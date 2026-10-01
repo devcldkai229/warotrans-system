@@ -1,0 +1,33 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WaroTrans.BuildingBlocks/WaroTrans.BuildingBlocks.csproj" />
+    <Project Path="src/WaroTrans.Host/WaroTrans.Host.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Fleet/">
+    <Project Path="src/Modules/Fleet/WaroTrans.Fleet.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Identity/">
+    <Project Path="src/Modules/Identity/WaroTrans.Identity.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Navigation/">
+    <Project Path="src/Modules/Navigation/WaroTrans.Navigation.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Operations/">
+    <Project Path="src/Modules/Operations/WaroTrans.Operations.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Transportation/">
+    <Project Path="src/Modules/Transportation/WaroTrans.Transportation.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Warehouse/">
+    <Project Path="src/Modules/Warehouse/WaroTrans.Warehouse.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/WorkflowExecution/">
+    <Project Path="src/Modules/WorkflowExecution/WaroTrans.WorkflowExecution.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WaroTrans.ArchitectureTests/WaroTrans.ArchitectureTests.csproj" />
+    <Project Path="tests/WaroTrans.IntegrationTests/WaroTrans.IntegrationTests.csproj" />
+    <Project Path="tests/WaroTrans.UnitTests/WaroTrans.UnitTests.csproj" />
+  </Folder>
+</Solution>

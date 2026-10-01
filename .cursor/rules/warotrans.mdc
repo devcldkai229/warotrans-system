@@ -1,0 +1,28 @@
+---
+description: WaroTrans mandatory project rules
+alwaysApply: true
+---
+
+Before modifying WaroTrans code, always read and obey `/rules`.
+
+Priority:
+1. `/rules/00-PROJECT-CONTEXT.md`
+2. `/rules/01-SYSTEM-ARCHITECTURE.md`
+3. `/rules/02-DOMAIN-RULES.md`
+4. `/rules/03-WORKFLOW-RUNTIME-RULES.md`
+5. `/rules/04-MODULE-COMMUNICATION-RULES.md`
+6. `/rules/05-NAVIGATION-RULES.md`
+7. `/rules/06-CODING-STANDARDS.md`
+8. feature-specific rules
+9. `/rules/99-AI-CURSOR-RULES.md`
+
+Never introduce a new domain entity, DB table/collection, status, Step Type,
+module dependency, or architecture pattern unless explicitly requested.
+
+Never create TransportMovement, BindingSource, TrafficResource, or TrafficReservation
+entities/tables.
+
+If code or an older document conflicts with `/rules`, report the conflict before changing
+domain behavior. Do not silently guess.
+
+After code changes, run the relevant build/tests and report failures explicitly.

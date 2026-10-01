@@ -1,0 +1,70 @@
+.shell {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(14, 116, 144, 0.18), transparent),
+    radial-gradient(ellipse 70% 50% at 90% 80%, rgba(15, 23, 42, 0.08), transparent),
+    linear-gradient(160deg, #f0f7fa 0%, #e8eef3 45%, #f5f7f9 100%);
+}
+
+.brand {
+  max-width: 40rem;
+  text-align: center;
+}
+
+.brand-mark {
+  margin: 0 0 20px;
+  font-family: var(--display);
+  font-size: 2.75rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--brand);
+  line-height: 1;
+}
+
+.brand h1 {
+  margin: 0 0 16px;
+  font-family: var(--display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-h);
+  line-height: 1.2;
+}
+
+.tagline {
+  margin: 0 auto 28px;
+  max-width: 32rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.cta {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand);
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.cta:hover {
+  background: var(--brand-hover);
+}
+
+.cta:active {
+  transform: translateY(1px);
+}
+
+.cta:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WaroTrans.BuildingBlocks\WaroTrans.BuildingBlocks.csproj" />
+    <ProjectReference Include="..\Modules\Identity\WaroTrans.Identity.csproj" />
+    <ProjectReference Include="..\Modules\Navigation\WaroTrans.Navigation.csproj" />
+    <ProjectReference Include="..\Modules\Operations\WaroTrans.Operations.csproj" />
+    <ProjectReference Include="..\Modules\Transportation\WaroTrans.Transportation.csproj" />
+    <ProjectReference Include="..\Modules\Fleet\WaroTrans.Fleet.csproj" />
+    <ProjectReference Include="..\Modules\Warehouse\WaroTrans.Warehouse.csproj" />
+    <ProjectReference Include="..\Modules\WorkflowExecution\WaroTrans.WorkflowExecution.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AspNetCore.HealthChecks.MongoDb" Version="9.0.0" />
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="MQTTnet" Version="5.2.0.1603" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,153 @@
+# Required checks (early stage): main-ci
+# Trigger: PR develop → main (full release gate)
+
+name: Main CI
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: main-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  ASPNETCORE_ENVIRONMENT: Development
+  ConnectionStrings__PostgreSQL: Host=localhost;Port=5432;Database=warotrans;Username=warotrans;Password=warotrans
+  ConnectionStrings__MongoDB: mongodb://warotrans:warotrans@localhost:27017/?authSource=admin
+  Mongo__ConnectionString: mongodb://warotrans:warotrans@localhost:27017/?authSource=admin
+  Mongo__DatabaseName: warotrans_operations
+
+jobs:
+  release-gate:
+    name: Full main pipeline
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: warotrans
+          POSTGRES_USER: warotrans
+          POSTGRES_PASSWORD: warotrans
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U warotrans -d warotrans"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mongodb:
+        image: mongo:8
+        env:
+          MONGO_INITDB_ROOT_USERNAME: warotrans
+          MONGO_INITDB_ROOT_PASSWORD: warotrans
+          MONGO_INITDB_DATABASE: warotrans_operations
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval \"db.adminCommand('ping').ok\""
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            app/package-lock.json
+
+      - name: Docker Compose config validation
+        working-directory: infrastructure
+        run: |
+          cp .env.example .env
+          docker compose config
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.*
+
+      - name: Restore backend
+        working-directory: backend
+        run: dotnet restore WaroTrans.slnx
+
+      - name: Apply PostgreSQL migrations
+        working-directory: backend
+        run: |
+          set -e
+          HOST=src/WaroTrans.Host/WaroTrans.Host.csproj
+          update() {
+            echo "=== Migrating $2 ==="
+            dotnet ef database update --project "$1" --startup-project "$HOST" --context "$2"
+          }
+          update src/WaroTrans.BuildingBlocks/WaroTrans.BuildingBlocks.csproj CodeSequenceDbContext
+          update src/Modules/Identity/WaroTrans.Identity.csproj IdentityDbContext
+          update src/Modules/Warehouse/WaroTrans.Warehouse.csproj WarehouseDbContext
+          update src/Modules/Transportation/WaroTrans.Transportation.csproj TransportationDbContext
+          update src/Modules/WorkflowExecution/WaroTrans.WorkflowExecution.csproj WorkflowExecutionDbContext
+          update src/Modules/Fleet/WaroTrans.Fleet.csproj FleetDbContext
+          update src/Modules/Navigation/WaroTrans.Navigation.csproj NavigationDbContext
+
+      - name: Build backend
+        working-directory: backend
+        run: dotnet build WaroTrans.slnx -c Release --no-restore
+
+      - name: Unit tests
+        working-directory: backend
+        run: dotnet test tests/WaroTrans.UnitTests/WaroTrans.UnitTests.csproj -c Release --no-build --verbosity normal
+
+      - name: Architecture tests
+        working-directory: backend
+        run: dotnet test tests/WaroTrans.ArchitectureTests/WaroTrans.ArchitectureTests.csproj -c Release --no-build --verbosity normal
+
+      - name: Integration tests
+        working-directory: backend
+        run: dotnet test tests/WaroTrans.IntegrationTests/WaroTrans.IntegrationTests.csproj -c Release --no-build --verbosity normal
+
+      - name: Web lint/typecheck/build
+        working-directory: web
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run build
+
+      - name: App lint/typecheck
+        working-directory: app
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+
+      - name: Start Host
+        working-directory: backend
+        run: |
+          nohup dotnet run --project src/WaroTrans.Host/WaroTrans.Host.csproj -c Release --no-build --no-launch-profile --urls http://127.0.0.1:5090 > /tmp/warotrans-host.log 2>&1 &
+          echo $! > /tmp/warotrans-host.pid
+
+      - name: Wait for GET /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5090/health | grep -qi Healthy; then
+              echo "Health OK"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Host log:"
+          cat /tmp/warotrans-host.log || true
+          exit 1
+
+      - name: Stop Host
+        if: always()
+        run: |
+          if [ -f /tmp/warotrans-host.pid ]; then
+            kill "$(cat /tmp/warotrans-host.pid)" || true
+          fi

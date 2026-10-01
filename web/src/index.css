@@ -1,0 +1,31 @@
+:root {
+  --text: #475569;
+  --text-h: #0f172a;
+  --brand: #0e7490;
+  --brand-hover: #0f766e;
+  --sans: 'Segoe UI', 'Helvetica Neue', sans-serif;
+  --display: 'Trebuchet MS', 'Segoe UI', sans-serif;
+
+  font: 16px/1.5 var(--sans);
+  color: var(--text);
+  background: #f5f7f9;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+#root {
+  min-height: 100svh;
+}
