@@ -2,12 +2,16 @@ using WaroTrans.IntegrationTests.Infrastructure;
 
 namespace WaroTrans.IntegrationTests.WorkflowExecution.CreateJob;
 
+/// <summary>
+/// Placeholder for Job Planning: 1 TransportRequest → N Jobs + JobContainer rows.
+/// Job has no TransportRequestId; Request↔Job is via JobContainer only.
+/// </summary>
 [Collection(IntegrationCollection.Name)]
 public sealed class CreateJobIntegrationTests(WaroTransWebApplicationFactory factory)
     : IntegrationTestBase(factory)
 {
-    [Fact(Skip = "CreateJob feature/API not implemented yet")]
-    public Task Creating_job_from_transport_request_persists_job()
+    [Fact(Skip = "Job Planning feature/API not implemented yet — expect N Jobs + JobContainers per TransportRequest")]
+    public Task Planning_transport_request_persists_jobs_and_job_containers()
     {
         return Task.CompletedTask;
     }

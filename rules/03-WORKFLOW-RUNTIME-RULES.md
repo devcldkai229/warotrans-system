@@ -133,7 +133,7 @@ WORKFLOW_VAR.speedProfile
 ```
 
 ### CURRENT_MOVEMENT
-Binds from the current `TransportRequest.TransportData.movements[]` item.
+Binds from the **active JobContainer** (and matching Detail fields for source/destination), not from a JSON movements array.
 
 Supported paths:
 ```text
@@ -170,19 +170,21 @@ Do not create a Workflow variable when a constant is enough.
 
 ## Runtime rule
 
-`TransportRequest.TransportData.movements[]` is the only persisted movement plan.
+`TransportRequestDetail` is the only persisted movement plan.
 
 Do not create `TransportMovement`.
+Do not use `TransportRequest.TransportData` JSONB as SoT.
 
-A single TransportRequest creates one Job.
+A single TransportRequest may create **N** Jobs. Container allocation lives on `JobContainer`.
 
 ```text
-TransportRequest.TransportData.movements[]
+TransportRequestDetail lines
                 ↓
-select current movement
+Job Planning → 1..N Jobs + JobContainer rows
                 ↓
-instantiate movement-driven runtime JobTask(s)
-from reusable WorkflowTask template(s)
+select active JobContainer (CURRENT_MOVEMENT context)
+                ↓
+instantiate runtime JobTask(s) from WorkflowTask template(s)
                 ↓
 JobTask.ContextValues snapshots CURRENT_MOVEMENT
                 ↓
@@ -196,7 +198,8 @@ JobStep.OutputValues
 ```
 
 `Job` must not have a direct `ContainerId`.
-
+`Job` must not have a direct `TransportRequestId` (resolve via JobContainer).
+JobTask/JobStep remain workflow graph instances; do not map 1:1 to Detail/movement.
 ## CHECK
 Initial examples:
 ```text

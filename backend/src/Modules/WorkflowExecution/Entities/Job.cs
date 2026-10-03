@@ -7,7 +7,6 @@ public sealed class Job
 {
     public Guid Id { get; set; }
     public string JobNo { get; set; } = string.Empty;
-    public Guid TransportRequestId { get; set; }
     public Guid WorkflowId { get; set; }
     public Guid MapVersionId { get; set; }
     public JobStatus Status { get; set; }
@@ -20,6 +19,7 @@ public sealed class Job
     public string? FailureMessage { get; set; }
 
     public ICollection<JobTask> JobTasks { get; set; } = [];
+    public ICollection<JobContainer> JobContainers { get; set; } = [];
 
     public void MarkRecoveryRequired(string? failureCode = null, string? failureMessage = null)
     {

@@ -58,13 +58,14 @@ JOB-YYYYMMDD-SEQ6
 
 ## JSONB
 Use for intentionally dynamic data:
-- TransportRequest.TransportData
+- TransportRequest.WorkflowInputs
 - Workflow variable schema
 - Workflow Step bindings
 - Job/Task context
 - JobStep resolved inputs/outputs
 - Navigation geometry when finalized as JSON
 
+Do **not** store the movement plan in TransportRequest JSONB; use `transport_request_details` rows.
 JSON still requires application/schema validation.
 
 ## Index strategy
@@ -94,6 +95,12 @@ TransportRequest.status
 TransportRequest.requested_by
 TransportRequest (status, submitted_at)
 
+TransportRequestDetail (transport_request_id, sequence_no) UNIQUE
+TransportRequestDetail (transport_request_id, container_id) UNIQUE
+TransportRequestDetail.transport_request_id
+TransportRequestDetail.container_id
+TransportRequestDetail.status
+
 Workflow (code, version_no) UNIQUE
 Workflow.status
 
@@ -101,9 +108,15 @@ WorkflowTask (workflow_id, sequence_no)
 WorkflowStep (workflow_task_id, sequence_no)
 
 Job.job_no UNIQUE
-Job.transport_request_id UNIQUE
 Job.status
 Job (status, queued_at)
+(Do not store Job.transport_request_id — Request↔Job via JobContainer)
+
+JobContainer (job_id, container_id) UNIQUE
+JobContainer (job_id, sequence_no) UNIQUE
+JobContainer.transport_request_id
+JobContainer.container_id
+JobContainer.status
 
 JobTask (job_id, sequence_no)
 JobStep (job_task_id, sequence_no)

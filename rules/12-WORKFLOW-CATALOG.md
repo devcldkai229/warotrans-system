@@ -50,7 +50,8 @@ Robot A fails + Container onboard
 → same Job resumes original destination
 ```
 
-Do not create a new TransportRequest.
+Do not create a new TransportRequest.  
+Do not create a new Job batch for payload recovery — resume the **same Job** (and its JobContainer rows) after reassignment.
 
 ### REPLENISHMENT
 Move a prepared Container from reserve/storage to picking/forward location.

@@ -10,6 +10,7 @@ public sealed class WorkflowExecutionDbContext(DbContextOptions<WorkflowExecutio
     public DbSet<WorkflowTask> WorkflowTasks => Set<WorkflowTask>();
     public DbSet<WorkflowStep> WorkflowSteps => Set<WorkflowStep>();
     public DbSet<Job> Jobs => Set<Job>();
+    public DbSet<JobContainer> JobContainers => Set<JobContainer>();
     public DbSet<JobTask> JobTasks => Set<JobTask>();
     public DbSet<JobStep> JobSteps => Set<JobStep>();
     public DbSet<HandoverConfirmation> HandoverConfirmations => Set<HandoverConfirmation>();

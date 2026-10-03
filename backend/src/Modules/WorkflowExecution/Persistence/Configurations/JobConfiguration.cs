@@ -25,9 +25,13 @@ public sealed class JobConfiguration : IEntityTypeConfiguration<Job>
             .IsRequired();
 
         builder.HasIndex(x => x.JobNo).IsUnique();
-        builder.HasIndex(x => x.TransportRequestId).IsUnique();
 
         builder.HasMany(x => x.JobTasks)
+            .WithOne(x => x.Job)
+            .HasForeignKey(x => x.JobId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.JobContainers)
             .WithOne(x => x.Job)
             .HasForeignKey(x => x.JobId)
             .OnDelete(DeleteBehavior.Cascade);

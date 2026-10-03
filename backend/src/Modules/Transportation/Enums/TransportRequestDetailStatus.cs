@@ -1,13 +1,11 @@
 namespace WaroTrans.Transportation.Enums;
 
-public enum TransportRequestStatus
+public enum TransportRequestDetailStatus
 {
-    SUBMITTED,
+    PENDING,
     QUEUED,
     IN_PROGRESS,
-    PARTIALLY_COMPLETED,
     COMPLETED,
     FAILED,
-    CANCELLED,
-    REJECTED
+    CANCELLED
 }

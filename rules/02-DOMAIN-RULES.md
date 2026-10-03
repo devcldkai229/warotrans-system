@@ -41,46 +41,45 @@ Because Warehouse and Navigation are different modules:
 SUBMITTED
 QUEUED
 IN_PROGRESS
+PARTIALLY_COMPLETED
 COMPLETED
 FAILED
 CANCELLED
 REJECTED
 ```
 
-Once `QUEUED`, the movement plan is treated as immutable.
+Once `QUEUED`, Detail lines are treated as immutable for planning purposes (replan of FAILED/CANCELLED lines is a later policy).
 
 ### Persisted movement plan
 The only persisted movement plan is:
 ```text
-TransportRequest.TransportData.movements[]
+TransportRequestDetail (1 TransportRequest → N Details)
 ```
 
 Do **not** create `TransportMovement`.
+Do **not** store the plan in `TransportRequest.TransportData` JSONB.
 
-Example:
-```json
-{
-  "schemaVersion": 1,
-  "movements": [
-    {
-      "sequenceNo": 1,
-      "containerId": "uuid",
-      "source": {
-        "storageLocationId": "uuid-or-null",
-        "endpointId": "uuid",
-        "levelNo": 1
-      },
-      "destination": {
-        "storageLocationId": "uuid-or-null",
-        "endpointId": "uuid",
-        "levelNo": 2
-      }
-    }
-  ]
-}
+Each Detail line carries one Container move (source/destination endpoints and optional storage locations).  
+Unique within a request: `(TransportRequestId, SequenceNo)` and `(TransportRequestId, ContainerId)`.
+
+`TransportRequestDetail` status:
+```text
+PENDING
+QUEUED
+IN_PROGRESS
+COMPLETED
+FAILED
+CANCELLED
 ```
 
-A request may contain one or many movements.
+### Request status aggregation (via Details)
+Aggregate Request status from Detail lines (not from Job status alone):
+- all PENDING → SUBMITTED / QUEUED
+- any IN_PROGRESS / QUEUED after start → IN_PROGRESS
+- mix of COMPLETED + non-terminal → PARTIALLY_COMPLETED
+- all COMPLETED → COMPLETED
+- any FAILED with others COMPLETED → PARTIALLY_COMPLETED; all FAILED → FAILED
+- cancelled by staff → CANCELLED
 
 ## Workflow definition vs runtime
 
@@ -91,13 +90,39 @@ Workflow → WorkflowTask → WorkflowStep
 
 Runtime:
 ```text
-TransportRequest → Job → JobTask → JobStep
+TransportRequest (+ Details)
+  → Job Planning → 1..N Jobs
+  → JobContainer (allocation: Request ↔ Job ↔ Container)
+  → Job → JobTask → JobStep
 ```
 
-One `TransportRequest` creates one `Job`.
+One `TransportRequest` may create **N** `Job`s (batching by robot capacity / zone / priority — planning policy).
 
-`Job` must not contain a direct `ContainerId`.
+Request↔Job cardinality is expressed only through `JobContainer` (owned by WorkflowExecution / `execution` schema).  
+`Job` must **not** store `TransportRequestId`.  
+`Job` must not contain a direct `ContainerId`.  
+`JobContainer` must not store `TransportRequestDetailId` (match by TransportRequestId + ContainerId).
 
+Assumption: all `JobContainer` rows for one Job share the same `TransportRequestId` (enforced in planning).
+
+`JobContainer` status:
+```text
+PENDING
+ASSIGNED
+ONBOARD
+DELIVERED
+FAILED
+CANCELLED
+```
+
+### JobContainer → Detail (same TransportRequestId + ContainerId)
+| JobContainer | Detail |
+|--------------|--------|
+| PENDING | QUEUED or PENDING (planner sets) |
+| ASSIGNED / ONBOARD | IN_PROGRESS |
+| DELIVERED | COMPLETED |
+| FAILED | FAILED |
+| CANCELLED | CANCELLED (replan back to QUEUED — decide later) |
 ## Job state machine
 ```text
 CREATED

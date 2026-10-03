@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using WaroTrans.Transportation.Entities;
-using WaroTrans.Transportation.ValueObjects;
 
 namespace WaroTrans.Transportation.Persistence.Configurations;
 
@@ -20,13 +19,6 @@ public sealed class TransportRequestConfiguration : IEntityTypeConfiguration<Tra
         builder.Property(x => x.FailureMessage).HasMaxLength(500);
         builder.Property(x => x.Version).IsConcurrencyToken();
 
-        builder.Property(x => x.TransportData)
-            .HasColumnType("jsonb")
-            .HasConversion(
-                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                v => JsonSerializer.Deserialize<TransportDataDocument>(v, (JsonSerializerOptions?)null)!)
-            .IsRequired();
-
         builder.Property(x => x.WorkflowInputs)
             .HasColumnType("jsonb")
             .HasConversion(
@@ -36,6 +28,5 @@ public sealed class TransportRequestConfiguration : IEntityTypeConfiguration<Tra
                     : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
 
         builder.HasIndex(x => x.RequestCode).IsUnique();
-        builder.HasIndex(x => x.TransportData).HasMethod("gin").HasOperators("jsonb_ops");
     }
 }

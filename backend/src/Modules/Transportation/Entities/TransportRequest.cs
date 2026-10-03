@@ -1,11 +1,10 @@
 using System.Text.Json;
 using WaroTrans.Transportation.Enums;
-using WaroTrans.Transportation.ValueObjects;
 
 namespace WaroTrans.Transportation.Entities;
 
 /// <summary>
-/// Runtime: one TransportRequest maps to one Job; TransportData.Movements expands into JobTasks.
+/// Runtime: one TransportRequest maps to N Jobs via JobContainer; movement plan is TransportRequestDetail.
 /// </summary>
 public sealed class TransportRequest
 {
@@ -15,7 +14,6 @@ public sealed class TransportRequest
     public Guid WorkflowId { get; set; }
     public Guid RequestedBy { get; set; }
     public TransportRequestStatus Status { get; set; }
-    public TransportDataDocument TransportData { get; set; } = new();
     public int PlanSchemaVersion { get; set; }
     public Dictionary<string, JsonElement>? WorkflowInputs { get; set; }
     public string? Note { get; set; }
@@ -27,4 +25,6 @@ public sealed class TransportRequest
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public long Version { get; set; }
+
+    public ICollection<TransportRequestDetail> Details { get; set; } = [];
 }

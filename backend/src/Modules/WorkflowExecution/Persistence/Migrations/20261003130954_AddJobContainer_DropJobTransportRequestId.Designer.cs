@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WaroTrans.WorkflowExecution.Persistence;
@@ -11,9 +12,11 @@ using WaroTrans.WorkflowExecution.Persistence;
 namespace WaroTrans.WorkflowExecution.Persistence.Migrations
 {
     [DbContext(typeof(WorkflowExecutionDbContext))]
-    partial class WorkflowExecutionDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003130954_AddJobContainer_DropJobTransportRequestId")]
+    partial class AddJobContainer_DropJobTransportRequestId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
