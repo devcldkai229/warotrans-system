@@ -58,4 +58,6 @@ Thumbs.db
 *.sln.docstates
 .vs/
 
+# Local MCP config (personal)
+.mcp.json
 
