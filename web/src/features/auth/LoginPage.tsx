@@ -1,26 +1,60 @@
 import { useState, type FormEvent } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { ApiError } from '@/shared/api/client'
 import { Icon } from '@/shared/ui/Icon'
-import { useAuth } from './authContext'
-import { FACILITIES, GATEWAY_STATUS, MOCK_ACCOUNT } from './mock'
+import { ConsoleAccessError, useAuth } from './authContext'
+import { GATEWAY_STATUS } from './mock'
 import { FacilityTwinMap } from './FacilityTwinMap'
 import './auth.css'
+
+const DEFAULT_ROUTE = '/monitor/fleet'
+
+/** Turns a failed sign-in into the message shown under the form. Backend `code` values come from the Identity module. */
+function describeSignInError(error: unknown): string {
+  if (error instanceof ConsoleAccessError) return error.message
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case 'invalid_credentials':
+        return 'Incorrect username or password.'
+      case 'account_locked':
+        return 'This account is locked. Contact an administrator.'
+      case 'account_inactive':
+        return 'This account is not active. Contact an administrator.'
+      case 'validation_failed':
+        return 'Enter both username and password.'
+      default:
+        return 'Sign-in failed. Try again.'
+    }
+  }
+  return 'Cannot reach the server. Check your connection and try again.'
+}
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { signIn } = useAuth()
-  const [facility, setFacility] = useState(FACILITIES[0].code)
-  const [employeeId, setEmployeeId] = useState('ADM-0007')
-  const [password, setPassword] = useState('password123')
-  const [remember, setRemember] = useState(true)
+  const { status, signIn } = useAuth()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function handleSubmit(event: FormEvent) {
+  const from = (location.state as { from?: string } | null)?.from ?? DEFAULT_ROUTE
+
+  // Already signed in (for example after a reload on /login): go straight to the console.
+  if (status === 'authenticated') return <Navigate to={from} replace />
+
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    // Mock: any credentials sign in as the Admin account. TODO(backend): POST /api/identity/login.
-    signIn(MOCK_ACCOUNT)
-    const from = (location.state as { from?: string } | null)?.from
-    navigate(from ?? '/monitor/fleet', { replace: true })
+    if (submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await signIn(username.trim(), password)
+      navigate(from, { replace: true })
+    } catch (caught) {
+      setError(describeSignInError(caught))
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -54,26 +88,18 @@ export function LoginPage() {
         <section className="login__card login__auth">
           <h1>Sign In to Fleet Manager</h1>
           <p className="login__sub">
-            Enter credentials or tap employee badge to access administrative mission control
+            Enter your credentials to access administrative mission control
           </p>
 
           <form onSubmit={handleSubmit} className="login__form">
             <label className="login__field">
-              <span>Facility Cluster</span>
-              <select value={facility} onChange={(event) => setFacility(event.target.value)}>
-                {FACILITIES.map((item) => (
-                  <option key={item.code} value={item.code}>
-                    {item.code} · {item.name} ({item.city})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="login__field">
-              <span>Employee ID</span>
+              <span>Username</span>
               <input
-                value={employeeId}
-                onChange={(event) => setEmployeeId(event.target.value)}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
+                autoFocus
+                required
               />
             </label>
             <label className="login__field">
@@ -83,37 +109,20 @@ export function LoginPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="current-password"
+                required
               />
             </label>
 
-            <div className="login__options">
-              <label className="login__remember">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(event) => setRemember(event.target.checked)}
-                />
-                Remember workstation (Shift 8h)
-              </label>
-              <a href="#forgot" onClick={(event) => event.preventDefault()}>
-                Forgot key?
-              </a>
-            </div>
+            {error ? (
+              <p className="login__error" role="alert">
+                {error}
+              </p>
+            ) : null}
 
-            <button type="submit" className="login__submit">
-              Sign In to Console <Icon name="arrowRight" size={16} />
+            <button type="submit" className="login__submit" disabled={submitting}>
+              {submitting ? 'Signing in…' : 'Sign In to Console'} <Icon name="arrowRight" size={16} />
             </button>
           </form>
-
-          <div className="login__rfid">
-            <span className="login__rfid-icon">
-              <Icon name="info" size={18} />
-            </span>
-            <div>
-              <strong>RFID Card Reader Ready</strong>
-              <span>Tap employee RFID badge on desktop Zebra scanner for single-tap login</span>
-            </div>
-          </div>
 
           <p className="login__footer">
             WaroTrans Enterprise v2.4.0-prod · ROS2 Nav2 Hardware Bridge · TLS 1.3

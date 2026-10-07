@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AdminPage } from '@/app/AdminPage'
 import type { Account, AccountRole, AccountStatus } from '@/shared/api/contracts'
 import { formatIsoDateTime } from '@/shared/lib/format'
 import { AccountFormDialog } from './AccountFormDialog'
 import { ACCOUNT_ROLES } from './constants'
-import { ACCOUNTS } from './mock'
+import { listAccounts } from './api'
 
 const STATUS_PILL: Record<AccountStatus, { label: string; tone: 'green' | 'grey' | 'red' }> = {
   ACTIVE: { label: 'Active', tone: 'green' },
@@ -13,10 +13,27 @@ const STATUS_PILL: Record<AccountStatus, { label: string; tone: 'green' | 'grey'
 }
 
 export function AccountsPage() {
-  const [accounts, setAccounts] = useState<Account[]>(ACCOUNTS)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<AccountRole | ''>('')
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    listAccounts()
+      .then((items) => {
+        if (cancelled) return
+        setAccounts(items)
+        setLoadState('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setLoadState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -32,7 +49,8 @@ export function AccountsPage() {
   const active = accounts.filter((account) => account.status === 'ACTIVE').length
   const notActive = accounts.length - active
 
-  // Mock-only state changes. Real status changes go through the Identity API, which owns the transitions.
+  // TODO(backend): the Identity API only lists accounts so far. Create, edit and status changes below stay in
+  // local state and are lost on reload; the API will own these transitions once the endpoints exist.
   function setStatus(id: string, status: AccountStatus) {
     setAccounts((current) => current.map((account) => (account.id === id ? { ...account, status } : account)))
   }
@@ -131,7 +149,11 @@ export function AccountsPage() {
           {visible.length === 0 ? (
             <tr>
               <td colSpan={7} className="atable__empty">
-                No accounts match the filter
+                {loadState === 'loading'
+                  ? 'Loading accounts…'
+                  : loadState === 'error'
+                    ? 'Could not load accounts. Check that the API is running and reload.'
+                    : 'No accounts match the filter'}
               </td>
             </tr>
           ) : null}

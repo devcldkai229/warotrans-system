@@ -110,11 +110,17 @@ export interface Account {
   lastLoginAt: string | null
 }
 
-/** Warehouse a user signs in to. TODO(backend): login/cluster selection endpoint is not implemented yet. */
-export interface Facility {
-  code: string
-  name: string
-  city: string
+/** Response of POST /api/identity/login and /refresh. The web client asks for the refresh token as an HttpOnly cookie, so `refreshToken` is null here. */
+export interface Session {
+  accessToken: string
+  accessTokenExpiresAt: string
+  refreshToken: string | null
+  account: Account
+}
+
+/** Response of GET /api/identity/accounts (Admin only). */
+export interface ListAccountsResponse {
+  items: Account[]
 }
 
 /* --------------------------------------------------------------------- Fleet */
