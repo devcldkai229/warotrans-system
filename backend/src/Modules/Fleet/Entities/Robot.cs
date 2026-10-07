@@ -187,4 +187,34 @@ public sealed class Robot
         UpdatedAt = utcNow;
         return true;
     }
+
+    /// <summary>Backend-owned: reserve robot for an issued navigate command.</summary>
+    public void ReserveForCommand(Guid commandId, DateTimeOffset utcNow)
+    {
+        Status = RobotStatus.RESERVED;
+        CurrentCommandId = commandId;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>Backend-owned: robot accepted navigate and Nav2 is running.</summary>
+    public void MarkExecuting(Guid commandId, DateTimeOffset utcNow)
+    {
+        Status = RobotStatus.EXECUTING;
+        CurrentCommandId = commandId;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>Backend-owned: clear command and return to AVAILABLE.</summary>
+    public void MarkAvailable(DateTimeOffset utcNow)
+    {
+        Status = RobotStatus.AVAILABLE;
+        CurrentCommandId = null;
+        UpdatedAt = utcNow;
+    }
+
+    public void ClearCurrentCommand(DateTimeOffset utcNow)
+    {
+        CurrentCommandId = null;
+        UpdatedAt = utcNow;
+    }
 }

@@ -6,6 +6,8 @@ using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Fleet.Abstractions;
+using WaroTrans.Fleet.Enums;
+using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
 
@@ -74,6 +76,58 @@ public sealed class RobotConnectivityMonitorHostedService(
             logger.LogInformation(
                 "Robot {RobotCode} connectivity OFFLINE (heartbeat timeout)",
                 robot.Code);
+
+            var inFlight = await db.RobotCommands
+                .Where(c => c.RobotId == robot.Id
+                            && (c.Status == RobotCommandStatus.SENT
+                                || c.Status == RobotCommandStatus.ACKED
+                                || c.Status == RobotCommandStatus.RUNNING))
+                .ToListAsync(cancellationToken);
+
+            var abortedNavigate = false;
+            foreach (var command in inFlight)
+            {
+                if (!command.TryAbortOffline(utcNow))
+                {
+                    continue;
+                }
+
+                if (command.Type == RobotCommandType.NAVIGATE_TO_POSE)
+                {
+                    abortedNavigate = true;
+                }
+
+                if (command.JobAssignmentId is { } assignmentId)
+                {
+                    var assignment = await db.JobAssignments.FirstOrDefaultAsync(
+                        a => a.Id == assignmentId,
+                        cancellationToken);
+                    assignment?.TryEnd(AssignmentEndReason.ROBOT_OFFLINE, utcNow);
+                }
+
+                await events.PublishAsync(
+                    new RobotCommandLifecycleChanged(
+                        command.Id,
+                        robot.Id,
+                        robot.Code,
+                        command.Type.ToString(),
+                        command.Status.ToString(),
+                        command.JobAssignmentId,
+                        command.JobStepId,
+                        null,
+                        command.ErrorCode,
+                        RobotCommandLifecycleChanged.Phases.OfflineAbort),
+                    cancellationToken);
+            }
+
+            if (abortedNavigate)
+            {
+                robot.MarkAvailable(utcNow);
+            }
+            else
+            {
+                robot.ClearCurrentCommand(utcNow);
+            }
 
             await notifier.NotifyConnectivityChangedAsync(
                 robot.Id,

@@ -34,6 +34,7 @@ public static class BuildingBlocksServiceCollectionExtensions
         services.AddProblemDetails();
 
         services.AddValidatorsFromAssembly(typeof(BuildingBlocksServiceCollectionExtensions).Assembly);
+        services.AddSingleton<IMqttRobotCommandPublisher, MqttRobotCommandPublisher>();
         services.AddHostedService<MqttSubscriberHostedService>();
 
         return services;

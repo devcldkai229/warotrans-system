@@ -10,6 +10,7 @@ public sealed class FleetDbContext(DbContextOptions<FleetDbContext> options) : D
     public DbSet<RobotStateEvent> RobotStateEvents => Set<RobotStateEvent>();
     public DbSet<DispatchDecision> DispatchDecisions => Set<DispatchDecision>();
     public DbSet<JobAssignment> JobAssignments => Set<JobAssignment>();
+    public DbSet<RobotCommand> RobotCommands => Set<RobotCommand>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

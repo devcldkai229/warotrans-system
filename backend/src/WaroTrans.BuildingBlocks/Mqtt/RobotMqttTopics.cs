@@ -4,6 +4,9 @@ public static class RobotMqttTopics
 {
     public const string HeartbeatSuffix = "heartbeat";
     public const string TelemetrySuffix = "telemetry";
+    public const string CommandSuffix = "command";
+    public const string CommandAckSuffix = "command_ack";
+    public const string CommandResultSuffix = "command_result";
 
     public static string HeartbeatFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/heartbeat";
@@ -11,11 +14,26 @@ public static class RobotMqttTopics
     public static string TelemetryFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/telemetry";
 
+    public static string CommandAckFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/command_ack";
+
+    public static string CommandResultFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/command_result";
+
     public static string Heartbeat(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/heartbeat";
 
     public static string Telemetry(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/telemetry";
+
+    public static string Command(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/command";
+
+    public static string CommandAck(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/command_ack";
+
+    public static string CommandResult(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/command_result";
 
     public static bool TryParse(string topic, string topicPrefix, out string robotCode, out string kind)
     {
@@ -37,7 +55,11 @@ public static class RobotMqttTopics
 
         robotCode = rest[..slash];
         kind = rest[(slash + 1)..];
-        return kind is HeartbeatSuffix or TelemetrySuffix;
+        return kind is HeartbeatSuffix
+            or TelemetrySuffix
+            or CommandSuffix
+            or CommandAckSuffix
+            or CommandResultSuffix;
     }
 
     public static string NormalizePrefix(string topicPrefix) =>

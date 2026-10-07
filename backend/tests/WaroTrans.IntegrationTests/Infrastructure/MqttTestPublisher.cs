@@ -52,6 +52,46 @@ public static class MqttTestPublisher
             },
             cancellationToken);
 
+    public static Task PublishCommandAckAsync(
+        string robotCode,
+        Guid commandId,
+        bool accepted,
+        string? reasonCode = null,
+        CancellationToken cancellationToken = default) =>
+        PublishAsync(
+            RobotMqttTopics.CommandAck("warotrans/v1", robotCode),
+            new
+            {
+                schemaVersion = 1,
+                messageId = Guid.NewGuid(),
+                commandId,
+                robotCode,
+                accepted,
+                reasonCode,
+                sentAt = DateTimeOffset.UtcNow
+            },
+            cancellationToken);
+
+    public static Task PublishCommandResultAsync(
+        string robotCode,
+        Guid commandId,
+        string outcome,
+        string? errorCode = null,
+        CancellationToken cancellationToken = default) =>
+        PublishAsync(
+            RobotMqttTopics.CommandResult("warotrans/v1", robotCode),
+            new
+            {
+                schemaVersion = 1,
+                messageId = Guid.NewGuid(),
+                commandId,
+                robotCode,
+                outcome,
+                errorCode,
+                sentAt = DateTimeOffset.UtcNow
+            },
+            cancellationToken);
+
     public static Task PublishTelemetryAsync(
         string robotCode,
         Guid bootId,
