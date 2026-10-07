@@ -1,8 +1,10 @@
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
+using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 
@@ -30,6 +32,9 @@ public static class BuildingBlocksServiceCollectionExtensions
         services.AddScoped<IBusinessCodeGenerator, BusinessCodeGenerator>();
         services.AddExceptionHandler<GlobalExceptionHandler>();
         services.AddProblemDetails();
+
+        services.AddValidatorsFromAssembly(typeof(BuildingBlocksServiceCollectionExtensions).Assembly);
+        services.AddHostedService<MqttSubscriberHostedService>();
 
         return services;
     }

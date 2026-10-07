@@ -15,6 +15,11 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
         builder.UseSetting("ConnectionStrings:MongoDB", TestConnectionStrings.MongoDb);
         builder.UseSetting("Mongo:ConnectionString", TestConnectionStrings.MongoDb);
         builder.UseSetting("Mongo:DatabaseName", TestConnectionStrings.MongoDatabaseName);
+        builder.UseSetting("Mqtt:Host", "localhost");
+        builder.UseSetting("Mqtt:Port", "1883");
+        builder.UseSetting("Mqtt:ClientId", $"warotrans-test-{Guid.NewGuid():N}");
+        builder.UseSetting("Mqtt:TopicPrefix", "warotrans/v1");
+        builder.UseSetting("Mqtt:HeartbeatTimeoutSeconds", "2");
 
         builder.ConfigureTestServices(services =>
         {
