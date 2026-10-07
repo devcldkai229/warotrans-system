@@ -1,9 +1,15 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.Fleet.Features.DisableRobot;
+using WaroTrans.Fleet.Features.EnableRobot;
+using WaroTrans.Fleet.Features.GetRobot;
+using WaroTrans.Fleet.Features.ListRobots;
+using WaroTrans.Fleet.Features.RegisterRobot;
 using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet;
@@ -15,6 +21,14 @@ public static class FleetModule
         services.AddDbContext<FleetDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("PostgreSQL")));
 
+        services.AddValidatorsFromAssembly(typeof(FleetModule).Assembly);
+
+        services.AddScoped<RegisterRobotHandler>();
+        services.AddScoped<GetRobotHandler>();
+        services.AddScoped<ListRobotsHandler>();
+        services.AddScoped<EnableRobotHandler>();
+        services.AddScoped<DisableRobotHandler>();
+
         return services;
     }
 
@@ -22,6 +36,11 @@ public static class FleetModule
     {
         var group = endpoints.MapGroup("/api/fleet");
         group.MapGet("/ping", () => Results.Ok(new { module = "fleet" }));
+        group.MapRegisterRobot();
+        group.MapGetRobot();
+        group.MapListRobots();
+        group.MapEnableRobot();
+        group.MapDisableRobot();
         return endpoints;
     }
 }
