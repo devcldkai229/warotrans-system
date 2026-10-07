@@ -21,7 +21,7 @@ public static class NavigationModule
     public static IEndpointRouteBuilder MapNavigationEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/navigation");
-        group.MapGet("/ping", () => Results.Ok(new { module = "navigation" }));
+        group.MapGet("/ping", () => Results.Ok(new { module = "navigation" })).AllowAnonymous();
         return endpoints;
     }
 }

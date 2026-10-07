@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Options;
@@ -15,6 +16,7 @@ public static class BuildingBlocksServiceCollectionExtensions
         services.Configure<PostgresOptions>(configuration.GetSection(PostgresOptions.SectionName));
         services.Configure<MongoOptions>(configuration.GetSection(MongoOptions.SectionName));
         services.Configure<MqttOptions>(configuration.GetSection(MqttOptions.SectionName));
+        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
 
         var postgresConnection =
             configuration.GetConnectionString("PostgreSQL")
@@ -25,6 +27,7 @@ public static class BuildingBlocksServiceCollectionExtensions
             options.UseNpgsql(postgresConnection));
 
         services.AddHttpContextAccessor();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<ICurrentUser, CurrentUser>();
         services.AddSingleton<IIntegrationEventPublisher, InProcessIntegrationEventPublisher>();
         services.AddScoped<IBusinessCodeGenerator, BusinessCodeGenerator>();

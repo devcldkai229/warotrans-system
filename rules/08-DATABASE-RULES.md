@@ -76,6 +76,11 @@ Recommended baseline:
 Account.username UNIQUE
 Account.email UNIQUE
 
+RefreshToken.token_hash UNIQUE
+RefreshToken.account_id
+RefreshToken.family_id
+(Store only the SHA-256 hash of a refresh token, never the token itself)
+
 Product.sku UNIQUE
 Product.supplier_barcode UNIQUE
 

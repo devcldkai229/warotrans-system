@@ -21,7 +21,7 @@ public static class FleetModule
     public static IEndpointRouteBuilder MapFleetEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/fleet");
-        group.MapGet("/ping", () => Results.Ok(new { module = "fleet" }));
+        group.MapGet("/ping", () => Results.Ok(new { module = "fleet" })).AllowAnonymous();
         return endpoints;
     }
 }

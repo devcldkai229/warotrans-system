@@ -21,7 +21,7 @@ public static class WarehouseModule
     public static IEndpointRouteBuilder MapWarehouseEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/warehouse");
-        group.MapGet("/ping", () => Results.Ok(new { module = "warehouse" }));
+        group.MapGet("/ping", () => Results.Ok(new { module = "warehouse" })).AllowAnonymous();
         return endpoints;
     }
 }
