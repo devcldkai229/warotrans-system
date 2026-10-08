@@ -24,6 +24,7 @@ import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 export type IncidentCategory =
   | 'CONTAINER_DAMAGED'
@@ -91,11 +92,13 @@ export function IssueReportingModal({
   const [cameraActive, setCameraActive] = useState(false);
 
   const handleSubmit = () => {
+    triggerHaptic('warning');
     onSubmit(selectedCat, notes);
     onClose();
   };
 
   const handleSnapPhoto = () => {
+    triggerHaptic('tick');
     setPhotoAttached(true);
     setCameraActive(false);
   };
@@ -109,6 +112,9 @@ export function IssueReportingModal({
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
+          {/* Top Drag Handle Indicator */}
+          <View style={styles.dragHandle} />
+
           {/* Header */}
           <View style={styles.header}>
             <View>
@@ -143,7 +149,10 @@ export function IssueReportingModal({
                   return (
                     <Pressable
                       key={c.id}
-                      onPress={() => setSelectedCat(c.id)}
+                      onPress={() => {
+                        triggerHaptic('tap');
+                        setSelectedCat(c.id);
+                      }}
                       style={[
                         styles.catCard,
                         isSelected && styles.catCardSelected,
@@ -317,7 +326,19 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '92%',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    paddingTop: 10,
     ...shadows.sheet,
+  },
+  dragHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginBottom: 4,
   },
   header: {
     flexDirection: 'row',

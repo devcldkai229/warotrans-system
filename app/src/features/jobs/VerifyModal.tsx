@@ -21,6 +21,7 @@ import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 
 interface OtherContainerInfo {
@@ -85,14 +86,17 @@ export function VerifyModal({
     if (!code) return;
 
     if (code.toUpperCase() === targetContainer.toUpperCase()) {
+      triggerHaptic('success');
       setMismatch(false);
       onSuccess(code);
     } else {
+      triggerHaptic('error');
       setMismatch(true);
     }
   };
 
   const handleScannerResult = (scanned: string) => {
+    triggerHaptic('tap');
     setIsScannerOpen(false);
     setBarcodeInput(scanned);
     handleVerify(scanned);
@@ -107,6 +111,7 @@ export function VerifyModal({
     >
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
+          <View style={styles.dragHandle} />
           {!mismatch ? (
             /* ================================================================
                SCR-STF-14: HANDOVER CONFIRMATION HUD
@@ -427,7 +432,19 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '92%',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    paddingTop: 10,
     ...shadows.sheet,
+  },
+  dragHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginBottom: 4,
   },
   sheetScroll: {
     padding: 16,

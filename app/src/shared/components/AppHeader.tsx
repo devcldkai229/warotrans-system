@@ -1,13 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { Bell, ChevronDown, LogOut } from 'lucide-react-native';
-import Svg, { Path } from 'react-native-svg';
+import {
+  AlertTriangle,
+  Bell,
+  Check,
+  ChevronDown,
+  LogOut,
+  X,
+} from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { shadows } from '../theme/shadows';
+import { typography } from '../theme/typography';
+import { triggerHaptic } from '../utils/haptics';
+import { BrandMark } from './BrandMark';
 
 interface AppHeaderProps {
   operatorName?: string;
@@ -23,24 +34,38 @@ export function AppHeader({
   onZonePress,
   onNotificationsPress,
 }: AppHeaderProps) {
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [hasUnread, setHasUnread] = useState(true);
+
+  const handleOpenNotifications = () => {
+    triggerHaptic('tap');
+    if (onNotificationsPress) {
+      onNotificationsPress();
+    } else {
+      setIsNotifModalOpen(true);
+    }
+  };
+
+  const handleDismissNotifications = () => {
+    setHasUnread(false);
+    setIsNotifModalOpen(false);
+    triggerHaptic('tap');
+  };
+
   return (
     <View style={styles.header}>
       {/* Brand & Zone Dropdown */}
       <View style={styles.leftGroup}>
-        {/* BrandMark */}
-        <View style={styles.brandMark}>
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M6 3v12" />
-            <Path d="M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
-            <Path d="M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
-            <Path d="M15 6a9 9 0 0 0-9 9" />
-          </Svg>
-        </View>
+        {/* Authentic WaroTrans BrandMark */}
+        <BrandMark size={38} />
 
         <View style={styles.textGroup}>
           <Text style={styles.facilitySubtitle}>WAROTRANS FACILITY</Text>
           <Pressable
-            onPress={onZonePress}
+            onPress={() => {
+              triggerHaptic('tap');
+              onZonePress?.();
+            }}
             style={({ pressed }) => [
               styles.zoneButton,
               pressed && styles.zoneButtonPressed,
@@ -58,7 +83,7 @@ export function AppHeader({
       <View style={styles.rightGroup}>
         {/* Notifications Bell */}
         <Pressable
-          onPress={onNotificationsPress}
+          onPress={handleOpenNotifications}
           style={({ pressed }) => [
             styles.iconCircle,
             pressed && styles.iconCirclePressed,
@@ -67,13 +92,16 @@ export function AppHeader({
           accessibilityLabel="Notifications"
         >
           <Bell size={17} color="#334155" />
-          <View style={styles.bellBadge} />
+          {hasUnread && <View style={styles.bellBadge} />}
         </Pressable>
 
         {/* Quick Shift Logout */}
         {onLogout && (
           <Pressable
-            onPress={onLogout}
+            onPress={() => {
+              triggerHaptic('warning');
+              onLogout();
+            }}
             style={({ pressed }) => [
               styles.logoutCircle,
               pressed && styles.logoutCirclePressed,
@@ -90,6 +118,78 @@ export function AppHeader({
           <Text style={styles.avatarText}>AT</Text>
         </View>
       </View>
+
+      {/* Real-Time Facility Notifications Modal */}
+      <Modal
+        visible={isNotifModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsNotifModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.sheetContainer}>
+            {/* Top Drag Handle Indicator */}
+            <View style={styles.dragHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetEyebrow}>FACILITY TELEMETRY</Text>
+                <Text style={styles.sheetTitle}>Real-Time Notifications</Text>
+              </View>
+              <Pressable
+                onPress={() => setIsNotifModalOpen(false)}
+                style={styles.closeBtn}
+              >
+                <X size={18} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            <View style={styles.notificationsList}>
+              {/* Alert Item 1 */}
+              <View style={styles.notifItem}>
+                <View style={styles.notifIconSuccess}>
+                  <Check size={14} color={colors.success} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.notifItemTop}>
+                    <Text style={styles.notifItemTitle}>AMR-01 Arrived</Text>
+                    <Text style={styles.notifTime}>Just now</Text>
+                  </View>
+                  <Text style={styles.notifItemDesc}>
+                    Robot is awaiting physical cargo handover at Rack A-02.
+                  </Text>
+                </View>
+              </View>
+
+              {/* Alert Item 2 */}
+              <View style={styles.notifItem}>
+                <View style={styles.notifIconWarning}>
+                  <AlertTriangle size={14} color={colors.warning} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.notifItemTop}>
+                    <Text style={styles.notifItemTitleWarning}>Deadlock Resolved</Text>
+                    <Text style={styles.notifTime}>3m ago</Text>
+                  </View>
+                  <Text style={styles.notifItemDesc}>
+                    AMR-02 yielded right-of-way in Aisle 2 corridor. Normal Nav2 path clear.
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={handleDismissNotifications}
+              style={({ pressed }) => [
+                styles.markReadBtn,
+                pressed && styles.markReadBtnPressed,
+              ]}
+            >
+              <Text style={styles.markReadText}>Dismiss & Mark As Read</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -117,22 +217,10 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
   },
-  brandMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
   textGroup: {
     flex: 1,
     justifyContent: 'center',
+    marginLeft: 2,
   },
   facilitySubtitle: {
     fontSize: 10,
@@ -140,6 +228,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: colors.primary,
+    fontFamily: typography.fontSans,
     marginBottom: 1,
   },
   zoneButton: {
@@ -154,6 +243,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#0f172a',
     maxWidth: 155,
+    fontFamily: typography.fontSans,
   },
   chevron: {
     marginLeft: 3,
@@ -220,5 +310,126 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0.5,
+    fontFamily: typography.fontMono,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    paddingBottom: 28,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    ...shadows.sheet,
+  },
+  dragHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: 10,
+    marginBottom: 12,
+  },
+  sheetEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: 0.8,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  notificationsList: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  notifItem: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  notifIconSuccess: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifIconWarning: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifItemTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  notifItemTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  notifItemTitleWarning: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#b45309',
+  },
+  notifTime: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  notifItemDesc: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 15,
+  },
+  markReadBtn: {
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  markReadBtnPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  markReadText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textPrimary,
   },
 });

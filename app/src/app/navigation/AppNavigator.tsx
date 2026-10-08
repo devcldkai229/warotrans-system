@@ -28,6 +28,7 @@ import { TransportHistoryScreen } from '../../features/transport/TransportHistor
 import { TransportScreen } from '../../features/transport/TransportScreen';
 import { AppHeader } from '../../shared/components/AppHeader';
 import { colors } from '../../shared/theme/colors';
+import { triggerHaptic } from '../../shared/utils/haptics';
 import { BottomTabBar } from './BottomTabBar';
 import { useNavigation } from './NavigationContext';
 
@@ -122,6 +123,9 @@ export function AppNavigator() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Top Drag Handle Indicator */}
+            <View style={styles.dragHandle} />
+
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>Switch Facility Work Zone</Text>
@@ -144,6 +148,7 @@ export function AppNavigator() {
                   <Pressable
                     key={zone}
                     onPress={() => {
+                      triggerHaptic('tick');
                       updateZone(zone);
                       setIsZoneModalOpen(false);
                     }}
@@ -194,7 +199,19 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
+    paddingTop: 10,
     maxHeight: '70%',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
+  dragHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginBottom: 12,
   },
   modalHeader: {
     flexDirection: 'row',

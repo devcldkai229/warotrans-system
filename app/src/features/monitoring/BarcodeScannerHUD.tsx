@@ -16,6 +16,7 @@ import {
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 interface BarcodeScannerHUDProps {
   visible: boolean;
@@ -39,7 +40,8 @@ export function BarcodeScannerHUD({
       transparent
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.overlay}>
         {/* Header Bar */}
         <View style={styles.header}>
           <View>
@@ -89,7 +91,10 @@ export function BarcodeScannerHUD({
         {/* Bottom Simulation Buttons */}
         <View style={styles.actionsBox}>
           <Pressable
-            onPress={() => onScanResult(targetBarcode)}
+            onPress={() => {
+              triggerHaptic('success');
+              onScanResult(targetBarcode);
+            }}
             style={({ pressed }) => [
               styles.actionBtn,
               styles.btnMatch,
@@ -103,7 +108,10 @@ export function BarcodeScannerHUD({
           </Pressable>
 
           <Pressable
-            onPress={() => onScanResult('BOX-999')}
+            onPress={() => {
+              triggerHaptic('error');
+              onScanResult('BOX-999');
+            }}
             style={({ pressed }) => [
               styles.actionBtn,
               styles.btnMismatch,
@@ -116,7 +124,10 @@ export function BarcodeScannerHUD({
           </Pressable>
 
           <Pressable
-            onPress={onClose}
+            onPress={() => {
+              triggerHaptic('tap');
+              onClose();
+            }}
             style={({ pressed }) => [
               styles.cancelBtn,
               pressed && styles.cancelBtnPressed,
@@ -127,13 +138,22 @@ export function BarcodeScannerHUD({
           </Pressable>
         </View>
       </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   overlay: {
     flex: 1,
+    width: '100%',
+    maxWidth: 480,
     backgroundColor: '#000000',
     justifyContent: 'space-between',
     padding: 18,

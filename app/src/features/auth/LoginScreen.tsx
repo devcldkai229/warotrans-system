@@ -19,12 +19,13 @@ import {
   UserCheck,
   X,
 } from 'lucide-react-native';
-import Svg, { Path } from 'react-native-svg';
+import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 import { PRESET_OPERATORS, useAuth } from './authContext';
 
 export const WORK_ZONES = [
@@ -74,6 +75,7 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const handleSelectPreset = (operator: (typeof PRESET_OPERATORS)[0]) => {
+    triggerHaptic('tap');
     setStaffId(operator.id);
     setSelectedZone(operator.zone);
     setError(null);
@@ -81,9 +83,11 @@ export function LoginScreen() {
 
   const handleLogin = () => {
     if (!staffId.trim()) {
+      triggerHaptic('error');
       setError('Staff Identifier is required.');
       return;
     }
+    triggerHaptic('success');
     setError(null);
     login(staffId, selectedZone);
   };
@@ -101,24 +105,7 @@ export function LoginScreen() {
         {/* Top Brand Bar */}
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
-            <View style={styles.logoBadge}>
-              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-                  stroke="#ffffff"
-                  strokeWidth={2.4}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M6 13V8a3 3 0 0 1 3-3h6M18 11v5a3 3 0 0 1-3 3H9"
-                  stroke="#ffffff"
-                  strokeWidth={2.4}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </View>
+            <BrandMark size={42} />
             <View>
               <Text style={styles.brandTitle}>WAROTRANS</Text>
               <Text style={styles.brandSubtitle}>Autonomous Fleet Mobile</Text>
@@ -253,6 +240,7 @@ export function LoginScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
+              <View style={styles.dragHandle} />
               <View style={styles.modalHeader}>
                 <View>
                   <Text style={styles.modalTag}>SCR-STF-02 · WORK ZONE SELECTION</Text>
@@ -277,6 +265,7 @@ export function LoginScreen() {
                     <Pressable
                       key={zone.value}
                       onPress={() => {
+                        triggerHaptic('tick');
                         setSelectedZone(zone.value);
                         setIsZoneModalOpen(false);
                       }}
@@ -596,7 +585,18 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     padding: 18,
     maxHeight: '85%',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
     ...shadows.sheet,
+  },
+  dragHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginBottom: 12,
   },
   modalHeader: {
     flexDirection: 'row',

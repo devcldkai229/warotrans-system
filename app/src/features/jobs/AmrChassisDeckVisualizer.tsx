@@ -39,7 +39,12 @@ export function AmrChassisDeckVisualizer({
               ]}
             >
               <View style={styles.slotTopRow}>
-                <Text style={styles.slotLabelText}>{slot.slotLabel}</Text>
+                <View style={styles.slotLabelGroup}>
+                  {(isUnload || isPickup) && (
+                    <View style={[styles.ledDot, isUnload ? styles.ledDotBlue : styles.ledDotAmber]} />
+                  )}
+                  <Text style={styles.slotLabelText}>{slot.slotLabel}</Text>
+                </View>
                 <View
                   style={[
                     styles.actionTag,
@@ -77,6 +82,15 @@ export function AmrChassisDeckVisualizer({
             </View>
           );
         })}
+      </View>
+
+      {/* Pick-to-Light Physical Deck Guidance */}
+      <View style={styles.ptlGuidance}>
+        <View style={styles.ptlLedPulse} />
+        <Text style={styles.ptlText}>
+          <Text style={styles.ptlBold}>Pick-to-Light Active: </Text>
+          Target slot illuminated on AMR physical deck during handover.
+        </Text>
       </View>
     </View>
   );
@@ -213,5 +227,61 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontStyle: 'italic',
     color: colors.textMuted,
+  },
+  slotLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ledDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  ledDotBlue: {
+    backgroundColor: '#0284c7',
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  ledDotAmber: {
+    backgroundColor: '#f59e0b',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  ptlGuidance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceSubtle,
+  },
+  ptlLedPulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0284c7',
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  ptlText: {
+    fontSize: 9,
+    color: colors.textSecondary,
+    flex: 1,
+    lineHeight: 13,
+  },
+  ptlBold: {
+    fontWeight: '800',
+    color: colors.primary,
   },
 });

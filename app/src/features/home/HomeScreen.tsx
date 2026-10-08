@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -8,12 +8,15 @@ import {
 } from 'react-native';
 import {
   BatteryMedium,
+  Check,
+  RefreshCw,
   ShieldCheck,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 
 const INITIAL_ROBOTS: MapRobot[] = [
   {
@@ -41,6 +44,16 @@ export function HomeScreen() {
   const { navigate } = useNavigation();
   const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
   const [sheetExpanded, setSheetExpanded] = useState<boolean>(false);
+  const [netStatus, setNetStatus] = useState<'syncing' | 'connected' | 'hidden'>('syncing');
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setNetStatus('connected'), 1200);
+    const t2 = setTimeout(() => setNetStatus('hidden'), 3500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
 
   const activeZone = session?.zone || 'Inbound Dock 01';
 
@@ -53,7 +66,24 @@ export function HomeScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} bounces={false}>
+    <View style={styles.root}>
+      {/* Floating WES Sync Status Pill */}
+      {netStatus !== 'hidden' && (
+        <View style={styles.floatingSyncContainer} pointerEvents="none">
+          <View style={styles.floatingSyncPill}>
+            {netStatus === 'syncing' ? (
+              <RefreshCw size={12} color="#38bdf8" />
+            ) : (
+              <Check size={12} color="#22c55e" />
+            )}
+            <Text style={styles.floatingSyncText}>
+              {netStatus === 'syncing' ? 'Syncing with WES...' : 'WMS Connected'}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} bounces={false}>
       {/* 1. Technical Blueprint Facility Radar Map */}
       <MiniFacilityMap
         currentZone={activeZone}
@@ -241,10 +271,44 @@ export function HomeScreen() {
         )}
       </View>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    position: 'relative',
+  },
+  floatingSyncContainer: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    zIndex: 99,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingSyncPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.94)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 99,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  floatingSyncText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontFamily: typography.fontMono,
+  },
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
