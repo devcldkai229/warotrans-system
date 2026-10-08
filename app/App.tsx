@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Platform, SafeAreaView, StyleSheet, View } from 'react-native';
 import { AppNavigator } from './src/app/navigation/AppNavigator';
 import { NavigationProvider } from './src/app/navigation/NavigationContext';
@@ -7,6 +7,20 @@ import { AuthProvider } from './src/features/auth/authContext';
 import { colors } from './src/shared/theme/colors';
 
 export default function App() {
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const fontId = 'warotrans-google-fonts';
+      if (!document.getElementById(fontId)) {
+        const link = document.createElement('link');
+        link.id = fontId;
+        link.rel = 'stylesheet';
+        link.href =
+          'https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@500;600;700&display=swap';
+        document.head.appendChild(link);
+      }
+    }
+  }, []);
+
   const content = (
     <SafeAreaView style={styles.appContainer}>
       <StatusBar style="dark" />

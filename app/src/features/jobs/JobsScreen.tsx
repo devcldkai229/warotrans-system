@@ -12,7 +12,7 @@ import { colors } from '../../shared/theme/colors';
 import { JobCard } from './JobCard';
 import { MOCK_JOBS } from './jobData';
 
-import { Search, X } from 'lucide-react-native';
+import { Box, Search, X } from 'lucide-react-native';
 
 type ScopeMode = 'active' | 'global' | 'history';
 type StatusFilter = 'ALL' | 'RUNNING' | 'QUEUED' | 'COMPLETED';
@@ -227,7 +227,9 @@ export function JobsScreen() {
           ))
         ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📦</Text>
+            <View style={styles.emptyIconWrap}>
+              <Box size={36} color={colors.textMuted} />
+            </View>
             <Text style={styles.emptyTitle}>No Jobs Found</Text>
             <Text style={styles.emptyDesc}>
               {search
@@ -390,8 +392,13 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
     paddingHorizontal: 24,
   },
-  emptyIcon: {
-    fontSize: 36,
+  emptyIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
   emptyTitle: {

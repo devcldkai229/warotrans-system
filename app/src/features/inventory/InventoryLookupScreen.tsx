@@ -6,9 +6,20 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  ArrowLeft,
+  MapPin,
+  PackagePlus,
+  Rocket,
+  Search,
+  X,
+} from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
 
 export interface CatalogProductItem {
   id: string;
@@ -16,200 +27,214 @@ export interface CatalogProductItem {
   category: string;
   sku: string;
   totalStock: number;
-  locations: { endpointCode: string; qty: number; containerBarcode: string }[];
+  startpoints: {
+    id: string;
+    label: string;
+    zone: string;
+    qty: number;
+    container: string;
+    status: string;
+  }[];
 }
 
-const CATALOG_ITEMS: CatalogProductItem[] = [
+const DISPATCH_CATALOG: CatalogProductItem[] = [
   {
-    id: 'prod-01',
-    name: 'Optical Proximity Sensor X4',
+    id: 'PROD-01',
+    name: 'Electronic Components',
+    category: 'Electronics',
+    sku: 'EC-9042',
+    totalStock: 57,
+    startpoints: [
+      { id: 'DOCK-IN-01', label: 'Inbound Dock 01', zone: 'Dock', qty: 25, container: 'BOX-101', status: 'Staged' },
+      { id: 'RACK-A-02', label: 'Rack A · Level 2', zone: 'Zone A', qty: 32, container: 'BOX-102', status: 'Stored' },
+    ],
+  },
+  {
+    id: 'PROD-02',
+    name: 'Sensor Array (SA-8820)',
     category: 'Sensors',
-    sku: 'SKU-SNS-9921',
-    totalStock: 90,
-    locations: [
-      { endpointCode: 'RACK-A02', qty: 45, containerBarcode: 'BOX-101' },
-      { endpointCode: 'RACK-A09', qty: 45, containerBarcode: 'BOX-102' },
+    sku: 'SA-8820',
+    totalStock: 48,
+    startpoints: [
+      { id: 'RACK-A-01', label: 'Rack A · Level 1', zone: 'Zone A', qty: 3, container: 'BOX-301', status: 'Shortage' },
+      { id: 'RACK-D-01', label: 'Bulk Yard D', zone: 'Zone D', qty: 45, container: 'BOX-302', status: 'Bulk Reserve' },
     ],
   },
   {
-    id: 'prod-02',
-    name: 'Pneumatic Actuator Valve',
-    category: 'Pneumatics',
-    sku: 'SKU-PNM-4410',
+    id: 'PROD-03',
+    name: 'Control Module (CM-3100)',
+    category: 'Electronics',
+    sku: 'CM-3100',
+    totalStock: 82,
+    startpoints: [
+      { id: 'RACK-B-04', label: 'Rack B · Level 3', zone: 'Zone B', qty: 7, container: 'BOX-204', status: 'Warning' },
+      { id: 'DOCK-IN-01', label: 'Inbound Dock 01', zone: 'Dock', qty: 75, container: 'BOX-205', status: 'Staged' },
+    ],
+  },
+  {
+    id: 'PROD-04',
+    name: 'Drive Assembly Kit',
+    category: 'Mechanical',
+    sku: 'MK-1120',
+    totalStock: 35,
+    startpoints: [
+      { id: 'RACK-B-02', label: 'Rack B · Level 1', zone: 'Zone B', qty: 15, container: 'BOX-401', status: 'Stored' },
+      { id: 'QA-02', label: 'QA Station 02', zone: 'QA Bay', qty: 20, container: 'BOX-402', status: 'Inspected' },
+    ],
+  },
+  {
+    id: 'PROD-05',
+    name: 'Heavy-Duty Shipping Carton',
+    category: 'Packaging',
+    sku: 'PKG-7700',
     totalStock: 120,
-    locations: [
-      { endpointCode: 'RACK-B04', qty: 50, containerBarcode: 'BOX-204' },
-      { endpointCode: 'RACK-B01', qty: 70, containerBarcode: 'BOX-205' },
-    ],
-  },
-  {
-    id: 'prod-03',
-    name: 'Relay Modules 24V DC',
-    category: 'Electronics',
-    sku: 'SKU-ELC-1088',
-    totalStock: 60,
-    locations: [
-      { endpointCode: 'RACK-A01', qty: 20, containerBarcode: 'TOTE-088' },
-      { endpointCode: 'RACK-A12', qty: 40, containerBarcode: 'TOTE-089' },
-    ],
-  },
-  {
-    id: 'prod-04',
-    name: 'Micro Controller Unit ESP32',
-    category: 'Electronics',
-    sku: 'SKU-MCU-3050',
-    totalStock: 200,
-    locations: [
-      { endpointCode: 'RACK-A02', qty: 100, containerBarcode: 'BOX-305' },
-      { endpointCode: 'DOCK-01', qty: 100, containerBarcode: 'BOX-306' },
-    ],
-  },
-  {
-    id: 'prod-05',
-    name: 'Heavy Duty Coupler 20mm',
-    category: 'Hardware',
-    sku: 'SKU-HDW-7712',
-    totalStock: 40,
-    locations: [
-      { endpointCode: 'RACK-B04', qty: 40, containerBarcode: 'BOX-205' },
+    startpoints: [
+      { id: 'PACKING-01', label: 'Packing Bench 01', zone: 'Pack Bay', qty: 60, container: 'TOTE-EXP-08', status: 'Active' },
+      { id: 'DOCK-OUT-01', label: 'Outbound Dock 01', zone: 'Dock', qty: 60, container: 'EMPTY-TOTE-STACK', status: 'Ready' },
     ],
   },
 ];
 
 export function InventoryLookupScreen() {
-  const { navigate } = useNavigation();
+  const { goBack, navigate } = useNavigation();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  const categories = ['All', 'Sensors', 'Pneumatics', 'Electronics', 'Hardware'];
+  const categories = ['All', 'Electronics', 'Sensors', 'Mechanical', 'Packaging'];
 
-  const filtered = CATALOG_ITEMS.filter((item) => {
-    const matchCat =
+  const filteredProducts = DISPATCH_CATALOG.filter((p) => {
+    const matchesCategory =
       selectedCategory === 'All' ||
-      item.category.toLowerCase() === selectedCategory.toLowerCase();
-    if (!matchCat) return false;
-
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.sku.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q) ||
-      item.locations.some(
-        (loc) =>
-          loc.endpointCode.toLowerCase().includes(q) ||
-          loc.containerBarcode.toLowerCase().includes(q)
-      )
-    );
+      p.category.toLowerCase() === selectedCategory.toLowerCase();
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.startpoints.some(
+        (sp) =>
+          sp.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          sp.container.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    return matchesCategory && matchesSearch;
   });
 
-  const handleQuickDispatch = (item: CatalogProductItem) => {
+  const handleQuickDispatch = (prod: CatalogProductItem) => {
     navigate('transport_create', {
-      workflowCode: 'INTERNAL_RELOCATION',
-      prefilledProduct: item.name,
-      prefilledContainer: item.locations[0]?.containerBarcode,
+      workflow: 'Inbound Putaway',
+      product: prod.name,
+      container: prod.startpoints[0]?.container || 'BOX-101',
+      source: prod.startpoints[0]?.id || 'DOCK-IN-01',
     });
   };
 
   return (
     <View style={styles.container}>
-      {/* Search Bar */}
-      <View style={styles.searchSection}>
-        <Input
-          placeholder="Search by SKU, product name, rack location..."
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-          containerStyle={{ marginBottom: 0 }}
-          rightIcon={
-            searchTerm ? (
-              <Pressable onPress={() => setSearchTerm('')}>
-                <Text style={styles.clearBtn}>✕</Text>
-              </Pressable>
-            ) : undefined
-          }
-        />
+      {/* Header with Search */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={goBack}
+          style={({ pressed }) => [
+            styles.backBtn,
+            pressed && styles.backBtnPressed,
+          ]}
+        >
+          <ArrowLeft size={20} color={colors.textPrimary} />
+        </Pressable>
+        <View style={styles.searchBox}>
+          <Search size={16} color={colors.textMuted} style={styles.searchIcon} />
+          <Input
+            value={searchTerm}
+            onChangeText={setSearchTerm}
+            placeholder="Search product, SKU, bin..."
+            containerStyle={styles.inputContainer}
+            inputStyle={styles.searchInput}
+          />
+          {searchTerm ? (
+            <Pressable
+              onPress={() => setSearchTerm('')}
+              style={styles.clearBtn}
+            >
+              <X size={14} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
-      {/* Category Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoryScroll}
-        contentContainerStyle={styles.categoryContent}
-      >
-        {categories.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          return (
-            <Pressable
-              key={cat}
-              onPress={() => setSelectedCategory(cat)}
-              style={[styles.catChip, isSelected && styles.catChipSelected]}
-            >
-              <Text
-                style={[
-                  styles.catChipText,
-                  isSelected && styles.catChipTextSelected,
-                ]}
+      {/* Category Filter Chips */}
+      <View style={styles.categoryBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+          {categories.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <Pressable
+                key={cat}
+                onPress={() => setSelectedCategory(cat)}
+                style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
               >
-                {cat}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextActive]}>
+                  {cat}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      {/* Results List */}
-      <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent}>
-        {filtered.length > 0 ? (
-          filtered.map((prod) => (
-            <View key={prod.id} style={styles.card}>
-              <View style={styles.cardTop}>
-                <View style={styles.infoCol}>
-                  <Text style={styles.prodName}>{prod.name}</Text>
-                  <Text style={styles.prodMeta}>
-                    {prod.category} · SKU: {prod.sku}
-                  </Text>
-                </View>
-                <View style={styles.stockCol}>
-                  <Text style={styles.stockNum}>{prod.totalStock}</Text>
-                  <Text style={styles.stockLabel}>IN STOCK</Text>
-                </View>
+      {/* Catalog Product Cards */}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {filteredProducts.map((prod) => (
+          <View key={prod.id} style={styles.productCard}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.productName}>{prod.name}</Text>
+                <Text style={styles.productMeta}>
+                  {prod.category} · SKU: {prod.sku}
+                </Text>
               </View>
+              <View style={styles.stockBox}>
+                <Text style={styles.stockCount}>{prod.totalStock}</Text>
+                <Text style={styles.stockLabel}>IN STOCK</Text>
+              </View>
+            </View>
 
-              {/* Locations Breakdown */}
-              <View style={styles.locationsList}>
-                {prod.locations.map((loc, idx) => (
-                  <View key={idx} style={styles.locationRow}>
-                    <Text style={styles.locEndpoint}>📍 {loc.endpointCode}</Text>
-                    <View style={styles.locMetaGroup}>
-                      <Text style={styles.locQty}>{loc.qty} units</Text>
-                      <View style={styles.locToteBadge}>
-                        <Text style={styles.locToteText}>{loc.containerBarcode}</Text>
-                      </View>
+            {/* Startpoints Locations */}
+            <View style={styles.startpointsList}>
+              {prod.startpoints.map((sp) => (
+                <View key={sp.id} style={styles.startpointRow}>
+                  <View style={styles.startpointLeft}>
+                    <MapPin size={14} color={colors.primary} />
+                    <Text style={styles.startpointId}>{sp.id}</Text>
+                    <Text style={styles.startpointZone}>({sp.zone})</Text>
+                  </View>
+                  <View style={styles.startpointRight}>
+                    <Text style={styles.startpointQty}>Qty: {sp.qty}</Text>
+                    <View style={styles.containerPill}>
+                      <Text style={styles.containerPillText}>{sp.container}</Text>
                     </View>
                   </View>
-                ))}
-              </View>
-
-              {/* Quick Dispatch Action */}
-              <Pressable
-                onPress={() => handleQuickDispatch(prod)}
-                style={({ pressed }) => [
-                  styles.dispatchBtn,
-                  pressed && styles.dispatchBtnPressed,
-                ]}
-              >
-                <Text style={styles.dispatchIcon}>🚀</Text>
-                <Text style={styles.dispatchText}>Dispatch Transport for this SKU</Text>
-              </Pressable>
+                </View>
+              ))}
             </View>
-          ))
-        ) : (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyIcon}>🔍</Text>
-            <Text style={styles.emptyTitle}>No matching products</Text>
+
+            {/* Quick Dispatch Action */}
+            <Button
+              label="Dispatch Transport for this SKU"
+              icon={<Rocket size={14} color={colors.primary} />}
+              onPress={() => handleQuickDispatch(prod)}
+              variant="outline"
+              size="sm"
+              style={styles.dispatchBtn}
+              textStyle={styles.dispatchBtnText}
+            />
+          </View>
+        ))}
+
+        {filteredProducts.length === 0 && (
+          <View style={styles.emptyState}>
+            <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
+            <Text style={styles.emptyTitle}>No matching products found</Text>
             <Text style={styles.emptySub}>
-              Try searching with another keyword or selecting "All" category.
+              Try searching with a different product name, SKU, or category filter.
             </Text>
           </View>
         )}
@@ -223,180 +248,219 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  searchSection: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    ...shadows.panel,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backBtnPressed: {
+    backgroundColor: colors.border,
+  },
+  searchBox: {
+    flex: 1,
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: 10,
+    zIndex: 10,
+  },
+  inputContainer: {
+    marginBottom: 0,
+  },
+  searchInput: {
+    paddingLeft: 34,
+    paddingRight: 30,
+    height: 40,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: 10,
+    fontSize: 12,
+    fontWeight: '700',
+    borderWidth: 0,
   },
   clearBtn: {
-    fontSize: 14,
-    color: colors.textMuted,
+    position: 'absolute',
+    right: 10,
+    zIndex: 10,
     padding: 4,
   },
-  categoryScroll: {
-    maxHeight: 46,
-    marginTop: 8,
+  categoryBar: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 8,
   },
-  categoryContent: {
-    paddingHorizontal: 16,
+  categoryScroll: {
+    paddingHorizontal: 14,
     gap: 6,
   },
-  catChip: {
-    paddingVertical: 6,
+  categoryChip: {
     paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  catChipSelected: {
+  categoryChipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  catChipText: {
+  categoryChipText: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
-  catChipTextSelected: {
-    color: colors.textInverse,
+  categoryChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '900',
   },
-  listArea: {
-    flex: 1,
-    marginTop: 8,
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+    gap: 12,
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+  productCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    marginBottom: 10,
+    ...shadows.panel,
   },
-  cardTop: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceSubtle,
-    marginBottom: 8,
+    borderBottomColor: colors.border,
+    paddingBottom: 10,
   },
-  infoCol: {
-    flex: 1,
-  },
-  prodName: {
-    fontSize: 13,
-    fontWeight: '800',
+  productName: {
+    fontSize: 14,
+    fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
-  prodMeta: {
+  productMeta: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textMuted,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
-  stockCol: {
+  stockBox: {
     alignItems: 'flex-end',
   },
-  stockNum: {
-    fontSize: 16,
+  stockCount: {
+    fontSize: 15,
     fontWeight: '900',
-    fontFamily: 'monospace',
     color: colors.primary,
+    fontFamily: typography.fontMono,
   },
   stockLabel: {
     fontSize: 8,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 0.8,
     color: colors.textMuted,
-    letterSpacing: 0.5,
   },
-  locationsList: {
-    gap: 4,
-    marginBottom: 10,
+  startpointsList: {
+    marginVertical: 10,
+    gap: 6,
   },
-  locationRow: {
+  startpointRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.surfaceSubtle,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
-  locEndpoint: {
+  startpointLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  startpointId: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  startpointZone: {
+    fontSize: 10,
+    color: colors.textMuted,
+  },
+  startpointRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  startpointQty: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  locMetaGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  locQty: {
-    fontSize: 10,
     color: colors.textSecondary,
-    fontWeight: '600',
+    fontFamily: typography.fontMono,
   },
-  locToteBadge: {
-    backgroundColor: colors.surface,
+  containerPill: {
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
     borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
-  locToteText: {
+  containerPillText: {
     fontSize: 9,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: colors.primary,
-  },
-  dispatchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    borderRadius: 8,
-    paddingVertical: 8,
-    gap: 6,
-  },
-  dispatchBtnPressed: {
-    backgroundColor: '#bae6fd',
-  },
-  dispatchIcon: {
-    fontSize: 12,
-  },
-  dispatchText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.primaryDark,
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 20,
-  },
-  emptyIcon: {
-    fontSize: 36,
-    marginBottom: 10,
-  },
-  emptyTitle: {
-    fontSize: 15,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  dispatchBtn: {
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 10,
+    marginTop: 2,
+  },
+  dispatchBtnText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 10,
   },
   emptySub: {
     fontSize: 11,
-    color: colors.textSecondary,
+    fontWeight: '500',
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: 4,
+    maxWidth: 240,
   },
 });

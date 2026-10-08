@@ -7,8 +7,17 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { AlertTriangle, Camera } from 'lucide-react-native';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Camera,
+  Check,
+  CheckCircle2,
+  Maximize2,
+  Timer,
+} from 'lucide-react-native';
 import { Button } from '../../shared/components/Button';
+import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
 import { BarcodeScannerHUD } from './BarcodeScannerHUD';
 import { IncidentCategory, IssueReportingModal } from './IssueReportingModal';
@@ -73,7 +82,7 @@ export function JobMonitoringScreen() {
       <View style={styles.completedContainer}>
         <View style={styles.completedCard}>
           <View style={styles.completedIconWrap}>
-            <Text style={styles.completedIcon}>✓</Text>
+            <CheckCircle2 size={36} color={colors.success} />
           </View>
           <Text style={styles.completedTitle}>Handover Completed!</Text>
           <Text style={styles.completedSubtitle}>
@@ -99,6 +108,21 @@ export function JobMonitoringScreen() {
 
   return (
     <View style={styles.root}>
+      <SubScreenHeader
+        label="AMR EXECUTION · HANDOVER HUD"
+        title="Live Robot Telemetry"
+        onBack={goBack}
+        rightAction={
+          <Pressable
+            onPress={() => navigate('live_map', { jobId })}
+            style={styles.liveMapHeaderBtn}
+          >
+            <Maximize2 size={15} color={colors.primary} />
+            <Text style={styles.liveMapHeaderText}>Radar Map</Text>
+          </Pressable>
+        }
+      />
+
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Status Toast Notification */}
         {feedbackToast && (
@@ -127,7 +151,8 @@ export function JobMonitoringScreen() {
               <Text style={styles.atStationText}>AT HANDOVER STATION</Text>
             </View>
             <View style={styles.timerPill}>
-              <Text style={styles.timerText}>⏱ 04:45 REMAINING</Text>
+              <Timer size={11} color="#b45309" />
+              <Text style={styles.timerText}>04:45 REMAINING</Text>
             </View>
           </View>
 
@@ -155,7 +180,11 @@ export function JobMonitoringScreen() {
               isRobotHeld && styles.safetyHoldBtnActive,
             ]}
           >
-            <Text style={styles.safetyHoldIcon}>🛑</Text>
+            <AlertTriangle
+              size={16}
+              color={isRobotHeld ? '#ffffff' : colors.warning}
+              style={{ marginRight: 6 }}
+            />
             <Text
               style={[
                 styles.safetyHoldText,
@@ -194,19 +223,23 @@ export function JobMonitoringScreen() {
               <View style={styles.targetActionBadge}>
                 <Text style={styles.targetActionText}>UNLOAD PAYLOAD</Text>
               </View>
-              <Text
-                style={[
-                  styles.verStatusText,
-                  isContainerVerified && styles.verStatusVerified,
-                  isScanMismatch && styles.verStatusMismatch,
-                ]}
-              >
-                {isContainerVerified
-                  ? '✓ VERIFIED MATCH'
-                  : isScanMismatch
-                  ? '⚠️ MISMATCH DETECTED'
-                  : 'PENDING SCAN'}
-              </Text>
+              <View style={styles.verStatusBadgeRow}>
+                {isContainerVerified ? (
+                  <View style={styles.verSuccessBadge}>
+                    <CheckCircle2 size={12} color={colors.success} />
+                    <Text style={styles.verSuccessText}>VERIFIED MATCH</Text>
+                  </View>
+                ) : isScanMismatch ? (
+                  <View style={styles.verDangerBadge}>
+                    <AlertCircle size={12} color={colors.danger} />
+                    <Text style={styles.verDangerText}>MISMATCH DETECTED</Text>
+                  </View>
+                ) : (
+                  <View style={styles.verPendingBadge}>
+                    <Text style={styles.verPendingText}>PENDING SCAN</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             <View style={styles.targetCardBody}>
@@ -651,6 +684,65 @@ const styles = StyleSheet.create({
   },
   receiptTime: {
     fontSize: 10,
+    color: colors.textMuted,
+  },
+  liveMapHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.2)',
+  },
+  liveMapHeaderText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  verStatusBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verSuccessBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  verSuccessText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.success,
+  },
+  verDangerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  verDangerText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.danger,
+  },
+  verPendingBadge: {
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  verPendingText: {
+    fontSize: 9,
+    fontWeight: '800',
     color: colors.textMuted,
   },
 });

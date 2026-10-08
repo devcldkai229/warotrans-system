@@ -1,224 +1,167 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import {
+  ArrowLeft,
+  Box,
+  CheckCircle2,
+  RefreshCw,
+  Zap,
+} from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
-import { Badge } from '../../shared/components/Badge';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
 
 interface PendingTask {
   id: string;
-  type: string;
   label: string;
   timestamp: string;
-  status: 'queued' | 'syncing' | 'synced';
+  status: 'queued' | 'synced';
 }
 
 const INITIAL_TASKS: PendingTask[] = [
   {
     id: 'tx-1',
-    type: 'handover',
-    label: '📦 Handover BOX-101 (Dock 01)',
+    label: 'Handover BOX-101 (Dock 01)',
     timestamp: '19:12:04',
     status: 'queued',
   },
   {
     id: 'tx-2',
-    type: 'verify',
-    label: '📦 Scan Verify BOX-102',
+    label: 'Scan Verify BOX-102',
     timestamp: '19:12:45',
     status: 'queued',
   },
   {
     id: 'tx-3',
-    type: 'incident',
-    label: '⚠️ Incident Report Rack A-02',
+    label: 'Incident Report Rack A-02',
     timestamp: '19:13:10',
     status: 'queued',
   },
 ];
 
 export function OfflineBannerHUD() {
-  const { goBack, navigate } = useNavigation();
+  const { goBack } = useNavigation();
   const [tasks, setTasks] = useState<PendingTask[]>(INITIAL_TASKS);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [countdown, setCountdown] = useState(5);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     if (isSyncing) return;
     const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          return 5;
-        }
-        return prev - 1;
-      });
+      setCountdown((prev) => (prev <= 1 ? 5 : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
   }, [isSyncing]);
 
   const handleSimulateSync = () => {
     setIsSyncing(true);
-    setToastMessage('Wi-Fi link detected! Flushing offline queue to WMS gateway...');
-
-    // Simulate task syncing sequentially
-    setTimeout(() => {
-      setTasks((prev) =>
-        prev.map((t, idx) => (idx === 0 ? { ...t, status: 'synced' } : t))
-      );
-    }, 700);
-
-    setTimeout(() => {
-      setTasks((prev) =>
-        prev.map((t, idx) => (idx <= 1 ? { ...t, status: 'synced' } : t))
-      );
-    }, 1400);
+    setFeedback('Wi-Fi link detected! Flushing offline queue to WMS gateway...');
 
     setTimeout(() => {
       setTasks((prev) => prev.map((t) => ({ ...t, status: 'synced' })));
       setIsSyncing(false);
-      setToastMessage('✅ All 3 pending transactions successfully reconciled with WMS!');
-      setTimeout(() => setToastMessage(null), 4000);
-    }, 2200);
+      setFeedback('All 3 pending transactions successfully reconciled with WMS!');
+      setTimeout(() => setFeedback(null), 3500);
+    }, 1500);
   };
 
   const pendingCount = tasks.filter((t) => t.status !== 'synced').length;
 
   return (
     <View style={styles.container}>
-      {/* Toast Alert */}
-      {toastMessage && (
-        <View style={styles.toast}>
-          <Text style={styles.toastText}>{toastMessage}</Text>
-        </View>
-      )}
-
-      {/* Amber Offline Alert Banner */}
-      <View style={styles.alertBanner}>
+      {/* Amber Reconnecting Banner */}
+      <View style={styles.banner}>
         <View style={styles.bannerLeft}>
-          <View style={styles.boltBadge}>
-            <Text style={styles.boltText}>⚡</Text>
+          <View style={styles.bannerIconBox}>
+            <Zap size={16} color="#fbbf24" />
           </View>
-          <View style={styles.bannerInfo}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.bannerTitle}>WMS NETWORK CONNECTION LOST (OFFLINE)</Text>
             <Text style={styles.bannerSubtitle}>
-              {pendingCount > 0
-                ? `${pendingCount} handover transactions cached in local SQLite store`
-                : 'All local records synced. Connection standby.'}
+              3 handover transactions cached in local SQLite store
             </Text>
           </View>
         </View>
-        <Pressable
-          style={styles.retryBadge}
-          onPress={handleSimulateSync}
-          disabled={isSyncing}
-        >
-          <Text style={styles.retryBadgeText}>
-            {isSyncing ? 'SYNCING...' : `RETRY ${countdown.toString().padStart(2, '0')}s`}
-          </Text>
-        </Pressable>
+        <View style={styles.retryPill}>
+          <Text style={styles.retryText}>RETRY 0{countdown}s</Text>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {/* Screen Header */}
-        <View style={styles.header}>
-          <Text style={styles.tag}>SCR-STF-18 · OFFLINE RECONNECTING MODE</Text>
-          <Text style={styles.title}>Offline Operation Mode</Text>
-          <Text style={styles.description}>
-            PDA terminal continues scanning and logging handovers without disrupting warehouse workflow.
-            Transactions will automatically synchronize once Wi-Fi 6 mesh or 5G coverage is re-established.
-          </Text>
-        </View>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {feedback && (
+          <View style={styles.feedbackToast}>
+            <Text style={styles.feedbackText}>{feedback}</Text>
+          </View>
+        )}
 
-        {/* Telemetry Diagnostics Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>NETWORK & STORAGE DIAGNOSTICS</Text>
-          <View style={styles.diagRow}>
-            <Text style={styles.diagLabel}>Wi-Fi 6 Connection</Text>
-            <Badge label="DISCONNECTED" tone="danger" />
-          </View>
-          <View style={styles.diagRow}>
-            <Text style={styles.diagLabel}>Local SQLite Cache</Text>
-            <Text style={styles.diagValueMono}>3 entries (4.2 KB / 100 MB)</Text>
-          </View>
-          <View style={styles.diagRow}>
-            <Text style={styles.diagLabel}>Last Gateway Handshake</Text>
-            <Text style={styles.diagValueMono}>19:11:42 (1m 28s ago)</Text>
-          </View>
-          <View style={styles.diagRow}>
-            <Text style={styles.diagLabel}>Nav2 Telemetry Proxy</Text>
-            <Badge label="STANDBY" tone="warning" />
-          </View>
+        {/* Header Content */}
+        <View style={styles.headerSection}>
+          <Text style={styles.headerTag}>SCR-STF-18 · OFFLINE RECONNECTING MODE</Text>
+          <Text style={styles.headerTitle}>Offline Operation Mode</Text>
+          <Text style={styles.headerDesc}>
+            PDA terminal continues scanning and logging handovers without disrupting warehouse workflow.
+          </Text>
         </View>
 
         {/* Local Sync Queue Card */}
         <View style={styles.queueCard}>
           <View style={styles.queueHeader}>
             <Text style={styles.queueTitle}>Local Sync Queue</Text>
-            <Badge
-              label={`${pendingCount} Pending Sync Task${pendingCount !== 1 ? 's' : ''}`}
-              tone={pendingCount > 0 ? 'warning' : 'success'}
-            />
+            <Text style={styles.queueCount}>
+              {pendingCount} Pending Sync Task{pendingCount !== 1 ? 's' : ''}
+            </Text>
           </View>
 
-          <View style={styles.taskList}>
-            {tasks.map((task) => (
-              <View key={task.id} style={styles.taskItem}>
-                <View style={styles.taskInfo}>
-                  <Text style={styles.taskLabel}>{task.label}</Text>
-                  <Text style={styles.taskTime}>{task.timestamp}</Text>
+          <View style={{ gap: 8 }}>
+            {tasks.map((t) => (
+              <View key={t.id} style={styles.taskRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  {t.status === 'synced' ? (
+                    <CheckCircle2 size={16} color={colors.success} />
+                  ) : (
+                    <Box size={16} color={colors.warning} />
+                  )}
+                  <Text style={styles.taskLabel} numberOfLines={1}>
+                    {t.label}
+                  </Text>
                 </View>
-                <Badge
-                  label={
-                    task.status === 'synced'
-                      ? 'SYNCED'
-                      : isSyncing
-                      ? 'UPLOADING'
-                      : 'QUEUED'
-                  }
-                  tone={
-                    task.status === 'synced'
-                      ? 'success'
-                      : isSyncing
-                      ? 'info'
-                      : 'neutral'
-                  }
-                />
+                <Text style={styles.taskTime}>{t.timestamp}</Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionSection}>
-          <Pressable
-            style={[styles.primaryBtn, isSyncing && styles.btnDisabled]}
-            onPress={handleSimulateSync}
-            disabled={isSyncing}
-          >
-            <Text style={styles.primaryBtnText}>
-              {isSyncing ? 'Synchronizing with WMS Gateway...' : '⚡ Test Connection & Force Flush Queue'}
-            </Text>
-          </Pressable>
+        {/* Manual Sync Trigger */}
+        <Button
+          label={isSyncing ? 'Reconnecting to WMS Gateway...' : 'Simulate Reconnect & Sync'}
+          icon={
+            isSyncing ? (
+              <RefreshCw size={16} color="#ffffff" />
+            ) : (
+              <RefreshCw size={16} color={colors.primary} />
+            )
+          }
+          onPress={handleSimulateSync}
+          variant={isSyncing ? 'primary' : 'outline'}
+          size="md"
+        />
 
-          <Pressable
-            style={styles.outlineBtn}
-            onPress={() => {
-              if (goBack) {
-                goBack();
-              } else {
-                navigate('home');
-              }
-            }}
-          >
-            <Text style={styles.outlineBtnText}>← Return to Operational Console</Text>
-          </Pressable>
-        </View>
+        <Button
+          label="Return to Operational Console"
+          icon={<ArrowLeft size={16} color={colors.textPrimary} />}
+          onPress={goBack}
+          variant="secondary"
+          size="lg"
+          style={{ marginTop: 6 }}
+        />
       </ScrollView>
     </View>
   );
@@ -229,216 +172,141 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  toast: {
-    position: 'absolute',
-    top: 55,
-    left: 16,
-    right: 16,
-    backgroundColor: '#0f172a',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#38bdf8',
-    zIndex: 99,
-  },
-  toastText: {
-    color: '#38bdf8',
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  alertBanner: {
-    backgroundColor: '#f59e0b',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  banner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    ...shadows.panel,
   },
   bannerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
     flex: 1,
-    marginRight: 8,
   },
-  boltBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#000000',
+  bannerIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: '#0f172a',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-  },
-  boltText: {
-    fontSize: 14,
-    color: '#fbbf24',
-    fontWeight: '900',
-  },
-  bannerInfo: {
-    flex: 1,
   },
   bannerTitle: {
-    color: '#0f172a',
     fontSize: 11,
     fontWeight: '900',
+    color: '#0f172a',
     letterSpacing: 0.5,
+    fontFamily: typography.fontSans,
   },
   bannerSubtitle: {
-    color: '#1e293b',
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(15, 23, 42, 0.85)',
     marginTop: 1,
   },
-  retryBadge: {
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+  retryPill: {
+    backgroundColor: 'rgba(15, 23, 42, 0.2)',
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 4,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 8,
   },
-  retryBadgeText: {
-    color: '#0f172a',
-    fontSize: 10,
-    fontFamily: 'monospace',
+  retryText: {
+    fontSize: 9,
     fontWeight: '900',
+    color: '#0f172a',
+    fontFamily: typography.fontMono,
   },
-  contentContainer: {
+  scrollContent: {
     padding: 16,
     paddingBottom: 40,
+    gap: 14,
   },
-  header: {
-    marginBottom: 16,
+  feedbackToast: {
+    backgroundColor: colors.successSoft,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
   },
-  tag: {
+  feedbackText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.success,
+  },
+  headerSection: {
+    marginTop: 4,
+  },
+  headerTag: {
     fontSize: 10,
-    fontFamily: 'monospace',
     fontWeight: '900',
     color: colors.primary,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    fontFamily: typography.fontMono,
   },
-  title: {
+  headerTitle: {
     fontSize: 20,
     fontWeight: '900',
     color: colors.textPrimary,
     marginTop: 4,
-    marginBottom: 4,
+    fontFamily: typography.fontSans,
   },
-  description: {
+  headerDesc: {
     fontSize: 12,
     color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    marginBottom: 16,
-  },
-  cardHeader: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    fontWeight: '900',
-    color: colors.textMuted,
-    marginBottom: 12,
-    letterSpacing: 0.8,
-  },
-  diagRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  diagLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  diagValueMono: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    color: colors.textSecondary,
-    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 4,
   },
   queueCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.35)',
+    backgroundColor: colors.warningSoft,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.warningBorder,
     padding: 14,
-    marginBottom: 20,
+    gap: 10,
+    ...shadows.panel,
   },
   queueHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingBottom: 4,
   },
   queueTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
-    color: colors.textPrimary,
+    color: colors.warning,
   },
-  taskList: {
-    gap: 8,
+  queueCount: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: colors.warning,
+    fontFamily: typography.fontMono,
   },
-  taskItem: {
+  taskRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: '#ffffff',
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  taskInfo: {
-    flex: 1,
-    marginRight: 8,
-  },
   taskLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.textPrimary,
+    flex: 1,
   },
   taskTime: {
     fontSize: 10,
-    fontFamily: 'monospace',
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  actionSection: {
-    gap: 10,
-  },
-  primaryBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: 13,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  primaryBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
     fontWeight: '800',
-  },
-  outlineBtn: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  outlineBtnText: {
-    color: colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
   },
 });

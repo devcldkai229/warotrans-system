@@ -7,36 +7,61 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  ArrowUpRight,
+  BatteryCharging,
+  CheckCircle2,
+  ChevronDown,
+  Lock,
+  LogIn,
+  MapPin,
+  Truck,
+  UserCheck,
+  X,
+} from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
 import { PRESET_OPERATORS, useAuth } from './authContext';
 
-const WORK_ZONES = [
+export const WORK_ZONES = [
+  {
+    value: 'Inbound Dock 01',
+    label: 'Inbound Dock 01 (Receiving Bay)',
+    detail: 'Dock 01 - 03 · High Load · Inbound Putaway',
+    tag: 'HIGH LOAD',
+    icon: 'truck',
+  },
   {
     value: 'Storage Zone A (Racks A01-A12)',
     label: 'Storage Zone A (Racks A01-A12)',
     detail: 'Standard pallet racking · Active fleet coverage',
-  },
-  {
-    value: 'Inbound Dock 01 (Receiving Bay)',
-    label: 'Inbound Dock 01 (Receiving Bay)',
-    detail: 'Dock 01 - 03 · High Load · Inbound Putaway',
+    tag: 'ACTIVE',
+    icon: 'mappin',
   },
   {
     value: 'Storage Zone B (Racks B01-B12)',
     label: 'Storage Zone B (Racks B01-B12)',
     detail: 'Heavy bulk reserve · Standby status',
+    tag: 'READY',
+    icon: 'mappin',
   },
   {
-    value: 'Outbound Dock 04 (Staging & Dispatch)',
+    value: 'Outbound Dock 04',
     label: 'Outbound Dock 04 (Staging & Dispatch)',
     detail: 'Shipping bay · Ready for delivery transfers',
+    tag: 'CLEAR',
+    icon: 'arrow',
   },
   {
-    value: 'Depot Charging & Maintenance',
+    value: 'Depot Charger Station',
     label: 'Depot Charging & Maintenance',
     detail: 'AMR service bays & battery swap hubs',
+    tag: 'MAINTENANCE',
+    icon: 'battery',
   },
 ];
 
@@ -44,11 +69,11 @@ export function LoginScreen() {
   const { login } = useAuth();
   const [staffId, setStaffId] = useState('STF-2026-088');
   const [password, setPassword] = useState('••••••••');
-  const [selectedZone, setSelectedZone] = useState('Storage Zone A (Racks A01-A12)');
+  const [selectedZone, setSelectedZone] = useState('Inbound Dock 01');
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSelectPreset = (operator: typeof PRESET_OPERATORS[0]) => {
+  const handleSelectPreset = (operator: (typeof PRESET_OPERATORS)[0]) => {
     setStaffId(operator.id);
     setSelectedZone(operator.zone);
     setError(null);
@@ -63,6 +88,10 @@ export function LoginScreen() {
     login(staffId, selectedZone);
   };
 
+  const activeZoneObj =
+    WORK_ZONES.find((z) => z.value === selectedZone || z.label.includes(selectedZone)) ||
+    WORK_ZONES[0];
+
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContent}
@@ -73,7 +102,22 @@ export function LoginScreen() {
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
             <View style={styles.logoBadge}>
-              <Text style={styles.logoText}>WT</Text>
+              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                  stroke="#ffffff"
+                  strokeWidth={2.4}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d="M6 13V8a3 3 0 0 1 3-3h6M18 11v5a3 3 0 0 1-3 3H9"
+                  stroke="#ffffff"
+                  strokeWidth={2.4}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
             </View>
             <View>
               <Text style={styles.brandTitle}>WAROTRANS</Text>
@@ -81,7 +125,6 @@ export function LoginScreen() {
             </View>
           </View>
           <View style={styles.statusPill}>
-            <View style={styles.statusDot} />
             <Text style={styles.statusText}>FLEET ONLINE</Text>
           </View>
         </View>
@@ -143,6 +186,7 @@ export function LoginScreen() {
             }}
             placeholder="STF-2026-XXX"
             autoCapitalize="characters"
+            leftIcon={<UserCheck size={18} color={colors.textMuted} />}
             error={error || undefined}
           />
 
@@ -152,6 +196,7 @@ export function LoginScreen() {
             onChangeText={setPassword}
             placeholder="Enter shift PIN or password"
             secureTextEntry
+            leftIcon={<Lock size={18} color={colors.textMuted} />}
           />
 
           {/* Assigned Work Zone Selector */}
@@ -159,20 +204,25 @@ export function LoginScreen() {
             <Text style={styles.inputLabel}>Assigned Work Zone</Text>
             <Pressable
               onPress={() => setIsZoneModalOpen(true)}
-              style={styles.zoneSelector}
+              style={({ pressed }) => [
+                styles.zoneSelector,
+                pressed && styles.zoneSelectorPressed,
+              ]}
             >
-              <View style={styles.zoneIconWrap}>
-                <Text style={styles.zoneIcon}>📍</Text>
+              <View style={styles.zoneLeft}>
+                <View style={styles.zoneIconWrap}>
+                  <MapPin size={18} color={colors.primary} />
+                </View>
+                <View style={styles.zoneDetails}>
+                  <Text style={styles.zoneName} numberOfLines={1}>
+                    {activeZoneObj.label}
+                  </Text>
+                  <Text style={styles.zoneDetailText} numberOfLines={1}>
+                    {activeZoneObj.detail}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.zoneDetails}>
-                <Text style={styles.zoneName} numberOfLines={1}>
-                  {selectedZone}
-                </Text>
-                <Text style={styles.zoneDetailText} numberOfLines={1}>
-                  Tap to change operational staging area
-                </Text>
-              </View>
-              <Text style={styles.zoneChevron}>▼</Text>
+              <ChevronDown size={16} color={colors.textMuted} />
             </Pressable>
           </View>
         </View>
@@ -181,9 +231,11 @@ export function LoginScreen() {
         <View style={styles.actionSection}>
           <Button
             label="SIGN IN TO ACTIVE SHIFT"
+            icon={<LogIn size={18} color="#ffffff" />}
             onPress={handleLogin}
             size="lg"
             variant="primary"
+            style={styles.submitButton}
           />
 
           <View style={styles.footerRow}>
@@ -192,7 +244,7 @@ export function LoginScreen() {
           </View>
         </View>
 
-        {/* Zone Selection Modal */}
+        {/* Zone Selection Modal (SCR-STF-02) */}
         <Modal
           visible={isZoneModalOpen}
           animationType="slide"
@@ -203,22 +255,24 @@ export function LoginScreen() {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <View>
-                  <Text style={styles.modalTitle}>Select Assigned Work Zone</Text>
+                  <Text style={styles.modalTag}>SCR-STF-02 · WORK ZONE SELECTION</Text>
+                  <Text style={styles.modalTitle}>Select Operating Work Zone</Text>
                   <Text style={styles.modalSubtitle}>
-                    Tasks and AMR alerts will be prioritized for this zone
+                    Designate active warehouse perimeter for cargo handover and robot dispatch.
                   </Text>
                 </View>
                 <Pressable
                   onPress={() => setIsZoneModalOpen(false)}
                   style={styles.modalCloseBtn}
                 >
-                  <Text style={styles.modalCloseText}>✕</Text>
+                  <X size={20} color={colors.textSecondary} />
                 </Pressable>
               </View>
 
               <ScrollView style={styles.modalScroll}>
                 {WORK_ZONES.map((zone) => {
-                  const isSelected = selectedZone === zone.value;
+                  const isSelected =
+                    selectedZone === zone.value || selectedZone === zone.label;
                   return (
                     <Pressable
                       key={zone.value}
@@ -231,26 +285,76 @@ export function LoginScreen() {
                         isSelected && styles.zoneItemSelected,
                       ]}
                     >
-                      <View style={styles.zoneItemInfo}>
-                        <Text
+                      <View style={styles.zoneItemLeft}>
+                        <View
                           style={[
-                            styles.zoneItemTitle,
-                            isSelected && styles.zoneItemTitleSelected,
+                            styles.zoneItemIconBox,
+                            isSelected && styles.zoneItemIconBoxActive,
                           ]}
                         >
-                          {zone.label}
-                        </Text>
-                        <Text style={styles.zoneItemDesc}>{zone.detail}</Text>
-                      </View>
-                      {isSelected && (
-                        <View style={styles.selectedBadge}>
-                          <Text style={styles.selectedBadgeText}>ACTIVE</Text>
+                          {zone.icon === 'truck' ? (
+                            <Truck
+                              size={18}
+                              color={isSelected ? '#ffffff' : colors.textMuted}
+                            />
+                          ) : zone.icon === 'arrow' ? (
+                            <ArrowUpRight
+                              size={18}
+                              color={isSelected ? '#ffffff' : colors.textMuted}
+                            />
+                          ) : zone.icon === 'battery' ? (
+                            <BatteryCharging
+                              size={18}
+                              color={isSelected ? '#ffffff' : colors.textMuted}
+                            />
+                          ) : (
+                            <MapPin
+                              size={18}
+                              color={isSelected ? '#ffffff' : colors.textMuted}
+                            />
+                          )}
                         </View>
-                      )}
+                        <View style={styles.zoneItemInfo}>
+                          <Text
+                            style={[
+                              styles.zoneItemTitle,
+                              isSelected && styles.zoneItemTitleSelected,
+                            ]}
+                          >
+                            {zone.label}
+                          </Text>
+                          <Text style={styles.zoneItemDesc}>{zone.detail}</Text>
+                        </View>
+                      </View>
+                      <View
+                        style={[
+                          styles.zoneItemBadge,
+                          isSelected && styles.zoneItemBadgeSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.zoneItemBadgeText,
+                            isSelected && styles.zoneItemBadgeTextSelected,
+                          ]}
+                        >
+                          {isSelected ? 'CURRENT SELECTION' : zone.tag}
+                        </Text>
+                      </View>
                     </Pressable>
                   );
                 })}
               </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <Button
+                  label="CONFIRM ASSIGNED WORK ZONE"
+                  icon={<CheckCircle2 size={16} color="#ffffff" />}
+                  onPress={() => setIsZoneModalOpen(false)}
+                  size="md"
+                  variant="primary"
+                />
+              </View>
             </View>
           </View>
         </Modal>
@@ -262,20 +366,19 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
-    backgroundColor: colors.background,
+    justifyContent: 'space-between',
   },
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 24,
+    padding: 20,
+    backgroundColor: colors.background,
     justifyContent: 'space-between',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    paddingTop: 8,
   },
   brandRow: {
     flexDirection: 'row',
@@ -283,82 +386,75 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logoBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoText: {
-    color: colors.textInverse,
-    fontWeight: '900',
-    fontSize: 16,
+    ...shadows.control,
   },
   brandTitle: {
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '900',
+    letterSpacing: 1.5,
     color: colors.primary,
-    letterSpacing: 0.8,
+    fontFamily: typography.fontMono,
   },
   brandSubtitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.successBg,
-    borderColor: colors.successBorder,
-    borderWidth: 1,
-    paddingVertical: 4,
+    backgroundColor: colors.successSoft,
     paddingHorizontal: 8,
-    borderRadius: 12,
-    gap: 6,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.success,
+    paddingVertical: 3,
+    borderRadius: 999,
   },
   statusText: {
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.success,
     letterSpacing: 0.5,
+    fontFamily: typography.fontMono,
   },
   headerSection: {
-    marginBottom: 24,
+    marginTop: 24,
   },
   screenTag: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontWeight: '900',
     color: colors.primary,
+    letterSpacing: 1.2,
     marginBottom: 4,
+    fontFamily: typography.fontMono,
   },
   heading: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.textPrimary,
-    marginBottom: 6,
+    letterSpacing: -0.5,
+    fontFamily: typography.fontSans,
   },
   description: {
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textSecondary,
     lineHeight: 18,
+    marginTop: 4,
+    fontFamily: typography.fontSans,
   },
   presetSection: {
-    marginBottom: 20,
+    marginTop: 18,
   },
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    color: colors.textSecondary,
+    letterSpacing: 0.8,
+    color: colors.textMuted,
     marginBottom: 8,
   },
   presetChips: {
@@ -367,108 +463,127 @@ const styles = StyleSheet.create({
   },
   presetChip: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
+    ...shadows.panel,
   },
   presetChipSelected: {
     borderColor: colors.primary,
     backgroundColor: colors.primaryLight,
   },
   presetChipName: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   presetChipNameSelected: {
-    color: colors.primaryDark,
+    color: colors.primary,
   },
   presetChipId: {
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: '700',
     color: colors.textMuted,
     marginTop: 2,
+    fontFamily: typography.fontMono,
   },
   presetChipIdSelected: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   formSection: {
-    marginBottom: 20,
+    marginTop: 18,
+    gap: 4,
   },
   zoneField: {
     marginTop: 4,
+    marginBottom: 12,
   },
   inputLabel: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     color: colors.textSecondary,
     marginBottom: 6,
+    fontFamily: typography.fontSans,
   },
   zoneSelector: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    ...shadows.panel,
+  },
+  zoneSelectorPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  zoneLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+    flex: 1,
+    marginRight: 8,
   },
   zoneIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: 34,
+    height: 34,
+    borderRadius: 8,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  zoneIcon: {
-    fontSize: 14,
   },
   zoneDetails: {
     flex: 1,
   },
   zoneName: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   zoneDetailText: {
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: '500',
     color: colors.textMuted,
     marginTop: 1,
-  },
-  zoneChevron: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   actionSection: {
-    marginTop: 10,
+    marginTop: 24,
+    paddingTop: 12,
+  },
+  submitButton: {
+    borderRadius: 12,
+    ...shadows.control,
   },
   footerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    alignItems: 'center',
+    marginTop: 14,
+    paddingHorizontal: 2,
   },
   footerText: {
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: '600',
     color: colors.textMuted,
   },
   footerDevice: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    fontWeight: '700',
-    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
   },
   modalOverlay: {
     flex: 1,
@@ -479,80 +594,119 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '75%',
+    padding: 18,
+    maxHeight: '85%',
+    ...shadows.sheet,
   },
   modalHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingBottom: 12,
+    alignItems: 'flex-start',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    paddingBottom: 12,
+  },
+  modalTag: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: 1,
+    fontFamily: typography.fontMono,
   },
   modalTitle: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.textPrimary,
+    marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   modalSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textMuted,
     marginTop: 2,
+    maxWidth: 290,
   },
   modalCloseBtn: {
-    padding: 4,
-  },
-  modalCloseText: {
-    fontSize: 16,
-    color: colors.textMuted,
-    fontWeight: '700',
+    padding: 6,
+    borderRadius: 8,
   },
   modalScroll: {
-    marginBottom: 16,
+    marginTop: 12,
+    maxHeight: 340,
   },
   zoneItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderColor: colors.border,
     marginBottom: 8,
     backgroundColor: colors.surface,
+    ...shadows.panel,
   },
   zoneItemSelected: {
     borderColor: colors.primary,
     backgroundColor: colors.primaryLight,
   },
+  zoneItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
+  },
+  zoneItemIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoneItemIconBoxActive: {
+    backgroundColor: colors.primary,
+  },
   zoneItemInfo: {
     flex: 1,
-    marginRight: 10,
   },
   zoneItemTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
     color: colors.textPrimary,
-    marginBottom: 2,
+    fontFamily: typography.fontSans,
   },
   zoneItemTitleSelected: {
-    color: colors.primaryDark,
+    color: colors.primary,
   },
   zoneItemDesc: {
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  selectedBadge: {
-    backgroundColor: colors.primary,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  selectedBadgeText: {
-    color: colors.textInverse,
     fontSize: 10,
-    fontWeight: '800',
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  zoneItemBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  zoneItemBadgeSelected: {
+    backgroundColor: colors.primary,
+  },
+  zoneItemBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  zoneItemBadgeTextSelected: {
+    color: '#ffffff',
+  },
+  modalFooter: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
 });

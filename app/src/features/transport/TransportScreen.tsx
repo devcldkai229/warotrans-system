@@ -11,14 +11,22 @@ import { colors } from '../../shared/theme/colors';
 import { ChevronRight, History, PackagePlus, PlusCircle } from 'lucide-react-native';
 import { WorkflowCode } from '../../shared/types/contracts';
 import { SafetyHubCard } from './SafetyHubCard';
-import { WORKFLOW_TEMPLATES } from './workflowTemplates';
+import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
 import { WorkflowTemplateCard } from './WorkflowTemplateCard';
 
 export function TransportScreen() {
   const { navigate, switchTab } = useNavigation();
 
-  const handleSelectWorkflow = (code: WorkflowCode) => {
-    navigate('transport_create', { workflowCode: code });
+  const handleSelectWorkflow = (workflow: WorkflowItem) => {
+    if (workflow.id === 'replenishment') {
+      navigate('replenishment');
+    } else if (workflow.id === 'point-to-point') {
+      navigate('point_to_point');
+    } else if (workflow.id === 'block-path') {
+      navigate('block_path');
+    } else {
+      navigate('transport_create', { workflow: workflow.name });
+    }
   };
 
   const handleLaunchRescue = () => {
@@ -74,10 +82,10 @@ export function TransportScreen() {
           <Text style={styles.sectionCount}>6 Workflows</Text>
         </View>
 
-        {WORKFLOW_TEMPLATES.map((tmpl) => (
+        {WORKFLOWS.map((wf) => (
           <WorkflowTemplateCard
-            key={tmpl.code}
-            template={tmpl}
+            key={wf.id}
+            workflow={wf}
             onSelect={handleSelectWorkflow}
           />
         ))}

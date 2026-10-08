@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -6,7 +6,16 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  Keyboard,
+  QrCode,
+  ScanLine,
+  X,
+  Zap,
+} from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
 
 interface BarcodeScannerHUDProps {
   visible: boolean;
@@ -21,6 +30,8 @@ export function BarcodeScannerHUD({
   onScanResult,
   targetBarcode = 'BOX-101',
 }: BarcodeScannerHUDProps) {
+  const [torchOn, setTorchOn] = useState(false);
+
   return (
     <Modal
       visible={visible}
@@ -36,11 +47,18 @@ export function BarcodeScannerHUD({
               <Text style={styles.hudBadgeText}>SCR-STF-13 · CAMERA HUD</Text>
             </View>
             <Text style={styles.hudTitle}>Scan Container Barcode</Text>
-            <Text style={styles.hudSubtitle}>Target: {targetBarcode}</Text>
           </View>
-          <Pressable onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => setTorchOn(!torchOn)}
+              style={[styles.headerIconBtn, torchOn && styles.headerIconBtnActive]}
+            >
+              <Zap size={18} color={torchOn ? colors.warning : '#ffffff'} />
+            </Pressable>
+            <Pressable onPress={onClose} style={styles.headerIconBtn}>
+              <X size={20} color="#ffffff" />
+            </Pressable>
+          </View>
         </View>
 
         {/* Viewfinder Center Reticle */}
@@ -52,14 +70,16 @@ export function BarcodeScannerHUD({
             <View style={[styles.corner, styles.cornerBL]} />
             <View style={[styles.corner, styles.cornerBR]} />
 
-            {/* Laser Line */}
+            {/* Glowing Scan Laser Line */}
             <View style={styles.laserLine} />
 
-            <Text style={styles.reticleCenterIcon}>📷</Text>
+            <View style={styles.reticleCenterIcon}>
+              <ScanLine size={48} color={colors.primary} />
+            </View>
           </View>
 
           <Text style={styles.reticleInstruction}>
-            Align 1D Code128 or 2D QR Code within reticle
+            Align 1D Code128 or 2D QR Code within the scanning reticle
           </Text>
           <View style={styles.fpsBadge}>
             <Text style={styles.fpsText}>⚡ AUTO-FOCUS ACTIVE · 60 FPS</Text>
@@ -76,13 +96,14 @@ export function BarcodeScannerHUD({
               pressed && styles.btnPressed,
             ]}
           >
+            <QrCode size={16} color="#ffffff" />
             <Text style={styles.btnMatchText}>
-              ✓ SIMULATE SCAN MATCH ({targetBarcode})
+              SIMULATE SCAN MATCH ({targetBarcode})
             </Text>
           </Pressable>
 
           <Pressable
-            onPress={() => onScanResult('WRONG-BARCODE-999')}
+            onPress={() => onScanResult('BOX-999')}
             style={({ pressed }) => [
               styles.actionBtn,
               styles.btnMismatch,
@@ -90,11 +111,18 @@ export function BarcodeScannerHUD({
             ]}
           >
             <Text style={styles.btnMismatchText}>
-              ⚠️ SIMULATE MISMATCH (WRONG-999)
+              SIMULATE MISMATCH (BOX-999)
             </Text>
           </Pressable>
 
-          <Pressable onPress={onClose} style={styles.cancelBtn}>
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [
+              styles.cancelBtn,
+              pressed && styles.cancelBtnPressed,
+            ]}
+          >
+            <Keyboard size={16} color="#ffffff" />
             <Text style={styles.cancelText}>Manual Keyboard Entry</Text>
           </Pressable>
         </View>
@@ -106,71 +134,70 @@ export function BarcodeScannerHUD({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: '#090d16', // Dark camera viewfinder
-    paddingHorizontal: 20,
-    paddingTop: 44,
-    paddingBottom: 28,
+    backgroundColor: '#000000',
     justifyContent: 'space-between',
+    padding: 18,
+    paddingTop: 36,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconBtnActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   hudBadge: {
-    backgroundColor: 'rgba(14, 116, 144, 0.3)',
-    borderWidth: 1,
-    borderColor: colors.primary,
+    backgroundColor: 'rgba(37, 99, 235, 0.2)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.4)',
     alignSelf: 'flex-start',
-    marginBottom: 4,
   },
   hudBadgeText: {
     fontSize: 9,
     fontWeight: '900',
-    fontFamily: 'monospace',
-    color: '#38bdf8',
+    color: colors.primary,
+    fontFamily: typography.fontMono,
+    letterSpacing: 0.8,
   },
   hudTitle: {
     fontSize: 16,
     fontWeight: '900',
     color: '#ffffff',
-  },
-  hudSubtitle: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    color: '#94a3b8',
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
+    marginTop: 4,
+    fontFamily: typography.fontSans,
   },
   reticleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   reticleBox: {
-    width: 240,
-    height: 240,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.4)',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    position: 'relative',
+    width: 250,
+    height: 250,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(37, 99, 235, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    ...shadows.float,
   },
   corner: {
     position: 'absolute',
@@ -216,70 +243,88 @@ const styles = StyleSheet.create({
     shadowColor: '#22c55e',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 10,
+    elevation: 8,
   },
   reticleCenterIcon: {
-    fontSize: 28,
-    opacity: 0.25,
+    opacity: 0.35,
   },
   reticleInstruction: {
     fontSize: 11,
-    color: '#94a3b8',
-    marginTop: 16,
+    color: '#cbd5e1',
     textAlign: 'center',
-    fontFamily: 'monospace',
+    marginTop: 18,
+    fontFamily: typography.fontSans,
   },
   fpsBadge: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.4)',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 12,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
     marginTop: 8,
   },
   fpsText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
-    fontFamily: 'monospace',
     color: '#4ade80',
+    fontFamily: typography.fontMono,
   },
   actionsBox: {
     gap: 8,
+    zIndex: 20,
+    paddingBottom: 8,
   },
   actionBtn: {
-    paddingVertical: 12,
-    borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   btnPressed: {
     opacity: 0.85,
   },
   btnMatch: {
     backgroundColor: colors.primary,
+    ...shadows.control,
   },
   btnMatchText: {
-    color: colors.textInverse,
     fontSize: 12,
     fontWeight: '900',
+    color: '#ffffff',
+    fontFamily: typography.fontSans,
   },
   btnMismatch: {
-    backgroundColor: colors.danger,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
   },
   btnMismatchText: {
-    color: colors.textInverse,
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#f87171',
+    fontFamily: typography.fontMono,
   },
   cancelBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  cancelBtnPressed: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   cancelText: {
-    color: '#94a3b8',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
+    color: '#ffffff',
   },
 });

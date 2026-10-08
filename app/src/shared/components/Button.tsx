@@ -4,6 +4,8 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextStyle,
+  View,
   ViewStyle,
 } from 'react-native';
 import { colors } from '../theme/colors';
@@ -15,7 +17,10 @@ interface ButtonProps {
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   loading?: boolean;
+  icon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
   style?: ViewStyle;
+  textStyle?: TextStyle;
 }
 
 export function Button({
@@ -25,7 +30,10 @@ export function Button({
   size = 'md',
   disabled = false,
   loading = false,
+  icon,
+  rightIcon,
   style,
+  textStyle,
 }: ButtonProps) {
   const isInteractive = !disabled && !loading;
 
@@ -48,16 +56,21 @@ export function Button({
           color={variant === 'primary' || variant === 'danger' ? colors.textInverse : colors.primary}
         />
       ) : (
-        <Text
-          style={[
-            textStyles.base,
-            textStyles[variant],
-            textStyles[size],
-            disabled && textStyles.disabled,
-          ]}
-        >
-          {label}
-        </Text>
+        <View style={styles.contentRow}>
+          {icon && <View style={styles.iconLeft}>{icon}</View>}
+          <Text
+            style={[
+              textStyles.base,
+              textStyles[variant],
+              textStyles[size],
+              disabled && textStyles.disabled,
+              textStyle,
+            ]}
+          >
+            {label}
+          </Text>
+          {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+        </View>
       )}
     </Pressable>
   );
@@ -100,6 +113,17 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.5,
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconLeft: {
+    marginRight: 8,
+  },
+  iconRight: {
+    marginLeft: 8,
   },
 });
 

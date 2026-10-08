@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { Check } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
 import { JobStepSummary } from '../../shared/types/contracts';
 
@@ -34,14 +35,18 @@ export function JobStepper({ steps }: JobStepperProps) {
                     isExecuting && styles.circleExecuting,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.circleText,
-                      (isCompleted || isExecuting) && styles.circleTextActive,
-                    ]}
-                  >
-                    {isCompleted ? '✓' : step.sequenceNo}
-                  </Text>
+                  {isCompleted ? (
+                    <Check size={12} color="#ffffff" strokeWidth={3} />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.circleText,
+                        isExecuting && styles.circleTextActive,
+                      ]}
+                    >
+                      {step.sequenceNo}
+                    </Text>
+                  )}
                 </View>
                 {!isLast && (
                   <View

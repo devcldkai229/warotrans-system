@@ -14,11 +14,15 @@ import { CreateContainerScreen } from '../../features/inventory/CreateContainerS
 import { InventoryLookupScreen } from '../../features/inventory/InventoryLookupScreen';
 import { JobDetailScreen } from '../../features/jobs/JobDetailScreen';
 import { JobsScreen } from '../../features/jobs/JobsScreen';
+import { BarcodeScannerHUD } from '../../features/monitoring/BarcodeScannerHUD';
 import { JobLiveMapScreen } from '../../features/monitoring/JobLiveMapScreen';
 import { JobMonitoringScreen } from '../../features/monitoring/JobMonitoringScreen';
 import { OfflineBannerHUD } from '../../features/monitoring/OfflineBannerHUD';
+import { BlockPathHazardScreen } from '../../features/safety/BlockPathHazardScreen';
 import { FleetRecallScreen } from '../../features/safety/FleetRecallScreen';
 import { PayloadRecoveryScreen } from '../../features/safety/PayloadRecoveryScreen';
+import { PointToPointScreen } from '../../features/transport/PointToPointScreen';
+import { ReplenishmentScreen } from '../../features/transport/ReplenishmentScreen';
 import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
 import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
@@ -71,10 +75,24 @@ export function AppNavigator() {
         return <PayloadRecoveryScreen />;
       case 'fleet_recall':
         return <FleetRecallScreen />;
+      case 'replenishment':
+        return <ReplenishmentScreen />;
+      case 'point_to_point':
+        return <PointToPointScreen />;
+      case 'block_path':
+        return <BlockPathHazardScreen />;
       case 'transport_history':
         return <TransportHistoryScreen />;
       case 'offline_hud':
         return <OfflineBannerHUD />;
+      case 'scanner_hud':
+        return (
+          <BarcodeScannerHUD
+            visible={true}
+            onClose={goBack}
+            onScanResult={() => goBack()}
+          />
+        );
       default:
         return <HomeScreen />;
     }
@@ -82,49 +100,13 @@ export function AppNavigator() {
 
   return (
     <View style={styles.root}>
-      <AppHeader
-        operatorName={session.fullName}
-        zone={session.zone}
-        onLogout={logout}
-        onZonePress={() => setIsZoneModalOpen(true)}
-      />
-
-      {!isMainTab && (
-        <View style={styles.subHeaderBar}>
-          <Pressable
-            onPress={goBack}
-            style={({ pressed }) => [
-              styles.backButton,
-              pressed && styles.backButtonPressed,
-            ]}
-          >
-            <Text style={styles.backChevron}>‹</Text>
-            <Text style={styles.backLabel}>Back</Text>
-          </Pressable>
-          <Text style={styles.subHeaderTitle}>
-            {currentScreen === 'job_detail'
-              ? 'Job Stepper & Payload'
-              : currentScreen === 'job_monitoring'
-              ? 'Live AMR Execution'
-              : currentScreen === 'transport_create'
-              ? 'New Transport Request'
-              : currentScreen === 'create_container'
-              ? 'Pack & Ingest Container'
-              : currentScreen === 'inventory_lookup'
-              ? 'Inventory SKU & Bin Lookup'
-              : currentScreen === 'live_map'
-              ? 'Real-Time Facility Radar'
-              : currentScreen === 'payload_recovery'
-              ? 'Payload Recovery Emergency'
-              : currentScreen === 'fleet_recall'
-              ? 'Fleet Recall & Docking'
-              : currentScreen === 'transport_history'
-              ? 'Transport Audit History'
-              : currentScreen === 'offline_hud'
-              ? 'Offline HUD & Sync Cache'
-              : 'WaroTrans Console'}
-          </Text>
-        </View>
+      {isMainTab && (
+        <AppHeader
+          operatorName={session.fullName}
+          zone={session.zone}
+          onLogout={logout}
+          onZonePress={() => setIsZoneModalOpen(true)}
+        />
       )}
 
       <View style={styles.content}>{renderScreen()}</View>
@@ -201,46 +183,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  subHeaderBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: colors.surfaceSubtle,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: 12,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  backButtonPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  backChevron: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary,
-    lineHeight: 18,
-  },
-  backLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  subHeaderTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
   },
   modalOverlay: {
     flex: 1,

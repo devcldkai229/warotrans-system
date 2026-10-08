@@ -7,8 +7,10 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { Box } from 'lucide-react-native';
 import { Badge } from '../../shared/components/Badge';
 import { Input } from '../../shared/components/Input';
+import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
 
 export interface TransportAuditOrder {
@@ -100,7 +102,7 @@ const PAST_ORDERS: TransportAuditOrder[] = [
 ];
 
 export function TransportHistoryScreen() {
-  const { navigate } = useNavigation();
+  const { navigate, goBack } = useNavigation();
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
   const [search, setSearch] = useState('');
 
@@ -138,6 +140,11 @@ export function TransportHistoryScreen() {
 
   return (
     <View style={styles.container}>
+      <SubScreenHeader
+        label="AUDIT TRAIL & LOGS"
+        title="Transport Order History"
+        onBack={goBack}
+      />
       {/* Metric Counters */}
       <View style={styles.countersRow}>
         <Pressable
@@ -204,7 +211,10 @@ export function TransportHistoryScreen() {
             </Text>
 
             <View style={styles.payloadBox}>
-              <Text style={styles.containerBarcode}>📦 {order.container}</Text>
+              <View style={styles.barcodeRow}>
+                <Box size={13} color={colors.primary} />
+                <Text style={styles.containerBarcode}>{order.container}</Text>
+              </View>
               <Text style={styles.productDesc}>
                 {order.qty} × {order.product}
               </Text>
@@ -319,6 +329,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 8,
     marginBottom: 8,
+  },
+  barcodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   containerBarcode: {
     fontSize: 11,

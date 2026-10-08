@@ -8,8 +8,22 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {
+  AlertOctagon,
+  AlertTriangle,
+  Box,
+  Camera,
+  Image as ImageIcon,
+  RefreshCw,
+  ScanLine,
+  ShieldAlert,
+  Warehouse,
+  X,
+} from 'lucide-react-native';
 import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
 
 export type IncidentCategory =
   | 'CONTAINER_DAMAGED'
@@ -23,38 +37,44 @@ interface IssueReportingModalProps {
   onClose: () => void;
   onSubmit: (category: IncidentCategory, notes: string) => void;
   robotCode?: string;
+  jobId?: string;
 }
 
-const CATEGORIES: { id: IncidentCategory; title: string; desc: string; icon: string }[] = [
+const CATEGORIES: {
+  id: IncidentCategory;
+  title: string;
+  desc: string;
+  icon: 'triangle' | 'scan' | 'warehouse' | 'box' | 'octagon';
+}[] = [
   {
     id: 'CONTAINER_DAMAGED',
     title: 'Container Damaged / Crushed',
     desc: 'Physical puncture, cracked rim, broken handle, or spilled cargo',
-    icon: '📦',
+    icon: 'triangle',
   },
   {
     id: 'BARCODE_UNREADABLE',
     title: 'Barcode / QR Unreadable',
     desc: 'Label missing, scuffed code 128, distorted or smeared print',
-    icon: '🏷️',
+    icon: 'scan',
   },
   {
     id: 'SHELF_BLOCKED',
     title: 'Shelf Location Blocked / Full',
     desc: 'Destination bin occupied, mechanical overhang, or damaged rack slot',
-    icon: '🧱',
+    icon: 'warehouse',
   },
   {
     id: 'QUANTITY_MISMATCH',
     title: 'Quantity Mismatch / Missing Items',
     desc: 'Piece count inside tote differs from digital WMS packing list',
-    icon: '🔢',
+    icon: 'box',
   },
   {
     id: 'AMR_PATH_BLOCKED',
     title: 'AMR Path Blocked / Deadlocked',
     desc: 'Aisle corridor obstructed by pallet or vehicle, safety laser tripped',
-    icon: '🛑',
+    icon: 'octagon',
   },
 ];
 
@@ -63,14 +83,21 @@ export function IssueReportingModal({
   onClose,
   onSubmit,
   robotCode = 'AMR-01',
+  jobId = 'JOB-2026-0812',
 }: IssueReportingModalProps) {
   const [selectedCat, setSelectedCat] = useState<IncidentCategory>('CONTAINER_DAMAGED');
   const [notes, setNotes] = useState('');
   const [photoAttached, setPhotoAttached] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
 
   const handleSubmit = () => {
     onSubmit(selectedCat, notes);
     onClose();
+  };
+
+  const handleSnapPhoto = () => {
+    setPhotoAttached(true);
+    setCameraActive(false);
   };
 
   return (
@@ -85,86 +112,189 @@ export function IssueReportingModal({
           {/* Header */}
           <View style={styles.header}>
             <View>
+              <Text style={styles.headerTag}>
+                SCR-STF-16 · {robotCode} · {jobId}
+              </Text>
               <Text style={styles.title}>Report Exception & Incident</Text>
-              <Text style={styles.subtitle}>{robotCode} · Active Task Issue</Text>
             </View>
             <Pressable onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeText}>✕</Text>
+              <X size={20} color={colors.textSecondary} />
             </Pressable>
           </View>
 
-          <ScrollView style={styles.scrollArea}>
+          <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
             {/* Safety Warning */}
             <View style={styles.safetyBox}>
-              <Text style={styles.safetyIcon}>🛡️</Text>
+              <ShieldAlert size={18} color={colors.danger} style={{ marginTop: 2 }} />
               <View style={styles.safetyTextWrap}>
-                <Text style={styles.safetyTitle}>Safety Protocol Active</Text>
+                <Text style={styles.safetyBold}>Safety Perimeter Protocol Active</Text>
                 <Text style={styles.safetyDesc}>
-                  Submitting this report will place {robotCode} on hold and notify the Shift Supervisor.
+                  Submitting this report will place <Text style={{ fontWeight: '900' }}>{robotCode}</Text> in emergency HOLD status. Dispatcher and Shift Supervisor will be alerted immediately.
                 </Text>
               </View>
             </View>
 
-            {/* Category Choices */}
-            <Text style={styles.sectionHeading}>1. SELECT INCIDENT CATEGORY</Text>
-            <View style={styles.categoryList}>
-              {CATEGORIES.map((cat) => {
-                const isSelected = selectedCat === cat.id;
-                return (
-                  <Pressable
-                    key={cat.id}
-                    onPress={() => setSelectedCat(cat.id)}
-                    style={[
-                      styles.catItem,
-                      isSelected && styles.catItemSelected,
-                    ]}
-                  >
-                    <Text style={styles.catIcon}>{cat.icon}</Text>
-                    <View style={styles.catInfo}>
-                      <Text
+            {/* 1. Category Picker */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>1. SELECT INCIDENT CATEGORY (REQUIRED)</Text>
+              <View style={{ gap: 8 }}>
+                {CATEGORIES.map((c) => {
+                  const isSelected = selectedCat === c.id;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => setSelectedCat(c.id)}
+                      style={[
+                        styles.catCard,
+                        isSelected && styles.catCardSelected,
+                      ]}
+                    >
+                      <View
                         style={[
-                          styles.catTitle,
-                          isSelected && styles.catTitleSelected,
+                          styles.catIconWrap,
+                          isSelected && styles.catIconWrapSelected,
                         ]}
                       >
-                        {cat.title}
-                      </Text>
-                      <Text style={styles.catDesc}>{cat.desc}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
+                        {c.icon === 'triangle' ? (
+                          <AlertTriangle
+                            size={16}
+                            color={isSelected ? '#ffffff' : colors.textMuted}
+                          />
+                        ) : c.icon === 'scan' ? (
+                          <ScanLine
+                            size={16}
+                            color={isSelected ? '#ffffff' : colors.textMuted}
+                          />
+                        ) : c.icon === 'warehouse' ? (
+                          <Warehouse
+                            size={16}
+                            color={isSelected ? '#ffffff' : colors.textMuted}
+                          />
+                        ) : c.icon === 'box' ? (
+                          <Box
+                            size={16}
+                            color={isSelected ? '#ffffff' : colors.textMuted}
+                          />
+                        ) : (
+                          <AlertOctagon
+                            size={16}
+                            color={isSelected ? '#ffffff' : colors.textMuted}
+                          />
+                        )}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.catTitle,
+                            isSelected && styles.catTitleSelected,
+                          ]}
+                        >
+                          {c.title}
+                        </Text>
+                        <Text style={styles.catDesc}>{c.desc}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
-            {/* Notes Input */}
-            <Text style={styles.sectionHeading}>2. FIELD OPERATOR NOTES</Text>
-            <TextInput
-              style={styles.notesInput}
-              placeholder="Describe physical condition, rack aisle location..."
-              placeholderTextColor={colors.textMuted}
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={3}
-            />
+            {/* 2. Photo Evidence (SCR-STF-17) */}
+            <View style={styles.evidenceCard}>
+              <View style={styles.evidenceHeader}>
+                <View>
+                  <Text style={styles.sectionLabel}>2. SCR-STF-17: PHOTO EVIDENCE</Text>
+                  <Text style={styles.evidenceSub}>Attach physical proof for supervisor</Text>
+                </View>
+                <View style={[styles.evidenceBadge, photoAttached && styles.evidenceBadgeAttached]}>
+                  <Text style={[styles.evidenceBadgeText, photoAttached && styles.evidenceBadgeTextAttached]}>
+                    {photoAttached ? 'ATTACHED' : 'OPTIONAL'}
+                  </Text>
+                </View>
+              </View>
 
-            {/* Photo Attachment Toggle */}
-            <Pressable
-              onPress={() => setPhotoAttached(!photoAttached)}
-              style={styles.photoToggle}
-            >
-              <Text style={styles.photoIcon}>📷</Text>
-              <Text style={styles.photoLabel}>
-                {photoAttached ? 'Evidence Photo Attached (IMG_2026_01.jpg)' : 'Attach Photo Evidence'}
-              </Text>
-              <Text style={styles.photoCheck}>{photoAttached ? '✓' : '+'}</Text>
-            </Pressable>
+              {!photoAttached ? (
+                cameraActive ? (
+                  /* Simulated Camera Viewfinder */
+                  <View style={styles.cameraBox}>
+                    <View style={styles.camTop}>
+                      <Text style={styles.camRecText}>● REC 1080p</Text>
+                      <Text style={styles.camDeviceText}>PDA CAM-01</Text>
+                    </View>
+                    <View style={styles.camReticle}>
+                      <View style={styles.camCenterLine} />
+                      <Text style={styles.camReticleText}>Align defect within frame</Text>
+                    </View>
+                    <View style={styles.camActions}>
+                      <Button
+                        label="Cancel"
+                        onPress={() => setCameraActive(false)}
+                        variant="secondary"
+                        size="sm"
+                      />
+                      <Pressable onPress={handleSnapPhoto} style={styles.shutterBtn}>
+                        <Camera size={22} color="#ffffff" />
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Button
+                    label="Open Camera to Capture Evidence"
+                    icon={<Camera size={16} color={colors.primary} />}
+                    onPress={() => setCameraActive(true)}
+                    variant="outline"
+                    size="md"
+                    style={styles.openCamBtn}
+                    textStyle={{ color: colors.primary, fontWeight: '800' }}
+                  />
+                )
+              ) : (
+                /* Photo Thumbnail Preview Card */
+                <View style={styles.previewCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View style={styles.previewIconBox}>
+                      <ImageIcon size={22} color={colors.primary} />
+                    </View>
+                    <View>
+                      <Text style={styles.previewFilename}>
+                        IMG_20260924_{selectedCat.substring(0, 8)}.JPG
+                      </Text>
+                      <Text style={styles.previewMeta}>Evidence Attached · 1.4 MB · High-Res</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <Pressable onPress={() => setCameraActive(true)} style={styles.retakeBtn}>
+                      <RefreshCw size={12} color={colors.primary} />
+                      <Text style={styles.retakeText}>Retake</Text>
+                    </Pressable>
+                    <Pressable onPress={() => setPhotoAttached(false)} style={styles.deletePhotoBtn}>
+                      <X size={14} color={colors.danger} />
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* 3. Operator Notes */}
+            <View style={styles.notesCard}>
+              <Text style={styles.sectionLabel}>3. OPERATOR DESCRIPTION NOTES</Text>
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="E.g., Left corner cracked, 2 units dislodged onto lane 2..."
+                placeholderTextColor={colors.textMuted}
+                multiline
+                numberOfLines={3}
+                style={styles.notesInput}
+              />
+            </View>
           </ScrollView>
 
-          {/* Action Buttons */}
-          <View style={styles.actionRow}>
+          {/* Bottom Fixed Action */}
+          <View style={styles.footer}>
             <Button
-              label="SUBMIT SAFETY REPORT"
+              label="Submit Exception & Pause Task"
+              icon={<AlertTriangle size={18} color="#ffffff" />}
               onPress={handleSubmit}
               variant="danger"
               size="lg"
@@ -186,96 +316,99 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '85%',
+    maxHeight: '92%',
+    ...shadows.sheet,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingBottom: 10,
+  },
+  headerTag: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: colors.primary,
+    fontFamily: typography.fontMono,
+    letterSpacing: 0.8,
   },
   title: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   closeBtn: {
-    padding: 4,
-  },
-  closeText: {
-    fontSize: 16,
-    color: colors.textMuted,
-    fontWeight: '700',
+    padding: 6,
+    borderRadius: 8,
   },
   scrollArea: {
-    marginBottom: 12,
+    maxHeight: 520,
+  },
+  scrollContent: {
+    padding: 16,
+    gap: 14,
   },
   safetyBox: {
     flexDirection: 'row',
+    gap: 10,
     backgroundColor: colors.dangerBg,
-    borderColor: colors.dangerBorder,
+    borderRadius: 12,
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    gap: 8,
-    marginBottom: 14,
-  },
-  safetyIcon: {
-    fontSize: 16,
+    borderColor: colors.dangerBorder,
+    padding: 12,
   },
   safetyTextWrap: {
     flex: 1,
   },
-  safetyTitle: {
-    fontSize: 11,
-    fontWeight: '800',
+  safetyBold: {
+    fontSize: 12,
+    fontWeight: '900',
     color: colors.danger,
   },
   safetyDesc: {
-    fontSize: 10,
+    fontSize: 11,
     color: colors.textSecondary,
+    lineHeight: 15,
     marginTop: 2,
-    lineHeight: 14,
   },
-  sectionHeading: {
+  section: {
+    gap: 6,
+  },
+  sectionLabel: {
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.8,
-    color: colors.textSecondary,
-    marginBottom: 8,
+    color: colors.textMuted,
   },
-  categoryList: {
-    gap: 6,
-    marginBottom: 14,
-  },
-  catItem: {
+  catCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
     gap: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: 12,
+    ...shadows.panel,
   },
-  catItemSelected: {
+  catCardSelected: {
     borderColor: colors.danger,
     backgroundColor: colors.dangerBg,
   },
-  catIcon: {
-    fontSize: 18,
+  catIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  catInfo: {
-    flex: 1,
+  catIconWrapSelected: {
+    backgroundColor: colors.danger,
   },
   catTitle: {
     fontSize: 12,
@@ -284,50 +417,189 @@ const styles = StyleSheet.create({
   },
   catTitleSelected: {
     color: colors.danger,
+    fontWeight: '900',
   },
   catDesc: {
     fontSize: 10,
     color: colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
-  notesInput: {
-    backgroundColor: colors.surfaceSubtle,
+  evidenceCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 12,
-    color: colors.textPrimary,
-    textAlignVertical: 'top',
-    minHeight: 60,
-    marginBottom: 12,
+    padding: 14,
+    gap: 10,
+    ...shadows.panel,
   },
-  photoToggle: {
+  evidenceHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
-    gap: 8,
-    marginBottom: 8,
   },
-  photoIcon: {
-    fontSize: 16,
-  },
-  photoLabel: {
-    flex: 1,
+  evidenceSub: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.textPrimary,
+    marginTop: 1,
   },
-  photoCheck: {
-    fontSize: 14,
+  evidenceBadge: {
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  evidenceBadgeAttached: {
+    backgroundColor: colors.successSoft,
+  },
+  evidenceBadgeText: {
+    fontSize: 8,
     fontWeight: '900',
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  evidenceBadgeTextAttached: {
+    color: colors.success,
+  },
+  openCamBtn: {
+    borderColor: colors.primaryBorder,
+    borderStyle: 'dashed',
+    borderWidth: 1.5,
+    borderRadius: 10,
+  },
+  cameraBox: {
+    backgroundColor: '#000000',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    padding: 12,
+    alignItems: 'center',
+  },
+  camTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  camRecText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#ef4444',
+    fontFamily: typography.fontMono,
+  },
+  camDeviceText: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontFamily: typography.fontMono,
+  },
+  camReticle: {
+    width: '80%',
+    height: 90,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: 8,
+    marginVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  camCenterLine: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    height: 1,
+    backgroundColor: '#ef4444',
+  },
+  camReticleText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  camActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  shutterBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    backgroundColor: colors.danger,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.float,
+  },
+  previewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.successBg,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    padding: 10,
+  },
+  previewIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewFilename: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  previewMeta: {
+    fontSize: 9,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  retakeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+  },
+  retakeText: {
+    fontSize: 10,
+    fontWeight: '800',
     color: colors.primary,
   },
-  actionRow: {
-    paddingTop: 8,
+  deletePhotoBtn: {
+    padding: 6,
+  },
+  notesCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 8,
+    ...shadows.panel,
+  },
+  notesInput: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 12,
+    color: colors.textPrimary,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: '#ffffff',
   },
 });

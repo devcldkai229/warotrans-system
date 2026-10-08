@@ -14,8 +14,12 @@ export type AppScreen =
   | 'live_map'
   | 'payload_recovery'
   | 'fleet_recall'
+  | 'replenishment'
+  | 'point_to_point'
+  | 'block_path'
   | 'transport_history'
-  | 'offline_hud';
+  | 'offline_hud'
+  | 'scanner_hud';
 
 export interface NavigationState {
   currentScreen: AppScreen;
