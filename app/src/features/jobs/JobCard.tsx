@@ -89,10 +89,11 @@ export function JobCard({ job, onPress }: JobCardProps) {
         {/* Route / Target Box */}
         <View style={styles.routeBox}>
           <View style={styles.routeIconWrap}>
-            <MapPin size={16} color={colors.primary} />
+            <MapPin size={18} color={colors.primary} />
           </View>
           <View style={styles.routeDetails}>
-            <Text style={styles.targetLabel}>Target: {job.destinationEndpointCode}</Text>
+            <Text style={styles.targetEyebrow}>TARGET LOCATION</Text>
+            <Text style={styles.targetCode} numberOfLines={1}>{job.destinationEndpointCode}</Text>
             <Text style={styles.routeText} numberOfLines={1}>
               {job.routeText}
             </Text>
@@ -138,10 +139,10 @@ export function JobCard({ job, onPress }: JobCardProps) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
+    marginBottom: 12,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
@@ -150,15 +151,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardPressed: {
-    transform: [{ scale: 0.985 }],
+    transform: [{ scale: 0.98 }],
     borderColor: colors.primary,
   },
   accentStrip: {
-    height: 4,
+    height: 6,
     width: '100%',
   },
   cardContent: {
-    padding: 12,
+    padding: 14,
   },
   headerRow: {
     flexDirection: 'row',
@@ -169,23 +170,25 @@ const styles = StyleSheet.create({
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     flex: 1,
   },
   jobNo: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     fontFamily: typography.fontMono,
     color: colors.textPrimary,
   },
   workflowName: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '900',
     color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   payloadSummary: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textSecondary,
     marginBottom: 10,
   },
@@ -193,30 +196,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceSubtle,
-    borderRadius: 8,
-    padding: 8,
-    gap: 8,
-    marginBottom: 10,
+    borderRadius: 10,
+    padding: 10,
+    gap: 10,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   routeIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   routeDetails: {
     flex: 1,
+    minWidth: 0,
   },
-  targetLabel: {
-    fontSize: 11,
-    fontWeight: '800',
+  targetEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+  },
+  targetCode: {
+    fontSize: 13,
+    fontWeight: '900',
     color: colors.textPrimary,
+    marginTop: 1,
   },
   routeText: {
     fontSize: 10,
@@ -228,7 +245,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 8,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
   },

@@ -1,6 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { Box, Layers } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 import { ContainerSlot } from '../../shared/types/contracts';
 
 interface AmrChassisDeckVisualizerProps {
@@ -12,39 +14,83 @@ export function AmrChassisDeckVisualizer({
   slots,
   robotCode = 'AMR-01',
 }: AmrChassisDeckVisualizerProps) {
+  const filledCount = slots.filter((s) => s.action !== 'EMPTY').length;
+
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
-          <Text style={styles.title}>FLATBED DECK CHASSIS MAP</Text>
-          <Text style={styles.robotCode}>{robotCode}</Text>
+          <View style={styles.iconWrap}>
+            <Layers size={14} color={colors.primary} />
+          </View>
+          <View>
+            <Text style={styles.title}>
+              {robotCode} Flatbed Chassis · 3-Tray Deck
+            </Text>
+            <Text style={styles.subTitle}>Top-Down Physical Tray Arrangement</Text>
+          </View>
         </View>
-        <Text style={styles.directionIndicator}>▲ TRAVEL FORWARD</Text>
+        <View style={styles.slotsBadge}>
+          <Text style={styles.slotsBadgeText}>{filledCount}/3 SLOTS</Text>
+        </View>
       </View>
 
-      <View style={styles.chassisBody}>
-        {slots.map((slot) => {
-          const isFilled = slot.action !== 'EMPTY';
-          const isUnload = slot.action === 'UNLOAD';
-          const isPickup = slot.action === 'PICKUP';
+      {/* Industrial AMR Chassis Schematic Graphic */}
+      <View style={styles.schematicWrapper}>
+        {/* Drive Wheels */}
+        <View style={styles.wheelLeft} />
+        <View style={styles.wheelRight} />
 
-          return (
-            <View
-              key={slot.slotNo}
-              style={[
-                styles.slotTray,
-                isFilled && styles.slotTrayFilled,
-                isUnload && styles.slotTrayUnload,
-                isPickup && styles.slotTrayPickup,
-              ]}
-            >
-              <View style={styles.slotTopRow}>
-                <View style={styles.slotLabelGroup}>
-                  {(isUnload || isPickup) && (
-                    <View style={[styles.ledDot, isUnload ? styles.ledDotBlue : styles.ledDotAmber]} />
-                  )}
-                  <Text style={styles.slotLabelText}>{slot.slotLabel}</Text>
+        {/* Heading Indicator Arrow */}
+        <View style={styles.headingIndicator}>
+          <Text style={styles.headingIndicatorText}>▲ FRONT (NAV2 HEADING DIRECTION)</Text>
+        </View>
+
+        {/* 3 Physical Tray Bays */}
+        <View style={styles.chassisBody}>
+          {slots.map((slot) => {
+            const isFilled = slot.action !== 'EMPTY';
+            const isUnload = slot.action === 'UNLOAD';
+            const isPickup = slot.action === 'PICKUP';
+
+            return (
+              <View
+                key={slot.slotNo}
+                style={[
+                  styles.slotTray,
+                  isFilled && styles.slotTrayFilled,
+                  isUnload && styles.slotTrayUnload,
+                  isPickup && styles.slotTrayPickup,
+                ]}
+              >
+                <View style={styles.slotTopRow}>
+                  <View style={styles.slotLabelGroup}>
+                    {(isUnload || isPickup) && (
+                      <View style={[styles.ledDot, isUnload ? styles.ledDotBlue : styles.ledDotAmber]} />
+                    )}
+                    <Text style={styles.slotLabelText}>{slot.slotLabel}</Text>
+                  </View>
                 </View>
+
+                {isFilled ? (
+                  <View style={styles.slotCargo}>
+                    <View style={styles.boxIconWrap}>
+                      <Box size={13} color={isUnload ? colors.primary : colors.textSecondary} />
+                    </View>
+                    <Text style={[styles.cargoBarcode, isUnload && styles.cargoBarcodeUnload]} numberOfLines={1}>
+                      {slot.containerBarcode}
+                    </Text>
+                    {slot.quantity !== undefined && (
+                      <Text style={styles.cargoQty}>{slot.quantity} pcs</Text>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.emptySlotWrap}>
+                    <Text style={styles.emptySlotText}>EMPTY TRAY</Text>
+                  </View>
+                )}
+
                 <View
                   style={[
                     styles.actionTag,
@@ -59,37 +105,21 @@ export function AmrChassisDeckVisualizer({
                       isPickup && styles.textPickup,
                     ]}
                   >
-                    {slot.action}
+                    {isUnload ? 'UNLOAD' : isPickup ? 'PICKUP' : slot.action}
                   </Text>
                 </View>
               </View>
-
-              {isFilled ? (
-                <View style={styles.slotCargo}>
-                  <Text style={styles.cargoBarcode}>{slot.containerBarcode}</Text>
-                  <Text style={styles.cargoProduct} numberOfLines={1}>
-                    {slot.productName}
-                  </Text>
-                  {slot.quantity !== undefined && (
-                    <Text style={styles.cargoQty}>{slot.quantity} units</Text>
-                  )}
-                </View>
-              ) : (
-                <View style={styles.emptySlotWrap}>
-                  <Text style={styles.emptySlotText}>[ Empty Slot ]</Text>
-                </View>
-              )}
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
       </View>
 
       {/* Pick-to-Light Physical Deck Guidance */}
       <View style={styles.ptlGuidance}>
         <View style={styles.ptlLedPulse} />
         <Text style={styles.ptlText}>
-          <Text style={styles.ptlBold}>Pick-to-Light Active: </Text>
-          Target slot illuminated on AMR physical deck during handover.
+          <Text style={styles.ptlBold}>Pick-to-Light: </Text>
+          Operator retrieves tote directly from illuminated tray slot during handover.
         </Text>
       </View>
     </View>
@@ -101,9 +131,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   headerRow: {
     flexDirection: 'row',
@@ -112,30 +142,89 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.surfaceSubtle,
-    paddingBottom: 6,
+    paddingBottom: 8,
   },
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    flex: 1,
+  },
+  iconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 92, 209, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 0.8,
-    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    color: colors.textPrimary,
+    textTransform: 'uppercase',
   },
-  robotCode: {
-    fontSize: 10,
-    fontWeight: '800',
-    fontFamily: 'monospace',
+  subTitle: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  slotsBadge: {
+    backgroundColor: 'rgba(0, 92, 209, 0.08)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.2)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  slotsBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    fontFamily: typography.fontMono,
     color: colors.primary,
   },
-  directionIndicator: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.textMuted,
-    fontFamily: 'monospace',
+  schematicWrapper: {
+    position: 'relative',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 92, 209, 0.35)',
+    backgroundColor: colors.surfaceSubtle,
+    padding: 10,
+    marginVertical: 4,
+  },
+  wheelLeft: {
+    position: 'absolute',
+    left: -4,
+    top: '50%',
+    marginTop: -16,
+    width: 5,
+    height: 32,
+    borderRadius: 2.5,
+    backgroundColor: '#334155',
+  },
+  wheelRight: {
+    position: 'absolute',
+    right: -4,
+    top: '50%',
+    marginTop: -16,
+    width: 5,
+    height: 32,
+    borderRadius: 2.5,
+    backgroundColor: '#334155',
+  },
+  headingIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  headingIndicatorText: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: colors.primary,
+    fontFamily: typography.fontMono,
   },
   chassisBody: {
     flexDirection: 'row',
@@ -200,23 +289,40 @@ const styles = StyleSheet.create({
   },
   slotCargo: {
     marginTop: 4,
+    alignItems: 'center',
+    width: '100%',
+  },
+  boxIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 92, 209, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
   },
   cargoBarcode: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  cargoBarcodeUnload: {
+    color: colors.primary,
   },
   cargoProduct: {
     fontSize: 9,
     color: colors.textSecondary,
     marginTop: 1,
+    textAlign: 'center',
   },
   cargoQty: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 1,
+    textAlign: 'center',
   },
   emptySlotWrap: {
     alignItems: 'center',

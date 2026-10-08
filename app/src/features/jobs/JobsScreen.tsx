@@ -6,13 +6,15 @@ import {
   Text,
   View,
 } from 'react-native';
+import { CheckCircle2, Search, X } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 import { JobCard } from './JobCard';
 import { MOCK_JOBS } from './jobData';
-
-import { Box, Search, X } from 'lucide-react-native';
 
 type ScopeMode = 'active' | 'global' | 'history';
 type StatusFilter = 'ALL' | 'RUNNING' | 'QUEUED' | 'COMPLETED';
@@ -92,8 +94,13 @@ export function JobsScreen() {
       {/* Scope Segmented Control */}
       <View style={styles.scopeBar}>
         <Pressable
-          onPress={() => setScope('active')}
+          onPress={() => {
+            triggerHaptic('tap');
+            setScope('active');
+          }}
           style={[styles.scopeBtn, scope === 'active' && styles.scopeBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="My Active jobs"
         >
           <Text
             style={[
@@ -121,8 +128,13 @@ export function JobsScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => setScope('global')}
+          onPress={() => {
+            triggerHaptic('tap');
+            setScope('global');
+          }}
           style={[styles.scopeBtn, scope === 'global' && styles.scopeBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="Global Fleet jobs"
         >
           <Text
             style={[
@@ -150,8 +162,13 @@ export function JobsScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => setScope('history')}
+          onPress={() => {
+            triggerHaptic('tap');
+            setScope('history');
+          }}
           style={[styles.scopeBtn, scope === 'history' && styles.scopeBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="Jobs history"
         >
           <Text
             style={[
@@ -192,7 +209,10 @@ export function JobsScreen() {
             return (
               <Pressable
                 key={st}
-                onPress={() => setStatusFilter(st)}
+                onPress={() => {
+                  triggerHaptic('tap');
+                  setStatusFilter(st);
+                }}
                 style={[
                   styles.filterChip,
                   isSelected && styles.filterChipSelected,
@@ -228,13 +248,21 @@ export function JobsScreen() {
         ) : (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconWrap}>
-              <Box size={36} color={colors.textMuted} />
+              <CheckCircle2 size={36} color={colors.success} strokeWidth={2.4} />
             </View>
-            <Text style={styles.emptyTitle}>No Jobs Found</Text>
+            <Text style={styles.emptyTitle}>
+              {search
+                ? 'No matching jobs'
+                : scope === 'history'
+                ? 'No history yet'
+                : "You're all caught up!"}
+            </Text>
             <Text style={styles.emptyDesc}>
               {search
-                ? `No jobs matched query "${search}". Try resetting the search.`
-                : 'There are currently no tasks in this view scope.'}
+                ? `No jobs matched query "${search}". Try resetting the search filter.`
+                : scope === 'history'
+                ? 'Completed tasks will appear here once verified.'
+                : 'No active tasks in your queue. Take a breather or check the global fleet.'}
             </Text>
           </View>
         )}
