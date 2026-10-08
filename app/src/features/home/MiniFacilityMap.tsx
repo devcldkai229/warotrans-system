@@ -39,6 +39,99 @@ interface MiniFacilityMapProps {
   robots: MapRobot[];
 }
 
+/**
+ * Animated radiating radar wave ring when a robot is actively selected
+ * Matches prototype `animate-ping` / radar wave radiation effect
+ */
+function RobotSelectionRadarWave({ isSelected }: { isSelected: boolean }) {
+  const waveAnim1 = useRef(new Animated.Value(0)).current;
+  const waveAnim2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isSelected) {
+      waveAnim1.setValue(0);
+      waveAnim2.setValue(0);
+      return;
+    }
+    const a1 = Animated.loop(
+      Animated.timing(waveAnim1, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: Platform.OS !== 'web',
+      })
+    );
+    const a2 = Animated.loop(
+      Animated.sequence([
+        Animated.delay(750),
+        Animated.timing(waveAnim2, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ])
+    );
+    a1.start();
+    a2.start();
+    return () => {
+      a1.stop();
+      a2.stop();
+    };
+  }, [isSelected, waveAnim1, waveAnim2]);
+
+  if (!isSelected) {
+    return <View style={styles.robotPulseDefault} />;
+  }
+
+  const scale1 = waveAnim1.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 2.3],
+  });
+  const opacity1 = waveAnim1.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [0.85, 0.35, 0],
+  });
+
+  const scale2 = waveAnim2.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 2.3],
+  });
+  const opacity2 = waveAnim2.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [0.85, 0.35, 0],
+  });
+
+  return (
+    <>
+      {/* Animated radiating wave ring 1 */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.robotPulseWave,
+          {
+            transform: [{ scale: scale1 }],
+            opacity: opacity1,
+          },
+        ]}
+      />
+      {/* Interleaved radiating wave ring 2 */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.robotPulseWave,
+          {
+            transform: [{ scale: scale2 }],
+            opacity: opacity2,
+          },
+        ]}
+      />
+      {/* Static active halo ring */}
+      <View style={styles.robotActiveHalo} pointerEvents="none" />
+    </>
+  );
+}
+
 export function MiniFacilityMap({
   currentZone,
   selectedRobotId,
@@ -72,13 +165,13 @@ export function MiniFacilityMap({
 
   const getWorkerPosition = () => {
     if (currentZone.includes('Inbound') || currentZone.includes('Dock 01')) {
-      return { left: '22%', top: '82%', name: 'Dock 01' };
+      return { left: '22%', top: '84%', name: 'Dock 01' };
     }
     if (currentZone.includes('Zone B')) {
       return { left: '76%', top: '38%', name: 'Zone B' };
     }
-    if (currentZone.includes('Outbound') || currentZone.includes('Shipping')) {
-      return { left: '78%', top: '82%', name: 'Dock Out' };
+    if (currentZone.includes('Outbound') || currentZone.includes('Shipping') || currentZone.includes('Dock 04')) {
+      return { left: '78%', top: '84%', name: 'Dock Out' };
     }
     return { left: '24%', top: '38%', name: 'Zone A' };
   };
@@ -211,10 +304,10 @@ export function MiniFacilityMap({
       {/* 9. Dynamic Nav2 Trajectory Wayline */}
       <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
         <Line
-          x1="32%"
-          y1="46%"
+          x1="38%"
+          y1="44%"
           x2="22%"
-          y2="82%"
+          y2="84%"
           stroke="#005cd1"
           strokeWidth="2"
           strokeDasharray="4,4"
@@ -244,7 +337,9 @@ export function MiniFacilityMap({
         </View>
         <View style={styles.workerLabelWrap}>
           <View style={styles.workerBlueDot} />
-          <Text style={styles.workerLabelText}>You ({workerPos.name})</Text>
+          <Text style={styles.workerLabelText} numberOfLines={1}>
+            You ({workerPos.name})
+          </Text>
         </View>
       </View>
 
@@ -267,16 +362,27 @@ export function MiniFacilityMap({
                 top: `${robot.yPercent}%` as any,
               },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Select ${robot.id}`}
           >
-            {/* Pulsing Distance Ring */}
-            <View
-              style={[
-                styles.robotPulseRing,
-                isSelected ? styles.robotPulseSelected : styles.robotPulseDefault,
-              ]}
-            />
+            {/* Directional Sonar Radar Cone on Web */}
+            {isWeb && (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.directionalSonarCone,
+                  {
+                    transform: [{ rotate: `${robot.headingDeg - 45}deg` }],
+                    backgroundImage: 'conic-gradient(from 0deg, transparent 75%, rgba(0, 92, 209, 0.40) 100%)',
+                  } as any,
+                ]}
+              />
+            )}
 
-            {/* Directional Robot Marker with Sharp SVG Navigation Arrow */}
+            {/* Pulsing Radiating Radar Wave when Selected */}
+            <RobotSelectionRadarWave isSelected={isSelected} />
+
+            {/* Directional Robot Marker with Geometrically Centered SVG Navigation Arrow */}
             <View
               style={[
                 styles.robotMarker,
@@ -286,16 +392,26 @@ export function MiniFacilityMap({
             >
               <View
                 style={{
-                  transform: [{ rotate: `${robot.headingDeg}deg` }],
+                  width: 20,
+                  height: 20,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  transform: [{ rotate: `${robot.headingDeg}deg` }],
                 }}
               >
-                <Navigation size={18} color="#ffffff" fill="#ffffff" />
+                <Navigation
+                  size={17}
+                  color="#ffffff"
+                  fill="#ffffff"
+                  style={{
+                    marginLeft: -1.5,
+                    marginTop: 1.5,
+                  }}
+                />
               </View>
             </View>
 
-            {/* Speed & ID Floating Tag (Refined Light Pill matching prototype) */}
+            {/* Speed & ID Floating Tag - Single-line nowrap horizontal pill */}
             <View style={styles.robotTag}>
               <View
                 style={[
@@ -303,7 +419,7 @@ export function MiniFacilityMap({
                   { backgroundColor: isMoving ? colors.primary : colors.success },
                 ]}
               />
-              <Text style={styles.robotTagText}>
+              <Text style={styles.robotTagText} numberOfLines={1}>
                 {robot.id} · {robot.speed}
               </Text>
             </View>
@@ -592,8 +708,11 @@ const styles = StyleSheet.create({
   workerLabelWrap: {
     position: 'absolute',
     top: 32,
+    left: -24,
+    minWidth: 76,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 4,
     borderWidth: 1,
@@ -605,6 +724,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+    ...(Platform.OS === 'web'
+      ? ({
+          left: '50%',
+          transform: [{ translateX: -38 }],
+          whiteSpace: 'nowrap',
+          width: 'max-content',
+        } as any)
+      : {}),
   },
   workerBlueDot: {
     width: 5,
@@ -617,6 +744,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
+    textAlign: 'center',
+    ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   robotWrapper: {
     position: 'absolute',
@@ -625,19 +754,38 @@ const styles = StyleSheet.create({
     transform: [{ translateX: -20 }, { translateY: -20 }],
     zIndex: 26,
   },
-  robotPulseRing: {
+  directionalSonarCone: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    top: -20,
+    left: -20,
+    opacity: 0.35,
+  },
+  robotPulseWave: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  robotActiveHalo: {
     position: 'absolute',
     width: 48,
     height: 48,
     borderRadius: 24,
-  },
-  robotPulseSelected: {
     borderWidth: 2,
-    borderColor: 'rgba(0, 92, 209, 0.75)',
+    borderColor: 'rgba(0, 92, 209, 0.55)',
   },
   robotPulseDefault: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(84, 101, 125, 0.3)',
+    borderColor: 'rgba(84, 101, 125, 0.25)',
   },
   robotMarker: {
     width: 40,
@@ -666,8 +814,11 @@ const styles = StyleSheet.create({
   robotTag: {
     position: 'absolute',
     top: 44,
+    left: -22,
+    minWidth: 84,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 4,
     borderWidth: 1,
@@ -680,6 +831,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 2,
+    ...(Platform.OS === 'web'
+      ? ({
+          left: '50%',
+          transform: [{ translateX: -42 }],
+          whiteSpace: 'nowrap',
+          width: 'max-content',
+        } as any)
+      : {}),
   },
   tagDot: {
     width: 5,
@@ -691,5 +850,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '900',
     fontFamily: typography.fontMono,
+    textAlign: 'center',
+    ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
 });

@@ -9,6 +9,7 @@ import {
 import {
   BatteryMedium,
   Check,
+  Plus,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react-native';
@@ -24,20 +25,20 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 const INITIAL_ROBOTS: MapRobot[] = [
   {
     id: 'AMR-01',
-    xPercent: 32,
+    xPercent: 38,
     yPercent: 44,
-    headingDeg: 120,
+    headingDeg: 45,
     status: 'EN_ROUTE',
-    battery: 78,
+    battery: 85,
     speed: '1.2 m/s',
   },
   {
     id: 'AMR-02',
-    xPercent: 78,
-    yPercent: 72,
-    headingDeg: 0,
+    xPercent: 74,
+    yPercent: 26,
+    headingDeg: 180,
     status: 'STANDBY',
-    battery: 94,
+    battery: 92,
     speed: '0.0 m/s',
   },
 ];
@@ -168,6 +169,23 @@ export function HomeScreen() {
                 </Pressable>
               </View>
             </View>
+
+            {/* Restored Quick Transport Request Action Button */}
+            <Pressable
+              onPress={() => {
+                triggerHaptic('tap');
+                navigate('transport_create');
+              }}
+              style={({ pressed }) => [
+                styles.newTransportBtn,
+                pressed && styles.newTransportBtnPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Create new transport request"
+            >
+              <Plus size={16} color="#ffffff" strokeWidth={3} />
+              <Text style={styles.newTransportBtnText}>+ New Transport Request</Text>
+            </Pressable>
           </View>
 
           {/* 3. Expanded Drawer Content (Warehouse Pulse & Fleet Telemetry) */}
@@ -495,6 +513,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     fontFamily: typography.fontSans,
+  },
+  newTransportBtn: {
+    marginTop: 10,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    borderBottomWidth: 2,
+    borderBottomColor: '#004bb0',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  newTransportBtnPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
+  },
+  newTransportBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+    fontFamily: typography.fontSans,
+    letterSpacing: 0.2,
   },
   expandedContent: {
     paddingHorizontal: 16,

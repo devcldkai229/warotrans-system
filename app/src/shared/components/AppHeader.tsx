@@ -36,6 +36,7 @@ export function AppHeader({
   onNotificationsPress,
 }: AppHeaderProps) {
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
 
   const handleOpenNotifications = () => {
@@ -100,9 +101,8 @@ export function AppHeader({
         {onLogout && (
           <Pressable
             onPress={() => {
-              triggerHaptic('warning');
-              onLogout();
-              toast.info('Logged out from shift console.');
+              triggerHaptic('tap');
+              setIsLogoutModalOpen(true);
             }}
             style={({ pressed }) => [
               styles.logoutCircle,
@@ -189,6 +189,60 @@ export function AppHeader({
             >
               <Text style={styles.markReadText}>Dismiss & Mark As Read</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Shift Logout Confirmation Modal */}
+      <Modal
+        visible={isLogoutModalOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsLogoutModalOpen(false)}
+      >
+        <View style={styles.logoutModalOverlay}>
+          <View style={styles.logoutDialog}>
+            <View style={styles.logoutIconCircle}>
+              <LogOut size={22} color={colors.danger} />
+            </View>
+            <Text style={styles.logoutDialogTitle}>End Shift & Sign Out?</Text>
+            <Text style={styles.logoutDialogDesc}>
+              Are you sure you want to sign out of the active shift console? Your current work zone and assigned queue will remain registered in WES.
+            </Text>
+
+            <View style={styles.logoutBtnRow}>
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
+                  setIsLogoutModalOpen(false);
+                }}
+                style={({ pressed }) => [
+                  styles.cancelLogoutBtn,
+                  pressed && styles.cancelLogoutBtnPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel sign out"
+              >
+                <Text style={styles.cancelLogoutText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('warning');
+                  setIsLogoutModalOpen(false);
+                  onLogout?.();
+                  toast.info('Logged out from shift console.');
+                }}
+                style={({ pressed }) => [
+                  styles.confirmLogoutBtn,
+                  pressed && styles.confirmLogoutBtnPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm sign out"
+              >
+                <Text style={styles.confirmLogoutText}>Sign Out</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -433,5 +487,93 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: colors.textPrimary,
+  },
+  logoutModalOverlay: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  logoutDialog: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    ...shadows.panel,
+  },
+  logoutIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.dangerBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  logoutDialogTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+    textAlign: 'center',
+  },
+  logoutDialogDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 17,
+  },
+  logoutBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 20,
+    width: '100%',
+  },
+  cancelLogoutBtn: {
+    flex: 1,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelLogoutBtnPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  cancelLogoutText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  confirmLogoutBtn: {
+    flex: 1,
+    backgroundColor: colors.danger,
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.danger,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  confirmLogoutBtnPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
+  },
+  confirmLogoutText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
 });
