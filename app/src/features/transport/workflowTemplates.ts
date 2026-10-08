@@ -1,0 +1,58 @@
+import { WorkflowTemplate } from '../../shared/types/contracts';
+
+export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    code: 'INBOUND_PUTAWAY',
+    title: 'Inbound Putaway',
+    tagline: 'Receiving Dock ➔ Storage Racks (3-slot flatbed)',
+    iconName: '📥',
+    category: 'routine',
+    estimatedDuration: '4 - 6 mins',
+    requiresContainer: true,
+  },
+  {
+    code: 'OUTBOUND_RETRIEVAL',
+    title: 'Outbound Retrieval',
+    tagline: 'Storage Racks ➔ Shipping & Staging Bay',
+    iconName: '📤',
+    category: 'routine',
+    estimatedDuration: '5 - 8 mins',
+    requiresContainer: true,
+  },
+  {
+    code: 'INTERNAL_RELOCATION',
+    title: 'Internal Relocation',
+    tagline: 'Rack-to-rack stock rebalancing & consolidation',
+    iconName: '🔄',
+    category: 'routine',
+    estimatedDuration: '3 - 5 mins',
+    requiresContainer: true,
+  },
+  {
+    code: 'POINT_TO_POINT_TRANSPORT',
+    title: 'Point-to-Point Transport',
+    tagline: 'Direct ad-hoc dispatch between two warehouse points',
+    iconName: '🚚',
+    category: 'routine',
+    estimatedDuration: '2 - 4 mins',
+    requiresContainer: true,
+  },
+  {
+    code: 'REPLENISHMENT',
+    title: 'Pick-face Replenishment',
+    tagline: 'Bulk reserve buffer ➔ Active pick faces',
+    iconName: '📦',
+    category: 'routine',
+    estimatedDuration: '6 - 10 mins',
+    requiresContainer: true,
+  },
+  {
+    code: 'PAYLOAD_RECOVERY',
+    title: 'Payload Recovery',
+    tagline: 'Rescue stranded tote from stalled robot to Depot',
+    iconName: '🛟',
+    category: 'safety',
+    estimatedDuration: '8 - 12 mins',
+    requiresContainer: true,
+  },
+];
