@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import {
   Animated,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -64,12 +65,13 @@ export const toast = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [currentToast, setCurrentToast] = useState<ToastOptions | null>(null);
   const animValue = useRef(new Animated.Value(0)).current;
+  const isWeb = Platform.OS === 'web';
 
   const hideToast = () => {
     Animated.timing(animValue, {
       toValue: 0,
       duration: 180,
-      useNativeDriver: true,
+      useNativeDriver: !isWeb,
     }).start(() => {
       setCurrentToast(null);
     });
@@ -82,7 +84,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       toValue: 1,
       tension: 80,
       friction: 9,
-      useNativeDriver: true,
+      useNativeDriver: !isWeb,
     }).start();
   };
 
@@ -176,13 +178,14 @@ export function useToast() {
 const styles = StyleSheet.create({
   toastContainer: {
     position: 'absolute',
-    top: 12,
+    top: 14,
     left: 0,
     right: 0,
-    zIndex: 99999,
+    zIndex: 999999,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
+    elevation: 999999,
   },
   toastCard: {
     width: '100%',
