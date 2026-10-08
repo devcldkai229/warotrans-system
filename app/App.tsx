@@ -69,5 +69,6 @@ const styles = StyleSheet.create({
   appContainer: {
     flex: 1,
     backgroundColor: colors.background,
+    position: 'relative',
   },
 });

@@ -80,10 +80,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = (options: ToastOptions) => {
     setCurrentToast(options);
     animValue.setValue(0);
-    Animated.spring(animValue, {
+    Animated.timing(animValue, {
       toValue: 1,
-      tension: 80,
-      friction: 9,
+      duration: 220,
       useNativeDriver: !isWeb,
     }).start();
   };
