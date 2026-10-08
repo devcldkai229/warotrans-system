@@ -3,8 +3,6 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
 import { Icon } from '@/shared/ui/Icon'
 import { ConsoleAccessError, useAuth } from './authContext'
-import { GATEWAY_STATUS } from './mock'
-import { FacilityTwinMap } from './FacilityTwinMap'
 import './auth.css'
 
 const DEFAULT_ROUTE = '/monitor/fleet'
@@ -59,7 +57,7 @@ export function LoginPage() {
 
   return (
     <div className="login">
-      <header className="login__bar">
+      <main className="login__panel">
         <div className="login__brand">
           <span className="login__logo">WT</span>
           <span className="login__brand-text">
@@ -69,27 +67,10 @@ export function LoginPage() {
             <span className="login__brand-sub">FLEET ENGINE</span>
           </span>
         </div>
-        <div className="login__status">
-          <span className="login__chip">
-            <span className="dot" />
-            {GATEWAY_STATUS.label}
-          </span>
-          <span className="login__time">
-            Cluster Time: <strong>{GATEWAY_STATUS.clusterTime}</strong>
-          </span>
-        </div>
-      </header>
 
-      <main className="login__split">
-        <section className="login__card login__twin">
-          <FacilityTwinMap />
-        </section>
-
-        <section className="login__card login__auth">
-          <h1>Sign In to Fleet Manager</h1>
-          <p className="login__sub">
-            Enter your credentials to access administrative mission control
-          </p>
+        <section className="login__card">
+          <h1>Sign in to Fleet Manager</h1>
+          <p className="login__sub">Enter your credentials to access the admin console.</p>
 
           <form onSubmit={handleSubmit} className="login__form">
             <label className="login__field">
@@ -123,11 +104,9 @@ export function LoginPage() {
               {submitting ? 'Signing in…' : 'Sign In to Console'} <Icon name="arrowRight" size={16} />
             </button>
           </form>
-
-          <p className="login__footer">
-            WaroTrans Enterprise v2.4.0-prod · ROS2 Nav2 Hardware Bridge · TLS 1.3
-          </p>
         </section>
+
+        <p className="login__footer">© WaroTrans</p>
       </main>
     </div>
   )
