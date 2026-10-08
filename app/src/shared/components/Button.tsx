@@ -86,6 +86,13 @@ const styles = StyleSheet.create({
   },
   primary: {
     backgroundColor: colors.primary,
+    borderBottomWidth: 3,
+    borderBottomColor: '#004bb0',
+    shadowColor: '#00285a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 3,
   },
   secondary: {
     backgroundColor: colors.surfaceSubtle,
@@ -99,6 +106,8 @@ const styles = StyleSheet.create({
   },
   danger: {
     backgroundColor: colors.danger,
+    borderBottomWidth: 3,
+    borderBottomColor: '#991b1b',
   },
   sm: {
     paddingVertical: 8,
@@ -109,7 +118,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   lg: {
-    paddingVertical: 14,
+    minHeight: 54,
+    paddingVertical: 15,
     paddingHorizontal: 24,
   },
   disabled: {

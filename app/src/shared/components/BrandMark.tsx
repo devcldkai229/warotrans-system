@@ -39,13 +39,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary, // Rich cobalt blue (#005cd1)
     alignItems: 'center',
     justifyContent: 'center',
-    // 3D tactile control shelf under the foot of the badge (matching prototype shadow-control: 0 3px 0 oklch(25% .08 255/.2))
+    // 3D tactile control shelf under foot and right edge for diagonal extruded depth
     borderBottomWidth: 3.5,
+    borderRightWidth: 2.5,
     borderBottomColor: '#003882',
+    borderRightColor: '#003882',
     shadowColor: '#012147',
-    shadowOffset: { width: 0, height: 3.5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 1,
-    elevation: 4,
+    shadowOffset: { width: 3, height: 3.5 },
+    shadowOpacity: 0.35,
+    shadowRadius: 2,
+    elevation: 5,
   },
 });
