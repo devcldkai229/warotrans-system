@@ -50,7 +50,41 @@ export type JobStepStatus =
   | 'FAILED'
   | 'CANCELLED'
 
+export type JobContainerStatus = 'PENDING' | 'ASSIGNED' | 'ONBOARD' | 'DELIVERED' | 'FAILED' | 'CANCELLED'
+
+export type TransportRequestStatus =
+  | 'SUBMITTED'
+  | 'QUEUED'
+  | 'IN_PROGRESS'
+  | 'PARTIALLY_COMPLETED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REJECTED'
+
+export type TransportRequestDetailStatus = 'PENDING' | 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+
+export type HandoverType =
+  | 'PICKUP'
+  | 'DROPOFF'
+  | 'PAYLOAD_TRANSFER'
+  | 'MAINTENANCE'
+  | 'INSPECTION'
+  | 'CHARGE_CONNECT'
+  | 'CHARGE_DISCONNECT'
+
 export type JobAssignmentStatus = 'PENDING_ACK' | 'ACKNOWLEDGED' | 'ACTIVE' | 'ENDED'
+
+export type AssignmentEndReason =
+  | 'COMPLETED'
+  | 'REASSIGNED'
+  | 'ROBOT_REJECTED'
+  | 'ACK_TIMEOUT'
+  | 'ROBOT_OFFLINE'
+  | 'CANCELLED'
+  | 'FAILED'
+
+export type RobotStateEventSource = 'SYSTEM' | 'HEARTBEAT' | 'DISPATCHER' | 'OPERATOR' | 'ROBOT'
 
 export type DispatchDecisionType = 'SELECTED' | 'NONE'
 
@@ -148,13 +182,14 @@ export interface RobotActivity {
   requestCode: string
   progressPercent: number
   routeLabel?: string
+  /** JobContainer joined with Container: what the Job moves (Container-level, never product units). TODO(backend). */
+  containers?: { barcode: string; status: JobContainerStatus }[]
 }
 
 /** Live telemetry shown on Robot Detail. TODO(backend): none of this is persisted in the Robot entity. */
 export interface RobotTelemetry {
   model?: string
   firmware?: string
-  payloadLabel?: string | null
   connectionLabel?: string
   eStopReleased?: boolean
   zone?: { name: string; heldSeconds: number; heldByRobotCode?: string; queueAfter?: number }
@@ -165,6 +200,31 @@ export interface RobotTelemetry {
 export interface RobotView extends Robot {
   activity: RobotActivity | null
   telemetry?: RobotTelemetry
+}
+
+/** fleet.robot_state_events. TODO(backend): no read endpoint yet. */
+export interface RobotStateEvent {
+  id: string
+  robotId: string
+  jobId: string | null
+  fromStatus: RobotStatus | null
+  toStatus: RobotStatus
+  reason: string | null
+  source: RobotStateEventSource
+  occurredAt: string
+}
+
+/** A Robot's JobAssignment joined with its Job. TODO(backend): no read endpoint yet. */
+export interface RobotJobHistoryItem {
+  id: string
+  robotId: string
+  jobNo: string
+  requestCode: string
+  jobStatus: JobStatus
+  assignmentStatus: JobAssignmentStatus
+  assignedAt: string
+  endedAt: string | null
+  endReason: AssignmentEndReason | null
 }
 
 export interface DispatchCandidate {
@@ -258,6 +318,8 @@ export interface JobStep {
   stepKey: string
   name: string
   inputBindings?: Record<string, InputBinding>
+  /** execution.handover_confirmations (one per HUMAN_INTERACTION step). TODO(backend): confirmedByName is joined from Identity. */
+  handover?: { handoverType: HandoverType; confirmedByName: string; confirmedAt: string; note: string | null }
   /** Set while status is WAITING. TODO(backend): max wait comes from the step timeout. */
   waitingSince?: string
   maxWaitSeconds?: number
@@ -281,7 +343,6 @@ export interface JobTask {
 export interface Job {
   id: string
   jobNo: string
-  transportRequestId: string
   workflowId: string
   mapVersionId: string
   status: JobStatus
@@ -299,7 +360,7 @@ export interface Job {
  * (rules/09), so the UI renders buttons from this list instead of guessing from `status`.
  * TODO(backend): proposed field, not implemented.
  */
-export type JobAction = 'PAUSE' | 'CANCEL' | 'REMOTE_CONFIRM' | 'SKIP_ENDPOINT'
+export type JobAction = 'PAUSE' | 'CANCEL' | 'REMOTE_CONFIRM'
 
 /** Job plus data the list/detail screens need from other modules (Fleet, Warehouse, Transportation). */
 export interface JobView extends Job {
@@ -331,6 +392,18 @@ export interface MapVersion {
 
 export interface ZoneGeometry {
   points: Point[]
+}
+
+/** navigation.edges: an ordered polyline Robots may travel along (rules/05). Not tied to any Endpoint. */
+export interface Edge {
+  id: string
+  mapVersionId: string
+  code: string
+  geometry: ZoneGeometry
+  direction: EdgeDirection
+  capacity: number
+  maxSpeed: number | null
+  isActive: boolean
 }
 
 export interface Zone {
@@ -403,6 +476,28 @@ export interface Product {
   updatedAt: string
 }
 
+export type ContainerStatus = 'CREATED' | 'PACKED' | 'RESERVED' | 'IN_TRANSIT' | 'STORED' | 'HOLD' | 'EMPTY' | 'OUT_OF_SERVICE'
+
+/** warehouse.containers: the physical transport unit; one Container holds one Product type (rules/00). */
+export interface Container {
+  id: string
+  productId: string
+  barcode: string
+  supplierPackageBarcode?: string
+  status: ContainerStatus
+  currentStorageLocationId: string | null
+  currentLevelNo: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Container joined with Product and StorageLocation. TODO(backend): needs a read endpoint with these joins. */
+export interface ContainerView extends Container {
+  sku: string
+  productName: string
+  locationCode: string | null
+}
+
 /** ContainerCount is the number of Containers (V1), not product units. */
 export interface InventoryStock {
   id: string
@@ -435,4 +530,56 @@ export interface StorageLocation {
 export interface StorageLocationView extends StorageLocation {
   warehouseName: string
   endpointCode: string
+  endpointName: string
+}
+
+/* ------------------------------------------------------------ Transportation */
+
+/** transportation.transport_request_details: the only persisted movement plan, one Container move per line. */
+export interface TransportRequestDetail {
+  id: string
+  transportRequestId: string
+  sequenceNo: number
+  containerId: string
+  sourceStorageLocationId: string | null
+  sourceEndpointId: string
+  sourceLevelNo: number
+  destinationStorageLocationId: string | null
+  destinationEndpointId: string
+  destinationLevelNo: number
+  status: TransportRequestDetailStatus
+}
+
+/** transportation.transport_requests. Status is aggregated from the Detail lines (rules/02). */
+export interface TransportRequest {
+  id: string
+  requestCode: string
+  warehouseId: string
+  workflowId: string
+  requestedBy: string
+  status: TransportRequestStatus
+  note: string | null
+  submittedAt: string
+  queuedAt: string | null
+  completedAt: string | null
+  failureCode: string | null
+  failureMessage: string | null
+}
+
+export type TransportRequestAction = 'CANCEL'
+
+/**
+ * A Request as the console lists it. TODO(backend): needs a read endpoint that joins the names, the Container
+ * barcode and Endpoint labels, and the Jobs reached through JobContainer (Job itself has no TransportRequestId).
+ */
+export interface TransportRequestView extends TransportRequest {
+  workflowName: string
+  requestedByName: string
+  details: (TransportRequestDetail & {
+    containerBarcode: string
+    sourceLabel: string
+    destinationLabel: string
+  })[]
+  jobs: { jobNo: string; status: JobStatus; robotCode: string | null }[]
+  availableActions: TransportRequestAction[]
 }
