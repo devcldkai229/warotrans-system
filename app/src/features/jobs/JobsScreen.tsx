@@ -12,6 +12,8 @@ import { colors } from '../../shared/theme/colors';
 import { JobCard } from './JobCard';
 import { MOCK_JOBS } from './jobData';
 
+import { Search, X } from 'lucide-react-native';
+
 type ScopeMode = 'active' | 'global' | 'history';
 type StatusFilter = 'ALL' | 'RUNNING' | 'QUEUED' | 'COMPLETED';
 
@@ -62,21 +64,29 @@ export function JobsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Page Title */}
+      <View style={styles.pageHeader}>
+        <Text style={styles.eyebrow}>EXECUTION CENTER</Text>
+        <Text style={styles.pageTitle}>Job Control</Text>
+      </View>
+
       {/* Search Input Bar */}
       <View style={styles.searchSection}>
-        <Input
-          placeholder="Search jobs, containers, endpoints..."
-          value={search}
-          onChangeText={setSearch}
-          containerStyle={styles.searchInputContainer}
-          rightIcon={
-            search ? (
-              <Pressable onPress={() => setSearch('')}>
-                <Text style={styles.clearIcon}>✕</Text>
-              </Pressable>
-            ) : undefined
-          }
-        />
+        <View style={styles.searchBox}>
+          <Search size={16} color="#94a3b8" />
+          <Input
+            placeholder="Search jobs, containers, locations..."
+            value={search}
+            onChangeText={setSearch}
+            containerStyle={styles.searchInputContainer}
+            inputStyle={styles.searchInputText}
+          />
+          {search ? (
+            <Pressable onPress={() => setSearch('')} style={styles.clearBtn}>
+              <X size={15} color="#94a3b8" />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       {/* Scope Segmented Control */}
@@ -236,16 +246,53 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  pageHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  eyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  pageTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0f172a',
+    marginTop: 2,
+    marginBottom: 6,
+  },
   searchSection: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 10,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
   },
   searchInputContainer: {
+    flex: 1,
     marginBottom: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
   },
-  clearIcon: {
-    fontSize: 14,
-    color: colors.textMuted,
+  searchInputText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  clearBtn: {
     padding: 4,
   },
   scopeBar: {

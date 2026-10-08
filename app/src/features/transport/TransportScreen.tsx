@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { colors } from '../../shared/theme/colors';
+import { ChevronRight, History, PackagePlus, PlusCircle } from 'lucide-react-native';
 import { WorkflowCode } from '../../shared/types/contracts';
 import { SafetyHubCard } from './SafetyHubCard';
 import { WORKFLOW_TEMPLATES } from './workflowTemplates';
@@ -40,7 +41,7 @@ export function TransportScreen() {
             pressed && styles.heroActionPressed,
           ]}
         >
-          <Text style={styles.heroActionIcon}>➕</Text>
+          <PlusCircle size={22} color="#ffffff" style={{ marginBottom: 6 }} />
           <Text style={styles.heroActionTitle}>New Transport</Text>
           <Text style={styles.heroActionSubtitle}>Select workflow & AMR</Text>
         </Pressable>
@@ -53,7 +54,7 @@ export function TransportScreen() {
             pressed && styles.heroActionPressed,
           ]}
         >
-          <Text style={styles.heroActionIcon}>📦</Text>
+          <PackagePlus size={22} color={colors.primary} style={{ marginBottom: 6 }} />
           <Text style={styles.heroActionTitleSecondary}>Pack & Ingest</Text>
           <Text style={styles.heroActionSubtitle}>Single / batch totes</Text>
         </Pressable>
@@ -135,14 +136,14 @@ export function TransportScreen() {
             pressed && styles.historyLinkBtnPressed,
           ]}
         >
-          <Text style={styles.historyLinkIcon}>📜</Text>
+          <History size={22} color={colors.primary} />
           <View style={styles.historyLinkTextCol}>
             <Text style={styles.historyLinkTitle}>View Transport Audit History</Text>
             <Text style={styles.historyLinkSubtitle}>
               Completed deliveries, timestamps & route metrics
             </Text>
           </View>
-          <Text style={styles.historyLinkChevron}>›</Text>
+          <ChevronRight size={18} color="#94a3b8" />
         </Pressable>
       </View>
     </ScrollView>

@@ -5,6 +5,14 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  CheckCheck,
+  ChevronRight,
+  CircleDot,
+  Clock3,
+  MapPin,
+  Timer,
+} from 'lucide-react-native';
 import { Badge } from '../../shared/components/Badge';
 import { colors } from '../../shared/theme/colors';
 import { AppJobItem } from './jobData';
@@ -80,7 +88,7 @@ export function JobCard({ job, onPress }: JobCardProps) {
         {/* Route / Target Box */}
         <View style={styles.routeBox}>
           <View style={styles.routeIconWrap}>
-            <Text style={styles.routeIcon}>📍</Text>
+            <MapPin size={16} color={colors.primary} />
           </View>
           <View style={styles.routeDetails}>
             <Text style={styles.targetLabel}>Target: {job.destinationEndpointCode}</Text>
@@ -88,38 +96,36 @@ export function JobCard({ job, onPress }: JobCardProps) {
               {job.routeText}
             </Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
+          <ChevronRight size={18} color="#94a3b8" />
         </View>
 
         {/* Footer Meta Row */}
         <View style={styles.footerRow}>
           <View style={styles.robotGroup}>
-            <View
-              style={[
-                styles.robotStatusDot,
-                { backgroundColor: getAccentColor() },
-              ]}
-            />
+            <CircleDot size={13} color={colors.primary} />
             <Text style={styles.robotLabel}>
-              AMR: <Text style={styles.robotCode}>{job.assignedRobotCode || 'Unassigned'}</Text>
+              Assigned: <Text style={styles.robotCode}>{job.assignedRobotCode || 'Unassigned'}</Text>
             </Text>
           </View>
 
           {job.etaSeconds !== undefined && job.status === 'RUNNING' && (
             <View style={styles.etaPill}>
-              <Text style={styles.etaText}>⏱ ETA {job.etaSeconds}s</Text>
+              <Timer size={11} color={colors.primary} style={styles.pillIcon} />
+              <Text style={styles.etaText}>ETA {job.etaSeconds}s</Text>
             </View>
           )}
 
           {job.status === 'QUEUED' && (
             <View style={styles.queuedPill}>
-              <Text style={styles.queuedText}>Standby in queue</Text>
+              <Clock3 size={11} color="#b45309" style={styles.pillIcon} />
+              <Text style={styles.queuedText}>Handover Ready</Text>
             </View>
           )}
 
           {job.status === 'COMPLETED' && (
             <View style={styles.completedPill}>
-              <Text style={styles.completedText}>✓ Done</Text>
+              <CheckCheck size={12} color={colors.success} style={styles.pillIcon} />
+              <Text style={styles.completedText}>Completed</Text>
             </View>
           )}
         </View>
@@ -130,10 +136,10 @@ export function JobCard({ job, onPress }: JobCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#e2e8f0',
     marginBottom: 10,
     overflow: 'hidden',
     shadowColor: '#000000',
@@ -143,15 +149,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardPressed: {
-    backgroundColor: colors.surfaceSubtle,
-    borderColor: colors.primaryBorder,
+    transform: [{ scale: 0.985 }],
+    borderColor: colors.primary,
   },
   accentStrip: {
-    height: 3,
+    height: 4,
     width: '100%',
   },
   cardContent: {
-    padding: 14,
+    padding: 12,
   },
   headerRow: {
     flexDirection: 'row',
@@ -169,7 +175,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     fontFamily: 'monospace',
-    color: colors.textPrimary,
+    color: '#0f172a',
   },
   workflowName: {
     fontSize: 11,
@@ -178,30 +184,30 @@ const styles = StyleSheet.create({
   },
   payloadSummary: {
     fontSize: 11,
-    color: colors.textSecondary,
+    fontWeight: '600',
+    color: '#64748b',
     marginBottom: 10,
   },
   routeBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: '#f8fafc',
     borderRadius: 8,
-    padding: 10,
-    gap: 10,
+    padding: 8,
+    gap: 8,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   routeIconWrap: {
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  routeIcon: {
-    fontSize: 13,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   routeDetails: {
     flex: 1,
@@ -209,73 +215,75 @@ const styles = StyleSheet.create({
   targetLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: '#0f172a',
   },
   routeText: {
     fontSize: 10,
-    color: colors.textMuted,
+    fontWeight: '500',
+    color: '#64748b',
     marginTop: 1,
-  },
-  chevron: {
-    fontSize: 18,
-    color: colors.textMuted,
-    fontWeight: '600',
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: colors.surfaceSubtle,
     paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
   },
   robotGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  robotStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
   robotLabel: {
     fontSize: 11,
-    color: colors.textMuted,
+    fontWeight: '600',
+    color: '#64748b',
   },
   robotCode: {
     fontWeight: '800',
     fontFamily: 'monospace',
-    color: colors.textPrimary,
+    color: '#0f172a',
+  },
+  pillIcon: {
+    marginRight: 4,
   },
   etaPill: {
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
     borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   etaText: {
     fontSize: 10,
-    fontWeight: '800',
     fontFamily: 'monospace',
-    color: colors.primaryDark,
+    fontWeight: '800',
+    color: colors.primary,
   },
   queuedPill: {
-    backgroundColor: colors.warningBg,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
     borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   queuedText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: colors.warning,
+    fontFamily: 'monospace',
+    fontWeight: '800',
+    color: '#b45309',
   },
   completedPill: {
-    backgroundColor: colors.successBg,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
     borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   completedText: {
     fontSize: 10,

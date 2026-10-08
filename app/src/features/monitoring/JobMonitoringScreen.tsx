@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { AlertTriangle, Camera } from 'lucide-react-native';
 import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
 import { BarcodeScannerHUD } from './BarcodeScannerHUD';
@@ -170,7 +171,7 @@ export function JobMonitoringScreen() {
             onPress={() => setIsIssueModalOpen(true)}
             style={styles.safetyIssueBtn}
           >
-            <Text style={styles.safetyIssueIcon}>⚠️</Text>
+            <AlertTriangle size={15} color="#ef4444" style={{ marginRight: 4 }} />
             <Text style={styles.safetyIssueText}>Report Issue</Text>
           </Pressable>
         </View>
@@ -229,7 +230,7 @@ export function JobMonitoringScreen() {
                 pressed && styles.launchScannerBtnPressed,
               ]}
             >
-              <Text style={styles.scannerBtnIcon}>📷</Text>
+              <Camera size={16} color="#ffffff" style={{ marginRight: 6 }} />
               <Text style={styles.scannerBtnText}>
                 {isContainerVerified ? 'Re-scan Barcode' : 'Open Camera Barcode Scanner'}
               </Text>

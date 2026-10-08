@@ -7,6 +7,13 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Compass,
+} from 'lucide-react-native';
 import { Badge } from '../../shared/components/Badge';
 import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
@@ -68,7 +75,10 @@ export function JobDetailScreen() {
           <View style={styles.etaRow}>
             <View>
               <Text style={styles.etaLabel}>Estimated Arrival</Text>
-              <Text style={styles.etaValue}>ETA 45s ⏳</Text>
+              <View style={styles.inlineIconRow}>
+                <Text style={styles.etaValue}>ETA 45s</Text>
+                <Clock3 size={13} color="#f59e0b" />
+              </View>
             </View>
             <View style={styles.progressCol}>
               <Text style={styles.progressLabel}>Navigation Progress</Text>
@@ -93,7 +103,10 @@ export function JobDetailScreen() {
             </View>
             <View style={[styles.statItem, styles.statDivider]}>
               <Text style={styles.statLabel}>NAV2 PATH</Text>
-              <Text style={[styles.statVal, styles.statSuccess]}>Clear 🟢</Text>
+              <View style={styles.inlineIconRow}>
+                <Text style={[styles.statVal, styles.statSuccess]}>Clear</Text>
+                <CheckCircle2 size={12} color={colors.success} />
+              </View>
             </View>
           </View>
 
@@ -111,7 +124,8 @@ export function JobDetailScreen() {
                   pressed && styles.nudgeBtnPressed,
                 ]}
               >
-                <Text style={styles.nudgeBtnText}>‹ Nudge -10cm</Text>
+                <ChevronLeft size={14} color="#475569" />
+                <Text style={styles.nudgeBtnText}>Nudge -10cm</Text>
               </Pressable>
               <Pressable
                 onPress={() => handleNudge('+10cm')}
@@ -120,7 +134,8 @@ export function JobDetailScreen() {
                   pressed && styles.nudgeBtnPressed,
                 ]}
               >
-                <Text style={styles.nudgeBtnText}>Nudge +10cm ›</Text>
+                <Text style={styles.nudgeBtnText}>Nudge +10cm</Text>
+                <ChevronRight size={14} color="#475569" />
               </Pressable>
             </View>
           </View>
@@ -138,9 +153,11 @@ export function JobDetailScreen() {
               pressed && styles.liveMapLinkBtnPressed,
             ]}
           >
+            <Compass size={14} color={colors.primary} />
             <Text style={styles.liveMapLinkText}>
-              🗺️ Open Real-Time Radar & Nav2 Trajectory ›
+              Open Real-Time Radar & Nav2 Trajectory
             </Text>
+            <ChevronRight size={14} color={colors.primary} />
           </Pressable>
         </View>
 
@@ -309,6 +326,11 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontFamily: 'monospace',
     color: colors.primary,
+  },
+  inlineIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   progressCol: {
     alignItems: 'flex-end',

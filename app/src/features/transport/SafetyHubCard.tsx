@@ -5,6 +5,14 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  AlertTriangle,
+  LifeBuoy,
+  OctagonAlert,
+  PauseCircle,
+  PlayCircle,
+  ShieldAlert,
+} from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
 
 interface SafetyHubCardProps {
@@ -37,7 +45,7 @@ export function SafetyHubCard({
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
-          <Text style={styles.headerIcon}>🛡️</Text>
+          <ShieldAlert size={20} color={colors.primary} />
           <View>
             <Text style={styles.headerTitle}>SAFETY & INCIDENT HUB</Text>
             <Text style={styles.headerSubtitle}>Field Safety & AMR Perimeter Controls</Text>
@@ -74,7 +82,8 @@ export function SafetyHubCard({
             pressed && styles.rescueBtnPressed,
           ]}
         >
-          <Text style={styles.rescueBtnText}>🛟 Launch Rescue Mission (SCR-STF-11)</Text>
+          <LifeBuoy size={16} color="#ffffff" style={styles.rescueBtnIcon} />
+          <Text style={styles.rescueBtnText}>Launch Rescue Mission (SCR-STF-11)</Text>
         </Pressable>
       </View>
 
@@ -90,7 +99,11 @@ export function SafetyHubCard({
         >
           <View style={styles.safetyBtnTop}>
             <Text style={styles.safetyBtnLabel}>Perimeter</Text>
-            <Text style={styles.safetyBtnIcon}>{isHolding ? '⏸️' : '⏹️'}</Text>
+            {isHolding ? (
+              <PlayCircle size={16} color={colors.primary} />
+            ) : (
+              <PauseCircle size={16} color="#64748b" />
+            )}
           </View>
           <Text
             style={[
@@ -112,7 +125,7 @@ export function SafetyHubCard({
         >
           <View style={styles.safetyBtnTop}>
             <Text style={styles.safetyBtnLabel}>Hazard</Text>
-            <Text style={styles.safetyBtnIcon}>⚠️</Text>
+            <AlertTriangle size={16} color="#f59e0b" />
           </View>
           <Text style={styles.safetyBtnTitle}>Block Path (Nav2)</Text>
           <Text style={styles.safetyBtnDesc}>Flag aisle obstacle</Text>
@@ -126,7 +139,7 @@ export function SafetyHubCard({
           >
             <View style={styles.safetyBtnTop}>
               <Text style={styles.safetyBtnLabel}>Recall</Text>
-              <Text style={styles.safetyBtnIcon}>🛑</Text>
+              <OctagonAlert size={16} color="#ef4444" />
             </View>
             <Text style={styles.safetyBtnTitle}>Fleet Recall</Text>
             <Text style={styles.safetyBtnDesc}>Dock policy</Text>
@@ -139,10 +152,10 @@ export function SafetyHubCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#e2e8f0',
     padding: 14,
     marginBottom: 12,
   },
@@ -152,7 +165,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceSubtle,
+    borderBottomColor: '#f1f5f9',
     paddingBottom: 8,
   },
   titleGroup: {
@@ -160,60 +173,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  headerIcon: {
-    fontSize: 18,
-  },
   headerTitle: {
     fontSize: 11,
     fontWeight: '900',
-    color: colors.textPrimary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    color: '#0f172a',
   },
   headerSubtitle: {
-    fontSize: 9,
-    color: colors.textSecondary,
-    fontWeight: '600',
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 1,
   },
   incidentBadge: {
-    backgroundColor: colors.dangerBg,
-    borderColor: colors.dangerBorder,
+    backgroundColor: '#fee2e2',
     borderWidth: 1,
-    paddingHorizontal: 6,
+    borderColor: '#fca5a5',
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 6,
   },
   incidentBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: colors.danger,
+    fontSize: 9,
     fontFamily: 'monospace',
+    fontWeight: '900',
+    color: '#dc2626',
   },
   toastBox: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primaryBorder,
+    backgroundColor: '#eff6ff',
     borderWidth: 1,
+    borderColor: '#bfdbfe',
     borderRadius: 8,
     padding: 8,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   toastText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.primaryDark,
+    color: colors.primary,
+    textAlign: 'center',
   },
   incidentBox: {
-    backgroundColor: colors.dangerBg,
-    borderColor: colors.dangerBorder,
+    backgroundColor: '#fef2f2',
     borderWidth: 1,
+    borderColor: '#fecaca',
     borderRadius: 10,
-    padding: 10,
+    padding: 12,
     marginBottom: 10,
   },
   incidentTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   incidentPingRow: {
     flexDirection: 'row',
@@ -221,42 +232,46 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   incidentDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.danger,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#ef4444',
   },
   incidentTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
-    color: colors.danger,
-    fontFamily: 'monospace',
+    color: '#991b1b',
   },
   incidentLocation: {
-    fontSize: 9,
+    fontSize: 10,
+    fontFamily: 'monospace',
     fontWeight: '700',
-    color: colors.textSecondary,
+    color: '#b91c1c',
   },
   incidentDesc: {
     fontSize: 11,
-    color: colors.textSecondary,
-    lineHeight: 15,
-    marginBottom: 8,
+    color: '#7f1d1d',
+    lineHeight: 16,
+    marginBottom: 10,
   },
   rescueBtn: {
-    backgroundColor: colors.danger,
-    paddingVertical: 8,
-    borderRadius: 6,
+    backgroundColor: '#dc2626',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 8,
   },
   rescueBtnPressed: {
-    backgroundColor: '#b91c1c',
+    opacity: 0.85,
+  },
+  rescueBtnIcon: {
+    marginRight: 6,
   },
   rescueBtnText: {
-    color: colors.textInverse,
+    color: '#ffffff',
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   actionsRow: {
     flexDirection: 'row',
@@ -264,44 +279,41 @@ const styles = StyleSheet.create({
   },
   safetyBtn: {
     flex: 1,
+    padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    padding: 10,
   },
   safetyBtnDefault: {
-    backgroundColor: colors.surfaceSubtle,
-    borderColor: colors.border,
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
   },
   safetyBtnActive: {
-    backgroundColor: colors.dangerBg,
-    borderColor: colors.danger,
+    backgroundColor: '#eff6ff',
+    borderColor: colors.primary,
   },
   safetyBtnTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 4,
   },
   safetyBtnLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
     textTransform: 'uppercase',
-    color: colors.textMuted,
-  },
-  safetyBtnIcon: {
-    fontSize: 12,
+    color: '#64748b',
   },
   safetyBtnTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
-    color: colors.textPrimary,
-    marginTop: 4,
+    color: '#0f172a',
   },
   safetyBtnTitleActive: {
-    color: colors.danger,
+    color: colors.primary,
   },
   safetyBtnDesc: {
     fontSize: 9,
-    color: colors.textMuted,
+    color: '#94a3b8',
     marginTop: 2,
   },
 });

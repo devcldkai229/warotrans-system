@@ -5,6 +5,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  BatteryMedium,
+  LocateFixed,
+  Search,
+  User,
+} from 'lucide-react-native';
+import Svg, { Circle, Line, Defs, Pattern, Rect } from 'react-native-svg';
 import { colors } from '../../shared/theme/colors';
 
 export interface MapRobot {
@@ -22,7 +29,7 @@ interface MiniFacilityMapProps {
   selectedRobotId: string;
   onSelectRobot: (robotId: string) => void;
   onLocateUser: () => void;
-  onOpenLiveMap?: () => void;
+  onSearch?: () => void;
   robots: MapRobot[];
 }
 
@@ -31,106 +38,206 @@ export function MiniFacilityMap({
   selectedRobotId,
   onSelectRobot,
   onLocateUser,
-  onOpenLiveMap,
+  onSearch,
   robots,
 }: MiniFacilityMapProps) {
   const selectedRobot = robots.find((r) => r.id === selectedRobotId) || robots[0];
 
-  const getWorkerCoords = () => {
-    if (currentZone.includes('Inbound')) return { left: '25%', top: '80%', name: 'Dock 01' };
-    if (currentZone.includes('Zone B')) return { left: '72%', top: '32%', name: 'Zone B' };
-    if (currentZone.includes('Outbound')) return { left: '75%', top: '80%', name: 'Dock Out' };
-    return { left: '26%', top: '32%', name: 'Zone A' };
+  const getWorkerPosition = () => {
+    if (currentZone.includes('Inbound') || currentZone.includes('Dock 01')) {
+      return { left: '22%', top: '82%', name: 'Dock 01' };
+    }
+    if (currentZone.includes('Zone B')) {
+      return { left: '76%', top: '38%', name: 'Zone B' };
+    }
+    if (currentZone.includes('Outbound') || currentZone.includes('Shipping')) {
+      return { left: '78%', top: '82%', name: 'Dock Out' };
+    }
+    return { left: '24%', top: '38%', name: 'Zone A' };
   };
 
-  const workerCoords = getWorkerCoords();
+  const workerPos = getWorkerPosition();
 
   return (
     <View style={styles.mapContainer}>
-      {/* Background Grid Accent */}
-      <View style={styles.gridOverlay} />
+      {/* 1. Blueprint Grid Background via SVG Pattern */}
+      <Svg style={StyleSheet.absoluteFill}>
+        <Defs>
+          <Pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <Line x1="0" y1="0" x2="24" y2="0" stroke="#bae6fd" strokeWidth="1" strokeOpacity="0.75" />
+            <Line x1="0" y1="0" x2="0" y2="24" stroke="#bae6fd" strokeWidth="1" strokeOpacity="0.75" />
+          </Pattern>
+        </Defs>
+        <Rect width="100%" height="100%" fill="url(#grid)" />
+      </Svg>
 
-      {/* Facility Zones Outline */}
-      {/* Zone A */}
-      <View style={[styles.facilityZone, styles.zoneA]}>
-        <Text style={styles.zoneLabel}>ZONE A (RACKS A01-A12)</Text>
-        <View style={styles.rackGrid}>
-          {Array.from({ length: 6 }).map((_, i) => (
+      {/* 2. Concentric Sonar Radar Rings */}
+      <View style={styles.sonarCenter}>
+        <View style={[styles.sonarRing, styles.ringLarge]} />
+        <View style={[styles.sonarRing, styles.ringMedium]} />
+        <View style={[styles.sonarRing, styles.ringSmall]} />
+      </View>
+
+      {/* 3. Floating Search Bar (Top) */}
+      <View style={styles.searchBarWrapper}>
+        <Pressable
+          onPress={onSearch}
+          style={({ pressed }) => [
+            styles.searchBar,
+            pressed && styles.searchBarPressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Search inventory or locations"
+        >
+          <Search size={18} color={colors.primary} />
+          <Text style={styles.searchPlaceholder}>Search inventory or locations...</Text>
+        </Pressable>
+      </View>
+
+      {/* 4. Active Robot Telemetry Badge (Top Left under search) */}
+      {selectedRobot && (
+        <View style={styles.telemetryBadge}>
+          <View style={styles.telemetryDot} />
+          <Text style={styles.telemetryId}>{selectedRobot.id}</Text>
+          <View style={styles.onlinePill}>
+            <Text style={styles.onlinePillText}>ONLINE</Text>
+          </View>
+          <View style={styles.batteryGroup}>
+            <BatteryMedium size={12} color="#64748b" />
+            <Text style={styles.batteryText}>{selectedRobot.battery}%</Text>
+          </View>
+        </View>
+      )}
+
+      {/* 5. Locate Me GPS Button (Top Right under search) */}
+      <Pressable
+        onPress={onLocateUser}
+        style={({ pressed }) => [
+          styles.locateButton,
+          pressed && styles.locateButtonPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Locate current position"
+      >
+        <LocateFixed size={18} color={colors.primary} />
+      </Pressable>
+
+      {/* 6. Storage Zone A Card */}
+      <View style={styles.zoneCardA}>
+        <Text style={styles.zoneTitle}>ZONE A</Text>
+        <View style={styles.rackGridA}>
+          {Array.from({ length: 12 }).map((_, i) => (
             <View key={i} style={styles.rackPill} />
           ))}
         </View>
       </View>
 
-      {/* Zone B */}
-      <View style={[styles.facilityZone, styles.zoneB]}>
-        <Text style={styles.zoneLabel}>ZONE B (BULK)</Text>
-        <View style={styles.rackGrid}>
-          {Array.from({ length: 4 }).map((_, i) => (
+      {/* 7. Storage Zone B Card */}
+      <View style={styles.zoneCardB}>
+        <Text style={styles.zoneTitle}>ZONE B</Text>
+        <View style={styles.rackGridB}>
+          {Array.from({ length: 8 }).map((_, i) => (
             <View key={i} style={styles.rackPill} />
           ))}
         </View>
       </View>
 
-      {/* Loading Docks */}
-      <View style={[styles.facilityZone, styles.zoneDocks]}>
-        <Text style={styles.zoneLabel}>INBOUND / OUTBOUND DOCKS</Text>
+      {/* 8. Loading Docks Area (Bottom Dashed Outline) */}
+      <View style={styles.docksContainer}>
+        <Text style={styles.zoneTitle}>LOADING DOCKS</Text>
         <View style={styles.docksRow}>
-          <View style={styles.dockItem}>
-            <Text style={styles.dockText}>DOCK 01</Text>
+          <View style={styles.dockSlot}>
+            <Text style={styles.dockSlotText}>DOCK-01</Text>
           </View>
-          <View style={styles.dockItem}>
-            <Text style={styles.dockText}>DOCK 02</Text>
+          <View style={styles.dockSlot}>
+            <Text style={styles.dockSlotText}>DOCK-02</Text>
           </View>
-          <View style={styles.dockItem}>
-            <Text style={styles.dockText}>DOCK 04</Text>
+          <View style={styles.dockSlot}>
+            <Text style={styles.dockSlotText}>DOCK-03</Text>
           </View>
         </View>
       </View>
 
-      {/* Worker Position Pin */}
+      {/* 9. Dynamic Nav2 Trajectory Wayline */}
+      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Line
+          x1="32%"
+          y1="46%"
+          x2="22%"
+          y2="82%"
+          stroke="#2563eb"
+          strokeWidth="2"
+          strokeDasharray="4,4"
+          strokeOpacity="0.4"
+        />
+      </Svg>
+
+      {/* 10. Dynamic Worker Position Marker */}
       <View
         style={[
           styles.workerMarker,
           {
-            left: workerCoords.left as any,
-            top: workerCoords.top as any,
+            left: workerPos.left as any,
+            top: workerPos.top as any,
           },
         ]}
+        pointerEvents="none"
       >
-        <View style={styles.workerPulseRing} />
-        <View style={styles.workerPinCenter}>
-          <Text style={styles.workerPinIcon}>👤</Text>
+        <View style={styles.workerPulse} />
+        <View style={styles.workerAvatar}>
+          <User size={13} color="#ffffff" />
         </View>
-        <View style={styles.workerTag}>
-          <Text style={styles.workerTagText}>You ({workerCoords.name})</Text>
+        <View style={styles.workerLabelWrap}>
+          <View style={styles.workerBlueDot} />
+          <Text style={styles.workerLabelText}>You ({workerPos.name})</Text>
         </View>
       </View>
 
-      {/* Robot Markers */}
+      {/* 11. AMR Fleet Markers */}
       {robots.map((robot) => {
-        const isSelected = robot.id === selectedRobotId;
+        const isSelected = selectedRobotId === robot.id;
+        const isMoving = robot.status === 'EN_ROUTE';
+
         return (
           <Pressable
             key={robot.id}
             onPress={() => onSelectRobot(robot.id)}
             style={[
-              styles.robotMarker,
+              styles.robotWrapper,
               {
                 left: `${robot.xPercent}%` as any,
                 top: `${robot.yPercent}%` as any,
               },
-              isSelected && styles.robotMarkerSelected,
             ]}
           >
+            {/* Pulsing ring */}
             <View
               style={[
-                styles.robotBody,
-                robot.status === 'EN_ROUTE' ? styles.robotMoving : styles.robotIdle,
+                styles.robotPulseRing,
+                isSelected ? styles.robotPulseSelected : styles.robotPulseDefault,
+              ]}
+            />
+
+            {/* Directional Robot Marker */}
+            <View
+              style={[
+                styles.robotMarker,
+                isMoving ? styles.robotMoving : styles.robotIdle,
+                isSelected && styles.robotSelectedGlow,
+                { transform: [{ rotate: `${robot.headingDeg}deg` }] },
               ]}
             >
-              <Text style={styles.robotNavArrow}>▲</Text>
+              <Text style={styles.robotArrow}>▲</Text>
             </View>
+
+            {/* Speed & ID Floating Tag */}
             <View style={styles.robotTag}>
+              <View
+                style={[
+                  styles.tagDot,
+                  { backgroundColor: isMoving ? colors.primary : colors.success },
+                ]}
+              />
               <Text style={styles.robotTagText}>
                 {robot.id} · {robot.speed}
               </Text>
@@ -138,288 +245,358 @@ export function MiniFacilityMap({
           </Pressable>
         );
       })}
-
-      {/* Active Robot Telemetry HUD Badge (Top Left) */}
-      {selectedRobot && (
-        <View style={styles.telemetryBadge}>
-          <View style={styles.telemetryDot} />
-          <Text style={styles.telemetryId}>{selectedRobot.id}</Text>
-          <View style={styles.telemetryStatusWrap}>
-            <Text style={styles.telemetryStatus}>
-              {selectedRobot.status.replace('_', ' ')}
-            </Text>
-          </View>
-          <Text style={styles.telemetryBattery}>🔋 {selectedRobot.battery}%</Text>
-        </View>
-      )}
-
-      {/* Top Right Controls: Live Map & Locate Me */}
-      <View style={styles.topRightControls}>
-        {onOpenLiveMap && (
-          <Pressable
-            onPress={onOpenLiveMap}
-            style={({ pressed }) => [
-              styles.controlButton,
-              pressed && styles.locateButtonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Open Fullscreen Live Radar"
-          >
-            <Text style={styles.controlIcon}>🗺️</Text>
-          </Pressable>
-        )}
-        <Pressable
-          onPress={onLocateUser}
-          style={({ pressed }) => [
-            styles.controlButton,
-            pressed && styles.locateButtonPressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Center map on current zone"
-        >
-          <Text style={styles.controlIcon}>🎯</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   mapContainer: {
-    height: 250,
-    backgroundColor: '#0f172a', // Deep industrial radar slate
+    height: 390,
+    backgroundColor: '#e0f2fe', // Sky-100 blueprint paper background
     position: 'relative',
     overflow: 'hidden',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderDark,
   },
-  gridOverlay: {
-    ...StyleSheet.absoluteFill,
-    opacity: 0.1,
-    borderWidth: 1,
-    borderColor: '#38bdf8',
-  },
-  facilityZone: {
+  sonarCenter: {
     position: 'absolute',
-    borderWidth: 1.5,
+    left: '50%',
+    top: '52%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'none',
+  },
+  sonarRing: {
+    position: 'absolute',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.12)',
+  },
+  ringLarge: {
+    width: 380,
+    height: 380,
+  },
+  ringMedium: {
+    width: 250,
+    height: 250,
+  },
+  ringSmall: {
+    width: 130,
+    height: 130,
+  },
+  searchBarWrapper: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    right: 14,
+    zIndex: 35,
+  },
+  searchBar: {
+    height: 48,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.85)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  searchBarPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  searchPlaceholder: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
+    flex: 1,
+  },
+  telemetryBadge: {
+    position: 'absolute',
+    top: 72,
+    left: 14,
+    zIndex: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 8,
-    padding: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  zoneA: {
-    left: '5%',
-    top: '12%',
-    width: '42%',
-    height: '42%',
-    borderColor: '#38bdf8',
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+  telemetryDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.success,
   },
-  zoneB: {
-    right: '5%',
-    top: '12%',
-    width: '42%',
-    height: '42%',
-    borderColor: '#818cf8',
-    backgroundColor: 'rgba(129, 140, 248, 0.08)',
+  telemetryId: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#0f172a',
   },
-  zoneDocks: {
-    left: '5%',
-    bottom: '10%',
-    width: '90%',
-    height: '30%',
-    borderStyle: 'dashed',
-    borderColor: '#94a3b8',
-    backgroundColor: 'rgba(148, 163, 184, 0.08)',
+  onlinePill: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
-  zoneLabel: {
+  onlinePillText: {
     fontSize: 8,
     fontWeight: '900',
-    color: '#cbd5e1',
+    color: '#16a34a',
+  },
+  batteryGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  batteryText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  locateButton: {
+    position: 'absolute',
+    top: 72,
+    right: 14,
+    zIndex: 30,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  locateButtonPressed: {
+    backgroundColor: '#eff6ff',
+    transform: [{ scale: 0.92 }],
+  },
+  zoneCardA: {
+    position: 'absolute',
+    left: '6%',
+    top: 122,
+    width: '42%',
+    height: 106,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderWidth: 2,
+    borderColor: '#7dd3fc',
+    borderRadius: 8,
+    padding: 7,
+  },
+  zoneCardB: {
+    position: 'absolute',
+    right: '6%',
+    top: 124,
+    width: '40%',
+    height: 102,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderWidth: 2,
+    borderColor: '#7dd3fc',
+    borderRadius: 8,
+    padding: 7,
+  },
+  zoneTitle: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#64748b',
     letterSpacing: 0.5,
   },
-  rackGrid: {
+  rackGridA: {
+    marginTop: 6,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    marginTop: 4,
+  },
+  rackGridB: {
+    marginTop: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
   },
   rackPill: {
-    width: '28%',
-    height: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    width: '30%',
+    height: 14,
     borderRadius: 2,
+    backgroundColor: '#cbd5e1',
+  },
+  docksContainer: {
+    position: 'absolute',
+    left: '6%',
+    bottom: 14,
+    width: '88%',
+    height: 78,
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#7dd3fc',
+    borderRadius: 8,
+    padding: 7,
   },
   docksRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 4,
+    gap: 8,
+    marginTop: 6,
   },
-  dockItem: {
+  dockSlot: {
     flex: 1,
-    height: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    height: 38,
     borderRadius: 4,
+    backgroundColor: '#cbd5e1',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dockText: {
+  dockSlotText: {
     fontSize: 8,
     fontFamily: 'monospace',
-    fontWeight: '700',
-    color: '#94a3b8',
+    fontWeight: '800',
+    color: '#475569',
   },
   workerMarker: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 20,
-    transform: [{ translateX: -12 }, { translateY: -12 }],
-  },
-  workerPulseRing: {
-    position: 'absolute',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(14, 116, 144, 0.4)',
-  },
-  workerPinCenter: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  workerPinIcon: {
-    fontSize: 11,
-  },
-  workerTag: {
-    marginTop: 2,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  workerTagText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  robotMarker: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 25,
     transform: [{ translateX: -14 }, { translateY: -14 }],
+    zIndex: 25,
   },
-  robotMarkerSelected: {
-    zIndex: 30,
+  workerPulse: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(37, 99, 235, 0.25)',
   },
-  robotBody: {
+  workerAvatar: {
     width: 28,
     height: 28,
     borderRadius: 14,
+    backgroundColor: '#0f172a',
     borderWidth: 2,
     borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  robotMoving: {
-    backgroundColor: colors.primary,
-  },
-  robotIdle: {
-    backgroundColor: colors.success,
-  },
-  robotNavArrow: {
-    fontSize: 12,
-    color: '#ffffff',
-    fontWeight: '900',
-  },
-  robotTag: {
-    marginTop: 2,
-    backgroundColor: 'rgba(15, 23, 42, 0.9)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  robotTagText: {
-    fontSize: 8,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  telemetryBadge: {
+  workerLabelWrap: {
     position: 'absolute',
-    top: 10,
-    left: 10,
+    top: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 6,
-    zIndex: 40,
-  },
-  telemetryDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.success,
-  },
-  telemetryId: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  telemetryStatusWrap: {
-    backgroundColor: 'rgba(14, 116, 144, 0.3)',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  telemetryStatus: {
+  workerBlueDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.primary,
+  },
+  workerLabelText: {
     fontSize: 8,
-    fontWeight: '700',
-    color: '#38bdf8',
+    fontWeight: '900',
+    color: '#0f172a',
   },
-  telemetryBattery: {
-    fontSize: 9,
-    color: '#cbd5e1',
-    fontWeight: '600',
-  },
-  topRightControls: {
+  robotWrapper: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    flexDirection: 'row',
-    gap: 8,
-    zIndex: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ translateX: -20 }, { translateY: -20 }],
+    zIndex: 26,
   },
-  controlButton: {
+  robotPulseRing: {
+    position: 'absolute',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  robotPulseSelected: {
+    borderWidth: 2,
+    borderColor: 'rgba(37, 99, 235, 0.6)',
+  },
+  robotPulseDefault: {
+    borderWidth: 1,
+    borderColor: 'rgba(100, 116, 139, 0.3)',
+  },
+  robotMarker: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 3,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 4,
   },
-  locateButtonPressed: {
-    backgroundColor: colors.surfaceSubtle,
+  robotMoving: {
+    backgroundColor: '#0284c7', // Vibrant Sky/Blue marker
   },
-  controlIcon: {
-    fontSize: 16,
+  robotIdle: {
+    backgroundColor: '#16a34a', // Green standby marker
+  },
+  robotSelectedGlow: {
+    borderColor: '#bae6fd',
+    borderWidth: 3,
+  },
+  robotArrow: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  robotTag: {
+    position: 'absolute',
+    top: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 4,
+  },
+  tagDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  robotTagText: {
+    color: '#ffffff',
+    fontSize: 8,
+    fontWeight: '800',
+    fontFamily: 'monospace',
   },
 });
