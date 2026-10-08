@@ -15,6 +15,7 @@ import {
 } from 'lucide-react-native';
 import { Badge } from '../../shared/components/Badge';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 import { AppJobItem } from './jobData';
 
 interface JobCardProps {
@@ -96,7 +97,7 @@ export function JobCard({ job, onPress }: JobCardProps) {
               {job.routeText}
             </Text>
           </View>
-          <ChevronRight size={18} color="#94a3b8" />
+          <ChevronRight size={18} color={colors.textMuted} />
         </View>
 
         {/* Footer Meta Row */}
@@ -117,7 +118,7 @@ export function JobCard({ job, onPress }: JobCardProps) {
 
           {job.status === 'QUEUED' && (
             <View style={styles.queuedPill}>
-              <Clock3 size={11} color="#b45309" style={styles.pillIcon} />
+              <Clock3 size={11} color={colors.warning} style={styles.pillIcon} />
               <Text style={styles.queuedText}>Handover Ready</Text>
             </View>
           )}
@@ -136,10 +137,10 @@ export function JobCard({ job, onPress }: JobCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
     marginBottom: 10,
     overflow: 'hidden',
     shadowColor: '#000000',
@@ -174,8 +175,8 @@ const styles = StyleSheet.create({
   jobNo: {
     fontSize: 13,
     fontWeight: '900',
-    fontFamily: 'monospace',
-    color: '#0f172a',
+    fontFamily: typography.fontMono,
+    color: colors.textPrimary,
   },
   workflowName: {
     fontSize: 11,
@@ -185,29 +186,29 @@ const styles = StyleSheet.create({
   payloadSummary: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748b',
+    color: colors.textSecondary,
     marginBottom: 10,
   },
   routeBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: 8,
     padding: 8,
     gap: 8,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
   },
   routeIconWrap: {
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
   },
   routeDetails: {
     flex: 1,
@@ -215,12 +216,12 @@ const styles = StyleSheet.create({
   targetLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#0f172a',
+    color: colors.textPrimary,
   },
   routeText: {
     fontSize: 10,
     fontWeight: '500',
-    color: '#64748b',
+    color: colors.textSecondary,
     marginTop: 1,
   },
   footerRow: {
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: colors.borderSubtle,
   },
   robotGroup: {
     flexDirection: 'row',
@@ -239,12 +240,12 @@ const styles = StyleSheet.create({
   robotLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748b',
+    color: colors.textSecondary,
   },
   robotCode: {
     fontWeight: '800',
-    fontFamily: 'monospace',
-    color: '#0f172a',
+    fontFamily: typography.fontMono,
+    color: colors.textPrimary,
   },
   pillIcon: {
     marginRight: 4,
@@ -252,41 +253,42 @@ const styles = StyleSheet.create({
   etaPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.primaryLight,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   etaText: {
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '800',
     color: colors.primary,
   },
   queuedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fffbeb',
+    backgroundColor: colors.warningBg,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   queuedText: {
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '800',
-    color: '#b45309',
+    color: colors.warning,
   },
   completedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0fdf4',
+    backgroundColor: colors.successBg,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   completedText: {
     fontSize: 10,
+    fontFamily: typography.fontMono,
     fontWeight: '800',
     color: colors.success,
   },

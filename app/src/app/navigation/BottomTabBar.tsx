@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: colors.border,
     paddingVertical: 6,
     paddingBottom: 14,
     elevation: 8,

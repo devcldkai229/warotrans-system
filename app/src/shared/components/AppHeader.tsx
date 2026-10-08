@@ -75,7 +75,7 @@ export function AppHeader({
             <Text style={styles.zoneName} numberOfLines={1}>
               {zone}
             </Text>
-            <ChevronDown size={14} color="#64748b" style={styles.chevron} />
+            <ChevronDown size={14} color={colors.textSecondary} style={styles.chevron} />
           </Pressable>
         </View>
       </View>
@@ -92,7 +92,7 @@ export function AppHeader({
           accessibilityRole="button"
           accessibilityLabel="Notifications"
         >
-          <Bell size={17} color="#334155" />
+          <Bell size={17} color={colors.textPrimary} />
           {hasUnread && <View style={styles.bellBadge} />}
         </Pressable>
 
@@ -111,7 +111,7 @@ export function AppHeader({
             accessibilityRole="button"
             accessibilityLabel="Sign out of shift"
           >
-            <LogOut size={16} color="#64748b" />
+            <LogOut size={16} color={colors.textSecondary} />
           </Pressable>
         )}
 
@@ -198,9 +198,9 @@ export function AppHeader({
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: colors.border,
     paddingVertical: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   zoneName: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#0f172a',
+    color: colors.textPrimary,
     maxWidth: 155,
     fontFamily: typography.fontSans,
   },
@@ -259,13 +259,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   iconCirclePressed: {
-    backgroundColor: '#e2e8f0',
+    backgroundColor: colors.surfaceMuted,
   },
   bellBadge: {
     position: 'absolute',
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#ef4444',
+    backgroundColor: colors.danger,
     borderWidth: 1.5,
     borderColor: '#ffffff',
   },
@@ -282,21 +282,21 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoutCirclePressed: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#fca5a5',
+    backgroundColor: colors.dangerBg,
+    borderColor: colors.dangerBorder,
   },
   avatarCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#0f172a',
+    backgroundColor: colors.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,

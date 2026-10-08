@@ -1,3 +1,5 @@
+import { colors } from '../../shared/theme/colors';
+
 export interface WorkflowItem {
   id: string;
   code: string;
@@ -17,8 +19,8 @@ export const WORKFLOWS: WorkflowItem[] = [
     category: 'INBOUND',
     note: 'Dock ➔ Storage Racks (Multi-Tote)',
     icon: 'package-check',
-    tone: '#eff6ff',
-    badgeTone: '#2563eb',
+    tone: colors.primaryLight,
+    badgeTone: colors.primary,
   },
   {
     id: 'outbound',
@@ -27,8 +29,8 @@ export const WORKFLOWS: WorkflowItem[] = [
     category: 'OUTBOUND',
     note: 'Storage Racks ➔ Outbound Shipping Bay',
     icon: 'truck',
-    tone: '#fffbeb',
-    badgeTone: '#d97706',
+    tone: colors.warningBg,
+    badgeTone: colors.warning,
   },
   {
     id: 'reallocation',
@@ -37,8 +39,8 @@ export const WORKFLOWS: WorkflowItem[] = [
     category: 'INTERNAL',
     note: 'Internal Slot Reallocation / Consolidation',
     icon: 'rotate-cw',
-    tone: '#f0fdf4',
-    badgeTone: '#16a34a',
+    tone: colors.successBg,
+    badgeTone: colors.success,
   },
   {
     id: 'point-to-point',
@@ -47,8 +49,8 @@ export const WORKFLOWS: WorkflowItem[] = [
     category: 'DIRECT',
     note: 'Direct Station Transport / Empty Tote Return',
     icon: 'navigation',
-    tone: '#f1f5f9',
-    badgeTone: '#475569',
+    tone: colors.surfaceSubtle,
+    badgeTone: colors.textSecondary,
   },
   {
     id: 'replenishment',
@@ -57,8 +59,8 @@ export const WORKFLOWS: WorkflowItem[] = [
     category: 'INTERNAL',
     note: 'Buffer Storage (Zone D) ➔ Active Pick-Face',
     icon: 'layers',
-    tone: '#eff6ff',
-    badgeTone: '#2563eb',
+    tone: colors.primaryLight,
+    badgeTone: colors.primary,
   },
   {
     id: 'block-path',
@@ -67,8 +69,8 @@ export const WORKFLOWS: WorkflowItem[] = [
     category: 'SAFETY',
     note: 'Report Blocked Aisle / Temporary Obstacle',
     icon: 'octagon',
-    tone: '#fef2f2',
-    badgeTone: '#dc2626',
+    tone: colors.dangerBg,
+    badgeTone: colors.danger,
   },
 ];
 

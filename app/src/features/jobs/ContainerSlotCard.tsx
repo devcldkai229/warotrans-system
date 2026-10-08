@@ -6,6 +6,7 @@ import {
   View,
 } from 'react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 import { ContainerSlot } from '../../shared/types/contracts';
 
 interface ContainerSlotCardProps {
@@ -135,7 +136,7 @@ const styles = StyleSheet.create({
   slotLabel: {
     fontSize: 10,
     fontWeight: '800',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.textSecondary,
   },
   statusIndicator: {
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
   barcode: {
     fontSize: 14,
     fontWeight: '900',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.textPrimary,
   },
   productName: {

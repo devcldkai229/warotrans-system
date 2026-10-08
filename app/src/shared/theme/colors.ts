@@ -49,6 +49,7 @@ export const colors = {
 
   // Border & Dividers
   border: '#d7dfe9',
+  borderSubtle: '#eef2f6',
   borderDark: '#99a7b8',
 
   // Overlay

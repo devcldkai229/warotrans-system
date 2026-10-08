@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
 
 export type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -67,12 +68,14 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontFamily: typography.fontMono,
+    fontSize: 11,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   labelSm: {
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: '800',
   },
 });

@@ -27,6 +27,6 @@ const styles = StyleSheet.create({
   },
   highlighted: {
     borderColor: colors.primary,
-    backgroundColor: '#f0fdfa',
+    backgroundColor: colors.primaryLight,
   },
 });
