@@ -66,7 +66,6 @@ export function LoginScreen() {
     setStaffId(operator.id);
     setSelectedZone(operator.zone);
     setError(null);
-    showToastInfo(`Selected profile: ${operator.name} (${operator.zone})`);
   };
 
   const handleLogin = () => {
@@ -241,7 +240,6 @@ export function LoginScreen() {
                               triggerHaptic('tick');
                               setSelectedZone(zone.value);
                               setIsZoneDropdownOpen(false);
-                              showToastInfo(`Switched zone to: ${zone.label}`);
                             }}
                             style={({ pressed }) => [
                               styles.dropdownItem,
@@ -392,7 +390,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     marginBottom: 6,
     fontFamily: typography.fontSans,
   },
@@ -431,7 +429,7 @@ const styles = StyleSheet.create({
   presetChipId: {
     fontSize: 9,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: colors.textSecondary,
     marginTop: 2,
     fontFamily: typography.fontMono,
   },
