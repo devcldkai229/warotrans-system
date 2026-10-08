@@ -193,25 +193,92 @@
 }
 
 .wf-bind {
-  display: grid;
-  grid-template-columns: 0.9fr 18px 1fr 1fr;
-  gap: 6px;
-  align-items: center;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.wf-bind__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin-bottom: 6px;
 }
 
 .wf-bind__name {
-  padding: 6px 9px;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: #f8fafc;
-  font-size: 14px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.wf-bind i {
-  font-style: normal;
+.wf-bind__name b {
+  color: var(--red);
+}
+
+.wf-bind__head small {
+  margin-right: auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--faint);
+}
+
+.wf-bind__x {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+}
+
+.wf-bind__x:hover {
+  background: var(--line);
+}
+
+.wf-bind__pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.wf-bind__pick select,
+.wf-bind__pick input {
+  width: 100%;
+}
+
+.wf__addinput {
+  width: 100%;
+  color: var(--blue);
+  border-style: dashed;
+}
+
+.wf-outs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-outs li {
+  padding: 3px 9px;
+  border: 1px solid var(--green-line);
+  border-radius: 999px;
+  background: var(--green-soft);
+  font-size: 12px;
+  color: var(--green-ink);
+}
+
+.wf-outs small {
+  margin-left: 4px;
   color: var(--faint);
 }
 
@@ -302,36 +369,30 @@
   color: var(--faint);
 }
 
-.wf-exec {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.wf-exec label {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.wf-exec span {
-  font-size: 10px;
-  color: var(--muted);
-}
-
 .wf-step__body .wf__ghost {
   margin-top: 4px;
 }
 
-.wf-exec {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.wf-exec select,
-.wf-exec input {
-  width: 100%;
-}
-
 .wf-step__body {
   min-width: 0;
+}
+
+/* Rename a Task or Step. The key stays fixed: STEP_OUTPUT bindings and Jobs refer to it. */
+.wf-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 8px;
+}
+
+.wf-name span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.wf-name small {
+  font-size: 11px;
+  color: var(--faint);
 }
