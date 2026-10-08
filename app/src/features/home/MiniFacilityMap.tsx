@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -8,11 +11,14 @@ import {
 import {
   BatteryMedium,
   LocateFixed,
+  Navigation,
   Search,
   User,
 } from 'lucide-react-native';
-import Svg, { Circle, Line, Defs, Pattern, Rect } from 'react-native-svg';
+import Svg, { Line, Defs, Pattern, Rect } from 'react-native-svg';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 export interface MapRobot {
   id: string;
@@ -41,6 +47,27 @@ export function MiniFacilityMap({
   onSearch,
   robots,
 }: MiniFacilityMapProps) {
+  const [isLocating, setIsLocating] = useState(false);
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 6000,
+        easing: Easing.linear,
+        useNativeDriver: Platform.OS !== 'web',
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spinAnim]);
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   const selectedRobot = robots.find((r) => r.id === selectedRobotId) || robots[0];
 
   const getWorkerPosition = () => {
@@ -57,6 +84,15 @@ export function MiniFacilityMap({
   };
 
   const workerPos = getWorkerPosition();
+
+  const handleLocateMe = () => {
+    triggerHaptic('tap');
+    setIsLocating(true);
+    onLocateUser();
+    setTimeout(() => setIsLocating(false), 1200);
+  };
+
+  const isWeb = Platform.OS === 'web';
 
   return (
     <View style={styles.mapContainer}>
@@ -77,6 +113,20 @@ export function MiniFacilityMap({
         <View style={[styles.sonarRing, styles.ringMedium]} />
         <View style={[styles.sonarRing, styles.ringSmall]} />
       </View>
+
+      {/* 2b. Rotating Radar Sweep (Conic gradient on web, sweeping indicator) */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.radarSweep,
+          {
+            transform: [{ rotate: spin }],
+          },
+          isWeb ? ({
+            backgroundImage: 'conic-gradient(from 0deg, transparent 65%, rgba(0, 92, 209, 0.22) 100%)',
+          } as any) : undefined,
+        ]}
+      />
 
       {/* 3. Floating Search Bar (Top) */}
       <View style={styles.searchBarWrapper}>
@@ -103,7 +153,7 @@ export function MiniFacilityMap({
             <Text style={styles.onlinePillText}>ONLINE</Text>
           </View>
           <View style={styles.batteryGroup}>
-            <BatteryMedium size={12} color="#64748b" />
+            <BatteryMedium size={12} color={colors.textSecondary} />
             <Text style={styles.batteryText}>{selectedRobot.battery}%</Text>
           </View>
         </View>
@@ -111,7 +161,7 @@ export function MiniFacilityMap({
 
       {/* 5. Locate Me GPS Button (Top Right under search) */}
       <Pressable
-        onPress={onLocateUser}
+        onPress={handleLocateMe}
         style={({ pressed }) => [
           styles.locateButton,
           pressed && styles.locateButtonPressed,
@@ -165,10 +215,10 @@ export function MiniFacilityMap({
           y1="46%"
           x2="22%"
           y2="82%"
-          stroke="#2563eb"
+          stroke="#005cd1"
           strokeWidth="2"
           strokeDasharray="4,4"
-          strokeOpacity="0.4"
+          strokeOpacity="0.45"
         />
       </Svg>
 
@@ -183,7 +233,12 @@ export function MiniFacilityMap({
         ]}
         pointerEvents="none"
       >
-        <View style={styles.workerPulse} />
+        <View
+          style={[
+            styles.workerPulse,
+            isLocating && styles.workerPulseActive,
+          ]}
+        />
         <View style={styles.workerAvatar}>
           <User size={13} color="#ffffff" />
         </View>
@@ -201,7 +256,10 @@ export function MiniFacilityMap({
         return (
           <Pressable
             key={robot.id}
-            onPress={() => onSelectRobot(robot.id)}
+            onPress={() => {
+              triggerHaptic('tap');
+              onSelectRobot(robot.id);
+            }}
             style={[
               styles.robotWrapper,
               {
@@ -210,7 +268,7 @@ export function MiniFacilityMap({
               },
             ]}
           >
-            {/* Pulsing ring */}
+            {/* Pulsing Distance Ring */}
             <View
               style={[
                 styles.robotPulseRing,
@@ -218,19 +276,26 @@ export function MiniFacilityMap({
               ]}
             />
 
-            {/* Directional Robot Marker */}
+            {/* Directional Robot Marker with Sharp SVG Navigation Arrow */}
             <View
               style={[
                 styles.robotMarker,
                 isMoving ? styles.robotMoving : styles.robotIdle,
                 isSelected && styles.robotSelectedGlow,
-                { transform: [{ rotate: `${robot.headingDeg}deg` }] },
               ]}
             >
-              <Text style={styles.robotArrow}>▲</Text>
+              <View
+                style={{
+                  transform: [{ rotate: `${robot.headingDeg}deg` }],
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Navigation size={18} color="#ffffff" fill="#ffffff" />
+              </View>
             </View>
 
-            {/* Speed & ID Floating Tag */}
+            {/* Speed & ID Floating Tag (Refined Light Pill matching prototype) */}
             <View style={styles.robotTag}>
               <View
                 style={[
@@ -251,8 +316,8 @@ export function MiniFacilityMap({
 
 const styles = StyleSheet.create({
   mapContainer: {
-    height: 390,
-    backgroundColor: '#e0f2fe', // Sky-100 blueprint paper background
+    height: 400,
+    backgroundColor: '#e0f2fe', // Blueprint paper background
     position: 'relative',
     overflow: 'hidden',
   },
@@ -268,7 +333,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(37, 99, 235, 0.12)',
+    borderColor: 'rgba(0, 92, 209, 0.12)',
   },
   ringLarge: {
     width: 380,
@@ -282,6 +347,19 @@ const styles = StyleSheet.create({
     width: 130,
     height: 130,
   },
+  radarSweep: {
+    position: 'absolute',
+    left: '50%',
+    top: '52%',
+    width: 580,
+    height: 580,
+    marginLeft: -290,
+    marginTop: -290,
+    borderRadius: 290,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.12)',
+    backgroundColor: 'transparent',
+  },
   searchBarWrapper: {
     position: 'absolute',
     top: 14,
@@ -294,12 +372,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.85)',
+    borderColor: 'rgba(215, 223, 233, 0.85)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
     gap: 10,
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -312,8 +390,9 @@ const styles = StyleSheet.create({
   searchPlaceholder: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748b',
+    color: colors.textSecondary,
     flex: 1,
+    fontFamily: typography.fontSans,
   },
   telemetryBadge: {
     position: 'absolute',
@@ -325,37 +404,39 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 8,
+    borderColor: colors.border,
+    paddingHorizontal: 9,
     paddingVertical: 5,
     gap: 6,
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
   },
   telemetryDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.success,
   },
   telemetryId: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
-    color: '#0f172a',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   onlinePill: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: colors.successSoft,
     paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingVertical: 1.5,
     borderRadius: 4,
   },
   onlinePillText: {
     fontSize: 8,
     fontWeight: '900',
-    color: '#16a34a',
+    color: colors.success,
+    fontFamily: typography.fontMono,
   },
   batteryGroup: {
     flexDirection: 'row',
@@ -364,36 +445,37 @@ const styles = StyleSheet.create({
   },
   batteryText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#64748b',
+    fontWeight: '600',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   locateButton: {
     position: 'absolute',
     top: 72,
     right: 14,
     zIndex: 30,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 5,
     elevation: 3,
   },
   locateButtonPressed: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.surfaceSubtle,
     transform: [{ scale: 0.92 }],
   },
   zoneCardA: {
     position: 'absolute',
     left: '6%',
-    top: 122,
+    top: 124,
     width: '42%',
     height: 106,
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
@@ -405,7 +487,7 @@ const styles = StyleSheet.create({
   zoneCardB: {
     position: 'absolute',
     right: '6%',
-    top: 124,
+    top: 126,
     width: '40%',
     height: 102,
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
@@ -417,8 +499,9 @@ const styles = StyleSheet.create({
   zoneTitle: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#64748b',
+    color: colors.textSecondary,
     letterSpacing: 0.5,
+    fontFamily: typography.fontSans,
   },
   rackGridA: {
     marginTop: 6,
@@ -466,9 +549,9 @@ const styles = StyleSheet.create({
   },
   dockSlotText: {
     fontSize: 8,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '800',
-    color: '#475569',
+    color: colors.textSecondary,
   },
   workerMarker: {
     position: 'absolute',
@@ -482,18 +565,25 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(37, 99, 235, 0.25)',
+    backgroundColor: 'rgba(0, 92, 209, 0.22)',
+  },
+  workerPulseActive: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: 'rgba(0, 92, 209, 0.45)',
+    transform: [{ scale: 1.25 }],
   },
   workerAvatar: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#071523',
     borderWidth: 2,
     borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -507,11 +597,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
     paddingHorizontal: 6,
     paddingVertical: 2,
     gap: 4,
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -525,7 +615,8 @@ const styles = StyleSheet.create({
   workerLabelText: {
     fontSize: 8,
     fontWeight: '900',
-    color: '#0f172a',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   robotWrapper: {
     position: 'absolute',
@@ -542,51 +633,53 @@ const styles = StyleSheet.create({
   },
   robotPulseSelected: {
     borderWidth: 2,
-    borderColor: 'rgba(37, 99, 235, 0.6)',
+    borderColor: 'rgba(0, 92, 209, 0.75)',
   },
   robotPulseDefault: {
     borderWidth: 1,
-    borderColor: 'rgba(100, 116, 139, 0.3)',
+    borderColor: 'rgba(84, 101, 125, 0.3)',
   },
   robotMarker: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#ffffff',
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 5,
     elevation: 4,
   },
   robotMoving: {
-    backgroundColor: '#0284c7', // Vibrant Sky/Blue marker
+    backgroundColor: colors.primary, // Rich cobalt blue marker
   },
   robotIdle: {
-    backgroundColor: '#16a34a', // Green standby marker
+    backgroundColor: colors.success, // Rich forest green standby marker
   },
   robotSelectedGlow: {
     borderColor: '#bae6fd',
-    borderWidth: 3,
-  },
-  robotArrow: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '900',
+    borderWidth: 3.5,
   },
   robotTag: {
     position: 'absolute',
-    top: 38,
+    top: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: 6,
     paddingVertical: 2,
     gap: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   tagDot: {
     width: 5,
@@ -594,9 +687,9 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
   },
   robotTagText: {
-    color: '#ffffff',
+    color: colors.textPrimary,
     fontSize: 8,
-    fontWeight: '800',
-    fontFamily: 'monospace',
+    fontWeight: '900',
+    fontFamily: typography.fontMono,
   },
 });

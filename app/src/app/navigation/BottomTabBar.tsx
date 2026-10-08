@@ -42,7 +42,7 @@ export function BottomTabBar() {
         <View style={[styles.iconPill, isHome && styles.iconPillActive]}>
           <Home
             size={20}
-            color={isHome ? colors.primary : colors.textMuted}
+            color={isHome ? colors.primary : colors.textSecondary}
             strokeWidth={isHome ? 2.8 : 2}
           />
         </View>
@@ -69,7 +69,7 @@ export function BottomTabBar() {
         <View style={[styles.iconPill, isJobs && styles.iconPillActive]}>
           <PackageCheck
             size={20}
-            color={isJobs ? colors.primary : colors.textMuted}
+            color={isJobs ? colors.primary : colors.textSecondary}
             strokeWidth={isJobs ? 2.8 : 2}
           />
           {activeJobCount > 0 && (
@@ -101,7 +101,7 @@ export function BottomTabBar() {
         <View style={[styles.iconPill, isTransport && styles.iconPillActive]}>
           <Rocket
             size={20}
-            color={isTransport ? colors.primary : colors.textMuted}
+            color={isTransport ? colors.primary : colors.textSecondary}
             strokeWidth={isTransport ? 2.8 : 2}
           />
         </View>
@@ -120,12 +120,13 @@ export function BottomTabBar() {
 
 const styles = StyleSheet.create({
   bar: {
+    height: 76,
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingVertical: 6,
-    paddingBottom: 14,
+    paddingTop: 6,
+    paddingBottom: 10,
     elevation: 8,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -3 },
@@ -151,7 +152,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   iconPillActive: {
-    backgroundColor: 'rgba(0, 92, 209, 0.12)',
+    backgroundColor: 'rgba(0, 92, 209, 0.10)',
+    transform: [{ scale: 1.05 }],
   },
   badge: {
     position: 'absolute',
@@ -182,11 +184,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.8,
+    fontFamily: typography.fontSans,
   },
   labelActive: {
     color: colors.primary,
   },
   labelInactive: {
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
 });

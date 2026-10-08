@@ -75,7 +75,7 @@ export function AppHeader({
             <Text style={styles.zoneName} numberOfLines={1}>
               {zone}
             </Text>
-            <ChevronDown size={14} color={colors.textSecondary} style={styles.chevron} />
+            <ChevronDown size={13} color={colors.textSecondary} style={styles.chevron} />
           </Pressable>
         </View>
       </View>
@@ -226,8 +226,8 @@ const styles = StyleSheet.create({
   },
   facilitySubtitle: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.2,
+    fontWeight: '900',
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
     color: colors.primary,
     fontFamily: typography.fontSans,
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   zoneName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
     color: colors.textPrimary,
     maxWidth: 155,

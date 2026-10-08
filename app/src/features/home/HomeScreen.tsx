@@ -16,7 +16,10 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 import { colors } from '../../shared/theme/colors';
+import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { useToast } from '../../shared/context/ToastContext';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 const INITIAL_ROBOTS: MapRobot[] = [
   {
@@ -42,6 +45,7 @@ const INITIAL_ROBOTS: MapRobot[] = [
 export function HomeScreen() {
   const { session } = useAuth();
   const { navigate } = useNavigation();
+  const { success: showToastSuccess } = useToast();
   const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
   const [sheetExpanded, setSheetExpanded] = useState<boolean>(false);
   const [netStatus, setNetStatus] = useState<'syncing' | 'connected' | 'hidden'>('syncing');
@@ -58,11 +62,16 @@ export function HomeScreen() {
   const activeZone = session?.zone || 'Inbound Dock 01';
 
   const handleOpenHandoverTask = () => {
+    triggerHaptic('tap');
     navigate('job_detail', { jobId: 'JOB-2026-0881' });
   };
 
   const handleLocateUser = () => {
     setSelectedRobotId('AMR-01');
+    const zoneName = activeZone.includes('(')
+      ? activeZone.split('(')[0].trim()
+      : activeZone;
+    showToastSuccess(`Centered map on your location (${zoneName})`);
   };
 
   return (
@@ -74,7 +83,7 @@ export function HomeScreen() {
             {netStatus === 'syncing' ? (
               <RefreshCw size={12} color="#38bdf8" />
             ) : (
-              <Check size={12} color="#22c55e" />
+              <Check size={12} color={colors.success} />
             )}
             <Text style={styles.floatingSyncText}>
               {netStatus === 'syncing' ? 'Syncing with WES...' : 'WMS Connected'}
@@ -83,194 +92,204 @@ export function HomeScreen() {
         </View>
       )}
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} bounces={false}>
-      {/* 1. Technical Blueprint Facility Radar Map */}
-      <MiniFacilityMap
-        currentZone={activeZone}
-        selectedRobotId={selectedRobotId}
-        onSelectRobot={setSelectedRobotId}
-        onLocateUser={handleLocateUser}
-        onSearch={() => navigate('inventory_lookup')}
-        robots={INITIAL_ROBOTS}
-      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        bounces={false}
+      >
+        {/* 1. Technical Blueprint Facility Radar Map */}
+        <MiniFacilityMap
+          currentZone={activeZone}
+          selectedRobotId={selectedRobotId}
+          onSelectRobot={setSelectedRobotId}
+          onLocateUser={handleLocateUser}
+          onSearch={() => navigate('inventory_lookup')}
+          robots={INITIAL_ROBOTS}
+        />
 
-      {/* 2. Interactive 2-Stage Bottom Sheet (Grab/Uber style) */}
-      <View style={styles.bottomSheet}>
-        {/* Handle Bar & Sheet Header Toggle */}
-        <Pressable
-          onPress={() => setSheetExpanded(!sheetExpanded)}
-          style={styles.sheetHandleArea}
-        >
-          <View style={styles.handlePill} />
-          <View style={styles.sheetHeaderRow}>
-            <View style={styles.sheetTitleGroup}>
-              <View style={styles.amberDot} />
-              <Text style={styles.sheetTitle}>NEXT HANDOVER TASK</Text>
+        {/* 2. Interactive 2-Stage Bottom Sheet (Grab/Uber style) */}
+        <View style={styles.bottomSheet}>
+          {/* Handle Bar & Sheet Header Toggle */}
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              setSheetExpanded(!sheetExpanded);
+            }}
+            style={styles.sheetHandleArea}
+            accessibilityRole="button"
+            accessibilityLabel={sheetExpanded ? 'Collapse fleet view' : 'Expand fleet view'}
+          >
+            <View style={styles.handlePill} />
+            <View style={styles.sheetHeaderRow}>
+              <View style={styles.sheetTitleGroup}>
+                <View style={styles.amberDot} />
+                <Text style={styles.sheetTitle}>NEXT HANDOVER TASK</Text>
+              </View>
+              <Text style={styles.sheetToggleText}>
+                {sheetExpanded ? 'Collapse Fleet View ▼' : 'Expand Fleet & Pulse ▲'}
+              </Text>
             </View>
-            <Text style={styles.sheetToggleText}>
-              {sheetExpanded ? 'Collapse Fleet View ▼' : 'Expand Fleet & Pulse ▲'}
-            </Text>
-          </View>
-        </Pressable>
+          </Pressable>
 
-        {/* Hero Task Card (Always Visible) */}
-        <View style={styles.heroCardContainer}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroTopRow}>
-              <View style={styles.heroPillGroup}>
-                <View style={styles.amrPill}>
-                  <Text style={styles.amrPillText}>AMR-01</Text>
+          {/* Hero Task Card (Always Visible in Peek State) */}
+          <View style={styles.heroCardContainer}>
+            <View style={styles.heroCard}>
+              <View style={styles.heroTopRow}>
+                <View style={styles.heroPillGroup}>
+                  <View style={styles.amrPill}>
+                    <Text style={styles.amrPillText}>AMR-01</Text>
+                  </View>
+                  <Text style={styles.workflowText}>INBOUND PUTAWAY</Text>
                 </View>
-                <Text style={styles.workflowText}>INBOUND PUTAWAY</Text>
+                <View style={styles.etaPill}>
+                  <Text style={styles.etaText}>ETA 45s (8m away)</Text>
+                </View>
               </View>
-              <View style={styles.etaPill}>
-                <Text style={styles.etaText}>ETA 45s (8m away)</Text>
-              </View>
-            </View>
 
-            <View style={styles.heroBottomRow}>
-              <View style={styles.heroTextCol}>
-                <Text style={styles.targetLocationText} numberOfLines={1}>
-                  Target: Rack A · Level 2 · Bin 03
-                </Text>
-                <Text style={styles.slotDetailsText} numberOfLines={1}>
-                  Slot 1 (Front): BOX-101 (45 pcs)
-                </Text>
+              <View style={styles.heroBottomRow}>
+                <View style={styles.heroTextCol}>
+                  <Text style={styles.targetLocationText} numberOfLines={1}>
+                    Target: Rack A · Level 2 · Bin 03
+                  </Text>
+                  <Text style={styles.slotDetailsText} numberOfLines={1}>
+                    Slot 1 (Front): BOX-101 (45 pcs)
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={handleOpenHandoverTask}
+                  style={({ pressed }) => [
+                    styles.openTaskBtn,
+                    pressed && styles.openTaskBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open handover task"
+                >
+                  <Text style={styles.openTaskText}>Open Task ➔</Text>
+                </Pressable>
               </View>
-              <Pressable
-                onPress={handleOpenHandoverTask}
-                style={({ pressed }) => [
-                  styles.openTaskBtn,
-                  pressed && styles.openTaskBtnPressed,
-                ]}
-              >
-                <Text style={styles.openTaskText}>Open Task ➔</Text>
-              </Pressable>
             </View>
           </View>
+
+          {/* 3. Expanded Drawer Content (Warehouse Pulse & Fleet Telemetry) */}
+          {sheetExpanded && (
+            <View style={styles.expandedContent}>
+              {/* Warehouse Pulse Card */}
+              <View style={styles.pulseCard}>
+                <View style={styles.pulseHeader}>
+                  <View style={styles.pulseTitleGroup}>
+                    <Text style={styles.pulseTitle}>WAREHOUSE PULSE</Text>
+                    <View style={styles.liveBadge}>
+                      <Text style={styles.liveBadgeText}>LIVE TELEMETRY</Text>
+                    </View>
+                  </View>
+                  <View style={styles.liveStatus}>
+                    <View style={styles.greenPulseDot} />
+                    <Text style={styles.liveStatusText}>LIVE</Text>
+                  </View>
+                </View>
+
+                <View style={styles.metricRow}>
+                  <View style={styles.metricCol}>
+                    <Text style={[styles.metricValue, styles.metricSuccess]}>2/2</Text>
+                    <Text style={styles.metricLabel}>Fleet Ready</Text>
+                  </View>
+                  <View style={[styles.metricCol, styles.metricDivider]}>
+                    <Text style={styles.metricValue}>1</Text>
+                    <Text style={styles.metricLabel}>My Active Tasks</Text>
+                  </View>
+                  <View style={[styles.metricCol, styles.metricDivider]}>
+                    <Text style={[styles.metricValue, styles.metricSuccess]}>0</Text>
+                    <Text style={styles.metricLabel}>Hazards</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Active Fleet (2 AMRs) Cards */}
+              <View style={styles.fleetSection}>
+                <View style={styles.fleetHeaderRow}>
+                  <Text style={styles.fleetTitle}>ACTIVE FLEET (2 AMRS)</Text>
+                  <Text style={styles.fleetSubtitle}>Physical Fleet Scope</Text>
+                </View>
+
+                <View style={styles.fleetCardsGrid}>
+                  {/* AMR-01 */}
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setSelectedRobotId('AMR-01');
+                    }}
+                    style={[
+                      styles.robotCard,
+                      selectedRobotId === 'AMR-01' && styles.robotCardSelected,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Select AMR-01"
+                  >
+                    <View style={styles.robotCardTop}>
+                      <Text style={styles.robotCardId}>AMR-01</Text>
+                      <View style={styles.robotStatusPillEnRoute}>
+                        <Text style={styles.robotStatusTextEnRoute}>EN ROUTE</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.robotCardTask} numberOfLines={1}>
+                      Transporting Tote BOX-101 to Rack A-02
+                    </Text>
+                    <View style={styles.robotCardBottom}>
+                      <View style={styles.batteryWrap}>
+                        <BatteryMedium size={12} color={colors.success} />
+                        <Text style={styles.batteryVal}>78%</Text>
+                      </View>
+                      <Text style={styles.totesText}>3 Totes</Text>
+                    </View>
+                  </Pressable>
+
+                  {/* AMR-02 */}
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setSelectedRobotId('AMR-02');
+                    }}
+                    style={[
+                      styles.robotCard,
+                      selectedRobotId === 'AMR-02' && styles.robotCardSelected,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Select AMR-02"
+                  >
+                    <View style={styles.robotCardTop}>
+                      <Text style={styles.robotCardId}>AMR-02</Text>
+                      <View style={styles.robotStatusPillStandby}>
+                        <Text style={styles.robotStatusTextStandby}>STANDBY</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.robotCardTask} numberOfLines={1}>
+                      Docking at Charger Station 02
+                    </Text>
+                    <View style={styles.robotCardBottom}>
+                      <View style={styles.batteryWrap}>
+                        <BatteryMedium size={12} color={colors.success} />
+                        <Text style={styles.batteryVal}>94%</Text>
+                      </View>
+                      <Text style={styles.totesText}>0 Totes</Text>
+                    </View>
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Operating Normally Safety Banner */}
+              <View style={styles.normalBanner}>
+                <ShieldCheck size={20} color={colors.primary} />
+                <View style={styles.normalBannerText}>
+                  <Text style={styles.normalTitle}>Systems operating normally</Text>
+                  <Text style={styles.normalSubtitle}>
+                    2/2 Physical AMRs online (AMR-01 & AMR-02) · No navigational deadlocks.
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
-
-        {/* 3. Expanded Drawer Content (Warehouse Pulse & Fleet Telemetry) */}
-        {sheetExpanded && (
-          <View style={styles.expandedContent}>
-            {/* Warehouse Pulse Card */}
-            <View style={styles.pulseCard}>
-              <View style={styles.pulseHeader}>
-                <View style={styles.pulseTitleGroup}>
-                  <Text style={styles.pulseTitle}>WAREHOUSE PULSE</Text>
-                  <View style={styles.liveBadge}>
-                    <Text style={styles.liveBadgeText}>LIVE TELEMETRY</Text>
-                  </View>
-                </View>
-                <View style={styles.liveStatus}>
-                  <View style={styles.greenPulseDot} />
-                  <Text style={styles.liveStatusText}>LIVE</Text>
-                </View>
-              </View>
-
-              <View style={styles.metricRow}>
-                <View style={styles.metricCol}>
-                  <Text style={[styles.metricValue, styles.metricSuccess]}>2/2</Text>
-                  <Text style={styles.metricLabel}>Fleet Ready</Text>
-                </View>
-                <View style={[styles.metricCol, styles.metricDivider]}>
-                  <Text style={styles.metricValue}>1</Text>
-                  <Text style={styles.metricLabel}>My Active Tasks</Text>
-                </View>
-                <View style={[styles.metricCol, styles.metricDivider]}>
-                  <Text style={[styles.metricValue, styles.metricSuccess]}>0</Text>
-                  <Text style={styles.metricLabel}>Hazards</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Active Fleet (2 AMRs) Cards */}
-            <View style={styles.fleetSection}>
-              <View style={styles.fleetHeaderRow}>
-                <Text style={styles.fleetTitle}>ACTIVE FLEET (2 AMRS)</Text>
-                <Text style={styles.fleetSubtitle}>Physical Fleet Scope</Text>
-              </View>
-
-              <View style={styles.fleetCardsGrid}>
-                {/* AMR-01 */}
-                <Pressable
-                  onPress={() => setSelectedRobotId('AMR-01')}
-                  style={[
-                    styles.robotCard,
-                    selectedRobotId === 'AMR-01' && styles.robotCardSelected,
-                  ]}
-                >
-                  <View style={styles.robotCardTop}>
-                    <Text style={styles.robotCardId}>AMR-01</Text>
-                    <View style={styles.robotStatusPillEnRoute}>
-                      <Text style={styles.robotStatusTextEnRoute}>EN ROUTE</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.robotCardTask} numberOfLines={1}>
-                    Inbound Putaway · Slot 1 Active
-                  </Text>
-                  <View style={styles.robotCardBottom}>
-                    <View style={styles.batteryWrap}>
-                      <BatteryMedium size={12} color={colors.success} />
-                      <Text style={styles.batteryVal}>78%</Text>
-                    </View>
-                    <Text style={styles.totesText}>3 Totes</Text>
-                  </View>
-                </Pressable>
-
-                {/* AMR-02 */}
-                <Pressable
-                  onPress={() => setSelectedRobotId('AMR-02')}
-                  style={[
-                    styles.robotCard,
-                    selectedRobotId === 'AMR-02' && styles.robotCardSelected,
-                  ]}
-                >
-                  <View style={styles.robotCardTop}>
-                    <Text style={styles.robotCardId}>AMR-02</Text>
-                    <View style={styles.robotStatusPillStandby}>
-                      <Text style={styles.robotStatusTextStandby}>STANDBY</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.robotCardTask} numberOfLines={1}>
-                    Depot Charging Bay 02
-                  </Text>
-                  <View style={styles.robotCardBottom}>
-                    <View style={styles.batteryWrap}>
-                      <BatteryMedium size={12} color={colors.success} />
-                      <Text style={styles.batteryVal}>94%</Text>
-                    </View>
-                    <Text style={styles.totesText}>0 Totes</Text>
-                  </View>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Operating Normally Info Banner */}
-            <View style={styles.normalBanner}>
-              <ShieldCheck size={20} color={colors.primary} />
-              <View style={styles.normalBannerText}>
-                <Text style={styles.normalTitle}>Systems operating normally</Text>
-                <Text style={styles.normalSubtitle}>
-                  2/2 Physical AMRs online · No navigational deadlocks.
-                </Text>
-              </View>
-            </View>
-
-            {/* Quick Action Button */}
-            <Pressable
-              onPress={() => navigate('transport_create')}
-              style={({ pressed }) => [
-                styles.newTransportBtn,
-                pressed && styles.newTransportBtnPressed,
-              ]}
-            >
-              <Text style={styles.newTransportBtnText}>+ New Transport Request</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-    </ScrollView>
+      </ScrollView>
     </View>
   );
 }
@@ -279,6 +298,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     position: 'relative',
+    backgroundColor: colors.background,
   },
   floatingSyncContainer: {
     position: 'absolute',
@@ -293,13 +313,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(15, 23, 42, 0.94)',
+    backgroundColor: 'rgba(7, 21, 35, 0.95)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 99,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
   },
@@ -307,23 +327,23 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#ffffff',
-    fontFamily: typography.fontMono,
+    fontFamily: typography.fontSans,
   },
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   bottomSheet: {
-    marginTop: -16,
+    marginTop: -14,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    shadowColor: '#000',
+    borderTopColor: colors.border,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -340,7 +360,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#cbd5e1',
+    backgroundColor: 'rgba(84, 101, 125, 0.3)',
     marginBottom: 8,
   },
   sheetHeaderRow: {
@@ -358,19 +378,21 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#f59e0b',
+    backgroundColor: colors.warning,
   },
   sheetTitle: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   sheetToggleText: {
     fontSize: 9,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '700',
-    color: '#64748b',
+    color: colors.textSecondary,
   },
   heroCardContainer: {
     paddingHorizontal: 16,
@@ -378,15 +400,11 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.4)',
-    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 92, 209, 0.35)',
+    backgroundColor: colors.surface,
     padding: 14,
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    ...shadows.panel,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -402,33 +420,35 @@ const styles = StyleSheet.create({
   amrPill: {
     backgroundColor: colors.primary,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 2.5,
     borderRadius: 6,
   },
   amrPillText: {
     color: '#ffffff',
     fontSize: 9,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '900',
   },
   workflowText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#0f172a',
+    color: colors.textPrimary,
     letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   etaPill: {
-    backgroundColor: '#fffbeb',
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: colors.warningBorder,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 2.5,
     borderRadius: 12,
   },
   etaText: {
-    color: '#b45309',
+    color: '#854d0e',
     fontSize: 9,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '800',
   },
   heroBottomRow: {
@@ -443,33 +463,38 @@ const styles = StyleSheet.create({
   targetLocationText: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#0f172a',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   slotDetailsText: {
     fontSize: 10,
-    fontWeight: '600',
-    color: '#64748b',
+    fontWeight: '500',
+    color: colors.textSecondary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   openTaskBtn: {
     backgroundColor: colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
-    shadowColor: colors.primary,
+    borderBottomWidth: 2.5,
+    borderBottomColor: '#004bb0',
+    shadowColor: '#00285a',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 3,
   },
   openTaskBtnPressed: {
-    opacity: 0.85,
+    opacity: 0.88,
     transform: [{ scale: 0.96 }],
   },
   openTaskText: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   expandedContent: {
     paddingHorizontal: 16,
@@ -478,15 +503,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pulseCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
     padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    ...shadows.panel,
   },
   pulseHeader: {
     flexDirection: 'row',
@@ -502,18 +524,20 @@ const styles = StyleSheet.create({
   pulseTitle: {
     fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 0.8,
-    color: '#0f172a',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   liveBadge: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   liveBadgeText: {
-    fontSize: 8,
-    fontFamily: 'monospace',
+    fontSize: 9,
+    fontFamily: typography.fontMono,
     fontWeight: '900',
     color: colors.primary,
   },
@@ -529,9 +553,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   liveStatusText: {
-    fontSize: 9,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '700',
     color: colors.success,
+    fontFamily: typography.fontSans,
   },
   metricRow: {
     flexDirection: 'row',
@@ -543,12 +568,13 @@ const styles = StyleSheet.create({
   },
   metricDivider: {
     borderLeftWidth: 1,
-    borderLeftColor: '#e2e8f0',
+    borderLeftColor: colors.border,
   },
   metricValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
-    color: '#0f172a',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   metricSuccess: {
     color: colors.success,
@@ -556,8 +582,9 @@ const styles = StyleSheet.create({
   metricLabel: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#64748b',
+    color: colors.textSecondary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   fleetSection: {
     gap: 8,
@@ -568,15 +595,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   fleetTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 0.8,
-    color: '#64748b',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   fleetSubtitle: {
-    fontSize: 9,
-    fontFamily: 'monospace',
-    fontWeight: '800',
+    fontSize: 10,
+    fontFamily: typography.fontMono,
+    fontWeight: '700',
     color: colors.primary,
   },
   fleetCardsGrid: {
@@ -585,15 +614,16 @@ const styles = StyleSheet.create({
   },
   robotCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 10,
+    borderColor: colors.border,
+    padding: 12,
   },
   robotCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.primaryLight,
+    ...shadows.panel,
   },
   robotCardTop: {
     flexDirection: 'row',
@@ -601,44 +631,47 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   robotCardId: {
-    fontSize: 11,
-    fontFamily: 'monospace',
+    fontSize: 12,
+    fontFamily: typography.fontMono,
     fontWeight: '900',
-    color: '#0f172a',
+    color: colors.textPrimary,
   },
   robotStatusPillEnRoute: {
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
   },
   robotStatusTextEnRoute: {
     fontSize: 8,
     fontWeight: '900',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   robotStatusPillStandby: {
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
   },
   robotStatusTextStandby: {
     fontSize: 8,
     fontWeight: '900',
     color: colors.success,
+    fontFamily: typography.fontSans,
   },
   robotCardTask: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '600',
-    color: '#64748b',
+    color: colors.textSecondary,
     marginTop: 6,
+    fontFamily: typography.fontSans,
   },
   robotCardBottom: {
-    marginTop: 8,
-    paddingTop: 6,
+    marginTop: 10,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: colors.borderSubtle,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -649,54 +682,41 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   batteryVal: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#64748b',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   totesText: {
     fontSize: 9,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '700',
-    color: '#64748b',
+    color: colors.textSecondary,
   },
   normalBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    borderRadius: 10,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: colors.primaryBorder,
     padding: 12,
-    gap: 10,
+    gap: 12,
   },
   normalBannerText: {
     flex: 1,
   },
   normalTitle: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.primary,
-  },
-  normalSubtitle: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#3b82f6',
-    marginTop: 1,
-  },
-  newTransportBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  newTransportBtnPressed: {
-    opacity: 0.85,
-  },
-  newTransportBtnText: {
-    color: '#ffffff',
     fontSize: 12,
     fontWeight: '900',
+    color: colors.primary,
+    fontFamily: typography.fontSans,
+  },
+  normalSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginTop: 1,
+    fontFamily: typography.fontSans,
   },
 });
