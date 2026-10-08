@@ -13,8 +13,8 @@ import './robots.css'
 export function FleetPage() {
   const { robotCode } = useParams()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<'robots' | 'teams'>('robots')
   const [query, setQuery] = useState('')
+  const [previewCode, setPreviewCode] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<RobotStatus | null>(null)
 
   const counts = useMemo(() => {
@@ -46,27 +46,6 @@ export function FleetPage() {
               </button>
             </header>
 
-            <div className="fleet__tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'robots'}
-                className={tab === 'robots' ? 'is-active' : undefined}
-                onClick={() => setTab('robots')}
-              >
-                Robots
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'teams'}
-                className={tab === 'teams' ? 'is-active' : undefined}
-                onClick={() => setTab('teams')}
-              >
-                Teams
-              </button>
-            </div>
-
             <label className="fleet__search">
               <Icon name="search" size={14} />
               <input
@@ -76,26 +55,35 @@ export function FleetPage() {
               />
             </label>
 
-            <div className="fleet__chips">
-              {ROBOT_STATUS_ORDER.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  className={`fleet__chip fleet__chip--${ROBOT_STATUS_TONE[status]}${statusFilter === status ? ' is-active' : ''}`}
-                  onClick={() => setStatusFilter(statusFilter === status ? null : status)}
-                >
-                  {counts.get(status) ?? 0} {status}
-                </button>
-              ))}
+            <div className="fleet__chips" role="group" aria-label="Filter by status">
+              <button
+                type="button"
+                className={`fleet__chip${statusFilter === null ? ' is-active' : ''}`}
+                onClick={() => setStatusFilter(null)}
+              >
+                All <b>{ROBOTS.length}</b>
+              </button>
+              {ROBOT_STATUS_ORDER.filter((status) => (counts.get(status) ?? 0) > 0 || statusFilter === status).map(
+                (status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={`fleet__chip fleet__chip--${ROBOT_STATUS_TONE[status]}${statusFilter === status ? ' is-active' : ''}`}
+                    onClick={() => setStatusFilter(statusFilter === status ? null : status)}
+                  >
+                    <span className="dot" />
+                    {status.charAt(0) + status.slice(1).toLowerCase()} <b>{counts.get(status) ?? 0}</b>
+                  </button>
+                ),
+              )}
             </div>
 
             <ul className="fleet__list">
-              {tab === 'robots' &&
-                visibleRobots.map((robot) => (
+              {visibleRobots.map((robot) => (
                   <li key={robot.id}>
                     <button
                       type="button"
-                      className={`fleet__item${robot.status === 'ERROR' ? ' is-error' : ''}`}
+                      className={`fleet__item${robot.status === 'ERROR' ? ' is-error' : ''}${previewCode === robot.code ? ' is-selected' : ''}`}
                       onClick={() => navigate(`/monitor/fleet/${robot.code}`)}
                     >
                       <span className="fleet__item-icon">
@@ -122,8 +110,7 @@ export function FleetPage() {
                     </button>
                   </li>
                 ))}
-              {tab === 'robots' && visibleRobots.length === 0 && <li className="fleet__empty">No robots match</li>}
-              {tab === 'teams' && <li className="fleet__empty">No teams configured</li>}
+              {visibleRobots.length === 0 && <li className="fleet__empty">No robots match</li>}
             </ul>
 
             <footer className="fleet__foot">
@@ -142,6 +129,8 @@ export function FleetPage() {
           selectedCode={robotCode ?? null}
           onSelect={(code) => navigate(`/monitor/fleet/${code}`)}
           variant={selected ? 'detail' : 'overview'}
+          previewCode={previewCode}
+          onPreview={setPreviewCode}
         />
       </div>
     </div>
