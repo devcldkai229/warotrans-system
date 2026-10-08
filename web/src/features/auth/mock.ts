@@ -10,6 +10,3 @@ export const MOCK_ACCOUNT: Account = {
   lastLoginAt: '2026-09-20T09:12:00+07:00',
 }
 
-// TODO(backend): gateway health/latency and the connected-fleet count have no endpoint yet (SignalR or /health).
-export const GATEWAY_STATUS = { label: 'Core Gateway: ONLINE (14ms)', clusterTime: '16:30:00 UTC+7' }
-export const FLEET_CONNECTED_LABEL = 'Fleet Connected (12 AMRs)'
