@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { AdminPage } from '@/app/AdminPage'
 import type { StorageLocationView } from '@/shared/api/contracts'
 import { Dialog } from '@/shared/ui/Dialog'
-import { ENDPOINT_OPTIONS, STORAGE_LOCATIONS, WAREHOUSES } from './mock'
+import { ENDPOINT_OPTIONS, WAREHOUSES } from './mock'
+import { SectionHead } from './SectionHead'
 
 interface LocationDraft {
   code: string
@@ -11,24 +11,24 @@ interface LocationDraft {
   endpointId: string
 }
 
-// A StorageLocation is a simple logical place such as "Shelf A" that points at one Navigation Endpoint.
-// Aisle/Bay/Level/Bin are not modelled (rules/00), so those columns from the design are not shown.
-export function StorageLocationsPage() {
-  const [locations, setLocations] = useState<StorageLocationView[]>(STORAGE_LOCATIONS)
+interface LocationsSectionProps {
+  locations: StorageLocationView[]
+  setLocations: (update: (current: StorageLocationView[]) => StorageLocationView[]) => void
+}
+
+/**
+ * warehouse.storage_locations: a simple logical place such as "Shelf A" that points at exactly one Navigation Endpoint.
+ * Aisle/Bay/Level/Bin are not modelled (rules/00). Code is unique per warehouse, an Endpoint serves one location only.
+ */
+export function LocationsSection({ locations, setLocations }: LocationsSectionProps) {
   const [draft, setDraft] = useState<LocationDraft | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const active = locations.filter((location) => location.isActive).length
-  const usedEndpoints = new Set(locations.map((location) => location.endpointId))
-  const freeEndpoints = ENDPOINT_OPTIONS.filter((endpoint) => !usedEndpoints.has(endpoint.id))
+  const used = new Set(locations.map((location) => location.endpointId))
+  const freeEndpoints = ENDPOINT_OPTIONS.filter((endpoint) => !used.has(endpoint.id))
 
   function open() {
-    setDraft({
-      code: '',
-      name: '',
-      warehouseId: WAREHOUSES[0].id,
-      endpointId: freeEndpoints[0]?.id ?? '',
-    })
+    setDraft({ code: '', name: '', warehouseId: WAREHOUSES[0].id, endpointId: freeEndpoints[0]?.id ?? '' })
     setError(null)
   }
 
@@ -53,6 +53,7 @@ export function StorageLocationsPage() {
         warehouseName: warehouse?.name ?? '—',
         endpointId: draft.endpointId,
         endpointCode: endpoint?.code ?? '—',
+        endpointName: endpoint?.name ?? '—',
         code,
         name: draft.name.trim(),
         isActive: true,
@@ -60,35 +61,29 @@ export function StorageLocationsPage() {
       },
     ])
     setDraft(null)
-    setError(null)
+  }
+
+  function toggle(id: string) {
+    setLocations((current) => current.map((location) => (location.id === id ? { ...location, isActive: !location.isActive } : location)))
   }
 
   return (
-    <AdminPage
-      title="Storage Location"
-      subtitle="Logical storage locations linked to a Navigation Endpoint (StorageLocation)"
-      stats={[
-        { label: 'Total locations', value: locations.length },
-        { label: 'Active', value: active, tone: 'green' },
-        { label: 'Inactive', value: locations.length - active, tone: 'muted' },
-        { label: 'Warehouses', value: new Set(locations.map((location) => location.warehouseId)).size },
-      ]}
-    >
-      <div className="atoolbar">
-        <h2>Locations</h2>
+    <>
+      <SectionHead title="Storage locations" hint="Places where Containers are stored. Each one points at one map Endpoint.">
         <button type="button" className="btn btn--blue" onClick={open}>
-          + Add Location
+          + Add location
         </button>
-      </div>
+      </SectionHead>
 
-      <table className="atable">
+      <table className="mtable">
         <thead>
           <tr>
             <th>Code</th>
             <th>Name</th>
             <th>Warehouse</th>
             <th>Endpoint</th>
-            <th className="is-right">Status</th>
+            <th>Status</th>
+            <th className="is-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -97,11 +92,24 @@ export function StorageLocationsPage() {
               <td>{location.code}</td>
               <td className="is-strong">{location.name}</td>
               <td className="is-faint">{location.warehouseName}</td>
-              <td className="is-faint">{location.endpointCode}</td>
-              <td className="is-right">
-                <span className={`apill apill--${location.isActive ? 'green' : 'grey'}`}>
+              <td className="is-faint">
+                {location.endpointName} · {location.endpointCode}
+              </td>
+              <td>
+                <span className={`mpill mpill--${location.isActive ? 'green' : 'grey'}`}>
                   {location.isActive ? 'Active' : 'Inactive'}
                 </span>
+              </td>
+              <td>
+                <div className="mrow-actions">
+                  <button
+                    type="button"
+                    className={`mbtn ${location.isActive ? 'mbtn--danger' : 'mbtn--ok'}`}
+                    onClick={() => toggle(location.id)}
+                  >
+                    {location.isActive ? 'Deactivate' : 'Activate'}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -113,11 +121,11 @@ export function StorageLocationsPage() {
           <div className="field-row">
             <label className="field">
               Code
-              <input value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} autoFocus />
+              <input value={draft.code} maxLength={100} onChange={(event) => setDraft({ ...draft, code: event.target.value })} autoFocus />
             </label>
             <label className="field">
               Name
-              <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+              <input value={draft.name} maxLength={100} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
             </label>
           </div>
           <label className="field">
@@ -131,12 +139,12 @@ export function StorageLocationsPage() {
             </select>
           </label>
           <label className="field">
-            Navigation endpoint
+            Map endpoint
             <select value={draft.endpointId} onChange={(event) => setDraft({ ...draft, endpointId: event.target.value })}>
               {freeEndpoints.length === 0 ? <option value="">No free endpoint</option> : null}
               {freeEndpoints.map((endpoint) => (
                 <option key={endpoint.id} value={endpoint.id}>
-                  {endpoint.code}
+                  {endpoint.name} · {endpoint.code}
                 </option>
               ))}
             </select>
@@ -145,6 +153,6 @@ export function StorageLocationsPage() {
           {error ? <small className="field" style={{ color: 'var(--red-ink)' }}>{error}</small> : null}
         </Dialog>
       ) : null}
-    </AdminPage>
+    </>
   )
 }

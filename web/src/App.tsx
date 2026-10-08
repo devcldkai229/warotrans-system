@@ -1,20 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { AdminLayout } from '@/app/AdminLayout'
 import { AppShell } from '@/app/AppShell'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { FleetPage } from '@/features/robots/FleetPage'
-import { JobsManagementPage } from '@/features/jobs/JobsManagementPage'
+import { TransportRequestsPage } from '@/features/transport-requests/TransportRequestsPage'
 import { JobDetailPage } from '@/features/jobs/JobDetailPage'
+import { ManagementPage } from '@/features/management/ManagementPage'
 import { FacilityPage } from '@/features/maps/FacilityPage'
 import { MapEditorPage } from '@/features/maps/MapEditorPage'
-import { AccountsPage } from '@/features/accounts/AccountsPage'
-import { RolesPage } from '@/features/accounts/RolesPage'
-import { CategoriesPage } from '@/features/products/CategoriesPage'
-import { ProductsPage } from '@/features/products/ProductsPage'
-import { InventoryPage } from '@/features/inventory/InventoryPage'
-import { StorageLocationsPage } from '@/features/inventory/StorageLocationsPage'
 
 function App() {
   return (
@@ -25,30 +19,28 @@ function App() {
         <Route element={<AppShell />}>
           <Route path="/monitor/fleet" element={<FleetPage />} />
           <Route path="/monitor/fleet/:robotCode" element={<FleetPage />} />
-          <Route path="/monitor/jobs" element={<JobsManagementPage />} />
+          <Route path="/monitor/requests" element={<TransportRequestsPage />} />
+          <Route path="/monitor/jobs" element={<Navigate to="/monitor/requests" replace />} />
           <Route path="/monitor/jobs/:jobNo" element={<JobDetailPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/configure/facility" element={<FacilityPage />} />
-        </Route>
-
-        {/* Account and data management use the sidebar console instead of the top navigation. */}
-        <Route element={<AdminLayout />}>
-          <Route path="/admin/accounts" element={<AccountsPage />} />
-          <Route path="/admin/roles" element={<RolesPage />} />
-          <Route path="/data/products" element={<ProductsPage />} />
-          <Route path="/data/categories" element={<CategoriesPage />} />
-          <Route path="/data/inventory" element={<InventoryPage />} />
-          <Route path="/data/storage-locations" element={<StorageLocationsPage />} />
+          <Route path="/management" element={<ManagementPage />} />
         </Route>
 
         {/* Full-screen editor: has its own header instead of the app shell. */}
         <Route path="/configure/facility/maps/:mapId/edit" element={<MapEditorPage />} />
       </Route>
 
+      <Route path="/admin" element={<Navigate to="/management?tab=accounts" replace />} />
+      <Route path="/admin/accounts" element={<Navigate to="/management?tab=accounts" replace />} />
+      <Route path="/admin/roles" element={<Navigate to="/management?tab=roles" replace />} />
+      <Route path="/data" element={<Navigate to="/management?tab=products" replace />} />
+      <Route path="/data/products" element={<Navigate to="/management?tab=products" replace />} />
+      <Route path="/data/categories" element={<Navigate to="/management?tab=categories" replace />} />
+      <Route path="/data/inventory" element={<Navigate to="/management?tab=inventory" replace />} />
+      <Route path="/data/storage-locations" element={<Navigate to="/management?tab=locations" replace />} />
       <Route path="/monitor" element={<Navigate to="/monitor/fleet" replace />} />
       <Route path="/configure" element={<Navigate to="/configure/facility" replace />} />
-      <Route path="/admin" element={<Navigate to="/admin/accounts" replace />} />
-      <Route path="/data" element={<Navigate to="/data/products" replace />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )

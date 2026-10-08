@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AdminPage } from '@/app/AdminPage'
+import { useMemo, useState } from 'react'
 import type { Account, AccountRole, AccountStatus } from '@/shared/api/contracts'
 import { formatIsoDateTime } from '@/shared/lib/format'
-import { AccountFormDialog } from './AccountFormDialog'
-import { ACCOUNT_ROLES } from './constants'
-import { listAccounts } from './api'
+import { AccountFormDialog } from '@/features/accounts/AccountFormDialog'
+import { ACCOUNT_ROLES } from '@/features/accounts/constants'
+import { SectionHead } from './SectionHead'
 
 const STATUS_PILL: Record<AccountStatus, { label: string; tone: 'green' | 'grey' | 'red' }> = {
   ACTIVE: { label: 'Active', tone: 'green' },
@@ -12,28 +11,17 @@ const STATUS_PILL: Record<AccountStatus, { label: string; tone: 'green' | 'grey'
   LOCKED: { label: 'Locked', tone: 'red' },
 }
 
-export function AccountsPage() {
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+interface AccountsSectionProps {
+  accounts: Account[]
+  setAccounts: (update: (current: Account[]) => Account[]) => void
+  loadState: 'loading' | 'ready' | 'error'
+}
+
+/** Accounts that can sign in to the console (identity.accounts). */
+export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSectionProps) {
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<AccountRole | ''>('')
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    listAccounts()
-      .then((items) => {
-        if (cancelled) return
-        setAccounts(items)
-        setLoadState('ready')
-      })
-      .catch(() => {
-        if (!cancelled) setLoadState('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -42,15 +30,12 @@ export function AccountsPage() {
         (roleFilter === '' || account.role === roleFilter) &&
         (needle === '' ||
           account.username.toLowerCase().includes(needle) ||
-          account.email.toLowerCase().includes(needle)),
+          account.email.toLowerCase().includes(needle) ||
+          account.fullName.toLowerCase().includes(needle)),
     )
   }, [accounts, query, roleFilter])
 
-  const active = accounts.filter((account) => account.status === 'ACTIVE').length
-  const notActive = accounts.length - active
-
-  // TODO(backend): the Identity API only lists accounts so far. Create, edit and status changes below stay in
-  // local state and are lost on reload; the API will own these transitions once the endpoints exist.
+  // TODO(backend): the Identity API only lists accounts so far. Create, edit and status changes stay in local state.
   function setStatus(id: string, status: AccountStatus) {
     setAccounts((current) => current.map((account) => (account.id === id ? { ...account, status } : account)))
   }
@@ -69,44 +54,29 @@ export function AccountsPage() {
   }
 
   return (
-    <AdminPage
-      title="Accounts"
-      subtitle="Manage system user accounts (Account)"
-      stats={[
-        { label: 'Total accounts', value: accounts.length },
-        { label: 'Active', value: active, tone: 'green' },
-        { label: 'Inactive / locked', value: notActive, tone: 'muted' },
-        { label: 'Roles', value: ACCOUNT_ROLES.length },
-      ]}
-    >
-      <div className="atoolbar">
-        <div className="atoolbar__filters">
-          <input
-            placeholder="Search username or email..."
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as AccountRole | '')}>
-            <option value="">All roles</option>
-            {ACCOUNT_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {role}
-              </option>
-            ))}
-          </select>
-        </div>
+    <>
+      <SectionHead title="Accounts" hint="People who can sign in. The role decides what each person may do.">
+        <input placeholder="Search name, username or email…" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as AccountRole | '')}>
+          <option value="">All roles</option>
+          {ACCOUNT_ROLES.map((role) => (
+            <option key={role} value={role}>
+              {role}
+            </option>
+          ))}
+        </select>
         <button type="button" className="btn btn--blue" onClick={() => setEditing('new')}>
-          + Add Account
+          + Add account
         </button>
-      </div>
+      </SectionHead>
 
-      <table className="atable">
+      <table className="mtable">
         <thead>
           <tr>
             <th>Username</th>
+            <th>Full name</th>
             <th>Email</th>
             <th>Role</th>
-            <th>Full name</th>
             <th>Last login</th>
             <th>Status</th>
             <th className="is-right">Actions</th>
@@ -118,26 +88,26 @@ export function AccountsPage() {
             return (
               <tr key={account.id}>
                 <td>{account.username}</td>
+                <td className="is-strong">{account.fullName}</td>
                 <td>{account.email}</td>
                 <td>
-                  <span className={`apill apill--${account.role === 'ADMIN' ? 'blue' : 'grey'}`}>{account.role}</span>
+                  <span className={`mpill mpill--${account.role === 'ADMIN' ? 'blue' : 'grey'}`}>{account.role}</span>
                 </td>
-                <td className="is-strong">{account.fullName}</td>
                 <td className="is-faint">{formatIsoDateTime(account.lastLoginAt)}</td>
                 <td>
-                  <span className={`apill apill--${pill.tone}`}>{pill.label}</span>
+                  <span className={`mpill mpill--${pill.tone}`}>{pill.label}</span>
                 </td>
                 <td>
-                  <div className="arow-actions">
-                    <button type="button" className="abtn" onClick={() => setEditing(account)}>
+                  <div className="mrow-actions">
+                    <button type="button" className="mbtn" onClick={() => setEditing(account)}>
                       Edit
                     </button>
                     {account.status === 'ACTIVE' ? (
-                      <button type="button" className="abtn abtn--danger" onClick={() => setStatus(account.id, 'INACTIVE')}>
+                      <button type="button" className="mbtn mbtn--danger" onClick={() => setStatus(account.id, 'INACTIVE')}>
                         Deactivate
                       </button>
                     ) : (
-                      <button type="button" className="abtn abtn--ok" onClick={() => setStatus(account.id, 'ACTIVE')}>
+                      <button type="button" className="mbtn mbtn--ok" onClick={() => setStatus(account.id, 'ACTIVE')}>
                         Activate
                       </button>
                     )}
@@ -148,7 +118,7 @@ export function AccountsPage() {
           })}
           {visible.length === 0 ? (
             <tr>
-              <td colSpan={7} className="atable__empty">
+              <td colSpan={7} className="mtable__empty">
                 {loadState === 'loading'
                   ? 'Loading accounts…'
                   : loadState === 'error'
@@ -168,6 +138,6 @@ export function AccountsPage() {
           onSave={save}
         />
       ) : null}
-    </AdminPage>
+    </>
   )
 }

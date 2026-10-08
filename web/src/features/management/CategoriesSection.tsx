@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { AdminPage } from '@/app/AdminPage'
-import type { ProductCategory } from '@/shared/api/contracts'
+import type { Product, ProductCategory } from '@/shared/api/contracts'
 import { Dialog } from '@/shared/ui/Dialog'
-import { CATEGORIES, PRODUCTS } from './mock'
+import { SectionHead } from './SectionHead'
 
 interface CategoryDraft {
   code: string
@@ -10,12 +9,18 @@ interface CategoryDraft {
   description: string
 }
 
-export function CategoriesPage() {
-  const [categories, setCategories] = useState<ProductCategory[]>(CATEGORIES)
+interface CategoriesSectionProps {
+  categories: ProductCategory[]
+  setCategories: (update: (current: ProductCategory[]) => ProductCategory[]) => void
+  products: Product[]
+}
+
+/** warehouse.product_categories: the code is unique. */
+export function CategoriesSection({ categories, setCategories, products }: CategoriesSectionProps) {
   const [draft, setDraft] = useState<CategoryDraft | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const productCount = (categoryId: string) => PRODUCTS.filter((product) => product.categoryId === categoryId).length
+  const productCount = (categoryId: string) => products.filter((product) => product.categoryId === categoryId).length
 
   function save() {
     if (!draft) return
@@ -33,20 +38,11 @@ export function CategoriesPage() {
       { id: `draft-category-${current.length + 1}`, code, name: draft.name.trim(), description: draft.description.trim() || undefined },
     ])
     setDraft(null)
-    setError(null)
   }
 
   return (
-    <AdminPage
-      title="Product Categories"
-      subtitle="Manage product groupings (ProductCategory)"
-      stats={[
-        { label: 'Total categories', value: categories.length },
-        { label: 'Products linked', value: PRODUCTS.length },
-      ]}
-    >
-      <div className="atoolbar">
-        <h2>Categories</h2>
+    <>
+      <SectionHead title="Categories" hint="Groups that products belong to.">
         <button
           type="button"
           className="btn btn--blue"
@@ -55,11 +51,11 @@ export function CategoriesPage() {
             setError(null)
           }}
         >
-          + Add Category
+          + Add category
         </button>
-      </div>
+      </SectionHead>
 
-      <table className="atable">
+      <table className="mtable">
         <thead>
           <tr>
             <th>Code</th>
@@ -85,20 +81,24 @@ export function CategoriesPage() {
           <div className="field-row">
             <label className="field">
               Code
-              <input value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} autoFocus />
+              <input value={draft.code} maxLength={100} onChange={(event) => setDraft({ ...draft, code: event.target.value })} autoFocus />
             </label>
             <label className="field">
               Name
-              <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+              <input value={draft.name} maxLength={100} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
             </label>
           </div>
           <label className="field">
             Description
-            <textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+            <textarea
+              value={draft.description}
+              maxLength={500}
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+            />
           </label>
           {error ? <small className="field" style={{ color: 'var(--red-ink)' }}>{error}</small> : null}
         </Dialog>
       ) : null}
-    </AdminPage>
+    </>
   )
 }
