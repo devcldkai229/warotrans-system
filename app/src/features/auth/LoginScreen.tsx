@@ -171,17 +171,17 @@ export function LoginScreen() {
                 }}
                 placeholder="STF-2026-XXX"
                 autoCapitalize="characters"
-                leftIcon={<UserCheck size={18} color={colors.textMuted} />}
+                leftIcon={<UserCheck size={18} color={colors.textSecondary} />}
                 error={error || undefined}
               />
 
               <Input
-                label="Access Password / PIN"
+                label="Access Password"
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Enter shift password"
                 secureTextEntry
-                leftIcon={<Lock size={18} color={colors.textMuted} />}
+                leftIcon={<Lock size={18} color={colors.textSecondary} />}
               />
 
               {/* Assigned Work Zone Selector Field */}
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   brandTitle: {
     fontSize: 12,
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
   brandSubtitle: {
     fontSize: 10,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
   statusPill: {
@@ -590,18 +590,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 12,
     paddingHorizontal: 2,
   },
   footerText: {
     fontSize: 10,
-    fontWeight: '600',
-    color: colors.textMuted,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   footerDevice: {
     fontSize: 10,
-    fontWeight: '800',
-    color: colors.textMuted,
+    fontWeight: '700',
+    color: colors.textSecondary,
     fontFamily: typography.fontMono,
   },
 });
