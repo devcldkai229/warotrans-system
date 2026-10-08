@@ -10,11 +10,13 @@ import { colors } from '../../shared/theme/colors';
 interface SafetyHubCardProps {
   onLaunchRescue: () => void;
   onBlockPath?: () => void;
+  onFleetRecall?: () => void;
 }
 
 export function SafetyHubCard({
   onLaunchRescue,
   onBlockPath,
+  onFleetRecall,
 }: SafetyHubCardProps) {
   const [isHolding, setIsHolding] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -115,6 +117,21 @@ export function SafetyHubCard({
           <Text style={styles.safetyBtnTitle}>Block Path (Nav2)</Text>
           <Text style={styles.safetyBtnDesc}>Flag aisle obstacle</Text>
         </Pressable>
+
+        {/* Fleet Recall Notice */}
+        {onFleetRecall && (
+          <Pressable
+            onPress={onFleetRecall}
+            style={[styles.safetyBtn, styles.safetyBtnDefault]}
+          >
+            <View style={styles.safetyBtnTop}>
+              <Text style={styles.safetyBtnLabel}>Recall</Text>
+              <Text style={styles.safetyBtnIcon}>🛑</Text>
+            </View>
+            <Text style={styles.safetyBtnTitle}>Fleet Recall</Text>
+            <Text style={styles.safetyBtnDesc}>Dock policy</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );

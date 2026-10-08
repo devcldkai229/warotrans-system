@@ -78,6 +78,7 @@ export function HomeScreen() {
         selectedRobotId={selectedRobotId}
         onSelectRobot={setSelectedRobotId}
         onLocateUser={handleLocateUser}
+        onOpenLiveMap={() => navigate('live_map')}
         robots={INITIAL_ROBOTS}
       />
 
@@ -137,7 +138,7 @@ export function HomeScreen() {
                 pressed && styles.actionBtnPressed,
               ]}
             >
-              <Text style={styles.secondaryActionText}>📋 All Jobs Queue</Text>
+              <Text style={styles.secondaryActionText}>📋 Jobs Queue</Text>
             </Pressable>
 
             <Pressable
@@ -147,7 +148,39 @@ export function HomeScreen() {
                 pressed && styles.actionBtnPressed,
               ]}
             >
-              <Text style={styles.secondaryActionText}>📡 AMR Live Monitor</Text>
+              <Text style={styles.secondaryActionText}>📡 AMR Live</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => navigate('inventory_lookup')}
+              style={({ pressed }) => [
+                styles.actionBtnSecondary,
+                pressed && styles.actionBtnPressed,
+              ]}
+            >
+              <Text style={styles.secondaryActionText}>🔍 SKU / Bin</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.actionRow}>
+            <Pressable
+              onPress={() => navigate('live_map')}
+              style={({ pressed }) => [
+                styles.actionBtnSecondary,
+                pressed && styles.actionBtnPressed,
+              ]}
+            >
+              <Text style={styles.secondaryActionText}>🗺️ Facility Radar</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => navigate('offline_hud')}
+              style={({ pressed }) => [
+                styles.actionBtnSecondary,
+                pressed && styles.actionBtnPressed,
+              ]}
+            >
+              <Text style={styles.secondaryActionText}>⚡ Offline Mode HUD</Text>
             </Pressable>
           </View>
         </View>

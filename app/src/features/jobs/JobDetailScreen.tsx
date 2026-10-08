@@ -124,6 +124,24 @@ export function JobDetailScreen() {
               </Pressable>
             </View>
           </View>
+
+          {/* Live Radar Map Shortcut */}
+          <Pressable
+            onPress={() =>
+              navigate('live_map', {
+                jobId: job.id,
+                robotId: job.assignedRobotCode,
+              })
+            }
+            style={({ pressed }) => [
+              styles.liveMapLinkBtn,
+              pressed && styles.liveMapLinkBtnPressed,
+            ]}
+          >
+            <Text style={styles.liveMapLinkText}>
+              🗺️ Open Real-Time Radar & Nav2 Trajectory ›
+            </Text>
+          </Pressable>
         </View>
 
         {/* 3-Slot Physical Flatbed Chassis Visualizer */}
@@ -424,5 +442,24 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     padding: 12,
+  },
+  liveMapLinkBtn: {
+    marginTop: 10,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveMapLinkBtnPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  liveMapLinkText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });

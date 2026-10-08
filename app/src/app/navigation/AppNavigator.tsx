@@ -10,10 +10,17 @@ import {
 import { useAuth } from '../../features/auth/authContext';
 import { LoginScreen } from '../../features/auth/LoginScreen';
 import { HomeScreen } from '../../features/home/HomeScreen';
+import { CreateContainerScreen } from '../../features/inventory/CreateContainerScreen';
+import { InventoryLookupScreen } from '../../features/inventory/InventoryLookupScreen';
 import { JobDetailScreen } from '../../features/jobs/JobDetailScreen';
 import { JobsScreen } from '../../features/jobs/JobsScreen';
+import { JobLiveMapScreen } from '../../features/monitoring/JobLiveMapScreen';
 import { JobMonitoringScreen } from '../../features/monitoring/JobMonitoringScreen';
+import { OfflineBannerHUD } from '../../features/monitoring/OfflineBannerHUD';
+import { FleetRecallScreen } from '../../features/safety/FleetRecallScreen';
+import { PayloadRecoveryScreen } from '../../features/safety/PayloadRecoveryScreen';
 import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
+import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
 import { AppHeader } from '../../shared/components/AppHeader';
 import { colors } from '../../shared/theme/colors';
@@ -54,6 +61,20 @@ export function AppNavigator() {
         return <JobMonitoringScreen />;
       case 'transport_create':
         return <TransportCreationScreen />;
+      case 'create_container':
+        return <CreateContainerScreen />;
+      case 'inventory_lookup':
+        return <InventoryLookupScreen />;
+      case 'live_map':
+        return <JobLiveMapScreen />;
+      case 'payload_recovery':
+        return <PayloadRecoveryScreen />;
+      case 'fleet_recall':
+        return <FleetRecallScreen />;
+      case 'transport_history':
+        return <TransportHistoryScreen />;
+      case 'offline_hud':
+        return <OfflineBannerHUD />;
       default:
         return <HomeScreen />;
     }
@@ -85,7 +106,23 @@ export function AppNavigator() {
               ? 'Job Stepper & Payload'
               : currentScreen === 'job_monitoring'
               ? 'Live AMR Execution'
-              : 'New Transport Request'}
+              : currentScreen === 'transport_create'
+              ? 'New Transport Request'
+              : currentScreen === 'create_container'
+              ? 'Pack & Ingest Container'
+              : currentScreen === 'inventory_lookup'
+              ? 'Inventory SKU & Bin Lookup'
+              : currentScreen === 'live_map'
+              ? 'Real-Time Facility Radar'
+              : currentScreen === 'payload_recovery'
+              ? 'Payload Recovery Emergency'
+              : currentScreen === 'fleet_recall'
+              ? 'Fleet Recall & Docking'
+              : currentScreen === 'transport_history'
+              ? 'Transport Audit History'
+              : currentScreen === 'offline_hud'
+              ? 'Offline HUD & Sync Cache'
+              : 'WaroTrans Console'}
           </Text>
         </View>
       )}

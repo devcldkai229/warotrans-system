@@ -21,7 +21,11 @@ export function TransportScreen() {
   };
 
   const handleLaunchRescue = () => {
-    navigate('transport_create', { workflowCode: 'PAYLOAD_RECOVERY' });
+    navigate('payload_recovery');
+  };
+
+  const handleFleetRecall = () => {
+    navigate('fleet_recall');
   };
 
   return (
@@ -42,7 +46,7 @@ export function TransportScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => navigate('transport_create', { step: 2 })}
+          onPress={() => navigate('create_container')}
           style={({ pressed }) => [
             styles.heroActionBtn,
             styles.heroActionSecondary,
@@ -50,14 +54,15 @@ export function TransportScreen() {
           ]}
         >
           <Text style={styles.heroActionIcon}>📦</Text>
-          <Text style={styles.heroActionTitleSecondary}>Pack Container</Text>
-          <Text style={styles.heroActionSubtitle}>Ingest tote to bay</Text>
+          <Text style={styles.heroActionTitleSecondary}>Pack & Ingest</Text>
+          <Text style={styles.heroActionSubtitle}>Single / batch totes</Text>
         </Pressable>
       </View>
 
       {/* 2. Safety & Incident Hub */}
       <SafetyHubCard
         onLaunchRescue={handleLaunchRescue}
+        onFleetRecall={handleFleetRecall}
         onBlockPath={() => alert('Nav2 Dynamic Obstacle flagged at current location.')}
       />
 
@@ -119,6 +124,26 @@ export function TransportScreen() {
             <Text style={styles.recentTime}>5 mins ago</Text>
           </View>
         </View>
+      </View>
+
+      {/* 5. View Full Audit Trail */}
+      <View style={styles.historyLinkSection}>
+        <Pressable
+          onPress={() => navigate('transport_history')}
+          style={({ pressed }) => [
+            styles.historyLinkBtn,
+            pressed && styles.historyLinkBtnPressed,
+          ]}
+        >
+          <Text style={styles.historyLinkIcon}>📜</Text>
+          <View style={styles.historyLinkTextCol}>
+            <Text style={styles.historyLinkTitle}>View Transport Audit History</Text>
+            <Text style={styles.historyLinkSubtitle}>
+              Completed deliveries, timestamps & route metrics
+            </Text>
+          </View>
+          <Text style={styles.historyLinkChevron}>›</Text>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -281,6 +306,44 @@ const styles = StyleSheet.create({
   },
   recentTime: {
     fontSize: 10,
+    color: colors.textMuted,
+  },
+  historyLinkSection: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  historyLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+    gap: 12,
+  },
+  historyLinkBtnPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  historyLinkIcon: {
+    fontSize: 22,
+  },
+  historyLinkTextCol: {
+    flex: 1,
+  },
+  historyLinkTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  historyLinkSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  historyLinkChevron: {
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.textMuted,
   },
 });

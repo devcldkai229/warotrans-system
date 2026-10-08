@@ -22,6 +22,7 @@ interface MiniFacilityMapProps {
   selectedRobotId: string;
   onSelectRobot: (robotId: string) => void;
   onLocateUser: () => void;
+  onOpenLiveMap?: () => void;
   robots: MapRobot[];
 }
 
@@ -30,6 +31,7 @@ export function MiniFacilityMap({
   selectedRobotId,
   onSelectRobot,
   onLocateUser,
+  onOpenLiveMap,
   robots,
 }: MiniFacilityMapProps) {
   const selectedRobot = robots.find((r) => r.id === selectedRobotId) || robots[0];
@@ -151,18 +153,33 @@ export function MiniFacilityMap({
         </View>
       )}
 
-      {/* Locate Me Button (Top Right) */}
-      <Pressable
-        onPress={onLocateUser}
-        style={({ pressed }) => [
-          styles.locateButton,
-          pressed && styles.locateButtonPressed,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Center map on current zone"
-      >
-        <Text style={styles.locateIcon}>🎯</Text>
-      </Pressable>
+      {/* Top Right Controls: Live Map & Locate Me */}
+      <View style={styles.topRightControls}>
+        {onOpenLiveMap && (
+          <Pressable
+            onPress={onOpenLiveMap}
+            style={({ pressed }) => [
+              styles.controlButton,
+              pressed && styles.locateButtonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Open Fullscreen Live Radar"
+          >
+            <Text style={styles.controlIcon}>🗺️</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={onLocateUser}
+          style={({ pressed }) => [
+            styles.controlButton,
+            pressed && styles.locateButtonPressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Center map on current zone"
+        >
+          <Text style={styles.controlIcon}>🎯</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -380,10 +397,15 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     fontWeight: '600',
   },
-  locateButton: {
+  topRightControls: {
     position: 'absolute',
     top: 10,
     right: 10,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 40,
+  },
+  controlButton: {
     width: 34,
     height: 34,
     borderRadius: 17,
@@ -392,13 +414,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 40,
     elevation: 3,
   },
   locateButtonPressed: {
     backgroundColor: colors.surfaceSubtle,
   },
-  locateIcon: {
+  controlIcon: {
     fontSize: 16,
   },
 });
