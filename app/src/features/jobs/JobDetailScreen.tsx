@@ -26,6 +26,7 @@ import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { toast } from '../../shared/context/ToastContext';
 import { AmrChassisDeckVisualizer } from './AmrChassisDeckVisualizer';
 import { ContainerSlotCard } from './ContainerSlotCard';
 import { MOCK_JOBS } from './jobData';
@@ -35,7 +36,6 @@ import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReport
 
 export function JobDetailScreen() {
   const { navigate, goBack, params } = useNavigation();
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
   const [isIssueOpen, setIsIssueOpen] = useState(false);
   const [isSoftHold, setIsSoftHold] = useState(false);
@@ -46,19 +46,17 @@ export function JobDetailScreen() {
   const job = MOCK_JOBS.find((j) => j.id === jobId) || MOCK_JOBS[0];
 
   const handleNudge = (delta: string) => {
-    setToastMsg(`Nudged ${job.assignedRobotCode} by ${delta}. Dock alignment recalibrated.`);
-    setTimeout(() => setToastMsg(null), 3000);
+    toast.info(`Nudged ${job.assignedRobotCode} by ${delta}. Dock alignment recalibrated.`);
   };
 
   const handleToggleSoftHold = () => {
     if (isSoftHold) {
       setIsSoftHold(false);
-      setToastMsg(`HOLD RELEASED: ${job.assignedRobotCode} ready to resume Nav2 path.`);
+      toast.success(`HOLD RELEASED: ${job.assignedRobotCode} ready to resume Nav2 path.`);
     } else {
       setIsSoftHold(true);
-      setToastMsg(`HOLD ACTIVE: ${job.assignedRobotCode} soft-paused within 3m perimeter.`);
+      toast.warning(`HOLD ACTIVE: ${job.assignedRobotCode} soft-paused within 3m perimeter.`);
     }
-    setTimeout(() => setToastMsg(null), 3000);
   };
 
   const handleOpenVerify = (containerCode?: string) => {
@@ -69,14 +67,12 @@ export function JobDetailScreen() {
   const handleVerifySuccess = (scannedCode: string) => {
     setIsVerifyOpen(false);
     setIsHandoverCompleted(true);
-    setToastMsg(`Handover verified for ${scannedCode}. Robot released to fleet.`);
-    setTimeout(() => setToastMsg(null), 4000);
+    toast.success(`Handover verified for ${scannedCode}. Robot released to fleet.`);
   };
 
   const handleIssueSubmit = (cat: IncidentCategory, notes: string) => {
     setIsSoftHold(true);
-    setToastMsg(`Incident logged: ${cat}. Supervisor notified and AMR soft-paused.`);
-    setTimeout(() => setToastMsg(null), 4000);
+    toast.error(`Incident logged: ${cat}. Supervisor notified and AMR soft-paused.`);
   };
 
   return (
@@ -106,13 +102,6 @@ export function JobDetailScreen() {
       />
 
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        {/* Nudge Feedback Toast */}
-        {toastMsg && (
-          <View style={styles.toastCard}>
-            <Text style={styles.toastText}>{toastMsg}</Text>
-          </View>
-        )}
-
         {/* Handover Success Banner if completed */}
         {isHandoverCompleted && (
           <View style={styles.successBanner}>

@@ -142,8 +142,8 @@ export function HoldToConfirmButton({
 const styles = StyleSheet.create({
   buttonContainer: {
     height: 50,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderRadius: 10,
+    backgroundColor: 'rgba(0, 122, 56, 0.12)',
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.success,
     position: 'relative',
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   },
   progressFillConfirmed: {
     width: '100%',
-    backgroundColor: '#059669',
+    backgroundColor: colors.success,
   },
   contentRow: {
     flexDirection: 'row',
@@ -183,18 +183,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   idleText: {
-    color: '#065f46',
-    fontSize: 12,
-    fontWeight: '800',
-    fontFamily: typography.fontSans,
-    letterSpacing: 0.6,
-  },
-  holdingText: {
-    color: '#065f46',
+    color: colors.success,
     fontSize: 12,
     fontWeight: '900',
     fontFamily: typography.fontSans,
-    letterSpacing: 0.4,
+    letterSpacing: 0.8,
+  },
+  holdingText: {
+    color: colors.success,
+    fontSize: 12,
+    fontWeight: '900',
+    fontFamily: typography.fontSans,
+    letterSpacing: 0.6,
   },
   confirmedText: {
     color: '#ffffff',

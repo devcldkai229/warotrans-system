@@ -25,6 +25,7 @@ import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { PRESET_OPERATORS, useAuth } from './authContext';
 
@@ -90,6 +91,11 @@ export function LoginScreen() {
     triggerHaptic('success');
     setError(null);
     login(staffId, selectedZone);
+    const matched = PRESET_OPERATORS.find(
+      (op) => op.id.toLowerCase() === staffId.trim().toLowerCase()
+    );
+    const opName = matched ? matched.name : `Operator (${staffId})`;
+    toast.success(`Signed in as ${opName} (${selectedZone})`);
   };
 
   const activeZoneObj =
@@ -268,6 +274,7 @@ export function LoginScreen() {
                         triggerHaptic('tick');
                         setSelectedZone(zone.value);
                         setIsZoneModalOpen(false);
+                        toast.info(`Switched zone to: ${zone.label}`);
                       }}
                       style={[
                         styles.zoneItem,

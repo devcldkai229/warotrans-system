@@ -24,6 +24,7 @@ import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
 export type IncidentCategory =
@@ -95,6 +96,7 @@ export function IssueReportingModal({
     triggerHaptic('warning');
     onSubmit(selectedCat, notes);
     onClose();
+    toast.error(`Exception submitted for ${jobId}. Task paused and supervisor notified.`);
   };
 
   const handleSnapPhoto = () => {

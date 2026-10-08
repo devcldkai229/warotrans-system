@@ -17,6 +17,7 @@ import {
 import { colors } from '../theme/colors';
 import { shadows } from '../theme/shadows';
 import { typography } from '../theme/typography';
+import { toast } from '../context/ToastContext';
 import { triggerHaptic } from '../utils/haptics';
 import { BrandMark } from './BrandMark';
 
@@ -101,6 +102,7 @@ export function AppHeader({
             onPress={() => {
               triggerHaptic('warning');
               onLogout();
+              toast.info('Logged out from shift console.');
             }}
             style={({ pressed }) => [
               styles.logoutCircle,

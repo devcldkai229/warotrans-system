@@ -9,6 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
 
 interface ButtonProps {
   label: string;
@@ -78,7 +79,7 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -93,7 +94,7 @@ const styles = StyleSheet.create({
   },
   outline: {
     backgroundColor: 'transparent',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.primary,
   },
   danger: {
@@ -108,7 +109,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   lg: {
-    paddingVertical: 15,
+    paddingVertical: 14,
     paddingHorizontal: 24,
   },
   disabled: {
@@ -144,7 +145,9 @@ const pressedStyles = StyleSheet.create({
 
 const textStyles = StyleSheet.create({
   base: {
-    fontWeight: '600',
+    fontWeight: '800',
+    fontFamily: typography.fontSans,
+    letterSpacing: 0.5,
     textAlign: 'center',
   },
   primary: {
@@ -160,14 +163,17 @@ const textStyles = StyleSheet.create({
     color: colors.textInverse,
   },
   sm: {
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '800',
   },
   md: {
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '800',
   },
   lg: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.8,
   },
   disabled: {
     color: colors.textMuted,

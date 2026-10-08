@@ -21,6 +21,7 @@ import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 
@@ -89,9 +90,11 @@ export function VerifyModal({
       triggerHaptic('success');
       setMismatch(false);
       onSuccess(code);
+      toast.success(`Payload ${code} verified. Handover completed.`);
     } else {
       triggerHaptic('error');
       setMismatch(true);
+      toast.error(`Barcode mismatch: scanned ${code}, expected ${targetContainer}.`);
     }
   };
 

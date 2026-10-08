@@ -4,6 +4,7 @@ import { Platform, SafeAreaView, StyleSheet, View } from 'react-native';
 import { AppNavigator } from './src/app/navigation/AppNavigator';
 import { NavigationProvider } from './src/app/navigation/NavigationContext';
 import { AuthProvider } from './src/features/auth/authContext';
+import { ToastProvider } from './src/shared/context/ToastContext';
 import { colors } from './src/shared/theme/colors';
 
 export default function App() {
@@ -26,7 +27,9 @@ export default function App() {
       <StatusBar style="dark" />
       <AuthProvider>
         <NavigationProvider>
-          <AppNavigator />
+          <ToastProvider>
+            <AppNavigator />
+          </ToastProvider>
         </NavigationProvider>
       </AuthProvider>
     </SafeAreaView>

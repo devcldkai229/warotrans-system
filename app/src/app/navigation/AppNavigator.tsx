@@ -28,6 +28,7 @@ import { TransportHistoryScreen } from '../../features/transport/TransportHistor
 import { TransportScreen } from '../../features/transport/TransportScreen';
 import { AppHeader } from '../../shared/components/AppHeader';
 import { colors } from '../../shared/theme/colors';
+import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { BottomTabBar } from './BottomTabBar';
 import { useNavigation } from './NavigationContext';
@@ -151,6 +152,7 @@ export function AppNavigator() {
                       triggerHaptic('tick');
                       updateZone(zone);
                       setIsZoneModalOpen(false);
+                      toast.info(`Switched zone to: ${zone}`);
                     }}
                     style={[
                       styles.zoneItem,
