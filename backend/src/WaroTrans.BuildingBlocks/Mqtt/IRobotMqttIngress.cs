@@ -9,4 +9,6 @@ public interface IRobotMqttIngress
 {
     Task HandleHeartbeatAsync(RobotHeartbeatMessage message, CancellationToken cancellationToken);
     Task HandleTelemetryAsync(RobotTelemetryMessage message, CancellationToken cancellationToken);
+    Task HandleCommandAckAsync(RobotCommandAckMessage message, CancellationToken cancellationToken);
+    Task HandleCommandResultAsync(RobotCommandResultMessage message, CancellationToken cancellationToken);
 }

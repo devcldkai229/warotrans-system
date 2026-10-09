@@ -9,7 +9,11 @@ using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.Fleet.Features.DisableRobot;
 using WaroTrans.Fleet.Features.EnableRobot;
 using WaroTrans.Fleet.Features.GetRobot;
+using WaroTrans.Fleet.Features.IssueCancelCommand;
+using WaroTrans.Fleet.Features.IssueNavigateCommand;
 using WaroTrans.Fleet.Features.ListRobots;
+using WaroTrans.Fleet.Features.ProcessRobotCommandAck;
+using WaroTrans.Fleet.Features.ProcessRobotCommandResult;
 using WaroTrans.Fleet.Features.ProcessRobotHeartbeat;
 using WaroTrans.Fleet.Features.ProcessRobotTelemetry;
 using WaroTrans.Fleet.Features.RegisterRobot;
@@ -35,8 +39,13 @@ public static class FleetModule
         services.AddScoped<DisableRobotHandler>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
         services.AddScoped<ProcessRobotTelemetryHandler>();
+        services.AddScoped<ProcessRobotCommandAckHandler>();
+        services.AddScoped<ProcessRobotCommandResultHandler>();
+        services.AddScoped<IssueNavigateCommandHandler>();
+        services.AddScoped<IssueCancelCommandHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
+        services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
 
         return services;
     }
@@ -50,6 +59,8 @@ public static class FleetModule
         group.MapListRobots();
         group.MapEnableRobot();
         group.MapDisableRobot();
+        group.MapIssueNavigateCommand();
+        group.MapIssueCancelCommand();
         return endpoints;
     }
 }

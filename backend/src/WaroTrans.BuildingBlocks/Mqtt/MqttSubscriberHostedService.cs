@@ -51,11 +51,13 @@ public sealed class MqttSubscriberHostedService(
                 var subscribeOptions = factory.CreateSubscribeOptionsBuilder()
                     .WithTopicFilter(RobotMqttTopics.HeartbeatFilter(mqtt.TopicPrefix))
                     .WithTopicFilter(RobotMqttTopics.TelemetryFilter(mqtt.TopicPrefix))
+                    .WithTopicFilter(RobotMqttTopics.CommandAckFilter(mqtt.TopicPrefix))
+                    .WithTopicFilter(RobotMqttTopics.CommandResultFilter(mqtt.TopicPrefix))
                     .Build();
 
                 await client.SubscribeAsync(subscribeOptions, stoppingToken).ConfigureAwait(false);
                 logger.LogInformation(
-                    "MQTT subscribed to robot heartbeat/telemetry on {Host}:{Port}",
+                    "MQTT subscribed to robot heartbeat/telemetry/command_ack/command_result on {Host}:{Port}",
                     mqtt.Host,
                     mqtt.Port);
 
@@ -113,6 +115,12 @@ public sealed class MqttSubscriberHostedService(
             return;
         }
 
+        // Backend never consumes its own downlink command topic.
+        if (kind == RobotMqttTopics.CommandSuffix)
+        {
+            return;
+        }
+
         var payload = e.ApplicationMessage.ConvertPayloadToString() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(payload))
         {
@@ -130,41 +138,24 @@ public sealed class MqttSubscriberHostedService(
 
         try
         {
-            if (kind == RobotMqttTopics.HeartbeatSuffix)
+            switch (kind)
             {
-                var message = JsonSerializer.Deserialize<RobotHeartbeatMessage>(payload, JsonOptions);
-                if (message is null)
-                {
-                    logger.LogWarning("Invalid heartbeat JSON on {Topic}", topic);
-                    return;
-                }
-
-                if (string.IsNullOrWhiteSpace(message.RobotCode))
-                {
-                    message.RobotCode = robotCodeFromTopic;
-                }
-
-                var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotHeartbeatMessage>>();
-                await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
-                await ingress.HandleHeartbeatAsync(message, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                var message = JsonSerializer.Deserialize<RobotTelemetryMessage>(payload, JsonOptions);
-                if (message is null)
-                {
-                    logger.LogWarning("Invalid telemetry JSON on {Topic}", topic);
-                    return;
-                }
-
-                if (string.IsNullOrWhiteSpace(message.RobotCode))
-                {
-                    message.RobotCode = robotCodeFromTopic;
-                }
-
-                var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotTelemetryMessage>>();
-                await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
-                await ingress.HandleTelemetryAsync(message, cancellationToken).ConfigureAwait(false);
+                case RobotMqttTopics.HeartbeatSuffix:
+                    await HandleHeartbeatAsync(scope, ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.TelemetrySuffix:
+                    await HandleTelemetryAsync(scope, ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.CommandAckSuffix:
+                    await HandleCommandAckAsync(scope, ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.CommandResultSuffix:
+                    await HandleCommandResultAsync(scope, ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
             }
         }
         catch (ValidationException vex)
@@ -178,5 +169,101 @@ public sealed class MqttSubscriberHostedService(
         {
             logger.LogError(ex, "Failed processing MQTT message on {Topic}", topic);
         }
+    }
+
+    private static async Task HandleHeartbeatAsync(
+        AsyncServiceScope scope,
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<RobotHeartbeatMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid heartbeat JSON on {topic}");
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RobotCode))
+        {
+            message.RobotCode = robotCodeFromTopic;
+        }
+
+        var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotHeartbeatMessage>>();
+        await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
+        await ingress.HandleHeartbeatAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleTelemetryAsync(
+        AsyncServiceScope scope,
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<RobotTelemetryMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid telemetry JSON on {topic}");
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RobotCode))
+        {
+            message.RobotCode = robotCodeFromTopic;
+        }
+
+        var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotTelemetryMessage>>();
+        await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
+        await ingress.HandleTelemetryAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleCommandAckAsync(
+        AsyncServiceScope scope,
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<RobotCommandAckMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid command_ack JSON on {topic}");
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RobotCode))
+        {
+            message.RobotCode = robotCodeFromTopic;
+        }
+
+        var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotCommandAckMessage>>();
+        await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
+        await ingress.HandleCommandAckAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleCommandResultAsync(
+        AsyncServiceScope scope,
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<RobotCommandResultMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid command_result JSON on {topic}");
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RobotCode))
+        {
+            message.RobotCode = robotCodeFromTopic;
+        }
+
+        var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotCommandResultMessage>>();
+        await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
+        await ingress.HandleCommandResultAsync(message, cancellationToken).ConfigureAwait(false);
     }
 }
