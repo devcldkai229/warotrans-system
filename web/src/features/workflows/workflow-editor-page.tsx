@@ -118,7 +118,7 @@ export function WorkflowEditorPage() {
       setServerErrors([])
       setMessage('Saved.')
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
-      if (isNew) navigate(`/workflows/${saved.id}`, { replace: true })
+      if (isNew) navigate(`/configure/workflows/${saved.id}`, { replace: true })
       else {
         setDraft(toUpsert(saved))
         setStatus(saved.status)
@@ -163,7 +163,7 @@ export function WorkflowEditorPage() {
     mutationFn: () => createWorkflowVersion(id!),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
-      navigate(`/workflows/${created.id}`)
+      navigate(`/configure/workflows/${created.id}`)
     },
     onError: (err) => setServerErrors([(err as Error).message]),
   })
@@ -225,7 +225,7 @@ export function WorkflowEditorPage() {
       <header className="wf-header">
         <div>
           <p className="crumb">
-            <Link to="/workflows">Workflows</Link> / {isNew ? 'New' : draft.code || id}
+            <Link to="/configure/workflows">Workflows</Link> / {isNew ? 'New' : draft.code || id}
           </p>
           <h1>{isNew ? 'New workflow template' : draft.name || 'Workflow editor'}</h1>
           <p>

@@ -16,7 +16,7 @@ export function WorkflowsListPage() {
           <h1>Workflow templates</h1>
           <p>Define HOW warehouse operations execute. Runtime values stay on Jobs.</p>
         </div>
-        <Link className="btn primary" to="/workflows/new">
+        <Link className="btn primary" to="/configure/workflows/new">
           New workflow
         </Link>
       </header>
@@ -45,7 +45,7 @@ export function WorkflowsListPage() {
                   <span className={`badge ${w.status.toLowerCase()}`}>{w.status}</span>
                 </td>
                 <td>
-                  <Link to={`/workflows/${w.id}`}>Open</Link>
+                  <Link to={`/configure/workflows/${w.id}`}>Open</Link>
                 </td>
               </tr>
             ))}

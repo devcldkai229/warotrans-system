@@ -25,7 +25,10 @@ const NAV: NavGroup[] = [
     label: 'Configure',
     to: '/configure',
     icon: 'settings',
-    items: [{ label: 'Facility', to: '/configure/facility' }],
+    items: [
+      { label: 'Facility', to: '/configure/facility' },
+      { label: 'Workflows', to: '/configure/workflows' },
+    ],
   },
   { label: 'Statistics', to: '/dashboard', icon: 'sliders' },
 ]
