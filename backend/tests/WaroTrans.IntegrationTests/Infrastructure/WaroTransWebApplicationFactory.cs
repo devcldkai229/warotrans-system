@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -15,6 +16,7 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
         builder.UseSetting("ConnectionStrings:MongoDB", TestConnectionStrings.MongoDb);
         builder.UseSetting("Mongo:ConnectionString", TestConnectionStrings.MongoDb);
         builder.UseSetting("Mongo:DatabaseName", TestConnectionStrings.MongoDatabaseName);
+        builder.UseSetting("Authentication:Jwt:Key", "warotrans-integration-test-signing-key-0123456789");
         builder.UseSetting("Mqtt:Host", "localhost");
         builder.UseSetting("Mqtt:Port", "1883");
         builder.UseSetting("Mqtt:ClientId", $"warotrans-test-{Guid.NewGuid():N}");
@@ -31,11 +33,17 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
                 })
                 .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
                     TestAuthenticationHandler.SchemeName,
-                    _ => { });
+                    options =>
+                    {
+                        // A request that brings its own token goes through the production JWT validation.
+                        options.ForwardDefaultSelector = context =>
+                            context.Request.Headers.ContainsKey("Authorization")
+                                ? JwtBearerDefaults.AuthenticationScheme
+                                : null;
+                    });
 
             // Avoid real outbound MQTT connect stalls during IssueNavigate; inbound ack/result still use broker.
             services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotCommandPublisher, CapturingMqttRobotCommandPublisher>();
         });
     }
 }
-

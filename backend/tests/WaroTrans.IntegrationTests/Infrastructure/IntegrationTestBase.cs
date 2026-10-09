@@ -26,6 +26,16 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         await DatabaseReset.TruncatePostgreSqlAsync(PostgreSql.ConnectionString);
     }
 
+    /// <summary>
+    /// A client the test authentication scheme leaves unauthenticated. Add a Bearer token to a request to go through real JWT validation.
+    /// </summary>
+    protected HttpClient CreateAnonymousClient()
+    {
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthenticationHandler.AnonymousHeader, "true");
+        return client;
+    }
+
     public virtual Task DisposeAsync()
     {
         _client?.Dispose();

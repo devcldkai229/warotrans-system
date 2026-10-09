@@ -1,0 +1,279 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100svh;
+  background: var(--canvas);
+}
+
+.shell__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 56px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  z-index: 50;
+}
+
+.shell__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.shell__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 24px;
+  border-right: 1px solid var(--line);
+  height: 36px;
+}
+
+.shell__logo {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.shell__brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.shell__brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.45px;
+}
+
+.shell__brand-name span {
+  color: var(--blue);
+}
+
+.shell__brand-sub {
+  margin-top: 3px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--faint);
+}
+
+.shell__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shell__nav-group {
+  position: relative;
+}
+
+.shell__nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.shell__nav-link:hover {
+  background: var(--canvas);
+}
+
+.shell__nav-link.is-active {
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-line);
+  color: var(--navy-deep);
+  font-weight: 700;
+}
+
+.shell__menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.shell__nav-group:hover .shell__menu,
+.shell__nav-group:focus-within .shell__menu {
+  display: block;
+}
+
+.shell__menu-item {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.shell__menu-item:hover,
+.shell__menu-item.active {
+  background: var(--blue-soft);
+  color: var(--navy-deep);
+}
+
+.shell__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.shell__bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+}
+
+.shell__bell-dot {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #fff;
+}
+
+.shell__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.shell__avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.shell__user-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  font-size: 11px;
+}
+
+.shell__user-text strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+button.shell__user {
+  font: inherit;
+  text-align: left;
+}
+
+button.shell__user {
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: none;
+}
+
+.shell__user-wrap {
+  position: relative;
+}
+
+.shell__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.shell__usermenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 61;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.shell__usermenu-head {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.shell__usermenu-head strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.shell__usermenu button {
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.shell__usermenu button:hover {
+  background: var(--canvas);
+}
+
+.shell__usermenu .is-danger {
+  color: var(--red-ink);
+}
+
+.shell__usermenu a {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.shell__usermenu a:hover {
+  background: var(--canvas);
+}

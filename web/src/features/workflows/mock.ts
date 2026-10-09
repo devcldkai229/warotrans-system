@@ -1,0 +1,92 @@
+import type { Workflow } from '@/shared/api/contracts'
+
+export const WORKFLOWS: Workflow[] = [
+  {
+    id: 'f0000000-0000-4000-8000-000000000001',
+    code: 'INBOUND_PUTAWAY',
+    versionNo: 1,
+    name: 'Inbound putaway',
+    description: 'Move a prepared inbound Container from receiving to its storage location',
+    status: 'DRAFT',
+    variablesSchema: [
+      { key: 'sourceLocation', label: 'Source location', dataType: 'STORAGE_LOCATION', source: 'STAFF_INPUT', required: true },
+      { key: 'destinationLocation', label: 'Destination location', dataType: 'STORAGE_LOCATION', source: 'STAFF_INPUT', required: true },
+      { key: 'containerId', label: 'Container', dataType: 'CONTAINER', source: 'STAFF_INPUT', required: true },
+      { key: 'speedProfile', label: 'Speed profile', dataType: 'STRING', source: 'ADMIN_INPUT', required: true, value: 'NORMAL', defaultValue: 'NORMAL' },
+      { key: 'timeout', label: 'Move timeout (s)', dataType: 'INT', source: 'ADMIN_INPUT', required: true, value: '300', defaultValue: '300' },
+    ],
+    tasks: [
+      {
+        id: 'task-1',
+        taskKey: 'RECEIVE_AND_PUTAWAY',
+        name: 'RECEIVE_AND_PUTAWAY',
+        sequenceNo: 1,
+        steps: [
+          {
+            id: 'step-1',
+            stepKey: 'MOVE_TO_RECEIVING',
+            name: 'MOVE_TO_RECEIVING',
+            stepType: 'MOVE',
+            sequenceNo: 1,
+            inputBindings: {
+              targetEndpointId: { sourceType: 'CURRENT_MOVEMENT', path: 'source.endpointId' },
+              purpose: { sourceType: 'CONSTANT', path: 'PICKUP' },
+              speedProfile: { sourceType: 'WORKFLOW_VAR', path: 'speedProfile' },
+            },
+            timeoutSeconds: 300,
+            maxAttempts: 1,
+            retryBackoffSeconds: 0,
+            onFailure: 'PAUSE_FOR_OPERATOR',
+            outputs: ['reachedEndpointId', 'arrivedAt'],
+          },
+          {
+            id: 'step-2',
+            stepKey: 'PICKUP_CONFIRM',
+            name: 'PICKUP_CONFIRM',
+            stepType: 'HUMAN_INTERACTION',
+            sequenceNo: 2,
+            inputBindings: {
+              containerId: { sourceType: 'CURRENT_MOVEMENT', path: 'containerId' },
+            },
+            timeoutSeconds: 300,
+            maxAttempts: 1,
+            retryBackoffSeconds: 0,
+            onFailure: 'PAUSE_FOR_OPERATOR',
+            outputs: ['confirmationId', 'confirmedContainerId', 'confirmedBy', 'confirmedAt', 'result'],
+          },
+          {
+            id: 'step-3',
+            stepKey: 'MOVE_TO_STORAGE',
+            name: 'MOVE_TO_STORAGE',
+            stepType: 'MOVE',
+            sequenceNo: 3,
+            inputBindings: {
+              targetEndpointId: { sourceType: 'CURRENT_MOVEMENT', path: 'destination.endpointId' },
+              purpose: { sourceType: 'CONSTANT', path: 'DROPOFF' },
+            },
+            timeoutSeconds: 300,
+            maxAttempts: 2,
+            retryBackoffSeconds: 5,
+            onFailure: 'REQUEST_REASSIGN',
+            outputs: ['reachedEndpointId', 'arrivedAt'],
+          },
+          {
+            id: 'step-4',
+            stepKey: 'DROPOFF_CONFIRM',
+            name: 'DROPOFF_CONFIRM',
+            stepType: 'HUMAN_INTERACTION',
+            sequenceNo: 4,
+            inputBindings: {
+              containerId: { sourceType: 'STEP_OUTPUT', path: 'PICKUP_CONFIRM.confirmedContainerId' },
+            },
+            timeoutSeconds: 300,
+            maxAttempts: 1,
+            retryBackoffSeconds: 0,
+            onFailure: 'PAUSE_FOR_OPERATOR',
+            outputs: ['confirmationId', 'confirmedContainerId', 'confirmedBy', 'confirmedAt', 'result'],
+          },
+        ],
+      },
+    ],
+  },
+]

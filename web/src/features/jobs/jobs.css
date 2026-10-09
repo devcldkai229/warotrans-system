@@ -1,0 +1,950 @@
+/* ================= Jobs management ================= */
+.jobs {
+  display: grid;
+  grid-template-columns: 384px 1fr;
+  height: 100%;
+  background: var(--surface);
+}
+
+.jobs__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+}
+
+.jobs__title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 14px 9px;
+}
+
+.jobs__title h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.jobs__title span {
+  padding: 2px 9px;
+  border-radius: 3px;
+  background: #f1f5f9;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jobs__cta {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 9px;
+  padding: 0 14px;
+}
+
+.jobs__cta .btn {
+  height: 32px;
+  font-size: 14px;
+}
+
+.jobs__cta .btn--primary {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.jobs__search {
+  display: flex;
+  gap: 7px;
+  padding: 11px 14px;
+}
+
+.jobs__search label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--canvas);
+  color: var(--faint);
+}
+
+.jobs__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.jobs__search > button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+.jobs__groups {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.jgroup__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 37px;
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--canvas);
+  font-size: 12px;
+  text-align: left;
+}
+
+.jgroup__head strong {
+  flex: 1;
+  letter-spacing: 0.3px;
+}
+
+.jgroup--blue .jgroup__head {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.jgroup--amber .jgroup__head {
+  background: #fffbeb;
+  color: var(--amber-ink);
+}
+
+.jgroup--purple .jgroup__head {
+  background: #faf5ff;
+  color: #7e22ce;
+}
+
+.jgroup--green .jgroup__head {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.jgroup--red .jgroup__head {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.jgroup--grey .jgroup__head {
+  color: var(--muted);
+}
+
+.jgroup__count {
+  min-width: 25px;
+  padding: 1px 7px;
+  border-radius: 1129px;
+  background: rgba(15, 23, 42, 0.08);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.jgroup__body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 9px;
+}
+
+.jgroup__empty {
+  padding: 9px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.jcard {
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.jcard:hover {
+  border-color: #7dd3fc;
+  box-shadow: 0 2px 9px rgba(2, 132, 199, 0.12);
+}
+
+.jcard header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.jcard__no {
+  padding: 2px 7px;
+  border: 1px solid #bae6fd;
+  border-radius: 3px;
+  background: #f0f9ff;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0c4a6e;
+}
+
+.jcard dl {
+  margin: 9px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jcard dl div {
+  display: flex;
+  justify-content: space-between;
+  padding: 1px 0;
+}
+
+.jcard dt,
+.jcard dd {
+  margin: 0;
+}
+
+.jcard dd {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.jcard__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.jcard__bar i {
+  display: block;
+  height: 100%;
+  background: #0ea5e9;
+}
+
+.jcard footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 9px;
+}
+
+.jcard footer small {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.jcard__mini {
+  margin-left: 5px;
+  padding: 2px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  background: var(--surface);
+  font-size: 10px;
+}
+
+.jcard__mini--danger {
+  border-color: var(--red-line);
+  color: var(--red-ink);
+}
+
+.jobs__foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jobs__foot a {
+  color: #2563eb;
+}
+
+/* map side */
+.jobs__map {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #f1f5f9;
+}
+
+.jobs__legend {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 43px;
+  padding: 0 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--ink-2);
+  z-index: 3;
+}
+
+.jobs__legend strong {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+kbd {
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--canvas);
+  font-family: var(--sans);
+  font-size: 10px;
+}
+
+.jobs__estop {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 27px;
+  padding: 0 14px;
+  border: 1px solid var(--red-line);
+  border-radius: 5px;
+  background: var(--red-soft);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--red-ink);
+}
+
+/* ---------- map scene ---------- */
+/* ================= Job detail ================= */
+.jdetail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  background: #f1f5f9;
+}
+
+.jdetail--empty {
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.jdetail__crumb {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 41px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.jdetail__crumb button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.jdetail__crumb strong {
+  color: var(--ink);
+}
+
+.jdetail__meta {
+  margin-left: auto;
+  display: flex;
+  gap: 28px;
+}
+
+.jdetail__meta b {
+  color: var(--ink);
+}
+
+.jdetail__meta .is-high {
+  color: var(--red-ink);
+}
+
+.jdetail__cards {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 14px;
+  padding: 14px;
+}
+
+.jcardx {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  position: relative;
+}
+
+.jcardx small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.jcardx h3 {
+  margin: 5px 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.jcardx h3 span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.jcardx__online {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--green-ink);
+}
+
+.jcardx__online .dot {
+  width: 6px;
+  height: 6px;
+}
+
+.jcardx dl {
+  display: flex;
+  gap: 20px;
+  margin: 5px 0 0;
+  font-size: 11px;
+}
+
+.jcardx dt {
+  color: var(--faint);
+}
+
+.jcardx dd {
+  margin: 1px 0 0;
+  font-weight: 700;
+}
+
+.jcardx dd.is-ok {
+  color: var(--green-ink);
+}
+
+.jcardx__link {
+  margin-top: 7px;
+  border: 0;
+  background: none;
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+  color: #2563eb !important;
+  text-decoration: underline;
+}
+
+.jcardx__step {
+  position: absolute;
+  top: 11px;
+  right: 16px;
+  padding: 1px 9px;
+  border-radius: 3px;
+  background: #f1f5f9;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.jcardx__progress {
+  display: flex;
+  height: 7px;
+  margin: 9px 0;
+  border-radius: 3px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.jcardx__progress i {
+  display: block;
+  background: #10b981;
+}
+
+.jcardx__progress i.is-wait {
+  background: #f59e0b;
+}
+
+.jcardx__ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jcardx__time {
+  font-size: 30px !important;
+}
+
+.jcardx__time span {
+  font-size: 12px !important;
+}
+
+.jcardx__est {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.jcardx__wait {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jcardx__wait b {
+  display: block;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 2px 9px;
+  border: 1px solid var(--amber-line);
+  border-radius: 3px;
+  background: var(--amber-soft);
+  color: var(--amber-ink);
+}
+
+.jdetail__main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 14px;
+  padding: 0 14px 14px;
+  min-height: 0;
+}
+
+.jflow,
+.jroute {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.jflow > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.jflow h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.jflow > header small {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.jflow__task {
+  padding: 16px;
+}
+
+.jflow__task-head {
+  display: flex;
+  justify-content: space-between;
+}
+
+.jflow__task-head h3 {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.jflow__task-head h3 small {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.jflow__task-head p {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jstep {
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.jstep--amber {
+  border-color: var(--amber-line);
+  background: #fffbeb;
+}
+
+.jstep--red {
+  border-color: var(--red-line);
+  background: var(--red-soft);
+}
+
+.jstep__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.jstep__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+}
+
+.jstep--amber .jstep__mark {
+  background: var(--amber);
+}
+
+.jstep--red .jstep__mark {
+  background: var(--red);
+}
+
+.jstep--grey .jstep__mark,
+.jstep--blue .jstep__mark,
+.jstep--purple .jstep__mark {
+  background: var(--line-2);
+}
+
+.jstep__no {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jstep__name {
+  font-weight: 700;
+}
+
+.jstep__kind {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
+.jstep__state {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jstep__timer {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--amber);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.jstep__head > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.jstep__body {
+  padding: 4px 14px 12px 38px;
+  border-top: 1px solid var(--line);
+}
+
+.jstep__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 24px;
+  margin: 8px 0 0;
+}
+
+.jstep__facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.jstep__facts dt {
+  color: var(--muted);
+}
+
+.jstep__facts dd {
+  margin: 0;
+  font-weight: 500;
+  text-align: right;
+}
+
+.jstep__body h5 {
+  margin: 12px 0 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.jstep__inputs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jstep__inputs li {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12px;
+}
+
+.jstep__inputs li:last-child {
+  border-bottom: 0;
+}
+
+.jstep__inputs span:first-child {
+  color: var(--muted);
+}
+
+.jstep__inputs b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.jstep__inputs small {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.jstep__err {
+  margin: 10px 0 0;
+  padding: 7px 10px;
+  border: 1px solid var(--red-line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--red-ink);
+}
+
+.jflow__ok {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 37px;
+  border: 0;
+  border-radius: 5px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.jflow > footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jflow .is-ok {
+  color: var(--green-ink);
+}
+
+.jroute {
+  display: flex;
+  flex-direction: column;
+}
+
+.muted {
+  color: var(--faint);
+}
+
+/* ================= Modal ================= */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 100;
+}
+
+.modal__card {
+  width: 648px;
+  padding: 22px 19px 19px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+}
+
+.modal__card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 17px;
+}
+
+.modal__card h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.modal__card header p {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.modal__card header button {
+  border: 0;
+  background: none;
+  color: var(--muted);
+}
+
+.modal__card table {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.modal__card th {
+  padding: 10px 12px;
+  background: var(--canvas);
+  text-align: right;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.modal__card th:first-child,
+.modal__card td:first-child {
+  text-align: left;
+}
+
+.modal__card td {
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  text-align: right;
+}
+
+.modal__card tr.is-assigned td {
+  background: #f0fdf4;
+}
+
+.modal__card tr.is-assigned strong {
+  color: var(--green-ink);
+}
+
+.modal__assigned {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 1px 10px;
+  border: 1px solid var(--green-line);
+  border-radius: 7px;
+  background: #fff;
+  font-size: 11px;
+  color: var(--green-ink);
+}
+
+.modal__score {
+  font-weight: 800;
+}
+
+tr.is-assigned .modal__score {
+  color: var(--green);
+}
+
+.modal__note {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.jflow__fail {
+  color: var(--red-ink);
+}
+
+/* Job route map: only the Origin and Destination of the movement, the Robot and its wait. */
+.jstep__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jstep__confirm p {
+  font-size: 12.5px;
+}
+
+.jstep__confirm small {
+  color: var(--muted);
+}
+
+.jstep__confirm > div {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.jstep__confirm .jflow__ok {
+  padding: 0 16px;
+}
+
+.jroute__map {
+  position: relative;
+  flex: 1;
+  min-height: 436px;
+}

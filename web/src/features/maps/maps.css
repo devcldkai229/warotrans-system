@@ -1,0 +1,1003 @@
+/* ================= Facility ================= */
+.facility {
+  height: 100%;
+  overflow: auto;
+  padding: 24px 26px 40px;
+  background: var(--canvas);
+}
+
+.facility h1 {
+  margin-bottom: 36px;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.facility h2 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.facility__cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin: 16px 0 48px;
+}
+
+.mapcard {
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.mapcard__thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 192px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mapcard__thumb--draft {
+  background-color: #f1f5fb;
+  background-image: linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.mapcard__thumb--live {
+  background: #e8eafd;
+}
+
+.mapcard__thumb .badge {
+  z-index: 5;
+  position: absolute;
+  top: 18px;
+  left: 16px;
+  font-size: 12px;
+}
+
+.mapcard__icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--navy-deep);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.mapcard__icon--live {
+  width: 64px;
+  height: 64px;
+  border: 2px solid var(--green-line);
+  background: #dcfce7;
+  color: var(--green-ink);
+}
+
+.mapcard__body {
+  padding: 20px 20px 24px;
+}
+
+.mapcard__body h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mapcard__body p {
+  margin: 6px 0 20px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.mapcard__actions {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 12px;
+}
+
+.mapcard__actions--single {
+  grid-template-columns: 1fr;
+}
+
+.mapcard__actions .btn {
+  height: 36px;
+}
+
+.facility__catalog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.facility__catalog-head > div {
+  display: flex;
+  gap: 10px;
+}
+
+.facility__square {
+  width: 32px;
+  padding: 0;
+}
+
+.facility__table {
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.facility__table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.facility__table th {
+  padding: 12px 16px;
+  background: #eef0fc;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.facility__table td {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.facility__table .is-strong {
+  font-weight: 700;
+}
+
+.facility__table td.facility__chev {
+  width: 30px;
+  color: var(--muted);
+  vertical-align: top;
+}
+
+.facility__notes {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+/* ================= Map editor ================= */
+.editor {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+  z-index: 40;
+}
+
+.editor__top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 72px;
+  padding: 0 30px 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.editor__back {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+}
+
+.editor__top h1 {
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.editor__draft {
+  padding: 3px 15px;
+  border: 1px solid var(--amber-line);
+  border-radius: 6px;
+  background: #fffbeb;
+  font-size: 16px;
+  color: var(--amber-ink);
+}
+
+.editor__saved {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+  font-size: 16px;
+  color: var(--muted);
+}
+
+.editor__saved .dot {
+  color: #10b981;
+}
+
+.editor__top-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 15px;
+}
+
+.editor__top-actions .btn {
+  height: 42px;
+  font-size: 18px;
+}
+
+.editor__bar {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 66px;
+  padding: 0 27px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.editor__bar-left,
+.editor__bar-right {
+  display: flex;
+  align-items: center;
+  gap: 21px;
+}
+
+.editor__mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.editor__tools {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  display: flex;
+  gap: 27px;
+  transform: translateX(-50%);
+  height: 100%;
+  align-items: center;
+}
+
+.editor__tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 66px;
+  height: 51px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.editor__tool.is-active {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+.editor__history {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.editor__history button {
+  border: 0;
+  background: none;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.editor__main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.editor__rail {
+  flex: none;
+  width: 54px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+
+.editor__rail button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-2);
+}
+
+.editor__rail button.is-active {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+.editor__canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.editor__pill {
+  position: absolute;
+  left: 50%;
+  bottom: 21px;
+  transform: translateX(-50%);
+  padding: 6px 21px;
+  border: 1px solid #93c5fd;
+  border-radius: 9px;
+  background: #eff6ff;
+  font-size: 15px;
+  font-weight: 800;
+  color: #1d4ed8;
+}
+
+.editor__panel {
+  flex: none;
+  width: 375px;
+  overflow: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+
+.editor__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px;
+  font-size: 18px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--line);
+}
+
+.editor__panel-foot {
+  position: sticky;
+  bottom: 0;
+  padding: 18px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* popover pickers */
+.picker {
+  position: absolute;
+  top: 9px;
+  z-index: 20;
+  width: 381px;
+  max-height: 630px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+}
+
+.picker header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 18px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.picker__search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 18px 12px;
+  height: 39px;
+  padding: 0 12px;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  color: var(--faint);
+}
+
+.picker__search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  font-size: 16px;
+}
+
+.picker h4 {
+  padding: 6px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.picker ul {
+  margin: 0;
+  padding: 0 12px 12px;
+  list-style: none;
+}
+
+.picker li button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 12px 15px;
+  border: 0;
+  border-radius: 9px;
+  background: #f8fafc;
+  margin-bottom: 6px;
+  text-align: left;
+}
+
+.picker li button:hover {
+  background: var(--blue-soft);
+}
+
+.picker li strong {
+  font-size: 16px;
+}
+
+.picker li small {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.picker__jobs {
+  padding: 0 12px 12px;
+}
+
+.picker__jobs h4 {
+  padding-left: 6px;
+}
+
+.confirm-bubble {
+  position: absolute;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 6px 21px rgba(15, 23, 42, 0.2);
+  font-size: 14px;
+}
+
+.confirm-bubble div {
+  display: flex;
+  gap: 9px;
+}
+
+.confirm-bubble button {
+  padding: 3px 15px;
+  border: 0;
+  border-radius: 4px;
+  background: #e2e8f0;
+  font-size: 14px;
+}
+
+.confirm-bubble button.is-ok {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+.zoneform {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 21px 18px;
+  font-size: 16px;
+}
+
+.zoneform label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zoneform label span {
+  font-size: 16px;
+  color: var(--ink-2);
+}
+
+.zoneform input,
+.zoneform select {
+  height: 45px;
+  padding: 0 15px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.zoneform__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.zoneform__check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 12px !important;
+}
+
+.editor__done {
+  height: 42px;
+  padding: 0 27px;
+  border: 0;
+  border-radius: 6px;
+  background: #2563eb;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ---------- editor chrome: true 1280-frame sizes (panels/pickers above stay at the 1920 scale) ---------- */
+.editor__top {
+  height: 56px;
+  gap: 14px;
+  padding: 0 24px 0 16px;
+}
+
+.editor__top h1 {
+  font-size: 17px;
+}
+
+.editor__draft {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.editor__saved {
+  padding-left: 14px;
+  font-size: 12px;
+}
+
+.editor__top-actions .btn {
+  height: 34px;
+  font-size: 13px;
+}
+
+.editor__bar {
+  height: 62px;
+  padding: 0 20px;
+}
+
+.editor__mini {
+  font-size: 10px;
+}
+
+.editor__tool {
+  min-width: 50px;
+  height: 46px;
+  font-size: 11px;
+}
+
+.editor__history,
+.editor__history button {
+  font-size: 11px;
+}
+
+.editor__rail {
+  width: 52px;
+  padding-top: 14px;
+  gap: 12px;
+}
+
+.editor__rail button {
+  width: 36px;
+  height: 36px;
+}
+
+.editor__done {
+  height: 34px;
+  padding: 0 22px;
+  font-size: 14px;
+}
+
+.editor__save {
+  height: 34px;
+  font-size: 13px;
+}
+
+.editor__crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.editor__crumb strong {
+  color: var(--ink);
+}
+
+.editor__pill {
+  padding: 5px 16px;
+  font-size: 12px;
+}
+
+.editor__panel--zone {
+  width: 330px;
+}
+
+.editor__panel--zone .editor__panel-head {
+  font-size: 14px;
+}
+
+.zoneform {
+  gap: 14px;
+  font-size: 13px;
+}
+
+.zoneform label span {
+  font-size: 13px;
+}
+
+.zoneform input,
+.zoneform select {
+  height: 34px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.zoneform__row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.editor__panel--zone .btn {
+  height: 38px;
+  font-size: 13px;
+}
+
+/* ---------- traffic board ---------- */
+/* ---------- popovers: centred under their toolbar button ---------- */
+.picker {
+  transform: translateX(-50%);
+}
+
+.picker--workflows {
+  width: 300px;
+  max-height: none;
+}
+
+.picker--workflows header {
+  padding: 14px 16px 10px;
+  font-size: 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.picker--workflows .picker__jobs {
+  padding: 10px 10px 12px;
+}
+
+.picker--workflows .picker__jobs h4 {
+  padding: 0 6px 6px;
+  font-size: 10px;
+}
+
+.picker--workflows li button {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--blue-soft);
+}
+
+.picker--workflows li strong {
+  font-size: 13px;
+}
+
+.picker--workflows li small {
+  font-size: 11px;
+}
+
+.picker .wf__add {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* Workflow panel: a draggable left edge widens it. */
+.editor__panelwrap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 12;
+  display: flex;
+  min-width: 0;
+}
+
+.editor__panelwrap > .editor__panel {
+  width: 100%;
+}
+
+.editor__resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  z-index: 6;
+  width: 9px;
+  cursor: col-resize;
+}
+
+.editor__resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.editor__resize:hover::after {
+  background: var(--blue);
+}
+
+/* Endpoint placing: click the sheet to move the pending marker. */
+.confirm-bubble select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+/* Heading dial: protractor around an Endpoint, the arm points where the Robot will face on arrival. */
+.hdial {
+  position: absolute;
+  z-index: 7;
+  width: 0;
+  height: 0;
+}
+
+.hdial__disc {
+  position: absolute;
+  left: -64px;
+  top: -64px;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
+  cursor: pointer;
+}
+
+/* Degree ticks live on a thin outer ring only: every 5°, stronger every 45°. */
+.hdial__disc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from -0.7deg, rgba(37, 99, 235, 0.8) 0 1.4deg, transparent 1.4deg 45deg),
+    repeating-conic-gradient(from -0.35deg, rgba(100, 116, 139, 0.55) 0 0.7deg, transparent 0.7deg 5deg);
+  -webkit-mask: radial-gradient(circle, transparent 54px, #000 55px);
+  mask: radial-gradient(circle, transparent 54px, #000 55px);
+  pointer-events: none;
+}
+
+.hdial__cardinal {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+  cursor: pointer;
+}
+
+.hdial__cardinal:hover {
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.hdial__cardinal.is-on {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #fff;
+}
+
+.hdial__arm {
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.2), #22c55e);
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+
+.hdial__handle {
+  position: absolute;
+  right: -14px;
+  top: -12px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.35);
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+  transition: transform 0.12s;
+}
+
+.hdial__handle:hover {
+  transform: scale(1.12);
+}
+
+.hdial__handle:active {
+  cursor: grabbing;
+  transform: scale(1.18);
+}
+
+.hdial__dot {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px #3b82f6;
+  pointer-events: none;
+}
+
+.hdial__foot {
+  position: absolute;
+  left: -80px;
+  top: 98px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 160px;
+  pointer-events: none;
+}
+
+.hdial__foot strong {
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: #1e293b;
+  font-size: 12px;
+  color: #fff;
+}
+
+.hdial__foot small {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #475569;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+}
+
+/* Zone / Endpoint panels overlay the canvas on the right (the workflow panel does the same via its wrapper). */
+.editor__main > .editor__panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 12;
+  box-shadow: -6px 0 18px rgba(15, 23, 42, 0.08);
+}
+
+/* The dial replaces the name label while an Endpoint is selected. */
+/* ---------- traffic board: Edges ---------- */
+.zoneform__note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* The editor canvas is the shared warehouse map; HTML helpers sit in its overlay. */
+.editor__map {
+  position: absolute;
+  inset: 0;
+}
+
+.editor__anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: scale(calc(1 / var(--z, 1)));
+  transform-origin: 0 0;
+}
+
+.board__draw {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.2);
+  font-size: 13px;
+  transform: translateX(-50%) scale(calc(1 / var(--z, 1)));
+  transform-origin: 50% 0;
+  cursor: default;
+}
+
+.board__draw button {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #e2e8f0;
+  font-size: 13px;
+}
+
+.board__draw button.is-ok {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+.board__draw button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mapcard__thumb .wmap {
+  position: absolute;
+  inset: 0;
+}
+
+.mapcard__body p.mapcard__stats {
+  margin: -14px 0 18px;
+  font-size: 12px;
+  color: var(--faint);
+}

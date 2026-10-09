@@ -48,7 +48,11 @@ public static class WorkflowExecutionModule
     public static IEndpointRouteBuilder MapWorkflowExecutionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/workflow-execution");
-        group.MapGet("/ping", () => Results.Ok(new { module = "workflow-execution" }));
+
+        // Giữ lại dòng ping duy nhất có cấu hình bảo mật AllowAnonymous của develop
+        group.MapGet("/ping", () => Results.Ok(new { module = "workflow-execution" })).AllowAnonymous();
+        
+        // Giữ lại toàn bộ các API tính năng mới của nhánh feature
         group.MapGetWorkflowMetadata();
         group.MapListWorkflows();
         group.MapGetWorkflow();
@@ -56,6 +60,7 @@ public static class WorkflowExecutionModule
         group.MapUpdateWorkflow();
         group.MapPublishWorkflow();
         group.MapCreateWorkflowVersion();
+        
         return endpoints;
     }
 }
