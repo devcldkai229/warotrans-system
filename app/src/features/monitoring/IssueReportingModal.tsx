@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 import {
   AlertOctagon,
   AlertTriangle,
+  ArrowLeft,
   Box,
   Camera,
   Image as ImageIcon,
@@ -105,32 +107,29 @@ export function IssueReportingModal({
     setCameraActive(false);
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          {/* Top Drag Handle Indicator */}
-          <View style={styles.dragHandle} />
+  if (!visible) return null;
 
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerTag}>
-                SCR-STF-16 · {robotCode} · {jobId}
-              </Text>
-              <Text style={styles.title}>Report Exception & Incident</Text>
-            </View>
-            <Pressable onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color={colors.textSecondary} />
-            </Pressable>
+  const modalBody = (
+    <View style={styles.fullScreenContainer}>
+        {/* Header matching prototype AppHeader */}
+        <View style={styles.header}>
+          <Pressable
+            onPress={onClose}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <ArrowLeft size={22} color={colors.textPrimary} />
+          </Pressable>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTag}>
+              SCR-STF-16 · {robotCode} · {jobId}
+            </Text>
+            <Text style={styles.title}>Report Exception & Incident</Text>
           </View>
+        </View>
 
-          <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
             {/* Safety Warning */}
             <View style={styles.safetyBox}>
               <ShieldAlert size={18} color={colors.danger} style={{ marginTop: 2 }} />
@@ -251,12 +250,12 @@ export function IssueReportingModal({
                 ) : (
                   <Button
                     label="Open Camera to Capture Evidence"
-                    icon={<Camera size={16} color={colors.primary} />}
+                    icon={<Camera size={18} color={colors.primary} />}
                     onPress={() => setCameraActive(true)}
                     variant="outline"
-                    size="md"
+                    size="lg"
                     style={styles.openCamBtn}
-                    textStyle={{ color: colors.primary, fontWeight: '800' }}
+                    textStyle={{ color: colors.primary, fontWeight: '900', fontSize: 12 }}
                   />
                 )
               ) : (
@@ -309,53 +308,77 @@ export function IssueReportingModal({
               onPress={handleSubmit}
               variant="danger"
               size="lg"
+              style={styles.submitBtn}
+              textStyle={{ fontWeight: '900', fontSize: 12 }}
             />
           </View>
         </View>
+  );
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.webAbsoluteOverlay} pointerEvents="auto">
+        {modalBody}
       </View>
+    );
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      {modalBody}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  webAbsoluteOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 110,
+    backgroundColor: colors.background,
+  },
+  fullScreenContainer: {
     flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '92%',
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    paddingTop: 10,
-    ...shadows.sheet,
-  },
-  dragHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#cbd5e1',
-    alignSelf: 'center',
-    marginBottom: 4,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 16,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: Platform.OS === 'ios' ? 48 : 14,
+    paddingBottom: 14,
+    minHeight: Platform.OS === 'ios' ? 104 : 72,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    zIndex: 30,
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleWrap: {
+    flex: 1,
+    marginLeft: 4,
   },
   headerTag: {
     fontSize: 9,
     fontWeight: '900',
     color: colors.primary,
     fontFamily: typography.fontMono,
-    letterSpacing: 0.8,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
   },
   title: {
     fontSize: 16,
@@ -369,19 +392,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   scrollArea: {
-    maxHeight: 520,
+    flex: 1,
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 28,
     gap: 14,
   },
   safetyBox: {
     flexDirection: 'row',
     gap: 10,
-    backgroundColor: colors.dangerBg,
+    backgroundColor: '#fee2e2',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.dangerBorder,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
     padding: 12,
   },
   safetyTextWrap: {
@@ -393,9 +417,9 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   safetyDesc: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    lineHeight: 15,
+    fontSize: 12,
+    color: colors.danger,
+    lineHeight: 16,
     marginTop: 2,
   },
   section: {
@@ -409,33 +433,38 @@ const styles = StyleSheet.create({
   },
   catCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    alignItems: 'flex-start',
+    gap: 12,
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     padding: 12,
+    minHeight: 60,
     ...shadows.panel,
   },
   catCardSelected: {
     borderColor: colors.danger,
-    backgroundColor: colors.dangerBg,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
   },
   catIconWrap: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
   },
   catIconWrapSelected: {
     backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   catTitle: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.textPrimary,
   },
   catTitleSelected: {
@@ -443,8 +472,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   catDesc: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.textMuted,
+    lineHeight: 15,
     marginTop: 2,
   },
   evidenceCard: {
@@ -486,10 +516,11 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   openCamBtn: {
-    borderColor: colors.primaryBorder,
+    borderColor: 'rgba(0, 92, 209, 0.5)',
     borderStyle: 'dashed',
-    borderWidth: 1.5,
-    borderRadius: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    minHeight: 64,
   },
   cameraBox: {
     backgroundColor: '#000000',
@@ -603,7 +634,7 @@ const styles = StyleSheet.create({
   },
   notesCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
@@ -611,18 +642,27 @@ const styles = StyleSheet.create({
     ...shadows.panel,
   },
   notesInput: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: 10,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: 10,
     fontSize: 12,
     color: colors.textPrimary,
-    minHeight: 60,
+    minHeight: 56,
     textAlignVertical: 'top',
   },
   footer: {
-    padding: 16,
+    padding: 12,
+    paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: '#ffffff',
+  },
+  submitBtn: {
+    minHeight: 64,
+    borderBottomWidth: 3,
+    borderBottomColor: '#991b1b',
+    borderRadius: 6,
   },
 });

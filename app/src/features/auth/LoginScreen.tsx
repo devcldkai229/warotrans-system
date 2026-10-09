@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -76,12 +77,8 @@ export function LoginScreen() {
     }
     triggerHaptic('success');
     setError(null);
+    showToastSuccess(`Signed in as Alex Tran (${selectedZone})`);
     login(staffId, selectedZone);
-    const matched = PRESET_OPERATORS.find(
-      (op) => op.id.toLowerCase() === staffId.trim().toLowerCase()
-    );
-    const opName = matched ? matched.name : `Operator (${staffId})`;
-    showToastSuccess(`Signed in as ${opName} (${selectedZone})`);
   };
 
   const activeZoneObj =
@@ -307,7 +304,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'ios' ? 52 : 24,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
     backgroundColor: colors.background,
     justifyContent: 'space-between',
     maxWidth: 480,
@@ -323,7 +322,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 4,
+    paddingTop: 8,
   },
   brandRow: {
     flexDirection: 'row',

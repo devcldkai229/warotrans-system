@@ -19,27 +19,33 @@ import {
   AlertTriangle,
   CheckCircle2,
   Info,
-  X,
+  MapPin,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';
 
+export interface ToastConfig {
+  icon?: string | ReactNode;
+  duration?: number;
+}
+
 export interface ToastOptions {
   type?: ToastType;
   message: string;
   description?: string;
   duration?: number;
+  icon?: string | ReactNode;
 }
 
 interface ToastContextType {
   showToast: (options: ToastOptions) => void;
   hideToast: () => void;
-  info: (message: string, description?: string) => void;
-  success: (message: string, description?: string) => void;
-  warning: (message: string, description?: string) => void;
-  error: (message: string, description?: string) => void;
+  info: (message: string, description?: string, options?: ToastConfig | string) => void;
+  success: (message: string, description?: string, options?: ToastConfig | string) => void;
+  warning: (message: string, description?: string, options?: ToastConfig | string) => void;
+  error: (message: string, description?: string, options?: ToastConfig | string) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -47,18 +53,30 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 type ToastListener = (options: ToastOptions) => void;
 let toastListener: ToastListener | null = null;
 
+const buildToastOptions = (
+  type: ToastType,
+  message: string,
+  description?: string,
+  options?: ToastConfig | string
+): ToastOptions => {
+  if (typeof options === 'string') {
+    return { type, message, description, icon: options };
+  }
+  return { type, message, description, ...options };
+};
+
 export const toast = {
-  info: (message: string, description?: string) => {
-    toastListener?.({ type: 'info', message, description });
+  info: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('info', message, description, options));
   },
-  success: (message: string, description?: string) => {
-    toastListener?.({ type: 'success', message, description });
+  success: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('success', message, description, options));
   },
-  warning: (message: string, description?: string) => {
-    toastListener?.({ type: 'warning', message, description });
+  warning: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('warning', message, description, options));
   },
-  error: (message: string, description?: string) => {
-    toastListener?.({ type: 'error', message, description });
+  error: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('error', message, description, options));
   },
 };
 
@@ -103,10 +121,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [currentToast]);
 
-  const info = (msg: string, desc?: string) => showToast({ type: 'info', message: msg, description: desc });
-  const success = (msg: string, desc?: string) => showToast({ type: 'success', message: msg, description: desc });
-  const warning = (msg: string, desc?: string) => showToast({ type: 'warning', message: msg, description: desc });
-  const error = (msg: string, desc?: string) => showToast({ type: 'error', message: msg, description: desc });
+  const info = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('info', msg, desc, opts));
+  const success = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('success', msg, desc, opts));
+  const warning = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('warning', msg, desc, opts));
+  const error = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('error', msg, desc, opts));
 
   const translateY = animValue.interpolate({
     inputRange: [0, 1],
@@ -136,12 +158,30 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               },
             ]}
           >
-            <Pressable onPress={hideToast} style={styles.toastPressable}>
+            <Pressable
+              onPress={hideToast}
+              style={styles.toastPressable}
+              accessibilityRole="alert"
+              accessibilityLabel={currentToast.message}
+            >
               <View style={styles.iconCol}>
-                {toastType === 'info' && <Info size={16} color={colors.textPrimary} />}
-                {toastType === 'success' && <CheckCircle2 size={16} color={colors.success} />}
-                {toastType === 'warning' && <AlertTriangle size={16} color={colors.warning} />}
-                {toastType === 'error' && <AlertOctagon size={16} color={colors.danger} />}
+                {currentToast.icon ? (
+                  typeof currentToast.icon === 'string' &&
+                  (currentToast.icon === 'pin' || currentToast.icon === '📍') ? (
+                    <MapPin size={16} color={colors.primary} />
+                  ) : typeof currentToast.icon === 'string' ? (
+                    <Text style={{ fontSize: 15 }}>{currentToast.icon}</Text>
+                  ) : (
+                    currentToast.icon
+                  )
+                ) : (
+                  <>
+                    {toastType === 'info' && <Info size={16} color={colors.textPrimary} />}
+                    {toastType === 'success' && <CheckCircle2 size={16} color={colors.success} />}
+                    {toastType === 'warning' && <AlertTriangle size={16} color={colors.warning} />}
+                    {toastType === 'error' && <AlertOctagon size={16} color={colors.danger} />}
+                  </>
+                )}
               </View>
 
               <View style={styles.textCol}>
@@ -153,10 +193,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     {currentToast.description}
                   </Text>
                 ) : null}
-              </View>
-
-              <View style={styles.closeCol}>
-                <X size={14} color={colors.textMuted} />
               </View>
             </Pressable>
           </Animated.View>
@@ -177,7 +213,7 @@ export function useToast() {
 const styles = StyleSheet.create({
   toastContainer: {
     position: 'absolute',
-    top: 14,
+    top: Platform.OS === 'ios' ? 54 : 14,
     left: 0,
     right: 0,
     zIndex: 999999,
@@ -225,8 +261,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: typography.fontSans,
     marginTop: 2,
-  },
-  closeCol: {
-    paddingLeft: 4,
   },
 });

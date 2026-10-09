@@ -59,7 +59,7 @@ export function ReplenishmentScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-21 · REPLENISHMENT"
+        label="SCR-STF-11-REPLENISH"
         title="Replenishment Dispatch"
         onBack={goBack}
       />
@@ -108,28 +108,28 @@ export function ReplenishmentScreen() {
             />
           </View>
         ) : (
-          <View style={{ gap: 12 }}>
+          <View style={{ gap: 16 }}>
             {/* Flow Banner */}
             <View style={styles.introCard}>
               <View style={styles.introIconBox}>
-                <Layers size={22} color={colors.primary} />
+                <Layers size={22} color="#ffffff" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.introTitle}>Pick-Face Replenishment Flow</Text>
                 <Text style={styles.introDesc}>
-                  Restock high-velocity picking bins from bulk reserve storage (Zone D).
+                  Restock high-velocity picking bins from bulk reserve storage.
                 </Text>
               </View>
             </View>
 
             {/* Step 1: Active Pick-Face Shortages */}
-            <View>
+            <View style={{ gap: 8 }}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>1. ACTIVE PICK-FACE SHORTAGES</Text>
+                <Text style={styles.sectionLabel}>1. ACTIVE PICK-FACE SHORTAGES:</Text>
                 <Text style={styles.sectionSubWarning}>Below Min Safety Stock</Text>
               </View>
 
-              <View style={{ gap: 8, marginTop: 6 }}>
+              <View style={{ gap: 8 }}>
                 {SHORTAGES.map((item) => {
                   const isSelected = selectedShortage === item.id;
                   const isCritical = item.urgency === 'CRITICAL';
@@ -139,11 +139,11 @@ export function ReplenishmentScreen() {
                       onPress={() => setSelectedShortage(item.id)}
                       style={[
                         styles.shortageCard,
-                        isSelected && styles.shortageCardSelected,
+                        isSelected ? styles.shortageCardSelected : styles.shortageCardNormal,
                       ]}
                     >
                       <View style={styles.shortageHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                           <Text style={styles.shortageName}>{item.name}</Text>
                           <Text style={styles.shortageCode}>({item.container})</Text>
                         </View>
@@ -167,7 +167,7 @@ export function ReplenishmentScreen() {
                       <View style={styles.shortageFooter}>
                         <Text style={styles.shortageStock}>
                           Current:{' '}
-                          <Text style={{ color: colors.danger, fontWeight: '900' }}>
+                          <Text style={{ color: colors.danger, fontWeight: '700' }}>
                             {item.current} units
                           </Text>{' '}
                           (Min: {item.minThreshold})
@@ -182,10 +182,10 @@ export function ReplenishmentScreen() {
 
             {/* Step 2: Source Bulk Buffer */}
             <View style={styles.bulkCard}>
-              <Text style={styles.sectionLabel}>2. SOURCE BULK STORAGE BUFFER</Text>
+              <Text style={styles.sectionLabel}>2. SOURCE BULK STORAGE BUFFER:</Text>
               <View style={styles.bulkRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Warehouse size={16} color={colors.primary} />
+                  <Warehouse size={15} color={colors.primary} />
                   <Text style={styles.bulkSourceText}>{currentAlert.bulkSource}</Text>
                 </View>
                 <Text style={styles.bulkStockText}>80 Units in Reserve</Text>
@@ -195,7 +195,7 @@ export function ReplenishmentScreen() {
             {/* Step 3: Quantity Stepper & Projection */}
             <View style={styles.qtyCard}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>3. REPLENISHMENT QUANTITY</Text>
+                <Text style={styles.sectionLabel}>3. REPLENISHMENT QUANTITY:</Text>
                 <Text style={styles.qtyTotal}>+{restockQty} units</Text>
               </View>
 
@@ -211,6 +211,7 @@ export function ReplenishmentScreen() {
                     placeholder="Enter qty"
                     rightIcon={<Text style={styles.unitsSuffix}>units</Text>}
                     containerStyle={{ marginBottom: 0 }}
+                    inputStyle={{ height: 44, fontSize: 14, fontFamily: typography.fontMono, fontWeight: '900' }}
                   />
                 </View>
                 <View style={styles.presetButtons}>
@@ -220,7 +221,7 @@ export function ReplenishmentScreen() {
                       onPress={() => setRestockQty(qty)}
                       style={[
                         styles.presetBtn,
-                        restockQty === qty && styles.presetBtnActive,
+                        restockQty === qty ? styles.presetBtnActive : styles.presetBtnNormal,
                       ]}
                     >
                       <Text
@@ -240,11 +241,11 @@ export function ReplenishmentScreen() {
               <View style={styles.deltaBox}>
                 <View style={styles.deltaHeader}>
                   <Text style={styles.deltaText}>
-                    Current: <Text style={{ color: colors.danger, fontWeight: '900' }}>{currentAlert.current}</Text>
+                    Current: <Text style={{ color: colors.danger, fontWeight: '700' }}>{currentAlert.current}</Text>
                   </Text>
                   <Text style={styles.deltaText}>
                     After Restock:{' '}
-                    <Text style={{ color: colors.success, fontWeight: '900' }}>{projectedStock} units</Text>
+                    <Text style={{ color: colors.success, fontWeight: '700' }}>{projectedStock} units</Text>
                   </Text>
                 </View>
 
@@ -269,14 +270,17 @@ export function ReplenishmentScreen() {
               </View>
             </View>
 
-            <Button
-              label={`Dispatch Replenishment Tour (+${restockQty} units)`}
-              icon={<Layers size={18} color="#ffffff" />}
+            {/* Dispatch Button */}
+            <Pressable
               onPress={handleDispatch}
-              variant="primary"
-              size="lg"
-              style={{ marginTop: 6 }}
-            />
+              style={styles.dispatchBtn}
+              accessibilityRole="button"
+            >
+              <Layers size={18} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.dispatchBtnText}>
+                Dispatch Replenishment Tour (+{restockQty} units)
+              </Text>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -297,30 +301,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: 'rgba(0, 92, 209, 0.05)',
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    borderRadius: 14,
-    padding: 12,
+    borderColor: 'rgba(0, 92, 209, 0.2)',
+    borderRadius: 12,
+    padding: 16,
     ...shadows.panel,
   },
   introIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   introTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
+    lineHeight: 20,
   },
   introDesc: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.textMuted,
+    lineHeight: 16,
     marginTop: 2,
   },
   sectionHeaderRow: {
@@ -331,26 +337,29 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     color: colors.textMuted,
   },
   sectionSubWarning: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.danger,
     fontFamily: typography.fontMono,
   },
   shortageCard: {
-    backgroundColor: '#ffffff',
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    borderWidth: 1,
     padding: 12,
     ...shadows.panel,
   },
+  shortageCardNormal: {
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   shortageCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: 'rgba(0, 92, 209, 0.1)',
   },
   shortageHeader: {
     flexDirection: 'row',
@@ -359,12 +368,11 @@ const styles = StyleSheet.create({
   },
   shortageName: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   shortageCode: {
     fontSize: 10,
-    fontWeight: '700',
     color: colors.textMuted,
     fontFamily: typography.fontMono,
   },
@@ -380,15 +388,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   urgencyWarning: {
-    backgroundColor: colors.warningSoft,
+    backgroundColor: '#fef3c7',
   },
   urgencyWarningText: {
-    color: colors.warning,
+    color: '#b45309',
   },
   urgencyText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
-    fontFamily: typography.fontMono,
   },
   shortageLoc: {
     fontSize: 11,
@@ -401,25 +408,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 6,
   },
   shortageStock: {
     fontSize: 10,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   replenishTap: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.primary,
   },
   bulkCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
+    padding: 14,
     gap: 8,
     ...shadows.panel,
   },
@@ -427,33 +431,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: 'rgba(241, 245, 249, 0.6)',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: 10,
   },
   bulkSourceText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   bulkStockText: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.success,
   },
   qtyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    gap: 10,
+    gap: 12,
     ...shadows.panel,
   },
   qtyTotal: {
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '700',
     color: colors.primary,
     fontFamily: typography.fontMono,
   },
@@ -463,31 +469,33 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   unitsSuffix: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.textMuted,
   },
   presetButtons: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 6,
   },
   presetBtn: {
-    height: 46,
+    height: 44,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  presetBtnNormal: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   presetBtnActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   presetBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
@@ -495,8 +503,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   deltaBox: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: 10,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.8)',
     padding: 10,
     gap: 6,
   },
@@ -505,8 +515,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   deltaText: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.textMuted,
   },
   barTrack: {
     height: 8,
@@ -524,23 +534,40 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   deltaFootnote: {
-    fontSize: 9,
+    fontSize: 10,
     color: colors.textMuted,
-    lineHeight: 12,
+    lineHeight: 14,
+  },
+  dispatchBtn: {
+    backgroundColor: colors.primary,
+    minHeight: 64,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 3,
+    borderBottomColor: '#004bb0',
+  },
+  dispatchBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
   },
   successCard: {
     backgroundColor: colors.successBg,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.successBorder,
-    padding: 18,
+    padding: 20,
     alignItems: 'center',
     ...shadows.panel,
   },
   successIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 999,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
@@ -555,46 +582,47 @@ const styles = StyleSheet.create({
   },
   successSub: {
     fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
+    fontWeight: '600',
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 16,
+    lineHeight: 16,
   },
   receiptBox: {
     width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+    borderColor: 'rgba(34, 197, 94, 0.2)',
+    padding: 16,
     gap: 8,
   },
   receiptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   receiptLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textMuted,
   },
   receiptVal: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   receiptHighlight: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.primary,
     fontFamily: typography.fontMono,
   },
   receiptSuccess: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.success,
-    fontFamily: typography.fontMono,
   },
   receiptBorderTop: {
     borderTopWidth: 1,

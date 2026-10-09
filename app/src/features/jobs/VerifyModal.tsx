@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -35,8 +36,11 @@ interface VerifyModalProps {
   targetContainer?: string;
   robotCode?: string;
   location?: string;
+  targetShelf?: string;
   productName?: string;
   quantity?: number;
+  initialMismatch?: boolean;
+  initialBarcodeInput?: string;
   otherContainers?: OtherContainerInfo[];
   onClose: () => void;
   onSuccess: (code: string) => void;
@@ -47,28 +51,31 @@ export function VerifyModal({
   visible,
   targetContainer = 'BOX-101',
   robotCode = 'AMR-01',
-  location = 'Rack A-02 Bin 03',
-  productName = 'Optical Proximity Sensor X4',
-  quantity = 45,
+  location = 'Stop 2/3: Rack A-02',
+  targetShelf = 'Rack A · Level 2 · Bin 03',
+  productName = 'Electronic Components',
+  quantity = 12,
+  initialMismatch = false,
+  initialBarcodeInput = '',
   otherContainers = [
-    { code: 'BOX-204', slot: 'Slot 2 (Mid)' },
-    { code: 'TOTE-088', slot: 'Slot 3 (Rear)' },
+    { code: 'BOX-102', slot: 'Slot 2 (Mid)' },
+    { code: 'BOX-103', slot: 'Slot 3 (Rear)' },
   ],
   onClose,
   onSuccess,
   onReportIssue,
 }: VerifyModalProps) {
   const [timeLeft, setTimeLeft] = useState(300); // 300s standard timeout
-  const [barcodeInput, setBarcodeInput] = useState('');
-  const [mismatch, setMismatch] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
+  const [mismatch, setMismatch] = useState(initialMismatch);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     setTimeLeft(300);
-    setBarcodeInput('');
-    setMismatch(false);
-  }, [visible]);
+    setBarcodeInput(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
+    setMismatch(initialMismatch);
+  }, [visible, initialMismatch, initialBarcodeInput]);
 
   useEffect(() => {
     if (!visible || timeLeft <= 0) return;
@@ -105,16 +112,11 @@ export function VerifyModal({
     handleVerify(scanned);
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          <View style={styles.dragHandle} />
+  if (!visible) return null;
+
+  const modalBody = (
+    <View style={styles.modalOverlay}>
+      <View style={[styles.sheetContainer, !mismatch && styles.sheetContainerVerify]}>
           {!mismatch ? (
             /* ================================================================
                SCR-STF-14: HANDOVER CONFIRMATION HUD
@@ -128,7 +130,7 @@ export function VerifyModal({
               <View style={styles.headerRow}>
                 <View style={styles.headerTitleCol}>
                   <View style={styles.eyebrowRow}>
-                    <Text style={styles.eyebrow}>SCR-STF-14 · HANDOVER HUD</Text>
+                    <Text style={styles.eyebrow}>SCR-STF-14 · HANDOVER CONFIRMATION HUD</Text>
                     <View
                       style={[
                         styles.timerBadge,
@@ -142,7 +144,7 @@ export function VerifyModal({
                           isUrgent && styles.timerTextUrgent,
                         ]}
                       >
-                        {timeLeft > 0 ? `${mins}:${secs} (300s)` : 'Timed Out!'}
+                        {timeLeft > 0 ? `${mins}:${secs} (300s Timeout)` : 'Timed Out!'}
                       </Text>
                     </View>
                   </View>
@@ -161,15 +163,16 @@ export function VerifyModal({
                 </Pressable>
               </View>
 
+              {/* Flatbed Tray Layout Guidance */}
+              <View style={styles.schematicHeader}>
+                <Text style={styles.schematicTitle}>
+                  AMR FLATBED DECK · PHYSICAL SLOT GUIDE:
+                </Text>
+                <Text style={styles.schematicBadge}>Flatbed 3-Tray Layout</Text>
+              </View>
+
               {/* 3-Slot Physical Flatbed Tray Schematic */}
               <View style={styles.schematicCard}>
-                <View style={styles.schematicHeader}>
-                  <Text style={styles.schematicTitle}>
-                    AMR FLATBED DECK · PHYSICAL SLOT GUIDE
-                  </Text>
-                  <Text style={styles.schematicBadge}>Flatbed 3-Tray</Text>
-                </View>
-
                 <View style={styles.slotsRow}>
                   {[
                     { label: 'Slot 1 (Front)', code: targetContainer, isTarget: true },
@@ -216,8 +219,7 @@ export function VerifyModal({
               <View style={styles.targetContainerCard}>
                 <View style={styles.targetCardTop}>
                   <View style={styles.targetIconRow}>
-                    <PackageCheck size={16} color={colors.primary} />
-                    <Text style={styles.targetCardTag}>UNLOAD CONTAINER AT THIS STATION</Text>
+                    <Text style={styles.targetCardTag}>📦 UNLOAD CONTAINER AT THIS STATION</Text>
                   </View>
                   <View style={styles.actionPill}>
                     <Text style={styles.actionPillText}>SCAN TO UNLOAD</Text>
@@ -233,7 +235,7 @@ export function VerifyModal({
 
                 <View style={styles.targetDestBox}>
                   <Text style={styles.targetDestLabel}>Target Shelf Destination</Text>
-                  <Text style={styles.targetDestValue}>{location}</Text>
+                  <Text style={styles.targetDestValue}>{targetShelf}</Text>
                 </View>
               </View>
 
@@ -267,7 +269,7 @@ export function VerifyModal({
                   <TextInput
                     value={barcodeInput}
                     onChangeText={setBarcodeInput}
-                    placeholder={`Scan or enter ${targetContainer}...`}
+                    placeholder={`Scan or enter code ${targetContainer}...`}
                     placeholderTextColor="#94a3b8"
                     autoCapitalize="characters"
                     style={styles.barcodeTextInput}
@@ -322,7 +324,7 @@ export function VerifyModal({
                   icon={<AlertTriangle size={15} color={colors.danger} />}
                   onPress={onReportIssue}
                   style={styles.reportIssueBtn}
-                  textStyle={{ color: colors.danger }}
+                  textStyle={{ color: colors.danger, fontWeight: '900', fontSize: 12 }}
                 />
                 <Button
                   label="Confirm Handover"
@@ -331,6 +333,7 @@ export function VerifyModal({
                   onPress={() => handleVerify()}
                   disabled={!barcodeInput.trim()}
                   style={styles.confirmBtn}
+                  textStyle={{ fontWeight: '900', fontSize: 12 }}
                 />
               </View>
 
@@ -371,7 +374,7 @@ export function VerifyModal({
                 <View style={styles.comparisonCol}>
                   <Text style={styles.comparisonColLabel}>EXPECTED TARGET</Text>
                   <Text style={styles.comparisonExpectedVal}>{targetContainer}</Text>
-                  <Text style={styles.comparisonSubtext}>{location}</Text>
+                  <Text style={styles.comparisonSubtext}>{targetShelf}</Text>
                 </View>
 
                 <View style={[styles.comparisonCol, styles.comparisonColRight]}>
@@ -390,22 +393,20 @@ export function VerifyModal({
                 <Button
                   label="Retry Barcode Scan"
                   variant="primary"
-                  size="lg"
-                  icon={<RefreshCw size={17} color="#ffffff" />}
+                  icon={<RefreshCw size={18} color="#ffffff" />}
                   onPress={() => {
                     setMismatch(false);
                     setBarcodeInput('');
                   }}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', minHeight: 64, borderRadius: 6 }}
                 />
                 <Button
                   label="Report Misplaced Container"
                   variant="outline"
-                  size="lg"
-                  icon={<AlertTriangle size={16} color={colors.danger} />}
+                  icon={<AlertTriangle size={15} color={colors.danger} />}
                   onPress={onReportIssue}
                   style={styles.mismatchReportBtn}
-                  textStyle={{ color: colors.danger }}
+                  textStyle={{ color: colors.danger, fontWeight: '900', fontSize: 12 }}
                 />
               </View>
             </View>
@@ -420,26 +421,64 @@ export function VerifyModal({
           onScanResult={handleScannerResult}
         />
       </View>
+    );
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.webAbsoluteOverlay} pointerEvents="auto">
+        {modalBody}
+      </View>
+    );
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      {modalBody}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  webAbsoluteOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: colors.overlay,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     justifyContent: 'flex-end',
+    padding: 12,
+    paddingBottom: 12,
+    ...(Platform.OS === 'web'
+      ? ({
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+        } as any)
+      : {}),
   },
   sheetContainer: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
     maxHeight: '92%',
     width: '100%',
-    maxWidth: 480,
+    maxWidth: '100%',
     alignSelf: 'center',
-    paddingTop: 10,
+    overflow: 'hidden',
     ...shadows.sheet,
+  },
+  sheetContainerVerify: {
+    height: 690,
   },
   dragHandle: {
     width: 44,
@@ -453,7 +492,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sheetContent: {
-    paddingBottom: 32,
+    paddingBottom: 0,
   },
   headerRow: {
     flexDirection: 'row',
@@ -462,7 +501,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingBottom: 12,
-    marginBottom: 12,
+    marginBottom: 14,
+    minHeight: 92,
   },
   headerTitleCol: {
     flex: 1,
@@ -470,22 +510,24 @@ const styles = StyleSheet.create({
   eyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
     marginBottom: 4,
+    minHeight: 34,
   },
   eyebrow: {
     fontSize: 10,
     fontWeight: '900',
     color: colors.primary,
     fontFamily: typography.fontSans,
-    letterSpacing: 0.6,
+    letterSpacing: 1.2,
   },
   timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#fef3c7',
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 99,
   },
@@ -496,7 +538,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     fontFamily: typography.fontMono,
-    color: '#92400e',
+    color: '#381c00',
   },
   timerTextUrgent: {
     color: colors.danger,
@@ -506,28 +548,38 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
+    marginTop: 4,
   },
   sheetSubtitle: {
     fontSize: 11,
-    color: colors.textSecondary,
+    fontWeight: '500',
+    color: colors.textMuted,
     fontFamily: typography.fontSans,
     marginTop: 2,
   },
   closeBtn: {
-    padding: 6,
+    width: 38,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -8,
+    marginTop: -4,
   },
   schematicCard: {
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: 'rgba(241, 245, 249, 0.6)',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 10,
-    marginBottom: 12,
+    padding: 8,
+    height: 83,
+    minHeight: 83,
+    marginBottom: 8,
   },
   schematicHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    minHeight: 15,
     marginBottom: 8,
   },
   schematicTitle: {
@@ -546,6 +598,7 @@ const styles = StyleSheet.create({
   slotsRow: {
     flexDirection: 'row',
     gap: 8,
+    height: 65,
   },
   slotCard: {
     flex: 1,
@@ -603,12 +656,13 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   targetContainerCard: {
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: colors.primary,
-    backgroundColor: 'rgba(37, 99, 235, 0.04)',
+    backgroundColor: 'rgba(0, 92, 209, 0.05)',
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    padding: 14,
+    minHeight: 140,
+    marginBottom: 8,
   },
   targetCardTop: {
     flexDirection: 'row',
@@ -677,10 +731,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: 'dashed',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 10,
-    backgroundColor: colors.surfaceSubtle,
-    marginBottom: 12,
+    backgroundColor: 'rgba(241, 245, 249, 0.3)',
+    minHeight: 75,
+    marginBottom: 16,
   },
   keepOnboardHeader: {
     flexDirection: 'row',
@@ -713,6 +768,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   barcodeSection: {
+    minHeight: 119,
     marginBottom: 16,
   },
   barcodeSectionTitle: {
@@ -720,21 +776,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.textMuted,
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
     backgroundColor: colors.surface,
     overflow: 'hidden',
+    minHeight: 64,
   },
   barcodeTextInput: {
     flex: 1,
-    height: 48,
-    paddingHorizontal: 12,
+    height: 64,
+    paddingHorizontal: 16,
     fontSize: 14,
     fontFamily: typography.fontMono,
     fontWeight: '700',
@@ -743,9 +800,10 @@ const styles = StyleSheet.create({
   cameraScanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: colors.primary,
-    height: 48,
+    height: 64,
+    minWidth: 112,
     paddingHorizontal: 14,
     justifyContent: 'center',
   },
@@ -762,6 +820,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
+    minHeight: 22,
   },
   simLabel: {
     fontSize: 10,
@@ -798,14 +857,22 @@ const styles = StyleSheet.create({
   },
   actionsGrid: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    marginTop: 0,
+    height: 64,
   },
   reportIssueBtn: {
-    flex: 0.42,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    flex: 1,
+    minHeight: 64,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 6,
   },
   confirmBtn: {
-    flex: 0.58,
+    flex: 1,
+    minHeight: 64,
+    borderRadius: 6,
+    borderBottomWidth: 3,
+    borderBottomColor: '#004bb0',
   },
   timeoutAlert: {
     marginTop: 12,
@@ -828,14 +895,17 @@ const styles = StyleSheet.create({
   },
   mismatchContainer: {
     padding: 16,
+    paddingTop: 12,
     borderTopWidth: 4,
     borderTopColor: colors.danger,
-    paddingBottom: 36,
+    marginHorizontal: 16,
+    paddingBottom: 16,
   },
   mismatchHeaderRow: {
     flexDirection: 'row',
     gap: 12,
     alignItems: 'flex-start',
+    marginTop: 4,
     marginBottom: 16,
   },
   mismatchIconWrap: {
@@ -850,16 +920,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mismatchTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
     color: colors.danger,
     fontFamily: typography.fontSans,
+    lineHeight: 28,
   },
   mismatchSubtitle: {
     fontSize: 12,
     color: colors.textSecondary,
     fontFamily: typography.fontSans,
-    marginTop: 4,
+    marginTop: 2,
     lineHeight: 16,
   },
   comparisonGrid: {
@@ -886,14 +957,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   comparisonExpectedVal: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
     fontFamily: typography.fontMono,
     color: colors.textPrimary,
     marginTop: 4,
   },
   comparisonSubtext: {
-    fontSize: 10,
+    fontSize: 9,
     color: colors.textMuted,
     marginTop: 2,
   },
@@ -904,22 +975,24 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   comparisonScannedVal: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
     fontFamily: typography.fontMono,
     color: colors.danger,
     marginTop: 4,
   },
   comparisonScannedSubtext: {
-    fontSize: 10,
+    fontSize: 9,
     color: colors.danger,
     marginTop: 2,
   },
   mismatchActions: {
-    gap: 10,
+    gap: 8,
   },
   mismatchReportBtn: {
     width: '100%',
+    minHeight: 48,
     borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 6,
   },
 });

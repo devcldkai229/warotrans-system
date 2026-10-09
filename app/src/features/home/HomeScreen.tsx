@@ -1,5 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  LayoutAnimation,
+  PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -48,7 +51,18 @@ export function HomeScreen() {
   const { navigate } = useNavigation();
   const { success: showToastSuccess } = useToast();
   const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
-  const [sheetExpanded, setSheetExpanded] = useState<boolean>(false);
+  const [sheetExpanded, setSheetExpanded] = useState<boolean>(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const s = new URLSearchParams(window.location.search).get('screen');
+        const focus = new URLSearchParams(window.location.search).get('focus');
+        return s === 'home-pulse' || focus === 'pulse' || focus === 'expanded';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
   const [netStatus, setNetStatus] = useState<'syncing' | 'connected' | 'hidden'>('syncing');
 
   useEffect(() => {
@@ -64,7 +78,7 @@ export function HomeScreen() {
 
   const handleOpenHandoverTask = () => {
     triggerHaptic('tap');
-    navigate('job_detail', { jobId: 'JOB-2026-0881' });
+    navigate('job_detail', { jobId: 'JOB-2026-0812' });
   };
 
   const handleLocateUser = () => {
@@ -72,8 +86,46 @@ export function HomeScreen() {
     const zoneName = activeZone.includes('(')
       ? activeZone.split('(')[0].trim()
       : activeZone;
-    showToastSuccess(`Centered map on your location (${zoneName})`);
+    showToastSuccess(
+      `Centered map on your location (${zoneName})`,
+      `Active Work Zone: ${zoneName}`,
+      'pin'
+    );
   };
+
+  const toggleSheet = (nextState?: boolean) => {
+    const target = typeof nextState === 'boolean' ? nextState : !sheetExpanded;
+    triggerHaptic('tap');
+    if (Platform.OS !== 'web') {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+    setSheetExpanded(target);
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return (
+          Math.abs(gestureState.dy) > 12 &&
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
+        );
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy < -25) {
+          // Swiped UP -> expand
+          if (!sheetExpanded) {
+            toggleSheet(true);
+          }
+        } else if (gestureState.dy > 25) {
+          // Swiped DOWN -> collapse
+          if (sheetExpanded) {
+            toggleSheet(false);
+          }
+        }
+      },
+    })
+  ).current;
 
   return (
     <View style={styles.root}>
@@ -95,8 +147,12 @@ export function HomeScreen() {
 
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          !sheetExpanded && styles.scrollContentCollapsed,
+        ]}
         bounces={false}
+        scrollEnabled={sheetExpanded}
       >
         {/* 1. Technical Blueprint Facility Radar Map */}
         <MiniFacilityMap
@@ -106,16 +162,14 @@ export function HomeScreen() {
           onLocateUser={handleLocateUser}
           onSearch={() => navigate('inventory_lookup')}
           robots={INITIAL_ROBOTS}
+          style={sheetExpanded ? styles.mapExpanded : styles.mapCollapsed}
         />
 
-        {/* 2. Interactive 2-Stage Bottom Sheet (Grab/Uber style) */}
-        <View style={styles.bottomSheet}>
+        {/* 2. Interactive 2-Stage Bottom Sheet (Grab/Uber style with swipe up/down) */}
+        <View style={styles.bottomSheet} {...panResponder.panHandlers}>
           {/* Handle Bar & Sheet Header Toggle */}
           <Pressable
-            onPress={() => {
-              triggerHaptic('tap');
-              setSheetExpanded(!sheetExpanded);
-            }}
+            onPress={() => toggleSheet()}
             style={styles.sheetHandleArea}
             accessibilityRole="button"
             accessibilityLabel={sheetExpanded ? 'Collapse fleet view' : 'Expand fleet view'}
@@ -169,23 +223,6 @@ export function HomeScreen() {
                 </Pressable>
               </View>
             </View>
-
-            {/* Restored Quick Transport Request Action Button */}
-            <Pressable
-              onPress={() => {
-                triggerHaptic('tap');
-                navigate('transport_create');
-              }}
-              style={({ pressed }) => [
-                styles.newTransportBtn,
-                pressed && styles.newTransportBtnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Create new transport request"
-            >
-              <Plus size={16} color="#ffffff" strokeWidth={3} />
-              <Text style={styles.newTransportBtnText}>+ New Transport Request</Text>
-            </Pressable>
           </View>
 
           {/* 3. Expanded Drawer Content (Warehouse Pulse & Fleet Telemetry) */}
@@ -304,6 +341,23 @@ export function HomeScreen() {
                   </Text>
                 </View>
               </View>
+
+              {/* Quick Transport Request Action Button */}
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
+                  navigate('transport_create');
+                }}
+                style={({ pressed }) => [
+                  styles.newTransportBtn,
+                  pressed && styles.newTransportBtnPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Create new transport request"
+              >
+                <Plus size={16} color="#ffffff" strokeWidth={2.6} />
+                <Text style={styles.newTransportBtnText}>+ New Transport Request</Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -354,11 +408,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 20,
   },
+  scrollContentCollapsed: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingBottom: 0,
+  },
+  mapCollapsed: {
+    flex: 1,
+    minHeight: 380,
+  },
+  mapExpanded: {
+    height: 280,
+  },
   bottomSheet: {
     marginTop: -14,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     shadowColor: '#000000',
@@ -492,11 +558,13 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   openTaskBtn: {
+    height: 32,
     backgroundColor: colors.primary,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderBottomWidth: 2.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 6,
+    borderBottomWidth: 2,
     borderBottomColor: '#004bb0',
     shadowColor: '#00285a',
     shadowOffset: { width: 0, height: 2 },

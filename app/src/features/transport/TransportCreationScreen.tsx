@@ -129,7 +129,7 @@ export function TransportCreationScreen() {
       <SubScreenHeader
         label={
           step === 1
-            ? 'SCR-STF-10 · DISPATCH HUB'
+            ? 'NEW TRANSPORT REQUEST'
             : `SCR-STF-11 · ${selectedWorkflow.name.toUpperCase()}`
         }
         title={
@@ -154,7 +154,7 @@ export function TransportCreationScreen() {
           <View style={{ gap: 12 }}>
             <View style={styles.workflowIntro}>
               <Text style={styles.workflowIntroTitle}>
-                5 Routine + 1 Safety Workflows
+                SCR-STF-10: 5 Routine + 1 Safety Workflow
               </Text>
               <View style={styles.rbacPill}>
                 <Text style={styles.rbacPillText}>Section 8 RBAC</Text>

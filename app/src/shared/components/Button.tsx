@@ -46,9 +46,9 @@ export function Button({
         styles.base,
         styles[variant],
         styles[size],
+        style,
         disabled && styles.disabled,
         pressed && isInteractive && pressedStyles[variant],
-        style,
       ]}
     >
       {loading ? (
@@ -123,7 +123,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   disabled: {
-    opacity: 0.5,
+    backgroundColor: '#cbd5e1',
+    borderColor: '#cbd5e1',
+    borderBottomWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   contentRow: {
     flexDirection: 'row',

@@ -1,46 +1,130 @@
-import { JobSummary } from '../../shared/types/contracts';
+import { ContainerSlot, JobStepSummary, JobSummary, WorkflowCode } from '../../shared/types/contracts';
+
+export type JobKind = 'waiting' | 'transit' | 'complete' | 'queued';
+
+export interface JobStopStep {
+  type: string;
+  label: string;
+  status: 'done' | 'waiting' | 'running' | 'future';
+  timeRemaining?: string;
+}
+
+export interface JobStopItem {
+  id: number;
+  name: string;
+  description: string;
+  state: 'done' | 'active' | 'future';
+  current?: boolean;
+  steps?: JobStopStep[];
+}
+
+export interface JobContainerItem {
+  code: string;
+  slot: string;
+  action: 'UNLOAD' | 'KEEP ONBOARD' | 'PICKUP' | 'DELIVERED';
+  location: string;
+  product: string;
+  qty: number;
+}
 
 export interface AppJobItem extends JobSummary {
+  kind: JobKind;
+  target: string;
+  route: string;
+  robot: string;
   isMine: boolean;
+  battery: string;
+  speed: string;
+  distanceRemaining?: string;
+  progressPercent?: number;
+  completedAt?: string;
+  duration?: string;
+  operator?: string;
+  currentStop: string;
+  stopsCount: number;
   routeText: string;
   payloadSummary: string;
+  containers: JobContainerItem[];
+  stopsList: JobStopItem[];
 }
 
 export const MOCK_JOBS: AppJobItem[] = [
   {
-    id: 'JOB-2026-0881',
-    jobNo: 'JOB-2026-0881',
+    id: 'JOB-2026-0812',
+    jobNo: 'JOB-2026-0812',
     workflowCode: 'INBOUND_PUTAWAY',
-    workflowName: 'Inbound Putaway',
-    status: 'RUNNING',
+    workflowName: 'Inbound Putaway (Multi-Drop)',
+    status: 'ASSIGNED',
+    kind: 'waiting',
+    target: 'Rack A · Level 2 · Bin 03',
+    route: 'Dock 01 ➔ Rack A-02 ➔ Rack B-04',
+    robot: 'AMR-01',
     assignedRobotCode: 'AMR-01',
-    etaSeconds: 45,
-    sourceEndpointCode: 'DOCK-01',
-    destinationEndpointCode: 'RACK-A02',
-    activeStepTitle: 'AMR moving to Rack A-02 for operator unload',
-    containerCount: 1,
+    payloadSummary: '3 Containers (BOX-101, BOX-102, BOX-103)',
+    stopsCount: 3,
+    currentStop: 'Stop 2/3: Rack A-02',
     isMine: true,
-    routeText: 'DOCK-01 (Receiving) ➔ RACK-A02 (Storage Zone A)',
-    payloadSummary: 'Slot 1: BOX-101 (45 pcs - Industrial Sensor)',
-    createdAtUtc: new Date(Date.now() - 5 * 60000).toISOString(),
+    battery: '85%',
+    speed: '0.0 m/s',
+    etaSeconds: 0,
+    distanceRemaining: '0m (At Station)',
+    progressPercent: 100,
+    sourceEndpointCode: 'Dock 01',
+    destinationEndpointCode: 'Rack A · Level 2 · Bin 03',
+    activeStepTitle: 'AMR docked. Waiting for operator unload verification',
+    containerCount: 3,
+    routeText: 'Dock 01 ➔ Rack A-02 ➔ Rack B-04',
+    createdAtUtc: new Date(Date.now() - 10 * 60000).toISOString(),
     slots: [
       {
         slotNo: 1,
         slotLabel: 'Slot 1 (Front)',
         containerBarcode: 'BOX-101',
-        productName: 'Optical Proximity Sensor X4',
-        quantity: 45,
+        productName: 'Electronic Components',
+        quantity: 12,
         action: 'UNLOAD',
       },
       {
         slotNo: 2,
         slotLabel: 'Slot 2 (Mid)',
-        action: 'EMPTY',
+        containerBarcode: 'BOX-102',
+        productName: 'Microcontroller Modules',
+        quantity: 8,
+        action: 'KEEP_ONBOARD',
       },
       {
         slotNo: 3,
         slotLabel: 'Slot 3 (Rear)',
-        action: 'EMPTY',
+        containerBarcode: 'BOX-103',
+        productName: 'Wiring Harness Bundles',
+        quantity: 20,
+        action: 'KEEP_ONBOARD',
+      },
+    ],
+    containers: [
+      {
+        code: 'BOX-101',
+        slot: 'Slot 1 (Front)',
+        action: 'UNLOAD',
+        location: 'Rack A · Level 2 · Bin 03',
+        product: 'Electronic Components',
+        qty: 12,
+      },
+      {
+        code: 'BOX-102',
+        slot: 'Slot 2 (Mid)',
+        action: 'KEEP ONBOARD',
+        location: 'Rack B · Level 1 · Bin 01 (Stop 3)',
+        product: 'Microcontroller Modules',
+        qty: 8,
+      },
+      {
+        code: 'BOX-103',
+        slot: 'Slot 3 (Rear)',
+        action: 'KEEP ONBOARD',
+        location: 'Outbound Dock Out 01 (Stop 4)',
+        product: 'Wiring Harness Bundles',
+        qty: 20,
       },
     ],
     steps: [
@@ -50,59 +134,111 @@ export const MOCK_JOBS: AppJobItem[] = [
         title: 'Payload Pre-Check',
         description: 'Verify container latch & weight limit at Dock 01',
         status: 'COMPLETED',
-        targetEndpointCode: 'DOCK-01',
+        targetEndpointCode: 'Dock 01',
       },
       {
         sequenceNo: 2,
         type: 'MOVE',
         title: 'Transit to Zone A',
         description: 'Autonomous navigation along Main Transit Corridor',
-        status: 'EXECUTING',
-        targetEndpointCode: 'RACK-A02',
-        timeRemainingSeconds: 45,
+        status: 'COMPLETED',
+        targetEndpointCode: 'Rack A-02',
       },
       {
         sequenceNo: 3,
         type: 'HUMAN_INTERACTION',
-        title: 'Operator Unload & Barcode Scan',
-        description: 'Confirm physical placement of BOX-101 into Rack A-02 Bin 03',
-        status: 'PENDING',
-        targetEndpointCode: 'RACK-A02',
+        title: 'Operator Handover & Verification',
+        description: 'Confirm physical placement of BOX-101 into Rack A · Level 2 · Bin 03',
+        status: 'WAITING',
+        targetEndpointCode: 'Rack A-02',
+        timeRemainingSeconds: 285,
+      },
+    ],
+    stopsList: [
+      {
+        id: 1,
+        name: 'STOP 1: Inbound Receiving Dock 01',
+        description: 'Batch Pickup: Loaded 3 Totes (BOX-101, 102, 103) · Completed at 09:32',
+        state: 'done',
+      },
+      {
+        id: 2,
+        name: 'STOP 2: Rack A-02',
+        description: 'Unload TOTE BOX-101 into Rack A (Level 2 · Bin 03)',
+        state: 'active',
+        current: true,
+        steps: [
+          {
+            type: 'MOVE',
+            label: 'MOVE: Arrived at Rack A-02 Endpoint (Nav2 Succeeded)',
+            status: 'done',
+          },
+          {
+            type: 'HUMAN_INTERACTION',
+            label: 'HUMAN_INTERACTION: Awaiting Staff Unload of BOX-101',
+            status: 'waiting',
+            timeRemaining: '04:45 remaining',
+          },
+          {
+            type: 'CHECK',
+            label: 'CHECK: Verify Barcode & Rack Alignment',
+            status: 'future',
+          },
+        ],
+      },
+      {
+        id: 3,
+        name: 'STOP 3: Rack B-04 (Storage Zone B)',
+        description: 'Unload TOTE BOX-102 & Retrieve empty tote BOX-055',
+        state: 'future',
+      },
+      {
+        id: 4,
+        name: 'STOP 4: Autonomous Return to Charging Depot',
+        description: 'Multi-stop transport tour completed, auto dock',
+        state: 'future',
       },
     ],
   },
   {
-    id: 'JOB-2026-0882',
-    jobNo: 'JOB-2026-0882',
+    id: 'JOB-2026-0813',
+    jobNo: 'JOB-2026-0813',
     workflowCode: 'OUTBOUND_RETRIEVAL',
-    workflowName: 'Outbound Retrieval',
-    status: 'QUEUED',
+    workflowName: 'Outbound Retrieval Tour',
+    status: 'RUNNING',
+    kind: 'transit',
+    target: 'Outbound Dock Out 01',
+    route: 'Rack B-04 ➔ Dock Out 01',
+    robot: 'AMR-02',
     assignedRobotCode: 'AMR-02',
-    etaSeconds: 210,
-    sourceEndpointCode: 'RACK-B04',
-    destinationEndpointCode: 'DOCK-04',
-    activeStepTitle: 'Awaiting AMR assignment confirmation',
-    containerCount: 2,
-    isMine: false,
-    routeText: 'RACK-B04 (Zone B Bulk) ➔ DOCK-04 (Shipping Bay)',
-    payloadSummary: 'Slot 1 & 2: BOX-204, BOX-205 (90 pcs)',
-    createdAtUtc: new Date(Date.now() - 15 * 60000).toISOString(),
+    payloadSummary: '1 Container (BOX-204)',
+    stopsCount: 2,
+    currentStop: 'Stop 1/2: En Route to Rack B-04',
+    isMine: true,
+    battery: '92%',
+    speed: '0.45 m/s',
+    etaSeconds: 84,
+    distanceRemaining: '18m',
+    progressPercent: 75,
+    sourceEndpointCode: 'Rack B-04',
+    destinationEndpointCode: 'Outbound Dock Out 01',
+    activeStepTitle: 'AMR moving along Aisle B for pickup',
+    containerCount: 1,
+    routeText: 'Rack B-04 ➔ Dock Out 01',
+    createdAtUtc: new Date(Date.now() - 4 * 60000).toISOString(),
     slots: [
       {
         slotNo: 1,
         slotLabel: 'Slot 1 (Front)',
         containerBarcode: 'BOX-204',
-        productName: 'Pneumatic Actuator Valve',
-        quantity: 50,
+        productName: 'Hydraulic Valves',
+        quantity: 8,
         action: 'PICKUP',
       },
       {
         slotNo: 2,
         slotLabel: 'Slot 2 (Mid)',
-        containerBarcode: 'BOX-205',
-        productName: 'Heavy Duty Coupler 20mm',
-        quantity: 40,
-        action: 'PICKUP',
+        action: 'EMPTY',
       },
       {
         slotNo: 3,
@@ -110,127 +246,226 @@ export const MOCK_JOBS: AppJobItem[] = [
         action: 'EMPTY',
       },
     ],
+    containers: [
+      {
+        code: 'BOX-204',
+        slot: 'Slot 1 (Front)',
+        action: 'PICKUP',
+        location: 'Rack B-04 · Level 2 · Bin 01',
+        product: 'Hydraulic Valves',
+        qty: 8,
+      },
+    ],
     steps: [
       {
         sequenceNo: 1,
         type: 'MOVE',
-        title: 'Navigate to Rack B04',
-        description: 'AMR moving from Depot to Bulk Racks',
-        status: 'READY',
-        targetEndpointCode: 'RACK-B04',
+        title: 'Navigate to Rack B-04',
+        description: 'Autonomous navigation via Corridor B',
+        status: 'EXECUTING',
+        targetEndpointCode: 'Rack B-04',
+        timeRemainingSeconds: 84,
       },
       {
         sequenceNo: 2,
         type: 'HUMAN_INTERACTION',
-        title: 'Load Outbound Containers',
-        description: 'Place BOX-204 and BOX-205 onto trays 1 & 2',
+        title: 'Staff Pickup Handover',
+        description: 'Load BOX-204 onto AMR-02 Slot 1',
         status: 'PENDING',
-        targetEndpointCode: 'RACK-B04',
+        targetEndpointCode: 'Rack B-04',
+      },
+    ],
+    stopsList: [
+      {
+        id: 1,
+        name: 'STOP 1: Rack B-04 (Storage Zone B)',
+        description: 'Retrieve TOTE BOX-204 for export shipping',
+        state: 'active',
+        current: true,
+        steps: [
+          {
+            type: 'MOVE',
+            label: 'MOVE: Navigating to Rack B-04 Endpoint (Nav2 Active)',
+            status: 'running',
+            timeRemaining: '01m 24s ETA',
+          },
+          {
+            type: 'HUMAN_INTERACTION',
+            label: 'HUMAN_INTERACTION: Staff picks BOX-204 onto AMR-02 Slot 1',
+            status: 'future',
+          },
+        ],
       },
       {
-        sequenceNo: 3,
-        type: 'MOVE',
-        title: 'Transport to Dock 04',
-        description: 'AMR transit to Outbound Staging',
-        status: 'PENDING',
-        targetEndpointCode: 'DOCK-04',
+        id: 2,
+        name: 'STOP 2: Outbound Shipping Bay 01',
+        description: 'Deliver BOX-204 to dispatch packing staging area',
+        state: 'future',
       },
     ],
   },
   {
-    id: 'JOB-2026-0879',
-    jobNo: 'JOB-2026-0879',
-    workflowCode: 'INTERNAL_RELOCATION',
-    workflowName: 'Internal Relocation',
+    id: 'JOB-2026-0808',
+    jobNo: 'JOB-2026-0808',
+    workflowCode: 'INBOUND_PUTAWAY',
+    workflowName: 'Inbound Putaway',
     status: 'COMPLETED',
+    kind: 'complete',
+    target: 'Rack C · Level 1 · Bin 01',
+    route: 'Dock 01 ➔ Rack C-05 ➔ Rack D-02',
+    robot: 'AMR-01',
     assignedRobotCode: 'AMR-01',
-    sourceEndpointCode: 'RACK-A01',
-    destinationEndpointCode: 'RACK-A09',
-    activeStepTitle: 'Workflow completed successfully',
-    containerCount: 1,
-    isMine: true,
-    routeText: 'RACK-A01 ➔ RACK-A09 (Zone A Inner)',
-    payloadSummary: 'Slot 2: TOTE-088 (20 pcs - Relay Modules)',
-    createdAtUtc: new Date(Date.now() - 45 * 60000).toISOString(),
-    slots: [
-      {
-        slotNo: 1,
-        slotLabel: 'Slot 1 (Front)',
-        action: 'EMPTY',
-      },
-      {
-        slotNo: 2,
-        slotLabel: 'Slot 2 (Mid)',
-        containerBarcode: 'TOTE-088',
-        productName: 'Relay Modules 24V',
-        quantity: 20,
-        action: 'UNLOAD',
-      },
-      {
-        slotNo: 3,
-        slotLabel: 'Slot 3 (Rear)',
-        action: 'EMPTY',
-      },
-    ],
-    steps: [
-      {
-        sequenceNo: 1,
-        type: 'MOVE',
-        title: 'Pickup Transit',
-        description: 'Moved to Rack A01',
-        status: 'COMPLETED',
-      },
-      {
-        sequenceNo: 2,
-        type: 'HUMAN_INTERACTION',
-        title: 'Relocate Tote',
-        description: 'Loaded TOTE-088 onto slot 2',
-        status: 'COMPLETED',
-      },
-      {
-        sequenceNo: 3,
-        type: 'MOVE',
-        title: 'Deliver to Rack A09',
-        description: 'Transit and drop-off verified',
-        status: 'COMPLETED',
-      },
-    ],
-  },
-  {
-    id: 'JOB-2026-0878',
-    jobNo: 'JOB-2026-0878',
-    workflowCode: 'PAYLOAD_RECOVERY',
-    workflowName: 'Payload Recovery',
-    status: 'COMPLETED',
-    assignedRobotCode: 'AMR-02',
-    sourceEndpointCode: 'AISLE-02',
-    destinationEndpointCode: 'DEPOT-01',
-    activeStepTitle: 'Fault cleared & payload safely returned to Depot',
-    containerCount: 1,
+    payloadSummary: '2 Containers Delivered',
+    stopsCount: 3,
+    currentStop: 'Completed',
     isMine: false,
-    routeText: 'AISLE-02 (Corridor) ➔ DEPOT-01 (Maintenance Bay)',
-    payloadSummary: 'Slot 1: TOTE-012 (Secured)',
-    createdAtUtc: new Date(Date.now() - 120 * 60000).toISOString(),
+    battery: '78%',
+    speed: '0.0 m/s',
+    etaSeconds: 0,
+    distanceRemaining: '0m',
+    progressPercent: 100,
+    completedAt: '08:45 AM (Today)',
+    duration: '14m 20s (On Time)',
+    operator: 'Alex Tran (STF-042)',
+    sourceEndpointCode: 'Dock 01',
+    destinationEndpointCode: 'Rack C · Level 1 · Bin 01',
+    activeStepTitle: 'Mission completed successfully',
+    containerCount: 2,
+    routeText: 'Dock 01 ➔ Rack C-05 ➔ Rack D-02',
+    createdAtUtc: new Date(Date.now() - 60 * 60000).toISOString(),
     slots: [
       {
         slotNo: 1,
         slotLabel: 'Slot 1 (Front)',
-        containerBarcode: 'TOTE-012',
-        productName: 'Recovered Payload Box',
-        quantity: 1,
+        containerBarcode: 'BOX-105',
+        productName: 'Control Relays',
+        quantity: 30,
         action: 'UNLOAD',
       },
       {
         slotNo: 2,
         slotLabel: 'Slot 2 (Mid)',
-        action: 'EMPTY',
+        containerBarcode: 'BOX-106',
+        productName: 'Sensor Enclosures',
+        quantity: 15,
+        action: 'UNLOAD',
       },
       {
         slotNo: 3,
         slotLabel: 'Slot 3 (Rear)',
         action: 'EMPTY',
+      },
+    ],
+    containers: [
+      {
+        code: 'BOX-105',
+        slot: 'Slot 1 (Front)',
+        action: 'DELIVERED',
+        location: 'Rack C-05 · Bin 02',
+        product: 'Control Relays',
+        qty: 30,
+      },
+      {
+        code: 'BOX-106',
+        slot: 'Slot 2 (Mid)',
+        action: 'DELIVERED',
+        location: 'Rack D-02 · Bin 01',
+        product: 'Sensor Enclosures',
+        qty: 15,
       },
     ],
     steps: [],
+    stopsList: [
+      {
+        id: 1,
+        name: 'STOP 1: Inbound Dock 01',
+        description: 'Inducted 2 totes · Completed 08:31 AM',
+        state: 'done',
+      },
+      {
+        id: 2,
+        name: 'STOP 2: Rack C-05',
+        description: 'Unloaded BOX-105 into Bin 02 · Completed 08:38 AM',
+        state: 'done',
+      },
+      {
+        id: 3,
+        name: 'STOP 3: Rack D-02',
+        description: 'Unloaded BOX-106 into Bin 01 · Completed 08:45 AM',
+        state: 'done',
+      },
+    ],
+  },
+  {
+    id: 'JOB-2026-0814',
+    jobNo: 'JOB-2026-0814',
+    workflowCode: 'INTERNAL_RELOCATION',
+    workflowName: 'Internal Reallocation',
+    status: 'QUEUED',
+    kind: 'queued',
+    target: 'Rack A · Level 1 · Bin 04',
+    route: 'Dock 01 ➔ Rack A-01',
+    robot: 'Pending Auto-assign',
+    assignedRobotCode: 'Pending Auto-assign',
+    payloadSummary: '1 Container (BOX-301)',
+    stopsCount: 2,
+    currentStop: 'Pending Dispatch',
+    isMine: false,
+    battery: 'N/A',
+    speed: '0.0 m/s',
+    etaSeconds: 120,
+    distanceRemaining: 'N/A',
+    progressPercent: 0,
+    sourceEndpointCode: 'Dock 01',
+    destinationEndpointCode: 'Rack A · Level 1 · Bin 04',
+    activeStepTitle: 'Awaiting AMR dispatch allocation',
+    containerCount: 1,
+    routeText: 'Dock 01 ➔ Rack A-01',
+    createdAtUtc: new Date(Date.now() - 2 * 60000).toISOString(),
+    slots: [
+      {
+        slotNo: 1,
+        slotLabel: 'Slot 1 (Front)',
+        containerBarcode: 'BOX-301',
+        productName: 'Optical Encoders',
+        quantity: 5,
+        action: 'PICKUP',
+      },
+      {
+        slotNo: 2,
+        slotLabel: 'Slot 2 (Mid)',
+        action: 'EMPTY',
+      },
+      {
+        slotNo: 3,
+        slotLabel: 'Slot 3 (Rear)',
+        action: 'EMPTY',
+      },
+    ],
+    containers: [
+      {
+        code: 'BOX-301',
+        slot: 'Slot 1 (Front)',
+        action: 'PICKUP',
+        location: 'Rack A-01 · Level 1 · Bin 04',
+        product: 'Optical Encoders',
+        qty: 5,
+      },
+    ],
+    steps: [],
+    stopsList: [
+      {
+        id: 1,
+        name: 'STOP 1: Staging Area Dock 01',
+        description: 'Waiting for available AMR (Queue #1 · Est: ~2 mins)',
+        state: 'future',
+      },
+      {
+        id: 2,
+        name: 'STOP 2: Rack A-01 (Bin 04)',
+        description: 'Reallocate stock to pick-face slot',
+        state: 'future',
+      },
+    ],
   },
 ];

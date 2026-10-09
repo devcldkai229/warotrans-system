@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -11,7 +12,10 @@ import {
   Bell,
   Check,
   ChevronDown,
+  Clock3,
   LogOut,
+  MapPin,
+  RefreshCw,
   X,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
@@ -21,22 +25,34 @@ import { toast } from '../context/ToastContext';
 import { triggerHaptic } from '../utils/haptics';
 import { BrandMark } from './BrandMark';
 
+const WORK_ZONE_DROPDOWN_ITEMS = [
+  'Inbound Dock 01',
+  'Storage Zone A (Racks A01-A12)',
+  'Storage Zone B (Racks B01-B08)',
+  'Outbound Shipping Bay 01',
+];
+
 interface AppHeaderProps {
   operatorName?: string;
   zone?: string;
   onLogout?: () => void;
   onZonePress?: () => void;
+  onZoneChange?: (zone: string) => void;
   onNotificationsPress?: () => void;
 }
 
 export function AppHeader({
+  operatorName = 'Alex Tran',
   zone = 'Inbound Dock 01',
   onLogout,
   onZonePress,
+  onZoneChange,
   onNotificationsPress,
 }: AppHeaderProps) {
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isZoneDropdownOpen, setIsZoneDropdownOpen] = useState(false);
+  const [isAvatarDropdownOpen, setIsAvatarDropdownOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
 
   const handleOpenNotifications = () => {
@@ -44,7 +60,9 @@ export function AppHeader({
     if (onNotificationsPress) {
       onNotificationsPress();
     } else {
-      setIsNotifModalOpen(true);
+      setIsZoneDropdownOpen(false);
+      setIsAvatarDropdownOpen(false);
+      setIsNotifModalOpen(!isNotifModalOpen);
     }
   };
 
@@ -66,7 +84,13 @@ export function AppHeader({
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
-              onZonePress?.();
+              if (onZonePress) {
+                onZonePress();
+              } else {
+                setIsNotifModalOpen(false);
+                setIsAvatarDropdownOpen(false);
+                setIsZoneDropdownOpen(!isZoneDropdownOpen);
+              }
             }}
             style={({ pressed }) => [
               styles.zoneButton,
@@ -80,6 +104,58 @@ export function AppHeader({
           </Pressable>
         </View>
       </View>
+
+      {/* Floating Work Zone Dropdown Menu (Anchored under Header) */}
+      {isZoneDropdownOpen && (
+        <>
+          <Pressable
+            style={styles.dropdownBackdrop}
+            onPress={() => setIsZoneDropdownOpen(false)}
+          />
+          <View style={styles.zoneDropdownMenu}>
+            <Text style={styles.zoneDropdownEyebrow}>SCR-STF-02: WORK ZONE</Text>
+            {WORK_ZONE_DROPDOWN_ITEMS.map((item) => {
+              const isSelected =
+                zone === item ||
+                (item.startsWith('Inbound') && zone.includes('Inbound')) ||
+                (item.startsWith('Storage Zone A') && zone.includes('Zone A')) ||
+                (item.startsWith('Storage Zone B') && zone.includes('Zone B')) ||
+                (item.startsWith('Outbound') && zone.includes('Outbound'));
+
+              return (
+                <Pressable
+                  key={item}
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    onZoneChange?.(item);
+                    setIsZoneDropdownOpen(false);
+                    toast.info(`Switched zone to: ${item}`);
+                  }}
+                  style={[
+                    styles.zoneDropdownItem,
+                    isSelected && styles.zoneDropdownItemActive,
+                  ]}
+                >
+                  <MapPin
+                    size={13}
+                    color={isSelected ? colors.primary : colors.textMuted}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={[
+                      styles.zoneDropdownItemText,
+                      isSelected && styles.zoneDropdownItemTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      )}
 
       {/* Right Actions: Bell + Logout + Avatar */}
       <View style={styles.rightGroup}>
@@ -116,136 +192,187 @@ export function AppHeader({
         )}
 
         {/* User Avatar */}
-        <View style={styles.avatarCircle}>
+        <Pressable
+          onPress={() => {
+            triggerHaptic('tap');
+            setIsZoneDropdownOpen(false);
+            setIsNotifModalOpen(false);
+            setIsAvatarDropdownOpen(!isAvatarDropdownOpen);
+          }}
+          style={({ pressed }) => [
+            styles.avatarCircle,
+            pressed && { opacity: 0.8 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="User profile menu"
+        >
           <Text style={styles.avatarText}>AT</Text>
-        </View>
+        </Pressable>
       </View>
 
-      {/* Real-Time Facility Notifications Modal */}
-      <Modal
-        visible={isNotifModalOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setIsNotifModalOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.sheetContainer}>
-            {/* Top Drag Handle Indicator */}
-            <View style={styles.dragHandle} />
-
-            <View style={styles.sheetHeader}>
-              <View>
-                <Text style={styles.sheetEyebrow}>FACILITY TELEMETRY</Text>
-                <Text style={styles.sheetTitle}>Real-Time Notifications</Text>
-              </View>
+      {/* Floating Notifications Popover (Anchored under Bell, matching Prototype 1:1) */}
+      {isNotifModalOpen && (
+        <>
+          <Pressable
+            style={styles.dropdownBackdrop}
+            onPress={() => setIsNotifModalOpen(false)}
+          />
+          <View style={styles.notifDropdownMenu}>
+            <Text style={styles.notifDropdownEyebrow}>NOTIFICATIONS</Text>
+            <View style={styles.notifDropdownList}>
               <Pressable
-                onPress={() => setIsNotifModalOpen(false)}
-                style={styles.closeBtn}
+                style={({ pressed }) => [
+                  styles.notifDropdownItem,
+                  pressed && styles.notifDropdownItemPressed,
+                ]}
+                onPress={handleDismissNotifications}
               >
-                <X size={18} color={colors.textSecondary} />
+                <View style={styles.notifItemHeader}>
+                  <View style={styles.notifIconSuccess}>
+                    <Check size={12} color={colors.success} strokeWidth={2.5} />
+                  </View>
+                  <Text style={styles.notifItemTitle}>AMR-01 Arrived</Text>
+                </View>
+                <Text style={styles.notifItemDesc}>
+                  Robot is awaiting handover at Rack A-02.
+                </Text>
+                <Text style={styles.notifItemTime}>Just now</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.notifDropdownItem,
+                  styles.notifDropdownItemWarning,
+                  pressed && styles.notifDropdownItemPressed,
+                ]}
+                onPress={handleDismissNotifications}
+              >
+                <View style={styles.notifItemHeader}>
+                  <View style={styles.notifIconWarning}>
+                    <AlertTriangle size={12} color="#dc2626" strokeWidth={2.5} />
+                  </View>
+                  <Text style={[styles.notifItemTitle, { color: '#dc2626' }]}>
+                    Deadlock Resolved
+                  </Text>
+                </View>
+                <Text style={styles.notifItemDesc}>
+                  AMR-02 yielded right-of-way in Aisle 2.
+                </Text>
+                <Text style={styles.notifItemTime}>3m ago</Text>
               </Pressable>
             </View>
+          </View>
+        </>
+      )}
 
-            <View style={styles.notificationsList}>
-              {/* Alert Item 1 */}
-              <View style={styles.notifItem}>
-                <View style={styles.notifIconSuccess}>
-                  <Check size={14} color={colors.success} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.notifItemTop}>
-                    <Text style={styles.notifItemTitle}>AMR-01 Arrived</Text>
-                    <Text style={styles.notifTime}>Just now</Text>
-                  </View>
-                  <Text style={styles.notifItemDesc}>
-                    Robot is awaiting physical cargo handover at Rack A-02.
-                  </Text>
-                </View>
-              </View>
-
-              {/* Alert Item 2 */}
-              <View style={styles.notifItem}>
-                <View style={styles.notifIconWarning}>
-                  <AlertTriangle size={14} color={colors.warning} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.notifItemTop}>
-                    <Text style={styles.notifItemTitleWarning}>Deadlock Resolved</Text>
-                    <Text style={styles.notifTime}>3m ago</Text>
-                  </View>
-                  <Text style={styles.notifItemDesc}>
-                    AMR-02 yielded right-of-way in Aisle 2 corridor. Normal Nav2 path clear.
-                  </Text>
-                </View>
-              </View>
+      {/* Floating Avatar Menu (Anchored under Avatar, matching Prototype 1:1) */}
+      {isAvatarDropdownOpen && (
+        <>
+          <Pressable
+            style={styles.dropdownBackdrop}
+            onPress={() => setIsAvatarDropdownOpen(false)}
+          />
+          <View style={styles.avatarDropdownMenu}>
+            <Text style={styles.avatarName}>{operatorName || 'Alex Tran'}</Text>
+            <Text style={styles.avatarRole}>Warehouse Operator · {zone}</Text>
+            <View style={styles.dropdownDivider} />
+            <View style={styles.shiftRow}>
+              <Clock3 size={13} color={colors.textSecondary} />
+              <Text style={styles.shiftText}>Current Shift: Morning (06:00 - 14:00)</Text>
             </View>
-
+            <View style={styles.dropdownDivider} />
             <Pressable
-              onPress={handleDismissNotifications}
               style={({ pressed }) => [
-                styles.markReadBtn,
-                pressed && styles.markReadBtnPressed,
+                styles.avatarLogoutBtn,
+                pressed && { backgroundColor: '#fee2e2' },
               ]}
+              onPress={() => {
+                triggerHaptic('tap');
+                setIsAvatarDropdownOpen(false);
+                setIsLogoutModalOpen(true);
+              }}
             >
-              <Text style={styles.markReadText}>Dismiss & Mark As Read</Text>
+              <LogOut size={13} color={colors.danger} />
+              <Text style={styles.avatarLogoutText}>Log out</Text>
             </Pressable>
           </View>
-        </View>
-      </Modal>
+        </>
+      )}
 
-      {/* Shift Logout Confirmation Modal */}
-      <Modal
-        visible={isLogoutModalOpen}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setIsLogoutModalOpen(false)}
-      >
-        <View style={styles.logoutModalOverlay}>
-          <View style={styles.logoutDialog}>
-            <View style={styles.logoutIconCircle}>
-              <LogOut size={22} color={colors.danger} />
-            </View>
-            <Text style={styles.logoutDialogTitle}>End Shift & Sign Out?</Text>
-            <Text style={styles.logoutDialogDesc}>
-              Are you sure you want to sign out of the active shift console? Your current work zone and assigned queue will remain registered in WES.
-            </Text>
+      {/* Shift Logout Confirmation Dialog */}
+      {(() => {
+        if (!isLogoutModalOpen) return null;
+        const modalBody = (
+          <View style={styles.logoutModalOverlay}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setIsLogoutModalOpen(false)}
+            />
+            <View style={styles.logoutDialog}>
+              <View style={styles.logoutIconCircle}>
+                <LogOut size={22} color={colors.danger} />
+              </View>
+              <Text style={styles.logoutDialogTitle}>End Shift & Sign Out?</Text>
+              <Text style={styles.logoutDialogDesc}>
+                Are you sure you want to sign out of the active shift console? Your current work zone and assigned queue will remain registered in WES.
+              </Text>
 
-            <View style={styles.logoutBtnRow}>
-              <Pressable
-                onPress={() => {
-                  triggerHaptic('tap');
-                  setIsLogoutModalOpen(false);
-                }}
-                style={({ pressed }) => [
-                  styles.cancelLogoutBtn,
-                  pressed && styles.cancelLogoutBtnPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel sign out"
-              >
-                <Text style={styles.cancelLogoutText}>Cancel</Text>
-              </Pressable>
+              <View style={styles.logoutBtnRow}>
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    setIsLogoutModalOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.cancelLogoutBtn,
+                    pressed && styles.cancelLogoutBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel sign out"
+                >
+                  <Text style={styles.cancelLogoutText}>Cancel</Text>
+                </Pressable>
 
-              <Pressable
-                onPress={() => {
-                  triggerHaptic('warning');
-                  setIsLogoutModalOpen(false);
-                  onLogout?.();
-                  toast.info('Logged out from shift console.');
-                }}
-                style={({ pressed }) => [
-                  styles.confirmLogoutBtn,
-                  pressed && styles.confirmLogoutBtnPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Confirm sign out"
-              >
-                <Text style={styles.confirmLogoutText}>Sign Out</Text>
-              </Pressable>
+                <Pressable
+                  onPress={() => {
+                    triggerHaptic('warning');
+                    setIsLogoutModalOpen(false);
+                    onLogout?.();
+                    toast.info('Logged out from shift console.');
+                  }}
+                  style={({ pressed }) => [
+                    styles.confirmLogoutBtn,
+                    pressed && styles.confirmLogoutBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm sign out"
+                >
+                  <Text style={styles.confirmLogoutText}>Sign Out</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        );
+
+        if (Platform.OS === 'web') {
+          return (
+            <View style={styles.webLogoutAbsoluteOverlay} pointerEvents="auto">
+              {modalBody}
+            </View>
+          );
+        }
+
+        return (
+          <Modal
+            visible={isLogoutModalOpen}
+            animationType="fade"
+            transparent
+            onRequestClose={() => setIsLogoutModalOpen(false)}
+          >
+            {modalBody}
+          </Modal>
+        );
+      })()}
     </View>
   );
 }
@@ -255,7 +382,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 48 : 12,
+    paddingBottom: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -303,6 +431,59 @@ const styles = StyleSheet.create({
   },
   chevron: {
     marginLeft: 3,
+  },
+  dropdownBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: -1200,
+    zIndex: 99,
+  },
+  zoneDropdownMenu: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 92 : 56,
+    left: 16,
+    width: 250,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 6,
+    zIndex: 100,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  zoneDropdownEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    textTransform: 'uppercase',
+  },
+  zoneDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  zoneDropdownItemActive: {
+    backgroundColor: 'rgba(0, 92, 209, 0.1)',
+  },
+  zoneDropdownItemText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  zoneDropdownItemTextActive: {
+    color: colors.primary,
+    fontWeight: '900',
   },
   rightGroup: {
     flexDirection: 'row',
@@ -368,125 +549,151 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontFamily: typography.fontMono,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
-  },
-  sheetContainer: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16,
-    paddingBottom: 28,
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    ...shadows.sheet,
-  },
-  dragHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#cbd5e1',
-    alignSelf: 'center',
-    marginBottom: 12,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 10,
-    marginBottom: 12,
-  },
-  sheetEyebrow: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 0.8,
-  },
-  sheetTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  notificationsList: {
-    gap: 10,
-    marginBottom: 16,
-  },
-  notifItem: {
-    flexDirection: 'row',
-    gap: 10,
-    backgroundColor: colors.surfaceSubtle,
+  notifDropdownMenu: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 92 : 56,
+    right: 12,
+    width: 288,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'flex-start',
+    borderColor: '#e2e8f0',
+    padding: 8,
+    zIndex: 100,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  notifDropdownEyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  notifDropdownList: {
+    gap: 4,
+  },
+  notifDropdownItem: {
+    padding: 8,
+    borderRadius: 8,
+    gap: 2,
+  },
+  notifDropdownItemPressed: {
+    backgroundColor: 'rgba(0, 92, 209, 0.08)',
+  },
+  notifDropdownItemWarning: {
+    backgroundColor: 'transparent',
+  },
+  notifItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   notifIconSuccess: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   notifIconWarning: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  notifItemTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
   notifItemTitle: {
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
-  },
-  notifItemTitleWarning: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#b45309',
-  },
-  notifTime: {
-    fontSize: 10,
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
   },
   notifItemDesc: {
     fontSize: 11,
     color: colors.textSecondary,
+    paddingLeft: 32,
     lineHeight: 15,
   },
-  markReadBtn: {
-    backgroundColor: colors.surfaceSubtle,
+  notifItemTime: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.textMuted,
+    paddingLeft: 32,
+    marginTop: 2,
+  },
+  avatarDropdownMenu: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 92 : 56,
+    right: 12,
+    width: 224,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
+    borderColor: '#e2e8f0',
+    padding: 10,
+    zIndex: 100,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    elevation: 10,
   },
-  markReadBtnPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  markReadText: {
-    fontSize: 12,
-    fontWeight: '800',
+  avatarName: {
+    fontSize: 13,
+    fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  avatarRole: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontFamily: typography.fontSans,
+  },
+  dropdownDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 8,
+  },
+  shiftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  shiftText: {
+    fontSize: 11,
+    color: colors.textPrimary,
+    fontWeight: '500',
+    flex: 1,
+  },
+  avatarLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderRadius: 6,
+  },
+  avatarLogoutText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.danger,
+  },
+  webLogoutAbsoluteOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: -1000,
+    zIndex: 999,
   },
   logoutModalOverlay: {
     flex: 1,
