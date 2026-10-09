@@ -36,7 +36,6 @@ public static class FleetModule
     {
         var group = endpoints.MapGroup("/api/fleet");
         group.MapGet("/ping", () => Results.Ok(new { module = "fleet" })).AllowAnonymous();
-        group.MapGet("/ping", () => Results.Ok(new { module = "fleet" }));
         group.MapRegisterRobot();
         group.MapGetRobot();
         group.MapListRobots();
