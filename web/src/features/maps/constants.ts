@@ -1,4 +1,4 @@
-import type { EndpointType, ZoneType } from '@/shared/api/contracts'
+import type { EdgeDirection, EndpointType, ZoneType } from '@/shared/api/contracts'
 
 export interface EndpointTemplate {
   type: EndpointType
@@ -31,4 +31,16 @@ export const ZONE_TEMPLATES: ZoneTemplate[] = [
   { type: 'NARROW_AREA', title: 'Narrow area', description: 'Corridor that fits a limited number of Robots' },
   { type: 'OPERATIONAL_AREA', title: 'Operational area', description: 'Area with its own speed and capacity rules' },
   { type: 'RESTRICTED_AREA', title: 'Restricted area', description: 'Robots must not enter this area' },
+]
+
+export interface EdgeTemplate {
+  direction: EdgeDirection
+  title: string
+  description: string
+}
+
+/** One entry per backend EdgeDirection (rules/05). */
+export const EDGE_TEMPLATES: EdgeTemplate[] = [
+  { direction: 'ONE_WAY', title: 'One-way edge', description: 'Path Robots may travel in one direction only' },
+  { direction: 'BIDIRECTIONAL', title: 'Two-way edge', description: 'Path Robots may travel in both directions' },
 ]

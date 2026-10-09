@@ -2,7 +2,6 @@ import { useState } from 'react'
 import type {
   BindingSourceType,
   InputBinding,
-  StepFailurePolicy,
   StepType,
   Workflow,
   WorkflowStep,
@@ -14,11 +13,16 @@ import { Icon } from '@/shared/ui/Icon'
 import {
   BINDING_SOURCES,
   CURRENT_MOVEMENT_PATHS,
-  FAILURE_POLICIES,
-  STEP_INPUT_NAMES,
+  CURRENT_MOVEMENT_TYPES,
+  INPUT_SPECS,
+  OUTPUT_SPECS,
   SUPPORTED_STEP_TYPES,
   VARIABLE_DATA_TYPES,
   VARIABLE_SOURCES,
+  accepts,
+  allowsConstant,
+  type InputSpec,
+  type ValueType,
 } from './constants'
 import './workflows.css'
 
@@ -27,88 +31,167 @@ interface WorkflowBuilderPanelProps {
   onChange: (workflow: Workflow) => void
 }
 
-/** Outputs of steps that run before `step`, as `<stepKey>.<outputName>` (a Workflow must not bind from a later step). */
-function earlierOutputs(tasks: WorkflowTask[], taskIndex: number, step: WorkflowStep): string[] {
-  const result: string[] = []
+interface ValueRef {
+  ref: string
+  type: ValueType
+}
+
+interface BindingContext {
+  variables: WorkflowVariable[]
+  /** Outputs of the Steps that run before this one. */
+  earlier: ValueRef[]
+}
+
+interface Candidate {
+  value: string
+  label: string
+}
+
+/** Outputs of steps that run before `step` (a Workflow must not bind from a later step), typed from OUTPUT_SPECS. */
+function earlierOutputs(tasks: WorkflowTask[], taskIndex: number, step: WorkflowStep): ValueRef[] {
+  const result: ValueRef[] = []
   tasks.forEach((task, index) => {
     if (index > taskIndex) return
     task.steps.forEach((candidate) => {
       const earlier = index < taskIndex || candidate.sequenceNo < step.sequenceNo
-      if (earlier) (candidate.outputs ?? []).forEach((output) => result.push(`${candidate.stepKey}.${output}`))
+      if (earlier) {
+        OUTPUT_SPECS[candidate.stepType].forEach((output) =>
+          result.push({ ref: `${candidate.stepKey}.${output.name}`, type: output.type }),
+        )
+      }
     })
   })
   return result
 }
 
-function defaultPath(sourceType: BindingSourceType, variableKeys: string[], outputs: string[]): string {
-  if (sourceType === 'WORKFLOW_VAR') return variableKeys[0] ?? ''
-  if (sourceType === 'CURRENT_MOVEMENT') return CURRENT_MOVEMENT_PATHS[0]
-  if (sourceType === 'STEP_OUTPUT') return outputs[0] ?? ''
-  return ''
+const specFor = (stepType: StepType, name: string): InputSpec =>
+  INPUT_SPECS[stepType].find((spec) => spec.name === name) ?? { name, type: 'ANY' }
+
+/** Values a source may offer to an input: only those whose type the input accepts. */
+function candidatesFor(spec: InputSpec, source: BindingSourceType, ctx: BindingContext): Candidate[] {
+  if (source === 'WORKFLOW_VAR') {
+    return ctx.variables
+      .filter((variable) => accepts(spec.type, variable.dataType))
+      .map((variable) => ({ value: variable.key, label: `${variable.key} (${variable.dataType})` }))
+  }
+  if (source === 'CURRENT_MOVEMENT') {
+    return CURRENT_MOVEMENT_PATHS.filter((path) => accepts(spec.type, CURRENT_MOVEMENT_TYPES[path])).map((path) => ({
+      value: path,
+      label: `${path} (${CURRENT_MOVEMENT_TYPES[path]})`,
+    }))
+  }
+  if (source === 'STEP_OUTPUT') {
+    return ctx.earlier
+      .filter((output) => accepts(spec.type, output.type))
+      .map((output) => ({ value: output.ref, label: `${output.ref} (${output.type})` }))
+  }
+  return []
+}
+
+function sourceAvailable(spec: InputSpec, source: BindingSourceType, ctx: BindingContext): boolean {
+  if (source === 'CONSTANT') return Boolean(spec.options) || allowsConstant(spec.type)
+  // An input with a fixed list of choices cannot be fed from anywhere else.
+  if (spec.options) return false
+  return candidatesFor(spec, source, ctx).length > 0
+}
+
+function initialPath(spec: InputSpec, source: BindingSourceType, ctx: BindingContext): string {
+  if (source === 'CONSTANT') return spec.options?.[0] ?? (spec.type === 'BOOL' ? 'true' : '')
+  return candidatesFor(spec, source, ctx)[0]?.value ?? ''
+}
+
+/** The binding a new input starts with, or null when nothing compatible exists yet. */
+function firstBinding(spec: InputSpec, ctx: BindingContext): InputBinding | null {
+  if (spec.defaultBinding) return spec.defaultBinding
+  const order: BindingSourceType[] = ['CURRENT_MOVEMENT', 'WORKFLOW_VAR', 'STEP_OUTPUT', 'CONSTANT']
+  const source = order.find((candidate) => sourceAvailable(spec, candidate, ctx))
+  return source ? { sourceType: source, path: initialPath(spec, source, ctx) } : null
 }
 
 interface BindingRowProps {
   input: string
+  spec: InputSpec
   binding: InputBinding
-  variableKeys: string[]
-  outputs: string[]
+  ctx: BindingContext
   onChange: (binding: InputBinding) => void
   onRemove: () => void
 }
 
-function BindingRow({ input, binding, variableKeys, outputs, onChange, onRemove }: BindingRowProps) {
-  const options =
-    binding.sourceType === 'WORKFLOW_VAR'
-      ? variableKeys
-      : binding.sourceType === 'CURRENT_MOVEMENT'
-        ? CURRENT_MOVEMENT_PATHS
-        : binding.sourceType === 'STEP_OUTPUT'
-          ? outputs
-          : null
+function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRowProps) {
+  const list = binding.sourceType === 'CONSTANT' ? null : candidatesFor(spec, binding.sourceType, ctx)
+  const listed = list?.some((candidate) => candidate.value === binding.path) ?? false
 
   return (
     <div className="wf-bind">
-      <span className="wf-bind__name" title={input}>
-        {input}
-      </span>
-      <i>←</i>
-      <select
-        value={binding.sourceType}
-        aria-label={`${input} source`}
-        onChange={(event) => {
-          const sourceType = event.target.value as BindingSourceType
-          onChange({ sourceType, path: defaultPath(sourceType, variableKeys, outputs) })
-        }}
-      >
-        {BINDING_SOURCES.map((source) => (
-          <option key={source} value={source}>
-            {source}
-          </option>
-        ))}
-      </select>
-      {options ? (
+      <div className="wf-bind__head">
+        <span className="wf-bind__name" title={input}>
+          {input}
+          {spec.required ? <b title="Required"> *</b> : null}
+        </span>
+        <small>{spec.type}</small>
+        {spec.required ? null : (
+          <button type="button" className="wf-bind__x" onClick={onRemove} aria-label={`Remove ${input}`}>
+            <Icon name="close" size={11} />
+          </button>
+        )}
+      </div>
+
+      <div className="wf-bind__pick">
         <select
-          value={options.includes(binding.path as never) ? binding.path : ''}
-          aria-label={`${input} path`}
-          onChange={(event) => onChange({ ...binding, path: event.target.value })}
+          value={binding.sourceType}
+          aria-label={`${input} source`}
+          onChange={(event) => {
+            const sourceType = event.target.value as BindingSourceType
+            onChange({ sourceType, path: initialPath(spec, sourceType, ctx) })
+          }}
         >
-          {!options.includes(binding.path as never) ? <option value="">Select…</option> : null}
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
+          {BINDING_SOURCES.map((source) => (
+            <option
+              key={source}
+              value={source}
+              disabled={source !== binding.sourceType && !sourceAvailable(spec, source, ctx)}
+            >
+              {source}
             </option>
           ))}
         </select>
-      ) : (
-        <input
-          value={binding.path}
-          aria-label={`${input} constant`}
-          onChange={(event) => onChange({ ...binding, path: event.target.value })}
-        />
-      )}
-      <button type="button" className="wf-bind__x" onClick={onRemove} aria-label={`Remove ${input}`}>
-        <Icon name="close" size={11} />
-      </button>
+
+        {list ? (
+          <select
+            value={listed ? binding.path : ''}
+            aria-label={`${input} value`}
+            onChange={(event) => onChange({ ...binding, path: event.target.value })}
+          >
+            {!listed ? <option value="">Select…</option> : null}
+            {list.map((candidate) => (
+              <option key={candidate.value} value={candidate.value}>
+                {candidate.label}
+              </option>
+            ))}
+          </select>
+        ) : spec.options || spec.type === 'BOOL' ? (
+          <select
+            value={binding.path}
+            aria-label={`${input} value`}
+            onChange={(event) => onChange({ ...binding, path: event.target.value })}
+          >
+            {!(spec.options ?? ['true', 'false']).includes(binding.path) ? <option value="">Select…</option> : null}
+            {(spec.options ?? ['true', 'false']).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type={spec.type === 'INT' || spec.type === 'DECIMAL' ? 'number' : 'text'}
+            step={spec.type === 'DECIMAL' ? 'any' : undefined}
+            value={binding.path}
+            aria-label={`${input} value`}
+            onChange={(event) => onChange({ ...binding, path: event.target.value })}
+          />
+        )}
+      </div>
     </div>
   )
 }
@@ -118,7 +201,6 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
   const [expandedStep, setExpandedStep] = useState<string | null>(workflow.tasks[0]?.steps[0]?.id ?? null)
   const [stepMenuFor, setStepMenuFor] = useState<string | null>(null)
   const isDraft = workflow.status === 'DRAFT'
-  const variableKeys = workflow.variablesSchema.map((variable) => variable.key)
 
   const patch = (changes: Partial<Workflow>) => onChange({ ...workflow, ...changes })
 
@@ -170,25 +252,27 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
         name: `${stepType}_${next}`,
         stepType,
         sequenceNo: next,
-        inputBindings: {},
+        inputBindings: Object.fromEntries(
+          INPUT_SPECS[stepType]
+            .filter((spec) => spec.required && spec.defaultBinding)
+            .map((spec) => [spec.name, spec.defaultBinding as InputBinding]),
+        ),
+        // Not edited in the builder, but the columns are NOT NULL: a failed Step stops and waits for an Admin.
         timeoutSeconds: 300,
         maxAttempts: 1,
         retryBackoffSeconds: 0,
-        onFailure: 'FAIL_JOB',
-        outputs: [],
+        onFailure: 'PAUSE_FOR_OPERATOR',
+        outputs: OUTPUT_SPECS[stepType].map((output) => output.name),
       }
       return { ...task, steps: [...task.steps, step] }
     })
     setStepMenuFor(null)
   }
 
-  function addInput(taskId: string, step: WorkflowStep) {
-    const used = Object.keys(step.inputBindings)
-    const name = STEP_INPUT_NAMES[step.stepType].find((candidate) => !used.includes(candidate))
-    if (!name) return
-    updateStep(taskId, step.id, {
-      inputBindings: { ...step.inputBindings, [name]: { sourceType: 'CONSTANT', path: '' } },
-    })
+  function addInput(taskId: string, step: WorkflowStep, name: string, ctx: BindingContext) {
+    const binding = firstBinding(specFor(step.stepType, name), ctx)
+    if (!name || !binding) return
+    updateStep(taskId, step.id, { inputBindings: { ...step.inputBindings, [name]: binding } })
   }
 
   function setBinding(taskId: string, step: WorkflowStep, input: string, binding: InputBinding | null) {
@@ -201,21 +285,12 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
   return (
     <div className="wf">
       <label className="wf__field">
-        <span>Workflow code</span>
-        <input
-          value={workflow.code}
-          disabled={!isDraft}
-          onChange={(event) => patch({ code: event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') })}
-        />
+        <span>Name</span>
+        <input value={workflow.name} onChange={(event) => patch({ name: event.target.value })} />
       </label>
       <p className="wf__meta">
         Version {workflow.versionNo} · {workflow.status}
       </p>
-
-      <label className="wf__field">
-        <span>Name</span>
-        <input value={workflow.name} onChange={(event) => patch({ name: event.target.value })} />
-      </label>
 
       <section className="wf__section">
         <header>
@@ -308,16 +383,36 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                 onClick={() => setExpandedTask(taskOpen ? null : task.id)}
               >
                 <Icon name={taskOpen ? 'chevronDown' : 'chevronRight'} size={12} />
-                <strong>{task.name}</strong>
+                <strong>{task.name || task.taskKey}</strong>
                 <em>{task.steps.length}</em>
               </button>
 
               {taskOpen ? (
                 <div className="wf-task__steps">
+                  <label className="wf-name">
+                    <span>Task name</span>
+                    <input
+                      value={task.name}
+                      disabled={!isDraft}
+                      aria-label="Task name"
+                      onChange={(event) => updateTask(task.id, (current) => ({ ...current, name: event.target.value }))}
+                    />
+                    <small>Key {task.taskKey}</small>
+                  </label>
                   {task.steps.map((step) => {
                     const stepOpen = expandedStep === step.id
                     const usedInputs = Object.keys(step.inputBindings)
-                    const canAddInput = STEP_INPUT_NAMES[step.stepType].some((name) => !usedInputs.includes(name))
+                    const ctx: BindingContext = {
+                      variables: workflow.variablesSchema,
+                      earlier: earlierOutputs(workflow.tasks, taskIndex, step),
+                    }
+                    // Only inputs the Step Type defines, whose precondition holds and that can be fed from somewhere.
+                    const addable = INPUT_SPECS[step.stepType].filter((spec) => {
+                      if (usedInputs.includes(spec.name)) return false
+                      const gate = spec.onlyWhen && step.inputBindings[spec.onlyWhen.input]
+                      if (spec.onlyWhen && !(gate?.sourceType === 'CONSTANT' && gate.path === spec.onlyWhen.value)) return false
+                      return firstBinding(spec, ctx) !== null
+                    })
                     return (
                       <div key={step.id} className={`wf-step${stepOpen ? ' is-open' : ''}`}>
                         <button
@@ -332,86 +427,65 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                             <small>
                               Step {step.sequenceNo} · {step.stepType}
                             </small>
-                            <strong>{step.name}</strong>
+                            <strong>{step.name || step.stepKey}</strong>
                           </span>
                           <Icon name={stepOpen ? 'chevronDown' : 'chevronRight'} size={11} />
                         </button>
 
                         {stepOpen ? (
                           <div className="wf-step__body">
+                            <label className="wf-name">
+                              <span>Step name</span>
+                              <input
+                                value={step.name}
+                                disabled={!isDraft}
+                                aria-label="Step name"
+                                onChange={(event) => updateStep(task.id, step.id, { name: event.target.value })}
+                              />
+                              <small>Key {step.stepKey}</small>
+                            </label>
+
                             <h5>Inputs</h5>
                             {usedInputs.length === 0 ? <p className="wf-none">None</p> : null}
                             {Object.entries(step.inputBindings).map(([input, binding]) => (
                               <BindingRow
                                 key={input}
                                 input={input}
+                                spec={specFor(step.stepType, input)}
                                 binding={binding}
-                                variableKeys={variableKeys}
-                                outputs={earlierOutputs(workflow.tasks, taskIndex, step)}
+                                ctx={ctx}
                                 onChange={(next) => setBinding(task.id, step, input, next)}
                                 onRemove={() => setBinding(task.id, step, input, null)}
                               />
                             ))}
-                            {canAddInput ? (
-                              <button type="button" className="wf__ghost" onClick={() => addInput(task.id, step)}>
-                                + Input
-                              </button>
+                            {addable.length > 0 ? (
+                              <select
+                                className="wf__addinput"
+                                value=""
+                                aria-label="Add input"
+                                onChange={(event) => addInput(task.id, step, event.target.value, ctx)}
+                              >
+                                <option value="">+ Add input…</option>
+                                {addable.map((spec) => (
+                                  <option key={spec.name} value={spec.name}>
+                                    {spec.name} ({spec.type})
+                                  </option>
+                                ))}
+                              </select>
                             ) : null}
 
                             <h5>Outputs</h5>
-                            <p className="wf-outputs">{(step.outputs ?? []).join(', ') || 'None'}</p>
-
-                            <h5>Execution</h5>
-                            <div className="wf-exec">
-                              <label>
-                                <span>On failure</span>
-                                <select
-                                  value={step.onFailure}
-                                  onChange={(event) =>
-                                    updateStep(task.id, step.id, { onFailure: event.target.value as StepFailurePolicy })
-                                  }
-                                >
-                                  {FAILURE_POLICIES.map((policy) => (
-                                    <option key={policy} value={policy}>
-                                      {policy}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label>
-                                <span>Timeout (s)</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={step.timeoutSeconds}
-                                  onChange={(event) =>
-                                    updateStep(task.id, step.id, { timeoutSeconds: Number(event.target.value) })
-                                  }
-                                />
-                              </label>
-                              <label>
-                                <span>Max attempts</span>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={step.maxAttempts}
-                                  onChange={(event) =>
-                                    updateStep(task.id, step.id, { maxAttempts: Number(event.target.value) })
-                                  }
-                                />
-                              </label>
-                              <label>
-                                <span>Retry backoff (s)</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={step.retryBackoffSeconds}
-                                  onChange={(event) =>
-                                    updateStep(task.id, step.id, { retryBackoffSeconds: Number(event.target.value) })
-                                  }
-                                />
-                              </label>
-                            </div>
+                            {OUTPUT_SPECS[step.stepType].length === 0 ? (
+                              <p className="wf-none">None</p>
+                            ) : (
+                              <ul className="wf-outs">
+                                {OUTPUT_SPECS[step.stepType].map((output) => (
+                                  <li key={output.name}>
+                                    {output.name} <small>{output.type}</small>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         ) : null}
                       </div>

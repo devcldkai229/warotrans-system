@@ -141,23 +141,6 @@
   gap: 16px;
 }
 
-.shell__fleet {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 14px;
-  border-radius: 999px;
-  background: var(--green-soft);
-  border: 1px solid var(--green-line);
-  color: var(--green-ink);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.shell__fleet .dot {
-  color: var(--green);
-}
-
 .shell__bell {
   position: relative;
   display: grid;

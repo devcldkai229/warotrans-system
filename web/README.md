@@ -1,3 +1,31 @@
+# WaroTrans Web (Admin console)
+
+## Run locally
+
+1. Start PostgreSQL and MongoDB: `docker compose up -d postgres mongodb` in `infrastructure/` (copy `.env.example` to `.env` first).
+2. Start the API: `dotnet run --project backend/src/WaroTrans.Host --launch-profile http` (listens on `http://localhost:5090`).
+3. Start the web app: `npm run dev` in `web/` and open `http://localhost:5173`.
+
+Open the app on `localhost`, not `127.0.0.1`: the API only allows the origins listed under `Cors:AllowedOrigins`,
+and the refresh cookie is `SameSite=Strict`.
+
+## Signing in
+
+The web console is for `ADMIN` accounts only; `STAFF` accounts are refused after sign-in.
+In Development the API seeds two accounts (never present outside a Development database):
+
+| Username | Password | Role |
+|---|---|---|
+| `admin` | `Admin@123` | ADMIN |
+| `staff` | `Staff@123` | STAFF |
+
+The access token is kept in memory only. The refresh token is an HttpOnly cookie, so a page reload restores the
+session through `POST /api/identity/refresh`.
+
+Set `VITE_MOCK_AUTO_LOGIN=true` in `.env.local` to skip sign-in and work on the mock-data screens without the API.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

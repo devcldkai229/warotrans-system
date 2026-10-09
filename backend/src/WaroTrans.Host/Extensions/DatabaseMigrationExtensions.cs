@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Identity;
 using WaroTrans.Identity.Persistence;
 using WaroTrans.Navigation.Persistence;
 using WaroTrans.Operations.Persistence;
@@ -34,6 +35,9 @@ public static class DatabaseMigrationExtensions
         await MigrateAsync<WorkflowExecutionDbContext>(sp, logger);
         await MigrateAsync<FleetDbContext>(sp, logger);
         await MigrateAsync<NavigationDbContext>(sp, logger);
+
+        logger.LogInformation("Seeding Development accounts...");
+        await sp.SeedIdentityDevelopmentDataAsync();
 
         logger.LogInformation("Ensuring MongoDB indexes...");
         var mongoIndexes = sp.GetRequiredService<OperationsIndexInitializer>();

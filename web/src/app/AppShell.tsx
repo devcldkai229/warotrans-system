@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Icon } from '@/shared/ui/Icon'
-import { FLEET_CONNECTED_LABEL } from '@/features/auth/mock'
 import { initialsOf, useAuth } from '@/features/auth/authContext'
 import './AppShell.css'
 
@@ -19,7 +18,7 @@ const NAV: NavGroup[] = [
     icon: 'radio',
     items: [
       { label: 'Fleet', to: '/monitor/fleet' },
-      { label: 'Jobs', to: '/monitor/jobs' },
+      { label: 'Transport Requests', to: '/monitor/requests' },
     ],
   },
   {
@@ -28,7 +27,7 @@ const NAV: NavGroup[] = [
     icon: 'settings',
     items: [{ label: 'Facility', to: '/configure/facility' }],
   },
-  { label: 'Dashboard', to: '/dashboard', icon: 'sliders' },
+  { label: 'Statistics', to: '/dashboard', icon: 'sliders' },
 ]
 
 export function AppShell() {
@@ -74,10 +73,6 @@ export function AppShell() {
         </nav>
 
         <div className="shell__right">
-          <span className="shell__fleet">
-            <span className="dot" />
-            {FLEET_CONNECTED_LABEL}
-          </span>
           <button type="button" className="shell__bell" aria-label="Notifications">
             <Icon name="bell" size={18} />
             <span className="shell__bell-dot" />
@@ -106,14 +101,9 @@ export function AppShell() {
                     <span>{account.username}</span>
                   </div>
                   {account.role === 'ADMIN' ? (
-                    <>
-                      <Link to="/admin/accounts" role="menuitem" onClick={() => setUserMenuOpen(false)}>
-                        Accounts &amp; roles
-                      </Link>
-                      <Link to="/data/products" role="menuitem" onClick={() => setUserMenuOpen(false)}>
-                        Data management
-                      </Link>
-                    </>
+                    <Link to="/management" role="menuitem" onClick={() => setUserMenuOpen(false)}>
+                      Management
+                    </Link>
                   ) : null}
                   <button type="button" role="menuitem" className="is-danger" onClick={signOut}>
                     Sign out

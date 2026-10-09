@@ -26,7 +26,7 @@ public static class WorkflowExecutionModule
     public static IEndpointRouteBuilder MapWorkflowExecutionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/workflow-execution");
-        group.MapGet("/ping", () => Results.Ok(new { module = "workflow-execution" }));
+        group.MapGet("/ping", () => Results.Ok(new { module = "workflow-execution" })).AllowAnonymous();
         return endpoints;
     }
 }

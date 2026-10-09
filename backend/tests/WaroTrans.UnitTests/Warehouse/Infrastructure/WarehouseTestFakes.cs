@@ -3,10 +3,14 @@ using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 
 namespace WaroTrans.UnitTests.Warehouse.Infrastructure;
 
-public sealed class FakeCurrentUser(Guid? accountId = null, string? username = "testuser") : ICurrentUser
+public sealed class FakeCurrentUser(
+    Guid? accountId = null,
+    string? username = "testuser",
+    string? role = "ADMIN") : ICurrentUser
 {
     public Guid? AccountId { get; set; } = accountId ?? Guid.NewGuid();
     public string? Username { get; set; } = username;
+    public string? Role { get; set; } = role;
     public bool IsAuthenticated => true;
 }
 
