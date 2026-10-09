@@ -128,6 +128,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<double?>("AngularVelocity")
+                        .HasColumnType("double precision")
+                        .HasColumnName("angular_velocity");
+
                     b.Property<decimal>("BatteryPercent")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
@@ -143,23 +147,75 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CurrentCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_command_id");
+
                     b.Property<Guid>("CurrentMapVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("current_map_version_id");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("error_code");
 
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("boolean")
                         .HasColumnName("is_enabled");
 
+                    b.Property<bool>("IsOnline")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_online");
+
                     b.Property<DateTimeOffset?>("LastHeartbeatAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_heartbeat_at");
+
+                    b.Property<Guid?>("LastHeartbeatBootId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_heartbeat_boot_id");
+
+                    b.Property<long?>("LastHeartbeatSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_heartbeat_sequence");
+
+                    b.Property<DateTimeOffset?>("LastTelemetryAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_telemetry_at");
+
+                    b.Property<Guid?>("LastTelemetryBootId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_telemetry_boot_id");
+
+                    b.Property<long?>("LastTelemetrySequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_telemetry_sequence");
+
+                    b.Property<double?>("LinearVelocity")
+                        .HasColumnType("double precision")
+                        .HasColumnName("linear_velocity");
+
+                    b.Property<string>("LocalizationStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("localization_status");
+
+                    b.Property<string>("MapVersionCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("map_version_code");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
+
+                    b.Property<string>("NavigationStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("navigation_status");
 
                     b.Property<double>("PoseX")
                         .HasColumnType("double precision")
@@ -195,7 +251,98 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_robots_code");
 
+                    b.HasIndex("IsOnline")
+                        .HasDatabaseName("i_x_robots_is_online");
+
+                    b.HasIndex("LastHeartbeatAt")
+                        .HasDatabaseName("i_x_robots_last_heartbeat_at");
+
                     b.ToTable("robots", "fleet");
+                });
+
+            modelBuilder.Entity("WaroTrans.Fleet.Entities.RobotCommand", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acked_at");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("error_code");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<Guid?>("JobAssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_assignment_id");
+
+                    b.Property<Guid?>("JobStepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_step_id");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<string>("RejectReasonCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("reject_reason_code");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TargetCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_command_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_robot_commands");
+
+                    b.HasIndex("JobAssignmentId")
+                        .HasDatabaseName("i_x_robot_commands_job_assignment_id");
+
+                    b.HasIndex("RobotId")
+                        .HasDatabaseName("i_x_robot_commands_robot_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("i_x_robot_commands_status");
+
+                    b.HasIndex("RobotId", "Status")
+                        .HasDatabaseName("i_x_robot_commands_robot_id_status");
+
+                    b.ToTable("robot_commands", "fleet");
                 });
 
             modelBuilder.Entity("WaroTrans.Fleet.Entities.RobotStateEvent", b =>

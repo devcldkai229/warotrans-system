@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.IntegrationEvents;
+using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 using WaroTrans.WorkflowExecution.Persistence;
 
 namespace WaroTrans.WorkflowExecution;
@@ -14,6 +17,8 @@ public static class WorkflowExecutionModule
     {
         services.AddDbContext<WorkflowExecutionDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("PostgreSQL")));
+
+        services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
 
         return services;
     }

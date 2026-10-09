@@ -8,8 +8,10 @@ using WaroTrans.BuildingBlocks;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Fleet;
+using WaroTrans.Fleet.Abstractions;
 using WaroTrans.Host.Extensions;
 using WaroTrans.Host.Hubs;
+using WaroTrans.Host.Realtime;
 using WaroTrans.Identity;
 using WaroTrans.Navigation;
 using WaroTrans.Operations;
@@ -95,6 +97,7 @@ builder.Services.AddCors(options =>
         .AllowCredentials()));
 
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<IRobotRealtimeNotifier, SignalRRobotRealtimeNotifier>();
 builder.Services.AddOpenApi();
 
 var postgresConnection = builder.Configuration.GetConnectionString("PostgreSQL")

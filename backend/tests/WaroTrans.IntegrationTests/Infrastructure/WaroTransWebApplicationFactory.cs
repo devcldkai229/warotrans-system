@@ -17,6 +17,12 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
         builder.UseSetting("Mongo:ConnectionString", TestConnectionStrings.MongoDb);
         builder.UseSetting("Mongo:DatabaseName", TestConnectionStrings.MongoDatabaseName);
         builder.UseSetting("Authentication:Jwt:Key", "warotrans-integration-test-signing-key-0123456789");
+        builder.UseSetting("Mqtt:Host", "localhost");
+        builder.UseSetting("Mqtt:Port", "1883");
+        builder.UseSetting("Mqtt:ClientId", $"warotrans-test-{Guid.NewGuid():N}");
+        builder.UseSetting("Mqtt:TopicPrefix", "warotrans/v1");
+        builder.UseSetting("Mqtt:HeartbeatTimeoutSeconds", "2");
+        builder.UseSetting("Mqtt:CommandAckTimeoutSeconds", "60");
 
         builder.ConfigureTestServices(services =>
         {
@@ -35,6 +41,9 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
                                 ? JwtBearerDefaults.AuthenticationScheme
                                 : null;
                     });
+
+            // Avoid real outbound MQTT connect stalls during IssueNavigate; inbound ack/result still use broker.
+            services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotCommandPublisher, CapturingMqttRobotCommandPublisher>();
         });
     }
 }
