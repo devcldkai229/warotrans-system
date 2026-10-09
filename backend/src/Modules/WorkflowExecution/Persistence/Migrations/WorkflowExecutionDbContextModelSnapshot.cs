@@ -399,6 +399,11 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Config")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("config");
+
                     b.Property<string>("InputBindings")
                         .IsRequired()
                         .HasColumnType("jsonb")

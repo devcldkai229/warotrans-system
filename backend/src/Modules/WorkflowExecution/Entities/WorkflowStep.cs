@@ -1,5 +1,5 @@
-using System.Text.Json;
 using WaroTrans.WorkflowExecution.Enums;
+using WaroTrans.WorkflowExecution.ValueObjects;
 
 namespace WaroTrans.WorkflowExecution.Entities;
 
@@ -11,11 +11,12 @@ public sealed class WorkflowStep
     public string Name { get; set; } = string.Empty;
     public StepType StepType { get; set; }
     public int SequenceNo { get; set; }
-    public Dictionary<string, JsonElement> InputBindings { get; set; } = new();
+    public WorkflowStepConfig Config { get; set; } = new();
+    public Dictionary<string, StepInputBinding> InputBindings { get; set; } = new();
     public int TimeoutSeconds { get; set; }
-    public int MaxAttempts { get; set; }
+    public int MaxAttempts { get; set; } = 1;
     public int RetryBackoffSeconds { get; set; }
-    public StepFailurePolicy OnFailure { get; set; }
+    public StepFailurePolicy OnFailure { get; set; } = StepFailurePolicy.FAIL_JOB;
 
     public WorkflowTask WorkflowTask { get; set; } = null!;
 }

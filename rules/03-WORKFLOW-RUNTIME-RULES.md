@@ -200,8 +200,12 @@ JobStep.OutputValues
 `Job` must not have a direct `ContainerId`.
 `Job` must not have a direct `TransportRequestId` (resolve via JobContainer).
 JobTask/JobStep remain workflow graph instances; do not map 1:1 to Detail/movement.
+## StepType Registry (closed)
+Backend `StepTypeRegistry` is the source of truth for StepType metadata (operation codes, inputs, outputs).
+Admin Web must load metadata from the API; Admin cannot invent StepTypes, operation codes, input keys, or output keys.
+
 ## CHECK
-Initial examples:
+Closed condition codes:
 ```text
 ROBOT_READY
 BATTERY_MIN
@@ -212,36 +216,25 @@ INVENTORY_AVAILABLE
 ```
 
 If `INVENTORY_AVAILABLE` is used, it must respect the Container/InventoryStock model and must not imply item-level robot transport.
-
-Typical outputs:
-```text
-passed
-observedValue?
-```
+Prefer `containerId` in V1 when product/quantity paths are not yet supported by Warehouse.
 
 ## MOVE
-Typical inputs:
+Closed purposes:
 ```text
-targetEndpointId
-targetEndpointGroupId?
-purpose
-speedProfile
-positionToleranceMeters
-yawToleranceDegrees
-allowReplan
-timeout
+PICKUP
+DROPOFF
+PARK
+CHARGE
+TRANSIT
 ```
 
-Typical outputs:
-```text
-reachedEndpointId
-arrivedAt
-```
+Required inputs (registry): `robotId`, `targetEndpointId`, `purpose`.
+Optional: `commandTimeoutSeconds`.
 
 MOVE does not update inventory by itself.
 
 ## HUMAN_INTERACTION
-Supported examples:
+Closed action codes:
 ```text
 PICKUP_CONFIRM
 DROPOFF_CONFIRM
@@ -253,15 +246,7 @@ CHARGE_CONNECT_CONFIRM
 CHARGE_DISCONNECT_CONFIRM
 ```
 
-Typical outputs:
-```text
-confirmationId
-confirmedContainerId?
-confirmedBy
-confirmedAt
-result
-details?
-```
+Common outputs: `confirmed`, `confirmedBy`, `confirmedAt`, `note`.
 
 ## WAIT
 Modes:
@@ -271,6 +256,7 @@ EVENT
 ROBOT_STATE
 ```
 
+`timeoutSeconds` is an optional input on `EVENT` / `ROBOT_STATE`, not a separate WAIT mode.
 Do not use WAIT for Zone/Edge traffic coordination.
 
 ## Failure policies

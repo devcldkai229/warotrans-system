@@ -1,0 +1,278 @@
+{
+  "code": "INTERNAL_RELOCATION",
+  "name": "Vận chuyển giữa các kệ",
+  "description": "Robot lấy container từ kệ nguồn, nhân viên xác nhận pickup, di chuyển tới kệ đích, xác nhận dropoff. Dùng cho REALLOCATION / chuyển vị trí trong kho.",
+  "variables": [
+    {
+      "key": "minBatteryPercent",
+      "name": "Pin tối thiểu (%)",
+      "dataType": "DECIMAL",
+      "source": "ADMIN_INPUT",
+      "isRequired": true,
+      "configuredValue": 25,
+      "description": "Admin cấu hình sẵn lúc tạo template. Runtime chỉ đọc lại giá trị này.",
+      "sequenceNo": 0
+    },
+    {
+      "key": "containerId",
+      "name": "Container cần chuyển",
+      "dataType": "UUID",
+      "source": "STAFF_INPUT",
+      "isRequired": true,
+      "description": "Staff nhập khi tạo TransportRequest REALLOCATION.",
+      "sequenceNo": 1
+    },
+    {
+      "key": "sourceEndpointId",
+      "name": "Endpoint kệ nguồn",
+      "dataType": "UUID",
+      "source": "STAFF_INPUT",
+      "isRequired": true,
+      "description": "Điểm nhận / kệ lấy hàng.",
+      "sequenceNo": 2
+    },
+    {
+      "key": "destinationEndpointId",
+      "name": "Endpoint kệ đích",
+      "dataType": "UUID",
+      "source": "STAFF_INPUT",
+      "isRequired": true,
+      "description": "Điểm giao / kệ đặt hàng.",
+      "sequenceNo": 3
+    },
+    {
+      "key": "assignedRobotId",
+      "name": "Robot được gán",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "description": "Runtime resolve từ JobAssignment — Admin/Staff không nhập.",
+      "sequenceNo": 4
+    },
+    {
+      "key": "transportRequestId",
+      "name": "TransportRequest",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "description": "Id request nghiệp vụ đang chạy.",
+      "sequenceNo": 5
+    },
+    {
+      "key": "jobId",
+      "name": "Job",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "description": "Id Job runtime khởi tạo từ template.",
+      "sequenceNo": 6
+    }
+  ],
+  "tasks": [
+    {
+      "taskKey": "PICKUP",
+      "name": "Lấy hàng tại kệ nguồn",
+      "sequenceNo": 1,
+      "steps": [
+        {
+          "stepKey": "CHECK_READY",
+          "name": "Kiểm tra robot sẵn sàng",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "ROBOT_READY",
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            }
+          }
+        },
+        {
+          "stepKey": "CHECK_BATTERY",
+          "name": "Kiểm tra pin tối thiểu",
+          "stepType": "CHECK",
+          "sequenceNo": 2,
+          "operationCode": "BATTERY_MIN",
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "REQUEST_REASSIGN",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "minimumBatteryPercent": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "minBatteryPercent"
+            }
+          }
+        },
+        {
+          "stepKey": "CHECK_REQUEST",
+          "name": "Kiểm tra request còn hiệu lực",
+          "stepType": "CHECK",
+          "sequenceNo": 3,
+          "operationCode": "REQUEST_ACTIVE",
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB",
+          "inputBindings": {
+            "transportRequestId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "transportRequestId"
+            }
+          }
+        },
+        {
+          "stepKey": "CHECK_SOURCE_ENDPOINT",
+          "name": "Kiểm tra kệ nguồn khả dụng",
+          "stepType": "CHECK",
+          "sequenceNo": 4,
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "timeoutSeconds": 30,
+          "maxAttempts": 2,
+          "retryBackoffSeconds": 5,
+          "onFailure": "PAUSE_FOR_OPERATOR",
+          "inputBindings": {
+            "endpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "sourceEndpointId"
+            }
+          }
+        },
+        {
+          "stepKey": "MOVE_PICKUP",
+          "name": "Di chuyển tới kệ nguồn",
+          "stepType": "MOVE",
+          "sequenceNo": 5,
+          "operationCode": "PICKUP",
+          "timeoutSeconds": 600,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "REQUEST_REASSIGN",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "sourceEndpointId"
+            },
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "PICKUP"
+            }
+          }
+        },
+        {
+          "stepKey": "PICKUP_CONFIRM",
+          "name": "Staff xác nhận đã đặt container lên robot",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 6,
+          "operationCode": "PICKUP_CONFIRM",
+          "instructionText": "Đặt container lên robot tại kệ nguồn rồi xác nhận.",
+          "timeoutSeconds": 900,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "containerId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "containerId"
+            },
+            "endpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "sourceEndpointId"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "taskKey": "DELIVERY",
+      "name": "Giao hàng tại kệ đích",
+      "sequenceNo": 2,
+      "steps": [
+        {
+          "stepKey": "CHECK_DEST_ENDPOINT",
+          "name": "Kiểm tra kệ đích khả dụng",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "timeoutSeconds": 30,
+          "maxAttempts": 2,
+          "retryBackoffSeconds": 5,
+          "onFailure": "PAUSE_FOR_OPERATOR",
+          "inputBindings": {
+            "endpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "destinationEndpointId"
+            }
+          }
+        },
+        {
+          "stepKey": "MOVE_DROPOFF",
+          "name": "Di chuyển tới kệ đích",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "operationCode": "DROPOFF",
+          "timeoutSeconds": 600,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "REQUEST_REASSIGN",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "destinationEndpointId"
+            },
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "DROPOFF"
+            }
+          }
+        },
+        {
+          "stepKey": "DROPOFF_CONFIRM",
+          "name": "Staff xác nhận đã lấy container khỏi robot",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 3,
+          "operationCode": "DROPOFF_CONFIRM",
+          "instructionText": "Lấy container khỏi robot tại kệ đích rồi xác nhận.",
+          "timeoutSeconds": 900,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "containerId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "containerId"
+            },
+            "endpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "destinationEndpointId"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

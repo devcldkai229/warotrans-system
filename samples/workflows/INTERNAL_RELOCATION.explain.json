@@ -1,0 +1,93 @@
+﻿{
+    "summary":  "API test INTERNAL_RELOCATION (Vận chuyển giữa các kệ)",
+    "endpoints":  {
+                      "create":  "POST /api/workflow-execution/workflows",
+                      "get":  "GET /api/workflow-execution/workflows/{id}",
+                      "publish":  "POST /api/workflow-execution/workflows/{id}/publish",
+                      "metadata":  "GET /api/workflow-execution/metadata/step-types"
+                  },
+    "workflowId":  "65a3bd87-02e2-46a1-845c-bac6b16431d6",
+    "files":  {
+                  "request":  "INTERNAL_RELOCATION.request.json",
+                  "createResponse":  "INTERNAL_RELOCATION.create.response.json",
+                  "storedGet":  "INTERNAL_RELOCATION.stored.get.json",
+                  "publishResponse":  "INTERNAL_RELOCATION.publish.response.json",
+                  "metadata":  "workflow-metadata.step-types.json"
+              },
+    "inputMeaning":  {
+                         "ADMIN_INPUT":  "minBatteryPercent=25 — Admin nhập lúc tạo template; lưu trong variablesSchema.configuredValue; runtime chỉ đọc lại.",
+                         "STAFF_INPUT":  "containerId, sourceEndpointId, destinationEndpointId — template chỉ lưu metadata; Staff nhập khi tạo TransportRequest (chưa có UI trong round này).",
+                         "SYSTEM_VALUE":  "assignedRobotId, transportRequestId, jobId — runtime resolve qua SystemVariableResolver; không nhập tay.",
+                         "bindings":  "Mỗi step input bind từ WORKFLOW_VAR / CONSTANT / CURRENT_MOVEMENT / STEP_OUTPUT — không hard-code trong executor."
+                     },
+    "processing":  {
+                       "draftCreate":  "ValidateDraft (structural): unique keys, required fields. Status=DRAFT. Persisted: workflows + workflow_tasks + workflow_steps; variablesSchema JSONB; input_bindings JSONB; config JSONB (operationCode).",
+                       "publish":  "ValidateForPublish (full registry): mỗi required input phải có binding đúng type; SYSTEM_VALUE key phải nằm catalog; CONSTANT phải đúng allowedValues. Status=PUBLISHED + publishedAt.",
+                       "runtimeNotYetWired":  "Job Planning chưa có. Khi chạy Job: VariableContextBuilder (ADMIN+STAFF+SYSTEM) -\u003e StepInputResolver -\u003e JobStep.ResolvedInputs -\u003e executor -\u003e JobStep.OutputValues. Template KHÔNG lưu runtime result."
+                   },
+    "storageShape":  {
+                         "table_workflows":  "code, version_no, name, status, variables_schema (jsonb), created_by, created_at, published_at",
+                         "table_workflow_tasks":  "workflow_id, task_key, name, sequence_no",
+                         "table_workflow_steps":  "workflow_task_id, step_key, name, step_type, sequence_no, config (jsonb: operationCode), input_bindings (jsonb), timeout/maxAttempts/onFailure"
+                     },
+    "tasksOverview":  [
+                          {
+                              "taskKey":  "PICKUP",
+                              "steps":  [
+                                            "CHECK_READY",
+                                            "CHECK_BATTERY",
+                                            "CHECK_REQUEST",
+                                            "CHECK_SOURCE_ENDPOINT",
+                                            "MOVE_PICKUP",
+                                            "PICKUP_CONFIRM"
+                                        ]
+                          },
+                          {
+                              "taskKey":  "DELIVERY",
+                              "steps":  [
+                                            "CHECK_DEST_ENDPOINT",
+                                            "MOVE_DROPOFF",
+                                            "DROPOFF_CONFIRM"
+                                        ]
+                          }
+                      ],
+    "exampleResolvedInputsAtRuntime":  {
+                                           "note":  "Minh họa — chưa gọi Job API. Giả sử Staff/System đã cung cấp giá trị thật.",
+                                           "CHECK_BATTERY":  {
+                                                                 "robotId":  "11111111-1111-1111-1111-111111111111",
+                                                                 "minimumBatteryPercent":  25
+                                                             },
+                                           "MOVE_PICKUP":  {
+                                                               "targetEndpointId":  "22222222-2222-2222-2222-222222222222",
+                                                               "purpose":  "PICKUP",
+                                                               "robotId":  "11111111-1111-1111-1111-111111111111"
+                                                           },
+                                           "DROPOFF_CONFIRM":  {
+                                                                   "containerId":  "33333333-3333-3333-3333-333333333333",
+                                                                   "robotId":  "11111111-1111-1111-1111-111111111111",
+                                                                   "endpointId":  "44444444-4444-4444-4444-444444444444"
+                                                               }
+                                       },
+    "exampleStepOutputsFromRegistry":  {
+                                           "CHECK_BATTERY":  [
+                                                                 "passed",
+                                                                 "actualBatteryPercent",
+                                                                 "requiredBatteryPercent",
+                                                                 "reason",
+                                                                 "checkedAt"
+                                                             ],
+                                           "MOVE_PICKUP":  [
+                                                               "navigationResult",
+                                                               "arrivedEndpointId",
+                                                               "startedAt",
+                                                               "completedAt",
+                                                               "failureReason"
+                                                           ],
+                                           "PICKUP_CONFIRM":  [
+                                                                  "confirmed",
+                                                                  "confirmedBy",
+                                                                  "confirmedAt",
+                                                                  "note"
+                                                              ]
+                                       }
+}

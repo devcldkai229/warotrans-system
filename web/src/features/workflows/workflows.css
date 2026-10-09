@@ -1,3 +1,255 @@
+.wf-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.wf-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.wf-header h1 {
+  margin: 0.15rem 0;
+  color: var(--text-h);
+}
+
+.crumb {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.wf-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: var(--text-h);
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn.primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.btn.small {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
+.btn.danger {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.wf-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+
+.wf-table th,
+.wf-table td {
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge.draft {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge.published {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.wf-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.7rem;
+  background: #fff;
+  padding: 1rem;
+  margin: 0;
+}
+
+.wf-card legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.grid-2,
+.grid-3 {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+input,
+select {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+}
+
+.var-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.wf-builder {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 1rem;
+}
+
+.side-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.side-list li {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.side-list li button {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+}
+
+.side-list li.active > button:first-child {
+  background: #ecfeff;
+  border-color: #67e8f9;
+}
+
+.side-list li > button:first-child {
+  flex: 1;
+  text-align: left;
+}
+
+.side-actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.binding-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 1.4fr;
+  gap: 0.5rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: start;
+}
+
+.binding-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.85rem;
+}
+
+.binding-label small {
+  color: #64748b;
+}
+
+.error,
+.error-list {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.error-list {
+  margin: 0;
+}
+
+.ok {
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.muted {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 1000px) {
+  .wf-builder,
+  .grid-2,
+  .grid-3,
+  .binding-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .wf {
   display: flex;
   flex-direction: column;
@@ -293,6 +545,7 @@
   margin-top: 12px;
 }
 
+/* Khối lệnh đã được dọn dẹp và hoàn thiện thuộc tính bị thiếu */
 .wf-addstep ul {
   position: absolute;
   left: 0;
@@ -305,94 +558,4 @@
   border-radius: 9px;
   background: var(--surface);
   box-shadow: 0 9px 27px rgba(15, 23, 42, 0.15);
-}
-
-.wf-addstep li button {
-  width: 100%;
-  padding: 8px 18px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  text-align: left;
-  font-size: 15px;
-}
-
-.wf-addstep li button:hover {
-  background: var(--blue-soft);
-}
-
-.wf__fold {
-  padding: 6px 0;
-  border-top: 1px solid var(--line);
-  font-size: 18px;
-}
-
-.wf__fold summary {
-  padding: 9px 0;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.wf__fold p {
-  padding-bottom: 9px;
-  font-size: 15px;
-  color: var(--muted);
-}
-
-.wf select {
-  font-size: 11px;
-  padding: 0 4px;
-}
-
-.wf-bind__name {
-  padding: 5px 6px;
-  font-size: 12px;
-}
-
-.wf-bind {
-  grid-template-columns: 1.1fr 14px 1fr 1fr;
-}
-
-.wf__meta {
-  margin-top: -14px;
-  font-size: 12px;
-  color: var(--faint);
-}
-
-.wf-bind {
-  grid-template-columns: 1.1fr 12px 1fr 1fr 14px;
-}
-
-.wf-bind__x {
-  border: 0;
-  background: none;
-  color: var(--faint);
-}
-
-.wf-step__body .wf__ghost {
-  margin-top: 4px;
-}
-
-.wf-step__body {
-  min-width: 0;
-}
-
-/* Rename a Task or Step. The key stays fixed: STEP_OUTPUT bindings and Jobs refer to it. */
-.wf-name {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 4px 0 8px;
-}
-
-.wf-name span {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-
-.wf-name small {
-  font-size: 11px;
-  color: var(--faint);
 }
