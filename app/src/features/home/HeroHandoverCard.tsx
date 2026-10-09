@@ -6,6 +6,7 @@ import {
   View,
 } from 'react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 
 interface HeroHandoverCardProps {
   robotCode: string;
@@ -96,7 +97,7 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: 10,
     fontWeight: '900',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
   },
   workflowText: {
     fontSize: 12,
@@ -124,7 +125,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: colors.warning,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
   },
   bodyRow: {
     flexDirection: 'row',

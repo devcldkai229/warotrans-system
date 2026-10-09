@@ -1,58 +1,77 @@
-import { WorkflowTemplate } from '../../shared/types/contracts';
+import { colors } from '../../shared/theme/colors';
 
-export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+export interface WorkflowItem {
+  id: string;
+  code: string;
+  name: string;
+  category: 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | 'DIRECT' | 'SAFETY';
+  note: string;
+  icon: 'package-check' | 'truck' | 'rotate-cw' | 'navigation' | 'layers' | 'octagon' | 'life-buoy';
+  tone: string;
+  badgeTone: string;
+}
+
+export const WORKFLOWS: WorkflowItem[] = [
   {
+    id: 'inbound',
     code: 'INBOUND_PUTAWAY',
-    title: 'Inbound Putaway',
-    tagline: 'Receiving Dock ➔ Storage Racks (3-slot flatbed)',
-    iconName: '📥',
-    category: 'routine',
-    estimatedDuration: '4 - 6 mins',
-    requiresContainer: true,
+    name: 'Inbound Putaway',
+    category: 'INBOUND',
+    note: 'Dock ➔ Storage Racks (Multi-Tote)',
+    icon: 'package-check',
+    tone: colors.primaryLight,
+    badgeTone: colors.primary,
   },
   {
+    id: 'outbound',
     code: 'OUTBOUND_RETRIEVAL',
-    title: 'Outbound Retrieval',
-    tagline: 'Storage Racks ➔ Shipping & Staging Bay',
-    iconName: '📤',
-    category: 'routine',
-    estimatedDuration: '5 - 8 mins',
-    requiresContainer: true,
+    name: 'Outbound Retrieval',
+    category: 'OUTBOUND',
+    note: 'Storage Racks ➔ Outbound Shipping Bay',
+    icon: 'truck',
+    tone: colors.warningBg,
+    badgeTone: colors.warning,
   },
   {
+    id: 'reallocation',
     code: 'INTERNAL_RELOCATION',
-    title: 'Internal Relocation',
-    tagline: 'Rack-to-rack stock rebalancing & consolidation',
-    iconName: '🔄',
-    category: 'routine',
-    estimatedDuration: '3 - 5 mins',
-    requiresContainer: true,
+    name: 'Reallocation',
+    category: 'INTERNAL',
+    note: 'Internal Slot Reallocation / Consolidation',
+    icon: 'rotate-cw',
+    tone: colors.successBg,
+    badgeTone: colors.success,
   },
   {
+    id: 'point-to-point',
     code: 'POINT_TO_POINT_TRANSPORT',
-    title: 'Point-to-Point Transport',
-    tagline: 'Direct ad-hoc dispatch between two warehouse points',
-    iconName: '🚚',
-    category: 'routine',
-    estimatedDuration: '2 - 4 mins',
-    requiresContainer: true,
+    name: 'Point-to-Point',
+    category: 'DIRECT',
+    note: 'Direct Station Transport / Empty Tote Return',
+    icon: 'navigation',
+    tone: colors.surfaceSubtle,
+    badgeTone: colors.textSecondary,
   },
   {
+    id: 'replenishment',
     code: 'REPLENISHMENT',
-    title: 'Pick-face Replenishment',
-    tagline: 'Bulk reserve buffer ➔ Active pick faces',
-    iconName: '📦',
-    category: 'routine',
-    estimatedDuration: '6 - 10 mins',
-    requiresContainer: true,
+    name: 'Replenishment',
+    category: 'INTERNAL',
+    note: 'Buffer Storage (Zone D) ➔ Active Pick-Face',
+    icon: 'layers',
+    tone: colors.primaryLight,
+    badgeTone: colors.primary,
   },
   {
-    code: 'PAYLOAD_RECOVERY',
-    title: 'Payload Recovery',
-    tagline: 'Rescue stranded tote from stalled robot to Depot',
-    iconName: '🛟',
-    category: 'safety',
-    estimatedDuration: '8 - 12 mins',
-    requiresContainer: true,
+    id: 'block-path',
+    code: 'BLOCK_PATH_HAZARD',
+    name: 'Block Path Hazard',
+    category: 'SAFETY',
+    note: 'Report Blocked Aisle / Temporary Obstacle',
+    icon: 'octagon',
+    tone: colors.dangerBg,
+    badgeTone: colors.danger,
   },
 ];
+
+export const WORKFLOW_TEMPLATES = WORKFLOWS;

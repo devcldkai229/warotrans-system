@@ -5,72 +5,100 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Badge } from '../../shared/components/Badge';
+import {
+  AlertOctagon,
+  Layers,
+  LifeBuoy,
+  Navigation,
+  PackageCheck,
+  RotateCw,
+  Truck,
+} from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
-import { WorkflowTemplate } from '../../shared/types/contracts';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
+import { WorkflowItem } from './workflowTemplates';
 
 interface WorkflowTemplateCardProps {
-  template: WorkflowTemplate;
-  onSelect: (code: WorkflowTemplate['code']) => void;
+  workflow: WorkflowItem;
+  onSelect: (workflow: WorkflowItem) => void;
 }
 
 export function WorkflowTemplateCard({
-  template,
+  workflow,
   onSelect,
 }: WorkflowTemplateCardProps) {
-  const isSafety = template.category === 'safety';
+  const isSafety = workflow.category === 'SAFETY';
+
+  const renderIcon = () => {
+    switch (workflow.icon) {
+      case 'package-check':
+        return <PackageCheck size={20} color={workflow.badgeTone} />;
+      case 'truck':
+        return <Truck size={20} color={workflow.badgeTone} />;
+      case 'rotate-cw':
+        return <RotateCw size={20} color={workflow.badgeTone} />;
+      case 'navigation':
+        return <Navigation size={20} color={workflow.badgeTone} />;
+      case 'layers':
+        return <Layers size={20} color={workflow.badgeTone} />;
+      case 'octagon':
+        return <AlertOctagon size={20} color={workflow.badgeTone} />;
+      case 'life-buoy':
+        return <LifeBuoy size={20} color={workflow.badgeTone} />;
+      default:
+        return <PackageCheck size={20} color={workflow.badgeTone} />;
+    }
+  };
 
   return (
     <Pressable
-      onPress={() => onSelect(template.code)}
+      onPress={() => onSelect(workflow)}
       style={({ pressed }) => [
         styles.card,
         isSafety && styles.cardSafety,
         pressed && styles.cardPressed,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`Select workflow ${template.title}`}
+      accessibilityLabel={`Select workflow ${workflow.name}`}
     >
       <View style={styles.topRow}>
-        <View style={styles.iconContainer}>
-          <Text style={styles.icon}>{template.iconName}</Text>
+        <View style={[styles.iconBox, { backgroundColor: workflow.tone }]}>
+          {renderIcon()}
         </View>
-        <Badge
-          label={template.category.toUpperCase()}
-          tone={isSafety ? 'danger' : 'info'}
-          size="sm"
-        />
+        <View style={[styles.badge, { borderColor: workflow.badgeTone }]}>
+          <Text style={[styles.badgeText, { color: workflow.badgeTone }]}>
+            {workflow.category}
+          </Text>
+        </View>
       </View>
 
-      <Text style={styles.title}>{template.title}</Text>
-      <Text style={styles.tagline} numberOfLines={2}>
-        {template.tagline}
+      <Text style={styles.name}>{workflow.name}</Text>
+      <Text style={styles.note} numberOfLines={2}>
+        {workflow.note}
       </Text>
-
-      <View style={styles.bottomRow}>
-        <Text style={styles.durationText}>⏱ {template.estimatedDuration}</Text>
-        <Text style={styles.selectCta}>Dispatch ➔</Text>
-      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1.5,
     borderColor: colors.border,
     padding: 14,
-    marginBottom: 8,
+    minHeight: 130,
+    justifyContent: 'space-between',
+    ...shadows.panel,
   },
   cardSafety: {
     borderColor: colors.dangerBorder,
-    backgroundColor: '#fffcfc',
+    backgroundColor: '#fffdfd',
   },
   cardPressed: {
-    backgroundColor: colors.surfaceSubtle,
-    borderColor: colors.primaryBorder,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
   topRow: {
     flexDirection: 'row',
@@ -78,45 +106,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: colors.primaryLight,
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  icon: {
-    fontSize: 18,
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  title: {
-    fontSize: 14,
-    fontWeight: '800',
+  badgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    fontFamily: typography.fontMono,
+    letterSpacing: 0.8,
+  },
+  name: {
+    fontSize: 13,
+    fontWeight: '900',
     color: colors.textPrimary,
-    marginBottom: 4,
+    fontFamily: typography.fontSans,
+    marginTop: 6,
   },
-  tagline: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    lineHeight: 16,
-    marginBottom: 10,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: colors.surfaceSubtle,
-    paddingTop: 8,
-  },
-  durationText: {
+  note: {
     fontSize: 10,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
-  selectCta: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.primary,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    lineHeight: 14,
+    marginTop: 2,
   },
 });

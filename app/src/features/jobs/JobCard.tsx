@@ -5,8 +5,17 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  CheckCheck,
+  ChevronRight,
+  CircleDot,
+  Clock3,
+  MapPin,
+  Timer,
+} from 'lucide-react-native';
 import { Badge } from '../../shared/components/Badge';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 import { AppJobItem } from './jobData';
 
 interface JobCardProps {
@@ -80,46 +89,45 @@ export function JobCard({ job, onPress }: JobCardProps) {
         {/* Route / Target Box */}
         <View style={styles.routeBox}>
           <View style={styles.routeIconWrap}>
-            <Text style={styles.routeIcon}>📍</Text>
+            <MapPin size={18} color={colors.primary} />
           </View>
           <View style={styles.routeDetails}>
-            <Text style={styles.targetLabel}>Target: {job.destinationEndpointCode}</Text>
+            <Text style={styles.targetEyebrow}>TARGET LOCATION</Text>
+            <Text style={styles.targetCode} numberOfLines={1}>{job.destinationEndpointCode}</Text>
             <Text style={styles.routeText} numberOfLines={1}>
               {job.routeText}
             </Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
+          <ChevronRight size={18} color={colors.textMuted} />
         </View>
 
         {/* Footer Meta Row */}
         <View style={styles.footerRow}>
           <View style={styles.robotGroup}>
-            <View
-              style={[
-                styles.robotStatusDot,
-                { backgroundColor: getAccentColor() },
-              ]}
-            />
+            <CircleDot size={13} color={colors.primary} />
             <Text style={styles.robotLabel}>
-              AMR: <Text style={styles.robotCode}>{job.assignedRobotCode || 'Unassigned'}</Text>
+              Assigned: <Text style={styles.robotCode}>{job.assignedRobotCode || 'Unassigned'}</Text>
             </Text>
           </View>
 
           {job.etaSeconds !== undefined && job.status === 'RUNNING' && (
             <View style={styles.etaPill}>
-              <Text style={styles.etaText}>⏱ ETA {job.etaSeconds}s</Text>
+              <Timer size={11} color={colors.primary} style={styles.pillIcon} />
+              <Text style={styles.etaText}>ETA {job.etaSeconds}s</Text>
             </View>
           )}
 
           {job.status === 'QUEUED' && (
             <View style={styles.queuedPill}>
-              <Text style={styles.queuedText}>Standby in queue</Text>
+              <Clock3 size={11} color={colors.warning} style={styles.pillIcon} />
+              <Text style={styles.queuedText}>Handover Ready</Text>
             </View>
           )}
 
           {job.status === 'COMPLETED' && (
             <View style={styles.completedPill}>
-              <Text style={styles.completedText}>✓ Done</Text>
+              <CheckCheck size={12} color={colors.success} style={styles.pillIcon} />
+              <Text style={styles.completedText}>Completed</Text>
             </View>
           )}
         </View>
@@ -131,10 +139,10 @@ export function JobCard({ job, onPress }: JobCardProps) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
+    marginBottom: 12,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
@@ -143,11 +151,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardPressed: {
-    backgroundColor: colors.surfaceSubtle,
-    borderColor: colors.primaryBorder,
+    transform: [{ scale: 0.98 }],
+    borderColor: colors.primary,
   },
   accentStrip: {
-    height: 3,
+    height: 6,
     width: '100%',
   },
   cardContent: {
@@ -162,22 +170,25 @@ const styles = StyleSheet.create({
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     flex: 1,
   },
   jobNo: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.textPrimary,
   },
   workflowName: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '900',
     color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   payloadSummary: {
     fontSize: 11,
+    fontWeight: '700',
     color: colors.textSecondary,
     marginBottom: 10,
   },
@@ -185,100 +196,116 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceSubtle,
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 10,
     gap: 10,
-    marginBottom: 10,
-  },
-  routeIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: colors.surface,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  routeIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  routeIcon: {
-    fontSize: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   routeDetails: {
     flex: 1,
+    minWidth: 0,
   },
-  targetLabel: {
-    fontSize: 11,
-    fontWeight: '800',
+  targetEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+  },
+  targetCode: {
+    fontSize: 13,
+    fontWeight: '900',
     color: colors.textPrimary,
+    marginTop: 1,
   },
   routeText: {
     fontSize: 10,
-    color: colors.textMuted,
+    fontWeight: '500',
+    color: colors.textSecondary,
     marginTop: 1,
-  },
-  chevron: {
-    fontSize: 18,
-    color: colors.textMuted,
-    fontWeight: '600',
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: colors.surfaceSubtle,
-    paddingTop: 8,
+    borderTopColor: colors.borderSubtle,
   },
   robotGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  robotStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
   robotLabel: {
     fontSize: 11,
-    color: colors.textMuted,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   robotCode: {
     fontWeight: '800',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.textPrimary,
   },
+  pillIcon: {
+    marginRight: 4,
+  },
   etaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
     borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   etaText: {
     fontSize: 10,
+    fontFamily: typography.fontMono,
     fontWeight: '800',
-    fontFamily: 'monospace',
-    color: colors.primaryDark,
+    color: colors.primary,
   },
   queuedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.warningBg,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
     borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   queuedText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontFamily: typography.fontMono,
+    fontWeight: '800',
     color: colors.warning,
   },
   completedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.successBg,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
     borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   completedText: {
     fontSize: 10,
+    fontFamily: typography.fontMono,
     fontWeight: '800',
     color: colors.success,
   },

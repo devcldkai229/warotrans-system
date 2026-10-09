@@ -6,9 +6,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import { CheckCircle2, Search, X } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 import { JobCard } from './JobCard';
 import { MOCK_JOBS } from './jobData';
 
@@ -62,28 +66,41 @@ export function JobsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Page Title */}
+      <View style={styles.pageHeader}>
+        <Text style={styles.eyebrow}>EXECUTION CENTER</Text>
+        <Text style={styles.pageTitle}>Job Control</Text>
+      </View>
+
       {/* Search Input Bar */}
       <View style={styles.searchSection}>
-        <Input
-          placeholder="Search jobs, containers, endpoints..."
-          value={search}
-          onChangeText={setSearch}
-          containerStyle={styles.searchInputContainer}
-          rightIcon={
-            search ? (
-              <Pressable onPress={() => setSearch('')}>
-                <Text style={styles.clearIcon}>✕</Text>
-              </Pressable>
-            ) : undefined
-          }
-        />
+        <View style={styles.searchBox}>
+          <Search size={16} color="#94a3b8" />
+          <Input
+            placeholder="Search jobs, containers, locations..."
+            value={search}
+            onChangeText={setSearch}
+            containerStyle={styles.searchInputContainer}
+            inputStyle={styles.searchInputText}
+          />
+          {search ? (
+            <Pressable onPress={() => setSearch('')} style={styles.clearBtn}>
+              <X size={15} color="#94a3b8" />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       {/* Scope Segmented Control */}
       <View style={styles.scopeBar}>
         <Pressable
-          onPress={() => setScope('active')}
+          onPress={() => {
+            triggerHaptic('tap');
+            setScope('active');
+          }}
           style={[styles.scopeBtn, scope === 'active' && styles.scopeBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="My Active jobs"
         >
           <Text
             style={[
@@ -111,8 +128,13 @@ export function JobsScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => setScope('global')}
+          onPress={() => {
+            triggerHaptic('tap');
+            setScope('global');
+          }}
           style={[styles.scopeBtn, scope === 'global' && styles.scopeBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="Global Fleet jobs"
         >
           <Text
             style={[
@@ -140,8 +162,13 @@ export function JobsScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => setScope('history')}
+          onPress={() => {
+            triggerHaptic('tap');
+            setScope('history');
+          }}
           style={[styles.scopeBtn, scope === 'history' && styles.scopeBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="Jobs history"
         >
           <Text
             style={[
@@ -182,7 +209,10 @@ export function JobsScreen() {
             return (
               <Pressable
                 key={st}
-                onPress={() => setStatusFilter(st)}
+                onPress={() => {
+                  triggerHaptic('tap');
+                  setStatusFilter(st);
+                }}
                 style={[
                   styles.filterChip,
                   isSelected && styles.filterChipSelected,
@@ -217,12 +247,22 @@ export function JobsScreen() {
           ))
         ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📦</Text>
-            <Text style={styles.emptyTitle}>No Jobs Found</Text>
+            <View style={styles.emptyIconWrap}>
+              <CheckCircle2 size={36} color={colors.success} strokeWidth={2.4} />
+            </View>
+            <Text style={styles.emptyTitle}>
+              {search
+                ? 'No matching jobs'
+                : scope === 'history'
+                ? 'No history yet'
+                : "You're all caught up!"}
+            </Text>
             <Text style={styles.emptyDesc}>
               {search
-                ? `No jobs matched query "${search}". Try resetting the search.`
-                : 'There are currently no tasks in this view scope.'}
+                ? `No jobs matched query "${search}". Try resetting the search filter.`
+                : scope === 'history'
+                ? 'Completed tasks will appear here once verified.'
+                : 'No active tasks in your queue. Take a breather or check the global fleet.'}
             </Text>
           </View>
         )}
@@ -236,16 +276,53 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  pageHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  eyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  pageTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0f172a',
+    marginTop: 2,
+    marginBottom: 6,
+  },
   searchSection: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 10,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
   },
   searchInputContainer: {
+    flex: 1,
     marginBottom: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
   },
-  clearIcon: {
-    fontSize: 14,
-    color: colors.textMuted,
+  searchInputText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  clearBtn: {
     padding: 4,
   },
   scopeBar: {
@@ -343,8 +420,13 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
     paddingHorizontal: 24,
   },
-  emptyIcon: {
-    fontSize: 36,
+  emptyIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
   emptyTitle: {

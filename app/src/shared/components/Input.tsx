@@ -9,6 +9,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors } from '../theme/colors';
+import { shadows } from '../theme/shadows';
+import { typography } from '../theme/typography';
 
 interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -68,12 +70,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   label: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '900',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
     color: colors.textSecondary,
     marginBottom: 6,
+    fontFamily: typography.fontSans,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -81,9 +84,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    minHeight: 46,
+    borderRadius: 12,
+    minHeight: 48,
     paddingHorizontal: 12,
+    ...shadows.input,
   },
   inputFocused: {
     borderColor: colors.primary,
@@ -96,6 +100,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 14,
+    fontWeight: '700',
+    fontFamily: typography.fontMono,
     color: colors.textPrimary,
     paddingVertical: 10,
   },

@@ -6,6 +6,7 @@ import {
   View,
 } from 'react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 
 export interface FleetRobotInfo {
   id: string;
@@ -83,7 +84,7 @@ const styles = StyleSheet.create({
   code: {
     fontSize: 12,
     fontWeight: '900',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.textPrimary,
   },
   statusBadge: {

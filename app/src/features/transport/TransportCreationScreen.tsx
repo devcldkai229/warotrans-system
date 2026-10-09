@@ -6,58 +6,94 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  Box,
+  Check,
+  Layers,
+  MapPin,
+  Plus,
+  Rocket,
+  Trash2,
+} from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
+import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
-import { WorkflowCode } from '../../shared/types/contracts';
-import { FACILITY_ENDPOINTS, PRESET_CONTAINERS } from './endpointsCatalog';
-import { WORKFLOW_TEMPLATES } from './workflowTemplates';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
+import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
+import { WorkflowTemplateCard } from './WorkflowTemplateCard';
 
-interface SlotConfig {
+interface SlotItem {
   slotNo: 1 | 2 | 3;
-  containerBarcode: string;
-  productName: string;
-  quantity: string;
+  container: string;
+  product: string;
+  source: string;
+  destination: string;
+  qty: string;
 }
 
+const PRESET_PRODUCTS = [
+  { name: 'Electronic Components', container: 'BOX-101', defaultQty: '45', source: 'DOCK-IN-01', destination: 'RACK-A-02' },
+  { name: 'Control Module (CM-3100)', container: 'BOX-102', defaultQty: '25', source: 'DOCK-IN-01', destination: 'RACK-B-04' },
+  { name: 'Sensor Array (SA-8820)', container: 'BOX-103', defaultQty: '20', source: 'RACK-D-01', destination: 'RACK-A-01' },
+];
+
 export function TransportCreationScreen() {
-  const { navigate, goBack, params } = useNavigation();
+  const { goBack, navigate, params } = useNavigation();
 
-  // Wizard Step (1: Workflow, 2: Slots, 3: Route, 4: Review, 5: Done)
-  const initialWorkflow: WorkflowCode = params?.workflowCode || 'INBOUND_PUTAWAY';
-  const [step, setStep] = useState<number>(params?.step || 1);
+  // If passed directly from Quick Dispatch or Home
+  const initialWorkflowName = params?.workflow || 'Inbound Putaway';
+  const initialContainer = params?.container || 'BOX-101';
+  const initialProduct = params?.product || 'Electronic Components';
+  const initialSource = params?.source || 'DOCK-IN-01';
 
-  // Form State
-  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowCode>(initialWorkflow);
-  const [sourceCode, setSourceCode] = useState<string>('DOCK-01');
-  const [destinationCode, setDestinationCode] = useState<string>('RACK-A02');
-  const [slots, setSlots] = useState<SlotConfig[]>([
+  // Step 1: Workflow Pick, Step 2: Configure Slots & Route, Step 3: Success
+  const [step, setStep] = useState<number>(params?.workflow ? 2 : 1);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowItem>(
+    WORKFLOWS.find((w) => w.name === initialWorkflowName) || WORKFLOWS[0]
+  );
+
+  const [slots, setSlots] = useState<SlotItem[]>([
     {
       slotNo: 1,
-      containerBarcode: 'BOX-101',
-      productName: 'Optical Proximity Sensor X4',
-      quantity: '45',
+      container: initialContainer,
+      product: initialProduct,
+      source: initialSource,
+      destination: 'RACK-A-02 · L2 · Bin 03',
+      qty: params?.qty || '45',
     },
   ]);
   const [activeSlotIdx, setActiveSlotIdx] = useState<number>(0);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [createdOrderCode, setCreatedOrderCode] = useState<string | null>(null);
+  const [dispatched, setDispatched] = useState<boolean>(false);
 
-  const selectedTemplate =
-    WORKFLOW_TEMPLATES.find((t) => t.code === selectedWorkflow) || WORKFLOW_TEMPLATES[0];
+  const handleSelectWorkflow = (wf: WorkflowItem) => {
+    setSelectedWorkflow(wf);
+    if (wf.id === 'replenishment') {
+      navigate('replenishment');
+    } else if (wf.id === 'point-to-point') {
+      navigate('point_to_point');
+    } else if (wf.id === 'block-path') {
+      navigate('block_path');
+    } else {
+      setStep(2);
+    }
+  };
 
   const handleAddSlot = () => {
     if (slots.length >= 3) return;
     const nextSlotNo = (slots.length + 1) as 1 | 2 | 3;
-    const preset = PRESET_CONTAINERS[(nextSlotNo - 1) % PRESET_CONTAINERS.length];
+    const preset = PRESET_PRODUCTS[(nextSlotNo - 1) % PRESET_PRODUCTS.length];
     setSlots([
       ...slots,
       {
         slotNo: nextSlotNo,
-        containerBarcode: preset.barcode,
-        productName: preset.product,
-        quantity: String(preset.defaultQty),
+        container: `BOX-10${nextSlotNo}`,
+        product: preset.name,
+        source: selectedWorkflow.id === 'inbound' ? 'DOCK-IN-01' : preset.source,
+        destination: preset.destination,
+        qty: preset.defaultQty,
       },
     ]);
     setActiveSlotIdx(slots.length);
@@ -65,469 +101,247 @@ export function TransportCreationScreen() {
 
   const handleRemoveSlot = (index: number) => {
     if (slots.length <= 1) return;
-    const updated = slots
+    const filtered = slots
       .filter((_, i) => i !== index)
       .map((s, idx) => ({ ...s, slotNo: (idx + 1) as 1 | 2 | 3 }));
-    setSlots(updated);
+    setSlots(filtered);
     setActiveSlotIdx(Math.max(0, index - 1));
   };
 
-  const handleUpdateCurrentSlot = (field: keyof SlotConfig, value: string) => {
+  const handleUpdateActiveSlot = (field: keyof SlotItem, val: string) => {
     const updated = [...slots];
     updated[activeSlotIdx] = {
       ...updated[activeSlotIdx],
-      [field]: value,
+      [field]: val,
     };
     setSlots(updated);
   };
 
-  const handlePresetFill = (preset: typeof PRESET_CONTAINERS[0]) => {
-    const updated = [...slots];
-    updated[activeSlotIdx] = {
-      ...updated[activeSlotIdx],
-      containerBarcode: preset.barcode,
-      productName: preset.product,
-      quantity: String(preset.defaultQty),
-    };
-    setSlots(updated);
+  const handleConfirmDispatch = () => {
+    setDispatched(true);
+    setStep(3);
   };
 
-  const handleSubmitDispatch = () => {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setCreatedOrderCode('TR-2049');
-      setStep(5);
-    }, 800);
-  };
+  const currentSlot = slots[activeSlotIdx] || slots[0];
 
-  // -------------------------------------------------------------
-  // STEP 5: SUCCESS CONFIRMATION RECEIPT
-  // -------------------------------------------------------------
-  if (step === 5) {
-    return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.successCard}>
-          <View style={styles.successIconWrap}>
-            <Text style={styles.successIcon}>✓</Text>
-          </View>
-          <Text style={styles.successTitle}>Transport Request Queued!</Text>
-          <Text style={styles.successSubtitle}>
-            Request #{createdOrderCode} successfully dispatched to AMR Fleet.
-          </Text>
-
-          {/* Allocation Info Box */}
-          <View style={styles.allocationBox}>
-            <View style={styles.allocationRow}>
-              <Text style={styles.allocLabel}>Assigned AMR:</Text>
-              <Text style={styles.allocRobot}>AMR-01 (Flatbed)</Text>
-            </View>
-            <View style={styles.allocationRow}>
-              <Text style={styles.allocLabel}>Workflow:</Text>
-              <Text style={styles.allocVal}>{selectedTemplate.title}</Text>
-            </View>
-            <View style={styles.allocationRow}>
-              <Text style={styles.allocLabel}>Route:</Text>
-              <Text style={styles.allocVal}>{sourceCode} ➔ {destinationCode}</Text>
-            </View>
-            <View style={styles.allocationRow}>
-              <Text style={styles.allocLabel}>Total Payload:</Text>
-              <Text style={styles.allocVal}>{slots.length} Containers ({slots.length}/3 Slots)</Text>
-            </View>
-
-            <View style={styles.slotsBreakdown}>
-              {slots.map((s) => (
-                <View key={s.slotNo} style={styles.slotReceiptRow}>
-                  <Text style={styles.slotReceiptTag}>Slot {s.slotNo}: {s.containerBarcode}</Text>
-                  <Text style={styles.slotReceiptItem}>{s.productName} ({s.quantity} units)</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.receiptActions}>
-            <Button
-              label="Track in AMR Live Monitor"
-              onPress={() => navigate('job_monitoring', { jobId: 'JOB-2026-0881' })}
-              variant="primary"
-              size="md"
-            />
-            <View style={{ height: 8 }} />
-            <Button
-              label="Return to Transport Hub"
-              onPress={goBack}
-              variant="secondary"
-              size="md"
-            />
-          </View>
-        </View>
-      </ScrollView>
-    );
-  }
-
-  // -------------------------------------------------------------
-  // STEPS 1 - 4: STEPPER WIZARD
-  // -------------------------------------------------------------
   return (
     <View style={styles.container}>
-      {/* Wizard Progress Stepper Bar */}
-      <View style={styles.stepperBar}>
-        {[
-          { num: 1, label: 'Workflow' },
-          { num: 2, label: 'Containers' },
-          { num: 3, label: 'Endpoints' },
-          { num: 4, label: 'Review' },
-        ].map((item) => {
-          const isActive = step === item.num;
-          const isDone = step > item.num;
-          return (
-            <Pressable
-              key={item.num}
-              onPress={() => {
-                if (item.num < step) setStep(item.num);
-              }}
-              style={styles.stepItem}
-            >
-              <View
-                style={[
-                  styles.stepCircle,
-                  isActive && styles.stepCircleActive,
-                  isDone && styles.stepCircleDone,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.stepNum,
-                    (isActive || isDone) && styles.stepNumActive,
-                  ]}
-                >
-                  {isDone ? '✓' : item.num}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.stepLabel,
-                  isActive && styles.stepLabelActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <SubScreenHeader
+        label={
+          step === 1
+            ? 'SCR-STF-10 · DISPATCH HUB'
+            : `SCR-STF-11 · ${selectedWorkflow.name.toUpperCase()}`
+        }
+        title={
+          step === 1
+            ? 'Select Workflow'
+            : step === 2
+            ? 'Configure Transport Mission'
+            : 'Dispatch Confirmed'
+        }
+        onBack={() => {
+          if (step === 2 && !params?.workflow) {
+            setStep(1);
+          } else {
+            goBack();
+          }
+        }}
+      />
 
-      <ScrollView style={styles.wizardContent} contentContainerStyle={styles.scrollContent}>
-        {/* STEP 1: WORKFLOW SELECTION */}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Step 1: Workflow Template Selection Grid */}
         {step === 1 && (
-          <View>
-            <Text style={styles.stepTitle}>Select Transport Workflow</Text>
-            <Text style={styles.stepSubtitle}>
-              Choose the operational template for AMR automated dispatch
-            </Text>
-
-            <View style={styles.templateList}>
-              {WORKFLOW_TEMPLATES.map((tmpl) => {
-                const isSelected = selectedWorkflow === tmpl.code;
-                return (
-                  <Pressable
-                    key={tmpl.code}
-                    onPress={() => setSelectedWorkflow(tmpl.code)}
-                    style={[
-                      styles.templateItem,
-                      isSelected && styles.templateItemSelected,
-                    ]}
-                  >
-                    <View style={styles.templateIconWrap}>
-                      <Text style={styles.templateIcon}>{tmpl.iconName}</Text>
-                    </View>
-                    <View style={styles.templateDetails}>
-                      <Text
-                        style={[
-                          styles.templateTitle,
-                          isSelected && styles.templateTitleSelected,
-                        ]}
-                      >
-                        {tmpl.title}
-                      </Text>
-                      <Text style={styles.templateDesc}>{tmpl.tagline}</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.radioCircle,
-                        isSelected && styles.radioCircleSelected,
-                      ]}
-                    >
-                      {isSelected && <View style={styles.radioDot} />}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {/* STEP 2: MULTI-SLOT CONTAINERS CONFIG */}
-        {step === 2 && (
-          <View>
-            <View style={styles.slotsHeader}>
-              <View>
-                <Text style={styles.stepTitle}>Configure AMR Payload Slots</Text>
-                <Text style={styles.stepSubtitle}>
-                  AMR flatbed supports up to 3 standard containers
-                </Text>
-              </View>
-              <Text style={styles.slotsCounter}>{slots.length} / 3 Slots</Text>
-            </View>
-
-            {/* Slots Tabs */}
-            <View style={styles.slotTabsRow}>
-              {slots.map((s, idx) => {
-                const isActive = activeSlotIdx === idx;
-                return (
-                  <Pressable
-                    key={s.slotNo}
-                    onPress={() => setActiveSlotIdx(idx)}
-                    style={[
-                      styles.slotTab,
-                      isActive && styles.slotTabActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.slotTabLabel,
-                        isActive && styles.slotTabLabelActive,
-                      ]}
-                    >
-                      Slot {s.slotNo}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.slotTabBarcode,
-                        isActive && styles.slotTabBarcodeActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {s.containerBarcode || 'Empty'}
-                    </Text>
-                    {slots.length > 1 && (
-                      <Pressable
-                        onPress={() => handleRemoveSlot(idx)}
-                        style={styles.slotRemoveBtn}
-                      >
-                        <Text style={styles.slotRemoveText}>✕</Text>
-                      </Pressable>
-                    )}
-                  </Pressable>
-                );
-              })}
-
-              {slots.length < 3 && (
-                <Pressable
-                  onPress={handleAddSlot}
-                  style={styles.addSlotBtn}
-                  accessibilityLabel="Add container slot"
-                >
-                  <Text style={styles.addSlotText}>+ Add</Text>
-                </Pressable>
-              )}
-            </View>
-
-            {/* Active Slot Form */}
-            <View style={styles.slotFormCard}>
-              <Text style={styles.slotCardTitle}>
-                Editing Slot {slots[activeSlotIdx]?.slotNo} Details
+          <View style={{ gap: 12 }}>
+            <View style={styles.workflowIntro}>
+              <Text style={styles.workflowIntroTitle}>
+                5 Routine + 1 Safety Workflows
               </Text>
-
-              {/* Quick Presets */}
-              <Text style={styles.presetLabel}>Quick Ingest Containers:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetsScroll}>
-                {PRESET_CONTAINERS.map((p) => (
-                  <Pressable
-                    key={p.barcode}
-                    onPress={() => handlePresetFill(p)}
-                    style={styles.presetChip}
-                  >
-                    <Text style={styles.presetChipCode}>{p.barcode}</Text>
-                    <Text style={styles.presetChipItem}>{p.product}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
-              <Input
-                label="Container Barcode"
-                value={slots[activeSlotIdx]?.containerBarcode}
-                onChangeText={(val) => handleUpdateCurrentSlot('containerBarcode', val)}
-                placeholder="BOX-XXX or TOTE-XXX"
-                autoCapitalize="characters"
-              />
-
-              <Input
-                label="Product Name"
-                value={slots[activeSlotIdx]?.productName}
-                onChangeText={(val) => handleUpdateCurrentSlot('productName', val)}
-                placeholder="Product description"
-              />
-
-              <Input
-                label="Quantity Units"
-                value={slots[activeSlotIdx]?.quantity}
-                onChangeText={(val) => handleUpdateCurrentSlot('quantity', val)}
-                placeholder="e.g. 45"
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-        )}
-
-        {/* STEP 3: ENDPOINTS SELECTION */}
-        {step === 3 && (
-          <View>
-            <Text style={styles.stepTitle}>Select Source & Destination</Text>
-            <Text style={styles.stepSubtitle}>
-              Specify pickup location and target drop-off bay
-            </Text>
-
-            {/* Source Endpoint Selector */}
-            <View style={styles.endpointSection}>
-              <Text style={styles.endpointLabel}>PICKUP SOURCE ENDPOINT</Text>
-              <View style={styles.endpointGrid}>
-                {FACILITY_ENDPOINTS.slice(0, 5).map((ep) => {
-                  const isSelected = sourceCode === ep.code;
-                  return (
-                    <Pressable
-                      key={`src-${ep.code}`}
-                      onPress={() => setSourceCode(ep.code)}
-                      style={[
-                        styles.endpointItem,
-                        isSelected && styles.endpointItemSelected,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.epCode,
-                          isSelected && styles.epCodeSelected,
-                        ]}
-                      >
-                        {ep.code}
-                      </Text>
-                      <Text style={styles.epName} numberOfLines={1}>{ep.name}</Text>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.rbacPill}>
+                <Text style={styles.rbacPillText}>Section 8 RBAC</Text>
               </View>
             </View>
 
-            {/* Destination Endpoint Selector */}
-            <View style={styles.endpointSection}>
-              <Text style={styles.endpointLabel}>DELIVERY DESTINATION ENDPOINT</Text>
-              <View style={styles.endpointGrid}>
-                {FACILITY_ENDPOINTS.map((ep) => {
-                  const isSelected = destinationCode === ep.code;
-                  return (
-                    <Pressable
-                      key={`dest-${ep.code}`}
-                      onPress={() => setDestinationCode(ep.code)}
-                      style={[
-                        styles.endpointItem,
-                        isSelected && styles.endpointItemSelected,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.epCode,
-                          isSelected && styles.epCodeSelected,
-                        ]}
-                      >
-                        {ep.code}
-                      </Text>
-                      <Text style={styles.epName} numberOfLines={1}>{ep.name}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* STEP 4: REVIEW & CONFIRM */}
-        {step === 4 && (
-          <View>
-            <Text style={styles.stepTitle}>Review Dispatch Order</Text>
-            <Text style={styles.stepSubtitle}>
-              Verify payload and navigation route before AMR transmission
-            </Text>
-
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <View style={styles.reviewIconWrap}>
-                  <Text style={styles.reviewIcon}>{selectedTemplate.iconName}</Text>
-                </View>
-                <View>
-                  <Text style={styles.reviewWfTitle}>{selectedTemplate.title}</Text>
-                  <Text style={styles.reviewEstimated}>Estimated Duration: {selectedTemplate.estimatedDuration}</Text>
-                </View>
-              </View>
-
-              {/* Route Summary */}
-              <View style={styles.reviewRouteBox}>
-                <View style={styles.routeCol}>
-                  <Text style={styles.routeColTag}>SOURCE</Text>
-                  <Text style={styles.routeColCode}>{sourceCode}</Text>
-                </View>
-                <Text style={styles.routeArrow}>➔</Text>
-                <View style={styles.routeCol}>
-                  <Text style={styles.routeColTag}>DESTINATION</Text>
-                  <Text style={styles.routeColCode}>{destinationCode}</Text>
-                </View>
-              </View>
-
-              {/* Payload Breakdown */}
-              <Text style={styles.reviewPayloadTitle}>
-                Payload Containers ({slots.length}/3 Slots)
-              </Text>
-              {slots.map((s) => (
-                <View key={s.slotNo} style={styles.reviewSlotItem}>
-                  <View style={styles.reviewSlotPill}>
-                    <Text style={styles.reviewSlotPillText}>Slot {s.slotNo}</Text>
-                  </View>
-                  <View style={styles.reviewSlotInfo}>
-                    <Text style={styles.reviewSlotBarcode}>{s.containerBarcode}</Text>
-                    <Text style={styles.reviewSlotProd}>{s.productName} ({s.quantity} units)</Text>
-                  </View>
+            <View style={styles.workflowGrid}>
+              {WORKFLOWS.map((wf) => (
+                <View key={wf.id} style={{ width: '48%' }}>
+                  <WorkflowTemplateCard
+                    workflow={wf}
+                    onSelect={handleSelectWorkflow}
+                  />
                 </View>
               ))}
             </View>
           </View>
         )}
-      </ScrollView>
 
-      {/* Stepper Navigation Buttons */}
-      <View style={styles.bottomNav}>
-        {step > 1 && (
-          <Button
-            label="Back"
-            onPress={() => setStep(step - 1)}
-            variant="secondary"
-            size="md"
-            style={styles.backNavBtn}
-          />
+        {/* Step 2: Multi-Slot Chassis Dispatch Configuration */}
+        {step === 2 && (
+          <View style={{ gap: 14 }}>
+            {/* Workflow Banner */}
+            <View style={styles.flowBanner}>
+              <View style={styles.flowBadge}>
+                <Text style={styles.flowBadgeText}>{selectedWorkflow.category}</Text>
+              </View>
+              <Text style={styles.flowTitle}>{selectedWorkflow.name}</Text>
+              <Text style={styles.flowNote}>{selectedWorkflow.note}</Text>
+            </View>
+
+            {/* Flatbed 3-Slot Selector */}
+            <View style={styles.deckCard}>
+              <View style={styles.deckHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Layers size={16} color={colors.primary} />
+                  <Text style={styles.deckTitle}>AMR Flatbed 3-Slot Payload</Text>
+                </View>
+                <Text style={styles.deckSlotsCount}>{slots.length}/3 Trays Loaded</Text>
+              </View>
+
+              <View style={styles.slotsSelectorRow}>
+                {slots.map((s, idx) => {
+                  const isActive = activeSlotIdx === idx;
+                  return (
+                    <Pressable
+                      key={s.slotNo}
+                      onPress={() => setActiveSlotIdx(idx)}
+                      style={[
+                        styles.slotTab,
+                        isActive && styles.slotTabActive,
+                      ]}
+                    >
+                      <Text style={[styles.slotTabLabel, isActive && styles.slotTabLabelActive]}>
+                        Slot {s.slotNo}
+                      </Text>
+                      <Text style={[styles.slotTabCode, isActive && styles.slotTabCodeActive]}>
+                        {s.container}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+
+                {slots.length < 3 && (
+                  <Pressable onPress={handleAddSlot} style={styles.addSlotBtn}>
+                    <Plus size={16} color={colors.primary} />
+                    <Text style={styles.addSlotText}>+ Add Tote</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+
+            {/* Active Slot Configuration Card */}
+            <View style={styles.configCard}>
+              <View style={styles.slotConfigHeader}>
+                <Text style={styles.slotConfigTitle}>
+                  Configuring Tray Slot {currentSlot.slotNo}
+                </Text>
+                {slots.length > 1 && (
+                  <Pressable
+                    onPress={() => handleRemoveSlot(activeSlotIdx)}
+                    style={styles.deleteSlotBtn}
+                  >
+                    <Trash2 size={16} color={colors.danger} />
+                  </Pressable>
+                )}
+              </View>
+
+              <Input
+                label="Container Barcode (Tote ID)"
+                value={currentSlot.container}
+                onChangeText={(v) => handleUpdateActiveSlot('container', v)}
+                placeholder="e.g. BOX-101"
+              />
+
+              <Input
+                label="Product Cargo SKU"
+                value={currentSlot.product}
+                onChangeText={(v) => handleUpdateActiveSlot('product', v)}
+                placeholder="e.g. Electronic Components"
+              />
+
+              <Input
+                label="Pickup Source Station"
+                value={currentSlot.source}
+                onChangeText={(v) => handleUpdateActiveSlot('source', v)}
+                placeholder="e.g. DOCK-IN-01"
+              />
+
+              <Input
+                label="Dropoff Destination Location"
+                value={currentSlot.destination}
+                onChangeText={(v) => handleUpdateActiveSlot('destination', v)}
+                placeholder="e.g. RACK-A-02 · Level 2 · Bin 03"
+              />
+
+              <Input
+                label="Quantity inside Container"
+                value={currentSlot.qty}
+                onChangeText={(v) => handleUpdateActiveSlot('qty', v)}
+                keyboardType="numeric"
+                placeholder="e.g. 45"
+              />
+            </View>
+
+            <Button
+              label={`Dispatch Multi-Tote Mission (${slots.length} Totes ➔ AMR-01)`}
+              icon={<Rocket size={18} color="#ffffff" />}
+              onPress={handleConfirmDispatch}
+              variant="primary"
+              size="lg"
+            />
+          </View>
         )}
-        <Button
-          label={step === 4 ? 'DISPATCH TO AMR FLEET' : 'Continue ➔'}
-          onPress={() => {
-            if (step === 4) {
-              handleSubmitDispatch();
-            } else {
-              setStep(step + 1);
-            }
-          }}
-          loading={isSubmitting}
-          variant="primary"
-          size="md"
-          style={styles.nextNavBtn}
-        />
-      </View>
+
+        {/* Step 3: Success Confirmation Screen */}
+        {step === 3 && (
+          <View style={styles.successCard}>
+            <View style={styles.successIconBadge}>
+              <Check size={28} color="#ffffff" />
+            </View>
+            <Text style={styles.successTitle}>Smart Multi-Tote Dispatch Queued</Text>
+            <Text style={styles.successSub}>
+              {slots.length} container{slots.length !== 1 ? 's' : ''} allocated to AMR-01 for autonomous transport.
+            </Text>
+
+            <View style={styles.receiptBox}>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Dispatch Order:</Text>
+                <Text style={styles.receiptVal}>TR-2049</Text>
+              </View>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Workflow:</Text>
+                <Text style={styles.receiptHighlight}>{selectedWorkflow.name}</Text>
+              </View>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Assigned Robot:</Text>
+                <Text style={styles.receiptSuccess}>AMR-01 (Online · 85%)</Text>
+              </View>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Payload Slots:</Text>
+                <Text style={styles.receiptVal}>{slots.length} Containers Loaded</Text>
+              </View>
+              <View style={[styles.receiptRow, styles.receiptBorderTop]}>
+                <Text style={styles.receiptLabel}>First Drop Station:</Text>
+                <Text style={styles.receiptVal}>{slots[0].destination}</Text>
+              </View>
+            </View>
+
+            <View style={{ width: '100%', gap: 8, marginTop: 16 }}>
+              <Button
+                label="Track on Live Nav2 Map"
+                icon={<MapPin size={16} color="#ffffff" />}
+                onPress={() => navigate('live_map', { robotId: 'AMR-01', jobId: 'TR-2049' })}
+                variant="primary"
+                size="lg"
+              />
+              <Button
+                label="Done & Return to Console"
+                onPress={goBack}
+                variant="outline"
+                size="md"
+              />
+            </View>
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -539,156 +353,108 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
-  stepperBar: {
+  workflowIntro: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  stepItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  stepCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepCircleActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  stepCircleDone: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-  },
-  stepNum: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.textSecondary,
-  },
-  stepNumActive: {
-    color: colors.textInverse,
-  },
-  stepLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
-  stepLabelActive: {
-    color: colors.primary,
-  },
-  wizardContent: {
-    flex: 1,
-  },
-  stepTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  stepSubtitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-    marginBottom: 12,
-  },
-  templateList: {
-    gap: 8,
-  },
-  templateItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 12,
-    gap: 12,
-  },
-  templateItemSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  templateIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  templateIcon: {
-    fontSize: 18,
-  },
-  templateDetails: {
-    flex: 1,
-  },
-  templateTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  templateTitleSelected: {
-    color: colors.primaryDark,
-  },
-  templateDesc: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioCircleSelected: {
-    borderColor: colors.primary,
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
-  },
-  slotsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  slotsCounter: {
+  workflowIntroTitle: {
     fontSize: 11,
     fontWeight: '800',
-    color: colors.primary,
-    fontFamily: 'monospace',
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
-  slotTabsRow: {
+  rbacPill: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  rbacPillText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: colors.primary,
+    fontFamily: typography.fontMono,
+  },
+  workflowGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  flowBanner: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    ...shadows.panel,
+  },
+  flowBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  flowBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: colors.primary,
+    fontFamily: typography.fontMono,
+  },
+  flowTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    marginTop: 6,
+    fontFamily: typography.fontSans,
+  },
+  flowNote: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  deckCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
+    ...shadows.panel,
+  },
+  deckHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  deckTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.textPrimary,
+  },
+  deckSlotsCount: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: colors.primary,
+    fontFamily: typography.fontMono,
+  },
+  slotsSelectorRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
   },
   slotTab: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 8,
-    padding: 8,
-    position: 'relative',
+    alignItems: 'center',
   },
   slotTabActive: {
     borderColor: colors.primary,
@@ -696,333 +462,136 @@ const styles = StyleSheet.create({
   },
   slotTabLabel: {
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.textMuted,
   },
   slotTabLabelActive: {
     color: colors.primary,
+    fontWeight: '900',
   },
-  slotTabBarcode: {
+  slotTabCode: {
     fontSize: 11,
     fontWeight: '900',
-    fontFamily: 'monospace',
     color: colors.textPrimary,
+    fontFamily: typography.fontMono,
     marginTop: 2,
   },
-  slotTabBarcodeActive: {
-    color: colors.primaryDark,
-  },
-  slotRemoveBtn: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    padding: 2,
-  },
-  slotRemoveText: {
-    fontSize: 10,
-    color: colors.textMuted,
+  slotTabCodeActive: {
+    color: colors.primary,
   },
   addSlotBtn: {
-    width: 60,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
+    flex: 1,
+    borderWidth: 1.5,
     borderStyle: 'dashed',
+    borderColor: colors.primaryBorder,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primaryLight,
+    paddingVertical: 8,
   },
   addSlotText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: colors.primary,
+    marginTop: 2,
   },
-  slotFormCard: {
-    backgroundColor: colors.surface,
+  configCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
     padding: 14,
-  },
-  slotCardTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginBottom: 8,
-  },
-  presetLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textMuted,
-    marginBottom: 6,
-  },
-  presetsScroll: {
-    marginBottom: 12,
-  },
-  presetChip: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  presetChipCode: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  presetChipItem: {
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  endpointSection: {
-    marginBottom: 16,
-  },
-  endpointLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    color: colors.textMuted,
-    marginBottom: 8,
-  },
-  endpointGrid: {
-    gap: 6,
-  },
-  endpointItem: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  endpointItemSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  epCode: {
-    fontSize: 12,
-    fontWeight: '900',
-    fontFamily: 'monospace',
-    color: colors.textPrimary,
-  },
-  epCodeSelected: {
-    color: colors.primaryDark,
-  },
-  epName: {
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  reviewCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 14,
-  },
-  reviewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceSubtle,
-  },
-  reviewIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reviewIcon: {
-    fontSize: 18,
-  },
-  reviewWfTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  reviewEstimated: {
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  reviewRouteBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: 8,
-    padding: 12,
-    marginVertical: 12,
-  },
-  routeCol: {
-    flex: 1,
-  },
-  routeColTag: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: colors.textMuted,
-  },
-  routeColCode: {
-    fontSize: 13,
-    fontWeight: '900',
-    fontFamily: 'monospace',
-    color: colors.primaryDark,
-    marginTop: 2,
-  },
-  routeArrow: {
-    fontSize: 16,
-    color: colors.primary,
-    fontWeight: '900',
-    paddingHorizontal: 8,
-  },
-  reviewPayloadTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginBottom: 6,
-  },
-  reviewSlotItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceSubtle,
+    ...shadows.panel,
   },
-  reviewSlotPill: {
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  reviewSlotPillText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.primaryDark,
-  },
-  reviewSlotInfo: {
-    flex: 1,
-  },
-  reviewSlotBarcode: {
-    fontSize: 11,
-    fontWeight: '800',
-    fontFamily: 'monospace',
-    color: colors.textPrimary,
-  },
-  reviewSlotProd: {
-    fontSize: 10,
-    color: colors.textSecondary,
-  },
-  bottomNav: {
+  slotConfigHeader: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: 12,
-    gap: 10,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  backNavBtn: {
-    flex: 1,
+  slotConfigTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
-  nextNavBtn: {
-    flex: 2,
+  deleteSlotBtn: {
+    padding: 4,
   },
   successCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.successBg,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.successBorder,
-    borderRadius: 16,
-    padding: 20,
+    padding: 18,
     alignItems: 'center',
+    ...shadows.panel,
   },
-  successIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  successIconBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 999,
     backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
-  successIcon: {
-    fontSize: 24,
-    color: colors.textInverse,
-    fontWeight: '900',
+    ...shadows.control,
   },
   successTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '900',
     color: colors.textPrimary,
+    marginTop: 12,
+    fontFamily: typography.fontSans,
   },
-  successSubtitle: {
+  successSub: {
     fontSize: 12,
+    fontWeight: '500',
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 16,
   },
-  allocationBox: {
+  receiptBox: {
     width: '100%',
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    padding: 12,
-    gap: 6,
-    marginBottom: 16,
+    padding: 14,
+    gap: 8,
   },
-  allocationRow: {
+  receiptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  allocLabel: {
+  receiptLabel: {
     fontSize: 11,
+    fontWeight: '600',
     color: colors.textMuted,
   },
-  allocRobot: {
-    fontSize: 12,
-    fontWeight: '900',
-    fontFamily: 'monospace',
-    color: colors.primary,
-  },
-  allocVal: {
+  receiptVal: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontMono,
   },
-  slotsBreakdown: {
-    marginTop: 8,
-    paddingTop: 8,
+  receiptHighlight: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.primary,
+    fontFamily: typography.fontMono,
+  },
+  receiptSuccess: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.success,
+    fontFamily: typography.fontMono,
+  },
+  receiptBorderTop: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    gap: 4,
-  },
-  slotReceiptRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  slotReceiptTag: {
-    fontSize: 10,
-    fontWeight: '800',
-    fontFamily: 'monospace',
-    color: colors.primaryDark,
-  },
-  slotReceiptItem: {
-    fontSize: 10,
-    color: colors.textSecondary,
-  },
-  receiptActions: {
-    width: '100%',
+    paddingTop: 8,
+    marginTop: 4,
   },
 });

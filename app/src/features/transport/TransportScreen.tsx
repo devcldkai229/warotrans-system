@@ -8,20 +8,33 @@ import {
 } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { colors } from '../../shared/theme/colors';
+import { ChevronRight, History, PackagePlus, PlusCircle } from 'lucide-react-native';
 import { WorkflowCode } from '../../shared/types/contracts';
 import { SafetyHubCard } from './SafetyHubCard';
-import { WORKFLOW_TEMPLATES } from './workflowTemplates';
+import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
 import { WorkflowTemplateCard } from './WorkflowTemplateCard';
 
 export function TransportScreen() {
   const { navigate, switchTab } = useNavigation();
 
-  const handleSelectWorkflow = (code: WorkflowCode) => {
-    navigate('transport_create', { workflowCode: code });
+  const handleSelectWorkflow = (workflow: WorkflowItem) => {
+    if (workflow.id === 'replenishment') {
+      navigate('replenishment');
+    } else if (workflow.id === 'point-to-point') {
+      navigate('point_to_point');
+    } else if (workflow.id === 'block-path') {
+      navigate('block_path');
+    } else {
+      navigate('transport_create', { workflow: workflow.name });
+    }
   };
 
   const handleLaunchRescue = () => {
-    navigate('transport_create', { workflowCode: 'PAYLOAD_RECOVERY' });
+    navigate('payload_recovery');
+  };
+
+  const handleFleetRecall = () => {
+    navigate('fleet_recall');
   };
 
   return (
@@ -36,28 +49,29 @@ export function TransportScreen() {
             pressed && styles.heroActionPressed,
           ]}
         >
-          <Text style={styles.heroActionIcon}>➕</Text>
+          <PlusCircle size={22} color="#ffffff" style={{ marginBottom: 6 }} />
           <Text style={styles.heroActionTitle}>New Transport</Text>
           <Text style={styles.heroActionSubtitle}>Select workflow & AMR</Text>
         </Pressable>
 
         <Pressable
-          onPress={() => navigate('transport_create', { step: 2 })}
+          onPress={() => navigate('create_container')}
           style={({ pressed }) => [
             styles.heroActionBtn,
             styles.heroActionSecondary,
             pressed && styles.heroActionPressed,
           ]}
         >
-          <Text style={styles.heroActionIcon}>📦</Text>
-          <Text style={styles.heroActionTitleSecondary}>Pack Container</Text>
-          <Text style={styles.heroActionSubtitle}>Ingest tote to bay</Text>
+          <PackagePlus size={22} color={colors.primary} style={{ marginBottom: 6 }} />
+          <Text style={styles.heroActionTitleSecondary}>Pack & Ingest</Text>
+          <Text style={styles.heroActionSubtitle}>Single / batch totes</Text>
         </Pressable>
       </View>
 
       {/* 2. Safety & Incident Hub */}
       <SafetyHubCard
         onLaunchRescue={handleLaunchRescue}
+        onFleetRecall={handleFleetRecall}
         onBlockPath={() => alert('Nav2 Dynamic Obstacle flagged at current location.')}
       />
 
@@ -68,10 +82,10 @@ export function TransportScreen() {
           <Text style={styles.sectionCount}>6 Workflows</Text>
         </View>
 
-        {WORKFLOW_TEMPLATES.map((tmpl) => (
+        {WORKFLOWS.map((wf) => (
           <WorkflowTemplateCard
-            key={tmpl.code}
-            template={tmpl}
+            key={wf.id}
+            workflow={wf}
             onSelect={handleSelectWorkflow}
           />
         ))}
@@ -120,6 +134,26 @@ export function TransportScreen() {
           </View>
         </View>
       </View>
+
+      {/* 5. View Full Audit Trail */}
+      <View style={styles.historyLinkSection}>
+        <Pressable
+          onPress={() => navigate('transport_history')}
+          style={({ pressed }) => [
+            styles.historyLinkBtn,
+            pressed && styles.historyLinkBtnPressed,
+          ]}
+        >
+          <History size={22} color={colors.primary} />
+          <View style={styles.historyLinkTextCol}>
+            <Text style={styles.historyLinkTitle}>View Transport Audit History</Text>
+            <Text style={styles.historyLinkSubtitle}>
+              Completed deliveries, timestamps & route metrics
+            </Text>
+          </View>
+          <ChevronRight size={18} color="#94a3b8" />
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -135,16 +169,22 @@ const styles = StyleSheet.create({
   },
   heroGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
+    gap: 12,
+    marginBottom: 16,
   },
   heroActionBtn: {
     flex: 1,
+    minHeight: 110,
     paddingVertical: 16,
     paddingHorizontal: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   heroActionPrimary: {
     backgroundColor: colors.primary,
@@ -152,29 +192,36 @@ const styles = StyleSheet.create({
   heroActionSecondary: {
     backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: colors.primaryBorder,
+    borderColor: 'rgba(0, 92, 209, 0.3)',
   },
   heroActionPressed: {
-    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+    opacity: 0.92,
   },
   heroActionIcon: {
-    fontSize: 22,
-    marginBottom: 4,
+    fontSize: 24,
+    marginBottom: 6,
   },
   heroActionTitle: {
     fontSize: 13,
     fontWeight: '900',
     color: colors.textInverse,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   heroActionTitleSecondary: {
     fontSize: 13,
     fontWeight: '900',
     color: colors.primary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   heroActionSubtitle: {
     fontSize: 10,
+    fontWeight: '600',
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 4,
+    textAlign: 'center',
   },
   catalogSection: {
     marginBottom: 14,
@@ -281,6 +328,44 @@ const styles = StyleSheet.create({
   },
   recentTime: {
     fontSize: 10,
+    color: colors.textMuted,
+  },
+  historyLinkSection: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  historyLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+    gap: 12,
+  },
+  historyLinkBtnPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  historyLinkIcon: {
+    fontSize: 22,
+  },
+  historyLinkTextCol: {
+    flex: 1,
+  },
+  historyLinkTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  historyLinkSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  historyLinkChevron: {
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.textMuted,
   },
 });

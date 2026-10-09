@@ -8,7 +8,18 @@ export type AppScreen =
   | 'transport'
   | 'job_detail'
   | 'job_monitoring'
-  | 'transport_create';
+  | 'transport_create'
+  | 'create_container'
+  | 'inventory_lookup'
+  | 'live_map'
+  | 'payload_recovery'
+  | 'fleet_recall'
+  | 'replenishment'
+  | 'point_to_point'
+  | 'block_path'
+  | 'transport_history'
+  | 'offline_hud'
+  | 'scanner_hud';
 
 export interface NavigationState {
   currentScreen: AppScreen;
