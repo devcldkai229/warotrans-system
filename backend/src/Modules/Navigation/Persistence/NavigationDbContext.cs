@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Persistence;
 using WaroTrans.Navigation.Entities;
@@ -18,5 +19,20 @@ public sealed class NavigationDbContext(DbContextOptions<NavigationDbContext> op
         modelBuilder.HasDefaultSchema("navigation");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(NavigationDbContext).Assembly);
         modelBuilder.ApplySnakeCaseNamingConvention();
+
+        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
+        {
+            modelBuilder.Entity<Zone>()
+                .Property(x => x.Geometry)
+                .HasConversion(
+                    v => v.RootElement.GetRawText(),
+                    v => JsonDocument.Parse(v, default));
+
+            modelBuilder.Entity<Edge>()
+                .Property(x => x.Geometry)
+                .HasConversion(
+                    v => v.RootElement.GetRawText(),
+                    v => JsonDocument.Parse(v, default));
+        }
     }
 }
