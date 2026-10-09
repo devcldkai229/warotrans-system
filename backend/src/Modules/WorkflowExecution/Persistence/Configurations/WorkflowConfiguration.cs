@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using WaroTrans.WorkflowExecution.Entities;
@@ -8,6 +9,13 @@ namespace WaroTrans.WorkflowExecution.Persistence.Configurations;
 
 public sealed class WorkflowConfiguration : IEntityTypeConfiguration<Workflow>
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() },
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     public void Configure(EntityTypeBuilder<Workflow> builder)
     {
         builder.ToTable("workflows");
@@ -21,8 +29,9 @@ public sealed class WorkflowConfiguration : IEntityTypeConfiguration<Workflow>
         builder.Property(x => x.VariablesSchema)
             .HasColumnType("jsonb")
             .HasConversion(
-                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                v => JsonSerializer.Deserialize<List<WorkflowVariableDefinition>>(v, (JsonSerializerOptions?)null)!)
+                v => JsonSerializer.Serialize(v, JsonOptions),
+                v => JsonSerializer.Deserialize<List<WorkflowVariableDefinition>>(v, JsonOptions)
+                     ?? new List<WorkflowVariableDefinition>())
             .IsRequired();
 
         builder.HasIndex(x => new { x.Code, x.VersionNo }).IsUnique();

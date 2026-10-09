@@ -1,20 +1,33 @@
-import './App.css'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AppLayout } from '@/app/layout'
+import { HomePage } from '@/app/home-page'
+import { WorkflowEditorPage } from '@/features/workflows/workflow-editor-page'
+import { WorkflowsListPage } from '@/features/workflows/workflows-list-page'
 
-function App() {
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
+export default function App() {
   return (
-    <main className="shell">
-      <header className="brand">
-        <p className="brand-mark">WaroTrans</p>
-        <h1>Warehouse &amp; transport operations</h1>
-        <p className="tagline">
-          Coordinate fleet, warehouse, and delivery workflows from one place.
-        </p>
-        <button type="button" className="cta">
-          Get started
-        </button>
-      </header>
-    </main>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="workflows" element={<WorkflowsListPage />} />
+            <Route path="workflows/new" element={<WorkflowEditorPage />} />
+            <Route path="workflows/:id" element={<WorkflowEditorPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   )
 }
-
-export default App
