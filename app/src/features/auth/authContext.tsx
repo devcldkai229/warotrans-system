@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { UserSession } from '../../shared/types/contracts';
 
 interface AuthContextType {
@@ -13,19 +14,19 @@ export const PRESET_OPERATORS: { id: string; name: string; zone: string; role: '
   {
     id: 'STF-2026-088',
     name: 'Alex Tran',
-    zone: 'Storage Zone A (Racks A01-A12)',
+    zone: 'Inbound Dock 01',
     role: 'STAFF',
   },
   {
     id: 'STF-2026-042',
     name: 'Sarah Connor',
-    zone: 'Inbound Dock 01 (Receiving Bay)',
+    zone: 'Inbound Dock 01',
     role: 'STAFF',
   },
   {
     id: 'STF-2026-015',
     name: 'David Miller',
-    zone: 'Outbound Dock 04 (Staging & Dispatch)',
+    zone: 'Outbound Dock 04',
     role: 'STAFF',
   },
 ];
@@ -33,12 +34,34 @@ export const PRESET_OPERATORS: { id: string; name: string; zone: string; role: '
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<UserSession | null>(null);
+  const [session, setSession] = useState<UserSession | null>(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const scr = sp.get('screen');
+        if (scr === 'login') return null;
+        if (scr || sp.get('auth') === '1') {
+          const matched = PRESET_OPERATORS[0];
+          return {
+            id: matched.id,
+            username: matched.id.toLowerCase(),
+            fullName: matched.name,
+            role: matched.role,
+            zone: matched.zone,
+            avatarInitials: 'AT',
+          };
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return null;
+  });
 
   const login = (staffId: string, zone?: string): boolean => {
     const matched = PRESET_OPERATORS.find((op) => op.id.toLowerCase() === staffId.trim().toLowerCase());
     const fullName = matched ? matched.name : `Operator (${staffId})`;
-    const activeZone = zone || (matched ? matched.zone : 'Storage Zone A (Racks A01-A12)');
+    const activeZone = zone || (matched ? matched.zone : 'Inbound Dock 01');
     const initials = fullName
       .split(' ')
       .map((part) => part[0])

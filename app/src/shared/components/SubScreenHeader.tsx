@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { shadows } from '../theme/shadows';
@@ -30,7 +30,7 @@ export function SubScreenHeader({
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <ArrowLeft size={20} color={colors.textPrimary} />
+          <ArrowLeft size={22} color={colors.textPrimary} />
         </Pressable>
         <View style={styles.titleGroup}>
           <Text style={styles.eyebrow} numberOfLines={1}>
@@ -51,11 +51,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingTop: Platform.OS === 'ios' ? 48 : 14,
+    paddingBottom: 14,
+    minHeight: Platform.OS === 'ios' ? 104 : 72,
     zIndex: 30,
     ...shadows.panel,
   },
@@ -66,15 +68,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backBtn: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
   backBtnPressed: {
-    backgroundColor: colors.border,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   titleGroup: {
     flex: 1,
@@ -83,16 +84,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
+    letterSpacing: 1.6,
     color: colors.primary,
-    fontFamily: typography.fontMono,
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '900',
     color: colors.textPrimary,
-    marginTop: 1,
-    fontFamily: typography.fontSans,
   },
   rightAction: {
     marginLeft: 10,

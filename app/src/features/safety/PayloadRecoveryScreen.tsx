@@ -12,6 +12,7 @@ import {
   Check,
   CheckCircle2,
   LifeBuoy,
+  Navigation,
   RefreshCw,
   ScanLine,
 } from 'lucide-react-native';
@@ -55,7 +56,7 @@ export function PayloadRecoveryScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-11-RESCUE · SAFETY"
+        label="SCR-STF-11-RESCUE"
         title="Emergency Payload Recovery"
         onBack={goBack}
       />
@@ -109,7 +110,7 @@ export function PayloadRecoveryScreen() {
             />
           </View>
         ) : (
-          <View style={{ gap: 12 }}>
+          <View style={{ gap: 16 }}>
             {/* Critical Alert Banner */}
             <View style={styles.alertCard}>
               <View style={styles.alertIconBox}>
@@ -123,9 +124,6 @@ export function PayloadRecoveryScreen() {
                   <Text style={styles.alertRobotText}>AMR-01 FAULTED</Text>
                 </View>
                 <Text style={styles.alertTitle}>Payload Recovery Protocol Required</Text>
-                <Text style={styles.alertDesc}>
-                  Drive motor stall with active payload. Deploy AMR-02 to transfer cargo and resume mission.
-                </Text>
               </View>
             </View>
 
@@ -215,7 +213,7 @@ export function PayloadRecoveryScreen() {
               <View style={styles.diagFaulted}>
                 <Text style={styles.diagLabelFaulted}>Faulted Robot</Text>
                 <Text style={styles.diagRobotId}>AMR-01</Text>
-                <Text style={styles.diagDetail}>Drive Motor Stall</Text>
+                <Text style={styles.diagDetail}>Error: Drive Motor Stall</Text>
                 <View style={styles.diagPillFaulted}>
                   <Text style={styles.diagPillTextFaulted}>Pos: (12.4m, 8.2m)</Text>
                 </View>
@@ -224,7 +222,7 @@ export function PayloadRecoveryScreen() {
               <View style={styles.diagRescue}>
                 <Text style={styles.diagLabelRescue}>Rescue Robot</Text>
                 <Text style={styles.diagRobotId}>AMR-02</Text>
-                <Text style={styles.diagDetail}>Batt: 92% · Deck Empty</Text>
+                <Text style={styles.diagDetail}>Battery: 92% · Flatbed Empty</Text>
                 <View style={styles.diagPillRescue}>
                   <Text style={styles.diagPillTextRescue}>Status: Available</Text>
                 </View>
@@ -236,7 +234,7 @@ export function PayloadRecoveryScreen() {
               <Text style={styles.cargoTitle}>STRANDED CARGO ONBOARD:</Text>
               <View style={styles.cargoRow}>
                 <View style={styles.cargoLeft}>
-                  <Box size={18} color={colors.primary} />
+                  <Box size={16} color={colors.primary} />
                   <View>
                     <Text style={styles.cargoCode}>BOX-101</Text>
                     <Text style={styles.cargoDesc}>Electronic Components (45 units)</Text>
@@ -244,25 +242,28 @@ export function PayloadRecoveryScreen() {
                 </View>
                 <View style={styles.cargoRight}>
                   <Text style={styles.cargoDestLabel}>Final Destination:</Text>
-                  <Text style={styles.cargoDestVal}>Rack A · L2 · Bin 03</Text>
+                  <Text style={styles.cargoDestVal}>Rack A · Level 2 · Bin 03</Text>
                 </View>
               </View>
             </View>
 
             {/* Phase Actions */}
             {phase === 'briefing' && (
-              <View style={styles.actionCard}>
-                <Text style={styles.actionTitle}>Step 1: Dispatch Carrier AMR-02</Text>
-                <Text style={styles.actionDesc}>
-                  Available carrier AMR-02 is ready at Depot. Tap below to navigate AMR-02 to stalled AMR-01 coordinates.
+              <View style={styles.actionCardPhase1}>
+                <Text style={styles.actionTitlePhase1}>Phase 1: Dispatch Rendezvous</Text>
+                <Text style={styles.actionDescPhase1}>
+                  Command AMR-02 to navigate autonomously to coordinate (X: 12.4m, Y: 8.2m). AMR-02 will park exactly 1.0 meter away from AMR-01 for safe cargo transfer.
                 </Text>
-                <Button
-                  label="DISPATCH RESCUE AMR-02 NOW"
-                  icon={<LifeBuoy size={16} color="#ffffff" />}
+                <Pressable
                   onPress={handleDispatchRescue}
-                  variant="danger"
-                  size="lg"
-                />
+                  style={styles.dispatchRescueBtn}
+                  accessibilityRole="button"
+                >
+                  <Navigation size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                  <Text style={styles.dispatchRescueBtnText}>
+                    Dispatch Rescue AMR-02 to Scene
+                  </Text>
+                </Pressable>
               </View>
             )}
 
@@ -351,19 +352,19 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   alertCard: {
-    backgroundColor: colors.dangerBg,
-    borderWidth: 1.5,
-    borderColor: colors.dangerBorder,
-    borderRadius: 14,
-    padding: 14,
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 12,
+    padding: 16,
     flexDirection: 'row',
     gap: 12,
     ...shadows.panel,
   },
   alertIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
@@ -380,22 +381,22 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   alertBadgeText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     color: '#ffffff',
     fontFamily: typography.fontMono,
   },
   alertRobotText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.danger,
     fontFamily: typography.fontMono,
   },
   alertTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     color: colors.danger,
-    marginTop: 4,
+    marginTop: 2,
     fontFamily: typography.fontSans,
   },
   alertDesc: {
@@ -408,8 +409,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 12,
@@ -424,21 +425,21 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 999,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: 'rgba(0, 92, 209, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepNumActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: 'rgba(0, 92, 209, 0.2)',
   },
   stepNumText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.textMuted,
     fontFamily: typography.fontMono,
   },
   stepNumTextActive: {
-    color: '#ffffff',
+    color: colors.primary,
   },
   stepText: {
     fontSize: 11,
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
   },
   stepTextActive: {
     color: colors.primary,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   stepArrow: {
     fontSize: 12,
@@ -460,10 +461,10 @@ const styles = StyleSheet.create({
   },
   diagFaulted: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.dangerBorder,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
     padding: 12,
     ...shadows.panel,
   },
@@ -472,13 +473,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     color: colors.danger,
+    letterSpacing: 0.8,
   },
   diagRescue: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.successBorder,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
     padding: 12,
     ...shadows.panel,
   },
@@ -487,21 +489,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     color: colors.success,
+    letterSpacing: 0.8,
   },
   diagRobotId: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
-    marginTop: 2,
+    marginTop: 4,
   },
   diagDetail: {
     fontSize: 10,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
   },
   diagPillFaulted: {
-    backgroundColor: colors.dangerSoft,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -509,13 +512,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   diagPillTextFaulted: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.danger,
+    fontSize: 10,
     fontFamily: typography.fontMono,
+    color: colors.danger,
   },
   diagPillRescue: {
-    backgroundColor: colors.successSoft,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -523,25 +525,25 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   diagPillTextRescue: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.success,
+    fontSize: 10,
     fontFamily: typography.fontMono,
+    color: colors.success,
   },
   cargoCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
+    padding: 14,
+    gap: 8,
     ...shadows.panel,
   },
   cargoTitle: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
     color: colors.textMuted,
-    letterSpacing: 1,
-    marginBottom: 8,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   cargoRow: {
     flexDirection: 'row',
@@ -554,27 +556,65 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cargoCode: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     color: colors.primary,
     fontFamily: typography.fontMono,
   },
   cargoDesc: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.textMuted,
   },
   cargoRight: {
     alignItems: 'flex-end',
   },
   cargoDestLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: colors.textPrimary,
   },
   cargoDestVal: {
     fontSize: 10,
-    fontWeight: '800',
-    color: colors.textPrimary,
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  actionCardPhase1: {
+    backgroundColor: 'rgba(0, 92, 209, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.2)',
+    padding: 16,
+    gap: 12,
+    ...shadows.panel,
+  },
+  actionTitlePhase1: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  actionDescPhase1: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
+  dispatchRescueBtn: {
+    backgroundColor: colors.primary,
+    minHeight: 64,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 3,
+    borderBottomColor: '#004bb0',
+  },
+  dispatchRescueBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '900',
   },
   actionCard: {
     backgroundColor: '#ffffff',

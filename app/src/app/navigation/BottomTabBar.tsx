@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -120,13 +121,13 @@ export function BottomTabBar() {
 
 const styles = StyleSheet.create({
   bar: {
-    height: 76,
+    height: Platform.OS === 'ios' ? 86 : 72,
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: 6,
-    paddingBottom: 10,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     elevation: 8,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -3 },
@@ -157,8 +158,8 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: 0,
-    right: 8,
+    top: -2,
+    right: 0,
     backgroundColor: colors.warning,
     borderRadius: 99,
     width: 16,
@@ -173,7 +174,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   badgeText: {
-    color: '#ffffff',
+    color: '#451a03',
     fontSize: 9,
     fontWeight: '900',
     fontFamily: typography.fontMono,

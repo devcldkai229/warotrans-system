@@ -1,267 +1,181 @@
 import React, { useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { CheckCircle2, Search, X } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
-import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { JobCard } from './JobCard';
-import { MOCK_JOBS } from './jobData';
+import { AppJobItem, MOCK_JOBS } from './jobData';
 
-type ScopeMode = 'active' | 'global' | 'history';
-type StatusFilter = 'ALL' | 'RUNNING' | 'QUEUED' | 'COMPLETED';
+type ViewMode = 'active' | 'global' | 'history';
 
 export function JobsScreen() {
-  const { navigate } = useNavigation();
-  const [scope, setScope] = useState<ScopeMode>('active');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const { navigate, params } = useNavigation();
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (params?.view === 'global' || params?.view === 'history') return params.view;
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const v = sp.get('view');
+        const s = sp.get('screen');
+        if (v === 'global' || s === 'jobs-global') return 'global';
+        if (v === 'history' || s === 'jobs-history') return 'history';
+      } catch {
+        // Fallback
+      }
+    }
+    return 'active';
+  });
   const [search, setSearch] = useState('');
 
-  const activeCount = MOCK_JOBS.filter((j) => j.isMine && j.status !== 'COMPLETED').length;
-  const globalCount = MOCK_JOBS.filter((j) => j.status !== 'COMPLETED').length;
-  const historyCount = MOCK_JOBS.filter((j) => j.status === 'COMPLETED').length;
+  const activeCount = MOCK_JOBS.filter((j) => j.isMine && j.kind !== 'complete').length;
+  const globalCount = MOCK_JOBS.filter((j) => j.kind !== 'complete').length;
+  const historyCount = MOCK_JOBS.filter((j) => j.kind === 'complete').length;
 
-  const filteredJobs = MOCK_JOBS.filter((job) => {
-    // 1. Scope filter
-    if (scope === 'active') {
-      if (!job.isMine || job.status === 'COMPLETED') return false;
-    } else if (scope === 'global') {
-      if (job.status === 'COMPLETED') return false;
-    } else if (scope === 'history') {
-      if (job.status !== 'COMPLETED') return false;
-    }
-
-    // 2. Status filter
-    if (statusFilter !== 'ALL' && job.status !== statusFilter) {
-      return false;
-    }
-
-    // 3. Search query
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const match =
-        job.jobNo.toLowerCase().includes(q) ||
-        job.workflowName.toLowerCase().includes(q) ||
-        job.destinationEndpointCode.toLowerCase().includes(q) ||
-        job.sourceEndpointCode.toLowerCase().includes(q) ||
-        (job.assignedRobotCode && job.assignedRobotCode.toLowerCase().includes(q)) ||
-        job.payloadSummary.toLowerCase().includes(q);
-      if (!match) return false;
-    }
-
-    return true;
+  const visible = MOCK_JOBS.filter((job) => {
+    const matchView =
+      viewMode === 'active'
+        ? job.isMine && job.kind !== 'complete'
+        : viewMode === 'global'
+          ? job.kind !== 'complete'
+          : job.kind === 'complete';
+    if (!matchView) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      job.id.toLowerCase().includes(q) ||
+      job.workflowName.toLowerCase().includes(q) ||
+      job.target.toLowerCase().includes(q) ||
+      job.payloadSummary.toLowerCase().includes(q) ||
+      job.robot.toLowerCase().includes(q) ||
+      job.containers.some((c) => c.code.toLowerCase().includes(q))
+    );
   });
 
-  const handleOpenJob = (jobId: string) => {
-    navigate('job_detail', { jobId });
+  const handleOpenJob = (job: AppJobItem) => {
+    triggerHaptic('tap');
+    navigate('job_detail', { jobId: job.id });
   };
 
   return (
     <View style={styles.container}>
-      {/* Page Title */}
+      {/* Page Header (Matching Prototype PageHeader exactly) */}
       <View style={styles.pageHeader}>
         <Text style={styles.eyebrow}>EXECUTION CENTER</Text>
         <Text style={styles.pageTitle}>Job Control</Text>
       </View>
 
-      {/* Search Input Bar */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchBox}>
-          <Search size={16} color="#94a3b8" />
-          <Input
-            placeholder="Search jobs, containers, locations..."
-            value={search}
-            onChangeText={setSearch}
-            containerStyle={styles.searchInputContainer}
-            inputStyle={styles.searchInputText}
-          />
-          {search ? (
-            <Pressable onPress={() => setSearch('')} style={styles.clearBtn}>
-              <X size={15} color="#94a3b8" />
-            </Pressable>
-          ) : null}
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Search Filter Input Bar */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchBox}>
+            <Search size={15} color={colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search jobs, containers, locations..."
+              placeholderTextColor={colors.textMuted}
+              style={styles.searchInput}
+            />
+            {search ? (
+              <Pressable
+                onPress={() => setSearch('')}
+                style={styles.clearBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <X size={14} color={colors.textSecondary} />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
-      </View>
 
-      {/* Scope Segmented Control */}
-      <View style={styles.scopeBar}>
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            setScope('active');
-          }}
-          style={[styles.scopeBtn, scope === 'active' && styles.scopeBtnActive]}
-          accessibilityRole="button"
-          accessibilityLabel="My Active jobs"
-        >
-          <Text
-            style={[
-              styles.scopeLabel,
-              scope === 'active' && styles.scopeLabelActive,
-            ]}
-          >
-            My Active
-          </Text>
-          <View
-            style={[
-              styles.scopeBadge,
-              scope === 'active' ? styles.scopeBadgeActive : styles.scopeBadgeInactive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.scopeBadgeText,
-                scope === 'active' && styles.scopeBadgeTextActive,
-              ]}
-            >
-              {activeCount}
-            </Text>
-          </View>
-        </Pressable>
+        {/* 3-Column Scope Segmented Control */}
+        <View style={styles.scopeBar}>
+          {(['active', 'global', 'history'] as const).map((item) => {
+            const count =
+              item === 'active' ? activeCount : item === 'global' ? globalCount : historyCount;
+            const label =
+              item === 'active' ? 'My Active' : item === 'global' ? 'Global' : 'History';
+            const isSelected = viewMode === item;
 
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            setScope('global');
-          }}
-          style={[styles.scopeBtn, scope === 'global' && styles.scopeBtnActive]}
-          accessibilityRole="button"
-          accessibilityLabel="Global Fleet jobs"
-        >
-          <Text
-            style={[
-              styles.scopeLabel,
-              scope === 'global' && styles.scopeLabelActive,
-            ]}
-          >
-            Global Fleet
-          </Text>
-          <View
-            style={[
-              styles.scopeBadge,
-              scope === 'global' ? styles.scopeBadgeActive : styles.scopeBadgeInactive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.scopeBadgeText,
-                scope === 'global' && styles.scopeBadgeTextActive,
-              ]}
-            >
-              {globalCount}
-            </Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            setScope('history');
-          }}
-          style={[styles.scopeBtn, scope === 'history' && styles.scopeBtnActive]}
-          accessibilityRole="button"
-          accessibilityLabel="Jobs history"
-        >
-          <Text
-            style={[
-              styles.scopeLabel,
-              scope === 'history' && styles.scopeLabelActive,
-            ]}
-          >
-            History
-          </Text>
-          <View
-            style={[
-              styles.scopeBadge,
-              scope === 'history' ? styles.scopeBadgeActive : styles.scopeBadgeInactive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.scopeBadgeText,
-                scope === 'history' && styles.scopeBadgeTextActive,
-              ]}
-            >
-              {historyCount}
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-
-      {/* Status Filter Chips (Only for Global Scope) */}
-      {scope === 'global' && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filtersScroll}
-          contentContainerStyle={styles.filtersContent}
-        >
-          {(['ALL', 'RUNNING', 'QUEUED'] as const).map((st) => {
-            const isSelected = statusFilter === st;
             return (
               <Pressable
-                key={st}
+                key={item}
                 onPress={() => {
                   triggerHaptic('tap');
-                  setStatusFilter(st);
+                  setViewMode(item);
                 }}
                 style={[
-                  styles.filterChip,
-                  isSelected && styles.filterChipSelected,
+                  styles.scopeBtn,
+                  isSelected && styles.scopeBtnActive,
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`${label} jobs (${count})`}
               >
                 <Text
                   style={[
-                    styles.filterChipText,
-                    isSelected && styles.filterChipTextSelected,
+                    styles.scopeLabel,
+                    isSelected && styles.scopeLabelActive,
                   ]}
                 >
-                  {st}
+                  {label}
                 </Text>
+                <View
+                  style={[
+                    styles.scopeBadge,
+                    isSelected ? styles.scopeBadgeActive : styles.scopeBadgeInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.scopeBadgeText,
+                      isSelected && styles.scopeBadgeTextActive,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
-        </ScrollView>
-      )}
+        </View>
 
-      {/* Job Cards List */}
-      <ScrollView
-        style={styles.jobsList}
-        contentContainerStyle={styles.jobsListContent}
-      >
-        {filteredJobs.length > 0 ? (
-          filteredJobs.map((job) => (
-            <JobCard
-              key={job.id}
-              job={job}
-              onPress={() => handleOpenJob(job.id)}
-            />
-          ))
+        {/* Job Cards List or Empty State */}
+        {visible.length > 0 ? (
+          <View style={styles.listContainer}>
+            {visible.map((job) => (
+              <JobCard
+                key={job.id}
+                job={job}
+                onPress={() => handleOpenJob(job)}
+              />
+            ))}
+          </View>
         ) : (
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconWrap}>
-              <CheckCircle2 size={36} color={colors.success} strokeWidth={2.4} />
+            <View style={styles.emptyIconCircle}>
+              <CheckCircle2 size={36} color={colors.success} strokeWidth={2.5} />
             </View>
             <Text style={styles.emptyTitle}>
-              {search
-                ? 'No matching jobs'
-                : scope === 'history'
-                ? 'No history yet'
-                : "You're all caught up!"}
+              {viewMode === 'history' ? 'No history yet' : "You're all caught up!"}
             </Text>
-            <Text style={styles.emptyDesc}>
-              {search
-                ? `No jobs matched query "${search}". Try resetting the search filter.`
-                : scope === 'history'
-                ? 'Completed tasks will appear here once verified.'
+            <Text style={styles.emptySubtitle}>
+              {viewMode === 'history'
+                ? 'Completed tasks will appear here.'
                 : 'No active tasks in your queue. Take a breather or check the global fleet.'}
             </Text>
           </View>
@@ -277,168 +191,159 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   pageHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 4,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 48 : 16,
+    paddingBottom: 14,
+    minHeight: Platform.OS === 'ios' ? 104 : 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: colors.border,
   },
   eyebrow: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 1.6,
     color: colors.primary,
     textTransform: 'uppercase',
   },
   pageTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#0f172a',
+    lineHeight: 28,
+    color: colors.textPrimary,
     marginTop: 2,
-    marginBottom: 6,
+  },
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 32,
   },
   searchSection: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
+    marginBottom: 12,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
     borderRadius: 8,
-    paddingHorizontal: 10,
+    height: 40,
+    paddingHorizontal: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  searchInputContainer: {
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
     flex: 1,
-    marginBottom: 0,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-  },
-  searchInputText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#0f172a',
+    color: colors.textPrimary,
+    paddingVertical: 0,
   },
   clearBtn: {
     padding: 4,
   },
   scopeBar: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceSubtle,
-    marginHorizontal: 16,
-    marginTop: 10,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 8,
     padding: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   scopeBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 6,
     gap: 6,
+    minHeight: 40,
+    borderRadius: 6,
   },
   scopeBtnActive: {
     backgroundColor: colors.surface,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
     elevation: 2,
   },
   scopeLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   scopeLabelActive: {
     color: colors.primary,
+    fontWeight: '900',
   },
   scopeBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   scopeBadgeActive: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: 'rgba(0, 92, 209, 0.15)',
   },
   scopeBadgeInactive: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: 'rgba(71, 85, 105, 0.15)',
   },
   scopeBadgeText: {
+    fontFamily: typography.fontMono,
     fontSize: 9,
-    fontWeight: '800',
-    fontFamily: 'monospace',
-    color: colors.textMuted,
-  },
-  scopeBadgeTextActive: {
-    color: colors.primaryDark,
-  },
-  filtersScroll: {
-    maxHeight: 40,
-    marginTop: 8,
-  },
-  filtersContent: {
-    paddingHorizontal: 16,
-    gap: 6,
-  },
-  filterChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterChipSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterChipText: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.textSecondary,
   },
-  filterChipTextSelected: {
-    color: colors.textInverse,
+  scopeBadgeTextActive: {
+    color: colors.primary,
   },
-  jobsList: {
-    flex: 1,
-    marginTop: 8,
-  },
-  jobsListContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+  listContainer: {
+    gap: 12,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 60,
     paddingHorizontal: 24,
   },
-  emptyIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.surfaceSubtle,
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    marginBottom: 20,
   },
   emptyTitle: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
     color: colors.textPrimary,
-    marginBottom: 6,
-  },
-  emptyDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
     textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 8,
+    maxWidth: 240,
     lineHeight: 18,
   },
 });

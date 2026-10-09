@@ -7,7 +7,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { Check, CheckCircle2 } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
@@ -22,15 +22,13 @@ interface HoldToConfirmButtonProps {
 
 export function HoldToConfirmButton({
   onConfirm,
-  label = 'HOLD 1.5s TO CONFIRM',
-  confirmingLabel = 'HOLD TO CONFIRM...',
+  label = 'Hold to Confirm',
   holdDurationMs = 1500,
   disabled = false,
   style,
 }: HoldToConfirmButtonProps) {
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [confirmed, setConfirmed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -40,7 +38,7 @@ export function HoldToConfirmButton({
   }, []);
 
   const startHold = () => {
-    if (disabled || confirmed) return;
+    if (disabled) return;
 
     try {
       Vibration.vibrate(30);
@@ -49,36 +47,33 @@ export function HoldToConfirmButton({
     }
 
     setHolding(true);
-    let elapsed = 0;
-    const intervalMs = 16; // ~60fps smooth progress
+    let current = 0;
+    const intervalMs = 10;
 
     timerRef.current = setInterval(() => {
-      elapsed += intervalMs;
-      const p = Math.min((elapsed / holdDurationMs) * 100, 100);
+      current += intervalMs;
+      const p = Math.min((current / holdDurationMs) * 100, 100);
       setProgress(p);
 
-      if (elapsed >= holdDurationMs) {
+      if (current === 750) {
+        try {
+          Vibration.vibrate(20);
+        } catch {}
+      }
+
+      if (current >= holdDurationMs) {
         if (timerRef.current) clearInterval(timerRef.current);
         setHolding(false);
-        setConfirmed(true);
+        setProgress(0);
         try {
           Vibration.vibrate([0, 60, 40, 80]);
-        } catch {
-          // Haptics fallback
-        }
+        } catch {}
         onConfirm();
-
-        // Reset state after a brief visual confirmation feedback
-        setTimeout(() => {
-          setConfirmed(false);
-          setProgress(0);
-        }, 1200);
       }
     }, intervalMs);
   };
 
   const endHold = () => {
-    if (confirmed) return;
     setHolding(false);
     setProgress(0);
     if (timerRef.current) {
@@ -86,6 +81,8 @@ export function HoldToConfirmButton({
       timerRef.current = null;
     }
   };
+
+  const isHalfway = progress > 50;
 
   return (
     <Pressable
@@ -105,35 +102,24 @@ export function HoldToConfirmButton({
         style={[
           styles.progressFill,
           { width: `${progress}%` },
-          confirmed && styles.progressFillConfirmed,
         ]}
       />
 
       {/* Button Content */}
-      <View style={styles.contentRow}>
-        {confirmed ? (
-          <>
-            <CheckCircle2 size={18} color="#ffffff" />
-            <Text style={styles.confirmedText}>CONFIRMED</Text>
-          </>
-        ) : holding ? (
-          <>
-            <Check size={16} color={progress > 50 ? '#ffffff' : colors.success} />
-            <Text
-              style={[
-                styles.holdingText,
-                progress > 50 && styles.textWhite,
-              ]}
-            >
-              {confirmingLabel} ({Math.round(progress)}%)
-            </Text>
-          </>
-        ) : (
-          <>
-            <View style={styles.pulseIndicator} />
-            <Text style={styles.idleText}>{label}</Text>
-          </>
-        )}
+      <View style={styles.contentRow} pointerEvents="none">
+        <Check
+          size={19}
+          color={isHalfway ? '#ffffff' : colors.success}
+          strokeWidth={2.5}
+        />
+        <Text
+          style={[
+            styles.label,
+            isHalfway && styles.labelWhite,
+          ]}
+        >
+          {label}
+        </Text>
       </View>
     </Pressable>
   );
@@ -141,20 +127,17 @@ export function HoldToConfirmButton({
 
 const styles = StyleSheet.create({
   buttonContainer: {
-    height: 50,
-    backgroundColor: 'rgba(0, 122, 56, 0.12)',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.success,
+    height: 52,
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    borderRadius: 6,
     position: 'relative',
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
   buttonDisabled: {
     opacity: 0.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
   },
   progressFill: {
     position: 'absolute',
@@ -162,48 +145,20 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: colors.success,
-    opacity: 0.9,
-  },
-  progressFillConfirmed: {
-    width: '100%',
-    backgroundColor: colors.success,
   },
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    zIndex: 2,
-    paddingHorizontal: 12,
+    zIndex: 10,
   },
-  pulseIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.success,
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
-  idleText: {
-    color: colors.success,
-    fontSize: 12,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-    letterSpacing: 0.8,
-  },
-  holdingText: {
-    color: colors.success,
-    fontSize: 12,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-    letterSpacing: 0.6,
-  },
-  confirmedText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-    letterSpacing: 0.8,
-  },
-  textWhite: {
+  labelWhite: {
     color: '#ffffff',
   },
 });

@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '700',
-    fontFamily: typography.fontMono,
+    fontFamily: typography.fontSans,
     color: colors.textPrimary,
     paddingVertical: 10,
   },

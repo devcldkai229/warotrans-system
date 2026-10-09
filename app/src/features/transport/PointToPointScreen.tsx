@@ -9,9 +9,9 @@ import {
 import {
   Check,
   Navigation,
+  Rocket,
   RotateCw,
   Route as RouteIcon,
-  Zap,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
@@ -53,7 +53,7 @@ export function PointToPointScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-22 · AD-HOC TRANSIT"
+        label="SCR-STF-11-P2P"
         title="Point-to-Point Transport"
         onBack={goBack}
       />
@@ -101,11 +101,11 @@ export function PointToPointScreen() {
             />
           </View>
         ) : (
-          <View style={{ gap: 14 }}>
+          <View style={{ gap: 16 }}>
             {/* Intro Card */}
             <View style={styles.introCard}>
               <View style={styles.introIconBox}>
-                <Navigation size={22} color={colors.primary} />
+                <Navigation size={22} color="#ffffff" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.introTitle}>Custom Point-to-Point Routing</Text>
@@ -127,19 +127,17 @@ export function PointToPointScreen() {
               <Text style={styles.presetDesc}>
                 Recirculate discharged empty totes from Outbound Shipping Dock back to Inbound Receiving for incoming shipments.
               </Text>
-              <Button
-                label="Apply Empty Tote Return Preset"
-                icon={<RotateCw size={14} color={colors.primary} />}
+              <Pressable
                 onPress={handleApplyEmptyTotePreset}
-                variant="outline"
-                size="sm"
                 style={styles.presetBtn}
-                textStyle={{ color: colors.primary, fontWeight: '800' }}
-              />
+              >
+                <RotateCw size={13} color={colors.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.presetBtnText}>Apply Empty Tote Return Preset</Text>
+              </Pressable>
             </View>
 
             {/* Step 1: Origin Station */}
-            <View>
+            <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>1. ORIGIN STATION (FROM):</Text>
               <View style={styles.stationsGrid}>
                 {STATIONS.map((st) => {
@@ -150,7 +148,7 @@ export function PointToPointScreen() {
                       onPress={() => setOrigin(st.id)}
                       style={[
                         styles.stationCard,
-                        isSelected && styles.stationCardSelected,
+                        isSelected ? styles.stationCardSelected : styles.stationCardNormal,
                       ]}
                     >
                       <Text style={styles.stationId}>{st.id}</Text>
@@ -168,25 +166,31 @@ export function PointToPointScreen() {
             <View style={styles.connectorRow}>
               <View style={styles.connectorLine} />
               <View style={styles.connectorBadge}>
-                <RouteIcon size={13} color={colors.primary} />
+                <RouteIcon size={12} color={colors.primary} />
                 <Text style={styles.connectorText}>Est. 38m · ~2m 45s transit</Text>
               </View>
               <View style={styles.connectorLine} />
             </View>
 
             {/* Step 2: Destination Station */}
-            <View>
+            <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>2. DESTINATION STATION (TO):</Text>
               <View style={styles.stationsGrid}>
                 {STATIONS.map((st) => {
                   const isSelected = destination === st.id;
+                  const isSameAsOrigin = origin === st.id;
                   return (
                     <Pressable
                       key={st.id}
+                      disabled={isSameAsOrigin}
                       onPress={() => setDestination(st.id)}
                       style={[
                         styles.stationCard,
-                        isSelected && styles.stationCardSelected,
+                        isSameAsOrigin
+                          ? styles.stationCardDisabled
+                          : isSelected
+                          ? styles.stationCardSelected
+                          : styles.stationCardNormal,
                       ]}
                     >
                       <Text style={styles.stationId}>{st.id}</Text>
@@ -201,59 +205,67 @@ export function PointToPointScreen() {
             </View>
 
             {/* Step 3: Cargo & Priority */}
-            <View style={styles.configCard}>
-              <Input
-                label="3. Cargo Tag / Tote Identifier"
-                value={cargoTag}
-                onChangeText={setCargoTag}
-                placeholder="e.g. TOTE-EXP-08"
-              />
+            <View style={styles.cargoPriorityCard}>
+              <View style={{ gap: 6 }}>
+                <Text style={styles.sectionLabel}>CARGO TAG / TOTE IDENTIFIER</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={cargoTag}
+                      onChangeText={setCargoTag}
+                      placeholder="e.g. TOTE-EXP-08"
+                      containerStyle={{ marginBottom: 0 }}
+                      inputStyle={{ height: 44, fontSize: 12, fontFamily: typography.fontMono, fontWeight: '700' }}
+                    />
+                  </View>
+                  <Pressable
+                    onPress={() => setCargoTag(`TOTE-${Math.floor(100 + Math.random() * 900)}`)}
+                    style={styles.randomBtn}
+                  >
+                    <Text style={styles.randomBtnText}>Random</Text>
+                  </Pressable>
+                </View>
+              </View>
 
-              <Text style={styles.sectionLabel}>SPEED & PRIORITY PROFILE:</Text>
-              <View style={styles.priorityRow}>
-                <Pressable
-                  onPress={() => setPriority('normal')}
-                  style={[
-                    styles.priorityBtn,
-                    priority === 'normal' && styles.priorityBtnActive,
-                  ]}
-                >
-                  <Text
+              <View style={{ gap: 6, marginTop: 12 }}>
+                <Text style={styles.sectionLabel}>TRANSPORT SPEED & LANE PRIORITY</Text>
+                <View style={styles.priorityGrid}>
+                  <Pressable
+                    onPress={() => setPriority('normal')}
                     style={[
-                      styles.priorityText,
-                      priority === 'normal' && styles.priorityTextActive,
+                      styles.priorityCard,
+                      priority === 'normal' ? styles.priorityCardActive : styles.priorityCardNormal,
                     ]}
                   >
-                    Normal (0.8 m/s)
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setPriority('urgent')}
-                  style={[
-                    styles.priorityBtn,
-                    priority === 'urgent' && styles.priorityBtnActiveUrgent,
-                  ]}
-                >
-                  <Zap size={14} color={priority === 'urgent' ? '#ffffff' : colors.warning} />
-                  <Text
+                    <Text style={styles.priorityCardTitle}>Standard Lane</Text>
+                    <Text style={styles.priorityCardSub}>Normal speed profile</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setPriority('urgent')}
                     style={[
-                      styles.priorityText,
-                      priority === 'urgent' && styles.priorityTextActive,
+                      styles.priorityCard,
+                      priority === 'urgent' ? styles.priorityCardActiveUrgent : styles.priorityCardNormal,
                     ]}
                   >
-                    Urgent (1.2 m/s)
-                  </Text>
-                </Pressable>
+                    <Text style={styles.priorityCardUrgentTitle}>Expedited Express</Text>
+                    <Text style={styles.priorityCardSub}>High priority lane clearance</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
 
-            <Button
-              label={`Dispatch Point-to-Point Transit (${priority.toUpperCase()})`}
-              icon={<Navigation size={18} color="#ffffff" />}
+            {/* Submit Button */}
+            <Pressable
               onPress={handleDispatch}
-              variant="primary"
-              size="lg"
-            />
+              style={styles.dispatchBtn}
+              accessibilityRole="button"
+            >
+              <Rocket size={18} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.dispatchBtnText}>
+                Initiate Direct P2P Transfer ({origin} ➔ {destination})
+              </Text>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -285,7 +297,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -343,10 +355,20 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   presetBtn: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primaryBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.3)',
     borderRadius: 8,
-    marginTop: 6,
+    paddingVertical: 8,
+    marginTop: 10,
+  },
+  presetBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
   },
   sectionLabel: {
     fontSize: 10,
@@ -361,28 +383,38 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stationCard: {
-    width: '48%',
+    width: 195,
+    minHeight: 78.5,
     backgroundColor: '#ffffff',
-    borderRadius: 10,
-    borderWidth: 1.5,
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: colors.border,
     padding: 10,
     ...shadows.panel,
   },
   stationCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: 'rgba(0, 92, 209, 0.1)',
+  },
+  stationCardNormal: {
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
+  },
+  stationCardDisabled: {
+    opacity: 0.35,
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
   },
   stationId: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   stationName: {
     fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
+    fontWeight: '500',
+    color: colors.textPrimary,
     marginTop: 2,
   },
   stationType: {
@@ -405,7 +437,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: 'rgba(0, 92, 209, 0.1)',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 5,
@@ -416,47 +448,84 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontFamily: typography.fontMono,
   },
-  configCard: {
+  cargoPriorityCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    gap: 10,
+    gap: 12,
     ...shadows.panel,
   },
-  priorityRow: {
+  randomBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  randomBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  priorityGrid: {
     flexDirection: 'row',
     gap: 8,
   },
-  priorityBtn: {
+  priorityCard: {
     flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+  },
+  priorityCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(0, 92, 209, 0.1)',
+  },
+  priorityCardActiveUrgent: {
+    borderColor: '#b45309',
+    backgroundColor: '#fef3c7',
+  },
+  priorityCardNormal: {
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  priorityCardTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.textPrimary,
+  },
+  priorityCardUrgentTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#b45309',
+  },
+  priorityCardSub: {
+    fontSize: 10,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  dispatchBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  priorityBtnActive: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    borderRadius: 12,
+    minHeight: 64,
+    borderBottomWidth: 3,
+    borderBottomColor: '#004bb0',
+    paddingHorizontal: 20,
+    marginTop: 4,
+    ...shadows.panel,
   },
-  priorityBtnActiveUrgent: {
-    backgroundColor: colors.warning,
-    borderColor: colors.warning,
-  },
-  priorityText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textSecondary,
-  },
-  priorityTextActive: {
-    color: '#ffffff',
+  dispatchBtnText: {
+    fontSize: 14,
     fontWeight: '900',
+    color: '#ffffff',
   },
   successCard: {
     backgroundColor: colors.successBg,
