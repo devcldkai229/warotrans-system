@@ -38,6 +38,7 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
         Assert.Equal(warehouseId, robot.WarehouseId);
         Assert.Equal(mapVersionId, robot.CurrentMapVersionId);
         Assert.Equal(RobotStatus.OFFLINE, robot.Status);
+        Assert.False(robot.IsOnline);
         Assert.True(robot.IsEnabled);
         Assert.NotEqual(Guid.Empty, robot.Id);
     }
@@ -121,6 +122,7 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
         string Code,
         string Name,
         RobotStatus Status,
+        bool IsOnline,
         decimal BatteryPercent,
         bool IsEnabled);
 

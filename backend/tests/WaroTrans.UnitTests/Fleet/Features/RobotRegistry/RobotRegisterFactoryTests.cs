@@ -21,6 +21,7 @@ public class RobotRegisterFactoryTests
         Assert.Equal("Forklift A", robot.Name);
         Assert.Equal(RobotStatus.OFFLINE, robot.Status);
         Assert.True(robot.IsEnabled);
+        Assert.False(robot.IsOnline);
         Assert.Equal(0m, robot.BatteryPercent);
         Assert.Equal(0d, robot.PoseX);
         Assert.Equal(0d, robot.PoseY);
