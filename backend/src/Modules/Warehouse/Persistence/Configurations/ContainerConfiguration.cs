@@ -17,5 +17,13 @@ public sealed class ContainerConfiguration : IEntityTypeConfiguration<Container>
         builder.Property(x => x.UpdatedAt).IsConcurrencyToken();
 
         builder.HasIndex(x => x.Barcode).IsUnique();
+
+        builder.HasOne(x => x.Product)
+            .WithMany()
+            .HasForeignKey(x => x.ProductId);
+
+        builder.HasOne(x => x.CurrentStorageLocation)
+            .WithMany()
+            .HasForeignKey(x => x.CurrentStorageLocationId);
     }
 }

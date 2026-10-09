@@ -79,6 +79,12 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_containers_barcode");
 
+                    b.HasIndex("CurrentStorageLocationId")
+                        .HasDatabaseName("i_x_containers_current_storage_location_id");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("i_x_containers_product_id");
+
                     b.ToTable("containers", "warehouse");
                 });
 
@@ -111,6 +117,9 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("p_k_inventory_stocks");
+
+                    b.HasIndex("StorageLocationId")
+                        .HasDatabaseName("i_x_inventory_stocks_storage_location_id");
 
                     b.HasIndex("ProductId", "StorageLocationId", "LevelNo")
                         .IsUnique()
@@ -304,6 +313,46 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasDatabaseName("i_x_warehouses_code");
 
                     b.ToTable("warehouses", "warehouse");
+                });
+
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.Container", b =>
+                {
+                    b.HasOne("WaroTrans.Warehouse.Entities.StorageLocation", "CurrentStorageLocation")
+                        .WithMany()
+                        .HasForeignKey("CurrentStorageLocationId")
+                        .HasConstraintName("f_k_containers_storage_locations_current_storage_location_id");
+
+                    b.HasOne("WaroTrans.Warehouse.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_containers_products_product_id");
+
+                    b.Navigation("CurrentStorageLocation");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.InventoryStock", b =>
+                {
+                    b.HasOne("WaroTrans.Warehouse.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_inventory_stocks_products_product_id");
+
+                    b.HasOne("WaroTrans.Warehouse.Entities.StorageLocation", "StorageLocation")
+                        .WithMany()
+                        .HasForeignKey("StorageLocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_inventory_stocks_storage_locations_storage_location_id");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("StorageLocation");
                 });
 #pragma warning restore 612, 618
         }

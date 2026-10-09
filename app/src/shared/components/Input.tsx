@@ -1,0 +1,125 @@
+import React, { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TextInputProps,
+  TextStyle,
+  View,
+  ViewStyle,
+} from 'react-native';
+import { colors } from '../theme/colors';
+import { shadows } from '../theme/shadows';
+import { typography } from '../theme/typography';
+
+interface InputProps extends Omit<TextInputProps, 'style'> {
+  label?: string;
+  error?: string;
+  hint?: string;
+  containerStyle?: ViewStyle;
+  inputStyle?: TextStyle;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+}
+
+export function Input({
+  label,
+  error,
+  hint,
+  containerStyle,
+  inputStyle,
+  leftIcon,
+  rightIcon,
+  secureTextEntry,
+  ...props
+}: InputProps) {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <View style={[styles.container, containerStyle]}>
+      {label && <Text style={styles.label}>{label}</Text>}
+      <View
+        style={[
+          styles.inputContainer,
+          isFocused && styles.inputFocused,
+          error ? styles.inputError : null,
+        ]}
+      >
+        {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
+        <TextInput
+          placeholderTextColor={colors.textMuted}
+          style={[styles.input, inputStyle]}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          secureTextEntry={secureTextEntry}
+          {...props}
+        />
+        {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+      </View>
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : hint ? (
+        <Text style={styles.hintText}>{hint}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: colors.textSecondary,
+    marginBottom: 6,
+    fontFamily: typography.fontSans,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    ...shadows.input,
+  },
+  inputFocused: {
+    borderColor: colors.primary,
+    backgroundColor: '#ffffff',
+  },
+  inputError: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerBg,
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: typography.fontMono,
+    color: colors.textPrimary,
+    paddingVertical: 10,
+  },
+  iconLeft: {
+    marginRight: 8,
+  },
+  iconRight: {
+    marginLeft: 8,
+  },
+  errorText: {
+    fontSize: 11,
+    color: colors.danger,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  hintText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+});
