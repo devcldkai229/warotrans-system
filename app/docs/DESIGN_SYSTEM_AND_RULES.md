@@ -35,9 +35,13 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
 | `textPrimary` | `#071523` | Chữ chính, tiêu đề (slate-950, đen đậm) |
 | `textSecondary`| `#475569` | Chữ phụ, nhãn mô tả, subtitle (slate-600, đậm nét, dễ đọc) |
 | `textMuted` | `#64748b` | Chữ ghi chú phụ (slate-500, không được dùng màu sáng hơn) |
-| `success` | `#059669` / `#10b981` | Hoàn thành, pin tốt, robot trực tuyến |
-| `warning` | `#d97706` / `#f59e0b` | Chờ handover, ETA sắp tới, cảnh báo |
-| `danger` | `#dc2626` / `#ef4444` | Dừng khẩn cấp, sự cố hàng hóa, deadlock |
+| `success` | `#007a38` | Hoàn thành, pin tốt, robot trực tuyến |
+| `warning` | `#f0b21b` | Chờ handover, ETA sắp tới, cảnh báo |
+| `danger` | `#c8272b` | Dừng khẩn cấp, sự cố hàng hóa, deadlock |
+
+> **Lưu ý:** ba giá trị trên là giá trị **thật** trong `src/shared/theme/colors.ts:28,34,40`.
+> Mỗi tone còn có các token đi kèm `*Bg`, `*Soft`, `*Border` (ví dụ `successBg: '#eefaf2'`).
+> Luôn đọc token thật từ `colors.ts` thay vì dùng giá trị ghi nhớ.
 
 ### 2.2 Quy chuẩn Typography (`src/shared/theme/typography.ts`)
 * **Eyebrows / Badges / Protocol Codes**: `fontMono`, size `9-10`, `fontWeight: '900'`, `textTransform: 'uppercase'`, `letterSpacing: 1.2 - 1.6`.
@@ -54,12 +58,21 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
   * Root tại `App.tsx` phải là `<View style={{ flex: 1, backgroundColor: colors.background }}>`.
   * Tránh tạo khoảng trống (letterbox) hụt đầu và đáy trên iPhone 12/13/14/15.
 * **Quy chuẩn Header đỉnh máy**:
-  * Mọi thanh header (`AppHeader`, `SubScreenHeader`, `pageHeader` của Jobs và Transport) phải có:
+  * Mọi thanh header phải giữ đúng inset dùng chung để che kín tai thỏ:
     ```tsx
     paddingTop: Platform.OS === 'ios' ? 48 : 12, // Che kín tai thỏ bằng nền header
     paddingBottom: 12,
-    minHeight: Platform.OS === 'ios' ? 104 : 72,
     ```
+  * `minHeight` phía iOS luôn là `104`, nhưng **phía non-iOS KHÔNG phải hằng số duy nhất**. Phải lấy đúng giá trị
+    của file đang sửa — không được mặc định `72`:
+    | File | `minHeight` |
+    | --- | --- |
+    | `src/shared/components/SubScreenHeader.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
+    | `src/features/monitoring/IssueReportingModal.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
+    | `src/features/jobs/JobsScreen.tsx` | `Platform.OS === 'ios' ? 104 : 75` |
+    | `src/features/transport/TransportScreen.tsx` | `Platform.OS === 'ios' ? 104 : 76` |
+    | `src/features/jobs/JobDetailScreen.tsx` | `Platform.OS === 'ios' ? 104 : 68` |
+    | `src/shared/components/AppHeader.tsx` | không dùng — chỉ `paddingTop` + `paddingBottom: 12` |
   * Dropdown menus bên trong header phải đặt: `top: Platform.OS === 'ios' ? 92 : 56`.
 * **Quy chuẩn Bottom Tab Bar**:
   * Phải chạm đáy vật lý của thiết bị:

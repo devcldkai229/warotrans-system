@@ -1,0 +1,66 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Root `model` sets the catalog default only. V2 does NOT retain a #variant here,
+  // so the variant is pinned per agent below. Verify with /models.
+  "model": "opencode/space-bunny-free",
+
+  "default_agent": "build",
+
+  "agents": {
+    // Primary coding agent — highest reasoning variant.
+    "build": {
+      "model": "opencode/space-bunny-free#high",
+      "description": "Default coding agent for WaroTrans mobile app changes",
+    },
+
+    // Planning / architecture — same strength, read-only.
+    "plan": {
+      "model": "opencode/space-bunny-free#high",
+      "description": "Plans WaroTrans frontend work without editing files",
+    },
+
+    // Read-only search. Lower variant only to cut latency — all models cost $0,
+    // so there is no budget reason to drop below `high` for actual reasoning work.
+    "explore": {
+      "mode": "subagent",
+      "model": "opencode/space-bunny-free#low",
+      "description": "Fast read-only search across src/ and rules/",
+    },
+
+    // Audit agent. Maximum reasoning, and structurally forbidden from editing.
+    "reviewer": {
+      "mode": "subagent",
+      "model": "opencode/space-bunny-free#max",
+      "description": "Audits WaroTrans FE code against AGENTS.md rules; reports only",
+      "system": "Audit only. Never edit files. Report findings in severity order with exact file:line citations. Verify every claim against the source before reporting it; if the documentation and the code disagree, report the discrepancy explicitly rather than trusting either one.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "git commit *", "effect": "deny" },
+        { "action": "shell", "resource": "git push *", "effect": "deny" }
+      ]
+    }
+  },
+
+  // AGENTS.md §4 enforces a hard FE-only boundary at the tool level,
+  // not just in prose. Workspace is app/, so backend lives at ../.
+  "permissions": [
+    { "action": "edit", "resource": "../backend/**", "effect": "deny" },
+    { "action": "edit", "resource": "../infrastructure/**", "effect": "deny" },
+    { "action": "edit", "resource": "../web/**", "effect": "deny" },
+    { "action": "shell", "resource": "git push *", "effect": "ask" }
+  ],
+
+  // V2 does not resolve the `instructions` array, so the 13 backend rule files
+  // are exposed as a reference instead. They live outside the workspace root.
+  "references": {
+    "rules": {
+      "path": "../rules",
+      "description": "WaroTrans backend/domain rule set. Read 09-FRONTEND-RULES.md before frontend structural changes; note its listed feature folders are stale and do not match app/src. All other rule files govern backend work, which is out of scope for this app."
+    }
+  },
+
+  "watcher": {
+    "ignore": ["dist/**", "node_modules/**", ".expo/**"]
+  }
+}
