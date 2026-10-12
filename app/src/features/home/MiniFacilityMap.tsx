@@ -149,18 +149,16 @@ export function MiniFacilityMap({
 
   return (
     <View style={[styles.mapContainer, style]}>
-      {/* 1. Blueprint Grid Background */}
-      {Platform.OS === 'web' ? (
-        <Svg style={StyleSheet.absoluteFill}>
-          <Defs>
-            <Pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-              <Line x1="0" y1="0" x2="24" y2="0" stroke="#9bb1c4" strokeWidth="1" strokeOpacity="0.5" />
-              <Line x1="0" y1="0" x2="0" y2="24" stroke="#9bb1c4" strokeWidth="1" strokeOpacity="0.5" />
-            </Pattern>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#grid)" />
-        </Svg>
-      ) : null}
+      {/* 1. Blueprint Grid Background (Active across Mobile and Web) */}
+      <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+        <Defs>
+          <Pattern id="facility-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <Line x1="0" y1="0" x2="24" y2="0" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
+            <Line x1="0" y1="0" x2="0" y2="24" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
+          </Pattern>
+        </Defs>
+        <Rect width="100%" height="100%" fill="url(#facility-grid)" />
+      </Svg>
 
       {/* 2. Concentric Sonar Radar Rings */}
       <View style={styles.sonarCenter} pointerEvents="none">
@@ -178,7 +176,7 @@ export function MiniFacilityMap({
             transform: [{ rotate: spin }],
           },
           isWeb ? ({
-            backgroundImage: 'conic-gradient(from 0deg, transparent 65%, rgba(0, 92, 209, 0.22) 100%)',
+            backgroundImage: 'conic-gradient(from 0deg, transparent 65%, rgba(0, 92, 209, 0.18) 100%)',
           } as any) : undefined,
         ]}
       />
@@ -384,14 +382,14 @@ const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
     minHeight: 340,
-    backgroundColor: '#dce6ef', // Blueprint paper background
+    backgroundColor: colors.mapBackground, // High-contrast blueprint cyan (#e0f2fe)
     position: 'relative',
     overflow: 'hidden',
   },
   sonarCenter: {
     position: 'absolute',
     left: '50%',
-    top: '52%',
+    top: '48%',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -402,28 +400,28 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 92, 209, 0.12)',
   },
   ringLarge: {
-    width: 380,
-    height: 380,
+    width: 320,
+    height: 320,
   },
   ringMedium: {
-    width: 250,
-    height: 250,
+    width: 220,
+    height: 220,
   },
   ringSmall: {
-    width: 130,
-    height: 130,
+    width: 120,
+    height: 120,
   },
   radarSweep: {
     position: 'absolute',
     left: '50%',
-    top: '52%',
-    width: 580,
-    height: 580,
-    marginLeft: -290,
-    marginTop: -290,
-    borderRadius: 290,
+    top: '48%',
+    width: 340,
+    height: 340,
+    marginLeft: -170,
+    marginTop: -170,
+    borderRadius: 170,
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.12)',
+    borderColor: 'rgba(0, 92, 209, 0.15)',
     backgroundColor: 'transparent',
   },
   searchBarWrapper: {
@@ -541,28 +539,28 @@ const styles = StyleSheet.create({
   zoneCardA: {
     position: 'absolute',
     left: '6%',
-    top: '10%',
+    top: '9%',
     marginTop: 48,
-    height: '27%',
+    height: '26%',
     width: '39%',
-    backgroundColor: 'rgba(255, 255, 255, 0.80)',
-    borderWidth: 2,
-    borderColor: '#9bb1c4',
-    borderRadius: 6,
-    padding: 8,
+    backgroundColor: colors.mapZoneBg,
+    borderWidth: 1.5,
+    borderColor: colors.mapLine,
+    borderRadius: 8,
+    padding: 7,
   },
   zoneCardB: {
     position: 'absolute',
     right: '6%',
-    top: '12%',
+    top: '11%',
     marginTop: 48,
-    height: '25%',
+    height: '24%',
     width: '37%',
-    backgroundColor: 'rgba(255, 255, 255, 0.80)',
-    borderWidth: 2,
-    borderColor: '#9bb1c4',
-    borderRadius: 6,
-    padding: 8,
+    backgroundColor: colors.mapZoneBg,
+    borderWidth: 1.5,
+    borderColor: colors.mapLine,
+    borderRadius: 8,
+    padding: 7,
   },
   zoneTitle: {
     fontSize: 9,
@@ -572,57 +570,58 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   rackGridA: {
-    marginTop: 10,
+    marginTop: 8,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 3,
     justifyContent: 'space-between',
   },
   rackGridB: {
-    marginTop: 10,
+    marginTop: 8,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 3,
     justifyContent: 'space-between',
   },
   rackPill: {
     width: '30%',
-    height: 16,
+    height: 12,
     borderRadius: 2,
-    backgroundColor: '#b8cbd9',
+    backgroundColor: colors.mapRack,
   },
   docksContainer: {
     position: 'absolute',
     left: '6%',
-    bottom: 22,
+    bottom: 16,
     width: '88%',
-    height: '24%',
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderWidth: 2,
+    height: '22%',
+    maxHeight: 74,
+    backgroundColor: colors.mapZoneBg,
+    borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#9bb1c4',
-    borderRadius: 6,
-    padding: 8,
+    borderColor: colors.mapLine,
+    borderRadius: 8,
+    padding: 7,
   },
   docksRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 8,
+    marginTop: 6,
   },
   dockSlot: {
     flex: 1,
-    height: 40,
+    height: 32,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(203, 213, 225, 0.6)',
-    backgroundColor: 'rgba(241, 245, 249, 0.4)',
+    borderColor: 'rgba(203, 213, 225, 0.8)',
+    backgroundColor: 'rgba(241, 245, 249, 0.7)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   dockSlotText: {
     fontSize: 9,
     fontFamily: typography.fontMono,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textSecondary,
   },
   workerMarker: {
