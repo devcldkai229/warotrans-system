@@ -10,10 +10,10 @@ public sealed class TransportRequestDetail
     public Guid ContainerId { get; set; }
     public Guid? SourceStorageLocationId { get; set; }
     public Guid SourceEndpointId { get; set; }
-    public short SourceLevelNo { get; set; }
+    public short? SourceLevelNo { get; set; }
     public Guid? DestinationStorageLocationId { get; set; }
     public Guid DestinationEndpointId { get; set; }
-    public short DestinationLevelNo { get; set; }
+    public short? DestinationLevelNo { get; set; }
     public TransportRequestDetailStatus Status { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

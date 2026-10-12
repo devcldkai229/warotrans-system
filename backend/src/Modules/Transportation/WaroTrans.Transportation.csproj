@@ -12,6 +12,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\WaroTrans.BuildingBlocks\WaroTrans.BuildingBlocks.csproj" />
+    <!-- Public Contracts only (IJobRuntimeProvisioner / IWorkflowRequestValidator). Do not use Persistence. -->
+    <ProjectReference Include="..\WorkflowExecution\WaroTrans.WorkflowExecution.csproj" />
   </ItemGroup>
 
   <ItemGroup>

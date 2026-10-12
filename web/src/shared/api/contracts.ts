@@ -118,6 +118,8 @@ export type EdgeDirection = 'ONE_WAY' | 'BIDIRECTIONAL'
 /** CURRENT_MOVEMENT binding paths supported by the backend (rules/03). */
 export type CurrentMovementPath =
   | 'containerId'
+  | 'transportRequestDetailId'
+  | 'jobContainerId'
   | 'source.endpointId'
   | 'source.storageLocationId'
   | 'source.levelNo'

@@ -18,21 +18,27 @@ public static class GetWorkflowMetadataEndpoint
                     st.StepType.ToString(),
                     st.Description,
                     st.OperationFieldName,
-                    st.Operations.Select(op => new OperationMetadataDto(
-                        op.Code,
-                        op.Description,
-                        op.Inputs.Select(i => new FieldMetadataDto(
-                            i.Key,
-                            i.DataType.ToString(),
-                            i.Required,
-                            i.Description,
-                            i.AllowedValues)).ToList(),
-                        op.Outputs.Select(o => new FieldMetadataDto(
-                            o.Key,
-                            o.DataType.ToString(),
-                            false,
-                            o.Description,
-                            o.AllowedValues)).ToList())).ToList())).ToList(),
+                    st.Operations.Select(op =>
+                    {
+                        OperationExecutionScopeCatalog.TryGet(st.StepType, op.Code, out var scopeDef);
+                        return new OperationMetadataDto(
+                            op.Code,
+                            op.Description,
+                            scopeDef?.Scope.ToString(),
+                            scopeDef?.StopActionFilter?.ToString(),
+                            op.Inputs.Select(i => new FieldMetadataDto(
+                                i.Key,
+                                i.DataType.ToString(),
+                                i.Required,
+                                i.Description,
+                                i.AllowedValues)).ToList(),
+                            op.Outputs.Select(o => new FieldMetadataDto(
+                                o.Key,
+                                o.DataType.ToString(),
+                                false,
+                                o.Description,
+                                o.AllowedValues)).ToList());
+                    }).ToList())).ToList(),
                 Enum.GetNames<BindingSourceType>(),
                 Enum.GetNames<WorkflowVariableSource>(),
                 Enum.GetNames<WorkflowDataType>(),
@@ -40,11 +46,15 @@ public static class GetWorkflowMetadataEndpoint
                 SystemVariableCatalog.All.Select(s => new CatalogFieldDto(
                     s.Key,
                     s.DataType.ToString(),
-                    s.Description)).ToList(),
+                    s.Key,
+                    s.Description,
+                    RequiredCapable: false)).ToList(),
                 CurrentMovementCatalog.All.Select(m => new CatalogFieldDto(
                     m.Path,
                     m.DataType.ToString(),
-                    m.Description)).ToList());
+                    m.Label,
+                    m.Description,
+                    m.IsRequiredCapable)).ToList());
 
             return Results.Ok(response);
         });
@@ -71,6 +81,8 @@ public sealed record StepTypeMetadataDto(
 public sealed record OperationMetadataDto(
     string Code,
     string Description,
+    string? ExecutionScope,
+    string? StopActionFilter,
     IReadOnlyList<FieldMetadataDto> Inputs,
     IReadOnlyList<FieldMetadataDto> Outputs);
 
@@ -84,4 +96,6 @@ public sealed record FieldMetadataDto(
 public sealed record CatalogFieldDto(
     string Key,
     string DataType,
-    string Description);
+    string Label,
+    string Description,
+    bool RequiredCapable = false);

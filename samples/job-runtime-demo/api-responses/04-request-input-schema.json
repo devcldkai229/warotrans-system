@@ -1,0 +1,29 @@
+{
+  "workflowId": "ad360f97-02ff-4136-86ea-57412bf0c252",
+  "workflowCode": "DEMO_INTERNAL_RELOCATION_113751",
+  "note": "Workflow metadata only \u2014 not the full future TransportRequest form schema.",
+  "workflowInputs": [],
+  "movementInputs": [
+    {
+      "key": "containerId",
+      "dataType": "UUID",
+      "required": true,
+      "label": "Container",
+      "description": "Container selected for this transport movement."
+    },
+    {
+      "key": "destination.endpointId",
+      "dataType": "UUID",
+      "required": true,
+      "label": "Destination endpoint",
+      "description": "Destination endpoint from matching TransportRequestDetail (or stop endpoint at DROPOFF stop scope)."
+    },
+    {
+      "key": "source.endpointId",
+      "dataType": "UUID",
+      "required": true,
+      "label": "Source endpoint",
+      "description": "Source endpoint from matching TransportRequestDetail (or stop endpoint at PICKUP stop scope)."
+    }
+  ]
+}

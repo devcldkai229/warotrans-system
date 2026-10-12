@@ -1,0 +1,45 @@
+{
+  "batchKey": "BATCH-SHARED-PICKUP",
+  "sequenceNo": 1,
+  "containerIds": [
+    "c1000000-0000-4000-8000-000000000001",
+    "c2000000-0000-4000-8000-000000000002",
+    "c3000000-0000-4000-8000-000000000003"
+  ],
+  "stops": [
+    {
+      "sequenceNo": 1,
+      "endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "action": "PICKUP",
+      "containerIds": [
+        "c1000000-0000-4000-8000-000000000001",
+        "c2000000-0000-4000-8000-000000000002",
+        "c3000000-0000-4000-8000-000000000003"
+      ]
+    },
+    {
+      "sequenceNo": 2,
+      "endpointId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "action": "DROPOFF",
+      "containerIds": [
+        "c1000000-0000-4000-8000-000000000001"
+      ]
+    },
+    {
+      "sequenceNo": 3,
+      "endpointId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      "action": "DROPOFF",
+      "containerIds": [
+        "c2000000-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "sequenceNo": 4,
+      "endpointId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "action": "DROPOFF",
+      "containerIds": [
+        "c3000000-0000-4000-8000-000000000003"
+      ]
+    }
+  ]
+}

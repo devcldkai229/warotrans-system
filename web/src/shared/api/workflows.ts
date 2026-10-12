@@ -3,6 +3,7 @@ import type {
   WorkflowDetail,
   WorkflowListItem,
   WorkflowMetadata,
+  WorkflowRequestInputSchema,
   WorkflowUpsert,
 } from './types'
 
@@ -22,6 +23,12 @@ export function listWorkflows(params?: { code?: string; status?: string }) {
 
 export function getWorkflow(id: string) {
   return apiFetch<WorkflowDetail>(`/api/workflow-execution/workflows/${id}`)
+}
+
+export function getWorkflowRequestInputSchema(id: string) {
+  return apiFetch<WorkflowRequestInputSchema>(
+    `/api/workflow-execution/workflows/${id}/request-input-schema`,
+  )
 }
 
 export function createWorkflow(body: WorkflowUpsert) {

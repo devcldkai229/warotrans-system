@@ -11,6 +11,7 @@ public sealed class TransportRequest
     public Guid Id { get; set; }
     public string RequestCode { get; set; } = string.Empty;
     public Guid WarehouseId { get; set; }
+    public Guid MapVersionId { get; set; }
     public Guid WorkflowId { get; set; }
     public Guid RequestedBy { get; set; }
     public TransportRequestStatus Status { get; set; }

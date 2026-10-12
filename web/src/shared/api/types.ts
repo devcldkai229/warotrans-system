@@ -27,6 +27,8 @@ export interface FieldMetadata {
 export interface OperationMetadata {
   code: string
   description: string
+  executionScope?: string | null
+  stopActionFilter?: string | null
   inputs: FieldMetadata[]
   outputs: FieldMetadata[]
 }
@@ -41,7 +43,23 @@ export interface StepTypeMetadata {
 export interface CatalogField {
   key: string
   dataType: string
+  label?: string
   description: string
+  requiredCapable?: boolean
+}
+
+export interface WorkflowRequestInputField {
+  key: string
+  dataType: string
+  required: boolean
+  label: string
+  description?: string | null
+}
+
+export interface WorkflowRequestInputSchema {
+  workflowId: string
+  workflowInputs: WorkflowRequestInputField[]
+  movementInputs: WorkflowRequestInputField[]
 }
 
 export interface WorkflowMetadata {

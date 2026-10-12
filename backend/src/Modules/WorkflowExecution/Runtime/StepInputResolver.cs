@@ -89,10 +89,24 @@ public sealed class StepInputResolver
 
             case BindingSourceType.CURRENT_MOVEMENT:
             {
-                if (movement is null
-                    || string.IsNullOrWhiteSpace(binding.SourceReference)
-                    || !movement.TryGet(binding.SourceReference, out var raw)
-                    || raw is null)
+                if (movement is null || string.IsNullOrWhiteSpace(binding.SourceReference))
+                {
+                    throw new DomainValidationException(
+                        $"CURRENT_MOVEMENT '{binding.SourceReference}' is unavailable.",
+                        "current_movement_unresolved");
+                }
+
+                // Explicit scope mismatch (e.g. containerId on a STOP-scope task).
+                if (movement.Scope is { } scope
+                    && CurrentMovementCatalog.TryGet(binding.SourceReference, out var field)
+                    && !field.IsAvailableAt(scope, movement.StopAction))
+                {
+                    throw new DomainValidationException(
+                        $"CURRENT_MOVEMENT '{binding.SourceReference}' is not available at execution scope {scope}.",
+                        "current_movement_scope_mismatch");
+                }
+
+                if (!movement.TryGet(binding.SourceReference, out var raw) || raw is null)
                 {
                     throw new DomainValidationException(
                         $"CURRENT_MOVEMENT '{binding.SourceReference}' is unavailable.",
