@@ -10,21 +10,24 @@ interface AuthContextType {
   updateZone: (zone: string) => void;
 }
 
-export const PRESET_OPERATORS: { id: string; name: string; zone: string; role: 'STAFF' | 'ADMIN' }[] = [
+export const PRESET_OPERATORS: { id: string; username: string; name: string; zone: string; role: 'STAFF' | 'ADMIN' }[] = [
   {
     id: 'STF-2026-088',
+    username: 'alex.tran',
     name: 'Alex Tran',
     zone: 'Inbound Dock 01',
     role: 'STAFF',
   },
   {
     id: 'STF-2026-042',
+    username: 'sarah.connor',
     name: 'Sarah Connor',
     zone: 'Inbound Dock 01',
     role: 'STAFF',
   },
   {
     id: 'STF-2026-015',
+    username: 'david.miller',
     name: 'David Miller',
     zone: 'Outbound Dock 04',
     role: 'STAFF',
@@ -44,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const matched = PRESET_OPERATORS[0];
           return {
             id: matched.id,
-            username: matched.id.toLowerCase(),
+            username: matched.username,
             fullName: matched.name,
             role: matched.role,
             zone: matched.zone,
@@ -58,9 +61,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   });
 
-  const login = (staffId: string, zone?: string): boolean => {
-    const matched = PRESET_OPERATORS.find((op) => op.id.toLowerCase() === staffId.trim().toLowerCase());
-    const fullName = matched ? matched.name : `Operator (${staffId})`;
+  const login = (identifier: string, zone?: string): boolean => {
+    const trimmed = identifier.trim().toLowerCase();
+    const matched = PRESET_OPERATORS.find(
+      (op) => op.username.toLowerCase() === trimmed || op.id.toLowerCase() === trimmed
+    );
+    const fullName = matched
+      ? matched.name
+      : trimmed.includes('.')
+        ? trimmed
+            .split('.')
+            .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+            .join(' ')
+        : `Operator (${identifier})`;
     const activeZone = zone || (matched ? matched.zone : 'Inbound Dock 01');
     const initials = fullName
       .split(' ')
@@ -70,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .toUpperCase();
 
     const newSession: UserSession = {
-      id: staffId,
-      username: staffId.toLowerCase(),
+      id: matched ? matched.id : 'STF-2026-088',
+      username: matched ? matched.username : trimmed,
       fullName,
       role: matched ? matched.role : 'STAFF',
       zone: activeZone,

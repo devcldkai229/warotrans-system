@@ -10,10 +10,12 @@ import {
 import {
   Check,
   ChevronDown,
+  Eye,
+  EyeOff,
   Lock,
   LogIn,
   MapPin,
-  UserCheck,
+  User,
 } from 'lucide-react-native';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
@@ -56,22 +58,23 @@ export const WORK_ZONES = [
 export function LoginScreen() {
   const { login } = useAuth();
   const { success: showToastSuccess } = useToast();
-  const [staffId, setStaffId] = useState('STF-2026-088');
+  const [username, setUsername] = useState('alex.tran');
   const [password, setPassword] = useState('••••••••');
+  const [showPassword, setShowPassword] = useState(false);
   const [selectedZone, setSelectedZone] = useState('Inbound Dock 01');
   const [isZoneDropdownOpen, setIsZoneDropdownOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = () => {
-    if (!staffId.trim()) {
+    if (!username.trim()) {
       triggerHaptic('error');
-      setError('Staff Identifier is required.');
+      setError('Staff Username is required.');
       return;
     }
     triggerHaptic('success');
     setError(null);
-    showToastSuccess(`Signed in as Alex Tran (${selectedZone})`);
-    login(staffId, selectedZone);
+    login(username, selectedZone);
+    showToastSuccess(`Signed in as ${username} (${selectedZone})`);
   };
 
   const activeZoneObj =
@@ -87,29 +90,29 @@ export function LoginScreen() {
         <View style={styles.container}>
           {/* Top Section with high stacking context to overlay over actionSection */}
           <View style={styles.topSection}>
-            {/* Top Brand Bar */}
-            <View style={styles.topBar}>
-              <View style={styles.brandRow}>
-                <BrandMark size={40} />
-                <View>
-                  <Text style={styles.brandTitle}>WAROTRANS</Text>
-                  <Text style={styles.brandSubtitle}>Autonomous Fleet Mobile</Text>
-                </View>
+            {/* Centered Brand Hero */}
+            <View style={styles.brandHero}>
+              <View style={styles.logoBadgeWrap}>
+                <BrandMark size={56} />
               </View>
+              <Text style={styles.brandTitle}>WAROTRANS</Text>
+              <Text style={styles.brandSubtitle}>Autonomous Fleet Operator Console</Text>
             </View>
 
             {/* Form Fields */}
             <View style={styles.formSection}>
               <Input
-                label="Staff Identifier (Staff ID)"
-                value={staffId}
+                label="Staff Username"
+                value={username}
                 onChangeText={(text) => {
-                  setStaffId(text);
+                  setUsername(text);
                   if (error) setError(null);
                 }}
-                placeholder="STF-2026-XXX"
-                autoCapitalize="characters"
-                leftIcon={<UserCheck size={18} color={colors.textSecondary} />}
+                placeholder="e.g. alex.tran"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+                leftIcon={<User size={18} color={colors.textSecondary} />}
                 error={error || undefined}
               />
 
@@ -118,8 +121,26 @@ export function LoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Enter shift password"
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                returnKeyType="done"
                 leftIcon={<Lock size={18} color={colors.textSecondary} />}
+                rightIcon={
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setShowPassword(!showPassword);
+                    }}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={18} color={colors.textSecondary} />
+                    ) : (
+                      <Eye size={18} color={colors.textSecondary} />
+                    )}
+                  </Pressable>
+                }
               />
 
               {/* Assigned Work Zone Selector Field */}
@@ -241,7 +262,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: Platform.select({ android: 24, default: 52 }),
+    paddingTop: Platform.select({ android: 20, default: 44 }),
     paddingBottom: Platform.select({ android: 24, default: 36 }),
     backgroundColor: colors.background,
     justifyContent: 'space-between',
@@ -254,29 +275,36 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 100,
   },
-  topBar: {
-    flexDirection: 'row',
+  brandHero: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 8,
+    justifyContent: 'center',
+    paddingTop: Platform.select({ android: 12, default: 18 }),
+    marginBottom: 4,
   },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  logoBadgeWrap: {
+    marginBottom: 14,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 6,
   },
   brandTitle: {
-    fontSize: 12,
+    fontSize: 22,
     fontWeight: '900',
-    letterSpacing: 1.2,
-    color: colors.primary,
+    letterSpacing: 2,
+    color: colors.textPrimary,
     fontFamily: typography.fontMono,
+    textAlign: 'center',
   },
   brandSubtitle: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.textSecondary,
     fontFamily: typography.fontSans,
+    marginTop: 4,
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
   formSection: {
     marginTop: 36,
