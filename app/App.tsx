@@ -1,6 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { LogBox, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+
+if (__DEV__) {
+  LogBox.ignoreLogs([
+    'props.pointerEvents is deprecated',
+    'Animated: `useNativeDriver`',
+    'componentWillReceiveProps has been renamed',
+  ]);
+}
 import { Wifi } from 'lucide-react-native';
 import { AppNavigator } from './src/app/navigation/AppNavigator';
 import { NavigationProvider } from './src/app/navigation/NavigationContext';
@@ -45,6 +53,25 @@ export default function App() {
             -moz-osx-font-smoothing: grayscale !important;
             text-rendering: optimizeLegibility !important;
           }
+          /* Hide desktop scrollbars cleanly across all browsers */
+          ::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+          }
+          * {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+          /* Prevent accidental blue text selection when dragging with mouse during demo */
+          body, #web-phone-frame, #web-phone-frame * {
+            -webkit-user-select: none !important;
+            user-select: none !important;
+          }
+          input, textarea {
+            -webkit-user-select: text !important;
+            user-select: text !important;
+          }
           html, body, #root {
             -webkit-font-smoothing: antialiased !important;
             -moz-osx-font-smoothing: grayscale !important;
@@ -53,6 +80,9 @@ export default function App() {
           *:focus, *:focus-visible, *:focus-within {
             outline: none !important;
             box-shadow: none !important;
+          }
+          button, [role="button"], a {
+            cursor: pointer !important;
           }
           button, [role="button"], a, input, select, textarea {
             outline: none !important;
@@ -123,6 +153,9 @@ export default function App() {
             max-height: 844px !important;
             transform: scale(var(--phone-scale, 1)) !important;
             transform-origin: center center !important;
+            backface-visibility: hidden !important;
+            -webkit-backface-visibility: hidden !important;
+            transform-style: preserve-3d !important;
             border-radius: 46px !important;
             border: 2px solid #334155 !important;
             box-shadow: 0 25px 70px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 50px rgba(0, 92, 209, 0.15) !important;
