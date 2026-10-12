@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 88,
+    paddingBottom: Platform.select({ ios: 104, default: 96 }),
     gap: 16,
   },
   section: {

@@ -406,12 +406,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingBottom: 88,
+    paddingBottom: Platform.select({ ios: 104, default: 96 }),
   },
   scrollContentCollapsed: {
     flexGrow: 1,
     justifyContent: 'space-between',
-    paddingBottom: 82,
+    paddingBottom: 0,
   },
   mapCollapsed: {
     flex: 1,
@@ -433,6 +433,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     zIndex: 30,
+    paddingBottom: Platform.select({ ios: 96, default: 84 }),
   },
   sheetHandleArea: {
     alignItems: 'center',
@@ -552,7 +553,7 @@ const styles = StyleSheet.create({
   },
   slotDetailsText: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 2,
     fontFamily: typography.fontSans,

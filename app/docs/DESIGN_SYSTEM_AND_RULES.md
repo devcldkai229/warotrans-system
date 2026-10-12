@@ -44,9 +44,14 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
 > Luôn đọc token thật từ `colors.ts` thay vì dùng giá trị ghi nhớ.
 
 ### 2.2 Quy chuẩn Typography (`src/shared/theme/typography.ts`)
+* **Hệ Font Chuẩn (Native Retina & Modern Web)**:
+  * **iOS Native (iPhone)**: San Francisco (`SF Pro`) bản địa Apple — tối ưu hoàn hảo kerning, tracking và độ nét cho màn hình Super Retina XDR.
+  * **Web Simulator & Android**: `Inter` (đầy đủ các biến thể weight `400, 500, 600, 700, 800, 900`).
+  * **Monospace Codes**: `Menlo` (iOS) / `JetBrains Mono` (Web).
+  * **Khử răng cưa Web**: Bắt buộc bật `-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;` trong CSS toàn cục để triệt tiêu hiện tượng chữ bị mỏng và nhạt màu trên trình duyệt desktop.
 * **Eyebrows / Badges / Protocol Codes**: `fontMono`, size `9-10`, `fontWeight: '900'`, `textTransform: 'uppercase'`, `letterSpacing: 1.2 - 1.6`.
-* **Tiêu đề màn hình & Thẻ chính**: `fontSans`, size `16-24`, `fontWeight: '900'`, `color: colors.textPrimary`.
-* **Nội dung thẻ & Mô tả**: `fontSans`, size `11-13`, `fontWeight: '600' - '700'`, `color: colors.textSecondary`.
+* **Tiêu đề màn hình & Thẻ chính**: `fontSans`, size `16-24`, `fontWeight: '900'`, `color: colors.textPrimary` (`#071523`).
+* **Nội dung thẻ & Mô tả**: `fontSans`, size `11-13`, `fontWeight: '600' - '700'`, `color: colors.textSecondary` (`#475569`). Tuyệt đối không dùng xám nhạt mờ (`#94a3b8`) cho nội dung đọc hay đường viền.
 * **Chỉ số Telemetry**: `fontMono` hoặc `fontSans`, `fontWeight: '900'`, `tabularNums`.
 
 ---
@@ -74,16 +79,42 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
     | `src/features/jobs/JobDetailScreen.tsx` | `Platform.OS === 'ios' ? 104 : 68` |
     | `src/shared/components/AppHeader.tsx` | không dùng — chỉ `paddingTop` + `paddingBottom: 12` |
   * Dropdown menus bên trong header phải đặt: `top: Platform.OS === 'ios' ? 92 : 56`.
-* **Quy chuẩn Bottom Tab Bar**:
-  * Phải chạm đáy vật lý của thiết bị:
+* **Quy chuẩn Floating Navigation Dock (Silicon Valley Modern Industrial)**:
+  * Thanh điều hướng dạng viên thuốc nổi (`borderRadius: 999`), tách biệt khỏi đáy tạo cảm giác thoáng đãng, sang trọng:
     ```tsx
-    height: Platform.OS === 'ios' ? 86 : 72,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8, // Chừa khoảng trống cho thanh Home bar
+    // Container bao bọc (cho phép click/scroll xuyên qua hai bên mép)
+    dockWrapper: {
+      position: 'absolute',
+      bottom: Platform.select({ android: 16, default: 24 }),
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 90,
+    },
+    // Viên thuốc nổi (kích thước vàng ~296px, chiếm ~76% chiều rộng màn hình 390px)
+    dockPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(255, 255, 255, 0.96)',
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      shadowColor: '#071523',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.14,
+      shadowRadius: 18,
+      elevation: 10,
+      gap: 10,
+    },
     ```
-  * Badge đếm Job phải đặt tại `top: -2, right: 0`, không che icon `PackageCheck`.
-* **Khu vực ngón cái (Thumb Zone)**:
+  * Badge đếm Job: đặt tại `top: -4, right: -8`, nền `colors.danger`, viền trắng `1.5px`, chữ mono 9px đậm 900.
+* **Khu vực ngón cái (Thumb Zone) & Bệ Đỡ Đáy (Solid Surface Foundation)**:
   * Nửa dưới màn hình (40–50% từ dưới lên) là nơi ngón tay cái thao tác thuận tiện nhất khi cầm máy 1 tay.
-  * Thẻ tác vụ cần xử lý ngay (*"NEXT HANDOVER TASK"*) phải **dock sát ngay trên Tab Bar**, không được để khoảng trống lơ lửng ở giữa.
+  * **Bệ đỡ đáy (Solid Bottom Surface)**: Bề mặt của Bottom Sheet kéo dài chạm sát mép đáy vật lý của màn hình (`bottom: 0`), triệt tiêu hoàn toàn khe hở lọt map phía dưới. Thanh Floating Dock nổi trôi đè lên trên bệ đỡ này tạo hiệu ứng chiều sâu 3D sang trọng.
+  * **Khoảng đệm cuộn an toàn (Safe Scroll Insets)**: Mọi màn hình cuộn (`HomeScreen`, `JobsScreen`, `TransportScreen`) đều khai báo `paddingBottom: Platform.select({ ios: 104, default: 96 })` để nội dung cuối cùng không bao giờ bị thanh dock che khuất.
 
 ### 3.2 Cử chỉ Cảm ứng (Touch Gestures)
 * **Bottom Sheet kéo vuốt (PanResponder)**:

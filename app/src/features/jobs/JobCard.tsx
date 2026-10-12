@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 10,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   statusTag: {
     paddingHorizontal: 7,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
   },
   tagQueuedText: {
-    color: '#64748b',
+    color: colors.textSecondary,
   },
   targetBox: {
     marginTop: 12,
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   targetEyebrow: {
     fontSize: 9,
     fontWeight: '900',
-    color: colors.textMuted,
+    color: colors.textSecondary,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
@@ -295,8 +295,8 @@ const styles = StyleSheet.create({
   },
   targetRoute: {
     fontSize: 10,
-    fontWeight: '500',
-    color: colors.textMuted,
+    fontWeight: '600',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   footerRow: {
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   robotLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   robotCode: {
     fontFamily: typography.fontMono,
@@ -377,6 +377,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontMono,
     fontSize: 10,
     fontWeight: '700',
-    color: '#64748b',
+    color: colors.textSecondary,
   },
 });

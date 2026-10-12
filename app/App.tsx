@@ -29,7 +29,7 @@ export default function App() {
         link.id = fontId;
         link.rel = 'stylesheet';
         link.href =
-          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap';
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800;900&display=swap';
         document.head.appendChild(link);
       }
 
@@ -41,6 +41,14 @@ export default function App() {
           *, *:before, *:after {
             outline: none !important;
             -webkit-tap-highlight-color: transparent !important;
+            -webkit-font-smoothing: antialiased !important;
+            -moz-osx-font-smoothing: grayscale !important;
+            text-rendering: optimizeLegibility !important;
+          }
+          html, body, #root {
+            -webkit-font-smoothing: antialiased !important;
+            -moz-osx-font-smoothing: grayscale !important;
+            text-rendering: optimizeLegibility !important;
           }
           *:focus, *:focus-visible, *:focus-within {
             outline: none !important;
