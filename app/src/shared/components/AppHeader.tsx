@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 40,
+    zIndex: 80,
     elevation: 2,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },

@@ -138,14 +138,6 @@ export function BarcodeScannerHUD({
     </View>
   );
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.webAbsoluteOverlay} pointerEvents="auto">
-        {hudBody}
-      </View>
-    );
-  }
-
   return (
     <Modal
       visible={visible}
@@ -159,14 +151,6 @@ export function BarcodeScannerHUD({
 }
 
 const styles = StyleSheet.create({
-  webAbsoluteOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 120,
-  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
