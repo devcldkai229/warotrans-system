@@ -19,6 +19,7 @@ import {
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 import { BarcodeScannerHUD } from './BarcodeScannerHUD';
 import { IncidentCategory, IssueReportingModal } from './IssueReportingModal';
 
@@ -393,7 +394,7 @@ const styles = StyleSheet.create({
   timerText: {
     fontSize: 9,
     fontWeight: '800',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.warning,
   },
   stationHeading: {
@@ -434,7 +435,7 @@ const styles = StyleSheet.create({
   },
   batteryText: {
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -507,7 +508,7 @@ const styles = StyleSheet.create({
   verTargetLabel: {
     fontSize: 10,
     fontWeight: '800',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.primary,
   },
   targetContainerCard: {
@@ -559,7 +560,7 @@ const styles = StyleSheet.create({
   targetBarcodeText: {
     fontSize: 18,
     fontWeight: '900',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.textPrimary,
   },
   targetProductText: {
@@ -589,7 +590,7 @@ const styles = StyleSheet.create({
   },
   scannedResultValue: {
     fontSize: 11,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '800',
     color: colors.textPrimary,
   },
@@ -678,7 +679,7 @@ const styles = StyleSheet.create({
   },
   receiptLabel: {
     fontSize: 11,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '700',
     color: colors.textPrimary,
   },

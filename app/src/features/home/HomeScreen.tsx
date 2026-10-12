@@ -406,19 +406,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 88,
   },
   scrollContentCollapsed: {
     flexGrow: 1,
     justifyContent: 'space-between',
-    paddingBottom: 0,
+    paddingBottom: 82,
   },
   mapCollapsed: {
     flex: 1,
-    minHeight: 380,
+    minHeight: 340,
   },
   mapExpanded: {
-    height: 280,
+    height: 270,
   },
   bottomSheet: {
     marginTop: -14,

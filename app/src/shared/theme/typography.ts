@@ -2,11 +2,11 @@ import { Platform } from 'react-native';
 
 export const typography = {
   fontSans: Platform.select({
-    web: "'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    default: undefined,
+    web: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif",
+    default: undefined, // iOS uses San Francisco (SF Pro) natively
   }),
   fontMono: Platform.select({
-    web: "'Roboto Mono', monospace",
-    default: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    web: "Menlo, 'SF Mono', Consolas, 'JetBrains Mono', 'Roboto Mono', monospace",
+    default: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   }),
 };

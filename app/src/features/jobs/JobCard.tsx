@@ -88,7 +88,7 @@ export function JobCard({ job, onPress }: JobCardProps) {
               <Text style={styles.jobId}>{job.id}</Text>
               <Text style={styles.workflowName}> · {job.workflowName}</Text>
             </Text>
-            <Text style={styles.payloadSummary} numberOfLines={1}>
+            <Text style={styles.payloadSummary} numberOfLines={2}>
               {job.payloadSummary}
             </Text>
           </View>
@@ -221,15 +221,15 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   statusTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
     borderRadius: 4,
     flexShrink: 0,
   },
   statusTagText: {
     fontSize: 8,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   tagWaiting: {

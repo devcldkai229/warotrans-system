@@ -64,18 +64,6 @@ function RobotSelectionRadarWave({ isSelected }: { isSelected: boolean }) {
     return () => a.stop();
   }, [isSelected, waveAnim]);
 
-  if (Platform.OS === 'web') {
-    return (
-      <View
-        pointerEvents="none"
-        style={[
-          styles.robotPulseRingWeb,
-          isSelected ? (styles.robotPulsePingWeb as any) : styles.robotPulseDefault,
-        ]}
-      />
-    );
-  }
-
   if (!isSelected) {
     return <View style={styles.robotPulseDefault} />;
   }
@@ -394,7 +382,8 @@ export function MiniFacilityMap({
 
 const styles = StyleSheet.create({
   mapContainer: {
-    height: 400,
+    flex: 1,
+    minHeight: 340,
     backgroundColor: '#dce6ef', // Blueprint paper background
     position: 'relative',
     overflow: 'hidden',
@@ -740,19 +729,6 @@ const styles = StyleSheet.create({
     top: -20,
     left: -20,
     opacity: 0.35,
-  },
-  robotPulseRingWeb: {
-    position: 'absolute',
-    top: -6,
-    left: -6,
-    right: -6,
-    bottom: -6,
-    borderRadius: 26,
-    borderWidth: 1.5,
-  },
-  robotPulsePingWeb: {
-    borderColor: 'rgba(0, 92, 209, 0.85)',
-    ...({ animation: 'ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite' } as any),
   },
   robotPulseWave: {
     position: 'absolute',

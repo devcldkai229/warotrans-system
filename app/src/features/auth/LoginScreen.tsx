@@ -305,8 +305,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 52 : 24,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    paddingTop: Platform.select({ android: 24, default: 52 }),
+    paddingBottom: Platform.select({ android: 24, default: 36 }),
     backgroundColor: colors.background,
     justifyContent: 'space-between',
     maxWidth: 480,

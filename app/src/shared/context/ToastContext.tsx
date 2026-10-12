@@ -213,7 +213,7 @@ export function useToast() {
 const styles = StyleSheet.create({
   toastContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 14,
+    top: Platform.select({ android: 14, default: 54 }),
     left: 0,
     right: 0,
     zIndex: 999999,
