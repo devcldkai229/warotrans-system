@@ -23,7 +23,7 @@ import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { useToast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { PRESET_OPERATORS, useAuth } from './authContext';
+import { useAuth } from './authContext';
 
 export const WORK_ZONES = [
   {
@@ -55,19 +55,12 @@ export const WORK_ZONES = [
 
 export function LoginScreen() {
   const { login } = useAuth();
-  const { info: showToastInfo, success: showToastSuccess } = useToast();
+  const { success: showToastSuccess } = useToast();
   const [staffId, setStaffId] = useState('STF-2026-088');
   const [password, setPassword] = useState('••••••••');
   const [selectedZone, setSelectedZone] = useState('Inbound Dock 01');
   const [isZoneDropdownOpen, setIsZoneDropdownOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleSelectPreset = (operator: (typeof PRESET_OPERATORS)[0]) => {
-    triggerHaptic('tap');
-    setStaffId(operator.id);
-    setSelectedZone(operator.zone);
-    setError(null);
-  };
 
   const handleLogin = () => {
     if (!staffId.trim()) {
@@ -102,58 +95,6 @@ export function LoginScreen() {
                   <Text style={styles.brandTitle}>WAROTRANS</Text>
                   <Text style={styles.brandSubtitle}>Autonomous Fleet Mobile</Text>
                 </View>
-              </View>
-              <View style={styles.statusPill}>
-                <Text style={styles.statusText}>FLEET ONLINE</Text>
-              </View>
-            </View>
-
-            {/* Screen Title */}
-            <View style={styles.headerSection}>
-              <Text style={styles.screenTag}>SCR-STF-01 · AUTHENTICATION</Text>
-              <Text style={styles.heading}>Shift Authentication</Text>
-              <Text style={styles.description}>
-                Verify operator credentials to access AMR fleet handover and dispatch controls.
-              </Text>
-            </View>
-
-            {/* Quick Operator Profiles Section */}
-            <View style={styles.presetSection}>
-              <Text style={styles.sectionLabel}>QUICK OPERATOR PROFILES</Text>
-              <View style={styles.presetChips}>
-                {PRESET_OPERATORS.map((op) => {
-                  const isSelected = staffId === op.id;
-                  return (
-                    <Pressable
-                      key={op.id}
-                      onPress={() => handleSelectPreset(op)}
-                      style={({ pressed }) => [
-                        styles.presetChip,
-                        isSelected && styles.presetChipSelected,
-                        pressed && styles.presetChipPressed,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Select profile ${op.name}`}
-                    >
-                      <Text
-                        style={[
-                          styles.presetChipName,
-                          isSelected && styles.presetChipNameSelected,
-                        ]}
-                      >
-                        {op.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.presetChipId,
-                          isSelected && styles.presetChipIdSelected,
-                        ]}
-                      >
-                        {op.id}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
               </View>
             </View>
 
@@ -271,7 +212,7 @@ export function LoginScreen() {
             </View>
           </View>
 
-          {/* Action Button & Device Tag */}
+          {/* Action Button */}
           <View style={styles.actionSection}>
             <Button
               label="SIGN IN TO ACTIVE SHIFT"
@@ -281,11 +222,6 @@ export function LoginScreen() {
               variant="primary"
               style={styles.submitButton}
             />
-
-            <View style={styles.footerRow}>
-              <Text style={styles.footerText}>WaroTrans Core v2.4.1-rc</Text>
-              <Text style={styles.footerDevice}>DEVICE #PDA-04</Text>
-            </View>
           </View>
         </View>
       </ScrollView>
@@ -342,106 +278,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
-  statusPill: {
-    backgroundColor: 'rgba(0, 122, 56, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999,
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.success,
-    fontFamily: typography.fontMono,
-    lineHeight: 12,
-  },
-  headerSection: {
-    marginTop: 22,
-  },
-  screenTag: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 1.2,
-    marginBottom: 4,
-    fontFamily: typography.fontMono,
-  },
-  heading: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    letterSpacing: -0.5,
-    fontFamily: typography.fontSans,
-  },
-  description: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    lineHeight: 18,
-    marginTop: 4,
-    fontFamily: typography.fontSans,
-  },
-  presetSection: {
-    marginTop: 16,
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: colors.textSecondary,
-    marginBottom: 6,
-    fontFamily: typography.fontSans,
-  },
-  presetChips: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  presetChip: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    ...shadows.panel,
-  },
-  presetChipPressed: {
-    backgroundColor: colors.surfaceSubtle,
-  },
-  presetChipSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  presetChipName: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  presetChipNameSelected: {
-    color: colors.primary,
-    fontWeight: '900',
-  },
-  presetChipId: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    marginTop: 2,
-    fontFamily: typography.fontMono,
-  },
-  presetChipIdSelected: {
-    color: colors.primary,
-    fontWeight: '800',
-  },
   formSection: {
-    marginTop: 16,
-    gap: 6,
+    marginTop: 36,
+    gap: 8,
     position: 'relative',
     zIndex: 100,
   },
@@ -584,24 +423,5 @@ const styles = StyleSheet.create({
   submitButton: {
     width: '100%',
     minHeight: 56,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 2,
-  },
-  footerText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  footerDevice: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    fontFamily: typography.fontMono,
   },
 });
