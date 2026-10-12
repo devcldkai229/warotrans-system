@@ -354,14 +354,6 @@ export function AppHeader({
           </View>
         );
 
-        if (Platform.OS === 'web') {
-          return (
-            <View style={styles.webLogoutAbsoluteOverlay} pointerEvents="auto">
-              {modalBody}
-            </View>
-          );
-        }
-
         return (
           <Modal
             visible={isLogoutModalOpen}
@@ -686,14 +678,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.danger,
-  },
-  webLogoutAbsoluteOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: -1000,
-    zIndex: 999,
   },
   logoutModalOverlay: {
     flex: 1,
