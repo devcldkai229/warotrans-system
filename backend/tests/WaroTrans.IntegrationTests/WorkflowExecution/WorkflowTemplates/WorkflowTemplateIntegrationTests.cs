@@ -36,7 +36,14 @@ public sealed class WorkflowTemplateIntegrationTests(WaroTransWebApplicationFact
         Assert.True(root.TryGetProperty("systemVariables", out var systemVars));
         Assert.True(systemVars.GetArrayLength() > 0);
         Assert.True(root.TryGetProperty("currentMovementFields", out var movement));
-        Assert.True(movement.GetArrayLength() > 0);
+        Assert.True(movement.GetArrayLength() >= 9);
+        Assert.Contains(
+            movement.EnumerateArray(),
+            e => e.GetProperty("key").GetString() == "transportRequestDetailId");
+        Assert.Contains(
+            movement.EnumerateArray(),
+            e => e.GetProperty("key").GetString() == "jobContainerId"
+                 && e.GetProperty("requiredCapable").GetBoolean());
     }
 
     [Fact]
@@ -93,6 +100,117 @@ public sealed class WorkflowTemplateIntegrationTests(WaroTransWebApplicationFact
     }
 
     [Fact]
+    public async Task Request_input_schema_exposes_movement_paths_not_admin_system()
+    {
+        var createBody = BuildValidPayload("WF_SCHEMA_" + Guid.NewGuid().ToString("N")[..8]);
+        var create = await Client.PostAsJsonAsync("/api/workflow-execution/workflows", createBody, JsonOptions);
+        create.EnsureSuccessStatusCode();
+        var created = await create.Content.ReadFromJsonAsync<WorkflowDetailDto>(JsonOptions);
+        Assert.NotNull(created);
+
+        var response = await Client.GetAsync(
+            $"/api/workflow-execution/workflows/{created.Id}/request-input-schema");
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = doc.RootElement;
+
+        Assert.Equal(created.Id, root.GetProperty("workflowId").GetGuid());
+
+        Assert.True(root.TryGetProperty("workflowInputs", out var workflowInputs));
+        Assert.Equal(0, workflowInputs.GetArrayLength());
+
+        Assert.True(root.TryGetProperty("movementInputs", out var movementInputs));
+        var keys = movementInputs.EnumerateArray().Select(e => e.GetProperty("key").GetString()).ToList();
+        Assert.Contains("containerId", keys);
+        Assert.Contains("source.endpointId", keys);
+        Assert.Contains("destination.endpointId", keys);
+        Assert.DoesNotContain("minBatteryPercent", keys);
+        Assert.DoesNotContain("assignedRobotId", keys);
+
+        var container = movementInputs.EnumerateArray()
+            .First(e => e.GetProperty("key").GetString() == "containerId");
+        Assert.True(container.GetProperty("required").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Internal_relocation_create_get_publish_roundtrip_and_request_schema()
+    {
+        var code = "IR_" + Guid.NewGuid().ToString("N")[..8];
+        var createBody = BuildInternalRelocationPayload(code);
+
+        var create = await Client.PostAsJsonAsync("/api/workflow-execution/workflows", createBody, JsonOptions);
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = await create.Content.ReadFromJsonAsync<WorkflowDetailDto>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.Equal(WorkflowStatus.DRAFT, created.Status);
+        Assert.Equal(2, created.Tasks.Count);
+
+        var get = await Client.GetAsync($"/api/workflow-execution/workflows/{created.Id}");
+        get.EnsureSuccessStatusCode();
+        using var getDoc = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
+        var getRoot = getDoc.RootElement;
+
+        var variableKeys = getRoot.GetProperty("variables").EnumerateArray()
+            .Select(v => v.GetProperty("key").GetString()).ToList();
+        Assert.Equal(
+            ["minBatteryPercent", "assignedRobotId", "transportRequestId", "jobId"],
+            variableKeys);
+        Assert.DoesNotContain("containerId", variableKeys);
+        Assert.DoesNotContain("sourceEndpointId", variableKeys);
+        Assert.DoesNotContain("destinationEndpointId", variableKeys);
+
+        var pickupSteps = getRoot.GetProperty("tasks").EnumerateArray()
+            .First(t => t.GetProperty("taskKey").GetString() == "PICKUP")
+            .GetProperty("steps");
+        var sourceEndpointBinding = pickupSteps.EnumerateArray()
+            .First(s => s.GetProperty("stepKey").GetString() == "CHECK_SOURCE_ENDPOINT")
+            .GetProperty("inputBindings").GetProperty("endpointId");
+        Assert.Equal("CURRENT_MOVEMENT", sourceEndpointBinding.GetProperty("sourceType").GetString());
+        Assert.Equal("source.endpointId", sourceEndpointBinding.GetProperty("sourceReference").GetString());
+
+        var pickupContainer = pickupSteps.EnumerateArray()
+            .First(s => s.GetProperty("stepKey").GetString() == "PICKUP_CONFIRM")
+            .GetProperty("inputBindings").GetProperty("containerId");
+        Assert.Equal("CURRENT_MOVEMENT", pickupContainer.GetProperty("sourceType").GetString());
+        Assert.Equal("containerId", pickupContainer.GetProperty("sourceReference").GetString());
+
+        var publish = await Client.PostAsync($"/api/workflow-execution/workflows/{created.Id}/publish", null);
+        publish.EnsureSuccessStatusCode();
+        var published = await publish.Content.ReadFromJsonAsync<WorkflowDetailDto>(JsonOptions);
+        Assert.NotNull(published);
+        Assert.Equal(WorkflowStatus.PUBLISHED, published.Status);
+
+        var reload = await Client.GetAsync($"/api/workflow-execution/workflows/{created.Id}");
+        reload.EnsureSuccessStatusCode();
+        using var reloadDoc = JsonDocument.Parse(await reload.Content.ReadAsStringAsync());
+        var destBinding = reloadDoc.RootElement.GetProperty("tasks").EnumerateArray()
+            .First(t => t.GetProperty("taskKey").GetString() == "DELIVERY")
+            .GetProperty("steps").EnumerateArray()
+            .First(s => s.GetProperty("stepKey").GetString() == "MOVE_DROPOFF")
+            .GetProperty("inputBindings").GetProperty("targetEndpointId");
+        Assert.Equal("CURRENT_MOVEMENT", destBinding.GetProperty("sourceType").GetString());
+        Assert.Equal("destination.endpointId", destBinding.GetProperty("sourceReference").GetString());
+
+        var schemaResponse = await Client.GetAsync(
+            $"/api/workflow-execution/workflows/{created.Id}/request-input-schema");
+        schemaResponse.EnsureSuccessStatusCode();
+        using var schemaDoc = JsonDocument.Parse(await schemaResponse.Content.ReadAsStringAsync());
+        var schema = schemaDoc.RootElement;
+        Assert.Equal(created.Id, schema.GetProperty("workflowId").GetGuid());
+        Assert.Equal(0, schema.GetProperty("workflowInputs").GetArrayLength());
+        var movementKeys = schema.GetProperty("movementInputs").EnumerateArray()
+            .Select(e => e.GetProperty("key").GetString()).ToList();
+        Assert.Contains("containerId", movementKeys);
+        Assert.Contains("source.endpointId", movementKeys);
+        Assert.Contains("destination.endpointId", movementKeys);
+        Assert.DoesNotContain("minBatteryPercent", movementKeys);
+        Assert.DoesNotContain("assignedRobotId", movementKeys);
+        Assert.DoesNotContain("transportRequestId", movementKeys);
+        Assert.DoesNotContain("jobId", movementKeys);
+    }
+
+    [Fact]
     public async Task Publish_invalid_returns_400_with_errors()
     {
         var body = BuildValidPayload("WF_BAD_" + Guid.NewGuid().ToString("N")[..8]);
@@ -121,10 +239,9 @@ public sealed class WorkflowTemplateIntegrationTests(WaroTransWebApplicationFact
             Variables =
             [
                 Var("minBatteryPercent", "Min battery", WorkflowDataType.DECIMAL, WorkflowVariableSource.ADMIN_INPUT, true, 30m, 0),
-                Var("containerId", "Container", WorkflowDataType.UUID, WorkflowVariableSource.STAFF_INPUT, true, null, 1),
-                Var("sourceEndpointId", "Source", WorkflowDataType.UUID, WorkflowVariableSource.STAFF_INPUT, true, null, 2),
-                Var("destinationEndpointId", "Dest", WorkflowDataType.UUID, WorkflowVariableSource.STAFF_INPUT, true, null, 3),
-                Var("assignedRobotId", "Robot", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 4)
+                Var("assignedRobotId", "Robot", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 1),
+                Var("transportRequestId", "Request", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 2),
+                Var("jobId", "Job", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 3)
             ],
             Tasks =
             [
@@ -142,12 +259,12 @@ public sealed class WorkflowTemplateIntegrationTests(WaroTransWebApplicationFact
                             Bind("minimumBatteryPercent", BindingSourceType.WORKFLOW_VAR, "minBatteryPercent")),
                         Step("MOVE_PICKUP", "Move pickup", StepType.MOVE, "PICKUP", 3,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("targetEndpointId", BindingSourceType.WORKFLOW_VAR, "sourceEndpointId"),
+                            Bind("targetEndpointId", BindingSourceType.CURRENT_MOVEMENT, "source.endpointId"),
                             BindConst("purpose", "PICKUP")),
                         Step("PICKUP_CONFIRM", "Confirm", StepType.HUMAN_INTERACTION, "PICKUP_CONFIRM", 4,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("containerId", BindingSourceType.WORKFLOW_VAR, "containerId"),
-                            Bind("endpointId", BindingSourceType.WORKFLOW_VAR, "sourceEndpointId"))
+                            Bind("containerId", BindingSourceType.CURRENT_MOVEMENT, "containerId"),
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "source.endpointId"))
                     ]
                 },
                 new UpsertTaskPayload
@@ -159,12 +276,75 @@ public sealed class WorkflowTemplateIntegrationTests(WaroTransWebApplicationFact
                     [
                         Step("MOVE_DROPOFF", "Move dropoff", StepType.MOVE, "DROPOFF", 1,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("targetEndpointId", BindingSourceType.WORKFLOW_VAR, "destinationEndpointId"),
+                            Bind("targetEndpointId", BindingSourceType.CURRENT_MOVEMENT, "destination.endpointId"),
                             BindConst("purpose", "DROPOFF")),
                         Step("DROPOFF_CONFIRM", "Confirm drop", StepType.HUMAN_INTERACTION, "DROPOFF_CONFIRM", 2,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("containerId", BindingSourceType.WORKFLOW_VAR, "containerId"),
-                            Bind("endpointId", BindingSourceType.WORKFLOW_VAR, "destinationEndpointId"))
+                            Bind("containerId", BindingSourceType.CURRENT_MOVEMENT, "containerId"),
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "destination.endpointId"))
+                    ]
+                }
+            ]
+        };
+
+    private static UpsertPayload BuildInternalRelocationPayload(string code) =>
+        new()
+        {
+            Code = code,
+            Name = "Internal Relocation IT",
+            Description = "CURRENT_MOVEMENT bindings; no movement STAFF_INPUT variables",
+            Variables =
+            [
+                Var("minBatteryPercent", "Min battery", WorkflowDataType.DECIMAL, WorkflowVariableSource.ADMIN_INPUT, true, 25m, 0),
+                Var("assignedRobotId", "Robot", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 1),
+                Var("transportRequestId", "Request", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 2),
+                Var("jobId", "Job", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 3)
+            ],
+            Tasks =
+            [
+                new UpsertTaskPayload
+                {
+                    TaskKey = "PICKUP",
+                    Name = "Pickup",
+                    SequenceNo = 1,
+                    Steps =
+                    [
+                        Step("CHECK_READY", "Ready", StepType.CHECK, "ROBOT_READY", 1,
+                            Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId")),
+                        Step("CHECK_BATTERY", "Battery", StepType.CHECK, "BATTERY_MIN", 2,
+                            Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
+                            Bind("minimumBatteryPercent", BindingSourceType.WORKFLOW_VAR, "minBatteryPercent")),
+                        Step("CHECK_REQUEST", "Request", StepType.CHECK, "REQUEST_ACTIVE", 3,
+                            Bind("transportRequestId", BindingSourceType.WORKFLOW_VAR, "transportRequestId")),
+                        Step("CHECK_SOURCE_ENDPOINT", "Source EP", StepType.CHECK, "ENDPOINT_AVAILABLE", 4,
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "source.endpointId")),
+                        Step("MOVE_PICKUP", "Move pickup", StepType.MOVE, "PICKUP", 5,
+                            Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
+                            Bind("targetEndpointId", BindingSourceType.CURRENT_MOVEMENT, "source.endpointId"),
+                            BindConst("purpose", "PICKUP")),
+                        Step("PICKUP_CONFIRM", "Confirm", StepType.HUMAN_INTERACTION, "PICKUP_CONFIRM", 6,
+                            Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
+                            Bind("containerId", BindingSourceType.CURRENT_MOVEMENT, "containerId"),
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "source.endpointId"))
+                    ]
+                },
+                new UpsertTaskPayload
+                {
+                    TaskKey = "DELIVERY",
+                    Name = "Delivery",
+                    SequenceNo = 2,
+                    Steps =
+                    [
+                        Step("CHECK_DEST_ENDPOINT", "Dest EP", StepType.CHECK, "ENDPOINT_AVAILABLE", 1,
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "destination.endpointId")),
+                        Step("MOVE_DROPOFF", "Move dropoff", StepType.MOVE, "DROPOFF", 2,
+                            Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
+                            Bind("targetEndpointId", BindingSourceType.CURRENT_MOVEMENT, "destination.endpointId"),
+                            BindConst("purpose", "DROPOFF")),
+                        Step("DROPOFF_CONFIRM", "Confirm drop", StepType.HUMAN_INTERACTION, "DROPOFF_CONFIRM", 3,
+                            Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
+                            Bind("containerId", BindingSourceType.CURRENT_MOVEMENT, "containerId"),
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "destination.endpointId"))
                     ]
                 }
             ]

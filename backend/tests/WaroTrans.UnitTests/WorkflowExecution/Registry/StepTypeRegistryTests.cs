@@ -55,5 +55,27 @@ public class StepTypeRegistryTests
         Assert.NotEmpty(CurrentMovementCatalog.All);
         Assert.True(SystemVariableCatalog.TryGet("assignedRobotId", out _));
         Assert.True(CurrentMovementCatalog.TryGet("containerId", out _));
+        Assert.True(CurrentMovementCatalog.TryGet("transportRequestDetailId", out var detail));
+        Assert.True(detail.IsRequiredCapable);
+        Assert.True(CurrentMovementCatalog.TryGet("jobContainerId", out var jobContainer));
+        Assert.True(jobContainer.IsRequiredCapable);
+        Assert.True(CurrentMovementCatalog.TryGet("source.storageLocationId", out var storage));
+        Assert.False(storage.IsRequiredCapable);
+    }
+
+    [Fact]
+    public void Inventory_available_requires_container_id_only()
+    {
+        var check = StepTypeRegistry.Get(StepType.CHECK);
+        var op = Assert.Single(check.Operations, o => o.Code == "INVENTORY_AVAILABLE");
+        var container = Assert.Single(op.Inputs);
+        Assert.Equal("containerId", container.Key);
+        Assert.True(container.Required);
+        Assert.Equal(3, op.Outputs.Count);
+        Assert.Contains(op.Outputs, o => o.Key == "passed");
+        Assert.Contains(op.Outputs, o => o.Key == "reason");
+        Assert.Contains(op.Outputs, o => o.Key == "checkedAt");
+        Assert.DoesNotContain(op.Outputs, o => o.Key == "availableQuantity");
+        Assert.DoesNotContain(op.Outputs, o => o.Key == "requiredQuantity");
     }
 }

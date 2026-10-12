@@ -11,12 +11,15 @@ using WaroTrans.WorkflowExecution.Features.CreateWorkflow;
 using WaroTrans.WorkflowExecution.Features.CreateWorkflowVersion;
 using WaroTrans.WorkflowExecution.Features.GetWorkflow;
 using WaroTrans.WorkflowExecution.Features.GetWorkflowMetadata;
+using WaroTrans.WorkflowExecution.Features.GetWorkflowRequestInputSchema;
 using WaroTrans.WorkflowExecution.Features.ListWorkflows;
 using WaroTrans.WorkflowExecution.Features.PublishWorkflow;
 using WaroTrans.WorkflowExecution.Features.UpdateWorkflow;
+using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 using WaroTrans.WorkflowExecution.Persistence;
 using WaroTrans.WorkflowExecution.Runtime;
+using WaroTrans.WorkflowExecution.Services;
 
 namespace WaroTrans.WorkflowExecution;
 
@@ -31,6 +34,7 @@ public static class WorkflowExecutionModule
 
         services.AddScoped<ListWorkflowsHandler>();
         services.AddScoped<GetWorkflowHandler>();
+        services.AddScoped<GetWorkflowRequestInputSchemaHandler>();
         services.AddScoped<CreateWorkflowHandler>();
         services.AddScoped<UpdateWorkflowHandler>();
         services.AddScoped<PublishWorkflowHandler>();
@@ -39,6 +43,8 @@ public static class WorkflowExecutionModule
         services.AddSingleton<ISystemVariableResolver, SystemVariableResolver>();
         services.AddSingleton<StepInputResolver>();
         services.AddScoped<WorkflowVariableContextBuilder>();
+        services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
+        services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
 
@@ -56,6 +62,7 @@ public static class WorkflowExecutionModule
         group.MapGetWorkflowMetadata();
         group.MapListWorkflows();
         group.MapGetWorkflow();
+        group.MapGetWorkflowRequestInputSchema();
         group.MapCreateWorkflow();
         group.MapUpdateWorkflow();
         group.MapPublishWorkflow();

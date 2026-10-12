@@ -13,6 +13,7 @@ public sealed class JobConfiguration : IEntityTypeConfiguration<Job>
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.JobNo).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.ProvisioningKey).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.FailureCode).HasMaxLength(50);
         builder.Property(x => x.FailureMessage).HasMaxLength(500);
@@ -25,6 +26,9 @@ public sealed class JobConfiguration : IEntityTypeConfiguration<Job>
             .IsRequired();
 
         builder.HasIndex(x => x.JobNo).IsUnique();
+        builder.HasIndex(x => x.ProvisioningKey).IsUnique();
+        builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => new { x.Status, x.QueuedAt });
 
         builder.HasMany(x => x.JobTasks)
             .WithOne(x => x.Job)

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WaroTrans.BuildingBlocks.Enums;
+using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Registry;
 using WaroTrans.WorkflowExecution.ValueObjects;
@@ -171,6 +172,13 @@ public static class WorkflowDefinitionValidator
                 result.Add($"{taskPath}.name", "Task name is required.");
             }
 
+            JobStopAction? taskAffinity = null;
+            if (full)
+            {
+                taskAffinity = OperationExecutionScopeCatalog.ResolveTaskAffinity(
+                    task.Steps.Select(s => (s.StepType, s.OperationCode)));
+            }
+
             for (var si = 0; si < task.Steps.Count; si++)
             {
                 var step = task.Steps[si];
@@ -181,7 +189,7 @@ public static class WorkflowDefinitionValidator
                     result.Add($"{stepPath}.stepKey", $"Duplicate step key '{step.StepKey}' within workflow.");
                 }
 
-                ValidateStep(step, stepPath, model.Variables, stepIndex, result, full);
+                ValidateStep(step, stepPath, model.Variables, stepIndex, result, full, taskAffinity);
             }
         }
 
@@ -197,7 +205,8 @@ public static class WorkflowDefinitionValidator
         List<WorkflowVariableDefinition> variables,
         IReadOnlyDictionary<string, (int TaskSeq, int StepSeq, StepType StepType, string OperationCode)> stepIndex,
         WorkflowDefinitionValidationResult result,
-        bool full)
+        bool full,
+        JobStopAction? taskAffinity)
     {
         if (string.IsNullOrWhiteSpace(step.StepKey))
         {
@@ -239,10 +248,21 @@ public static class WorkflowDefinitionValidator
             return;
         }
 
-        if (step.StepType == StepType.CHECK
-            && string.Equals(step.OperationCode, nameof(CheckConditionCode.INVENTORY_AVAILABLE), StringComparison.Ordinal))
+        if (!OperationExecutionScopeCatalog.TryGet(step.StepType, step.OperationCode, out var scopeDef))
         {
-            ValidateInventoryAvailableBindings(step, stepPath, result);
+            result.Add(
+                $"{stepPath}.operationCode",
+                $"No execution scope registered for {step.StepType}.{step.OperationCode}.");
+            return;
+        }
+
+        var resolvedStopAction = OperationExecutionScopeCatalog.TryResolveStopAction(scopeDef, taskAffinity);
+        if (scopeDef.Scope is ExecutionScope.ONCE_PER_STOP or ExecutionScope.PER_CONTAINER_AT_STOP
+            && resolvedStopAction is null)
+        {
+            result.Add(
+                $"{stepPath}.operationCode",
+                $"Stop-scoped step '{step.StepKey}' ({step.StepType}.{step.OperationCode}) requires a resolvable PICKUP/DROPOFF affinity (mixed affinity tasks are invalid).");
         }
 
         foreach (var binding in step.InputBindings)
@@ -265,7 +285,9 @@ public static class WorkflowDefinitionValidator
                 variables,
                 step,
                 stepIndex,
-                result);
+                result,
+                scopeDef,
+                resolvedStopAction);
         }
 
         foreach (var required in operation.Inputs.Where(i => i.Required))
@@ -279,22 +301,6 @@ public static class WorkflowDefinitionValidator
         }
     }
 
-    private static void ValidateInventoryAvailableBindings(
-        WorkflowStepModel step,
-        string stepPath,
-        WorkflowDefinitionValidationResult result)
-    {
-        var hasContainer = step.InputBindings.ContainsKey("containerId");
-        var hasProduct = step.InputBindings.ContainsKey("productId");
-        var hasLocation = step.InputBindings.ContainsKey("sourceStorageLocationId");
-        if (!hasContainer && !hasProduct && !hasLocation)
-        {
-            result.Add(
-                $"{stepPath}.inputBindings",
-                "INVENTORY_AVAILABLE requires at least one of containerId, productId, or sourceStorageLocationId.");
-        }
-    }
-
     private static void ValidateBinding(
         string inputKey,
         StepInputBinding binding,
@@ -303,7 +309,9 @@ public static class WorkflowDefinitionValidator
         List<WorkflowVariableDefinition> variables,
         WorkflowStepModel currentStep,
         IReadOnlyDictionary<string, (int TaskSeq, int StepSeq, StepType StepType, string OperationCode)> stepIndex,
-        WorkflowDefinitionValidationResult result)
+        WorkflowDefinitionValidationResult result,
+        OperationExecutionScopeDefinition scopeDef,
+        JobStopAction? resolvedStopAction)
     {
         if (!Enum.IsDefined(binding.SourceType))
         {
@@ -358,6 +366,27 @@ public static class WorkflowDefinitionValidator
                     result.Add(
                         path,
                         $"CURRENT_MOVEMENT '{field.Path}' type {field.DataType} is incompatible with input {inputDef.DataType}.");
+                }
+
+                if (inputDef.Required && !field.IsRequiredCapable)
+                {
+                    result.Add(
+                        path,
+                        $"CURRENT_MOVEMENT '{field.Path}' cannot bind to required input '{inputKey}' (optional-only path).");
+                }
+
+                if (scopeDef.Scope == ExecutionScope.ONCE_PER_JOB)
+                {
+                    result.Add(
+                        path,
+                        $"CURRENT_MOVEMENT '{field.Path}' cannot bind on ONCE_PER_JOB step '{currentStep.StepKey}'.");
+                }
+                else if (resolvedStopAction is not null
+                         && !field.IsAvailableAt(scopeDef.Scope, resolvedStopAction))
+                {
+                    result.Add(
+                        path,
+                        $"CURRENT_MOVEMENT '{field.Path}' is not available at {scopeDef.Scope} with stop action {resolvedStopAction}.");
                 }
 
                 break;

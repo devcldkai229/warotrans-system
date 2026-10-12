@@ -4,6 +4,11 @@ namespace WaroTrans.WorkflowExecution.Registry;
 
 /// <summary>
 /// Hard-coded source of truth for StepType metadata. Admin cannot invent types/codes/inputs/outputs.
+/// Job Runtime Provisioner expands steps via OperationExecutionScopeCatalog (not TaskKey/StepKey):
+/// ROBOT_READY / BATTERY_MIN / REQUEST_ACTIVE → ONCE_PER_JOB;
+/// ENDPOINT_AVAILABLE / MOVE PICKUP|DROPOFF → ONCE_PER_STOP;
+/// PICKUP_CONFIRM / DROPOFF_CONFIRM → PER_CONTAINER_AT_STOP.
+/// Execution scope is not persisted on WorkflowStep in V1.
 /// </summary>
 public static class StepTypeRegistry
 {
@@ -131,17 +136,12 @@ public static class StepTypeRegistry
                     ]),
                 new OperationDefinition(
                     nameof(CheckConditionCode.INVENTORY_AVAILABLE),
-                    "Check container/inventory availability (prefer containerId in V1).",
+                    "Check container availability by containerId (V1 Container/InventoryStock model; not item quantity).",
                     [
-                        In("containerId", WorkflowDataType.UUID, false, "Container to check."),
-                        In("productId", WorkflowDataType.UUID, false, "Product to check."),
-                        In("sourceStorageLocationId", WorkflowDataType.UUID, false, "Storage location to check."),
-                        In("requiredQuantity", WorkflowDataType.INTEGER, false, "Required container count.")
+                        In("containerId", WorkflowDataType.UUID, true, "Container to check.")
                     ],
                     [
                         Out("passed", WorkflowDataType.BOOLEAN, "Whether the check passed."),
-                        Out("availableQuantity", WorkflowDataType.INTEGER, "Available quantity."),
-                        Out("requiredQuantity", WorkflowDataType.INTEGER, "Required quantity."),
                         Out("reason", WorkflowDataType.STRING, "Failure or pass reason."),
                         Out("checkedAt", WorkflowDataType.DATETIME, "Check timestamp.")
                     ])

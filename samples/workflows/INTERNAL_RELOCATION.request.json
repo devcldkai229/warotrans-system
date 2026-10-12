@@ -1,7 +1,7 @@
 {
   "code": "INTERNAL_RELOCATION",
   "name": "Vận chuyển giữa các kệ",
-  "description": "Robot lấy container từ kệ nguồn, nhân viên xác nhận pickup, di chuyển tới kệ đích, xác nhận dropoff. Dùng cho REALLOCATION / chuyển vị trí trong kho.",
+  "description": "Robot lấy container từ kệ nguồn, nhân viên xác nhận pickup, di chuyển tới kệ đích, xác nhận dropoff. Dùng cho REALLOCATION / chuyển vị trí trong kho. Movement fields bind qua CURRENT_MOVEMENT (không STAFF_INPUT).",
   "variables": [
     {
       "key": "minBatteryPercent",
@@ -14,40 +14,13 @@
       "sequenceNo": 0
     },
     {
-      "key": "containerId",
-      "name": "Container cần chuyển",
-      "dataType": "UUID",
-      "source": "STAFF_INPUT",
-      "isRequired": true,
-      "description": "Staff nhập khi tạo TransportRequest REALLOCATION.",
-      "sequenceNo": 1
-    },
-    {
-      "key": "sourceEndpointId",
-      "name": "Endpoint kệ nguồn",
-      "dataType": "UUID",
-      "source": "STAFF_INPUT",
-      "isRequired": true,
-      "description": "Điểm nhận / kệ lấy hàng.",
-      "sequenceNo": 2
-    },
-    {
-      "key": "destinationEndpointId",
-      "name": "Endpoint kệ đích",
-      "dataType": "UUID",
-      "source": "STAFF_INPUT",
-      "isRequired": true,
-      "description": "Điểm giao / kệ đặt hàng.",
-      "sequenceNo": 3
-    },
-    {
       "key": "assignedRobotId",
       "name": "Robot được gán",
       "dataType": "UUID",
       "source": "SYSTEM_VALUE",
       "isRequired": true,
       "description": "Runtime resolve từ JobAssignment — Admin/Staff không nhập.",
-      "sequenceNo": 4
+      "sequenceNo": 1
     },
     {
       "key": "transportRequestId",
@@ -56,7 +29,7 @@
       "source": "SYSTEM_VALUE",
       "isRequired": true,
       "description": "Id request nghiệp vụ đang chạy.",
-      "sequenceNo": 5
+      "sequenceNo": 2
     },
     {
       "key": "jobId",
@@ -65,7 +38,7 @@
       "source": "SYSTEM_VALUE",
       "isRequired": true,
       "description": "Id Job runtime khởi tạo từ template.",
-      "sequenceNo": 6
+      "sequenceNo": 3
     }
   ],
   "tasks": [
@@ -141,8 +114,8 @@
           "onFailure": "PAUSE_FOR_OPERATOR",
           "inputBindings": {
             "endpointId": {
-              "sourceType": "WORKFLOW_VAR",
-              "sourceReference": "sourceEndpointId"
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId"
             }
           }
         },
@@ -162,8 +135,8 @@
               "sourceReference": "assignedRobotId"
             },
             "targetEndpointId": {
-              "sourceType": "WORKFLOW_VAR",
-              "sourceReference": "sourceEndpointId"
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId"
             },
             "purpose": {
               "sourceType": "CONSTANT",
@@ -188,12 +161,12 @@
               "sourceReference": "assignedRobotId"
             },
             "containerId": {
-              "sourceType": "WORKFLOW_VAR",
+              "sourceType": "CURRENT_MOVEMENT",
               "sourceReference": "containerId"
             },
             "endpointId": {
-              "sourceType": "WORKFLOW_VAR",
-              "sourceReference": "sourceEndpointId"
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId"
             }
           }
         }
@@ -216,8 +189,8 @@
           "onFailure": "PAUSE_FOR_OPERATOR",
           "inputBindings": {
             "endpointId": {
-              "sourceType": "WORKFLOW_VAR",
-              "sourceReference": "destinationEndpointId"
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
             }
           }
         },
@@ -237,8 +210,8 @@
               "sourceReference": "assignedRobotId"
             },
             "targetEndpointId": {
-              "sourceType": "WORKFLOW_VAR",
-              "sourceReference": "destinationEndpointId"
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
             },
             "purpose": {
               "sourceType": "CONSTANT",
@@ -263,12 +236,12 @@
               "sourceReference": "assignedRobotId"
             },
             "containerId": {
-              "sourceType": "WORKFLOW_VAR",
+              "sourceType": "CURRENT_MOVEMENT",
               "sourceReference": "containerId"
             },
             "endpointId": {
-              "sourceType": "WORKFLOW_VAR",
-              "sourceReference": "destinationEndpointId"
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
             }
           }
         }

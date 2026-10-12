@@ -18,12 +18,9 @@ public static class InboundPutawayWorkflowFactory
             Variables =
             [
                 Var("minBatteryPercent", "Min battery %", WorkflowDataType.DECIMAL, WorkflowVariableSource.ADMIN_INPUT, true, 30m, 0),
-                Var("containerId", "Container", WorkflowDataType.UUID, WorkflowVariableSource.STAFF_INPUT, true, null, 1),
-                Var("sourceEndpointId", "Source endpoint", WorkflowDataType.UUID, WorkflowVariableSource.STAFF_INPUT, true, null, 2),
-                Var("destinationEndpointId", "Destination endpoint", WorkflowDataType.UUID, WorkflowVariableSource.STAFF_INPUT, true, null, 3),
-                Var("assignedRobotId", "Assigned robot", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 4),
-                Var("transportRequestId", "Transport request", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 5),
-                Var("jobId", "Job", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 6)
+                Var("assignedRobotId", "Assigned robot", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 1),
+                Var("transportRequestId", "Transport request", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 2),
+                Var("jobId", "Job", WorkflowDataType.UUID, WorkflowVariableSource.SYSTEM_VALUE, true, null, 3)
             ],
             Tasks =
             [
@@ -41,12 +38,12 @@ public static class InboundPutawayWorkflowFactory
                             Bind("minimumBatteryPercent", BindingSourceType.WORKFLOW_VAR, "minBatteryPercent")),
                         Step("MOVE_PICKUP", "Move to pickup", StepType.MOVE, "PICKUP", 3,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("targetEndpointId", BindingSourceType.WORKFLOW_VAR, "sourceEndpointId"),
+                            Bind("targetEndpointId", BindingSourceType.CURRENT_MOVEMENT, "source.endpointId"),
                             BindConst("purpose", "PICKUP")),
                         Step("PICKUP_CONFIRM", "Confirm pickup", StepType.HUMAN_INTERACTION, "PICKUP_CONFIRM", 4,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("containerId", BindingSourceType.WORKFLOW_VAR, "containerId"),
-                            Bind("endpointId", BindingSourceType.WORKFLOW_VAR, "sourceEndpointId"))
+                            Bind("containerId", BindingSourceType.CURRENT_MOVEMENT, "containerId"),
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "source.endpointId"))
                     ]
                 },
                 new WorkflowTaskModel
@@ -58,12 +55,12 @@ public static class InboundPutawayWorkflowFactory
                     [
                         Step("MOVE_DROPOFF", "Move to dropoff", StepType.MOVE, "DROPOFF", 1,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("targetEndpointId", BindingSourceType.WORKFLOW_VAR, "destinationEndpointId"),
+                            Bind("targetEndpointId", BindingSourceType.CURRENT_MOVEMENT, "destination.endpointId"),
                             BindConst("purpose", "DROPOFF")),
                         Step("DROPOFF_CONFIRM", "Confirm dropoff", StepType.HUMAN_INTERACTION, "DROPOFF_CONFIRM", 2,
                             Bind("robotId", BindingSourceType.WORKFLOW_VAR, "assignedRobotId"),
-                            Bind("containerId", BindingSourceType.WORKFLOW_VAR, "containerId"),
-                            Bind("endpointId", BindingSourceType.WORKFLOW_VAR, "destinationEndpointId"))
+                            Bind("containerId", BindingSourceType.CURRENT_MOVEMENT, "containerId"),
+                            Bind("endpointId", BindingSourceType.CURRENT_MOVEMENT, "destination.endpointId"))
                     ]
                 }
             ]

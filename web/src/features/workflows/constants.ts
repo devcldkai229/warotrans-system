@@ -49,9 +49,15 @@ export function allowsConstant(type: ValueType): boolean {
   return type === 'STRING' || type === 'INT' || type === 'DECIMAL' || type === 'BOOL' || type === 'ANY'
 }
 
-/** Paths the backend resolves from the active JobContainer / Detail line (rules/03), with what each one yields. */
+/**
+ * Paths the backend resolves from the active JobContainer / Detail line (rules/03).
+ * Prefer metadata.currentMovementFields in the real Workflow Editor; this list is for legacy Map Editor mock only.
+ * Movement fields are NOT WorkflowVariables / STAFF_INPUT — they come from TransportRequestDetail.
+ */
 export const CURRENT_MOVEMENT_PATHS: CurrentMovementPath[] = [
   'containerId',
+  'transportRequestDetailId',
+  'jobContainerId',
   'source.endpointId',
   'source.storageLocationId',
   'source.levelNo',
@@ -62,6 +68,8 @@ export const CURRENT_MOVEMENT_PATHS: CurrentMovementPath[] = [
 
 export const CURRENT_MOVEMENT_TYPES: Record<CurrentMovementPath, ValueType> = {
   containerId: 'CONTAINER',
+  transportRequestDetailId: 'STRING',
+  jobContainerId: 'STRING',
   'source.endpointId': 'ENDPOINT',
   'source.storageLocationId': 'STORAGE_LOCATION',
   'source.levelNo': 'INT',
