@@ -1,24 +1,30 @@
 import { useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { RobotStatus } from '@/shared/api/contracts'
+import type { Robot, RobotStatus, RobotView } from '@/shared/api/contracts'
+import { listRobots } from '@/shared/api/fleet'
 import { cx } from '@/shared/lib/cx'
+import { humanize } from '@/shared/lib/format'
+import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
-import { humanize } from '@/shared/lib/format'
 import { ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
 import { FleetMap } from './FleetMap'
 import { RobotDetailPanel } from './RobotDetailPanel'
 import { ROBOT_STATUS_ORDER } from './constants'
-import { ROBOTS } from './mock'
 
 const chipClass = (active: boolean) =>
   cx(
     'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors duration-200',
     active ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
   )
+
+function toRobotView(robot: Robot): RobotView {
+  return { ...robot, activity: null }
+}
 
 export function FleetPage() {
   const { robotCode } = useParams()
@@ -27,20 +33,45 @@ export function FleetPage() {
   const [previewCode, setPreviewCode] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<RobotStatus | null>(null)
   const statusRailRef = useRef<HTMLDivElement>(null)
+  const debouncedQuery = useDebouncedValue(query.trim(), 250)
+  const search = debouncedQuery || undefined
+
+  const countsQuery = useQuery({
+    queryKey: ['fleet-robots', 'counts', search ?? ''],
+    queryFn: () => listRobots({ search, take: 100 }),
+  })
+
+  const listQuery = useQuery({
+    queryKey: ['fleet-robots', 'list', search ?? '', statusFilter ?? 'ALL'],
+    queryFn: () =>
+      listRobots({
+        search,
+        status: statusFilter ?? undefined,
+        take: 100,
+      }),
+  })
+
+  const robotsForCounts = useMemo(
+    () => (countsQuery.data?.items ?? []).map(toRobotView),
+    [countsQuery.data],
+  )
+  const robots = useMemo(
+    () => (listQuery.data?.items ?? []).map(toRobotView),
+    [listQuery.data],
+  )
+  const totalForHeader = countsQuery.data?.total ?? robotsForCounts.length
 
   const counts = useMemo(() => {
     const map = new Map<RobotStatus, number>()
     ROBOT_STATUS_ORDER.forEach((status) => map.set(status, 0))
-    ROBOTS.forEach((robot) => map.set(robot.status, (map.get(robot.status) ?? 0) + 1))
+    robotsForCounts.forEach((robot) => map.set(robot.status, (map.get(robot.status) ?? 0) + 1))
     return map
-  }, [])
+  }, [robotsForCounts])
 
-  const visibleRobots = ROBOTS.filter(
-    (robot) =>
-      robot.code.toLowerCase().includes(query.toLowerCase()) &&
-      (statusFilter === null || robot.status === statusFilter),
-  )
-  const selected = ROBOTS.find((robot) => robot.code === robotCode) ?? null
+  // Detail + map use the search-scoped set (no status filter) so a selected robot stays findable.
+  const selected = robotsForCounts.find((robot) => robot.code === robotCode) ?? null
+  const isLoading = listQuery.isLoading || countsQuery.isLoading
+  const error = listQuery.error ?? countsQuery.error
 
   function scrollStatuses(direction: 1 | -1) {
     statusRailRef.current?.scrollBy({ left: direction * 160, behavior: 'smooth' })
@@ -56,7 +87,7 @@ export function FleetPage() {
           <>
             <header className="flex items-center gap-3 px-4 pt-5">
               <h1 className="text-xl font-book">Fleet</h1>
-              <span className="text-sm text-muted">{ROBOTS.length} robots</span>
+              <span className="text-sm text-muted">{totalForHeader} robots</span>
               <IconButton aria-label="More" className="-mr-1 ml-auto">
                 <Icon name="more" size={18} />
               </IconButton>
@@ -72,7 +103,7 @@ export function FleetPage() {
                 className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
                 <button type="button" className={chipClass(statusFilter === null)} onClick={() => setStatusFilter(null)}>
-                  All <span className="opacity-60">{ROBOTS.length}</span>
+                  All <span className="opacity-60">{countsQuery.data?.total ?? 0}</span>
                 </button>
                 {ROBOT_STATUS_ORDER.map((status) => (
                   <button
@@ -95,44 +126,69 @@ export function FleetPage() {
             </div>
 
             <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-4 pt-1 pb-2">
-              {visibleRobots.map((robot) => (
-                <li key={robot.id}>
-                  <button
-                    type="button"
-                    className={cx(
-                      // Each Robot is its own white card, like a Request, so rows read as separate items on the grey panel.
-                      'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 rounded-md bg-surface px-4 py-3.5 text-left transition-shadow duration-200',
-                      previewCode === robot.code ? 'ring-2 ring-ink' : 'hover:shadow-float',
-                    )}
-                    onClick={() => navigate(`/monitor/fleet/${robot.code}`)}
-                  >
-                    <span className="min-w-0">
-                      <strong className="block font-medium">{robot.code}</strong>
-                      <span className="block truncate text-xs text-muted">
-                        {robot.activity
-                          ? `${robot.activity.requestCode}${robot.activity.routeLabel ? `, ${robot.activity.routeLabel}` : ''}`
-                          : 'No active job'}
-                      </span>
-                    </span>
-                    <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
-                      {robot.status}
-                    </StatusBadge>
-                    {robot.activity ? (
-                      <>
-                        <Meter percent={robot.activity.progressPercent} tone={ROBOT_STATUS_TONE[robot.status]} />
-                        <span className="text-right text-xs text-muted tabular-nums">{robot.activity.progressPercent}%</span>
-                      </>
-                    ) : null}
-                  </button>
+              {isLoading ? (
+                <li className="px-3 py-10 text-center text-sm text-muted">Loading robots…</li>
+              ) : null}
+              {error ? (
+                <li className="px-3 py-10 text-center text-sm text-red-ink">
+                  {(error as Error).message || 'Failed to load robots.'}
                 </li>
-              ))}
-              {visibleRobots.length === 0 ? (
-                <li className="px-3 py-10 text-center text-sm text-muted">No robots match this filter.</li>
+              ) : null}
+              {!isLoading && !error
+                ? robots.map((robot) => (
+                    <li key={robot.id}>
+                      <button
+                        type="button"
+                        className={cx(
+                          // Each Robot is its own white card, like a Request, so rows read as separate items on the grey panel.
+                          'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 rounded-md bg-surface px-4 py-3.5 text-left transition-shadow duration-200',
+                          previewCode === robot.code ? 'ring-2 ring-ink' : 'hover:shadow-float',
+                        )}
+                        onClick={() => navigate(`/monitor/fleet/${robot.code}`)}
+                      >
+                        <span className="min-w-0">
+                          <strong className="block font-medium">{robot.code}</strong>
+                          <span className="block truncate text-xs text-muted">
+                            {robot.activity
+                              ? `${robot.activity.requestCode}${robot.activity.routeLabel ? `, ${robot.activity.routeLabel}` : ''}`
+                              : 'No active job'}
+                          </span>
+                        </span>
+                        <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
+                          {robot.status}
+                        </StatusBadge>
+                        {robot.activity ? (
+                          <>
+                            <Meter percent={robot.activity.progressPercent} tone={ROBOT_STATUS_TONE[robot.status]} />
+                            <span className="text-right text-xs text-muted tabular-nums">
+                              {robot.activity.progressPercent}%
+                            </span>
+                          </>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))
+                : null}
+              {!isLoading && !error && robots.length === 0 ? (
+                <li className="flex flex-col items-center justify-center gap-4 px-4 py-12 text-center">
+                  <Icon name="radio" size={28} className="text-muted" />
+                  <div>
+                    <p className="text-sm font-medium text-ink">There are currently no robots.</p>
+                    <p className="mt-1 text-xs text-muted">
+                      {query || statusFilter
+                        ? 'Try a different code or status filter.'
+                        : 'Add a robot to start monitoring the fleet.'}
+                    </p>
+                  </div>
+                  <Button type="button" variant="primary" size="sm">
+                    <Icon name="plus" size={14} /> Create Robot
+                  </Button>
+                </li>
               ) : null}
             </ul>
 
             <footer className="flex items-center justify-between px-4 py-3 text-xs text-muted">
-              <span>{visibleRobots.length} shown</span>
+              <span>{robots.length} shown</span>
               <Button variant="surface" size="sm">
                 Actions <Icon name="chevronDown" size={13} />
               </Button>
@@ -143,7 +199,7 @@ export function FleetPage() {
 
       <div className="relative min-w-0 overflow-hidden rounded-lg bg-container">
         <FleetMap
-          robots={ROBOTS}
+          robots={robotsForCounts}
           selectedCode={robotCode ?? null}
           onSelect={(code) => navigate(`/monitor/fleet/${code}`)}
           variant={selected ? 'detail' : 'overview'}

@@ -5,7 +5,9 @@ export function AppLayout() {
   return (
     <div className="app-shell">
       <aside className="app-nav">
-        <div className="app-brand">WaroTrans</div>
+        <div className="app-brand">
+          <img src="/logo_wrt.png" alt="WaroTrans" className="h-10 w-auto object-contain" />
+        </div>
         <nav>
           <NavLink to="/" end>
             Home
