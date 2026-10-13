@@ -93,7 +93,7 @@ export function PointToPointScreen() {
             </View>
 
             <Button
-              label="Done & Return to Console"
+              label="Back to Hub"
               onPress={goBack}
               variant="primary"
               size="lg"
@@ -262,7 +262,7 @@ export function PointToPointScreen() {
             >
               <Rocket size={18} color="#ffffff" style={{ marginRight: 8 }} />
               <Text style={styles.dispatchBtnText} numberOfLines={1}>
-                Initiate Direct P2P Transfer ({origin} ➔ {destination})
+                Dispatch P2P ({origin} ➔ {destination})
               </Text>
             </Pressable>
           </View>

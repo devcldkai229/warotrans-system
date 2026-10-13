@@ -129,7 +129,7 @@ export function SafetyHubCard({
           ]}
         >
           <LifeBuoy size={16} color="#ffffff" style={styles.rescueBtnIcon} />
-          <Text style={styles.rescueBtnText} numberOfLines={1}>Launch Rescue Mission</Text>
+          <Text style={styles.rescueBtnText} numberOfLines={1}>Launch Rescue</Text>
         </Pressable>
       </View>
 

@@ -118,7 +118,7 @@ export function TransportScreen() {
             >
               <Plus size={24} color="#ffffff" strokeWidth={2.4} />
               <Text style={styles.heroBtnPrimaryText}>
-                New Transport{'\n'}Order
+                New{'\n'}Order
               </Text>
             </Pressable>
 
@@ -136,7 +136,7 @@ export function TransportScreen() {
             >
               <PackagePlus size={24} color={colors.primary} strokeWidth={2.4} />
               <Text style={styles.heroBtnSecondaryText}>
-                Pack & Ingest{'\n'}Container
+                Pack{'\n'}Container
               </Text>
             </Pressable>
           </View>
@@ -209,11 +209,11 @@ export function TransportScreen() {
                 pressed && styles.rescueBtnPressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Launch Rescue Mission"
+              accessibilityLabel="Launch Rescue"
             >
               <LifeBuoy size={14} color="#ffffff" style={{ marginRight: 6 }} />
               <Text style={styles.rescueBtnText}>
-                Launch Rescue Mission
+                Launch Rescue
               </Text>
             </Pressable>
           </View>
@@ -277,9 +277,9 @@ export function TransportScreen() {
               }}
               style={styles.viewHistoryBtn}
               accessibilityRole="button"
-              accessibilityLabel="View all history"
+              accessibilityLabel="View history"
             >
-              <Text style={styles.viewHistoryBtnText}>View All History</Text>
+              <Text style={styles.viewHistoryBtnText}>View History</Text>
               <ChevronRight size={13} color={colors.primary} />
             </Pressable>
           </View>

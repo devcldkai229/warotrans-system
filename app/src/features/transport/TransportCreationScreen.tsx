@@ -283,7 +283,7 @@ export function TransportCreationScreen() {
             </View>
 
             <Button
-              label={`Dispatch Mission (${slots.length} ${slots.length === 1 ? 'Tote' : 'Totes'} ➔ AMR-01)`}
+              label={`Dispatch (AMR-01 · ${slots.length} ${slots.length === 1 ? 'Tote' : 'Totes'})`}
               icon={<Rocket size={18} color="#ffffff" />}
               onPress={handleConfirmDispatch}
               variant="primary"
@@ -335,7 +335,7 @@ export function TransportCreationScreen() {
                 size="lg"
               />
               <Button
-                label="Done & Return to Console"
+                label="Back to Hub"
                 onPress={goBack}
                 variant="outline"
                 size="md"

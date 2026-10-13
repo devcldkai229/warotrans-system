@@ -341,7 +341,7 @@ export function JobsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Reset filters and search"
             >
-              <Text style={styles.clearSearchBtnText}>Reset Filters & Search</Text>
+              <Text style={styles.clearSearchBtnText}>Reset Filters</Text>
             </Pressable>
           </View>
         ) : (

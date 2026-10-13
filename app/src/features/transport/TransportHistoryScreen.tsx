@@ -422,7 +422,7 @@ export function TransportHistoryScreen() {
                   }}
                   style={styles.resetBtn}
                 >
-                  <Text style={styles.resetBtnText}>Reset All Filters</Text>
+                  <Text style={styles.resetBtnText}>Reset Filters</Text>
                 </Pressable>
               )}
             </View>
@@ -525,7 +525,7 @@ export function TransportHistoryScreen() {
                           accessibilityRole="button"
                         >
                           <Navigation size={13} color="#ffffff" style={{ marginRight: 6 }} />
-                          <Text style={styles.actionBtnPrimaryText}>Track on Map</Text>
+                          <Text style={styles.actionBtnPrimaryText}>Live Map</Text>
                         </Pressable>
 
                         <Pressable
@@ -536,7 +536,7 @@ export function TransportHistoryScreen() {
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
                         >
-                          <Text style={styles.actionBtnOutlineText}>View Job Detail</Text>
+                          <Text style={styles.actionBtnOutlineText}>View Job</Text>
                         </Pressable>
                       </>
                     )}

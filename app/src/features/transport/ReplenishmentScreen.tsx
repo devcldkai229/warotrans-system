@@ -106,7 +106,7 @@ export function ReplenishmentScreen() {
             </View>
 
             <Button
-              label="Done & Return to Console"
+              label="Back to Hub"
               onPress={goBack}
               variant="primary"
               size="lg"
@@ -320,7 +320,7 @@ export function ReplenishmentScreen() {
             >
               <Layers size={18} color="#ffffff" style={{ marginRight: 8 }} />
               <Text style={styles.dispatchBtnText} numberOfLines={1}>
-                Dispatch Replenishment Tour (+{restockQty} units)
+                Dispatch Tour (+{restockQty} units)
               </Text>
             </Pressable>
           </View>

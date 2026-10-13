@@ -228,7 +228,7 @@ export function VerifyModal({
                   </View>
                   <View style={{ marginTop: 14 }}>
                     <Button
-                      label={`Confirm All (${otherContainers.length + 1} Containers)`}
+                      label={`Confirm All (${otherContainers.length + 1} Totes)`}
                       variant="primary"
                       icon={<Check size={16} color="#ffffff" />}
                       onPress={() => {
@@ -426,7 +426,7 @@ export function VerifyModal({
               {/* Recovery Action Buttons */}
               <View style={styles.mismatchActions}>
                 <Button
-                  label="Retry Barcode Scan"
+                  label="Retry Scan"
                   variant="primary"
                   icon={<RefreshCw size={18} color="#ffffff" />}
                   onPress={() => {
@@ -436,7 +436,7 @@ export function VerifyModal({
                   style={{ width: '100%', minHeight: 64, borderRadius: 6 }}
                 />
                 <Button
-                  label="Report Misplaced Container"
+                  label="Report Misplaced"
                   variant="outline"
                   icon={<AlertTriangle size={15} color={colors.danger} />}
                   onPress={onReportIssue}

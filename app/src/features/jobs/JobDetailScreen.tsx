@@ -220,7 +220,7 @@ export function JobDetailScreen() {
             >
               <PauseCircle size={15} color={colors.warning} />
               <Text style={[styles.menuItemText, { color: colors.warning }]}>
-                Hold Robot (Soft Pause 3m)
+                Hold Robot (3m)
               </Text>
             </Pressable>
             <Pressable
@@ -231,7 +231,7 @@ export function JobDetailScreen() {
               }}
             >
               <RefreshCw size={15} color={colors.primary} />
-              <Text style={styles.menuItemText}>Refresh Nav2 Path</Text>
+              <Text style={styles.menuItemText}>Refresh Route</Text>
             </Pressable>
           </View>
         </>
@@ -410,7 +410,7 @@ export function JobDetailScreen() {
                   </Text>
                 </View>
                 <Text style={styles.otherToggleAction}>
-                  {showOtherContainers ? 'Hide ▲' : 'View Details ▼'}
+                  {showOtherContainers ? 'Hide ▲' : 'Details ▼'}
                 </Text>
               </Pressable>
 
@@ -473,7 +473,7 @@ export function JobDetailScreen() {
                           </Text>
                         </View>
                         <Text style={styles.doneStopsAction}>
-                          {showDoneStops ? 'Hide Details ▲' : 'View Details ▼'}
+                          {showDoneStops ? 'Hide ▲' : 'Details ▼'}
                         </Text>
                       </Pressable>
 
@@ -662,7 +662,7 @@ export function JobDetailScreen() {
               ]}
             >
               <Maximize2 size={18} color="#ffffff" />
-              <Text style={styles.trackLiveMapText}>Track on Live Map</Text>
+              <Text style={styles.trackLiveMapText}>Live Map</Text>
             </Pressable>
           </View>
         ) : isCompleted ? (
@@ -713,7 +713,7 @@ export function JobDetailScreen() {
               ]}
             >
               <Sparkles size={18} color="#ffffff" />
-              <Text style={styles.trackLiveMapText}>Expedite Priority</Text>
+              <Text style={styles.trackLiveMapText}>Expedite</Text>
             </Pressable>
           </View>
         )}

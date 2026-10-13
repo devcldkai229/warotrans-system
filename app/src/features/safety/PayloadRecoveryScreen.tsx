@@ -102,7 +102,7 @@ export function PayloadRecoveryScreen() {
             </View>
 
             <Button
-              label="Done & Return to Console"
+              label="Back to Hub"
               onPress={goBack}
               variant="primary"
               size="lg"
