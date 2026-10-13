@@ -1,3 +1,7 @@
+/**
+ * @deprecated Local mock workflows for legacy Map Editor demos only.
+ * Canonical routes (/configure/workflows*) must fetch from the WorkflowExecution API — never import this.
+ */
 import type { Workflow } from '@/shared/api/contracts'
 
 export const WORKFLOWS: Workflow[] = [

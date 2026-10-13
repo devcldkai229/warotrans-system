@@ -40,6 +40,12 @@ export interface StepTypeMetadata {
   operations: OperationMetadata[]
 }
 
+/**
+ * Catalog field from metadata (systemVariables / currentMovementFields).
+ * Scope availability for CURRENT_MOVEMENT is not returned as API fields —
+ * the editor filters using operation.executionScope + stopActionFilter
+ * (mirroring CurrentMovementFieldDefinition.IsAvailableAt).
+ */
 export interface CatalogField {
   key: string
   dataType: string

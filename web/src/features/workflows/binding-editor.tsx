@@ -6,6 +6,7 @@ import type {
   WorkflowTaskDraft,
   WorkflowVariable,
 } from '@/shared/api/types'
+import { isMovementFieldAvailable } from './movement-scope'
 
 interface BindingEditorProps {
   input: FieldMetadata
@@ -15,6 +16,12 @@ interface BindingEditorProps {
   currentTaskIndex: number
   currentStepIndex: number
   metadata: WorkflowMetadata
+  /** From operation metadata (OperationExecutionScopeCatalog). */
+  executionScope?: string | null
+  /** PICKUP | DROPOFF when stop-scoped. */
+  stopActionFilter?: string | null
+  /** When true, render a compact read-only display (e.g. auto-synced purpose). */
+  readOnlyConstant?: boolean
   onChange: (binding: StepInputBinding) => void
 }
 
@@ -36,10 +43,7 @@ function earlierSteps(
   return result
 }
 
-function compatible(
-  sourceType: string,
-  targetType: string,
-): boolean {
+function compatible(sourceType: string, targetType: string): boolean {
   return sourceType === targetType || (sourceType === 'INTEGER' && targetType === 'DECIMAL')
 }
 
@@ -51,15 +55,23 @@ export function BindingEditor({
   currentTaskIndex,
   currentStepIndex,
   metadata,
+  executionScope,
+  stopActionFilter,
+  readOnlyConstant,
   onChange,
 }: BindingEditorProps) {
   const sourceType = binding?.sourceType ?? 'WORKFLOW_VAR'
   const previous = earlierSteps(tasks, currentTaskIndex, currentStepIndex)
 
   const compatibleVars = variables.filter((v) => compatible(v.dataType, input.dataType))
-  const compatibleMovement = metadata.currentMovementFields.filter((f) =>
-    compatible(f.dataType, input.dataType),
+  const compatibleMovement = metadata.currentMovementFields.filter(
+    (f) =>
+      compatible(f.dataType, input.dataType) &&
+      isMovementFieldAvailable(f, executionScope, stopActionFilter),
   )
+
+  const currentMovementAllowed =
+    executionScope != null && executionScope !== 'ONCE_PER_JOB'
 
   const stepOptions = previous.flatMap((step) => {
     const typeMeta = metadata.stepTypes.find((s) => s.stepType === step.stepType)
@@ -74,6 +86,30 @@ export function BindingEditor({
       }))
   })
 
+  if (readOnlyConstant && binding?.sourceType === 'CONSTANT') {
+    return (
+      <div className="binding-row auto-constant">
+        <div className="binding-label">
+          <strong>{input.key}</strong>
+          <span>
+            {input.dataType}
+            {input.required ? ' · required' : ' · optional'}
+          </span>
+          <small>{input.description}</small>
+        </div>
+        <span className="auto-constant-value">
+          CONSTANT: {String(binding.constantValue ?? '')}
+          <em> (synced with operation)</em>
+        </span>
+      </div>
+    )
+  }
+
+  const bindingSources = metadata.bindingSources.filter((s) => {
+    if (s === 'CURRENT_MOVEMENT' && !currentMovementAllowed) return false
+    return true
+  })
+
   return (
     <div className="binding-row">
       <div className="binding-label">
@@ -86,7 +122,7 @@ export function BindingEditor({
       </div>
 
       <select
-        value={sourceType}
+        value={bindingSources.includes(sourceType) ? sourceType : bindingSources[0] ?? 'WORKFLOW_VAR'}
         onChange={(e) =>
           onChange({
             sourceType: e.target.value as StepInputBinding['sourceType'],
@@ -96,7 +132,7 @@ export function BindingEditor({
           })
         }
       >
-        {metadata.bindingSources.map((s) => (
+        {bindingSources.map((s) => (
           <option key={s} value={s}>
             {s}
           </option>
@@ -125,24 +161,38 @@ export function BindingEditor({
       )}
 
       {sourceType === 'CURRENT_MOVEMENT' && (
-        <select
-          value={binding?.sourceReference ?? ''}
-          onChange={(e) =>
-            onChange({
-              sourceType,
-              sourceReference: e.target.value,
-              outputKey: null,
-              constantValue: undefined,
-            })
-          }
-        >
-          <option value="">Select path…</option>
-          {compatibleMovement.map((f) => (
-            <option key={f.key} value={f.key}>
-              {f.key} ({f.dataType})
-            </option>
-          ))}
-        </select>
+        <div className="binding-movement">
+          <select
+            value={binding?.sourceReference ?? ''}
+            onChange={(e) =>
+              onChange({
+                sourceType,
+                sourceReference: e.target.value,
+                outputKey: null,
+                constantValue: undefined,
+              })
+            }
+          >
+            <option value="">Select path…</option>
+            {compatibleMovement.map((f) => (
+              <option key={f.key} value={f.key}>
+                {f.key} ({f.dataType})
+              </option>
+            ))}
+          </select>
+          {compatibleMovement.length === 0 && (
+            <p className="binding-warning">
+              No CURRENT_MOVEMENT paths are available for this step&apos;s execution scope
+              {executionScope ? ` (${executionScope}` : ''}
+              {stopActionFilter ? ` · ${stopActionFilter}` : ''}
+              {executionScope ? ')' : ''}.
+            </p>
+          )}
+          <p className="binding-help">
+            Runtime context from TransportRequestDetail and Job planning. Admin/Staff do not enter this
+            value directly.
+          </p>
+        </div>
       )}
 
       {sourceType === 'STEP_OUTPUT' && (
