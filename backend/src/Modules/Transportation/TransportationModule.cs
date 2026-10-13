@@ -1,9 +1,11 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.Transportation.Features.CreateTransportRequest;
 using WaroTrans.Transportation.Persistence;
 
 namespace WaroTrans.Transportation;
@@ -15,6 +17,10 @@ public static class TransportationModule
         services.AddDbContext<TransportationDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("PostgreSQL")));
 
+        services.AddValidatorsFromAssembly(typeof(TransportationModule).Assembly);
+
+        services.AddScoped<CreateTransportRequestHandler>();
+
         return services;
     }
 
@@ -22,6 +28,9 @@ public static class TransportationModule
     {
         var group = endpoints.MapGroup("/api/transportation");
         group.MapGet("/ping", () => Results.Ok(new { module = "transportation" })).AllowAnonymous();
+
+        CreateTransportRequestEndpoint.Map(group);
+
         return endpoints;
     }
 }

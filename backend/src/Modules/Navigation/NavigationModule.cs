@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Features.ArchiveMapVersion;
 using WaroTrans.Navigation.Features.CreateEndpoint;
 using WaroTrans.Navigation.Features.CreateMapVersion;
@@ -15,6 +16,7 @@ using WaroTrans.Navigation.Features.PublishMapVersion;
 using WaroTrans.Navigation.Features.UpdateEndpoint;
 using WaroTrans.Navigation.Features.UpdateMapVersion;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 
 namespace WaroTrans.Navigation;
 
@@ -36,6 +38,8 @@ public static class NavigationModule
         services.AddScoped<CreateEndpointHandler>();
         services.AddScoped<GetEndpointHandler>();
         services.AddScoped<UpdateEndpointHandler>();
+
+        services.AddScoped<INavigationModule, NavigationModuleApi>();
 
         return services;
     }

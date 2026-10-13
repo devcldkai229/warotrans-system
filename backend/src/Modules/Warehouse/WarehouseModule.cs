@@ -6,11 +6,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Features.CreateContainer;
 using WaroTrans.Warehouse.Features.GetContainer;
 using WaroTrans.Warehouse.Features.GetProductInventoryContext;
 using WaroTrans.Warehouse.Features.ResolveProduct;
 using WaroTrans.Warehouse.Persistence;
+using WaroTrans.Warehouse.Services;
 
 namespace WaroTrans.Warehouse;
 
@@ -27,6 +29,8 @@ public static class WarehouseModule
         services.AddScoped<CreateContainerHandler>();
         services.AddScoped<GetContainerHandler>();
         services.AddScoped<GetProductInventoryContextHandler>();
+
+        services.AddScoped<IWarehouseModule, WarehouseModuleApi>();
 
         return services;
     }
