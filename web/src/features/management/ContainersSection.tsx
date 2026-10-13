@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { ContainerStatus, ContainerView } from '@/shared/api/contracts'
-import { formatIsoDateTime } from '@/shared/lib/format'
+import { formatIsoDateTime, humanize } from '@/shared/lib/format'
+import { SearchInput } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
+import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { SectionHead } from './SectionHead'
 
 const STATUSES: ContainerStatus[] = ['CREATED', 'PACKED', 'RESERVED', 'IN_TRANSIT', 'STORED', 'HOLD', 'EMPTY', 'OUT_OF_SERVICE']
@@ -30,54 +33,58 @@ export function ContainersSection({ containers }: { containers: ContainerView[] 
   return (
     <>
       <SectionHead title="Containers" hint="The physical units the robots carry. One Container holds one product type.">
-        <input placeholder="Search barcode, SKU or product…" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select value={status} onChange={(event) => setStatus(event.target.value as ContainerStatus | '')}>
+        <SearchInput className="w-72" placeholder="Search barcode, SKU or product" value={query} onChange={setQuery} />
+        <select
+          className={controlClass('pill')}
+          aria-label="Filter by status"
+          value={status}
+          onChange={(event) => setStatus(event.target.value as ContainerStatus | '')}
+        >
           <option value="">All statuses</option>
           {STATUSES.map((value) => (
             <option key={value} value={value}>
-              {value}
+              {humanize(value)}
             </option>
           ))}
         </select>
       </SectionHead>
 
-      <table className="mtable">
+      <Table>
         <thead>
           <tr>
-            <th>Barcode</th>
-            <th>Product</th>
-            <th>Status</th>
-            <th>Location</th>
-            <th>Level</th>
-            <th>Supplier package</th>
-            <th className="is-right">Updated</th>
+            <Th>Barcode</Th>
+            <Th>Product</Th>
+            <Th>Status</Th>
+            <Th>Location</Th>
+            <Th>Level</Th>
+            <Th>Supplier package</Th>
+            <Th align="right">Updated</Th>
           </tr>
         </thead>
         <tbody>
           {visible.map((item) => (
-            <tr key={item.id}>
-              <td>{item.barcode}</td>
-              <td>
-                <span className="is-strong">{item.productName}</span> <span className="is-faint">{item.sku}</span>
-              </td>
-              <td>
+            <Tr key={item.id}>
+              <Td className="font-mono text-xs">{item.barcode}</Td>
+              <Td>
+                <span className="font-medium text-ink">{item.productName}</span>{' '}
+                <span className="font-mono text-xs text-muted">{item.sku}</span>
+              </Td>
+              <Td>
                 <StatusBadge tone={CONTAINER_STATUS_TONE[item.status]}>{item.status}</StatusBadge>
-              </td>
-              <td className="is-faint">{item.locationCode ?? '—'}</td>
-              <td className="is-faint">{item.currentLevelNo ?? '—'}</td>
-              <td className="is-faint">{item.supplierPackageBarcode ?? '—'}</td>
-              <td className="is-right is-faint">{formatIsoDateTime(item.updatedAt)}</td>
-            </tr>
+              </Td>
+              <Td tone="faint">{item.locationCode ?? '—'}</Td>
+              <Td tone="faint">{item.currentLevelNo ?? '—'}</Td>
+              <Td tone="faint" className="font-mono text-xs">
+                {item.supplierPackageBarcode ?? '—'}
+              </Td>
+              <Td align="right" tone="faint">
+                {formatIsoDateTime(item.updatedAt)}
+              </Td>
+            </Tr>
           ))}
-          {visible.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="mtable__empty">
-                No containers match the filter
-              </td>
-            </tr>
-          ) : null}
+          {visible.length === 0 ? <EmptyRow colSpan={7}>No containers match this filter.</EmptyRow> : null}
         </tbody>
-      </table>
+      </Table>
     </>
   )
 }

@@ -29,168 +29,144 @@ export function BottomTabBar() {
   const isTransport = activeTab === 'transport';
 
   return (
-    <View style={styles.bar}>
-      {/* 1. HOME TAB */}
-      <Pressable
-        onPress={() => handleTabPress('home')}
-        style={({ pressed }) => [
-          styles.tabBtn,
-          pressed && styles.tabBtnPressed,
-        ]}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isHome }}
-      >
-        <View style={[styles.iconPill, isHome && styles.iconPillActive]}>
+    <View style={styles.dockWrapper} pointerEvents="box-none">
+      <View style={styles.dockPill}>
+        {/* 1. HOME TAB */}
+        <Pressable
+          onPress={() => handleTabPress('home')}
+          style={({ pressed }) => [
+            styles.tabBtn,
+            pressed && styles.tabBtnPressed,
+            isHome && styles.tabBtnActive,
+          ]}
+          accessibilityRole="tab"
+          accessibilityLabel="Home"
+          accessibilityState={{ selected: isHome }}
+        >
           <Home
-            size={20}
+            size={23}
             color={isHome ? colors.primary : colors.textSecondary}
-            strokeWidth={isHome ? 2.8 : 2}
+            strokeWidth={isHome ? 2.8 : 2.2}
           />
-        </View>
-        <Text
-          style={[
-            styles.label,
-            isHome ? styles.labelActive : styles.labelInactive,
-          ]}
-        >
-          HOME
-        </Text>
-      </Pressable>
+        </Pressable>
 
-      {/* 2. JOB TAB */}
-      <Pressable
-        onPress={() => handleTabPress('jobs')}
-        style={({ pressed }) => [
-          styles.tabBtn,
-          pressed && styles.tabBtnPressed,
-        ]}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isJobs }}
-      >
-        <View style={[styles.iconPill, isJobs && styles.iconPillActive]}>
-          <PackageCheck
-            size={20}
-            color={isJobs ? colors.primary : colors.textSecondary}
-            strokeWidth={isJobs ? 2.8 : 2}
-          />
-          {activeJobCount > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{activeJobCount}</Text>
-            </View>
-          )}
-        </View>
-        <Text
-          style={[
-            styles.label,
-            isJobs ? styles.labelActive : styles.labelInactive,
+        {/* 2. JOB TAB */}
+        <Pressable
+          onPress={() => handleTabPress('jobs')}
+          style={({ pressed }) => [
+            styles.tabBtn,
+            pressed && styles.tabBtnPressed,
+            isJobs && styles.tabBtnActive,
           ]}
+          accessibilityRole="tab"
+          accessibilityLabel="Jobs"
+          accessibilityState={{ selected: isJobs }}
         >
-          JOB
-        </Text>
-      </Pressable>
+          <View style={styles.iconContainer}>
+            <PackageCheck
+              size={23}
+              color={isJobs ? colors.primary : colors.textSecondary}
+              strokeWidth={isJobs ? 2.8 : 2.2}
+            />
+            {activeJobCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{activeJobCount}</Text>
+              </View>
+            )}
+          </View>
+        </Pressable>
 
-      {/* 3. TRANSPORT TAB */}
-      <Pressable
-        onPress={() => handleTabPress('transport')}
-        style={({ pressed }) => [
-          styles.tabBtn,
-          pressed && styles.tabBtnPressed,
-        ]}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isTransport }}
-      >
-        <View style={[styles.iconPill, isTransport && styles.iconPillActive]}>
+        {/* 3. TRANSPORT TAB */}
+        <Pressable
+          onPress={() => handleTabPress('transport')}
+          style={({ pressed }) => [
+            styles.tabBtn,
+            pressed && styles.tabBtnPressed,
+            isTransport && styles.tabBtnActive,
+          ]}
+          accessibilityRole="tab"
+          accessibilityLabel="Transport"
+          accessibilityState={{ selected: isTransport }}
+        >
           <Rocket
-            size={20}
+            size={23}
             color={isTransport ? colors.primary : colors.textSecondary}
-            strokeWidth={isTransport ? 2.8 : 2}
+            strokeWidth={isTransport ? 2.8 : 2.2}
           />
-        </View>
-        <Text
-          style={[
-            styles.label,
-            isTransport ? styles.labelActive : styles.labelInactive,
-          ]}
-        >
-          TRANSPORT
-        </Text>
-      </Pressable>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    height: Platform.OS === 'ios' ? 86 : 72,
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 6,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    elevation: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-  },
-  tabBtn: {
-    flex: 1,
+  dockWrapper: {
+    position: 'absolute',
+    bottom: Platform.select({ android: 16, default: 24 }),
+    left: 0,
+    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
+    zIndex: 90,
+  },
+  dockPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    shadowColor: '#071523',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 10,
+    gap: 10,
+  },
+  tabBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 84,
+    paddingHorizontal: 26,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  tabBtnActive: {
+    backgroundColor: 'rgba(0, 92, 209, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.22)',
   },
   tabBtnPressed: {
-    transform: [{ scale: 0.95 }],
-    opacity: 0.8,
+    transform: [{ scale: 0.92 }],
+    opacity: 0.85,
   },
-  iconPill: {
+  iconContainer: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  iconPillActive: {
-    backgroundColor: 'rgba(0, 92, 209, 0.10)',
-    transform: [{ scale: 1.05 }],
   },
   badge: {
     position: 'absolute',
-    top: -2,
-    right: 0,
-    backgroundColor: colors.warning,
+    top: -4,
+    right: -8,
+    backgroundColor: colors.danger,
     borderRadius: 99,
-    width: 16,
-    height: 16,
+    minWidth: 17,
+    height: 17,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#ffffff',
-    shadowColor: colors.warning,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
+    paddingHorizontal: 3,
   },
   badgeText: {
-    color: '#451a03',
+    color: '#ffffff',
     fontSize: 9,
     fontWeight: '900',
     fontFamily: typography.fontMono,
     lineHeight: 11,
-  },
-  label: {
-    marginTop: 2,
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    fontFamily: typography.fontSans,
-  },
-  labelActive: {
-    color: colors.primary,
-  },
-  labelInactive: {
-    color: colors.textSecondary,
   },
 });

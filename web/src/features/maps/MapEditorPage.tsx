@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type {
   Edge,
@@ -10,7 +10,12 @@ import type {
   Zone,
   ZoneType,
 } from '@/shared/api/contracts'
+import { cx } from '@/shared/lib/cx'
+import { Button, IconButton } from '@/shared/ui/Button'
+import { Field, FieldRow, SearchInput } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
 import { Icon, type IconName } from '@/shared/ui/Icon'
+import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { WarehouseMap } from '@/shared/map/WarehouseMap'
 import { toPercent } from '@/shared/map/mapStyle'
 import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES } from '@/shared/map/scene'
@@ -20,9 +25,8 @@ import { WORKFLOWS } from '@/features/workflows/mock'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
 import { EDITOR_DEFAULTS, MAP_VERSIONS } from './mock'
 import { normalizeYaw } from './yaw'
-import './maps.css'
 
-const PANEL_WIDTH = { min: 320, default: 375, key: 'warotrans.workflowPanelWidth' }
+const PANEL_WIDTH = { min: 320, default: 460, key: 'warotrans.workflowPanelWidth' }
 
 const clampPanelWidth = (width: number) =>
   Math.min(Math.max(width, PANEL_WIDTH.min), Math.max(PANEL_WIDTH.min, Math.round(window.innerWidth * 0.7)))
@@ -35,6 +39,9 @@ function readPanelWidth(): number {
     return PANEL_WIDTH.default
   }
 }
+
+// Width of the Endpoint / Edge / Zone inspector. The workflow panel is wider and resizable.
+const INSPECTOR_WIDTH = 340
 
 type Tool = 'workflows' | 'endpoints' | 'traffic'
 
@@ -53,13 +60,6 @@ const TOOLS: { tool: Tool; label: string; icon: IconName }[] = [
   { tool: 'endpoints', label: 'Endpoints', icon: 'target' },
   { tool: 'traffic', label: 'Traffic', icon: 'navigate' },
 ]
-
-// Horizontal offset (px) from the canvas centre so each popover sits under its toolbar button.
-const PICKER_OFFSET: Record<Tool, number> = {
-  workflows: -126,
-  endpoints: -17,
-  traffic: 83,
-};
 
 // Where a new Endpoint first appears (metres); the Admin clicks the map to move it.
 const PENDING_ENDPOINT_AT = { x: 25, y: 25 }
@@ -89,7 +89,7 @@ function initialMode(state: string | null): Mode {
 }
 
 function Backdrop({ onClick }: { onClick: () => void }) {
-  return <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={onClick} />
+  return <div className="absolute inset-0 z-10" onClick={onClick} />
 }
 
 export function MapEditorPage() {
@@ -159,7 +159,7 @@ export function MapEditorPage() {
   const selectedEdge = mode.kind === 'edge' ? edges.find((edge) => edge.id === mode.edgeId) : undefined
   const panelOpen = Boolean(selectedZone ?? selectedWorkflow ?? selectedEndpoint ?? selectedEdge)
   // Panels float over the canvas instead of squeezing it, so the map and the Endpoints on it never shift.
-  const openPanelWidth = selectedWorkflow ? panelWidth : selectedZone || selectedEndpoint || selectedEdge ? 330 : 0
+  const openPanelWidth = selectedWorkflow ? panelWidth : selectedZone || selectedEndpoint || selectedEdge ? INSPECTOR_WIDTH : 0
 
   function createWorkflow() {
     const count = workflows.length + 1
@@ -295,318 +295,256 @@ export function MapEditorPage() {
 
   const lowered = query.toLowerCase()
 
+  function deleteSelection() {
+    if (selectedZone) removeZone(selectedZone.id)
+    else if (selectedEdge) removeEdge(selectedEdge.id)
+    else if (selectedEndpoint) removeEndpoint(selectedEndpoint.id)
+    else setMode({ kind: 'idle' })
+  }
+
   return (
-    <div className="editor">
-      <header className="editor__top">
-        <button
-          type="button"
-          className="editor__back"
-          aria-label="Back to Facility"
-          onClick={() => navigate('/configure/facility')}
-        >
+    <div className="fixed inset-0 z-40 flex min-w-[1100px] flex-col bg-surface">
+      <header className="flex h-14 flex-none items-center gap-3 pr-6 pl-3">
+        <IconButton aria-label="Back to Facility" onClick={() => navigate('/configure/facility')}>
           <Icon name="arrowLeft" size={18} />
-        </button>
-        <h1>Editing · v{version.versionNo} (draft)</h1>
-        <span className="editor__draft">Unpublished</span>
-        <span className="editor__saved">
-          <span className="dot" /> Auto-saved at {EDITOR_DEFAULTS.autosavedAt}
+        </IconButton>
+        <h1 className="text-base font-medium">Map version {version.versionNo}</h1>
+        <StatusBadge tone="amber">Unpublished draft</StatusBadge>
+        <span className="ml-2 flex items-center gap-2 text-xs text-muted">
+          <span className="size-1.5 rounded-full bg-green" /> Saved automatically at {EDITOR_DEFAULTS.autosavedAt}
         </span>
-        <div className="editor__top-actions">
-          <button type="button" className="btn" onClick={() => navigate('/configure/facility')}>
-            Discard Changes
-          </button>
-          <button type="button" className="btn btn--primary">
-            Publish
-          </button>
+        <div className="ml-auto flex gap-2">
+          <Button variant="ghost" onClick={() => navigate('/configure/facility')}>
+            Discard changes
+          </Button>
+          <Button variant="primary">Publish</Button>
         </div>
       </header>
 
-      <div className="editor__bar">
-        <div className="editor__bar-left">
+      <div className="relative flex h-12 flex-none items-center justify-between px-4">
+        <div className="flex items-center gap-2">
           {panelOpen ? (
             <>
-              <button type="button" className="editor__done" onClick={() => setMode({ kind: 'idle' })}>
+              <Button variant="primary" size="sm" onClick={() => setMode({ kind: 'idle' })}>
                 Done
-              </button>
+              </Button>
               {selectedWorkflow ? (
                 <>
-                  <button type="button" className="btn editor__save">
-                    Save
-                  </button>
-                  <span className="editor__crumb">
-                    <Icon name="workflow" size={14} /> Workflows / <strong>{selectedWorkflow.name}</strong>
+                  <Button size="sm">Save</Button>
+                  <span className="ml-2 inline-flex items-center gap-2 text-sm text-muted">
+                    <Icon name="workflow" size={15} /> Workflows
+                    <Icon name="chevronRight" size={12} />
+                    <strong className="font-medium text-ink">{selectedWorkflow.name}</strong>
                   </span>
                 </>
               ) : null}
             </>
           ) : (
             <>
-              <button type="button" className="editor__mini">
+              <Button variant="ghost" size="sm">
                 <Icon name="save" size={14} /> Save
-              </button>
-              <button type="button" className="editor__mini">
+              </Button>
+              <Button variant="ghost" size="sm">
                 <Icon name="more" size={14} /> More
-              </button>
+              </Button>
             </>
           )}
         </div>
 
         {panelOpen ? null : (
-          <div className="editor__tools">
+          <div className="absolute top-1/2 left-1/2 flex -translate-1/2 items-center gap-1 rounded-full bg-container-high p-1">
             {TOOLS.map((item) => (
               <button
                 key={item.tool}
                 type="button"
-                className={`editor__tool${activeTool === item.tool ? ' is-active' : ''}`}
+                className={cx(
+                  'flex h-8 items-center gap-2 rounded-full px-3.5 text-sm transition-colors duration-200',
+                  activeTool === item.tool ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-surface hover:text-ink',
+                )}
+                aria-pressed={activeTool === item.tool}
                 onClick={() => openTool(item.tool)}
               >
-                <Icon name={item.icon} size={16} />
+                <Icon name={item.icon} size={15} />
                 {item.label}
               </button>
             ))}
           </div>
         )}
 
-        <div className="editor__bar-right editor__history">
+        <div className="flex items-center gap-1">
           {panelOpen ? (
             <>
-              <button type="button">
-                <Icon name="copy" size={11} /> Duplicate
-              </button>
-              <button
-                type="button"
-                style={{ color: 'var(--red-ink)' }}
-                onClick={() =>
-                  selectedZone
-                    ? removeZone(selectedZone.id)
-                    : selectedEdge
-                      ? removeEdge(selectedEdge.id)
-                      : selectedEndpoint
-                      ? removeEndpoint(selectedEndpoint.id)
-                      : setMode({ kind: 'idle' })
-                }
-              >
-                <Icon name="trash" size={11} /> Delete
-              </button>
+              <Button variant="ghost" size="sm">
+                <Icon name="copy" size={14} /> Duplicate
+              </Button>
+              <Button variant="dangerGhost" size="sm" onClick={deleteSelection}>
+                <Icon name="trash" size={14} /> Delete
+              </Button>
             </>
           ) : null}
-          <button type="button">
-            <Icon name="undo" size={11} /> Undo
-          </button>
-          <button type="button">
-            <Icon name="redo" size={11} /> Redo
-          </button>
+          <Button variant="ghost" size="sm">
+            <Icon name="undo" size={14} /> Undo
+          </Button>
+          <Button variant="ghost" size="sm">
+            <Icon name="redo" size={14} /> Redo
+          </Button>
         </div>
       </div>
 
-      <div className="editor__main">
-        <nav className="editor__rail" aria-label="Tools">
-          {TOOLS.map((item) => (
-            <button
-              key={item.tool}
-              type="button"
-              aria-label={item.label}
-              className={activeTool === item.tool ? 'is-active' : undefined}
-              onClick={() => openTool(item.tool)}
-            >
-              <Icon name={item.icon} size={14} />
-            </button>
-          ))}
-        </nav>
+      <div className="relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-lg bg-container">
+        <div className="absolute inset-0">
+          <WarehouseMap
+            zones={zones}
+            edges={edges}
+            endpoints={endpoints}
+            layers={{ robots: false, occupancy: false, legendOpen: true }}
+            labels={activeTool === 'endpoints' ? 'all' : 'focus'}
+            emphasis={activeTool === 'endpoints' ? ['endpoints'] : activeTool === 'traffic' ? ['zones', 'edges'] : []}
+            selected={{ zoneId: selectedZone?.id, edgeId: selectedEdge?.id, endpointId: selectedEndpoint?.id }}
+            onZoneClick={!picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'zone', zoneId: id }) : undefined}
+            onEdgeClick={!picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'edge', edgeId: id }) : undefined}
+            onEndpointClick={
+              !picking && activeTool === 'endpoints' ? (id) => setMode({ kind: 'endpoint', endpointId: id }) : undefined
+            }
+            onBackgroundClick={handleMapClick}
+            drawing={mode.kind === 'drawingEdge' ? { points: mode.points, direction: mode.direction } : undefined}
+            uiInset={openPanelWidth ? openPanelWidth + PANEL_GAP : 0}
+          >
+            {selectedEndpoint ? (
+              <div className={ANCHOR} style={toPercent(selectedEndpoint)}>
+                <HeadingDial
+                  x={0}
+                  y={0}
+                  yaw={selectedEndpoint.yaw}
+                  onChange={(yaw) => patchEndpoint(selectedEndpoint.id, { yaw })}
+                />
+              </div>
+            ) : null}
 
-        <div className="editor__canvas">
-          <div className="editor__map">
-            <WarehouseMap
-              zones={zones}
-              edges={edges}
-              endpoints={endpoints}
-              layers={{ robots: false, occupancy: false, legendOpen: true }}
-              labels={activeTool === 'endpoints' ? 'all' : 'focus'}
-              emphasis={activeTool === 'endpoints' ? ['endpoints'] : activeTool === 'traffic' ? ['zones', 'edges'] : []}
-              selected={{ zoneId: selectedZone?.id, edgeId: selectedEdge?.id, endpointId: selectedEndpoint?.id }}
-              onZoneClick={!picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'zone', zoneId: id }) : undefined}
-              onEdgeClick={!picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'edge', edgeId: id }) : undefined}
-              onEndpointClick={
-                !picking && activeTool === 'endpoints' ? (id) => setMode({ kind: 'endpoint', endpointId: id }) : undefined
-              }
-              onBackgroundClick={handleMapClick}
-              drawing={mode.kind === 'drawingEdge' ? { points: mode.points, direction: mode.direction } : undefined}
-              uiInset={openPanelWidth}
-            >
-              {selectedEndpoint ? (
-                <div className="editor__anchor" style={toPercent(selectedEndpoint)}>
-                  <HeadingDial
-                    x={0}
-                    y={0}
-                    yaw={selectedEndpoint.yaw}
-                    onChange={(yaw) => patchEndpoint(selectedEndpoint.id, { yaw })}
-                  />
-                </div>
-              ) : null}
-
-              {mode.kind === 'placing' ? (
-                <div className="editor__anchor" style={toPercent(mode.at)}>
-                  <HeadingDial x={0} y={0} yaw={mode.yaw} onChange={(yaw) => setMode({ ...mode, yaw })} />
-                  <div className="confirm-bubble" style={{ left: 112, top: -54 }}>
-                    Click the map to move it. Drag the arrow to set the heading ({mode.yaw}°).
-                    <select
-                      value={mode.endpointType}
-                      aria-label="Endpoint type"
-                      onChange={(event) => setMode({ ...mode, endpointType: event.target.value as EndpointType })}
-                    >
-                      {ENDPOINT_TEMPLATES.map((item) => (
-                        <option key={item.type} value={item.type}>
-                          {item.title}
-                        </option>
-                      ))}
-                    </select>
-                    <div>
-                      <button type="button" onClick={() => setMode({ kind: 'idle' })}>
-                        Cancel
-                      </button>
-                      <button type="button" className="is-ok" onClick={() => confirmEndpoint(mode.endpointType, mode.at, mode.yaw)}>
-                        Place
-                      </button>
-                    </div>
+            {mode.kind === 'placing' ? (
+              <div className={ANCHOR} style={toPercent(mode.at)}>
+                <HeadingDial x={0} y={0} yaw={mode.yaw} onChange={(yaw) => setMode({ ...mode, yaw })} />
+                <div className="absolute -top-14 left-28 z-8 flex w-64 flex-col gap-2.5 rounded-md bg-surface p-3.5 text-xs shadow-float">
+                  <p className="text-ink-2">Click the map to move it. Drag the arrow to set the heading ({mode.yaw}°).</p>
+                  <select
+                    className={controlClass('sm')}
+                    value={mode.endpointType}
+                    aria-label="Endpoint type"
+                    onChange={(event) => setMode({ ...mode, endpointType: event.target.value as EndpointType })}
+                  >
+                    {ENDPOINT_TEMPLATES.map((item) => (
+                      <option key={item.type} value={item.type}>
+                        {item.title}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex justify-end gap-1.5">
+                    <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
+                      Cancel
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={() => confirmEndpoint(mode.endpointType, mode.at, mode.yaw)}>
+                      Place endpoint
+                    </Button>
                   </div>
                 </div>
-              ) : null}
-
-              {mode.kind === 'drawingEdge' ? (
-                <div className="board__draw">
-                  <span>
-                    {mode.points.length < 2 ? 'Click the map to add points (at least 2)' : `${mode.points.length} points`}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={mode.points.length === 0}
-                    onClick={() => setMode({ ...mode, points: mode.points.slice(0, -1) })}
-                  >
-                    Undo point
-                  </button>
-                  <button type="button" className="is-ok" disabled={mode.points.length < 2} onClick={finishEdge}>
-                    Finish
-                  </button>
-                  <button type="button" onClick={() => setMode({ kind: 'idle' })}>
-                    Cancel
-                  </button>
-                </div>
-              ) : null}
-            </WarehouseMap>
-          </div>
-
-          <div className="editor__pill">✎ EDITING › V{version.versionNo}: LATEST</div>
-
-          {mode.kind === 'picker' ? (
-            <>
-              <Backdrop onClick={() => setMode({ kind: 'idle' })} />
-              <div
-                className={`picker picker--${mode.tool}`}
-                style={{ left: `calc(50% + ${PICKER_OFFSET[mode.tool]}px)` }}
-              >
-                {mode.tool === 'workflows' ? (
-                  <>
-                    <header>
-                      Workflows
-                      <button type="button" className="wf__add" onClick={createWorkflow}>
-                        + New workflow
-                      </button>
-                    </header>
-                    <div className="picker__jobs">
-                      <h4>Jobs</h4>
-                      <ul>
-                        {workflows.map((workflow) => (
-                          <li key={workflow.id}>
-                            <button type="button" onClick={() => setMode({ kind: 'workflow', workflowId: workflow.id })}>
-                              <strong>{workflow.name}</strong>
-                              <small>Connect Endpoints together</small>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </>
-                ) : null}
-
-                {mode.tool === 'endpoints' ? (
-                  <>
-                    <header>
-                      Endpoints
-                      <button type="button" className="wf__add" onClick={() => startPlacing('STORAGE')}>
-                        + Add Endpoint
-                      </button>
-                    </header>
-                    <label className="picker__search">
-                      <Icon name="search" size={12} />
-                      <input value={query} onChange={(event) => setQuery(event.target.value)} autoFocus />
-                    </label>
-                    <h4>Groups</h4>
-                    <ul>
-                      <li>
-                        <button type="button">
-                          <strong>Endpoint Group</strong>
-                          <small>Create a collection of endpoints that can be used interchangeably</small>
-                        </button>
-                      </li>
-                    </ul>
-                    <h4>Endpoints</h4>
-                    <ul>
-                      {ENDPOINT_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
-                        <li key={item.type}>
-                          <button type="button" onClick={() => startPlacing(item.type)}>
-                            <strong>{item.title}</strong>
-                            <small>{item.description}</small>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : null}
-
-                {mode.tool === 'traffic' ? (
-                  <>
-                    <header>Traffic</header>
-                    <label className="picker__search">
-                      <Icon name="search" size={12} />
-                      <input
-                        placeholder="Search zones and edges..."
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                      />
-                    </label>
-                    <h4>Zones</h4>
-                    <ul>
-                      {ZONE_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
-                        <li key={item.type}>
-                          <button type="button" onClick={() => addZone(item.type, item.title)}>
-                            <strong>{item.title}</strong>
-                            <small>{item.description}</small>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    <h4>Edges</h4>
-                    <ul>
-                      {EDGE_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
-                        <li key={item.direction}>
-                          <button type="button" onClick={() => startEdge(item.direction)}>
-                            <strong>{item.title}</strong>
-                            <small>{item.description}</small>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : null}
               </div>
-            </>
-          ) : null}
+            ) : null}
+
+            {mode.kind === 'drawingEdge' ? (
+              <div className="absolute top-3 left-1/2 z-9 flex origin-top -translate-x-1/2 scale-[calc(1/var(--z,1))] cursor-default items-center gap-1 rounded-full bg-surface py-1 pr-1 pl-4 text-xs whitespace-nowrap shadow-float">
+                <span className="mr-2 text-ink-2">
+                  {mode.points.length < 2 ? 'Click the map to add points (at least 2)' : `${mode.points.length} points`}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={mode.points.length === 0}
+                  onClick={() => setMode({ ...mode, points: mode.points.slice(0, -1) })}
+                >
+                  Undo point
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
+                  Cancel
+                </Button>
+                <Button variant="primary" size="sm" disabled={mode.points.length < 2} onClick={finishEdge}>
+                  Finish edge
+                </Button>
+              </div>
+            ) : null}
+          </WarehouseMap>
         </div>
 
+        {mode.kind === 'picker' ? (
+          <>
+            <Backdrop onClick={() => setMode({ kind: 'idle' })} />
+            <div className="absolute top-3 left-1/2 z-20 max-h-[calc(100%-24px)] w-[380px] -translate-x-1/2 overflow-auto rounded-lg bg-surface p-2 shadow-float">
+              {mode.tool === 'workflows' ? (
+                <>
+                  <PickerHead title="Workflows">
+                    <Button variant="primary" size="sm" onClick={createWorkflow}>
+                      <Icon name="plus" size={14} /> New workflow
+                    </Button>
+                  </PickerHead>
+                  <ul>
+                    {workflows.map((workflow) => (
+                      <PickerItem
+                        key={workflow.id}
+                        title={workflow.name}
+                        note={`Version ${workflow.versionNo}, ${workflow.status.toLowerCase()}`}
+                        onClick={() => setMode({ kind: 'workflow', workflowId: workflow.id })}
+                      />
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
+              {mode.tool === 'endpoints' ? (
+                <>
+                  <PickerHead title="Endpoints">
+                    <Button variant="primary" size="sm" onClick={() => startPlacing('STORAGE')}>
+                      <Icon name="plus" size={14} /> Add endpoint
+                    </Button>
+                  </PickerHead>
+                  <SearchInput value={query} onChange={setQuery} placeholder="Search endpoint types" autoFocus className="mx-1" />
+                  <PickerHeading>Groups</PickerHeading>
+                  <ul>
+                    <PickerItem title="Endpoint group" note="A set of endpoints that can be used interchangeably" />
+                  </ul>
+                  <PickerHeading>Endpoint types</PickerHeading>
+                  <ul>
+                    {ENDPOINT_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
+                      <PickerItem key={item.type} title={item.title} note={item.description} onClick={() => startPlacing(item.type)} />
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
+              {mode.tool === 'traffic' ? (
+                <>
+                  <PickerHead title="Traffic" />
+                  <SearchInput value={query} onChange={setQuery} placeholder="Search zones and edges" className="mx-1" />
+                  <PickerHeading>Zones</PickerHeading>
+                  <ul>
+                    {ZONE_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
+                      <PickerItem key={item.type} title={item.title} note={item.description} onClick={() => addZone(item.type, item.title)} />
+                    ))}
+                  </ul>
+                  <PickerHeading>Edges</PickerHeading>
+                  <ul>
+                    {EDGE_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
+                      <PickerItem key={item.direction} title={item.title} note={item.description} onClick={() => startEdge(item.direction)} />
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
         {selectedWorkflow ? (
-          <div className="editor__panelwrap" style={{ width: panelWidth }}>
+          <aside className={SIDE_PANEL} style={{ width: panelWidth }}>
             <div
-              className="editor__resize"
+              className="group absolute inset-y-0 left-0 z-6 w-2 cursor-col-resize"
               role="separator"
               aria-orientation="vertical"
               aria-label="Resize panel"
@@ -616,262 +554,269 @@ export function MapEditorPage() {
                 latestWidth.current = PANEL_WIDTH.default
                 setPanelWidth(PANEL_WIDTH.default)
               }}
-            />
-            <aside className="editor__panel">
+            >
+              <div className="absolute inset-y-6 left-0.5 w-0.5 rounded-full transition-colors duration-200 group-hover:bg-blue" />
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">
               <WorkflowBuilderPanel
                 key={selectedWorkflow.id}
                 workflow={selectedWorkflow}
-                onChange={(next) =>
-                  setWorkflows((current) => current.map((item) => (item.id === next.id ? next : item)))
-                }
+                onChange={(next) => setWorkflows((current) => current.map((item) => (item.id === next.id ? next : item)))}
               />
-            </aside>
-          </div>
+            </div>
+          </aside>
         ) : null}
 
         {selectedEndpoint ? (
-          <aside className="editor__panel editor__panel--zone">
-            <div className="editor__panel-head">
-              <span>{ENDPOINT_TEMPLATES.find((item) => item.type === selectedEndpoint.endpointType)?.title} endpoint</span>
-              <Icon name="list" size={14} />
-            </div>
-            <div className="zoneform">
-              <label>
-                <span>Name</span>
+          <Inspector
+            title={`${ENDPOINT_TEMPLATES.find((item) => item.type === selectedEndpoint.endpointType)?.title} endpoint`}
+            deleteLabel="Delete endpoint"
+            onDelete={() => removeEndpoint(selectedEndpoint.id)}
+          >
+            <Field label="Name">
+              <input
+                className={controlClass()}
+                value={selectedEndpoint.name}
+                onChange={(event) => patchEndpoint(selectedEndpoint.id, { name: event.target.value })}
+              />
+            </Field>
+            <Field label="Type">
+              <select
+                className={controlClass()}
+                value={selectedEndpoint.endpointType}
+                onChange={(event) => patchEndpoint(selectedEndpoint.id, { endpointType: event.target.value as EndpointType })}
+              >
+                {ENDPOINT_TEMPLATES.map((item) => (
+                  <option key={item.type} value={item.type}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <FieldRow>
+              <Field label="X (m)">
                 <input
-                  value={selectedEndpoint.name}
-                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { name: event.target.value })}
+                  type="number"
+                  step={0.1}
+                  className={controlClass()}
+                  value={selectedEndpoint.x}
+                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { x: Number(event.target.value) })}
                 />
-              </label>
-              <label>
-                <span>Type</span>
-                <select
-                  value={selectedEndpoint.endpointType}
-                  onChange={(event) =>
-                    patchEndpoint(selectedEndpoint.id, { endpointType: event.target.value as EndpointType })
-                  }
-                >
-                  {ENDPOINT_TEMPLATES.map((item) => (
-                    <option key={item.type} value={item.type}>
-                      {item.type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="zoneform__row">
-                <label>
-                  <span>X (m)</span>
-                  <input
-                    type="number"
-                    step={0.1}
-                    value={selectedEndpoint.x}
-                    onChange={(event) => patchEndpoint(selectedEndpoint.id, { x: Number(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  <span>Y (m)</span>
-                  <input
-                    type="number"
-                    step={0.1}
-                    value={selectedEndpoint.y}
-                    onChange={(event) => patchEndpoint(selectedEndpoint.id, { y: Number(event.target.value) })}
-                  />
-                </label>
-              </div>
-              <div className="zoneform__row">
-                <label>
-                  <span>Yaw (°)</span>
-                  <input
-                    type="number"
-                    value={selectedEndpoint.yaw}
-                    onChange={(event) =>
-                      patchEndpoint(selectedEndpoint.id, { yaw: normalizeYaw(Number(event.target.value)) })
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Yaw tolerance (°)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={selectedEndpoint.yawTolerance}
-                    onChange={(event) =>
-                      patchEndpoint(selectedEndpoint.id, { yawTolerance: Number(event.target.value) })
-                    }
-                  />
-                </label>
-              </div>
-              <label>
-                <span>Position tolerance (m)</span>
+              </Field>
+              <Field label="Y (m)">
+                <input
+                  type="number"
+                  step={0.1}
+                  className={controlClass()}
+                  value={selectedEndpoint.y}
+                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { y: Number(event.target.value) })}
+                />
+              </Field>
+            </FieldRow>
+            <FieldRow>
+              <Field label="Yaw (°)">
+                <input
+                  type="number"
+                  className={controlClass()}
+                  value={selectedEndpoint.yaw}
+                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { yaw: normalizeYaw(Number(event.target.value)) })}
+                />
+              </Field>
+              <Field label="Yaw tolerance (°)">
                 <input
                   type="number"
                   min={0}
-                  step={0.05}
-                  value={selectedEndpoint.positionTolerance}
-                  onChange={(event) =>
-                    patchEndpoint(selectedEndpoint.id, { positionTolerance: Number(event.target.value) })
-                  }
+                  className={controlClass()}
+                  value={selectedEndpoint.yawTolerance}
+                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { yawTolerance: Number(event.target.value) })}
                 />
-              </label>
-              <label className="zoneform__check">
-                <input
-                  type="checkbox"
-                  checked={selectedEndpoint.isEnabled}
-                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { isEnabled: event.target.checked })}
-                />
-                <span>Enabled</span>
-              </label>
-            </div>
-            <div className="editor__panel-foot">
-              <button
-                type="button"
-                className="btn btn--danger btn--block"
-                onClick={() => removeEndpoint(selectedEndpoint.id)}
-              >
-                <Icon name="trash" size={13} /> Delete endpoint
-              </button>
-            </div>
-          </aside>
+              </Field>
+            </FieldRow>
+            <Field label="Position tolerance (m)">
+              <input
+                type="number"
+                min={0}
+                step={0.05}
+                className={controlClass()}
+                value={selectedEndpoint.positionTolerance}
+                onChange={(event) => patchEndpoint(selectedEndpoint.id, { positionTolerance: Number(event.target.value) })}
+              />
+            </Field>
+            <Toggle
+              label="Enabled"
+              checked={selectedEndpoint.isEnabled}
+              onChange={(isEnabled) => patchEndpoint(selectedEndpoint.id, { isEnabled })}
+            />
+          </Inspector>
         ) : null}
 
         {selectedEdge ? (
-          <aside className="editor__panel editor__panel--zone">
-            <div className="editor__panel-head">
-              <span>{EDGE_TEMPLATES.find((item) => item.direction === selectedEdge.direction)?.title}</span>
-              <Icon name="list" size={14} />
-            </div>
-            <div className="zoneform">
-              <label>
-                <span>Direction</span>
-                <select
-                  value={selectedEdge.direction}
-                  onChange={(event) => patchEdge(selectedEdge.id, { direction: event.target.value as EdgeDirection })}
-                >
-                  {EDGE_TEMPLATES.map((item) => (
-                    <option key={item.direction} value={item.direction}>
-                      {item.direction}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="zoneform__row">
-                <label>
-                  <span>Capacity</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={selectedEdge.capacity}
-                    onChange={(event) => patchEdge(selectedEdge.id, { capacity: Number(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  <span>Max speed (m/s)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={selectedEdge.maxSpeed ?? ''}
-                    placeholder="—"
-                    onChange={(event) =>
-                      patchEdge(selectedEdge.id, {
-                        maxSpeed: event.target.value === '' ? null : Number(event.target.value),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-              <label className="zoneform__check">
+          <Inspector
+            title={EDGE_TEMPLATES.find((item) => item.direction === selectedEdge.direction)?.title ?? 'Edge'}
+            deleteLabel="Delete edge"
+            onDelete={() => removeEdge(selectedEdge.id)}
+          >
+            <Field label="Direction">
+              <select
+                className={controlClass()}
+                value={selectedEdge.direction}
+                onChange={(event) => patchEdge(selectedEdge.id, { direction: event.target.value as EdgeDirection })}
+              >
+                {EDGE_TEMPLATES.map((item) => (
+                  <option key={item.direction} value={item.direction}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <FieldRow>
+              <Field label="Capacity">
                 <input
-                  type="checkbox"
-                  checked={selectedEdge.isActive}
-                  onChange={(event) => patchEdge(selectedEdge.id, { isActive: event.target.checked })}
+                  type="number"
+                  min={0}
+                  className={controlClass()}
+                  value={selectedEdge.capacity}
+                  onChange={(event) => patchEdge(selectedEdge.id, { capacity: Number(event.target.value) })}
                 />
-                <span>Active</span>
-              </label>
-              <p className="zoneform__note">{selectedEdge.geometry.points.length} points on the path</p>
-            </div>
-            <div className="editor__panel-foot">
-              <button type="button" className="btn btn--danger btn--block" onClick={() => removeEdge(selectedEdge.id)}>
-                <Icon name="trash" size={13} /> Delete edge
-              </button>
-            </div>
-          </aside>
+              </Field>
+              <Field label="Max speed (m/s)">
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  className={controlClass()}
+                  value={selectedEdge.maxSpeed ?? ''}
+                  placeholder="—"
+                  onChange={(event) =>
+                    patchEdge(selectedEdge.id, { maxSpeed: event.target.value === '' ? null : Number(event.target.value) })
+                  }
+                />
+              </Field>
+            </FieldRow>
+            <Toggle label="Active" checked={selectedEdge.isActive} onChange={(isActive) => patchEdge(selectedEdge.id, { isActive })} />
+            <p className="text-xs text-muted">{selectedEdge.geometry.points.length} points on the path</p>
+          </Inspector>
         ) : null}
 
         {selectedZone ? (
-          <aside className="editor__panel editor__panel--zone">
-            <div className="editor__panel-head">
-              <span>{ZONE_TEMPLATES.find((item) => item.type === selectedZone.zoneType)?.title}</span>
-              <Icon name="list" size={14} />
-            </div>
-            <div className="zoneform">
-              <label>
-                <span>Name</span>
-                <input
-                  value={selectedZone.name}
-                  onChange={(event) => patchZone(selectedZone.id, { name: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>Type</span>
-                <select
-                  value={selectedZone.zoneType}
-                  onChange={(event) => patchZone(selectedZone.id, { zoneType: event.target.value as ZoneType })}
-                >
-                  {ZONE_TEMPLATES.map((item) => (
-                    <option key={item.type} value={item.type}>
-                      {item.type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="zoneform__row">
-                <label>
-                  <span>Capacity</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={selectedZone.capacity}
-                    onChange={(event) => patchZone(selectedZone.id, { capacity: Number(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  <span>Max speed (m/s)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={selectedZone.maxSpeed ?? ''}
-                    placeholder="—"
-                    onChange={(event) =>
-                      patchZone(selectedZone.id, {
-                        maxSpeed: event.target.value === '' ? null : Number(event.target.value),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-              <label className="zoneform__check">
-                <input
-                  type="checkbox"
-                  checked={selectedZone.isActive}
-                  onChange={(event) => patchZone(selectedZone.id, { isActive: event.target.checked })}
-                />
-                <span>Active</span>
-              </label>
-            </div>
-            <div className="editor__panel-foot">
-              <button
-                type="button"
-                className="btn btn--danger btn--block"
-                onClick={() => removeZone(selectedZone.id)}
+          <Inspector
+            title={ZONE_TEMPLATES.find((item) => item.type === selectedZone.zoneType)?.title ?? 'Zone'}
+            deleteLabel="Delete zone"
+            onDelete={() => removeZone(selectedZone.id)}
+          >
+            <Field label="Name">
+              <input
+                className={controlClass()}
+                value={selectedZone.name}
+                onChange={(event) => patchZone(selectedZone.id, { name: event.target.value })}
+              />
+            </Field>
+            <Field label="Type">
+              <select
+                className={controlClass()}
+                value={selectedZone.zoneType}
+                onChange={(event) => patchZone(selectedZone.id, { zoneType: event.target.value as ZoneType })}
               >
-                <Icon name="trash" size={13} /> Delete zone
-              </button>
-            </div>
-          </aside>
+                {ZONE_TEMPLATES.map((item) => (
+                  <option key={item.type} value={item.type}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <FieldRow>
+              <Field label="Capacity">
+                <input
+                  type="number"
+                  min={0}
+                  className={controlClass()}
+                  value={selectedZone.capacity}
+                  onChange={(event) => patchZone(selectedZone.id, { capacity: Number(event.target.value) })}
+                />
+              </Field>
+              <Field label="Max speed (m/s)">
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  className={controlClass()}
+                  value={selectedZone.maxSpeed ?? ''}
+                  placeholder="—"
+                  onChange={(event) =>
+                    patchZone(selectedZone.id, { maxSpeed: event.target.value === '' ? null : Number(event.target.value) })
+                  }
+                />
+              </Field>
+            </FieldRow>
+            <Toggle label="Active" checked={selectedZone.isActive} onChange={(isActive) => patchZone(selectedZone.id, { isActive })} />
+          </Inspector>
         ) : null}
       </div>
     </div>
+  )
+}
+
+// Panels float over the right edge of the canvas, this far from its border.
+const PANEL_GAP = 12
+const SIDE_PANEL = 'absolute top-3 right-3 bottom-3 z-12 flex flex-col overflow-hidden rounded-lg bg-surface shadow-float'
+// Widgets pinned to a map point keep their size while the map is zoomed.
+const ANCHOR = 'absolute size-0 origin-top-left scale-[calc(1/var(--z,1))]'
+
+function PickerHead({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <header className="flex min-h-8 items-center justify-between gap-3 px-3 pt-2 pb-3">
+      <h2 className="text-md font-book">{title}</h2>
+      {children}
+    </header>
+  )
+}
+
+function PickerHeading({ children }: { children: ReactNode }) {
+  return <h3 className="px-3 pt-4 pb-1 text-xs text-muted">{children}</h3>
+}
+
+function PickerItem({ title, note, onClick }: { title: string; note: string; onClick?: () => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        className="flex w-full flex-col items-start rounded-md px-3 py-2.5 text-left transition-colors duration-200 hover:bg-container-high"
+        onClick={onClick}
+      >
+        <strong className="font-medium">{title}</strong>
+        <span className="text-xs text-muted">{note}</span>
+      </button>
+    </li>
+  )
+}
+
+interface InspectorProps {
+  title: string
+  deleteLabel: string
+  onDelete: () => void
+  children: ReactNode
+}
+
+/** Properties of the selected Endpoint, Edge or Zone. */
+function Inspector({ title, deleteLabel, onDelete, children }: InspectorProps) {
+  return (
+    <aside className={SIDE_PANEL} style={{ width: INSPECTOR_WIDTH }}>
+      <h2 className="px-5 pt-5 pb-2 text-md font-book">{title}</h2>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-5 py-3">{children}</div>
+      <div className="px-5 pt-2 pb-5">
+        <Button variant="danger" block onClick={onDelete}>
+          <Icon name="trash" size={15} /> {deleteLabel}
+        </Button>
+      </div>
+    </aside>
+  )
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2.5 text-sm">
+      <input type="checkbox" className="size-4 accent-ink" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      {label}
+    </label>
   )
 }

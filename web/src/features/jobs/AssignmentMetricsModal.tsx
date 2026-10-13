@@ -1,6 +1,9 @@
+import { Modal } from '@/shared/ui/Dialog'
 import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { humanize } from '@/shared/lib/format'
 import { ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
+import { Table, Td, Th, Tr } from '@/shared/ui/Table'
 import type { DispatchDecision } from '@/shared/api/contracts'
 
 interface AssignmentMetricsModalProps {
@@ -14,64 +17,55 @@ interface AssignmentMetricsModalProps {
 // status and battery only, so no workload / distance / score columns are shown.
 export function AssignmentMetricsModal({ jobNo, decision, onClose }: AssignmentMetricsModalProps) {
   return (
-    <div className="modal" role="presentation" onClick={onClose}>
-      <div
-        className="modal__card"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="assign-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div>
-            <h2 id="assign-title">Robot Assignment</h2>
-            <p>Candidates evaluated by the dispatcher for {jobNo}</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close">
-            <Icon name="close" size={18} />
-          </button>
-        </header>
-
+    <Modal
+      title="Robot assignment"
+      subtitle={`Candidates the dispatcher evaluated for ${jobNo}`}
+      width="w-[640px]"
+      onClose={onClose}
+    >
+      <div className="px-6 pt-4 pb-6">
         {decision ? (
           <>
-            <table>
+            <Table>
               <thead>
                 <tr>
-                  <th>Robot</th>
-                  <th>Status</th>
-                  <th>Battery</th>
-                  <th>Result</th>
+                  <Th className="pl-0">Robot</Th>
+                  <Th>Status</Th>
+                  <Th align="right">Battery</Th>
+                  <Th align="right" className="pr-0">
+                    Result
+                  </Th>
                 </tr>
               </thead>
               <tbody>
                 {decision.candidates.map((row) => (
-                  <tr key={row.robotCode} className={row.selected ? 'is-assigned' : undefined}>
-                    <td>
-                      <strong>{row.robotCode}</strong>
-                    </td>
-                    <td>
+                  <Tr key={row.robotCode}>
+                    <Td tone="strong" className="pl-0">
+                      {row.robotCode}
+                    </Td>
+                    <Td>
                       <StatusBadge tone={ROBOT_STATUS_TONE[row.status]}>{row.status}</StatusBadge>
-                    </td>
-                    <td>{row.batteryPercent}%</td>
-                    <td className="modal__score">
+                    </Td>
+                    <Td align="right">{row.batteryPercent}%</Td>
+                    <Td align="right" className="pr-0">
                       {row.selected ? (
-                        <span className="modal__assigned">
-                          <Icon name="check" size={10} /> Selected
+                        <span className="inline-flex items-center gap-1.5 font-medium text-green-ink">
+                          <Icon name="check" size={14} strokeWidth={2.25} /> Selected
                         </span>
                       ) : (
                         '—'
                       )}
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 ))}
               </tbody>
-            </table>
-            <p className="modal__note">Decision type: {decision.type}</p>
+            </Table>
+            <p className="mt-4 text-xs text-muted">Decision type: {humanize(decision.type).toLowerCase()}</p>
           </>
         ) : (
-          <p className="modal__note">No dispatch decision has been recorded for this Job yet.</p>
+          <p className="text-sm text-muted">No dispatch decision has been recorded for this job yet.</p>
         )}
       </div>
-    </div>
+    </Modal>
   )
 }

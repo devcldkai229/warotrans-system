@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { Product, ProductCategory } from '@/shared/api/contracts'
+import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
-import { SectionHead } from './SectionHead'
+import { Field, FieldRow, FormError, SearchInput } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
+import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
+import { AddButton, SectionHead } from './SectionHead'
 
 interface ProductDraft {
   sku: string
@@ -88,8 +93,13 @@ export function ProductsSection({ products, setProducts, categories }: ProductsS
   return (
     <>
       <SectionHead title="Products" hint="The product master catalog. A Container always holds one product type.">
-        <input placeholder="Search SKU, name or barcode…" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+        <SearchInput className="w-72" placeholder="Search SKU, name or barcode" value={query} onChange={setQuery} />
+        <select
+          className={controlClass('pill')}
+          aria-label="Filter by category"
+          value={categoryFilter}
+          onChange={(event) => setCategoryFilter(event.target.value)}
+        >
           <option value="">All categories</option>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
@@ -97,99 +107,103 @@ export function ProductsSection({ products, setProducts, categories }: ProductsS
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn--blue" onClick={open}>
-          + Add product
-        </button>
+        <AddButton onClick={open}>Add product</AddButton>
       </SectionHead>
 
-      <table className="mtable">
+      <Table>
         <thead>
           <tr>
-            <th>SKU</th>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Category</th>
-            <th>Supplier barcode</th>
-            <th>Status</th>
-            <th className="is-right">Actions</th>
+            <Th>SKU</Th>
+            <Th>Name</Th>
+            <Th>Description</Th>
+            <Th>Category</Th>
+            <Th>Supplier barcode</Th>
+            <Th>Status</Th>
+            <Th align="right">Actions</Th>
           </tr>
         </thead>
         <tbody>
           {visible.map((product) => (
-            <tr key={product.id}>
-              <td>{product.sku}</td>
-              <td className="is-strong">{product.name}</td>
-              <td className="is-faint">{product.description ?? '—'}</td>
-              <td>{categoryName(product.categoryId)}</td>
-              <td className="is-faint">{product.supplierBarcode ?? '—'}</td>
-              <td>
-                <span className={`mpill mpill--${product.isActive ? 'green' : 'grey'}`}>
+            <Tr key={product.id}>
+              <Td className="font-mono text-xs">{product.sku}</Td>
+              <Td tone="strong">{product.name}</Td>
+              <Td tone="faint">{product.description ?? '—'}</Td>
+              <Td>{categoryName(product.categoryId)}</Td>
+              <Td tone="faint" className="font-mono text-xs">
+                {product.supplierBarcode ?? '—'}
+              </Td>
+              <Td>
+                <StatusBadge tone={product.isActive ? 'green' : 'grey'} withDot>
                   {product.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </td>
-              <td>
-                <div className="mrow-actions">
-                  <button
-                    type="button"
-                    className={`mbtn ${product.isActive ? 'mbtn--danger' : 'mbtn--ok'}`}
-                    onClick={() => toggle(product.id)}
-                  >
+                </StatusBadge>
+              </Td>
+              <Td>
+                <div className="flex justify-end">
+                  <Button size="sm" variant={product.isActive ? 'ghost' : 'tonal'} onClick={() => toggle(product.id)}>
                     {product.isActive ? 'Deactivate' : 'Activate'}
-                  </button>
+                  </Button>
                 </div>
-              </td>
-            </tr>
+              </Td>
+            </Tr>
           ))}
-          {visible.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="mtable__empty">
-                No products match the filter
-              </td>
-            </tr>
-          ) : null}
+          {visible.length === 0 ? <EmptyRow colSpan={7}>No products match this filter.</EmptyRow> : null}
         </tbody>
-      </table>
+      </Table>
 
       {draft ? (
         <Dialog title="Add product" submitLabel="Create product" onClose={() => setDraft(null)} onSubmit={save}>
-          <div className="field-row">
-            <label className="field">
-              SKU
-              <input value={draft.sku} maxLength={100} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} autoFocus />
-            </label>
-            <label className="field">
-              Category
-              <select value={draft.categoryId} onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}>
+          <FieldRow>
+            <Field label="SKU">
+              <input
+                className={controlClass()}
+                value={draft.sku}
+                maxLength={100}
+                onChange={(event) => setDraft({ ...draft, sku: event.target.value })}
+                autoFocus
+              />
+            </Field>
+            <Field label="Category">
+              <select
+                className={controlClass()}
+                value={draft.categoryId}
+                onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}
+              >
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
                 ))}
               </select>
-            </label>
-          </div>
-          <label className="field">
-            Name
-            <input value={draft.name} maxLength={200} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-          </label>
-          <label className="field">
-            Supplier barcode
+            </Field>
+          </FieldRow>
+          <Field label="Name">
             <input
+              className={controlClass()}
+              value={draft.name}
+              maxLength={200}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+            />
+          </Field>
+          <Field
+            label="Supplier barcode"
+            hint="Scanned on the supplier package to identify the product when receiving. Must be unique."
+          >
+            <input
+              className={controlClass()}
               value={draft.supplierBarcode}
               maxLength={128}
               onChange={(event) => setDraft({ ...draft, supplierBarcode: event.target.value })}
             />
-            <small>Scanned on the supplier package to identify the product when receiving. Must be unique.</small>
-          </label>
-          <label className="field">
-            Description
+          </Field>
+          <Field label="Description">
             <textarea
+              className={controlClass('area')}
               value={draft.description}
               maxLength={500}
               onChange={(event) => setDraft({ ...draft, description: event.target.value })}
             />
-          </label>
-          {error ? <small className="field" style={{ color: 'var(--red-ink)' }}>{error}</small> : null}
+          </Field>
+          {error ? <FormError>{error}</FormError> : null}
         </Dialog>
       ) : null}
     </>

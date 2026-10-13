@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
+import { cx } from '@/shared/lib/cx'
+import { Button, IconButton } from '@/shared/ui/Button'
+import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
+import { Meter } from '@/shared/ui/Meter'
+import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
 import { REQUEST_STATUS_TONE } from '@/shared/ui/statusTones'
-import { formatDuration, secondsBetween } from '@/shared/lib/format'
+import { formatDuration, secondsBetween, humanize } from '@/shared/lib/format'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { findEndpointByName } from '@/shared/map/scene'
 import { ROBOTS } from '../robots/mock'
@@ -12,8 +17,6 @@ import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
 import { RequestDetailPanel } from './RequestDetailPanel'
 import { TRANSPORT_REQUESTS } from './mock'
-import '../jobs/jobs.css'
-import './transport-requests.css'
 
 function RequestCard({
   request,
@@ -27,41 +30,42 @@ function RequestCard({
   const progress = detailProgress(request)
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
   const canCancel = request.availableActions.includes('CANCEL')
+  const facts = [
+    { label: 'Route', value: routeSummary(request) },
+    { label: 'Containers', value: request.details.length },
+    { label: 'Jobs', value: request.jobs.length === 0 ? '—' : request.jobs.length },
+  ]
 
   return (
-    <article className={`jcard rcard${selected ? ' is-selected' : ''}`} onClick={onSelect}>
-      <header>
-        <span className="jcard__no mono">{request.requestCode}</span>
-        <span className={`badge badge--${REQUEST_STATUS_TONE[request.status]}`}>{request.status}</span>
+    <article
+      className={cx(
+        'cursor-pointer rounded-md bg-surface p-4 transition-shadow duration-200',
+        selected ? 'ring-2 ring-ink' : 'hover:shadow-float',
+      )}
+      onClick={onSelect}
+    >
+      <header className="flex items-center justify-between gap-2">
+        <span className="font-mono text-xs font-medium">{request.requestCode}</span>
+        <StatusBadge tone={REQUEST_STATUS_TONE[request.status]}>{request.status}</StatusBadge>
       </header>
-      <dl>
-        <div>
-          <dt>Route:</dt>
-          <dd>{routeSummary(request)}</dd>
-        </div>
-        <div>
-          <dt>Containers:</dt>
-          <dd>
-            <Icon name="box" size={12} /> {request.details.length}
-          </dd>
-        </div>
-        <div>
-          <dt>Jobs:</dt>
-          <dd>{request.jobs.length === 0 ? '—' : request.jobs.length}</dd>
-        </div>
+      <dl className="mt-3 flex flex-col gap-1 text-xs">
+        {facts.map((fact) => (
+          <div key={fact.label} className="flex justify-between gap-4">
+            <dt className="text-muted">{fact.label}</dt>
+            <dd className="truncate">{fact.value}</dd>
+          </div>
+        ))}
       </dl>
-      <div className="jcard__bar">
-        <i style={{ width: `${progress.percent}%` }} />
-      </div>
-      <footer>
-        <small>
-          {progress.done}/{progress.total} done · {elapsed === null ? '—' : formatDuration(elapsed)}
-        </small>
+      <Meter percent={progress.percent} tone="blue" className="mt-3" />
+      <footer className="mt-3 flex min-h-8 items-center justify-between gap-2">
+        <span className="text-xs text-muted">
+          {progress.done} of {progress.total} delivered{elapsed === null ? '' : `, ${formatDuration(elapsed)}`}
+        </span>
         {canCancel ? (
           <span onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="jcard__mini jcard__mini--danger">
+            <Button variant="danger" size="sm">
               Cancel
-            </button>
+            </Button>
           </span>
         ) : null}
       </footer>
@@ -128,8 +132,8 @@ export function TransportRequestsPage() {
               y: robot.poseY,
               tone: job.status === 'RECOVERY_REQUIRED' ? ('danger' as const) : ('dark' as const),
               lines: [
-                `${request.requestCode} · ${job.status}`,
-                `${job.jobNo} · ${job.robotCode} · ${robot.batteryPercent}%`,
+                `${request.requestCode}: ${humanize(job.status).toLowerCase()}`,
+                `${job.jobNo}, ${job.robotCode}, ${robot.batteryPercent}% battery`,
               ],
             },
           ]
@@ -167,53 +171,52 @@ export function TransportRequestsPage() {
   }
 
   return (
-    <div className="jobs">
-      <aside className="jobs__panel">
-        <header className="jobs__title">
-          <h2>
-            <Icon name="layers" size={14} /> TRANSPORT REQUESTS
-          </h2>
-          <span className="mono">Total: {TRANSPORT_REQUESTS.length}</span>
+    <div className="grid h-full grid-cols-[400px_minmax(0,1fr)] gap-3 px-3 pb-3">
+      <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">
+        <header className="flex items-center gap-3 px-5 pt-5">
+          <h1 className="text-xl font-book whitespace-nowrap">Transport requests</h1>
+          <span className="text-sm text-muted">{TRANSPORT_REQUESTS.length}</span>
+          <Button variant="primary" size="sm" className="ml-auto">
+            <Icon name="plus" size={14} /> New request
+          </Button>
         </header>
 
-        <div className="jobs__cta rcta">
-          <button type="button" className="btn btn--primary">
-            <Icon name="plus" size={14} /> New Request
-          </button>
+        <div className="flex items-center gap-1.5 px-4 py-3">
+          <SearchInput
+            tone="surface"
+            className="flex-1"
+            placeholder="Search request code or container"
+            value={query}
+            onChange={setQuery}
+          />
+          <IconButton tone="surface" aria-label="Filter">
+            <Icon name="filter" size={15} />
+          </IconButton>
+          <IconButton tone="surface" aria-label="Sort">
+            <Icon name="sort" size={15} />
+          </IconButton>
         </div>
 
-        <div className="jobs__search">
-          <label>
-            <Icon name="search" size={14} />
-            <input
-              placeholder="Search REQ-YYYYMMDD-XXXXXX or container..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <button type="button" aria-label="Filter">
-            <Icon name="filter" size={14} />
-          </button>
-          <button type="button" aria-label="Sort">
-            <Icon name="sort" size={14} />
-          </button>
-        </div>
-
-        <div className="jobs__groups">
+        <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
           {REQUEST_STATUS_GROUPS.map((status) => {
             const requests = grouped.get(status) ?? []
             const expanded = open.has(status)
             return (
-              <section key={status} className={`jgroup jgroup--${REQUEST_STATUS_TONE[status]}`}>
-                <button type="button" className="jgroup__head" onClick={() => toggle(status)}>
-                  <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={12} />
-                  <span className="dot" />
-                  <strong>{status}</strong>
-                  <span className="jgroup__count">{requests.length}</span>
+              <section key={status}>
+                <button
+                  type="button"
+                  className="flex h-10 w-full items-center gap-2.5 rounded-full px-3 text-left text-sm transition-colors duration-200 hover:bg-surface"
+                  aria-expanded={expanded}
+                  onClick={() => toggle(status)}
+                >
+                  <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
+                  <ToneDot tone={REQUEST_STATUS_TONE[status]} />
+                  <span className="flex-1 font-medium">{humanize(status)}</span>
+                  <span className="text-xs text-muted tabular-nums">{requests.length}</span>
                 </button>
                 {expanded ? (
-                  <div className="jgroup__body">
-                    {requests.length === 0 ? <p className="jgroup__empty">No requests</p> : null}
+                  <div className="flex flex-col gap-2 px-2 pt-1 pb-3">
+                    {requests.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No requests</p> : null}
                     {requests.map((request) => (
                       <RequestCard
                         key={request.id}
@@ -230,50 +233,54 @@ export function TransportRequestsPage() {
         </div>
       </aside>
 
-      <section className="jobs__map">
+      <section className="relative min-w-0 overflow-hidden rounded-lg bg-container">
+        <WarehouseMap
+          robots={mapRobots}
+          layers={{ occupancy: true }}
+          labels="focus"
+          focusEndpointIds={mapView.focusEndpointIds}
+          focusRobotCodes={mapView.focusRobotCodes}
+          movements={mapView.movements}
+          callouts={mapView.callouts}
+        />
+
         {selected ? (
-          <div className={`rdrawers${collapsed ? ' is-collapsed' : ''}`}>
-            <RequestDetailPanel
-              request={selected}
-              selectedJobNo={selectedJobNo}
-              onSelectJob={(jobNo) => setSelectedJobNo(jobNo === selectedJobNo ? null : jobNo)}
-              onClose={() => selectRequest(selected.id)}
-            />
-            {selectedJob ? (
-              <JobSummaryPanel
-                jobRef={selectedJob}
-                onClose={() => setSelectedJobNo(null)}
-                onOpenFull={() => navigate(`/monitor/jobs/${selectedJob.jobNo}`)}
-              />
-            ) : null}
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex gap-3 p-3">
+            {collapsed ? null : (
+              <>
+                <RequestDetailPanel
+                  request={selected}
+                  selectedJobNo={selectedJobNo}
+                  onSelectJob={(jobNo) => setSelectedJobNo(jobNo === selectedJobNo ? null : jobNo)}
+                  onClose={() => selectRequest(selected.id)}
+                />
+                {selectedJob ? (
+                  <JobSummaryPanel
+                    jobRef={selectedJob}
+                    onClose={() => setSelectedJobNo(null)}
+                    onOpenFull={() => navigate(`/monitor/jobs/${selectedJob.jobNo}`)}
+                  />
+                ) : null}
+              </>
+            )}
             <button
               type="button"
-              className="rdrawers__handle"
+              className="pointer-events-auto grid h-14 w-7 place-items-center self-center rounded-full bg-surface text-ink-2 shadow-float transition-colors duration-200 hover:text-ink"
               aria-label={collapsed ? 'Show panels' : 'Hide panels'}
               title={collapsed ? 'Show panels' : 'Hide panels'}
               onClick={() => setCollapsed(!collapsed)}
             >
-              {collapsed ? '»' : '«'}
+              <Icon name="chevronRight" size={14} className={collapsed ? undefined : 'rotate-180'} />
             </button>
           </div>
         ) : null}
-        <div className="jobs__mapfill">
-          <WarehouseMap
-            robots={mapRobots}
-            layers={{ occupancy: true }}
-            labels="focus"
-            focusEndpointIds={mapView.focusEndpointIds}
-            focusRobotCodes={mapView.focusRobotCodes}
-            movements={mapView.movements}
-            callouts={mapView.callouts}
-          />
-        </div>
 
-        <footer className="jobs__legend">
-          <button type="button" className="jobs__estop">
-            <Icon name="bolt" size={12} /> Facility E-Stop
-          </button>
-        </footer>
+        <button
+          type="button"
+          className="absolute top-3 right-3 z-5 inline-flex h-9 items-center gap-2 rounded-full bg-red px-4 text-sm font-medium text-white shadow-float transition-colors duration-200 hover:bg-red-ink"
+        >
+          <Icon name="bolt" size={15} /> Facility E-stop
+        </button>
       </section>
     </div>
   )

@@ -17,6 +17,7 @@ import {
   ShieldAlert,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 
 function PulsingBeaconDot() {
   const pingAnim = useRef(new Animated.Value(0)).current;
@@ -34,14 +35,6 @@ function PulsingBeaconDot() {
     return () => loop.stop();
   }, [pingAnim]);
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.beaconContainer}>
-        <View style={[styles.beaconPing, { animation: 'ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite' } as any]} />
-        <View style={styles.beaconCore} />
-      </View>
-    );
-  }
 
   const scale = pingAnim.interpolate({
     inputRange: [0, 1],
@@ -247,7 +240,7 @@ const styles = StyleSheet.create({
   },
   incidentBadgeText: {
     fontSize: 9,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '900',
     color: '#dc2626',
   },
@@ -312,7 +305,7 @@ const styles = StyleSheet.create({
   },
   incidentLocation: {
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '700',
     color: '#b91c1c',
   },

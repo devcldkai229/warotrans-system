@@ -82,3 +82,13 @@ export const CONTAINER_STATUS_TONE: Record<ContainerStatus, Tone> = {
   EMPTY: 'grey',
   OUT_OF_SERVICE: 'red',
 }
+
+/** Solid tone, for dots and progress bars. */
+export const TONE_SOLID: Record<Tone, string> = {
+  green: 'bg-green',
+  blue: 'bg-blue',
+  amber: 'bg-amber',
+  red: 'bg-red',
+  purple: 'bg-purple',
+  grey: 'bg-container-highest',
+}

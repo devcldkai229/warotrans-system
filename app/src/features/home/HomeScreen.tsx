@@ -166,7 +166,10 @@ export function HomeScreen() {
         />
 
         {/* 2. Interactive 2-Stage Bottom Sheet (Grab/Uber style with swipe up/down) */}
-        <View style={styles.bottomSheet} {...panResponder.panHandlers}>
+        <View
+          style={[styles.bottomSheet, !sheetExpanded && styles.bottomSheetCollapsed]}
+          {...panResponder.panHandlers}
+        >
           {/* Handle Bar & Sheet Header Toggle */}
           <Pressable
             onPress={() => toggleSheet()}
@@ -406,7 +409,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: Platform.select({ ios: 80, default: 72 }),
   },
   scrollContentCollapsed: {
     flexGrow: 1,
@@ -415,10 +418,10 @@ const styles = StyleSheet.create({
   },
   mapCollapsed: {
     flex: 1,
-    minHeight: 380,
+    minHeight: 360,
   },
   mapExpanded: {
-    height: 280,
+    height: 250,
   },
   bottomSheet: {
     marginTop: -14,
@@ -433,6 +436,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     zIndex: 30,
+    paddingBottom: 0,
+  },
+  bottomSheetCollapsed: {
+    paddingBottom: Platform.select({ ios: 78, default: 70 }),
   },
   sheetHandleArea: {
     alignItems: 'center',
@@ -552,7 +559,7 @@ const styles = StyleSheet.create({
   },
   slotDetailsText: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 2,
     fontFamily: typography.fontSans,

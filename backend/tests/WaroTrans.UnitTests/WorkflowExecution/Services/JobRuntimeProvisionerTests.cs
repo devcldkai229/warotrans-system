@@ -396,4 +396,39 @@ public class JobRuntimeProvisionerTests
             Guid.NewGuid(),
             dest,
             2);
+
+    private sealed class FakeJobCodeGenerator : IBusinessCodeGenerator
+    {
+        private int _n;
+
+        public Task<string> NextWarehouseCodeAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult("WH");
+
+        public Task<string> NextCategoryCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
+            Task.FromResult("CAT");
+
+        public Task<string> NextSkuCodeAsync(string prefix, CancellationToken cancellationToken = default) =>
+            Task.FromResult("SKU");
+
+        public Task<string> NextMapVersionCodeAsync(string warehouseCode, int versionNo, CancellationToken cancellationToken = default) =>
+            Task.FromResult("MAP");
+
+        public Task<string> NextEndpointCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
+            Task.FromResult("EP");
+
+        public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult("EDGE");
+
+        public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult("RBT");
+
+        public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult("CTN");
+
+        public Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult("REQ");
+
+        public Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult($"JOB-TEST-{Interlocked.Increment(ref _n):D4}");
+    }
 }

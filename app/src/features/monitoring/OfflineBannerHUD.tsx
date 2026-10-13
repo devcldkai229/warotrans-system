@@ -179,9 +179,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#f59e0b',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 48 : 12,
+    paddingTop: Platform.select({ android: 12, default: 48 }),
     paddingBottom: 12,
-    minHeight: Platform.OS === 'ios' ? 96 : 56,
+    minHeight: Platform.select({ android: 56, default: 96 }),
     ...shadows.panel,
   },
   bannerLeft: {

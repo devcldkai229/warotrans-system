@@ -354,14 +354,6 @@ export function AppHeader({
           </View>
         );
 
-        if (Platform.OS === 'web') {
-          return (
-            <View style={styles.webLogoutAbsoluteOverlay} pointerEvents="auto">
-              {modalBody}
-            </View>
-          );
-        }
-
         return (
           <Modal
             visible={isLogoutModalOpen}
@@ -382,13 +374,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingTop: Platform.OS === 'ios' ? 48 : 12,
+    paddingTop: Platform.select({ android: 12, default: 48 }),
     paddingBottom: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 40,
+    zIndex: 80,
     elevation: 2,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
@@ -442,7 +434,7 @@ const styles = StyleSheet.create({
   },
   zoneDropdownMenu: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 92 : 56,
+    top: Platform.select({ android: 56, default: 92 }),
     left: 16,
     width: 250,
     backgroundColor: '#ffffff',
@@ -551,7 +543,7 @@ const styles = StyleSheet.create({
   },
   notifDropdownMenu: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 92 : 56,
+    top: Platform.select({ android: 56, default: 92 }),
     right: 12,
     width: 288,
     backgroundColor: '#ffffff',
@@ -631,7 +623,7 @@ const styles = StyleSheet.create({
   },
   avatarDropdownMenu: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 92 : 56,
+    top: Platform.select({ android: 56, default: 92 }),
     right: 12,
     width: 224,
     backgroundColor: '#ffffff',
@@ -686,14 +678,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.danger,
-  },
-  webLogoutAbsoluteOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: -1000,
-    zIndex: 999,
   },
   logoutModalOverlay: {
     flex: 1,
