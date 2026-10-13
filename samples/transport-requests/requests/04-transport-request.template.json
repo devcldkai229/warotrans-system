@@ -1,0 +1,27 @@
+{
+  "warehouseId": "11111111-1111-1111-1111-111111111111",
+  "mapVersionId": "{{MAP_VERSION_ID}}",
+  "workflowId": "{{WORKFLOW_ID}}",
+  "workflowInputs": {},
+  "note": "Chuyển 3 container từ kệ A sang D, E, F",
+  "details": [
+    {
+      "sequenceNo": 1,
+      "containerId": "c1000000-0000-4000-8000-000000000001",
+      "sourceEndpointId": "{{EP_A}}",
+      "destinationEndpointId": "{{EP_D}}"
+    },
+    {
+      "sequenceNo": 2,
+      "containerId": "c2000000-0000-4000-8000-000000000002",
+      "sourceEndpointId": "{{EP_A}}",
+      "destinationEndpointId": "{{EP_E}}"
+    },
+    {
+      "sequenceNo": 3,
+      "containerId": "c3000000-0000-4000-8000-000000000003",
+      "sourceEndpointId": "{{EP_A}}",
+      "destinationEndpointId": "{{EP_F}}"
+    }
+  ]
+}

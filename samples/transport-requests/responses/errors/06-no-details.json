@@ -1,0 +1,27 @@
+{
+  "case": "Khong co Detail nao",
+  "expectedStatus": 400,
+  "expectedCode": "validation_failed",
+  "request": {
+    "warehouseId": "11111111-1111-1111-1111-111111111111",
+    "mapVersionId": "52bba2c6-52d9-41f0-acbd-74c1d9b2a3b9",
+    "workflowId": "15a7f3f5-cdfb-4fc3-a896-37dc1d9d5ccf",
+    "workflowInputs": {},
+    "note": "Chuyển 3 container từ kệ A sang D, E, F",
+    "details": []
+  },
+  "response": {
+    "title": "validation_failed",
+    "status": 400,
+    "detail": "At least one Detail is required.",
+    "instance": "/api/transportation/transport-requests",
+    "code": "validation_failed",
+    "traceId": "0HNP8VM44OR3L:00000018",
+    "errors": [
+      {
+        "path": "Details",
+        "message": "At least one Detail is required."
+      }
+    ]
+  }
+}

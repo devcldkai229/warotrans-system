@@ -1,0 +1,21 @@
+       job_no        | task |         scope         | stop_action | stop_endpoint |    container    |  current_movement  |                   steps                   
+---------------------+------+-----------------------+-------------+---------------+-----------------+--------------------+-------------------------------------------
+ JOB-20261013-000003 |    1 | ONCE_PER_JOB          |             |               |                 |                    | CHECK_READY, CHECK_BATTERY, CHECK_REQUEST
+ JOB-20261013-000003 |    2 | ONCE_PER_STOP         | PICKUP      | EP-KE-A       |                 |                    | CHECK_SOURCE_ENDPOINT, MOVE_PICKUP
+ JOB-20261013-000003 |    3 | PER_CONTAINER_AT_STOP | PICKUP      | EP-KE-A       | CTN-DEMO-000001 | EP-KE-A -> EP-KE-D | PICKUP_CONFIRM
+ JOB-20261013-000003 |    4 | PER_CONTAINER_AT_STOP | PICKUP      | EP-KE-A       | CTN-DEMO-000002 | EP-KE-A -> EP-KE-E | PICKUP_CONFIRM
+ JOB-20261013-000003 |    5 | PER_CONTAINER_AT_STOP | PICKUP      | EP-KE-A       | CTN-DEMO-000003 | EP-KE-A -> EP-KE-F | PICKUP_CONFIRM
+ JOB-20261013-000003 |    6 | ONCE_PER_STOP         | DROPOFF     | EP-KE-D       |                 |                    | CHECK_DEST_ENDPOINT, MOVE_DROPOFF
+ JOB-20261013-000003 |    7 | PER_CONTAINER_AT_STOP | DROPOFF     | EP-KE-D       | CTN-DEMO-000001 | EP-KE-A -> EP-KE-D | DROPOFF_CONFIRM
+ JOB-20261013-000003 |    8 | ONCE_PER_STOP         | DROPOFF     | EP-KE-E       |                 |                    | CHECK_DEST_ENDPOINT, MOVE_DROPOFF
+ JOB-20261013-000003 |    9 | PER_CONTAINER_AT_STOP | DROPOFF     | EP-KE-E       | CTN-DEMO-000002 | EP-KE-A -> EP-KE-E | DROPOFF_CONFIRM
+ JOB-20261013-000003 |   10 | ONCE_PER_STOP         | DROPOFF     | EP-KE-F       |                 |                    | CHECK_DEST_ENDPOINT, MOVE_DROPOFF
+ JOB-20261013-000003 |   11 | PER_CONTAINER_AT_STOP | DROPOFF     | EP-KE-F       | CTN-DEMO-000003 | EP-KE-A -> EP-KE-F | DROPOFF_CONFIRM
+(11 rows)
+
+       job_no        | status  |              provisioning_key              | sequence_no |     barcode     | job_container_status 
+---------------------+---------+--------------------------------------------+-------------+-----------------+----------------------
+ JOB-20261013-000003 | CREATED | a6c926c0ab6348a9a25c20bee4494573:BATCH-001 |           1 | CTN-DEMO-000001 | PENDING
+ JOB-20261013-000003 | CREATED | a6c926c0ab6348a9a25c20bee4494573:BATCH-001 |           2 | CTN-DEMO-000002 | PENDING
+ JOB-20261013-000003 | CREATED | a6c926c0ab6348a9a25c20bee4494573:BATCH-001 |           3 | CTN-DEMO-000003 | PENDING
+(3 rows)
