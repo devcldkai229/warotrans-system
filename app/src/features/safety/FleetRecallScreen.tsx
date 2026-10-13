@@ -25,7 +25,7 @@ export function FleetRecallScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-11-MAINT · STATUS NOTICE"
+        label="SCR-STF-11-MAINT"
         title="Fleet Status Notice"
         onBack={goBack}
       />
@@ -34,7 +34,7 @@ export function FleetRecallScreen() {
         {/* Admin Exclusive Authority Notice Card */}
         <View style={styles.warningCard}>
           <View style={styles.warningIconWrap}>
-            <Lock size={22} color={colors.warning} />
+            <Lock size={22} color="#b45309" />
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.badgeRow}>
@@ -139,22 +139,23 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   warningCard: {
-    backgroundColor: colors.warningSoft,
-    borderWidth: 1.5,
-    borderColor: colors.warningBorder,
+    backgroundColor: 'rgba(254, 243, 199, 0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
     borderRadius: 14,
-    padding: 14,
+    padding: 16,
     flexDirection: 'row',
     gap: 12,
     ...shadows.panel,
   },
   warningIconWrap: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fef3c7',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
   },
   badgeRow: {
     flexDirection: 'row',

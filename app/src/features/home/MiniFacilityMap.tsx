@@ -37,6 +37,7 @@ interface MiniFacilityMapProps {
   onLocateUser: () => void;
   onSearch?: () => void;
   robots: MapRobot[];
+  style?: any;
 }
 
 /**
@@ -44,91 +45,49 @@ interface MiniFacilityMapProps {
  * Matches prototype `animate-ping` / radar wave radiation effect
  */
 function RobotSelectionRadarWave({ isSelected }: { isSelected: boolean }) {
-  const waveAnim1 = useRef(new Animated.Value(0)).current;
-  const waveAnim2 = useRef(new Animated.Value(0)).current;
+  const waveAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!isSelected) {
-      waveAnim1.setValue(0);
-      waveAnim2.setValue(0);
+      waveAnim.setValue(0);
       return;
     }
-    const a1 = Animated.loop(
-      Animated.timing(waveAnim1, {
+    const a = Animated.loop(
+      Animated.timing(waveAnim, {
         toValue: 1,
-        duration: 1500,
+        duration: 1200,
         easing: Easing.out(Easing.ease),
         useNativeDriver: Platform.OS !== 'web',
       })
     );
-    const a2 = Animated.loop(
-      Animated.sequence([
-        Animated.delay(750),
-        Animated.timing(waveAnim2, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: Platform.OS !== 'web',
-        }),
-      ])
-    );
-    a1.start();
-    a2.start();
-    return () => {
-      a1.stop();
-      a2.stop();
-    };
-  }, [isSelected, waveAnim1, waveAnim2]);
+    a.start();
+    return () => a.stop();
+  }, [isSelected, waveAnim]);
 
   if (!isSelected) {
     return <View style={styles.robotPulseDefault} />;
   }
 
-  const scale1 = waveAnim1.interpolate({
+  const scale = waveAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 2.3],
   });
-  const opacity1 = waveAnim1.interpolate({
-    inputRange: [0, 0.7, 1],
-    outputRange: [0.85, 0.35, 0],
-  });
-
-  const scale2 = waveAnim2.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 2.3],
-  });
-  const opacity2 = waveAnim2.interpolate({
+  const opacity = waveAnim.interpolate({
     inputRange: [0, 0.7, 1],
     outputRange: [0.85, 0.35, 0],
   });
 
   return (
-    <>
-      {/* Animated radiating wave ring 1 */}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.robotPulseWave,
-          {
-            transform: [{ scale: scale1 }],
-            opacity: opacity1,
-          },
-        ]}
-      />
-      {/* Interleaved radiating wave ring 2 */}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.robotPulseWave,
-          {
-            transform: [{ scale: scale2 }],
-            opacity: opacity2,
-          },
-        ]}
-      />
-      {/* Static active halo ring */}
-      <View style={styles.robotActiveHalo} pointerEvents="none" />
-    </>
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.robotPulseWave,
+        {
+          transform: [{ scale }],
+          opacity,
+        },
+      ]}
+    />
   );
 }
 
@@ -139,6 +98,7 @@ export function MiniFacilityMap({
   onLocateUser,
   onSearch,
   robots,
+  style,
 }: MiniFacilityMapProps) {
   const [isLocating, setIsLocating] = useState(false);
   const spinAnim = useRef(new Animated.Value(0)).current;
@@ -168,12 +128,12 @@ export function MiniFacilityMap({
       return { left: '22%', top: '84%', name: 'Dock 01' };
     }
     if (currentZone.includes('Zone B')) {
-      return { left: '76%', top: '38%', name: 'Zone B' };
+      return { left: '60%', top: '34%', name: 'Zone B' };
     }
     if (currentZone.includes('Outbound') || currentZone.includes('Shipping') || currentZone.includes('Dock 04')) {
       return { left: '78%', top: '84%', name: 'Dock Out' };
     }
-    return { left: '24%', top: '38%', name: 'Zone A' };
+    return { left: '24%', top: '30%', name: 'Zone A' };
   };
 
   const workerPos = getWorkerPosition();
@@ -188,20 +148,20 @@ export function MiniFacilityMap({
   const isWeb = Platform.OS === 'web';
 
   return (
-    <View style={styles.mapContainer}>
-      {/* 1. Blueprint Grid Background via SVG Pattern */}
-      <Svg style={StyleSheet.absoluteFill}>
+    <View style={[styles.mapContainer, style]}>
+      {/* 1. Blueprint Grid Background (Active across Mobile and Web) */}
+      <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
         <Defs>
-          <Pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <Line x1="0" y1="0" x2="24" y2="0" stroke="#bae6fd" strokeWidth="1" strokeOpacity="0.75" />
-            <Line x1="0" y1="0" x2="0" y2="24" stroke="#bae6fd" strokeWidth="1" strokeOpacity="0.75" />
+          <Pattern id="facility-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <Line x1="0" y1="0" x2="24" y2="0" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
+            <Line x1="0" y1="0" x2="0" y2="24" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
           </Pattern>
         </Defs>
-        <Rect width="100%" height="100%" fill="url(#grid)" />
+        <Rect width="100%" height="100%" fill="url(#facility-grid)" />
       </Svg>
 
       {/* 2. Concentric Sonar Radar Rings */}
-      <View style={styles.sonarCenter}>
+      <View style={styles.sonarCenter} pointerEvents="none">
         <View style={[styles.sonarRing, styles.ringLarge]} />
         <View style={[styles.sonarRing, styles.ringMedium]} />
         <View style={[styles.sonarRing, styles.ringSmall]} />
@@ -216,7 +176,7 @@ export function MiniFacilityMap({
             transform: [{ rotate: spin }],
           },
           isWeb ? ({
-            backgroundImage: 'conic-gradient(from 0deg, transparent 65%, rgba(0, 92, 209, 0.22) 100%)',
+            backgroundImage: 'conic-gradient(from 0deg, transparent 65%, rgba(0, 92, 209, 0.18) 100%)',
           } as any) : undefined,
         ]}
       />
@@ -301,19 +261,11 @@ export function MiniFacilityMap({
         </View>
       </View>
 
-      {/* 9. Dynamic Nav2 Trajectory Wayline */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Line
-          x1="38%"
-          y1="44%"
-          x2="22%"
-          y2="84%"
-          stroke="#005cd1"
-          strokeWidth="2"
-          strokeDasharray="4,4"
-          strokeOpacity="0.45"
-        />
-      </Svg>
+      {/* 9. Dynamic Nav2 Trajectory Wayline (Matches prototype line 928) */}
+      <View
+        pointerEvents="none"
+        style={styles.trajectoryStrip}
+      />
 
       {/* 10. Dynamic Worker Position Marker */}
       <View
@@ -373,7 +325,7 @@ export function MiniFacilityMap({
                   styles.directionalSonarCone,
                   {
                     transform: [{ rotate: `${robot.headingDeg - 45}deg` }],
-                    backgroundImage: 'conic-gradient(from 0deg, transparent 75%, rgba(0, 92, 209, 0.40) 100%)',
+                    backgroundImage: 'conic-gradient(from 0deg, transparent 75%, rgba(2, 132, 199, 0.40) 100%)',
                   } as any,
                 ]}
               />
@@ -392,21 +344,17 @@ export function MiniFacilityMap({
             >
               <View
                 style={{
-                  width: 20,
-                  height: 20,
+                  width: 24,
+                  height: 24,
                   alignItems: 'center',
                   justifyContent: 'center',
                   transform: [{ rotate: `${robot.headingDeg}deg` }],
                 }}
               >
                 <Navigation
-                  size={17}
+                  size={18}
                   color="#ffffff"
                   fill="#ffffff"
-                  style={{
-                    marginLeft: -1.5,
-                    marginTop: 1.5,
-                  }}
                 />
               </View>
             </View>
@@ -432,18 +380,18 @@ export function MiniFacilityMap({
 
 const styles = StyleSheet.create({
   mapContainer: {
-    height: 400,
-    backgroundColor: '#e0f2fe', // Blueprint paper background
+    flex: 1,
+    minHeight: 340,
+    backgroundColor: colors.mapBackground, // High-contrast blueprint cyan (#e0f2fe)
     position: 'relative',
     overflow: 'hidden',
   },
   sonarCenter: {
     position: 'absolute',
     left: '50%',
-    top: '52%',
+    top: '48%',
     alignItems: 'center',
     justifyContent: 'center',
-    pointerEvents: 'none',
   },
   sonarRing: {
     position: 'absolute',
@@ -452,28 +400,28 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 92, 209, 0.12)',
   },
   ringLarge: {
-    width: 380,
-    height: 380,
+    width: 320,
+    height: 320,
   },
   ringMedium: {
-    width: 250,
-    height: 250,
+    width: 220,
+    height: 220,
   },
   ringSmall: {
-    width: 130,
-    height: 130,
+    width: 120,
+    height: 120,
   },
   radarSweep: {
     position: 'absolute',
     left: '50%',
-    top: '52%',
-    width: 580,
-    height: 580,
-    marginLeft: -290,
-    marginTop: -290,
-    borderRadius: 290,
+    top: '48%',
+    width: 340,
+    height: 340,
+    marginLeft: -170,
+    marginTop: -170,
+    borderRadius: 170,
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.12)',
+    borderColor: 'rgba(0, 92, 209, 0.15)',
     backgroundColor: 'transparent',
   },
   searchBarWrapper: {
@@ -591,24 +539,26 @@ const styles = StyleSheet.create({
   zoneCardA: {
     position: 'absolute',
     left: '6%',
-    top: 124,
-    width: '42%',
-    height: 106,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    borderWidth: 2,
-    borderColor: '#7dd3fc',
+    top: '9%',
+    marginTop: 48,
+    height: '26%',
+    width: '39%',
+    backgroundColor: colors.mapZoneBg,
+    borderWidth: 1.5,
+    borderColor: colors.mapLine,
     borderRadius: 8,
     padding: 7,
   },
   zoneCardB: {
     position: 'absolute',
     right: '6%',
-    top: 126,
-    width: '40%',
-    height: 102,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    borderWidth: 2,
-    borderColor: '#7dd3fc',
+    top: '11%',
+    marginTop: 48,
+    height: '24%',
+    width: '37%',
+    backgroundColor: colors.mapZoneBg,
+    borderWidth: 1.5,
+    borderColor: colors.mapLine,
     borderRadius: 8,
     padding: 7,
   },
@@ -620,33 +570,36 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   rackGridA: {
-    marginTop: 6,
+    marginTop: 8,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 3,
+    justifyContent: 'space-between',
   },
   rackGridB: {
-    marginTop: 6,
+    marginTop: 8,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 3,
+    justifyContent: 'space-between',
   },
   rackPill: {
     width: '30%',
-    height: 14,
+    height: 12,
     borderRadius: 2,
-    backgroundColor: '#cbd5e1',
+    backgroundColor: colors.mapRack,
   },
   docksContainer: {
     position: 'absolute',
     left: '6%',
-    bottom: 14,
+    bottom: 16,
     width: '88%',
-    height: 78,
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
-    borderWidth: 2,
+    height: '22%',
+    maxHeight: 74,
+    backgroundColor: colors.mapZoneBg,
+    borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#7dd3fc',
+    borderColor: colors.mapLine,
     borderRadius: 8,
     padding: 7,
   },
@@ -657,14 +610,16 @@ const styles = StyleSheet.create({
   },
   dockSlot: {
     flex: 1,
-    height: 38,
+    height: 32,
     borderRadius: 4,
-    backgroundColor: '#cbd5e1',
+    borderWidth: 1,
+    borderColor: 'rgba(203, 213, 225, 0.8)',
+    backgroundColor: 'rgba(241, 245, 249, 0.7)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   dockSlotText: {
-    fontSize: 8,
+    fontSize: 9,
     fontFamily: typography.fontMono,
     fontWeight: '800',
     color: colors.textSecondary,
@@ -704,6 +659,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 3,
+  },
+  trajectoryStrip: {
+    position: 'absolute',
+    left: '39%',
+    top: '26%',
+    height: '38%',
+    width: 4,
+    transform: [{ rotate: '12deg' }],
+    backgroundColor: 'rgba(0, 92, 209, 0.20)',
+    borderRadius: 2,
+    zIndex: 15,
   },
   workerLabelWrap: {
     position: 'absolute',
@@ -814,15 +780,15 @@ const styles = StyleSheet.create({
   robotTag: {
     position: 'absolute',
     top: 44,
-    left: -22,
-    minWidth: 84,
+    left: '50%',
+    transform: [{ translateX: -42 }],
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(203, 213, 225, 0.8)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     gap: 4,
@@ -833,12 +799,10 @@ const styles = StyleSheet.create({
     elevation: 2,
     ...(Platform.OS === 'web'
       ? ({
-          left: '50%',
-          transform: [{ translateX: -42 }],
           whiteSpace: 'nowrap',
           width: 'max-content',
         } as any)
-      : {}),
+      : { minWidth: 84 }),
   },
   tagDot: {
     width: 5,

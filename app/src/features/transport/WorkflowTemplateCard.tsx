@@ -51,6 +51,28 @@ export function WorkflowTemplateCard({
     }
   };
 
+  const getBadgeStyle = () => {
+    if (workflow.id === 'replenishment') {
+      return { bg: 'rgba(0, 92, 209, 0.1)', text: colors.primary, border: 'rgba(0, 92, 209, 0.2)' };
+    }
+    switch (workflow.category) {
+      case 'INBOUND':
+        return { bg: 'rgba(0, 92, 209, 0.1)', text: colors.primary, border: 'rgba(0, 92, 209, 0.2)' };
+      case 'OUTBOUND':
+        return { bg: '#fef3c7', text: '#78350f', border: 'rgba(245, 158, 11, 0.25)' };
+      case 'INTERNAL':
+        return { bg: '#d2f4dc', text: colors.success, border: 'rgba(0, 122, 56, 0.25)' };
+      case 'DIRECT':
+        return { bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' };
+      case 'SAFETY':
+        return { bg: '#fee2e2', text: colors.danger, border: 'rgba(200, 39, 43, 0.25)' };
+      default:
+        return { bg: '#f1f5f9', text: colors.textSecondary, border: colors.border };
+    }
+  };
+
+  const badgeStyle = getBadgeStyle();
+
   return (
     <Pressable
       onPress={() => onSelect(workflow)}
@@ -66,8 +88,8 @@ export function WorkflowTemplateCard({
         <View style={[styles.iconBox, { backgroundColor: workflow.tone }]}>
           {renderIcon()}
         </View>
-        <View style={[styles.badge, { borderColor: workflow.badgeTone }]}>
-          <Text style={[styles.badgeText, { color: workflow.badgeTone }]}>
+        <View style={[styles.badge, { backgroundColor: badgeStyle.bg, borderColor: badgeStyle.border }]}>
+          <Text style={[styles.badgeText, { color: badgeStyle.text }]}>
             {workflow.category}
           </Text>
         </View>
@@ -84,11 +106,11 @@ export function WorkflowTemplateCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1.5,
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    minHeight: 130,
+    minHeight: 144,
     justifyContent: 'space-between',
     ...shadows.panel,
   },
@@ -109,7 +131,7 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -126,17 +148,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   name: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
-    marginTop: 6,
+    marginTop: 'auto',
   },
   note: {
     fontSize: 10,
     fontWeight: '500',
     color: colors.textSecondary,
     lineHeight: 14,
-    marginTop: 2,
+    marginTop: 4,
   },
 });

@@ -1,32 +1,36 @@
-import { Vibration } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 
 export type HapticType = 'tap' | 'tick' | 'success' | 'warning' | 'error';
 
+/**
+ * Trigger calibrated tactile vibration feedback.
+ * Routine interactions (tap, tick) are silenced to prevent annoying motor spam on real phones.
+ * Only high-impact events (success confirmation, warning, emergency error) trigger physical vibration.
+ */
 export function triggerHaptic(type: HapticType = 'tap') {
   try {
     switch (type) {
       case 'tick':
-        Vibration.vibrate(15);
-        break;
       case 'tap':
-        Vibration.vibrate(30);
+        // Silenced on mobile devices to prevent excessive motor buzz on physical smartphones
         break;
       case 'success':
-        // Quick double-pulse success
-        Vibration.vibrate([0, 40, 50, 60]);
+        // Feather-light crisp tactile click (10ms)
+        Vibration.vibrate(Platform.OS === 'ios' ? 10 : [0, 12]);
         break;
       case 'warning':
-        // Double alert vibration
-        Vibration.vibrate([0, 80, 60, 100]);
+        // Soft alert tap (15ms)
+        Vibration.vibrate(Platform.OS === 'ios' ? 15 : [0, 18]);
         break;
       case 'error':
-        // Triple urgent hazard vibration
-        Vibration.vibrate([0, 100, 50, 100, 50, 200]);
+        // Controlled double micro-pulse (20ms each)
+        Vibration.vibrate([0, 20, 30, 20]);
         break;
       default:
-        Vibration.vibrate(30);
+        break;
     }
   } catch {
     // Graceful fallback on devices without vibration hardware
   }
 }
+

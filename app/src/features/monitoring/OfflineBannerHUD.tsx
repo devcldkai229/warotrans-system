@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -178,7 +179,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#f59e0b',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.select({ android: 12, default: 48 }),
+    paddingBottom: 12,
+    minHeight: Platform.select({ android: 56, default: 96 }),
     ...shadows.panel,
   },
   bannerLeft: {

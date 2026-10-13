@@ -28,5 +28,9 @@ public sealed class TransportRequestConfiguration : IEntityTypeConfiguration<Tra
                     : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
 
         builder.HasIndex(x => x.RequestCode).IsUnique();
+        builder.HasIndex(x => x.MapVersionId);
+        builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => x.RequestedBy);
+        builder.HasIndex(x => new { x.Status, x.SubmittedAt });
     }
 }

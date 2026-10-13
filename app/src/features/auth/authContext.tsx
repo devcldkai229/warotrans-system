@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { UserSession } from '../../shared/types/contracts';
 
 interface AuthContextType {
@@ -9,23 +10,26 @@ interface AuthContextType {
   updateZone: (zone: string) => void;
 }
 
-export const PRESET_OPERATORS: { id: string; name: string; zone: string; role: 'STAFF' | 'ADMIN' }[] = [
+export const PRESET_OPERATORS: { id: string; username: string; name: string; zone: string; role: 'STAFF' | 'ADMIN' }[] = [
   {
     id: 'STF-2026-088',
+    username: 'alex.tran',
     name: 'Alex Tran',
-    zone: 'Storage Zone A (Racks A01-A12)',
+    zone: 'Inbound Dock 01',
     role: 'STAFF',
   },
   {
     id: 'STF-2026-042',
+    username: 'sarah.connor',
     name: 'Sarah Connor',
-    zone: 'Inbound Dock 01 (Receiving Bay)',
+    zone: 'Inbound Dock 01',
     role: 'STAFF',
   },
   {
     id: 'STF-2026-015',
+    username: 'david.miller',
     name: 'David Miller',
-    zone: 'Outbound Dock 04 (Staging & Dispatch)',
+    zone: 'Outbound Dock 04',
     role: 'STAFF',
   },
 ];
@@ -33,12 +37,44 @@ export const PRESET_OPERATORS: { id: string; name: string; zone: string; role: '
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<UserSession | null>(null);
+  const [session, setSession] = useState<UserSession | null>(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const scr = sp.get('screen');
+        if (scr === 'login') return null;
+        if (scr || sp.get('auth') === '1') {
+          const matched = PRESET_OPERATORS[0];
+          return {
+            id: matched.id,
+            username: matched.username,
+            fullName: matched.name,
+            role: matched.role,
+            zone: matched.zone,
+            avatarInitials: 'AT',
+          };
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return null;
+  });
 
-  const login = (staffId: string, zone?: string): boolean => {
-    const matched = PRESET_OPERATORS.find((op) => op.id.toLowerCase() === staffId.trim().toLowerCase());
-    const fullName = matched ? matched.name : `Operator (${staffId})`;
-    const activeZone = zone || (matched ? matched.zone : 'Storage Zone A (Racks A01-A12)');
+  const login = (identifier: string, zone?: string): boolean => {
+    const trimmed = identifier.trim().toLowerCase();
+    const matched = PRESET_OPERATORS.find(
+      (op) => op.username.toLowerCase() === trimmed || op.id.toLowerCase() === trimmed
+    );
+    const fullName = matched
+      ? matched.name
+      : trimmed.includes('.')
+        ? trimmed
+            .split('.')
+            .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+            .join(' ')
+        : `Operator (${identifier})`;
+    const activeZone = zone || (matched ? matched.zone : 'Inbound Dock 01');
     const initials = fullName
       .split(' ')
       .map((part) => part[0])
@@ -47,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .toUpperCase();
 
     const newSession: UserSession = {
-      id: staffId,
-      username: staffId.toLowerCase(),
+      id: matched ? matched.id : 'STF-2026-088',
+      username: matched ? matched.username : trimmed,
       fullName,
       role: matched ? matched.role : 'STAFF',
       zone: activeZone,

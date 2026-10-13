@@ -11,6 +11,7 @@ import {
   LocateFixed,
   Navigation,
 } from 'lucide-react-native';
+import Svg, { Defs, Line, Pattern, Rect } from 'react-native-svg';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
@@ -51,8 +52,16 @@ export function JobLiveMapScreen() {
 
       {/* Blueprint Radar Telemetry Viewport */}
       <View style={styles.mapViewport}>
-        {/* Background Grid Pattern */}
-        <View style={styles.gridOverlay} />
+        {/* Background Blueprint Grid Pattern */}
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+          <Defs>
+            <Pattern id="livemap-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+              <Line x1="0" y1="0" x2="24" y2="0" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
+              <Line x1="0" y1="0" x2="0" y2="24" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
+            </Pattern>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#livemap-grid)" />
+        </Svg>
 
         {/* Dynamic Nav2 Route Wayline */}
         <View
@@ -225,15 +234,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.mapBackground,
     position: 'relative',
     overflow: 'hidden',
-  },
-  gridOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.2)',
   },
   routeWayline: {
     position: 'absolute',

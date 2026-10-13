@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -33,15 +34,11 @@ export function BarcodeScannerHUD({
 }: BarcodeScannerHUDProps) {
   const [torchOn, setTorchOn] = useState(false);
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.overlay}>
+  if (!visible) return null;
+
+  const hudBody = (
+    <View style={styles.modalBackdrop}>
+      <View style={styles.overlay}>
         {/* Header Bar */}
         <View style={styles.header}>
           <View>
@@ -138,7 +135,17 @@ export function BarcodeScannerHUD({
           </Pressable>
         </View>
       </View>
-      </View>
+    </View>
+  );
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}
+    >
+      {hudBody}
     </Modal>
   );
 }
@@ -157,7 +164,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     justifyContent: 'space-between',
     padding: 18,
-    paddingTop: 36,
+    paddingTop: Platform.OS === 'ios' ? 52 : 36,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 18,
   },
   header: {
     flexDirection: 'row',

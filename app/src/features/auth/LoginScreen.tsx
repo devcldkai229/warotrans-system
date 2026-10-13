@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,10 +10,12 @@ import {
 import {
   Check,
   ChevronDown,
+  Eye,
+  EyeOff,
   Lock,
   LogIn,
   MapPin,
-  UserCheck,
+  User,
 } from 'lucide-react-native';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
@@ -22,7 +25,7 @@ import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { useToast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { PRESET_OPERATORS, useAuth } from './authContext';
+import { useAuth } from './authContext';
 
 export const WORK_ZONES = [
   {
@@ -54,34 +57,49 @@ export const WORK_ZONES = [
 
 export function LoginScreen() {
   const { login } = useAuth();
-  const { info: showToastInfo, success: showToastSuccess } = useToast();
-  const [staffId, setStaffId] = useState('STF-2026-088');
-  const [password, setPassword] = useState('••••••••');
+  const { success: showToastSuccess } = useToast();
+  const zoneSelectorRef = useRef<View>(null);
+  const [username, setUsername] = useState('alex.tran');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [selectedZone, setSelectedZone] = useState('Inbound Dock 01');
   const [isZoneDropdownOpen, setIsZoneDropdownOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  // Measured window rect of the zone selector so the popover anchors to it
+  // instead of relying on a hardcoded offset that breaks when text wraps.
+  const [zoneRect, setZoneRect] = useState({ top: 0, left: 0, width: 0 });
 
-  const handleSelectPreset = (operator: (typeof PRESET_OPERATORS)[0]) => {
+  const handleToggleZoneDropdown = () => {
     triggerHaptic('tap');
-    setStaffId(operator.id);
-    setSelectedZone(operator.zone);
-    setError(null);
+    if (isZoneDropdownOpen) {
+      setIsZoneDropdownOpen(false);
+      return;
+    }
+    zoneSelectorRef.current?.measureInWindow((x, y, width, height) => {
+      setZoneRect({ top: y + height, left: x, width });
+    });
+    setIsZoneDropdownOpen(true);
   };
 
   const handleLogin = () => {
-    if (!staffId.trim()) {
+    if (!username.trim()) {
       triggerHaptic('error');
-      setError('Staff Identifier is required.');
+      setPasswordError(null);
+      setError('Staff Username is required.');
+      return;
+    }
+    if (!password) {
+      triggerHaptic('error');
+      setError(null);
+      setPasswordError('Access Password is required.');
       return;
     }
     triggerHaptic('success');
     setError(null);
-    login(staffId, selectedZone);
-    const matched = PRESET_OPERATORS.find(
-      (op) => op.id.toLowerCase() === staffId.trim().toLowerCase()
-    );
-    const opName = matched ? matched.name : `Operator (${staffId})`;
-    showToastSuccess(`Signed in as ${opName} (${selectedZone})`);
+    setPasswordError(null);
+    login(username, selectedZone);
+    showToastSuccess(`Signed in as ${username} (${selectedZone})`);
   };
 
   const activeZoneObj =
@@ -97,101 +115,73 @@ export function LoginScreen() {
         <View style={styles.container}>
           {/* Top Section with high stacking context to overlay over actionSection */}
           <View style={styles.topSection}>
-            {/* Top Brand Bar */}
-            <View style={styles.topBar}>
-              <View style={styles.brandRow}>
-                <BrandMark size={40} />
-                <View>
-                  <Text style={styles.brandTitle}>WAROTRANS</Text>
-                  <Text style={styles.brandSubtitle}>Autonomous Fleet Mobile</Text>
-                </View>
+            {/* Centered Brand Hero */}
+            <View style={styles.brandHero}>
+              <View style={styles.logoBadgeWrap}>
+                <BrandMark size={56} />
               </View>
-              <View style={styles.statusPill}>
-                <Text style={styles.statusText}>FLEET ONLINE</Text>
-              </View>
-            </View>
-
-            {/* Screen Title */}
-            <View style={styles.headerSection}>
-              <Text style={styles.screenTag}>SCR-STF-01 · AUTHENTICATION</Text>
-              <Text style={styles.heading}>Shift Authentication</Text>
-              <Text style={styles.description}>
-                Verify operator credentials to access AMR fleet handover and dispatch controls.
-              </Text>
-            </View>
-
-            {/* Quick Operator Profiles Section */}
-            <View style={styles.presetSection}>
-              <Text style={styles.sectionLabel}>QUICK OPERATOR PROFILES</Text>
-              <View style={styles.presetChips}>
-                {PRESET_OPERATORS.map((op) => {
-                  const isSelected = staffId === op.id;
-                  return (
-                    <Pressable
-                      key={op.id}
-                      onPress={() => handleSelectPreset(op)}
-                      style={({ pressed }) => [
-                        styles.presetChip,
-                        isSelected && styles.presetChipSelected,
-                        pressed && styles.presetChipPressed,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Select profile ${op.name}`}
-                    >
-                      <Text
-                        style={[
-                          styles.presetChipName,
-                          isSelected && styles.presetChipNameSelected,
-                        ]}
-                      >
-                        {op.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.presetChipId,
-                          isSelected && styles.presetChipIdSelected,
-                        ]}
-                      >
-                        {op.id}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <Text style={styles.brandTitle}>WAROTRANS</Text>
+              <Text style={styles.brandSubtitle}>Autonomous Fleet Operator Console</Text>
             </View>
 
             {/* Form Fields */}
             <View style={styles.formSection}>
               <Input
-                label="Staff Identifier (Staff ID)"
-                value={staffId}
+                label="Staff Username"
+                value={username}
                 onChangeText={(text) => {
-                  setStaffId(text);
+                  setUsername(text);
                   if (error) setError(null);
                 }}
-                placeholder="STF-2026-XXX"
-                autoCapitalize="characters"
-                leftIcon={<UserCheck size={18} color={colors.textSecondary} />}
+                placeholder="e.g. alex.tran"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+                leftIcon={<User size={18} color={colors.textSecondary} />}
+                containerStyle={styles.fieldSpacing}
+                inputStyle={styles.identifierInput}
                 error={error || undefined}
               />
 
               <Input
                 label="Access Password"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (passwordError) setPasswordError(null);
+                }}
                 placeholder="Enter shift password"
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                returnKeyType="done"
                 leftIcon={<Lock size={18} color={colors.textSecondary} />}
+                containerStyle={styles.fieldSpacing}
+                error={passwordError || undefined}
+                rightIcon={
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setShowPassword(!showPassword);
+                    }}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                    accessibilityState={{ selected: showPassword }}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={18} color={colors.textSecondary} />
+                    ) : (
+                      <Eye size={18} color={colors.textSecondary} />
+                    )}
+                  </Pressable>
+                }
               />
 
               {/* Assigned Work Zone Selector Field */}
               <View style={styles.zoneField}>
                 <Text style={styles.inputLabel}>Assigned Work Zone</Text>
                 <Pressable
-                  onPress={() => {
-                    triggerHaptic('tap');
-                    setIsZoneDropdownOpen(!isZoneDropdownOpen);
-                  }}
+                  ref={zoneSelectorRef}
+                  onPress={handleToggleZoneDropdown}
                   style={({ pressed }) => [
                     styles.zoneSelector,
                     isZoneDropdownOpen && styles.zoneSelectorActive,
@@ -199,6 +189,8 @@ export function LoginScreen() {
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel="Select assigned work zone"
+                  accessibilityHint="Double tap to choose the work zone for this shift"
+                  accessibilityState={{ expanded: isZoneDropdownOpen }}
                 >
                   <View style={styles.zoneLeft}>
                     <MapPin size={18} color={colors.primary} style={styles.mapPinIcon} />
@@ -220,78 +212,86 @@ export function LoginScreen() {
                     ]}
                   />
                 </Pressable>
-
-                {/* Floating Popover Dropdown (OVERLAYS ON TOP of the screen without pushing button down) */}
-                {isZoneDropdownOpen && (
-                  <>
-                    <Pressable
-                      style={styles.dropdownDismissLayer}
-                      onPress={() => setIsZoneDropdownOpen(false)}
-                    />
-                    <View style={styles.floatingDropdownCard}>
-                      {WORK_ZONES.map((zone, index) => {
-                        const isSelected =
-                          selectedZone === zone.value || selectedZone === zone.label;
-                        const isLast = index === WORK_ZONES.length - 1;
-                        return (
-                          <Pressable
-                            key={zone.value}
-                            onPress={() => {
-                              triggerHaptic('tick');
-                              setSelectedZone(zone.value);
-                              setIsZoneDropdownOpen(false);
-                            }}
-                            style={({ pressed }) => [
-                              styles.dropdownItem,
-                              isSelected && styles.dropdownItemSelected,
-                              pressed && styles.dropdownItemPressed,
-                              !isLast && styles.dropdownItemDivider,
-                            ]}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Select ${zone.label}`}
-                          >
-                            <View style={styles.dropdownItemContent}>
-                              <Text
-                                style={[
-                                  styles.dropdownItemTitle,
-                                  isSelected && styles.dropdownItemTitleSelected,
-                                ]}
-                              >
-                                {zone.label}
-                              </Text>
-                              <Text style={styles.dropdownItemDesc}>{zone.detail}</Text>
-                            </View>
-                            {isSelected && (
-                              <Check size={16} color={colors.primary} strokeWidth={2.6} />
-                            )}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </>
-                )}
               </View>
             </View>
           </View>
 
-          {/* Action Button & Device Tag */}
+          {/* Action Button */}
           <View style={styles.actionSection}>
             <Button
-              label="SIGN IN TO ACTIVE SHIFT"
+              label="SIGN IN TO SHIFT"
               icon={<LogIn size={18} color="#ffffff" strokeWidth={2.4} />}
               onPress={handleLogin}
               size="lg"
               variant="primary"
               style={styles.submitButton}
             />
-
-            <View style={styles.footerRow}>
-              <Text style={styles.footerText}>WaroTrans Core v2.4.1-rc</Text>
-              <Text style={styles.footerDevice}>DEVICE #PDA-04</Text>
-            </View>
           </View>
         </View>
       </ScrollView>
+
+      {/* Popover layer sits outside the ScrollView so it can cover the whole
+          screen without being clipped by the scroll container. Anchored to the
+          measured window rect of the zone selector. */}
+      {isZoneDropdownOpen && zoneRect.width > 0 && (
+        <>
+          <Pressable
+            style={styles.dropdownDismissLayer}
+            onPress={() => setIsZoneDropdownOpen(false)}
+            accessibilityLabel="Close work zone list"
+          />
+          <View
+            style={[
+              styles.floatingDropdownCard,
+              {
+                top: zoneRect.top,
+                left: zoneRect.left,
+                width: zoneRect.width,
+              },
+            ]}
+          >
+            {WORK_ZONES.map((zone, index) => {
+              const isSelected =
+                selectedZone === zone.value || selectedZone === zone.label;
+              const isLast = index === WORK_ZONES.length - 1;
+              return (
+                <Pressable
+                  key={zone.value}
+                  onPress={() => {
+                    triggerHaptic('tick');
+                    setSelectedZone(zone.value);
+                    setIsZoneDropdownOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.dropdownItem,
+                    isSelected && styles.dropdownItemSelected,
+                    pressed && styles.dropdownItemPressed,
+                    !isLast && styles.dropdownItemDivider,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${zone.label}`}
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <View style={styles.dropdownItemContent}>
+                    <Text
+                      style={[
+                        styles.dropdownItemTitle,
+                        isSelected && styles.dropdownItemTitleSelected,
+                      ]}
+                    >
+                      {zone.label}
+                    </Text>
+                    <Text style={styles.dropdownItemDesc}>{zone.detail}</Text>
+                  </View>
+                  {isSelected && (
+                    <Check size={16} color={colors.primary} strokeWidth={2.6} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -307,7 +307,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'ios' ? 48 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     backgroundColor: colors.background,
     justifyContent: 'space-between',
     maxWidth: 480,
@@ -319,136 +321,49 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 100,
   },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 4,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  brandTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    color: colors.primary,
-    fontFamily: typography.fontMono,
-  },
-  brandSubtitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  statusPill: {
-    backgroundColor: 'rgba(0, 122, 56, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999,
-    alignSelf: 'center',
+  brandHero: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  statusText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.success,
-    fontFamily: typography.fontMono,
-    lineHeight: 12,
-  },
-  headerSection: {
-    marginTop: 22,
-  },
-  screenTag: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 1.2,
+    paddingTop: Platform.select({ android: 12, default: 18 }),
     marginBottom: 4,
-    fontFamily: typography.fontMono,
   },
-  heading: {
-    fontSize: 24,
+  logoBadgeWrap: {
+    marginBottom: 14,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  brandTitle: {
+    fontSize: 22,
     fontWeight: '900',
+    letterSpacing: 1.5,
     color: colors.textPrimary,
-    letterSpacing: -0.5,
     fontFamily: typography.fontSans,
+    textAlign: 'center',
   },
-  description: {
+  brandSubtitle: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.textSecondary,
-    lineHeight: 18,
+    fontFamily: typography.fontSans,
     marginTop: 4,
-    fontFamily: typography.fontSans,
-  },
-  presetSection: {
-    marginTop: 16,
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: colors.textSecondary,
-    marginBottom: 6,
-    fontFamily: typography.fontSans,
-  },
-  presetChips: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  presetChip: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    ...shadows.panel,
-  },
-  presetChipPressed: {
-    backgroundColor: colors.surfaceSubtle,
-  },
-  presetChipSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  presetChipName: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  presetChipNameSelected: {
-    color: colors.primary,
-    fontWeight: '900',
-  },
-  presetChipId: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    marginTop: 2,
-    fontFamily: typography.fontMono,
-  },
-  presetChipIdSelected: {
-    color: colors.primary,
-    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
   formSection: {
-    marginTop: 16,
-    gap: 6,
+    marginTop: 36,
     position: 'relative',
     zIndex: 100,
   },
+  // 4pt vertical rhythm: 16 between fields, 32 before the primary CTA.
+  // Input's own marginBottom is neutralised here via containerStyle.
+  fieldSpacing: {
+    marginBottom: 16,
+  },
   zoneField: {
-    marginTop: 4,
-    marginBottom: 8,
+    marginBottom: 32,
     position: 'relative',
     zIndex: 100,
   },
@@ -461,6 +376,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontFamily: typography.fontSans,
   },
+  identifierInput: {
+    fontFamily: typography.fontMono,
+    letterSpacing: 0.4,
+  },
   zoneSelector: {
     minHeight: 56,
     flexDirection: 'row',
@@ -472,7 +391,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    ...shadows.panel,
+    ...shadows.input,
   },
   zoneSelectorActive: {
     borderColor: colors.primary,
@@ -502,7 +421,7 @@ const styles = StyleSheet.create({
   },
   zoneDetailText: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 1,
     fontFamily: typography.fontSans,
@@ -514,7 +433,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '180deg' }],
   },
   dropdownDismissLayer: {
-    position: 'fixed' as any,
+    position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
@@ -523,9 +442,6 @@ const styles = StyleSheet.create({
   },
   floatingDropdownCard: {
     position: 'absolute',
-    top: 76,
-    left: 0,
-    right: 0,
     zIndex: 9999,
     elevation: 30,
     backgroundColor: colors.surface,
@@ -571,38 +487,16 @@ const styles = StyleSheet.create({
   },
   dropdownItemDesc: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 2,
     fontFamily: typography.fontSans,
   },
   actionSection: {
-    marginTop: 24,
-    paddingTop: 8,
     position: 'relative',
     zIndex: 1,
   },
   submitButton: {
     width: '100%',
-    minHeight: 56,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 2,
-  },
-  footerText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  footerDevice: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    fontFamily: typography.fontMono,
   },
 });

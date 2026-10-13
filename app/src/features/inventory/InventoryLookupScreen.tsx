@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -255,7 +256,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingTop: Platform.select({ android: 10, default: 48 }),
+    paddingBottom: 10,
+    minHeight: Platform.select({ android: 58, default: 100 }),
     gap: 8,
     ...shadows.panel,
   },

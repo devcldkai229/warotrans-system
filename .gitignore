@@ -49,6 +49,11 @@ Thumbs.db
 *.key
 *.mobileprovision
 *.pem
+*.token
+
+# Demo / local session artifacts (never commit access tokens)
+samples/**/_session*.json
+samples/**/*.token
 
 # .NET
 **/bin/

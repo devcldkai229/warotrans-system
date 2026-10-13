@@ -18,10 +18,10 @@ export const colors = {
   mapRack: '#cbd5e1',
   mapZoneBg: 'rgba(255, 255, 255, 0.85)',
 
-  // Text colors (Calibrated high-contrast midnight tones matching prototype oklch(0.19 0.035 250))
+  // Text colors (Calibrated high-contrast slate tones matching prototype oklch(0.19 0.035 250) and oklch(0.46 0.025 250))
   textPrimary: '#071523', // Deep midnight navy-black
-  textSecondary: '#54657d', // Industrial slate-blue
-  textMuted: '#8b9cb0', // Balanced muted gray-blue
+  textSecondary: '#475569', // Rich slate-600
+  textMuted: '#64748b', // Strong legible slate-500 (replaces washed-out #8b9cb0)
   textInverse: '#ffffff',
 
   // Status Tones (Deep forest green matching prototype oklch(0.5 0.15 154))
@@ -47,10 +47,10 @@ export const colors = {
   infoBg: '#ebf3ff',
   infoBorder: '#b8d5ff',
 
-  // Border & Dividers
-  border: '#d7dfe9',
-  borderSubtle: '#eef2f6',
-  borderDark: '#99a7b8',
+  // Border & Dividers (Crisp visible boundaries matching prototype slate-200 / slate-300)
+  border: '#cbd5e1', // Slate-300 crisp card & input boundaries
+  borderSubtle: '#e2e8f0', // Slate-200
+  borderDark: '#94a3b8', // Slate-400
 
   // Overlay
   overlay: 'rgba(7, 21, 35, 0.55)',

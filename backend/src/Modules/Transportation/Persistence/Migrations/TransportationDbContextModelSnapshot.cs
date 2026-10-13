@@ -48,6 +48,10 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("failure_message");
 
+                    b.Property<Guid>("MapVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("map_version_id");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -105,9 +109,21 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("p_k_transport_requests");
 
+                    b.HasIndex("MapVersionId")
+                        .HasDatabaseName("i_x_transport_requests_map_version_id");
+
                     b.HasIndex("RequestCode")
                         .IsUnique()
                         .HasDatabaseName("i_x_transport_requests_request_code");
+
+                    b.HasIndex("RequestedBy")
+                        .HasDatabaseName("i_x_transport_requests_requested_by");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("i_x_transport_requests_status");
+
+                    b.HasIndex("Status", "SubmittedAt")
+                        .HasDatabaseName("i_x_transport_requests_status_submitted_at");
 
                     b.ToTable("transport_requests", "transportation");
                 });
@@ -131,7 +147,7 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("destination_endpoint_id");
 
-                    b.Property<short>("DestinationLevelNo")
+                    b.Property<short?>("DestinationLevelNo")
                         .HasColumnType("smallint")
                         .HasColumnName("destination_level_no");
 
@@ -147,7 +163,7 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("source_endpoint_id");
 
-                    b.Property<short>("SourceLevelNo")
+                    b.Property<short?>("SourceLevelNo")
                         .HasColumnType("smallint")
                         .HasColumnName("source_level_no");
 

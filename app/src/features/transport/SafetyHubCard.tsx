@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +17,49 @@ import {
   ShieldAlert,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
+
+function PulsingBeaconDot() {
+  const pingAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(pingAnim, {
+        toValue: 1,
+        duration: 1200,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: Platform.OS !== 'web',
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pingAnim]);
+
+
+  const scale = pingAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 2.4],
+  });
+  const opacity = pingAnim.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [0.85, 0.3, 0],
+  });
+
+  return (
+    <View style={styles.beaconContainer}>
+      <Animated.View
+        style={[
+          styles.beaconPing,
+          {
+            transform: [{ scale }],
+            opacity,
+          },
+        ]}
+      />
+      <View style={styles.beaconCore} />
+    </View>
+  );
+}
 
 interface SafetyHubCardProps {
   onLaunchRescue: () => void;
@@ -67,7 +113,7 @@ export function SafetyHubCard({
       <View style={styles.incidentBox}>
         <View style={styles.incidentTopRow}>
           <View style={styles.incidentPingRow}>
-            <View style={styles.incidentDot} />
+            <PulsingBeaconDot />
             <Text style={styles.incidentTitle}>AMR-01 STALLED · PAYLOAD AT RISK</Text>
           </View>
           <Text style={styles.incidentLocation}>Zone A · Aisle 2</Text>
@@ -194,7 +240,7 @@ const styles = StyleSheet.create({
   },
   incidentBadgeText: {
     fontSize: 9,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '900',
     color: '#dc2626',
   },
@@ -231,11 +277,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  incidentDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+  beaconContainer: {
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  beaconPing: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: '#ef4444',
+  },
+  beaconCore: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#dc2626',
+    zIndex: 2,
   },
   incidentTitle: {
     fontSize: 11,
@@ -244,7 +305,7 @@ const styles = StyleSheet.create({
   },
   incidentLocation: {
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '700',
     color: '#b91c1c',
   },

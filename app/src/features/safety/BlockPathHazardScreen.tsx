@@ -77,13 +77,16 @@ export function BlockPathHazardScreen() {
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Hazard Type:</Text>
                 <Text style={styles.receiptVal}>
-                  {HAZARD_CATEGORIES.find((h) => h.id === hazardType)?.title || 'Hazard'}
+                  {hazardType === 'LIQUID_SPILL' && 'Liquid Spill / Wet Floor'}
+                  {hazardType === 'FALLEN_PALLET' && 'Fallen Pallet / Cargo Obstacle'}
+                  {hazardType === 'MAINTENANCE' && 'Facility Maintenance'}
+                  {hazardType === 'COLLISION_RISK' && 'Equipment Collision Risk'}
                 </Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Routing Impact:</Text>
                 <Text style={styles.receiptDanger}>
-                  {severity === 'FULL_BLOCK' ? 'Edge Cost = ∞ (100% Detour)' : 'Caution Speed 0.3 m/s'}
+                  {severity === 'FULL_BLOCK' ? 'Edge Cost = ∞ (100% Detour)' : 'Caution Speed 0.3m/s'}
                 </Text>
               </View>
               <View style={styles.receiptRow}>
@@ -92,29 +95,31 @@ export function BlockPathHazardScreen() {
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
                 <Text style={styles.receiptLabel}>Est. Duration:</Text>
-                <Text style={styles.receiptVal}>{duration}</Text>
+                <Text style={styles.receiptDuration}>{duration}</Text>
               </View>
             </View>
 
             <View style={styles.submittedActions}>
-              <Button
-                label="Reopen Path & Clear Hazard"
-                icon={<RotateCcw size={16} color={colors.primary} />}
+              <Pressable
                 onPress={handleClear}
-                variant="outline"
-                size="md"
-              />
-              <Button
-                label="Done & Return to Console"
+                style={styles.reopenBtn}
+                accessibilityRole="button"
+              >
+                <RotateCcw size={16} color={colors.textPrimary} style={{ marginRight: 6 }} />
+                <Text style={styles.reopenBtnText}>Reopen Path</Text>
+              </Pressable>
+              <Pressable
                 onPress={goBack}
-                variant="primary"
-                size="lg"
-              />
+                style={styles.doneBtn}
+                accessibilityRole="button"
+              >
+                <Text style={styles.doneBtnText}>Done & Return</Text>
+              </Pressable>
             </View>
           </View>
         ) : (
-          <View style={{ gap: 14 }}>
-            {/* Intro Card */}
+          <View style={{ gap: 16 }}>
+            {/* Top Banner Card */}
             <View style={styles.introCard}>
               <View style={styles.introIconBox}>
                 <AlertOctagon size={22} color="#ffffff" />
@@ -127,10 +132,12 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* Step 1: Corridor Selector */}
-            <View>
-              <Text style={styles.sectionLabel}>1. SELECT BLOCKED CORRIDOR / EDGE:</Text>
-              <View style={{ gap: 6 }}>
+            {/* 1. Select Blocked Corridor / Edge */}
+            <View style={{ gap: 8 }}>
+              <Text style={styles.sectionLabel}>
+                1. Select Blocked Corridor / Edge:
+              </Text>
+              <View style={{ gap: 8 }}>
                 {EDGES.map((e) => {
                   const isSelected = selectedEdge === e.id;
                   return (
@@ -139,11 +146,11 @@ export function BlockPathHazardScreen() {
                       onPress={() => setSelectedEdge(e.id)}
                       style={[
                         styles.edgeCard,
-                        isSelected && styles.edgeCardSelected,
+                        isSelected ? styles.edgeCardSelected : styles.edgeCardNormal,
                       ]}
                     >
                       <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                           <Text style={styles.edgeId}>{e.id}</Text>
                           <View style={styles.edgeZonePill}>
                             <Text style={styles.edgeZoneText}>{e.zone}</Text>
@@ -151,16 +158,18 @@ export function BlockPathHazardScreen() {
                         </View>
                         <Text style={styles.edgeName}>{e.name}</Text>
                       </View>
-                      {isSelected && <Check size={18} color={colors.danger} />}
+                      {isSelected && <Check size={18} color="#ef4444" />}
                     </Pressable>
                   );
                 })}
               </View>
             </View>
 
-            {/* Step 2: Hazard Category */}
-            <View>
-              <Text style={styles.sectionLabel}>2. HAZARD CATEGORY:</Text>
+            {/* 2. Hazard Category */}
+            <View style={{ gap: 8 }}>
+              <Text style={styles.sectionLabel}>
+                2. Hazard Category:
+              </Text>
               <View style={styles.hazardGrid}>
                 {HAZARD_CATEGORIES.map((h) => {
                   const isSelected = hazardType === h.id;
@@ -170,15 +179,10 @@ export function BlockPathHazardScreen() {
                       onPress={() => setHazardType(h.id)}
                       style={[
                         styles.hazardCard,
-                        isSelected && styles.hazardCardSelected,
+                        isSelected ? styles.hazardCardSelected : styles.hazardCardNormal,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.hazardTitle,
-                          isSelected && styles.hazardTitleSelected,
-                        ]}
-                      >
+                      <Text style={styles.hazardTitle}>
                         {h.title}
                       </Text>
                       <Text style={styles.hazardDesc}>{h.desc}</Text>
@@ -188,59 +192,99 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* Step 3: Severity Profile */}
-            <View style={styles.configCard}>
-              <Text style={styles.sectionLabel}>3. SEVERITY PROFILE & DURATION:</Text>
+            {/* 3. Severity & Routing Policy */}
+            <View style={{ gap: 8 }}>
+              <Text style={styles.sectionLabel}>
+                3. Severity & Routing Policy:
+              </Text>
               <View style={styles.severityRow}>
                 <Pressable
                   onPress={() => setSeverity('FULL_BLOCK')}
                   style={[
                     styles.severityBtn,
-                    severity === 'FULL_BLOCK' && styles.severityBtnSelected,
+                    severity === 'FULL_BLOCK' ? styles.severityBtnSelectedFull : styles.severityBtnNormal,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.severityBtnText,
-                      severity === 'FULL_BLOCK' && styles.severityBtnTextSelected,
-                    ]}
-                  >
-                    Full Block (Cost = ∞)
+                  <Text style={styles.severityBtnFullTitle}>
+                    Full Blockage
+                  </Text>
+                  <Text style={styles.severityBtnSub}>
+                    Edge Cost = ∞ (100% detour)
                   </Text>
                 </Pressable>
                 <Pressable
                   onPress={() => setSeverity('CAUTION_ZONE')}
                   style={[
                     styles.severityBtn,
-                    severity === 'CAUTION_ZONE' && styles.severityBtnSelectedCaution,
+                    severity === 'CAUTION_ZONE' ? styles.severityBtnSelectedCaution : styles.severityBtnNormal,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.severityBtnText,
-                      severity === 'CAUTION_ZONE' && styles.severityBtnTextSelectedCaution,
-                    ]}
-                  >
-                    Caution Speed (0.3m/s)
+                  <Text style={styles.severityBtnCautionTitle}>
+                    Caution Zone
+                  </Text>
+                  <Text style={styles.severityBtnSub}>
+                    Slow crawl speed 0.3m/s
                   </Text>
                 </Pressable>
               </View>
+            </View>
 
+            {/* 4. Estimated Duration Until Clear */}
+            <View style={{ gap: 6 }}>
+              <Text style={styles.sectionLabel}>
+                Estimated Duration Until Clear:
+              </Text>
+              <View style={styles.durationRow}>
+                {['15m', '30m', '60m', 'Until Clear'].map((dur) => {
+                  const isSelected = duration === dur;
+                  return (
+                    <Pressable
+                      key={dur}
+                      onPress={() => setDuration(dur)}
+                      style={[
+                        styles.durationBtn,
+                        isSelected ? styles.durationBtnSelected : styles.durationBtnNormal,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.durationBtnText,
+                          isSelected ? styles.durationBtnTextSelected : styles.durationBtnTextNormal,
+                        ]}
+                      >
+                        {dur}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* 5. Field Observation Notes */}
+            <View style={{ gap: 6 }}>
+              <Text style={styles.sectionLabel}>
+                Field Observation Notes:
+              </Text>
               <Input
-                label="Observation Notes"
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Describe hazard specifics..."
+                placeholder="Describe hazard details..."
+                containerStyle={{ marginBottom: 0 }}
+                inputStyle={{ height: 40, fontSize: 12, fontWeight: '500' }}
               />
             </View>
 
-            <Button
-              label="Report Blocked Path & Reroute Fleet"
-              icon={<AlertOctagon size={18} color="#ffffff" />}
+            {/* Submit Button (size="large" - min-h-16 = 64px) */}
+            <Pressable
               onPress={handleSubmit}
-              variant="danger"
-              size="lg"
-            />
+              style={styles.submitBtn}
+              accessibilityRole="button"
+            >
+              <AlertOctagon size={18} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.submitBtnText}>
+                Report Hazard & Reroute Fleet
+              </Text>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -261,52 +305,58 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.dangerBg,
-    borderWidth: 1.5,
-    borderColor: colors.dangerBorder,
-    borderRadius: 14,
-    padding: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 12,
+    padding: 16,
     ...shadows.panel,
   },
   introIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
   },
   introTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
-    color: colors.danger,
+    color: colors.textPrimary,
     fontFamily: typography.fontSans,
+    lineHeight: 20,
   },
   introDesc: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.textMuted,
+    lineHeight: 16,
     marginTop: 2,
   },
   sectionLabel: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     color: colors.textMuted,
-    marginBottom: 6,
   },
   edgeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    justifyContent: 'space-between',
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    borderWidth: 1,
     padding: 12,
+    minHeight: 61,
     ...shadows.panel,
   },
+  edgeCardNormal: {
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   edgeCardSelected: {
-    borderColor: colors.danger,
-    backgroundColor: colors.dangerBg,
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   edgeId: {
     fontSize: 12,
@@ -315,21 +365,21 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontMono,
   },
   edgeZonePill: {
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.surfaceMuted,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   edgeZoneText: {
     fontSize: 8,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.textMuted,
     fontFamily: typography.fontMono,
   },
   edgeName: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     marginTop: 2,
   },
   hazardGrid: {
@@ -338,40 +388,33 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hazardCard: {
-    width: '48%',
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    width: 195,
+    minHeight: 57,
+    borderRadius: 12,
+    borderWidth: 1,
     padding: 10,
+    justifyContent: 'center',
     ...shadows.panel,
+  },
+  hazardCardNormal: {
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   hazardCardSelected: {
-    borderColor: colors.danger,
-    backgroundColor: colors.dangerBg,
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   hazardTitle: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
-  },
-  hazardTitleSelected: {
-    color: colors.danger,
-    fontWeight: '900',
+    lineHeight: 16,
   },
   hazardDesc: {
-    fontSize: 9,
+    fontSize: 10,
     color: colors.textMuted,
+    lineHeight: 15,
     marginTop: 2,
-  },
-  configCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 10,
-    ...shadows.panel,
   },
   severityRow: {
     flexDirection: 'row',
@@ -379,100 +422,163 @@ const styles = StyleSheet.create({
   },
   severityBtn: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
+    minHeight: 57,
+    padding: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
+    justifyContent: 'center',
   },
-  severityBtnSelected: {
-    backgroundColor: colors.danger,
-    borderColor: colors.danger,
+  severityBtnNormal: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+  },
+  severityBtnSelectedFull: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: '#ef4444',
   },
   severityBtnSelectedCaution: {
-    backgroundColor: colors.warning,
-    borderColor: colors.warning,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderColor: '#f59e0b',
   },
-  severityBtnText: {
+  severityBtnFullTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#ef4444',
+    lineHeight: 16,
+  },
+  severityBtnCautionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#b45309',
+    lineHeight: 16,
+  },
+  severityBtnSub: {
     fontSize: 10,
-    fontWeight: '800',
-    color: colors.textSecondary,
+    color: colors.textMuted,
+    lineHeight: 15,
+    marginTop: 2,
   },
-  severityBtnTextSelected: {
-    color: '#ffffff',
+  durationRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  durationBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  durationBtnNormal: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+  },
+  durationBtnSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  durationBtnText: {
+    fontSize: 12,
     fontWeight: '900',
   },
-  severityBtnTextSelectedCaution: {
+  durationBtnTextNormal: {
+    color: colors.textPrimary,
+  },
+  durationBtnTextSelected: {
     color: '#ffffff',
+  },
+  submitBtn: {
+    backgroundColor: colors.danger,
+    minHeight: 64,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 3,
+    borderBottomColor: '#991b1b',
+  },
+  submitBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '900',
+    letterSpacing: 0.5,
   },
   submittedCard: {
-    backgroundColor: colors.dangerBg,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: colors.dangerBorder,
-    padding: 18,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    padding: 20,
     alignItems: 'center',
     ...shadows.panel,
   },
   submittedIconBadge: {
-    width: 54,
-    height: 54,
-    borderRadius: 999,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.control,
   },
   submittedTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
-    color: colors.danger,
+    color: colors.textPrimary,
     marginTop: 12,
     fontFamily: typography.fontSans,
   },
   submittedSub: {
-    fontSize: 11,
-    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 16,
+    lineHeight: 16,
   },
   receiptBox: {
     width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+    padding: 16,
     gap: 8,
   },
   receiptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   receiptLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textMuted,
   },
   receiptVal: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
-    fontFamily: typography.fontMono,
   },
   receiptHighlight: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.primary,
-    fontFamily: typography.fontMono,
   },
   receiptDanger: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
-    color: colors.danger,
+    color: '#ef4444',
+    fontFamily: typography.fontMono,
+  },
+  receiptDuration: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#b45309',
     fontFamily: typography.fontMono,
   },
   receiptBorderTop: {
@@ -483,7 +589,37 @@ const styles = StyleSheet.create({
   },
   submittedActions: {
     width: '100%',
-    marginTop: 16,
+    marginTop: 20,
+    flexDirection: 'row',
     gap: 8,
+  },
+  reopenBtn: {
+    flex: 1,
+    minHeight: 64,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reopenBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  doneBtn: {
+    flex: 1,
+    minHeight: 64,
+    borderRadius: 6,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });
