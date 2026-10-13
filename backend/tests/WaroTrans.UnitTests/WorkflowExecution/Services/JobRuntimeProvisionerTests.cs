@@ -488,6 +488,9 @@ public class JobRuntimeProvisionerTests
         public Task<string> NextEndpointCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
             Task.FromResult("EP");
 
+        public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult("EDGE");
+
         public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult("RBT");
 

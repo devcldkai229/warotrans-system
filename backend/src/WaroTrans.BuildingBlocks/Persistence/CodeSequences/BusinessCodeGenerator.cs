@@ -30,6 +30,9 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
         return $"EP-{normalized}";
     }
 
+    public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) =>
+        NextFixedAsync("edge", "EDGE-", 3, cancellationToken);
+
     public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) =>
         NextFixedAsync("robot", "RBT-", 3, cancellationToken);
 
@@ -79,24 +82,16 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
 
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
+        // FOR UPDATE cannot lock a row that does not exist yet, so concurrent first calls for a new key
+        // would all INSERT and collide on the primary key. Create the row idempotently first, then lock it.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO public.code_sequences (key, next_value, day_bucket) VALUES ({key}, {1L}, {dayBucket}) ON CONFLICT (key) DO NOTHING",
+            cancellationToken);
+
         var sequence = await db.CodeSequences
             .FromSqlInterpolated($"SELECT * FROM public.code_sequences WHERE key = {key} FOR UPDATE")
             .AsTracking()
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (sequence is null)
-        {
-            sequence = new CodeSequence
-            {
-                Key = key,
-                NextValue = 2,
-                DayBucket = dayBucket
-            };
-            db.CodeSequences.Add(sequence);
-            await db.SaveChangesAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
-            return 1;
-        }
+            .SingleAsync(cancellationToken);
 
         var current = sequence.NextValue;
         sequence.NextValue = current + 1;
