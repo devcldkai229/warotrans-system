@@ -142,18 +142,34 @@ const styles = StyleSheet.create({
   },
 });
 
+/**
+ * Press physics: every button compresses 2% on touch-down so the press reads as a
+ * mechanical key travel rather than a flat colour swap.
+ *
+ * `primary` / `danger` carry a 3px bottom bevel. A real beveled key does not shrink —
+ * it is pushed *into* the surface — so these variants keep `borderBottomWidth` at 3
+ * and instead collapse it via the 2% scale (shrinking the bevel would reflow the
+ * button and jitter the label by 2pt on every touch). `primary` additionally drops
+ * its cast shadow, since a depressed key casts none.
+ */
 const pressedStyles = StyleSheet.create({
   primary: {
     backgroundColor: colors.primaryDark,
+    transform: [{ scale: 0.98 }],
+    shadowOpacity: 0,
+    elevation: 0,
   },
   secondary: {
     backgroundColor: colors.surfaceMuted,
+    transform: [{ scale: 0.98 }],
   },
   outline: {
     backgroundColor: colors.primaryLight,
+    transform: [{ scale: 0.98 }],
   },
   danger: {
     backgroundColor: '#b91c1c',
+    transform: [{ scale: 0.98 }],
   },
 });
 

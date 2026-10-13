@@ -237,24 +237,32 @@ const styles = StyleSheet.create({
   },
   tagWaiting: {
     backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.25)',
   },
   tagWaitingText: {
     color: '#92400e',
   },
   tagTransit: {
     backgroundColor: '#e0f2fe',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.25)',
   },
   tagTransitText: {
     color: colors.primary,
   },
   tagComplete: {
     backgroundColor: '#dcfce7',
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.25)',
   },
   tagCompleteText: {
     color: '#15803d',
   },
   tagQueued: {
     backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   tagQueuedText: {
     color: colors.textSecondary,
@@ -268,6 +276,8 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     backgroundColor: 'rgba(241, 245, 249, 0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.8)',
   },
   targetIconWrap: {
     width: 40,

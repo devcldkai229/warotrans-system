@@ -223,9 +223,10 @@ export function TransportScreen() {
             {/* Local 3m Soft Hold Toggle */}
             <Pressable
               onPress={toggleHold}
-              style={[
+              style={({ pressed }) => [
                 styles.utilityCard,
                 isHolding && styles.utilityCardHolding,
+                pressed && styles.utilityCardPressed,
               ]}
             >
               <View style={styles.utilityTopRow}>
@@ -251,7 +252,10 @@ export function TransportScreen() {
                 triggerHaptic('tap');
                 navigate('block_path');
               }}
-              style={styles.utilityCard}
+              style={({ pressed }) => [
+                styles.utilityCard,
+                pressed && styles.utilityCardPressed,
+              ]}
             >
               <View style={styles.utilityTopRow}>
                 <Text style={styles.utilityEyebrow}>HAZARD</Text>
@@ -289,7 +293,7 @@ export function TransportScreen() {
               }}
               style={({ pressed }) => [
                 styles.recentOrderCard,
-                pressed && { opacity: 0.85 },
+                pressed && styles.recentOrderCardPressed,
               ]}
               accessibilityRole="button"
               accessibilityLabel="View details for TR-2048"
@@ -322,7 +326,7 @@ export function TransportScreen() {
               }}
               style={({ pressed }) => [
                 styles.recentOrderCard,
-                pressed && { opacity: 0.85 },
+                pressed && styles.recentOrderCardPressed,
               ]}
               accessibilityRole="button"
               accessibilityLabel="View details for TR-2046"
@@ -634,6 +638,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   rescueBtnPressed: {
+    transform: [{ scale: 0.98 }],
     opacity: 0.9,
   },
   rescueBtnText: {
@@ -664,6 +669,10 @@ const styles = StyleSheet.create({
   utilityCardHolding: {
     backgroundColor: '#fef2f2',
     borderColor: colors.danger,
+  },
+  utilityCardPressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
   },
   utilityTopRow: {
     flexDirection: 'row',
@@ -724,6 +733,10 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  recentOrderCardPressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
+  },
   recentCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -739,6 +752,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.25)',
   },
   trBadgeInfoText: {
     fontFamily: typography.fontMono,
@@ -751,6 +766,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   trBadgeMutedText: {
     fontFamily: typography.fontMono,
@@ -769,6 +786,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.25)',
   },
   statusAllocatingText: {
     fontSize: 8,
@@ -781,6 +800,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.25)',
   },
   statusEnRouteText: {
     fontSize: 8,
@@ -838,7 +859,7 @@ const styles = StyleSheet.create({
   },
   historyEntryCardPressed: {
     borderColor: colors.primary,
-    transform: [{ scale: 0.99 }],
+    transform: [{ scale: 0.98 }],
   },
   historyEntryLeft: {
     flexDirection: 'row',

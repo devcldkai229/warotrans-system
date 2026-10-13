@@ -146,7 +146,10 @@ export function JobDetailScreen() {
       <View style={[styles.header, { paddingTop: topInset, minHeight: topInset + 56 }]}>
         <Pressable
           onPress={goBack}
-          style={styles.backBtn}
+          style={({ pressed }) => [
+            styles.backBtn,
+            pressed && styles.tactilePressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
@@ -169,7 +172,10 @@ export function JobDetailScreen() {
 
         <Pressable
           onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
-          style={styles.liveMapBtn}
+          style={({ pressed }) => [
+            styles.liveMapBtn,
+            pressed && styles.tactilePressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Open live map"
         >
@@ -178,7 +184,10 @@ export function JobDetailScreen() {
 
         <Pressable
           onPress={() => setShowMenu(!showMenu)}
-          style={styles.menuBtn}
+          style={({ pressed }) => [
+            styles.menuBtn,
+            pressed && styles.tactilePressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="More options"
         >
@@ -571,13 +580,19 @@ export function JobDetailScreen() {
                 <Text style={styles.dockNudgeLabel}>DOCK NUDGE:</Text>
                 <Pressable
                   onPress={() => handleNudge('-10cm')}
-                  style={styles.dockNudgeBtn}
+                  style={({ pressed }) => [
+                    styles.dockNudgeBtn,
+                    pressed && styles.tactilePressed,
+                  ]}
                 >
                   <Text style={styles.dockNudgeBtnText}>◀ -10cm</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => handleNudge('+10cm')}
-                  style={styles.dockNudgeBtn}
+                  style={({ pressed }) => [
+                    styles.dockNudgeBtn,
+                    pressed && styles.tactilePressed,
+                  ]}
                 >
                   <Text style={styles.dockNudgeBtnText}>+10cm ▶</Text>
                 </Pressable>
@@ -585,9 +600,10 @@ export function JobDetailScreen() {
 
               <Pressable
                 onPress={handleToggleSoftHold}
-                style={[
+                style={({ pressed }) => [
                   styles.softHoldTier1Btn,
                   isSoftHold && styles.softHoldTier1Active,
+                  pressed && styles.tactilePressed,
                 ]}
               >
                 <PauseCircle
@@ -610,7 +626,10 @@ export function JobDetailScreen() {
             <View style={styles.tier2Row}>
               <Pressable
                 onPress={() => setIsIssueOpen(true)}
-                style={styles.reportIssueTier2Btn}
+                style={({ pressed }) => [
+                  styles.reportIssueTier2Btn,
+                  pressed && styles.tactilePressed,
+                ]}
               >
                 <AlertTriangle size={18} color={colors.danger} />
                 <Text style={styles.reportIssueTier2Text}>Report Issue</Text>
@@ -627,14 +646,20 @@ export function JobDetailScreen() {
           <View style={styles.tier2Row}>
             <Pressable
               onPress={() => setIsIssueOpen(true)}
-              style={styles.reportIssueTier2Btn}
+              style={({ pressed }) => [
+                styles.reportIssueTier2Btn,
+                pressed && styles.tactilePressed,
+              ]}
             >
               <AlertTriangle size={18} color={colors.danger} />
               <Text style={styles.reportIssueTier2Text}>Report Obstacle</Text>
             </Pressable>
             <Pressable
               onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
-              style={styles.trackLiveMapBtn}
+              style={({ pressed }) => [
+                styles.trackLiveMapBtn,
+                pressed && styles.tactilePressed,
+              ]}
             >
               <Maximize2 size={18} color="#ffffff" />
               <Text style={styles.trackLiveMapText}>Track on Live Map</Text>
@@ -644,14 +669,23 @@ export function JobDetailScreen() {
           <View style={styles.tier2Row}>
             <Pressable
               onPress={() => toast.success('Audit PDF downloaded to device.')}
-              style={styles.reportIssueTier2Btn}
+              style={({ pressed }) => [
+                styles.reportIssueTier2Btn,
+                pressed && styles.tactilePressed,
+              ]}
             >
               <FileText size={18} color={colors.textPrimary} />
               <Text style={[styles.reportIssueTier2Text, { color: colors.textPrimary }]}>
                 Audit Log
               </Text>
             </Pressable>
-            <Pressable onPress={goBack} style={styles.trackLiveMapBtn}>
+            <Pressable
+              onPress={goBack}
+              style={({ pressed }) => [
+                styles.trackLiveMapBtn,
+                pressed && styles.tactilePressed,
+              ]}
+            >
               <ArrowLeft size={18} color="#ffffff" />
               <Text style={styles.trackLiveMapText}>Back to Jobs</Text>
             </Pressable>
@@ -663,14 +697,20 @@ export function JobDetailScreen() {
                 toast.info('Mission cancelled.');
                 goBack();
               }}
-              style={styles.reportIssueTier2Btn}
+              style={({ pressed }) => [
+                styles.reportIssueTier2Btn,
+                pressed && styles.tactilePressed,
+              ]}
             >
               <X size={18} color={colors.danger} />
               <Text style={styles.reportIssueTier2Text}>Cancel Job</Text>
             </Pressable>
             <Pressable
               onPress={() => toast.info('Job priority escalated to URGENT.')}
-              style={styles.trackLiveMapBtn}
+              style={({ pressed }) => [
+                styles.trackLiveMapBtn,
+                pressed && styles.tactilePressed,
+              ]}
             >
               <Sparkles size={18} color="#ffffff" />
               <Text style={styles.trackLiveMapText}>Expedite Priority</Text>
@@ -1710,6 +1750,15 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#ffffff',
     fontFamily: typography.fontSans,
+  },
+  /**
+   * Shared tactile press state for every interactive control on this screen.
+   * 2% scale + slight opacity drop reads as mechanical key travel on both the flat
+   * chip buttons and the beveled 64pt tier-2 actions.
+   */
+  tactilePressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
   },
   textWhite: {
     color: '#ffffff',
