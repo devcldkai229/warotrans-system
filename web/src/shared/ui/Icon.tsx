@@ -1,4 +1,4 @@
-// Minimal stroke-icon set (24x24 grid) so the mock UI needs no icon dependency.
+// Minimal stroke-icon set (24x24 grid) so the UI needs no icon dependency.
 const PATHS = {
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm10 2-4.3-4.3',
   bell: 'M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9Zm4.3 13a1.9 1.9 0 0 0 3.4 0',
@@ -57,12 +57,13 @@ interface IconProps {
   name: IconName
   size?: number
   strokeWidth?: number
+  className?: string
 }
 
-export function Icon({ name, size = 16, strokeWidth = 2 }: IconProps) {
+export function Icon({ name, size = 16, strokeWidth = 1.75, className }: IconProps) {
   return (
     <svg
-      className="icon"
+      className={className ? `shrink-0 ${className}` : 'shrink-0'}
       width={size}
       height={size}
       viewBox="0 0 24 24"

@@ -1,6 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './authContext'
-import './auth.css'
 
 /**
  * Route guard. UX only: the backend enforces roles (AdminOnly / StaffOrAdmin) on every request.
@@ -13,7 +12,7 @@ export function RequireAuth() {
   // Wait for the session restore before deciding, otherwise a reload would always bounce through /login.
   if (status === 'loading') {
     return (
-      <div className="auth-splash" role="status">
+      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">
         Restoring session…
       </div>
     )

@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import type { Product, ProductCategory } from '@/shared/api/contracts'
 import { Dialog } from '@/shared/ui/Dialog'
-import { SectionHead } from './SectionHead'
+import { Field, FieldRow, FormError } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
+import { Table, Td, Th, Tr } from '@/shared/ui/Table'
+import { AddButton, SectionHead } from './SectionHead'
 
 interface CategoryDraft {
   code: string
@@ -21,6 +24,11 @@ export function CategoriesSection({ categories, setCategories, products }: Categ
   const [error, setError] = useState<string | null>(null)
 
   const productCount = (categoryId: string) => products.filter((product) => product.categoryId === categoryId).length
+
+  function open() {
+    setDraft({ code: '', name: '', description: '' })
+    setError(null)
+  }
 
   function save() {
     if (!draft) return
@@ -43,60 +51,60 @@ export function CategoriesSection({ categories, setCategories, products }: Categ
   return (
     <>
       <SectionHead title="Categories" hint="Groups that products belong to.">
-        <button
-          type="button"
-          className="btn btn--blue"
-          onClick={() => {
-            setDraft({ code: '', name: '', description: '' })
-            setError(null)
-          }}
-        >
-          + Add category
-        </button>
+        <AddButton onClick={open}>Add category</AddButton>
       </SectionHead>
 
-      <table className="mtable">
+      <Table>
         <thead>
           <tr>
-            <th>Code</th>
-            <th>Name</th>
-            <th>Description</th>
-            <th className="is-right">Products</th>
+            <Th>Code</Th>
+            <Th>Name</Th>
+            <Th>Description</Th>
+            <Th align="right">Products</Th>
           </tr>
         </thead>
         <tbody>
           {categories.map((category) => (
-            <tr key={category.id}>
-              <td>{category.code}</td>
-              <td className="is-strong">{category.name}</td>
-              <td className="is-faint">{category.description ?? '—'}</td>
-              <td className="is-right">{productCount(category.id)}</td>
-            </tr>
+            <Tr key={category.id}>
+              <Td className="font-mono text-xs">{category.code}</Td>
+              <Td tone="strong">{category.name}</Td>
+              <Td tone="faint">{category.description ?? '—'}</Td>
+              <Td align="right">{productCount(category.id)}</Td>
+            </Tr>
           ))}
         </tbody>
-      </table>
+      </Table>
 
       {draft ? (
         <Dialog title="Add category" submitLabel="Create category" onClose={() => setDraft(null)} onSubmit={save}>
-          <div className="field-row">
-            <label className="field">
-              Code
-              <input value={draft.code} maxLength={100} onChange={(event) => setDraft({ ...draft, code: event.target.value })} autoFocus />
-            </label>
-            <label className="field">
-              Name
-              <input value={draft.name} maxLength={100} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-            </label>
-          </div>
-          <label className="field">
-            Description
+          <FieldRow>
+            <Field label="Code">
+              <input
+                className={controlClass()}
+                value={draft.code}
+                maxLength={100}
+                onChange={(event) => setDraft({ ...draft, code: event.target.value })}
+                autoFocus
+              />
+            </Field>
+            <Field label="Name">
+              <input
+                className={controlClass()}
+                value={draft.name}
+                maxLength={100}
+                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              />
+            </Field>
+          </FieldRow>
+          <Field label="Description">
             <textarea
+              className={controlClass('area')}
               value={draft.description}
               maxLength={500}
               onChange={(event) => setDraft({ ...draft, description: event.target.value })}
             />
-          </label>
-          {error ? <small className="field" style={{ color: 'var(--red-ink)' }}>{error}</small> : null}
+          </Field>
+          {error ? <FormError>{error}</FormError> : null}
         </Dialog>
       ) : null}
     </>

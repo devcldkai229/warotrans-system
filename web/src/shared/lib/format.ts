@@ -52,3 +52,10 @@ export function formatRelativeTime(iso: string | null | undefined): string {
   if (seconds < 86_400) return `${Math.round(seconds / 3600)} h ago`
   return formatDateTime(iso)
 }
+
+/** `IN_PROGRESS` → `In progress`. Backend enum values keep their meaning, only the casing changes. */
+export function humanize(value: string): string {
+  if (value !== value.toUpperCase()) return value
+  const text = value.replaceAll('_', ' ').toLowerCase()
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
