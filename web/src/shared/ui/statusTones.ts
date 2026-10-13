@@ -1,15 +1,15 @@
 import type { ContainerStatus, JobContainerStatus, JobStatus, TransportRequestDetailStatus, TransportRequestStatus, JobStepStatus, MapStatus, RobotStatus } from '@/shared/api/contracts'
 
-export type Tone = 'green' | 'blue' | 'amber' | 'red' | 'purple' | 'grey'
+export type Tone = 'green' | 'blue' | 'amber' | 'red' | 'purple' | 'grey' | 'teal' | 'rose'
 
 export const JOB_STATUS_TONE: Record<JobStatus, Tone> = {
   CREATED: 'grey',
-  QUEUED: 'grey',
+  QUEUED: 'purple',
   ASSIGNED: 'blue',
   RUNNING: 'blue',
-  PAUSED: 'purple',
-  REASSIGNING: 'amber',
-  RECOVERY_REQUIRED: 'red',
+  PAUSED: 'amber',
+  REASSIGNING: 'teal',
+  RECOVERY_REQUIRED: 'rose',
   COMPLETED: 'green',
   FAILED: 'red',
   CANCELLED: 'grey',
@@ -17,7 +17,7 @@ export const JOB_STATUS_TONE: Record<JobStatus, Tone> = {
 
 export const STEP_STATUS_TONE: Record<JobStepStatus, Tone> = {
   PENDING: 'grey',
-  READY: 'grey',
+  READY: 'teal',
   EXECUTING: 'blue',
   WAITING: 'amber',
   PAUSED: 'purple',
@@ -29,16 +29,16 @@ export const STEP_STATUS_TONE: Record<JobStepStatus, Tone> = {
 export const ROBOT_STATUS_TONE: Record<RobotStatus, Tone> = {
   OFFLINE: 'grey',
   AVAILABLE: 'green',
-  RESERVED: 'blue',
-  EXECUTING: 'green',
+  RESERVED: 'purple',
+  EXECUTING: 'blue',
   PAUSED: 'amber',
-  CHARGING: 'blue',
-  MAINTENANCE: 'purple',
+  CHARGING: 'teal',
+  MAINTENANCE: 'rose',
   ERROR: 'red',
 }
 
 export const MAP_STATUS_TONE: Record<MapStatus, Tone> = {
-  DRAFT: 'blue',
+  DRAFT: 'amber',
   PUBLISHED: 'green',
   ARCHIVED: 'grey',
 }
@@ -46,26 +46,27 @@ export const MAP_STATUS_TONE: Record<MapStatus, Tone> = {
 export const JOB_CONTAINER_STATUS_TONE: Record<JobContainerStatus, Tone> = {
   PENDING: 'grey',
   ASSIGNED: 'blue',
-  ONBOARD: 'blue',
+  ONBOARD: 'teal',
   DELIVERED: 'green',
   FAILED: 'red',
   CANCELLED: 'grey',
 }
 
+/** Each TransportRequest status gets its own tone so group rows stay distinguishable. */
 export const REQUEST_STATUS_TONE: Record<TransportRequestStatus, Tone> = {
-  SUBMITTED: 'grey',
-  QUEUED: 'grey',
+  SUBMITTED: 'purple',
+  QUEUED: 'teal',
   IN_PROGRESS: 'blue',
   PARTIALLY_COMPLETED: 'amber',
   COMPLETED: 'green',
   FAILED: 'red',
   CANCELLED: 'grey',
-  REJECTED: 'red',
+  REJECTED: 'rose',
 }
 
 export const REQUEST_DETAIL_STATUS_TONE: Record<TransportRequestDetailStatus, Tone> = {
   PENDING: 'grey',
-  QUEUED: 'grey',
+  QUEUED: 'teal',
   IN_PROGRESS: 'blue',
   COMPLETED: 'green',
   FAILED: 'red',
@@ -76,7 +77,7 @@ export const CONTAINER_STATUS_TONE: Record<ContainerStatus, Tone> = {
   CREATED: 'grey',
   PACKED: 'blue',
   RESERVED: 'purple',
-  IN_TRANSIT: 'blue',
+  IN_TRANSIT: 'teal',
   STORED: 'green',
   HOLD: 'amber',
   EMPTY: 'grey',
@@ -91,4 +92,6 @@ export const TONE_SOLID: Record<Tone, string> = {
   red: 'bg-red',
   purple: 'bg-purple',
   grey: 'bg-container-highest',
+  teal: 'bg-teal',
+  rose: 'bg-rose',
 }

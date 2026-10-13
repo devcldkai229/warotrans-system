@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { RobotStatus } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
@@ -16,7 +16,7 @@ import { ROBOTS } from './mock'
 
 const chipClass = (active: boolean) =>
   cx(
-    'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs transition-colors duration-200',
+    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors duration-200',
     active ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
   )
 
@@ -26,6 +26,7 @@ export function FleetPage() {
   const [query, setQuery] = useState('')
   const [previewCode, setPreviewCode] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<RobotStatus | null>(null)
+  const statusRailRef = useRef<HTMLDivElement>(null)
 
   const counts = useMemo(() => {
     const map = new Map<RobotStatus, number>()
@@ -41,6 +42,10 @@ export function FleetPage() {
   )
   const selected = ROBOTS.find((robot) => robot.code === robotCode) ?? null
 
+  function scrollStatuses(direction: 1 | -1) {
+    statusRailRef.current?.scrollBy({ left: direction * 160, behavior: 'smooth' })
+  }
+
   return (
     // The side panel is the Robot list, or one Robot's detail; the map keeps the rest of the frame either way.
     <div className={cx('grid h-full gap-3 px-3 pb-3', selected ? 'grid-cols-[400px_minmax(0,1fr)]' : 'grid-cols-[360px_minmax(0,1fr)]')}>
@@ -49,22 +54,27 @@ export function FleetPage() {
           <RobotDetailPanel robot={selected} onBack={() => navigate('/monitor/fleet')} />
         ) : (
           <>
-            <header className="flex items-center gap-3 px-5 pt-5">
+            <header className="flex items-center gap-3 px-4 pt-5">
               <h1 className="text-xl font-book">Fleet</h1>
               <span className="text-sm text-muted">{ROBOTS.length} robots</span>
-              <IconButton aria-label="More" className="-mr-2 ml-auto">
+              <IconButton aria-label="More" className="-mr-1 ml-auto">
                 <Icon name="more" size={18} />
               </IconButton>
             </header>
 
-            <SearchInput tone="surface" placeholder="Filter robots" value={query} onChange={setQuery} className="mx-4 mt-3" />
+            <div className="px-4 pt-3">
+              <SearchInput tone="surface" placeholder="Filter robots" value={query} onChange={setQuery} className="w-full" />
+            </div>
 
-            <div className="flex flex-wrap gap-1.5 px-4 py-3" role="group" aria-label="Filter by status">
-              <button type="button" className={chipClass(statusFilter === null)} onClick={() => setStatusFilter(null)}>
-                All <span className="opacity-60">{ROBOTS.length}</span>
-              </button>
-              {ROBOT_STATUS_ORDER.filter((status) => (counts.get(status) ?? 0) > 0 || statusFilter === status).map(
-                (status) => (
+            <div className="flex items-center gap-1 px-4 py-3" role="group" aria-label="Filter by status">
+              <div
+                ref={statusRailRef}
+                className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                <button type="button" className={chipClass(statusFilter === null)} onClick={() => setStatusFilter(null)}>
+                  All <span className="opacity-60">{ROBOTS.length}</span>
+                </button>
+                {ROBOT_STATUS_ORDER.map((status) => (
                   <button
                     key={status}
                     type="button"
@@ -74,11 +84,17 @@ export function FleetPage() {
                     <ToneDot tone={ROBOT_STATUS_TONE[status]} size="sm" />
                     {humanize(status)} <span className="opacity-60">{counts.get(status) ?? 0}</span>
                   </button>
-                ),
-              )}
+                ))}
+              </div>
+              <IconButton tone="surface" size="sm" aria-label="Scroll statuses left" onClick={() => scrollStatuses(-1)}>
+                <Icon name="chevronRight" size={14} className="rotate-180" />
+              </IconButton>
+              <IconButton tone="surface" size="sm" aria-label="Scroll statuses right" onClick={() => scrollStatuses(1)}>
+                <Icon name="chevronRight" size={14} />
+              </IconButton>
             </div>
 
-            <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-3 pt-1 pb-2">
+            <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-4 pt-1 pb-2">
               {visibleRobots.map((robot) => (
                 <li key={robot.id}>
                   <button
@@ -115,7 +131,7 @@ export function FleetPage() {
               ) : null}
             </ul>
 
-            <footer className="flex items-center justify-between px-5 py-3 text-xs text-muted">
+            <footer className="flex items-center justify-between px-4 py-3 text-xs text-muted">
               <span>{visibleRobots.length} shown</span>
               <Button variant="surface" size="sm">
                 Actions <Icon name="chevronDown" size={13} />

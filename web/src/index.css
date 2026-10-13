@@ -39,6 +39,12 @@
   --color-purple: #8430ce;
   --color-purple-ink: #6b21b8;
   --color-purple-soft: #f3e8fd;
+  --color-teal: #0f766e;
+  --color-teal-ink: #0f5f59;
+  --color-teal-soft: #e0f5f2;
+  --color-rose: #c2185b;
+  --color-rose-ink: #9f1449;
+  --color-rose-soft: #fce4ec;
 
   --text-*: initial;
   --text-xs: 0.78125rem;

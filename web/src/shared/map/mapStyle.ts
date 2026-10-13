@@ -66,7 +66,7 @@ export const EDGE_COLOR: Record<EdgeDirection, string> = { BIDIRECTIONAL: '#3279
 
 export const ZONE_ORDER: ZoneType[] = ['OPERATIONAL_AREA', 'NARROW_AREA', 'INTERSECTION', 'RESTRICTED_AREA']
 
-/** Legend swatch of a Zone type: the same tint as on the map, hatched for a restricted area. */
+/** Guide swatch of a Zone type: the same tint as on the map, hatched for a restricted area. */
 export function zoneSwatchStyle(type: ZoneType): CSSProperties {
   const color = ZONE_COLOR[type]
   return {

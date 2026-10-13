@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { MapVersion } from '@/shared/api/contracts'
+import { cx } from '@/shared/lib/cx'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
@@ -21,9 +22,16 @@ interface MapCardProps {
 }
 
 function MapCard({ version, when, children }: MapCardProps) {
+  const tint =
+    version.status === 'DRAFT'
+      ? 'border-amber/40 bg-amber-soft/50'
+      : version.status === 'PUBLISHED'
+        ? 'border-green/40 bg-green-soft/50'
+        : 'border-outline-soft bg-container'
+
   return (
-    <article className="overflow-hidden rounded-lg bg-container">
-      <div className="relative h-64">
+    <article className={cx('overflow-hidden rounded-lg border shadow-float', tint)}>
+      <div className="relative h-64 bg-container/60">
         <div className="absolute inset-x-0 top-4 bottom-0">
           <WarehouseMap layers={{ legend: false, controls: false, coordinates: false, robots: false }} labels="none" />
         </div>
@@ -31,7 +39,7 @@ function MapCard({ version, when, children }: MapCardProps) {
           {version.status}
         </StatusBadge>
       </div>
-      <div className="flex items-end justify-between gap-4 p-6">
+      <div className="flex items-end justify-between gap-4 border-t border-outline-soft bg-surface/70 p-6">
         <div>
           <h3 className="text-md font-book">
             {WAREHOUSE_NAME}, version {version.versionNo}
@@ -47,7 +55,7 @@ function MapCard({ version, when, children }: MapCardProps) {
 
 function MissingMapCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <article className="flex min-h-60 flex-col justify-end rounded-lg bg-container p-6">
+    <article className="flex min-h-60 flex-col justify-end rounded-lg border border-dashed border-outline bg-container p-6">
       <h3 className="text-md font-book">{title}</h3>
       <p className="mt-1 text-sm text-ink-2">{children}</p>
     </article>
