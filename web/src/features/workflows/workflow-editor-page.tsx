@@ -263,9 +263,25 @@ function collectClientWarnings(
   return warnings
 }
 
-export function WorkflowEditorPage() {
-  const { id } = useParams()
+export type WorkflowEditorProps = {
+  /** When set (Map Editor panel), overrides the route param. Use `'new'` to create. */
+  workflowId?: string
+  variant?: 'page' | 'panel'
+  onClose?: () => void
+  /** Called after create/version so the host can keep editing without leaving the map. */
+  onSaved?: (id: string) => void
+}
+
+export function WorkflowEditor({
+  workflowId: workflowIdProp,
+  variant = 'page',
+  onClose,
+  onSaved,
+}: WorkflowEditorProps) {
+  const params = useParams()
+  const id = workflowIdProp ?? params.id
   const isNew = !id || id === 'new'
+  const isPanel = variant === 'panel'
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -319,10 +335,16 @@ export function WorkflowEditorPage() {
       setMessage('Saved.')
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
       queryClient.invalidateQueries({ queryKey: ['workflow', saved.id] })
-      if (isNew) navigate(`/configure/workflows/${saved.id}`, { replace: true })
-      else {
+      if (isNew) {
         setDraft(toUpsert(saved))
         setStatus(saved.status)
+        setDraftKey(saved.id)
+        onSaved?.(saved.id)
+        if (!isPanel) navigate(`/configure/workflows/${saved.id}`, { replace: true })
+      } else {
+        setDraft(toUpsert(saved))
+        setStatus(saved.status)
+        onSaved?.(saved.id)
       }
     },
     onError: (err) => {
@@ -347,6 +369,7 @@ export function WorkflowEditorPage() {
       setStatus(saved.status)
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
       queryClient.invalidateQueries({ queryKey: ['workflow', saved.id] })
+      onSaved?.(saved.id)
     },
     onError: (err) => {
       if (err instanceof ApiError) {
@@ -365,7 +388,8 @@ export function WorkflowEditorPage() {
     mutationFn: () => createWorkflowVersion(id!),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
-      navigate(`/configure/workflows/${created.id}`)
+      onSaved?.(created.id)
+      if (!isPanel) navigate(`/configure/workflows/${created.id}`)
     },
     onError: (err) => setServerErrors([(err as Error).message]),
   })
@@ -460,7 +484,8 @@ export function WorkflowEditorPage() {
     })
   }
 
-  if (metadataQuery.isLoading || (!isNew && detailQuery.isLoading)) {
+  // After panel create we already have draft + draftKey=id; skip loading flash while detail refetches.
+  if (metadataQuery.isLoading || (!isNew && detailQuery.isLoading && draftKey !== id)) {
     return <p>Loading…</p>
   }
 
@@ -474,14 +499,70 @@ export function WorkflowEditorPage() {
 
   if (!metadata) return null
 
-  return (
-    <section className="wf-page">
+  function runSave() {
+    setMessage(null)
+    setShowPublishWarnings(false)
+    saveMutation.mutate()
+  }
+
+  function runPublish() {
+    setMessage(null)
+    setShowPublishWarnings(true)
+    if (clientWarnings.length > 0) return
+    publishMutation.mutate()
+  }
+
+  const saveLabel = isNew ? 'Create workflow' : 'Save draft'
+  const actionButtons = (
+    <>
+      {!readOnly && (
+        <button
+          type="button"
+          className="btn primary"
+          disabled={saveMutation.isPending}
+          onClick={runSave}
+        >
+          {saveMutation.isPending ? 'Saving…' : saveLabel}
+        </button>
+      )}
+      {!isNew && status === 'DRAFT' && (
+        <button
+          type="button"
+          className="btn"
+          disabled={publishMutation.isPending}
+          onClick={runPublish}
+        >
+          {publishMutation.isPending ? 'Publishing…' : 'Publish'}
+        </button>
+      )}
+      {!isNew && status === 'PUBLISHED' && (
+        <button
+          type="button"
+          className="btn primary"
+          disabled={versionMutation.isPending}
+          onClick={() => versionMutation.mutate()}
+        >
+          New version
+        </button>
+      )}
+      {isPanel && onClose && (
+        <button type="button" className="btn" onClick={onClose}>
+          Done
+        </button>
+      )}
+    </>
+  )
+
+  const editorBody = (
+    <>
       <header className="wf-header">
         <div>
-          <p className="crumb">
-            <Link to="/configure/workflows">Workflows</Link> / {isNew ? 'New' : draft.code || id}
-          </p>
-          <h1>{isNew ? 'New workflow template' : draft.name || 'Workflow editor'}</h1>
+          {!isPanel && (
+            <p className="crumb">
+              <Link to="/configure/workflows">Workflows</Link> / {isNew ? 'New' : draft.code || id}
+            </p>
+          )}
+          <h1>{isNew ? 'New workflow template' : draft.name || draft.code || 'Workflow editor'}</h1>
           <p>
             Status: <span className={`badge ${status.toLowerCase()}`}>{status}</span>
             {!isNew && detailQuery.data ? ` · v${detailQuery.data.versionNo}` : ''}
@@ -490,47 +571,7 @@ export function WorkflowEditorPage() {
               : ''}
           </p>
         </div>
-        <div className="wf-actions">
-          {!readOnly && (
-            <button
-              type="button"
-              className="btn primary"
-              disabled={saveMutation.isPending}
-              onClick={() => {
-                setMessage(null)
-                setShowPublishWarnings(false)
-                saveMutation.mutate()
-              }}
-            >
-              Save draft
-            </button>
-          )}
-          {!isNew && status === 'DRAFT' && (
-            <button
-              type="button"
-              className="btn"
-              disabled={publishMutation.isPending}
-              onClick={() => {
-                setMessage(null)
-                setShowPublishWarnings(true)
-                if (clientWarnings.length > 0) return
-                publishMutation.mutate()
-              }}
-            >
-              Publish
-            </button>
-          )}
-          {!isNew && status === 'PUBLISHED' && (
-            <button
-              type="button"
-              className="btn primary"
-              disabled={versionMutation.isPending}
-              onClick={() => versionMutation.mutate()}
-            >
-              New version
-            </button>
-          )}
-        </div>
+        {!isPanel && <div className="wf-actions">{actionButtons}</div>}
       </header>
 
       {message && <p className="ok">{message}</p>}
@@ -985,6 +1026,24 @@ export function WorkflowEditorPage() {
           )}
         </fieldset>
       </div>
-    </section>
+    </>
   )
+
+  if (isPanel) {
+    return (
+      <section className="wf-page wf-page--panel">
+        <div className="wf-page--panel__scroll">{editorBody}</div>
+        <footer className="wf-panel-actions">
+          <div className="wf-panel-actions__row">{actionButtons}</div>
+        </footer>
+      </section>
+    )
+  }
+
+  return <section className="wf-page">{editorBody}</section>
+}
+
+/** Full-page route wrapper for `/configure/workflows/new` and `/:id`. */
+export function WorkflowEditorPage() {
+  return <WorkflowEditor variant="page" />
 }

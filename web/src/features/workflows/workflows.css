@@ -4,6 +4,83 @@
   gap: 1rem;
 }
 
+/* Compact layout when embedded in Map Editor right panel.
+   Form scrolls in __scroll; Create/Done live in a separate footer bar. */
+.wf-page--panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.wf-page--panel__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem 1.25rem;
+}
+
+.wf-page--panel .wf-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  flex: none;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wf-page--panel .wf-header h1 {
+  font-size: 1.05rem;
+}
+
+.wf-panel-actions {
+  flex: none;
+  z-index: 3;
+  padding: 0.75rem 1.15rem 1rem;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  box-shadow: 0 -6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.wf-panel-actions__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.wf-panel-actions__row .btn {
+  flex: 1 1 calc(50% - 0.25rem);
+  justify-content: center;
+  min-height: 2.35rem;
+  font-weight: 600;
+}
+
+.wf-panel-actions__row .btn.primary {
+  order: -1;
+  flex: 1 1 100%;
+}
+
+.wf-page--panel .wf-builder {
+  grid-template-columns: 1fr;
+}
+
+.wf-page--panel .grid-2,
+.wf-page--panel .grid-3,
+.wf-page--panel .binding-row,
+.wf-page--panel .var-row {
+  grid-template-columns: 1fr;
+}
+
+.wf-page--panel .side-list {
+  max-height: 160px;
+}
+
 .wf-header {
   display: flex;
   justify-content: space-between;
@@ -40,8 +117,8 @@
 }
 
 .btn.primary {
-  background: var(--brand);
-  border-color: var(--brand);
+  background: var(--brand, #0f172a);
+  border-color: var(--brand, #0f172a);
   color: #fff;
 }
 
