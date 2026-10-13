@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +20,7 @@ import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { useTopInset } from '../../shared/theme/layout';
 
 export interface CatalogProductItem {
   id: string;
@@ -98,6 +98,7 @@ const DISPATCH_CATALOG: CatalogProductItem[] = [
 
 export function InventoryLookupScreen() {
   const { goBack, navigate } = useNavigation();
+  const topInset = useTopInset();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
@@ -131,7 +132,7 @@ export function InventoryLookupScreen() {
   return (
     <View style={styles.container}>
       {/* Header with Search */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topInset, minHeight: topInset + 52 }]}>
         <Pressable
           onPress={goBack}
           style={({ pressed }) => [
@@ -256,9 +257,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: 12,
-    paddingTop: Platform.select({ android: 10, default: 48 }),
+    paddingTop: 0,
     paddingBottom: 10,
-    minHeight: Platform.select({ android: 58, default: 100 }),
+    minHeight: 0,
     gap: 8,
     ...shadows.panel,
   },
@@ -295,6 +296,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     borderWidth: 0,
+    fontFamily: typography.fontSans,
   },
   clearBtn: {
     position: 'absolute',
@@ -333,6 +335,7 @@ const styles = StyleSheet.create({
   categoryChipTextActive: {
     color: '#ffffff',
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   scrollContent: {
     padding: 16,
@@ -382,6 +385,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   startpointsList: {
     marginVertical: 10,
@@ -446,6 +450,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 12,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   emptyState: {
     alignItems: 'center',
@@ -457,6 +462,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.textPrimary,
     marginTop: 10,
+    fontFamily: typography.fontSans,
   },
   emptySub: {
     fontSize: 11,
@@ -465,5 +471,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     maxWidth: 240,
+    fontFamily: typography.fontSans,
   },
 });

@@ -53,12 +53,12 @@ export function PointToPointScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-11-P2P"
+        label="POINT-TO-POINT TRANSPORT"
         title="Point-to-Point Transport"
         onBack={goBack}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {dispatched ? (
           <View style={styles.successCard}>
             <View style={styles.successIconBadge}>
@@ -72,15 +72,15 @@ export function PointToPointScreen() {
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Origin Station</Text>
-                <Text style={styles.receiptVal}>{origin}</Text>
+                <Text style={styles.receiptVal} numberOfLines={1}>{origin}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Destination</Text>
-                <Text style={styles.receiptHighlight}>{destination}</Text>
+                <Text style={styles.receiptHighlight} numberOfLines={1}>{destination}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Cargo ID</Text>
-                <Text style={styles.receiptVal}>{cargoTag}</Text>
+                <Text style={styles.receiptVal} numberOfLines={1}>{cargoTag}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Speed Profile</Text>
@@ -88,7 +88,7 @@ export function PointToPointScreen() {
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
                 <Text style={styles.receiptLabel}>Assigned Carrier</Text>
-                <Text style={styles.receiptSuccess}>AMR-02 (Healthy)</Text>
+                <Text style={styles.receiptSuccess} numberOfLines={1}>AMR-02 (Healthy)</Text>
               </View>
             </View>
 
@@ -105,40 +105,43 @@ export function PointToPointScreen() {
             {/* Intro Card */}
             <View style={styles.introCard}>
               <View style={styles.introIconBox}>
-                <Navigation size={22} color="#ffffff" />
+                <Navigation size={20} color="#ffffff" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.introTitle}>Custom Point-to-Point Routing</Text>
-                <Text style={styles.introDesc}>
-                  Bypasses fixed rack logic for flexible ad-hoc transport between stations.
-                </Text>
+              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                <Text style={styles.introTitle} numberOfLines={1}>Custom Point-to-Point Routing</Text>
+                <Text style={styles.introCategory} numberOfLines={1}>DIRECT · AD-HOC STATION TRANSFER</Text>
               </View>
             </View>
 
-            {/* Empty Tote Lifecycle Preset Card */}
-            <View style={styles.presetCard}>
-              <View style={styles.presetTop}>
-                <View style={styles.presetBadge}>
-                  <Text style={styles.presetBadgeText}>RULE 3 · TOTE LIFECYCLE</Text>
+            {/* Empty Tote Return Preset - elegant 1-touch card */}
+            <Pressable
+              onPress={handleApplyEmptyTotePreset}
+              style={({ pressed }) => [
+                styles.presetCard,
+                pressed && styles.presetCardPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Apply empty tote return preset"
+            >
+              <View style={styles.presetRow}>
+                <View style={styles.presetIconBox}>
+                  <RotateCw size={18} color="#ffffff" />
                 </View>
-                <Text style={styles.presetRouteNote}>Outbound ➔ Inbound</Text>
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text style={styles.presetTitle} numberOfLines={1}>Return Empty Totes</Text>
+                  <Text style={styles.presetDesc} numberOfLines={2}>
+                    Recirculate discharged empty totes from Outbound Shipping Dock back to Inbound Receiving.
+                  </Text>
+                </View>
+                <View style={styles.presetArrow}>
+                  <Text style={styles.presetArrowText} numberOfLines={1}>1-touch</Text>
+                </View>
               </View>
-              <Text style={styles.presetTitle}>Return Empty Totes Preset</Text>
-              <Text style={styles.presetDesc}>
-                Recirculate discharged empty totes from Outbound Shipping Dock back to Inbound Receiving for incoming shipments.
-              </Text>
-              <Pressable
-                onPress={handleApplyEmptyTotePreset}
-                style={styles.presetBtn}
-              >
-                <RotateCw size={13} color={colors.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.presetBtnText}>Apply Empty Tote Return Preset</Text>
-              </Pressable>
-            </View>
+            </Pressable>
 
             {/* Step 1: Origin Station */}
             <View style={{ gap: 8 }}>
-              <Text style={styles.sectionLabel}>1. ORIGIN STATION (FROM):</Text>
+              <Text style={styles.sectionLabel} numberOfLines={1}>1. ORIGIN STATION (FROM):</Text>
               <View style={styles.stationsGrid}>
                 {STATIONS.map((st) => {
                   const isSelected = origin === st.id;
@@ -151,11 +154,9 @@ export function PointToPointScreen() {
                         isSelected ? styles.stationCardSelected : styles.stationCardNormal,
                       ]}
                     >
-                      <Text style={styles.stationId}>{st.id}</Text>
-                      <Text style={styles.stationName} numberOfLines={1}>
-                        {st.name}
-                      </Text>
-                      <Text style={styles.stationType}>{st.type}</Text>
+                      <Text style={styles.stationId} numberOfLines={1}>{st.id}</Text>
+                      <Text style={styles.stationName} numberOfLines={1}>{st.name}</Text>
+                      <Text style={styles.stationType} numberOfLines={1}>{st.type}</Text>
                     </Pressable>
                   );
                 })}
@@ -167,14 +168,14 @@ export function PointToPointScreen() {
               <View style={styles.connectorLine} />
               <View style={styles.connectorBadge}>
                 <RouteIcon size={12} color={colors.primary} />
-                <Text style={styles.connectorText}>Est. 38m · ~2m 45s transit</Text>
+                <Text style={styles.connectorText} numberOfLines={1}>Est. 38m · ~2m 45s transit</Text>
               </View>
               <View style={styles.connectorLine} />
             </View>
 
             {/* Step 2: Destination Station */}
             <View style={{ gap: 8 }}>
-              <Text style={styles.sectionLabel}>2. DESTINATION STATION (TO):</Text>
+              <Text style={styles.sectionLabel} numberOfLines={1}>2. DESTINATION STATION (TO):</Text>
               <View style={styles.stationsGrid}>
                 {STATIONS.map((st) => {
                   const isSelected = destination === st.id;
@@ -193,11 +194,9 @@ export function PointToPointScreen() {
                           : styles.stationCardNormal,
                       ]}
                     >
-                      <Text style={styles.stationId}>{st.id}</Text>
-                      <Text style={styles.stationName} numberOfLines={1}>
-                        {st.name}
-                      </Text>
-                      <Text style={styles.stationType}>{st.type}</Text>
+                      <Text style={styles.stationId} numberOfLines={1}>{st.id}</Text>
+                      <Text style={styles.stationName} numberOfLines={1}>{st.name}</Text>
+                      <Text style={styles.stationType} numberOfLines={1}>{st.type}</Text>
                     </Pressable>
                   );
                 })}
@@ -207,9 +206,9 @@ export function PointToPointScreen() {
             {/* Step 3: Cargo & Priority */}
             <View style={styles.cargoPriorityCard}>
               <View style={{ gap: 6 }}>
-                <Text style={styles.sectionLabel}>CARGO TAG / TOTE IDENTIFIER</Text>
+                <Text style={styles.sectionLabel} numberOfLines={1}>CARGO TAG / TOTE IDENTIFIER</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Input
                       value={cargoTag}
                       onChangeText={setCargoTag}
@@ -222,13 +221,13 @@ export function PointToPointScreen() {
                     onPress={() => setCargoTag(`TOTE-${Math.floor(100 + Math.random() * 900)}`)}
                     style={styles.randomBtn}
                   >
-                    <Text style={styles.randomBtnText}>Random</Text>
+                    <Text style={styles.randomBtnText} numberOfLines={1}>Random</Text>
                   </Pressable>
                 </View>
               </View>
 
               <View style={{ gap: 6, marginTop: 12 }}>
-                <Text style={styles.sectionLabel}>TRANSPORT SPEED & LANE PRIORITY</Text>
+                <Text style={styles.sectionLabel} numberOfLines={1}>TRANSPORT SPEED & LANE PRIORITY</Text>
                 <View style={styles.priorityGrid}>
                   <Pressable
                     onPress={() => setPriority('normal')}
@@ -237,8 +236,8 @@ export function PointToPointScreen() {
                       priority === 'normal' ? styles.priorityCardActive : styles.priorityCardNormal,
                     ]}
                   >
-                    <Text style={styles.priorityCardTitle}>Standard Lane</Text>
-                    <Text style={styles.priorityCardSub}>Normal speed profile</Text>
+                    <Text style={styles.priorityCardTitle} numberOfLines={1}>Standard Lane</Text>
+                    <Text style={styles.priorityCardSub} numberOfLines={2}>Normal speed profile</Text>
                   </Pressable>
 
                   <Pressable
@@ -248,8 +247,8 @@ export function PointToPointScreen() {
                       priority === 'urgent' ? styles.priorityCardActiveUrgent : styles.priorityCardNormal,
                     ]}
                   >
-                    <Text style={styles.priorityCardUrgentTitle}>Expedited Express</Text>
-                    <Text style={styles.priorityCardSub}>High priority lane clearance</Text>
+                    <Text style={styles.priorityCardUrgentTitle} numberOfLines={1}>Expedited Express</Text>
+                    <Text style={styles.priorityCardSub} numberOfLines={2}>High priority lane clearance</Text>
                   </Pressable>
                 </View>
               </View>
@@ -262,7 +261,7 @@ export function PointToPointScreen() {
               accessibilityRole="button"
             >
               <Rocket size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.dispatchBtnText}>
+              <Text style={styles.dispatchBtnText} numberOfLines={1}>
                 Initiate Direct P2P Transfer ({origin} ➔ {destination})
               </Text>
             </Pressable>
@@ -280,7 +279,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 130,
+    gap: 16,
   },
   introCard: {
     flexDirection: 'row',
@@ -307,10 +307,12 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
-  introDesc: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 2,
+  introCategory: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    color: colors.primary,
+    fontFamily: typography.fontMono,
   },
   presetCard: {
     backgroundColor: '#ffffff',
@@ -318,57 +320,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    gap: 6,
     ...shadows.panel,
   },
-  presetTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  presetBadge: {
+  presetCardPressed: {
+    borderColor: colors.primary,
     backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
   },
-  presetBadgeText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
+  presetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  presetRouteNote: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
+  presetIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   presetTitle: {
     fontSize: 13,
     fontWeight: '900',
     color: colors.textPrimary,
-    marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   presetDesc: {
     fontSize: 10,
     color: colors.textSecondary,
     lineHeight: 14,
   },
-  presetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
+  presetArrow: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.3)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    marginTop: 10,
+    borderColor: colors.primaryBorder,
   },
-  presetBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
+  presetArrowText: {
+    fontSize: 9,
+    fontWeight: '900',
     color: colors.primary,
+    fontFamily: typography.fontMono,
   },
   sectionLabel: {
     fontSize: 10,
@@ -376,6 +370,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: colors.textMuted,
     marginBottom: 8,
+    fontFamily: typography.fontSans,
   },
   stationsGrid: {
     flexDirection: 'row',
@@ -383,8 +378,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stationCard: {
-    width: 195,
-    minHeight: 78.5,
+    flexBasis: '48%',
+    flexGrow: 1,
+    minWidth: 0,
+    minHeight: 78,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 1,
@@ -416,6 +413,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   stationType: {
     fontSize: 9,
@@ -441,12 +439,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 5,
+    flexShrink: 1,
   },
   connectorText: {
     fontSize: 10,
     fontWeight: '900',
     color: colors.primary,
     fontFamily: typography.fontMono,
+    flexShrink: 1,
   },
   cargoPriorityCard: {
     backgroundColor: '#ffffff',
@@ -466,11 +466,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
+    flexShrink: 0,
   },
   randomBtnText: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   priorityGrid: {
     flexDirection: 'row',
@@ -478,6 +480,7 @@ const styles = StyleSheet.create({
   },
   priorityCard: {
     flex: 1,
+    minWidth: 0,
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
@@ -498,11 +501,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   priorityCardUrgentTitle: {
     fontSize: 12,
     fontWeight: '900',
     color: '#b45309',
+    fontFamily: typography.fontSans,
   },
   priorityCardSub: {
     fontSize: 10,
@@ -520,12 +525,16 @@ const styles = StyleSheet.create({
     borderBottomColor: '#004bb0',
     paddingHorizontal: 20,
     marginTop: 4,
+    gap: 8,
     ...shadows.panel,
   },
   dispatchBtnText: {
     fontSize: 14,
     fontWeight: '900',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
+    flexShrink: 1,
+    textAlign: 'center',
   },
   successCard: {
     backgroundColor: colors.successBg,
@@ -535,6 +544,7 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: 'center',
     ...shadows.panel,
+    gap: 8,
   },
   successIconBadge: {
     width: 52,
@@ -551,6 +561,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: 12,
     fontFamily: typography.fontSans,
+    textAlign: 'center',
   },
   successSub: {
     fontSize: 12,
@@ -559,6 +570,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 16,
+    fontFamily: typography.fontSans,
   },
   receiptBox: {
     width: '100%',
@@ -572,29 +584,39 @@ const styles = StyleSheet.create({
   receiptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 8,
   },
   receiptLabel: {
     fontSize: 11,
     fontWeight: '600',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
+    flex: 1,
+    minWidth: 0,
   },
   receiptVal: {
     fontSize: 11,
     fontWeight: '800',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   receiptHighlight: {
     fontSize: 11,
     fontWeight: '900',
     color: colors.primary,
     fontFamily: typography.fontMono,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   receiptSuccess: {
     fontSize: 11,
     fontWeight: '900',
     color: colors.success,
     fontFamily: typography.fontMono,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   receiptBorderTop: {
     borderTopWidth: 1,

@@ -10,11 +10,13 @@ if (__DEV__) {
   ]);
 }
 import { Wifi } from 'lucide-react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/app/navigation/AppNavigator';
 import { NavigationProvider } from './src/app/navigation/NavigationContext';
 import { AuthProvider } from './src/features/auth/authContext';
 import { ToastProvider } from './src/shared/context/ToastContext';
 import { colors } from './src/shared/theme/colors';
+import { SIMULATED_STATUS_BAR } from './src/shared/theme/layout';
 import { typography } from './src/shared/theme/typography';
 
 export default function App() {
@@ -73,9 +75,19 @@ export default function App() {
             user-select: text !important;
           }
           html, body, #root {
+            /* Baseline family. Roughly 246 style blocks across the app declare
+               fontWeight without fontFamily; on native those resolve to the
+               system face, but on web they inherited the browser default
+               (serif) and got a synthesised faux-bold that looked far thinner
+               than the native build. Inter is loaded above with real weights
+               400-900, so this makes those styles render consistently. */
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif !important;
             -webkit-font-smoothing: antialiased !important;
             -moz-osx-font-smoothing: grayscale !important;
             text-rendering: optimizeLegibility !important;
+          }
+          code, pre, kbd, samp {
+            font-family: 'JetBrains Mono', Menlo, 'SF Mono', Consolas, 'Roboto Mono', monospace !important;
           }
           *:focus, *:focus-visible, *:focus-within {
             outline: none !important;
@@ -231,17 +243,26 @@ export default function App() {
     }
   }, []);
 
+  // SafeAreaProvider must sit above every screen that reads insets via
+  // `useTopInset()`. It is applied here — at the single definition of
+  // `content` — so BOTH the web phone-frame branch and the native branch get
+  // it. Wrapping only the final `return` leaves the web path without a
+  // provider, which makes `useSafeAreaInsets()` throw at render time.
+  // The inner root stays a plain View (no SafeAreaView) so the app never
+  // letterboxes; each screen opts into the inset it needs.
   const content = (
-    <View style={styles.appContainer}>
-      <StatusBar style="dark" />
-      <AuthProvider>
-        <NavigationProvider>
-          <ToastProvider>
-            <AppNavigator />
-          </ToastProvider>
-        </NavigationProvider>
-      </AuthProvider>
-    </View>
+    <SafeAreaProvider>
+      <View style={styles.appContainer}>
+        <StatusBar style="dark" />
+        <AuthProvider>
+          <NavigationProvider>
+            <ToastProvider>
+              <AppNavigator />
+            </ToastProvider>
+          </NavigationProvider>
+        </AuthProvider>
+      </View>
+    </SafeAreaProvider>
   );
 
   if (Platform.OS === 'web') {
@@ -315,7 +336,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 44,
+    height: SIMULATED_STATUS_BAR,
     zIndex: 9999,
     flexDirection: 'row',
     alignItems: 'center',

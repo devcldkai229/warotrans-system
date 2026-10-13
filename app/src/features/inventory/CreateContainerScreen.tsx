@@ -372,6 +372,7 @@ const styles = StyleSheet.create({
   modeTextActive: {
     color: colors.textPrimary,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   scrollContent: {
     padding: 16,
@@ -393,6 +394,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
     flex: 1,
+    fontFamily: typography.fontSans,
   },
   successCard: {
     borderRadius: 16,
@@ -426,6 +428,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 16,
+    fontFamily: typography.fontSans,
   },
   barcodeTicket: {
     width: '100%',
@@ -477,6 +480,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textSecondary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   ticketFooter: {
     flexDirection: 'row',
@@ -498,6 +502,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   stagedLocVal: {
     fontSize: 11,
@@ -585,6 +590,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 16,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   fieldLabel: {
     fontSize: 10,
@@ -593,6 +599,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 8,
     marginTop: 10,
+    fontFamily: typography.fontSans,
   },
   categoryChips: {
     flexDirection: 'row',
@@ -616,10 +623,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   chipTextSelected: {
     color: colors.primary,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   productChips: {
     gap: 6,
@@ -660,14 +669,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   productItemTextSelected: {
     color: colors.primary,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   stockNotice: {
     fontSize: 10,
     fontWeight: '700',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
 });

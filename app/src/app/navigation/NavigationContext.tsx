@@ -37,6 +37,9 @@ interface NavigationContextType {
   goBack: () => void;
   activeJobCount: number;
   setActiveJobCount: (count: number) => void;
+  /** Measured height of the floating dock pill, published by BottomTabBar. */
+  dockHeight: number;
+  setDockHeight: (height: number) => void;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
@@ -114,6 +117,9 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
     { screen: initial.screen, params: initial.params },
   ]);
   const [activeJobCount, setActiveJobCount] = useState<number>(1);
+  // Initial guess until BottomTabBar's onLayout reports the real pill height.
+  // Prevents a visible one-frame jump in the screens that dock content.
+  const [dockHeight, setDockHeight] = useState<number>(60);
 
   const navigate = (screen: AppScreen, newParams: Record<string, any> = {}) => {
     setHistory((prev) => [...prev, { screen, params: newParams }]);
@@ -168,6 +174,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
         goBack,
         activeJobCount,
         setActiveJobCount,
+        dockHeight,
+        setDockHeight,
       }}
     >
       {children}

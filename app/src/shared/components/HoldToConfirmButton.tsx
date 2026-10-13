@@ -157,6 +157,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   labelWhite: {
     color: '#ffffff',

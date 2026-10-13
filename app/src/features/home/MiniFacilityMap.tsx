@@ -316,6 +316,10 @@ export function MiniFacilityMap({
             ]}
             accessibilityRole="button"
             accessibilityLabel={`Select ${robot.id}`}
+            // The marker itself is 40pt and the ID tag is absolutely
+            // positioned, so the layout box is 40x40. hitSlop lifts the
+            // effective target to 52pt without disturbing marker geometry.
+            hitSlop={6}
           >
             {/* Directional Sonar Radar Cone on Web */}
             {isWeb && (
@@ -497,7 +501,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   onlinePillText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     color: colors.success,
     fontFamily: typography.fontMono,
@@ -518,9 +522,9 @@ const styles = StyleSheet.create({
     top: 72,
     right: 14,
     zIndex: 30,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderWidth: 1,
     borderColor: colors.border,
@@ -690,6 +694,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+    // Android ignores the shadow* props entirely; without elevation this label
+    // renders completely flat and detaches from the map underneath.
+    elevation: 2,
     ...(Platform.OS === 'web'
       ? ({
           left: '50%',
@@ -706,7 +713,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   workerLabelText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
@@ -780,8 +787,10 @@ const styles = StyleSheet.create({
   robotTag: {
     position: 'absolute',
     top: 44,
-    left: '50%',
-    transform: [{ translateX: -42 }],
+    // Was `left: 50%` + `translateX: -42`, which silently assumed the tag was
+    // exactly 84pt wide. At 9pt the tag grows past that, so centering is now
+    // delegated to the wrapper's `alignItems: 'center'` to stay true at any width.
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -811,7 +820,7 @@ const styles = StyleSheet.create({
   },
   robotTagText: {
     color: colors.textPrimary,
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     fontFamily: typography.fontMono,
     textAlign: 'center',

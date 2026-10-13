@@ -42,6 +42,8 @@ const SHORTAGES = [
   },
 ];
 
+const QUICK_CHIPS = [10, 25, 50];
+
 export function ReplenishmentScreen() {
   const { goBack } = useNavigation();
   const [selectedShortage, setSelectedShortage] = useState('RACK-A-01');
@@ -51,6 +53,8 @@ export function ReplenishmentScreen() {
   const currentAlert =
     SHORTAGES.find((s) => s.id === selectedShortage) || SHORTAGES[0];
   const projectedStock = currentAlert.current + restockQty;
+  const restockCap = Math.max(1, 80 - currentAlert.current);
+  const maxFillValue = Math.min(80, restockCap);
 
   const handleDispatch = () => {
     setDispatched(true);
@@ -59,12 +63,12 @@ export function ReplenishmentScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-11-REPLENISH"
+        label="REPLENISHMENT DISPATCH"
         title="Replenishment Dispatch"
         onBack={goBack}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {dispatched ? (
           <View style={styles.successCard}>
             <View style={styles.successIconBadge}>
@@ -79,15 +83,15 @@ export function ReplenishmentScreen() {
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Target SKU</Text>
-                <Text style={styles.receiptVal}>{currentAlert.name}</Text>
+                <Text style={styles.receiptVal} numberOfLines={1}>{currentAlert.name}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Source Buffer</Text>
-                <Text style={styles.receiptVal}>{currentAlert.bulkSource}</Text>
+                <Text style={styles.receiptVal} numberOfLines={1}>{currentAlert.bulkSource}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Target Pick Face</Text>
-                <Text style={styles.receiptHighlight}>{currentAlert.location}</Text>
+                <Text style={styles.receiptHighlight} numberOfLines={1}>{currentAlert.location}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Replenishment Load</Text>
@@ -95,7 +99,9 @@ export function ReplenishmentScreen() {
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
                 <Text style={styles.receiptLabel}>Projected Stock</Text>
-                <Text style={styles.receiptVal}>{projectedStock} units (Healthy)</Text>
+                <Text style={styles.receiptVal} numberOfLines={1}>
+                  {projectedStock} units (Healthy)
+                </Text>
               </View>
             </View>
 
@@ -112,27 +118,26 @@ export function ReplenishmentScreen() {
             {/* Flow Banner */}
             <View style={styles.introCard}>
               <View style={styles.introIconBox}>
-                <Layers size={22} color="#ffffff" />
+                <Layers size={20} color="#ffffff" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.introTitle}>Pick-Face Replenishment Flow</Text>
-                <Text style={styles.introDesc}>
-                  Restock high-velocity picking bins from bulk reserve storage.
-                </Text>
+              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                <Text style={styles.introTitle} numberOfLines={1}>Pick-Face Replenishment Flow</Text>
+                <Text style={styles.introCategory} numberOfLines={1}>INTERNAL · BUFFER ➔ PICK-FACE</Text>
               </View>
             </View>
 
             {/* Step 1: Active Pick-Face Shortages */}
             <View style={{ gap: 8 }}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>1. ACTIVE PICK-FACE SHORTAGES:</Text>
-                <Text style={styles.sectionSubWarning}>Below Min Safety Stock</Text>
+                <Text style={styles.sectionLabel} numberOfLines={1}>1. ACTIVE PICK-FACE SHORTAGES:</Text>
+                <Text style={styles.sectionSubWarning} numberOfLines={1}>Below Min Safety Stock</Text>
               </View>
 
               <View style={{ gap: 8 }}>
                 {SHORTAGES.map((item) => {
                   const isSelected = selectedShortage === item.id;
                   const isCritical = item.urgency === 'CRITICAL';
+                  const stockPct = Math.min(100, (item.current / item.minThreshold) * 100);
                   return (
                     <Pressable
                       key={item.id}
@@ -143,9 +148,12 @@ export function ReplenishmentScreen() {
                       ]}
                     >
                       <View style={styles.shortageHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Text style={styles.shortageName}>{item.name}</Text>
-                          <Text style={styles.shortageCode}>({item.container})</Text>
+                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <Text style={styles.shortageName} numberOfLines={1}>{item.name}</Text>
+                            <Text style={styles.shortageCode} numberOfLines={1}>({item.container})</Text>
+                          </View>
+                          <Text style={styles.shortageLoc} numberOfLines={1}>{item.location}</Text>
                         </View>
                         <View
                           style={[
@@ -158,21 +166,38 @@ export function ReplenishmentScreen() {
                               styles.urgencyText,
                               isCritical ? styles.urgencyCriticalText : styles.urgencyWarningText,
                             ]}
+                            numberOfLines={1}
                           >
                             {item.urgency}
                           </Text>
                         </View>
                       </View>
-                      <Text style={styles.shortageLoc}>{item.location}</Text>
-                      <View style={styles.shortageFooter}>
-                        <Text style={styles.shortageStock}>
-                          Current:{' '}
-                          <Text style={{ color: colors.danger, fontWeight: '700' }}>
-                            {item.current} units
-                          </Text>{' '}
-                          (Min: {item.minThreshold})
-                        </Text>
-                        <Text style={styles.replenishTap}>Tap to replenish ➔</Text>
+
+                      {/* Stock level progress bar comparing current qty to min threshold */}
+                      <View style={styles.stockBarBlock}>
+                        <View style={styles.stockBarHeader}>
+                          <Text style={styles.stockBarLabel} numberOfLines={1}>STOCK LEVEL</Text>
+                          <Text style={styles.stockBarValue} numberOfLines={1}>
+                            {item.current} / {item.minThreshold} units
+                          </Text>
+                        </View>
+                        <View style={styles.stockBarTrack}>
+                          <View
+                            style={[
+                              styles.stockBarFill,
+                              {
+                                width: `${stockPct}%`,
+                                backgroundColor: isCritical ? colors.danger : colors.warning,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <View style={styles.stockBarFooter}>
+                          <Text style={styles.stockBarFootnote} numberOfLines={1}>
+                            Min threshold {item.minThreshold} units
+                          </Text>
+                          <Text style={styles.replenishTap} numberOfLines={1}>Tap to replenish ➔</Text>
+                        </View>
                       </View>
                     </Pressable>
                   );
@@ -182,25 +207,25 @@ export function ReplenishmentScreen() {
 
             {/* Step 2: Source Bulk Buffer */}
             <View style={styles.bulkCard}>
-              <Text style={styles.sectionLabel}>2. SOURCE BULK STORAGE BUFFER:</Text>
+              <Text style={styles.sectionLabel} numberOfLines={1}>2. SOURCE BULK STORAGE BUFFER:</Text>
               <View style={styles.bulkRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                   <Warehouse size={15} color={colors.primary} />
-                  <Text style={styles.bulkSourceText}>{currentAlert.bulkSource}</Text>
+                  <Text style={styles.bulkSourceText} numberOfLines={1}>{currentAlert.bulkSource}</Text>
                 </View>
-                <Text style={styles.bulkStockText}>80 Units in Reserve</Text>
+                <Text style={styles.bulkStockText} numberOfLines={1}>80 Units in Reserve</Text>
               </View>
             </View>
 
             {/* Step 3: Quantity Stepper & Projection */}
             <View style={styles.qtyCard}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>3. REPLENISHMENT QUANTITY:</Text>
-                <Text style={styles.qtyTotal}>+{restockQty} units</Text>
+                <Text style={styles.sectionLabel} numberOfLines={1}>3. REPLENISHMENT QUANTITY:</Text>
+                <Text style={styles.qtyTotal} numberOfLines={1}>+{restockQty} units</Text>
               </View>
 
               <View style={styles.qtyControlsRow}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <Input
                     value={String(restockQty)}
                     onChangeText={(t) => {
@@ -215,10 +240,10 @@ export function ReplenishmentScreen() {
                   />
                 </View>
                 <View style={styles.presetButtons}>
-                  {[15, 25, 50].map((qty) => (
+                  {QUICK_CHIPS.map((qty) => (
                     <Pressable
                       key={qty}
-                      onPress={() => setRestockQty(qty)}
+                      onPress={() => setRestockQty(Math.min(80, qty))}
                       style={[
                         styles.presetBtn,
                         restockQty === qty ? styles.presetBtnActive : styles.presetBtnNormal,
@@ -229,27 +254,44 @@ export function ReplenishmentScreen() {
                           styles.presetBtnText,
                           restockQty === qty && styles.presetBtnTextActive,
                         ]}
+                        numberOfLines={1}
                       >
                         +{qty}
                       </Text>
                     </Pressable>
                   ))}
+                  <Pressable
+                    onPress={() => setRestockQty(maxFillValue)}
+                    style={[
+                      styles.presetBtn,
+                      restockQty === maxFillValue ? styles.presetBtnActive : styles.presetBtnNormal,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.presetBtnText,
+                        restockQty === maxFillValue && styles.presetBtnTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Max Fill
+                    </Text>
+                  </Pressable>
                 </View>
               </View>
 
-              {/* Stock Delta Bar */}
+              {/* Projected stock calculation */}
               <View style={styles.deltaBox}>
                 <View style={styles.deltaHeader}>
-                  <Text style={styles.deltaText}>
+                  <Text style={styles.deltaText} numberOfLines={1}>
                     Current: <Text style={{ color: colors.danger, fontWeight: '700' }}>{currentAlert.current}</Text>
                   </Text>
-                  <Text style={styles.deltaText}>
+                  <Text style={styles.deltaText} numberOfLines={1}>
                     After Restock:{' '}
                     <Text style={{ color: colors.success, fontWeight: '700' }}>{projectedStock} units</Text>
                   </Text>
                 </View>
 
-                {/* Progress bar with red current and green added */}
                 <View style={styles.barTrack}>
                   <View
                     style={[
@@ -264,7 +306,7 @@ export function ReplenishmentScreen() {
                     ]}
                   />
                 </View>
-                <Text style={styles.deltaFootnote}>
+                <Text style={styles.deltaFootnote} numberOfLines={2}>
                   Restock will lift bin well above safety minimum ({currentAlert.minThreshold} units).
                 </Text>
               </View>
@@ -277,7 +319,7 @@ export function ReplenishmentScreen() {
               accessibilityRole="button"
             >
               <Layers size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.dispatchBtnText}>
+              <Text style={styles.dispatchBtnText} numberOfLines={1}>
                 Dispatch Replenishment Tour (+{restockQty} units)
               </Text>
             </Pressable>
@@ -295,7 +337,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 130,
+    gap: 16,
   },
   introCard: {
     flexDirection: 'row',
@@ -305,12 +348,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0, 92, 209, 0.2)',
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     ...shadows.panel,
   },
   introIconBox: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 8,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -323,16 +366,18 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
     lineHeight: 20,
   },
-  introDesc: {
-    fontSize: 11,
-    color: colors.textMuted,
-    lineHeight: 16,
-    marginTop: 2,
+  introCategory: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    color: colors.primary,
+    fontFamily: typography.fontMono,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
   sectionLabel: {
     fontSize: 10,
@@ -340,6 +385,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
+    flex: 1,
+    minWidth: 0,
   },
   sectionSubWarning: {
     fontSize: 10,
@@ -351,6 +399,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
+    gap: 10,
     ...shadows.panel,
   },
   shortageCardNormal: {
@@ -363,16 +412,23 @@ const styles = StyleSheet.create({
   },
   shortageHeader: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 8,
   },
   shortageName: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   shortageCode: {
     fontSize: 10,
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  shortageLoc: {
+    fontSize: 11,
     color: colors.textMuted,
     fontFamily: typography.fontMono,
   },
@@ -388,35 +444,71 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   urgencyWarning: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: colors.warningSoft,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
   },
   urgencyWarningText: {
-    color: '#b45309',
+    color: colors.warningText,
   },
   urgencyText: {
     fontSize: 9,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
-  shortageLoc: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
-    marginTop: 2,
+  stockBarBlock: {
+    gap: 6,
   },
-  shortageFooter: {
+  stockBarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    gap: 8,
   },
-  shortageStock: {
+  stockBarLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
+    flex: 1,
+    minWidth: 0,
+  },
+  stockBarValue: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  stockBarTrack: {
+    height: 8,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: 999,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stockBarFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  stockBarFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stockBarFootnote: {
     fontSize: 10,
     color: colors.textMuted,
+    flex: 1,
+    minWidth: 0,
   },
   replenishTap: {
     fontSize: 10,
     fontWeight: '700',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   bulkCard: {
     backgroundColor: colors.surface,
@@ -436,17 +528,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 10,
+    gap: 8,
   },
   bulkSourceText: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
+    flex: 1,
+    minWidth: 0,
   },
   bulkStockText: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.success,
+    fontFamily: typography.fontSans,
   },
   qtyCard: {
     backgroundColor: colors.surface,
@@ -472,10 +568,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   presetButtons: {
     flexDirection: 'row',
     gap: 6,
+    flexShrink: 0,
   },
   presetBtn: {
     height: 44,
@@ -484,6 +582,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 52,
   },
   presetBtnNormal: {
     backgroundColor: colors.surface,
@@ -513,10 +612,13 @@ const styles = StyleSheet.create({
   deltaHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 8,
   },
   deltaText: {
     fontSize: 11,
     color: colors.textMuted,
+    flex: 1,
+    minWidth: 0,
   },
   barTrack: {
     height: 8,
@@ -549,11 +651,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 3,
     borderBottomColor: '#004bb0',
+    gap: 8,
   },
   dispatchBtnText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
+    flexShrink: 1,
   },
   successCard: {
     backgroundColor: colors.successBg,
@@ -563,6 +668,7 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     ...shadows.panel,
+    gap: 8,
   },
   successIconBadge: {
     width: 56,
@@ -579,6 +685,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: 12,
     fontFamily: typography.fontSans,
+    textAlign: 'center',
   },
   successSub: {
     fontSize: 12,
@@ -588,6 +695,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 16,
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   receiptBox: {
     width: '100%',
@@ -602,27 +710,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
   receiptLabel: {
     fontSize: 12,
     fontWeight: '500',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
+    flex: 1,
+    minWidth: 0,
   },
   receiptVal: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   receiptHighlight: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
     fontFamily: typography.fontMono,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   receiptSuccess: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.success,
+    fontFamily: typography.fontSans,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   receiptBorderTop: {
     borderTopWidth: 1,

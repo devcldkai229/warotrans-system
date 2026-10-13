@@ -103,6 +103,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   etaBadge: {
     flexDirection: 'row',
@@ -140,12 +141,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   payloadSubtext: {
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: 2,
     fontWeight: '500',
+    fontFamily: typography.fontSans,
   },
   ctaButton: {
     backgroundColor: colors.primary,
@@ -160,5 +163,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: 12,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
 });

@@ -17,6 +17,7 @@ import {
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { useTopInset } from '../../shared/theme/layout';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
 interface BarcodeScannerHUDProps {
@@ -32,13 +33,14 @@ export function BarcodeScannerHUD({
   onScanResult,
   targetBarcode = 'BOX-101',
 }: BarcodeScannerHUDProps) {
+  const topInset = useTopInset();
   const [torchOn, setTorchOn] = useState(false);
 
   if (!visible) return null;
 
   const hudBody = (
     <View style={styles.modalBackdrop}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { paddingTop: topInset + 8 }]}>
         {/* Header Bar */}
         <View style={styles.header}>
           <View>
@@ -164,7 +166,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     justifyContent: 'space-between',
     padding: 18,
-    paddingTop: Platform.OS === 'ios' ? 52 : 36,
+    paddingTop: 0,
     paddingBottom: Platform.OS === 'ios' ? 36 : 18,
   },
   header: {
@@ -354,5 +356,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
   },
 });

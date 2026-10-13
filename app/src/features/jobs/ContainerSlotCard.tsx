@@ -129,6 +129,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '900',
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   badgeTextActive: {
     color: colors.textInverse,
@@ -143,6 +144,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   mainInfoRow: {
     flexDirection: 'row',
@@ -164,6 +166,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   qtyText: {
     fontSize: 10,
@@ -183,5 +186,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: 11,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
 });

@@ -115,7 +115,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.danger,
     marginTop: 4,
-    fontWeight: '500',
+    fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   hintText: {
     fontSize: 11,

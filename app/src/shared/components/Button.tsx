@@ -179,15 +179,18 @@ const textStyles = StyleSheet.create({
   sm: {
     fontSize: 12,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   md: {
     fontSize: 14,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   lg: {
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.8,
+    fontFamily: typography.fontSans,
   },
   disabled: {
     color: colors.textMuted,

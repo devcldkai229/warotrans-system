@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
-import { Box, Layers } from 'lucide-react-native';
+import { Box, Layers, Lock } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
 import { typography } from '../../shared/theme/typography';
 import { ContainerSlot } from '../../shared/types/contracts';
@@ -102,14 +102,11 @@ export function AmrChassisDeckVisualizer({
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
           <View style={styles.iconWrap}>
-            <Layers size={15} color={colors.primary} />
+            <Layers size={14} color={colors.primary} />
           </View>
-          <View>
-            <Text style={styles.title}>
-              {activeRobot} Flatbed Chassis · 3-Tray Deck
-            </Text>
-            <Text style={styles.subTitle}>Top-Down Physical Tray Arrangement</Text>
-          </View>
+          <Text style={styles.title}>
+            {activeRobot} Flatbed Deck
+          </Text>
         </View>
         <View style={styles.slotsBadge}>
           <Text style={styles.slotsBadgeText}>{filledCount}/3 SLOTS</Text>
@@ -124,7 +121,7 @@ export function AmrChassisDeckVisualizer({
 
         {/* Heading Indicator Arrow */}
         <View style={styles.headingIndicator}>
-          <Text style={styles.headingIndicatorText}>▲ FRONT (NAV2 HEADING DIRECTION)</Text>
+          <Text style={styles.headingIndicatorText}>▲ FRONT HEADING</Text>
         </View>
 
         {/* 3 Physical Tray Bays */}
@@ -152,7 +149,7 @@ export function AmrChassisDeckVisualizer({
                 {matchingContainer && matchingContainer.code ? (
                   <View style={styles.slotCargo}>
                     <View style={styles.boxIconWrap}>
-                      <Box size={14} color={colors.primary} />
+                      <Box size={14} color={isTarget ? colors.primary : colors.textSecondary} />
                     </View>
                     <Text
                       style={[
@@ -169,7 +166,7 @@ export function AmrChassisDeckVisualizer({
                   </View>
                 ) : (
                   <View style={styles.emptySlotWrap}>
-                    <Text style={styles.emptySlotText}>EMPTY TRAY</Text>
+                    <Text style={styles.emptySlotText}>EMPTY</Text>
                   </View>
                 )}
 
@@ -187,33 +184,33 @@ export function AmrChassisDeckVisualizer({
                       : styles.tagEmpty,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.actionTagText,
-                      isTarget
-                        ? styles.textTarget
-                        : isUnload
-                        ? styles.textUnload
-                        : isPickup
-                        ? styles.textPickup
-                        : isKeep
-                        ? styles.textKeep
-                        : styles.textEmpty,
-                    ]}
-                  >
-                    {isTarget ? 'UNLOAD HERE' : matchingContainer ? matchingContainer.action : 'EMPTY'}
-                  </Text>
+                  {isKeep ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <Lock size={9} color="#64748b" />
+                      <Text style={[styles.actionTagText, styles.textKeep]}>KEEP</Text>
+                    </View>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.actionTagText,
+                        isTarget
+                          ? styles.textTarget
+                          : isUnload
+                          ? styles.textUnload
+                          : isPickup
+                          ? styles.textPickup
+                          : styles.textEmpty,
+                      ]}
+                    >
+                      {isTarget ? 'UNLOAD' : matchingContainer ? matchingContainer.action : 'EMPTY'}
+                    </Text>
+                  )}
                 </View>
               </TargetTrayPulseWrapper>
             );
           })}
         </View>
       </View>
-
-      {/* Pick-to-Light Deck Footnote */}
-      <Text style={styles.ptlFootnote}>
-        Pick-to-Light: Operator retrieves tote directly from illuminated tray slot during handover.
-      </Text>
     </View>
   );
 }
@@ -258,11 +255,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.textPrimary,
     textTransform: 'uppercase',
-  },
-  subTitle: {
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 1,
+    fontFamily: typography.fontSans,
   },
   slotsBadge: {
     backgroundColor: 'rgba(0, 102, 204, 0.1)',
@@ -316,6 +309,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.2,
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   chassisBody: {
     flexDirection: 'row',
@@ -386,6 +380,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.textMuted,
     marginTop: 1,
+    fontFamily: typography.fontSans,
   },
   emptySlotWrap: {
     marginVertical: 12,
@@ -418,10 +413,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(241, 245, 249, 0.4)',
   },
   actionTagText: {
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   textTarget: {
     color: '#ffffff',
@@ -437,12 +433,5 @@ const styles = StyleSheet.create({
   },
   textEmpty: {
     color: '#94a3b8',
-  },
-  ptlFootnote: {
-    fontSize: 9,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: 10,
-    lineHeight: 13,
   },
 });

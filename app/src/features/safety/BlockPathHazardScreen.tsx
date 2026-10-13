@@ -339,6 +339,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   edgeCard: {
     flexDirection: 'row',
@@ -381,6 +382,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   hazardGrid: {
     flexDirection: 'row',
@@ -409,6 +411,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   hazardDesc: {
     fontSize: 10,
@@ -445,12 +448,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#ef4444',
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   severityBtnCautionTitle: {
     fontSize: 12,
     fontWeight: '900',
     color: '#b45309',
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   severityBtnSub: {
     fontSize: 10,
@@ -481,6 +486,7 @@ const styles = StyleSheet.create({
   durationBtnText: {
     fontSize: 12,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   durationBtnTextNormal: {
     color: colors.textPrimary,
@@ -505,6 +511,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.5,
+    fontFamily: typography.fontSans,
   },
   submittedCard: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -539,6 +546,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 16,
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   receiptBox: {
     width: '100%',
@@ -558,16 +566,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   receiptVal: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   receiptHighlight: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   receiptDanger: {
     fontSize: 12,
@@ -608,6 +619,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   doneBtn: {
     flex: 1,
@@ -621,5 +633,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
   },
 });

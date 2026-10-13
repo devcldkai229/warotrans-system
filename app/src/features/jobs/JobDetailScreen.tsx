@@ -20,6 +20,7 @@ import {
   Clock3,
   FileText,
   Layers,
+  Lock,
   MapPin,
   Maximize2,
   MoreVertical,
@@ -34,6 +35,7 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { HoldToConfirmButton } from '../../shared/components/HoldToConfirmButton';
 import { colors } from '../../shared/theme/colors';
 import { typography } from '../../shared/theme/typography';
+import { useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { AmrChassisDeckVisualizer } from './AmrChassisDeckVisualizer';
@@ -71,6 +73,7 @@ function SpinningRefreshIcon({ size = 15, color = colors.primary }: { size?: num
 
 export function JobDetailScreen() {
   const { navigate, goBack, params } = useNavigation();
+  const topInset = useTopInset();
   const initialModal = params?.modal;
   const isInitialVerify = initialModal === 'verify' || initialModal === 'handover' || initialModal === 'mismatch';
   const isInitialMismatch = initialModal === 'mismatch';
@@ -86,10 +89,22 @@ export function JobDetailScreen() {
   const jobId = params?.jobId || 'JOB-2026-0812';
   const job = MOCK_JOBS.find((j) => j.id === jobId) || MOCK_JOBS[0];
 
-  const activeUnload =
-    job.containers?.find((c) => c.action === 'UNLOAD' || c.action === 'PICKUP') ||
-    job.containers?.[0];
-  const [targetContainer, setTargetContainer] = useState(activeUnload?.code || 'BOX-101');
+  const [showOtherContainers, setShowOtherContainers] = useState(false);
+
+  const isDockStation = Boolean(
+    job.currentStop?.toLowerCase().includes('dock') ||
+    job.target?.toLowerCase().includes('dock') ||
+    job.sourceEndpointCode?.toLowerCase().includes('dock')
+  );
+
+  const targetContainers =
+    job.containers?.filter((c) => c.action === 'UNLOAD' || c.action === 'PICKUP') || [];
+  const otherContainers =
+    job.containers?.filter((c) => c.action !== 'UNLOAD' && c.action !== 'PICKUP') || [];
+  const primaryTarget = targetContainers[0] || job.containers?.[0];
+
+  const activeUnload = primaryTarget;
+  const [targetContainer, setTargetContainer] = useState(primaryTarget?.code || 'BOX-101');
 
   const isEnRoute = job.kind === 'transit';
   const isWaiting = job.kind === 'waiting';
@@ -128,7 +143,7 @@ export function JobDetailScreen() {
   return (
     <View style={styles.root}>
       {/* Sticky App Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topInset, minHeight: topInset + 56 }]}>
         <Pressable
           onPress={goBack}
           style={styles.backBtn}
@@ -218,13 +233,13 @@ export function JobDetailScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* SCR-STF-09: AT-STATION CARD (Waiting Handover) */}
+        {/* AT-STATION CARD (Waiting Handover) */}
         {isWaiting && (
           <View style={styles.stationCard}>
             <View style={styles.stationHeader}>
               <View style={styles.stationBadge}>
                 <Clock3 size={12} color="#92400e" />
-                <Text style={styles.stationBadgeText}>SCR-STF-09 · AT STATION</Text>
+                <Text style={styles.stationBadgeText}>AT STATION</Text>
               </View>
               <View style={styles.remainingPill}>
                 <Text style={styles.remainingText}>04:45 remaining</Text>
@@ -235,9 +250,6 @@ export function JobDetailScreen() {
               <Text style={styles.stationTitle}>
                 {job.robot} Docked at {job.currentStop}
               </Text>
-              <Text style={styles.stationSubtitle}>
-                AMR has engaged mechanical brakes. Waiting for operator handover verification.
-              </Text>
             </View>
 
             <View style={styles.perimeterRow}>
@@ -247,58 +259,26 @@ export function JobDetailScreen() {
               </View>
               <Text style={styles.batteryText}>Battery: {job.battery}</Text>
             </View>
-
-            {/* Docking Micro-Nudge Controls */}
-            <View style={styles.nudgeBox}>
-              <View style={styles.nudgeHeader}>
-                <View>
-                  <Text style={styles.nudgeEyebrow}>DOCKING ALIGNMENT NUDGE</Text>
-                  <Text style={styles.nudgeDesc}>Adjust robot position (±10cm) for shelf clearance</Text>
-                </View>
-                <View style={styles.staffBoundaryBadge}>
-                  <Text style={styles.staffBoundaryText}>STAFF BOUNDARY</Text>
-                </View>
-              </View>
-
-              <View style={styles.nudgeBtnRow}>
-                <Pressable
-                  onPress={() => handleNudge('-10cm')}
-                  style={({ pressed }) => [styles.nudgeBtn, pressed && styles.nudgeBtnPressed]}
-                >
-                  <ArrowLeft size={14} color={colors.textPrimary} />
-                  <Text style={styles.nudgeBtnText}>Nudge -10cm</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleNudge('+10cm')}
-                  style={({ pressed }) => [styles.nudgeBtn, pressed && styles.nudgeBtnPressed]}
-                >
-                  <Text style={styles.nudgeBtnText}>Nudge +10cm</Text>
-                  <ArrowRight size={14} color={colors.textPrimary} />
-                </Pressable>
-              </View>
-
-              <Text style={styles.nudgeNote}>
-                Virtual Joystick teleoperation is restricted to Admin. Floor staff may execute ±10cm micro-nudges at dock.
-              </Text>
-            </View>
           </View>
         )}
 
-        {/* SCR-STF-09: EN ROUTE CARD */}
+        {/* EN ROUTE CARD */}
         {isEnRoute && (
           <View style={styles.enRouteCard}>
             <View style={styles.stationHeader}>
               <View style={styles.enRouteBadge}>
                 <Timer size={12} color="#ffffff" />
-                <Text style={styles.enRouteBadgeText}>SCR-STF-09 · EN ROUTE</Text>
+                <Text style={styles.enRouteBadgeText}>EN ROUTE</Text>
               </View>
               <Text style={styles.distanceText}>Distance: {job.distanceRemaining || '18m'}</Text>
             </View>
 
             <View style={styles.enRouteEtaRow}>
               <View>
-                <Text style={styles.etaLabel}>Robot Approaching Station</Text>
-                <Text style={styles.etaValue}>ETA 01m 24s ⏳</Text>
+                <Text style={styles.etaLabel}>Approaching Station</Text>
+                <Text style={styles.etaValue}>
+                  ETA {job.etaSeconds ? `${Math.floor(job.etaSeconds / 60).toString().padStart(2, '0')}m ${(job.etaSeconds % 60).toString().padStart(2, '0')}s` : '01m 24s'}
+                </Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.etaLabel}>PROGRESS</Text>
@@ -335,13 +315,17 @@ export function JobDetailScreen() {
           robotId={job.robot}
         />
 
-        {/* Dynamic Multi-Container Payload Manifest */}
+        {/* Dynamic Multi-Container Payload Manifest (Target Highlighted + Collapsible Others) */}
         <View style={styles.manifestCard}>
           <View style={styles.manifestHeader}>
             <View>
-              <Text style={styles.manifestEyebrow}>CARGO MANIFEST · DECK PAYLOAD</Text>
+              <Text style={styles.manifestEyebrow}>CARGO HANDOVER · TARGET SLOT</Text>
               <Text style={styles.manifestCount}>
-                {job.containers?.length || 0} Containers Allocated
+                {isDockStation
+                  ? `Batch Transfer (${job.containers?.length || 0} Containers)`
+                  : primaryTarget
+                  ? `Target: ${primaryTarget.code} (${primaryTarget.slot})`
+                  : 'Deck Empty'}
               </Text>
             </View>
             <View style={styles.manifestSlotsBadge}>
@@ -351,94 +335,108 @@ export function JobDetailScreen() {
             </View>
           </View>
 
-          <View style={styles.containersList}>
-            {job.containers?.map((c) => {
-              const isUnload = c.action === 'UNLOAD';
-              const isPickup = c.action === 'PICKUP';
-              const isDelivered = c.action === 'DELIVERED';
-
-              return (
-                <View
-                  key={c.code}
-                  style={[
-                    styles.containerItem,
-                    isUnload && styles.containerItemUnload,
-                    isPickup && styles.containerItemPickup,
-                    isDelivered && styles.containerItemDelivered,
-                  ]}
-                >
-                  <View style={styles.containerTopRow}>
-                    <View style={styles.containerBadgeRow}>
-                      <View
-                        style={[
-                          styles.containerActionBadge,
-                          isUnload
-                            ? styles.containerBadgeUnload
-                            : isPickup
-                            ? styles.containerBadgePickup
-                            : styles.containerBadgeKeep,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.containerActionText,
-                            (isUnload || isPickup) && styles.textWhite,
-                          ]}
-                        >
-                          {isUnload ? 'UNLOAD HERE' : isPickup ? 'PICKUP HERE' : c.action}
-                        </Text>
-                      </View>
-                      <Text style={styles.containerSlotText}>{c.slot}</Text>
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.containerStopStatus,
-                        isUnload ? styles.textPrimary : styles.textMuted,
-                      ]}
-                    >
-                      {isUnload ? 'Stop 2: Active' : isPickup ? 'Target Stop' : 'Future Stop'}
+          {/* Primary Target Container */}
+          {primaryTarget && (
+            <View style={[styles.containerItem, styles.containerItemUnload]}>
+              <View style={styles.containerTopRow}>
+                <View style={styles.containerBadgeRow}>
+                  <View style={[styles.containerActionBadge, styles.containerBadgeUnload]}>
+                    <Text style={[styles.containerActionText, styles.textWhite]}>
+                      {isDockStation ? 'BATCH HANDOVER' : 'UNLOAD TARGET'}
                     </Text>
                   </View>
-
-                  <View style={styles.containerBodyRow}>
-                    <View style={styles.containerInfoCol}>
-                      <Text style={styles.containerCode}>{c.code}</Text>
-                      <Text style={styles.containerLocation}>{c.location}</Text>
-                      <Text style={styles.containerQty}>
-                        {c.qty} × {c.product}
-                      </Text>
-                    </View>
-
-                    {isWaiting && (isUnload || isPickup) && (
-                      <Pressable
-                        onPress={() => handleOpenVerify(c.code)}
-                        style={({ pressed }) => [
-                          styles.verifyBtn,
-                          pressed && styles.verifyBtnPressed,
-                        ]}
-                      >
-                        <Check size={14} color="#ffffff" style={{ marginRight: 4 }} />
-                        <Text style={styles.verifyBtnText}>Verify</Text>
-                      </Pressable>
-                    )}
-                  </View>
+                  <Text style={styles.containerSlotText}>{primaryTarget.slot}</Text>
                 </View>
-              );
-            })}
-          </View>
+
+                <Text style={[styles.containerStopStatus, styles.textPrimary]}>
+                  {job.currentStop || 'Active Stop'}
+                </Text>
+              </View>
+
+              <View style={styles.containerBodyRow}>
+                <View style={styles.containerInfoCol}>
+                  <Text style={styles.containerCode}>{primaryTarget.code}</Text>
+                  <Text style={styles.containerLocation}>{primaryTarget.location || job.target}</Text>
+                  <Text style={styles.containerQty}>
+                    {primaryTarget.qty} × {primaryTarget.product}
+                  </Text>
+                </View>
+
+                {isWaiting && (
+                  <Pressable
+                    onPress={() => handleOpenVerify(primaryTarget.code)}
+                    style={({ pressed }) => [
+                      styles.verifyBtn,
+                      pressed && styles.verifyBtnPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Verify ${primaryTarget.code}`}
+                  >
+                    <Check size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                    <Text style={styles.verifyBtnText}>
+                      {isDockStation ? 'Verify All' : 'Verify'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Collapsible Secondary Containers (Keep Onboard) */}
+          {!isDockStation && otherContainers.length > 0 && (
+            <View style={styles.otherContainersSection}>
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
+                  setShowOtherContainers(!showOtherContainers);
+                }}
+                style={styles.otherContainersToggle}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle other containers"
+              >
+                <View style={styles.otherToggleLeft}>
+                  <Lock size={12} color="#64748b" />
+                  <Text style={styles.otherToggleTitle}>
+                    {otherContainers.length} Other {otherContainers.length === 1 ? 'Container' : 'Containers'} (Keep Onboard)
+                  </Text>
+                </View>
+                <Text style={styles.otherToggleAction}>
+                  {showOtherContainers ? 'Hide ▲' : 'View Details ▼'}
+                </Text>
+              </Pressable>
+
+              {showOtherContainers && (
+                <View style={styles.otherContainersList}>
+                  {otherContainers.map((c) => (
+                    <View key={c.code} style={styles.otherContainerRow}>
+                      <View style={styles.otherContainerLeft}>
+                        <Text style={styles.otherContainerCode}>{c.code}</Text>
+                        <Text style={styles.otherContainerSlot}>{c.slot}</Text>
+                        <Text style={styles.otherContainerProd}>{c.qty} × {c.product}</Text>
+                      </View>
+                      <View style={styles.otherKeepBadge}>
+                        <Lock size={9} color="#64748b" style={{ marginRight: 3 }} />
+                        <Text style={styles.otherKeepText}>KEEP</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
-        {/* Multi-Stop Routing & Stepper with Progressive Disclosure */}
+        {/* Multi-Stop Tour Itinerary (Matching Prototype 100%) */}
         <View style={styles.timelineCard}>
           <View style={styles.timelineHeader}>
-            <Text style={styles.manifestEyebrow}>MULTI-STOP TOUR ITINERARY (TASK ➔ STEP)</Text>
+            <Text style={styles.timelineTitle}>MULTI-STOP TOUR ITINERARY (TASK ➔ STEP)</Text>
             <Text style={styles.timelineDoneCount}>
               {job.stopsList?.filter((s) => s.state === 'done').length || 0} / {job.stopsList?.length || 0} STOPS DONE
             </Text>
           </View>
+          <View style={styles.timelineDivider} />
 
-          <View style={{ gap: 12 }}>
+          <View style={{ gap: 14 }}>
             {/* Completed Stops Collapsible */}
             {(() => {
               const doneStops = job.stopsList?.filter((s) => s.state === 'done') || [];
@@ -454,17 +452,19 @@ export function JobDetailScreen() {
                           setShowDoneStops(!showDoneStops);
                         }}
                         style={styles.doneStopsToggle}
+                        accessibilityRole="button"
+                        accessibilityLabel="Toggle completed stops details"
                       >
                         <View style={styles.doneStopsLeft}>
                           <View style={styles.doneCheckCircle}>
-                            <Check size={12} color={colors.success} />
+                            <Check size={14} color="#16a34a" strokeWidth={2.5} />
                           </View>
                           <Text style={styles.doneStopsTitle}>
                             {doneStops.length} {doneStops.length === 1 ? 'Stop' : 'Stops'} Completed
                           </Text>
                         </View>
                         <Text style={styles.doneStopsAction}>
-                          {showDoneStops ? 'Hide ▲' : 'View Details ▼'}
+                          {showDoneStops ? 'Hide Details ▲' : 'View Details ▼'}
                         </Text>
                       </Pressable>
 
@@ -472,7 +472,10 @@ export function JobDetailScreen() {
                         <View style={styles.doneStopsList}>
                           {doneStops.map((stop) => (
                             <View key={stop.id} style={styles.doneStopItem}>
-                              <Text style={styles.stopNameDone}>✓ {stop.name}</Text>
+                              <View style={styles.doneStopHeaderRow}>
+                                <CheckCircle2 size={13} color="#16a34a" />
+                                <Text style={styles.stopNameDone}>{stop.name}</Text>
+                              </View>
                               <Text style={styles.stopDescDone}>{stop.description}</Text>
                             </View>
                           ))}
@@ -485,12 +488,18 @@ export function JobDetailScreen() {
                   {remainingStops.map((stop) => {
                     if (stop.state === 'active') {
                       return (
-                        <View key={stop.id} style={styles.activeStopWrapper}>
+                        <View key={stop.id} style={styles.activeStopRowContainer}>
+                          {/* Left solid blue vertical rail */}
+                          <View style={styles.activeStopIndicatorBar} />
+
+                          {/* Active Stop Card */}
                           <View style={styles.activeStopCard}>
                             <View style={styles.activeStopHeader}>
                               <View style={styles.activeStopLeft}>
-                                <SpinningRefreshIcon size={15} color={colors.primary} />
-                                <Text style={styles.activeStopTitle}>{stop.name}</Text>
+                                <SpinningRefreshIcon size={16} color={colors.primary} />
+                                <Text style={styles.activeStopTitle} numberOfLines={1}>
+                                  {stop.name}
+                                </Text>
                               </View>
                               <View style={styles.activeStopBadge}>
                                 <Text style={styles.activeStopBadgeText}>{job.robot}</Text>
@@ -500,28 +509,32 @@ export function JobDetailScreen() {
 
                             {stop.steps && stop.steps.length > 0 && (
                               <View style={styles.stepsList}>
-                                {stop.steps.map((st, idx) => (
-                                  <View key={idx} style={styles.stepRow}>
-                                    <View
-                                      style={[
-                                        styles.stepDot,
-                                        st.status === 'done'
-                                          ? styles.stepDotDone
-                                          : st.status === 'waiting'
-                                          ? styles.stepDotWaiting
-                                          : styles.stepDotFuture,
-                                      ]}
-                                    />
-                                    <Text
-                                      style={[
-                                        styles.stepLabel,
-                                        st.status === 'waiting' && styles.stepLabelActive,
-                                      ]}
-                                    >
-                                      {st.label}
-                                    </Text>
-                                  </View>
-                                ))}
+                                {stop.steps.map((st, idx) => {
+                                  const isDone = st.status === 'done';
+                                  const isWaiting = st.status === 'waiting' || st.status === 'running';
+
+                                  return (
+                                    <View key={idx} style={styles.stepRow}>
+                                      {isDone ? (
+                                        <CheckCircle2 size={16} color="#16a34a" />
+                                      ) : isWaiting ? (
+                                        <Clock3 size={16} color="#b45309" />
+                                      ) : (
+                                        <Clock3 size={16} color="#64748b" />
+                                      )}
+                                      <Text
+                                        style={[
+                                          styles.stepLabel,
+                                          isDone && styles.stepLabelDone,
+                                          isWaiting && styles.stepLabelWaiting,
+                                          !isDone && !isWaiting && styles.stepLabelFuture,
+                                        ]}
+                                      >
+                                        {st.label}
+                                      </Text>
+                                    </View>
+                                  );
+                                })}
                               </View>
                             )}
                           </View>
@@ -531,8 +544,10 @@ export function JobDetailScreen() {
 
                     return (
                       <View key={stop.id} style={styles.futureStopRow}>
-                        <View style={styles.futureStopDot} />
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.futureStopRing}>
+                          <Clock3 size={15} color="#64748b" />
+                        </View>
+                        <View style={styles.futureStopTextCol}>
                           <Text style={styles.futureStopTitle}>{stop.name}</Text>
                           <Text style={styles.futureStopDesc}>{stop.description}</Text>
                         </View>
@@ -673,6 +688,7 @@ export function JobDetailScreen() {
         targetShelf={job.target || 'Rack A · Level 2 · Bin 03'}
         initialMismatch={isMismatch}
         otherContainers={job.containers?.filter(c => c.code !== targetContainer).map(c => ({ code: c.code, slot: c.slot }))}
+        isBulkMode={isDockStation}
         onClose={() => setIsVerifyOpen(false)}
         onSuccess={handleVerifySuccess}
         onReportIssue={() => {
@@ -704,9 +720,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingTop: Platform.select({ android: 12, default: 48 }),
+    paddingTop: 0,
     paddingBottom: 12,
-    minHeight: Platform.select({ android: 68, default: 104 }),
+    minHeight: 0,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -747,6 +763,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: colors.primary,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   jobIdHeading: {
     fontFamily: typography.fontMono,
@@ -809,6 +826,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   scrollArea: {
     flex: 1,
@@ -850,6 +868,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     color: '#ffffff',
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   remainingPill: {
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
@@ -872,6 +891,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   stationSubtitle: {
     fontSize: 12,
@@ -879,12 +899,14 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 4,
     lineHeight: 17,
+    fontFamily: typography.fontSans,
   },
   perimeterRow: {
     marginTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
@@ -895,6 +917,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   greenPingDot: {
     width: 8,
@@ -906,6 +930,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   batteryText: {
     fontFamily: typography.fontMono,
@@ -932,12 +957,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: colors.textMuted,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   nudgeDesc: {
     fontSize: 11,
     fontWeight: '500',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   staffBoundaryBadge: {
     backgroundColor: '#f1f5f9',
@@ -1003,6 +1030,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#ffffff',
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   distanceText: {
     fontFamily: typography.fontMono,
@@ -1021,6 +1049,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   etaValue: {
     fontFamily: typography.fontMono,
@@ -1067,6 +1096,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   telemetryVal: {
     fontFamily: typography.fontMono,
@@ -1101,12 +1131,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     color: colors.textMuted,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   manifestCount: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   manifestSlotsBadge: {
     backgroundColor: 'rgba(0, 102, 204, 0.1)',
@@ -1151,11 +1183,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   containerBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
   },
   containerActionBadge: {
     paddingHorizontal: 6,
@@ -1175,6 +1209,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '900',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   containerSlotText: {
     fontFamily: typography.fontMono,
@@ -1186,15 +1221,19 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
+    flexShrink: 0,
   },
   containerBodyRow: {
     marginTop: 8,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
+    gap: 8,
   },
   containerInfoCol: {
     flex: 1,
+    minWidth: 0,
   },
   containerCode: {
     fontFamily: typography.fontMono,
@@ -1207,6 +1246,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   containerQty: {
     fontSize: 10,
@@ -1228,6 +1268,91 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
+  },
+  otherContainersSection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+  },
+  otherContainersToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  otherToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  otherToggleTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  otherToggleAction: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: colors.primary,
+    fontFamily: typography.fontSans,
+  },
+  otherContainersList: {
+    marginTop: 8,
+    gap: 6,
+  },
+  otherContainerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  otherContainerLeft: {
+    flex: 1,
+  },
+  otherContainerCode: {
+    fontFamily: typography.fontMono,
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.textPrimary,
+  },
+  otherContainerSlot: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textMuted,
+    marginTop: 1,
+    fontFamily: typography.fontSans,
+  },
+  otherContainerProd: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontFamily: typography.fontSans,
+  },
+  otherKeepBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  otherKeepText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#64748b',
+    fontFamily: typography.fontSans,
   },
   timelineCard: {
     backgroundColor: colors.surface,
@@ -1245,176 +1370,221 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 10,
-    marginBottom: 12,
+    gap: 8,
+  },
+  timelineTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#1e3a5f',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
+    flex: 1,
   },
   timelineDoneCount: {
     fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '900',
     color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  timelineDivider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginTop: 10,
+    marginBottom: 14,
   },
   doneStopsContainer: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
     overflow: 'hidden',
   },
   doneStopsToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
   },
   doneStopsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    flex: 1,
   },
   doneCheckCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#dcfce7',
     alignItems: 'center',
     justifyContent: 'center',
   },
   doneStopsTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: typography.fontSans,
   },
   doneStopsAction: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   doneStopsList: {
-    padding: 10,
-    paddingTop: 4,
+    padding: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: 8,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    gap: 10,
   },
   doneStopItem: {
     gap: 2,
   },
+  doneStopHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   stopNameDone: {
     fontSize: 11,
     fontWeight: '800',
-    color: colors.success,
+    color: '#16a34a',
+    fontFamily: typography.fontSans,
   },
   stopDescDone: {
     fontSize: 10,
     fontWeight: '500',
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+    paddingLeft: 19,
   },
-  activeStopWrapper: {
-    borderLeftWidth: 2,
-    borderLeftColor: colors.primary,
-    paddingLeft: 14,
-    marginLeft: 8,
+  activeStopRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  activeStopIndicatorBar: {
+    width: 3.5,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
   },
   activeStopCard: {
-    backgroundColor: 'rgba(0, 92, 209, 0.06)',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 92, 209, 0.35)',
-    borderRadius: 12,
+    flex: 1,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+    borderRadius: 14,
     padding: 14,
   },
   activeStopHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   activeStopLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   activeStopTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   activeStopBadge: {
-    backgroundColor: 'rgba(0, 92, 209, 0.12)',
+    backgroundColor: '#dbeafe',
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.25)',
-    paddingHorizontal: 6,
+    borderColor: '#93c5fd',
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 4,
   },
   activeStopBadgeText: {
     fontFamily: typography.fontMono,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
     color: colors.primary,
   },
   activeStopDesc: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '500',
-    color: colors.textSecondary,
-    marginTop: 4,
+    color: '#475569',
+    marginTop: 5,
+    lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   stepsList: {
-    marginTop: 10,
+    marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 102, 204, 0.15)',
+    borderTopColor: '#dbeafe',
     paddingTop: 10,
-    gap: 6,
+    gap: 8,
   },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  stepDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  stepDotDone: {
-    backgroundColor: colors.success,
-  },
-  stepDotWaiting: {
-    backgroundColor: colors.warning,
-  },
-  stepDotFuture: {
-    backgroundColor: colors.border,
-  },
   stepLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.textMuted,
+    fontSize: 11.5,
+    fontFamily: typography.fontSans,
+    flex: 1,
+    lineHeight: 16,
   },
-  stepLabelActive: {
+  stepLabelDone: {
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  stepLabelWaiting: {
+    fontWeight: '800',
+    color: '#92400e',
+  },
+  stepLabelFuture: {
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: '#334155',
   },
   futureStopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingLeft: 14,
+    paddingVertical: 2,
   },
-  futureStopDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
+  futureStopRing: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: '#94a3b8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  futureStopTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   futureStopTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textMuted,
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#334155',
+    fontFamily: typography.fontSans,
   },
   futureStopDesc: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 10.5,
+    fontWeight: '500',
+    color: '#64748b',
+    marginTop: 2,
+    lineHeight: 15,
+    fontFamily: typography.fontSans,
   },
   stickyFooter: {
     position: 'absolute',
@@ -1445,11 +1615,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 8,
     padding: 6,
+    gap: 6,
+    flexWrap: 'wrap',
   },
   dockNudgeGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
   },
   dockNudgeLabel: {
     fontFamily: typography.fontMono,
@@ -1492,6 +1665,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#b45309',
+    fontFamily: typography.fontSans,
   },
   tier2Row: {
     flexDirection: 'row',
@@ -1514,6 +1688,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.danger,
+    fontFamily: typography.fontSans,
   },
   holdToConfirmTier2Wrap: {
     flex: 0.62,
@@ -1534,6 +1709,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
   },
   textWhite: {
     color: '#ffffff',

@@ -228,6 +228,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   mapViewport: {
     flex: 1,
@@ -463,6 +464,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 2,
     maxWidth: 220,
+    fontFamily: typography.fontSans,
   },
   statusBadge: {
     backgroundColor: colors.successSoft,
@@ -500,6 +502,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textMuted,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   targetBanner: {
     flexDirection: 'row',
@@ -515,5 +518,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.primary,
     flex: 1,
+    fontFamily: typography.fontSans,
   },
 });

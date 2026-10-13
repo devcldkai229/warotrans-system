@@ -350,6 +350,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   alertCard: {
     backgroundColor: colors.dangerSoft,
@@ -450,6 +451,7 @@ const styles = StyleSheet.create({
   stepTextActive: {
     color: colors.primary,
     fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   stepArrow: {
     fontSize: 12,
@@ -474,6 +476,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.danger,
     letterSpacing: 0.8,
+    fontFamily: typography.fontSans,
   },
   diagRescue: {
     flex: 1,
@@ -490,6 +493,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.success,
     letterSpacing: 0.8,
+    fontFamily: typography.fontSans,
   },
   diagRobotId: {
     fontSize: 14,
@@ -544,6 +548,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   cargoRow: {
     flexDirection: 'row',
@@ -572,6 +577,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   cargoDestVal: {
     fontSize: 10,
@@ -593,6 +599,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    fontFamily: typography.fontSans,
   },
   actionDescPhase1: {
     fontSize: 12,
@@ -615,6 +622,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   actionCard: {
     backgroundColor: '#ffffff',
@@ -683,6 +691,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 16,
+    fontFamily: typography.fontSans,
   },
   receiptBox: {
     width: '100%',
@@ -701,6 +710,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   receiptVal: {
     fontSize: 11,

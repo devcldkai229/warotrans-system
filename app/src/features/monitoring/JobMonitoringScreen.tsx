@@ -144,12 +144,12 @@ export function JobMonitoringScreen() {
           </View>
         )}
 
-        {/* Live Handover Station Hero Header (SCR-STF-09) */}
+        {/* Station Hero Header */}
         <View style={styles.stationCard}>
           <View style={styles.stationTopRow}>
             <View style={styles.atStationPill}>
               <View style={styles.stationDot} />
-              <Text style={styles.atStationText}>AT HANDOVER STATION</Text>
+              <Text style={styles.atStationText}>AT STATION</Text>
             </View>
             <View style={styles.timerPill}>
               <Timer size={11} color="#b45309" />
@@ -158,9 +158,6 @@ export function JobMonitoringScreen() {
           </View>
 
           <Text style={styles.stationHeading}>AMR-01 Docked at Rack A-02</Text>
-          <Text style={styles.stationSub}>
-            AMR has engaged mechanical brakes. Waiting for operator physical handover & barcode verification.
-          </Text>
 
           <View style={styles.safetyStatusRow}>
             <View style={styles.safetyPulseRow}>
@@ -192,7 +189,7 @@ export function JobMonitoringScreen() {
                 isRobotHeld && styles.safetyHoldTextActive,
               ]}
             >
-              {isRobotHeld ? 'RESUME ROBOT (RELEASE)' : 'HOLD ROBOT (SOFT PAUSE)'}
+              {isRobotHeld ? 'RESUME ROBOT' : 'HOLD ROBOT'}
             </Text>
           </Pressable>
 
@@ -266,7 +263,7 @@ export function JobMonitoringScreen() {
             >
               <Camera size={16} color="#ffffff" style={{ marginRight: 6 }} />
               <Text style={styles.scannerBtnText}>
-                {isContainerVerified ? 'Re-scan Barcode' : 'Open Camera Barcode Scanner'}
+                {isContainerVerified ? 'Re-scan Barcode' : 'Scan Barcode'}
               </Text>
             </Pressable>
           </View>
@@ -276,7 +273,7 @@ export function JobMonitoringScreen() {
       {/* Primary Action Button (Bottom Fixed) */}
       <View style={styles.bottomBar}>
         <Button
-          label="CONFIRM HANDOVER & RELEASE AMR"
+          label="CONFIRM HANDOVER"
           onPress={handleConfirmHandover}
           disabled={!isContainerVerified}
           size="lg"
@@ -284,7 +281,7 @@ export function JobMonitoringScreen() {
         />
         {!isContainerVerified && (
           <Text style={styles.disabledHintText}>
-            Verify barcode ({targetBarcode}) to unlock robot release
+            Scan {targetBarcode} to unlock release
           </Text>
         )}
       </View>
@@ -334,6 +331,7 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontSize: 11,
     fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   toastDanger: {
     backgroundColor: colors.dangerBg,
@@ -343,10 +341,12 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 11,
     fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   toastText: {
     fontSize: 11,
     fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   stationCard: {
     backgroundColor: colors.warningBg,
@@ -382,6 +382,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#ffffff',
     letterSpacing: 0.5,
+    fontFamily: typography.fontSans,
   },
   timerPill: {
     backgroundColor: colors.surface,
@@ -401,6 +402,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   stationSub: {
     fontSize: 11,
@@ -432,6 +434,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   batteryText: {
     fontSize: 10,
@@ -466,6 +469,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
     color: colors.danger,
+    fontFamily: typography.fontSans,
   },
   safetyHoldTextActive: {
     color: colors.textInverse,
@@ -489,6 +493,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   verificationSection: {
     marginBottom: 12,
@@ -504,6 +509,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   verTargetLabel: {
     fontSize: 10,
@@ -542,11 +548,13 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '900',
     color: colors.textInverse,
+    fontFamily: typography.fontSans,
   },
   verStatusText: {
     fontSize: 9,
     fontWeight: '900',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   verStatusVerified: {
     color: colors.success,
@@ -568,6 +576,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   targetSlotLocation: {
     fontSize: 11,
@@ -613,6 +622,7 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: 12,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   bottomBar: {
     backgroundColor: colors.surface,
@@ -622,7 +632,7 @@ const styles = StyleSheet.create({
   },
   disabledHintText: {
     fontSize: 10,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 6,
   },
@@ -655,11 +665,13 @@ const styles = StyleSheet.create({
     fontSize: 28,
     color: colors.textInverse,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   completedTitle: {
     fontSize: 18,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   completedSubtitle: {
     fontSize: 12,
@@ -702,6 +714,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   verStatusBadgeRow: {
     flexDirection: 'row',
@@ -720,6 +733,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: colors.success,
+    fontFamily: typography.fontSans,
   },
   verDangerBadge: {
     flexDirection: 'row',
@@ -734,6 +748,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: colors.danger,
+    fontFamily: typography.fontSans,
   },
   verPendingBadge: {
     backgroundColor: colors.surfaceMuted,
@@ -745,5 +760,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
 });

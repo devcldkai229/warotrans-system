@@ -77,5 +77,6 @@ const styles = StyleSheet.create({
   labelSm: {
     fontSize: 9,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
 });

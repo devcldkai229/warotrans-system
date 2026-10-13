@@ -76,6 +76,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   pillBadge: {
     backgroundColor: colors.primaryLight,
@@ -104,6 +105,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: colors.success,
+    fontFamily: typography.fontSans,
   },
   metricsGrid: {
     flexDirection: 'row',
@@ -134,5 +136,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textSecondary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
 });

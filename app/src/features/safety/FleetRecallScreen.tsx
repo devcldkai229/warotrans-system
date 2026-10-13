@@ -206,6 +206,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   recallModeBadge: {
     backgroundColor: colors.primaryLight,
@@ -326,6 +327,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   rbacDesc: {
     fontSize: 11,

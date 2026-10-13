@@ -13,11 +13,13 @@ import {
   ArrowRight,
   Box,
   CheckCircle2,
+  Filter,
   MapPin,
   Navigation,
   Printer,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   Truck,
   X,
 } from 'lucide-react-native';
@@ -175,9 +177,13 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
   },
 ];
 
+type CategoryFilter = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | 'EXCEPTION';
+
 export function TransportHistoryScreen() {
   const { navigate, goBack } = useNavigation();
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
+  const [showCategoryChips, setShowCategoryChips] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const inProgressCount = TRANSPORT_ORDERS.filter((o) => o.status === 'IN_PROGRESS').length;
@@ -186,6 +192,7 @@ export function TransportHistoryScreen() {
 
   const filteredOrders = TRANSPORT_ORDERS.filter((order) => {
     if (filter !== 'ALL' && order.status !== filter) return false;
+    if (categoryFilter !== 'ALL' && order.category !== categoryFilter) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -272,26 +279,92 @@ export function TransportHistoryScreen() {
           </Pressable>
         </View>
 
-        {/* Search Input Bar */}
-        <View style={styles.searchBox}>
-          <Search size={16} color="#94a3b8" style={styles.searchIcon} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search TR, location, container, robot..."
-            placeholderTextColor="#94a3b8"
-            style={styles.searchInput}
-          />
-          {searchQuery ? (
+        {/* Search & Filter Bar */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchRow}>
+            <View style={styles.searchBox}>
+              <Search size={16} color="#94a3b8" style={styles.searchIcon} />
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search TR, location, container, robot..."
+                placeholderTextColor="#94a3b8"
+                style={styles.searchInput}
+              />
+              {searchQuery ? (
+                <Pressable
+                  onPress={() => setSearchQuery('')}
+                  style={styles.clearBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                >
+                  <X size={15} color="#94a3b8" />
+                </Pressable>
+              ) : null}
+            </View>
+
             <Pressable
-              onPress={() => setSearchQuery('')}
-              style={styles.clearBtn}
+              onPress={() => {
+                triggerHaptic('tap');
+                setShowCategoryChips(!showCategoryChips);
+              }}
+              style={[
+                styles.filterBtn,
+                (categoryFilter !== 'ALL' || showCategoryChips) && styles.filterBtnActive,
+              ]}
               accessibilityRole="button"
-              accessibilityLabel="Clear search"
+              accessibilityLabel="Toggle category filter"
             >
-              <X size={15} color="#94a3b8" />
+              <SlidersHorizontal
+                size={16}
+                color={categoryFilter !== 'ALL' || showCategoryChips ? colors.primary : '#64748b'}
+              />
+              {categoryFilter !== 'ALL' && <View style={styles.filterDotBadge} />}
             </Pressable>
-          ) : null}
+          </View>
+
+          {/* Quick Category Chips */}
+          {showCategoryChips && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChipsRow}
+            >
+              {[
+                { key: 'ALL', label: 'All Categories' },
+                { key: 'INBOUND', label: 'Inbound' },
+                { key: 'OUTBOUND', label: 'Outbound' },
+                { key: 'INTERNAL', label: 'Internal Move' },
+                { key: 'EXCEPTION', label: 'Safety / Rescue' },
+              ].map((chip) => {
+                const isActive = categoryFilter === chip.key;
+                return (
+                  <Pressable
+                    key={chip.key}
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setCategoryFilter(chip.key as CategoryFilter);
+                    }}
+                    style={[
+                      styles.filterChip,
+                      isActive && styles.filterChipActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by ${chip.label}`}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {chip.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
 
         {/* Status Filter Tabs */}
@@ -340,15 +413,16 @@ export function TransportHistoryScreen() {
               <Search size={28} color="#94a3b8" style={{ marginBottom: 8 }} />
               <Text style={styles.emptyTitle}>No transport records found</Text>
               <Text style={styles.emptySubtitle}>Try adjusting your filter or search query.</Text>
-              {(searchQuery || filter !== 'ALL') && (
+              {(searchQuery || filter !== 'ALL' || categoryFilter !== 'ALL') && (
                 <Pressable
                   onPress={() => {
                     setSearchQuery('');
                     setFilter('ALL');
+                    setCategoryFilter('ALL');
                   }}
                   style={styles.resetBtn}
                 >
-                  <Text style={styles.resetBtnText}>Reset Filters</Text>
+                  <Text style={styles.resetBtnText}>Reset All Filters</Text>
                 </Pressable>
               )}
             </View>
@@ -586,6 +660,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   metricLabel: {
     fontSize: 9,
@@ -593,17 +668,78 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 2,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
+  },
+  searchSection: {
+    marginBottom: 14,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
-    height: 44,
-    marginBottom: 16,
+    height: 42,
+  },
+  filterBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  filterBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(0, 92, 209, 0.08)',
+  },
+  filterDotBadge: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingTop: 10,
+    paddingBottom: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '900',
   },
   searchIcon: {
     marginRight: 8,
@@ -614,6 +750,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.textPrimary,
     paddingVertical: 0,
+    fontFamily: typography.fontSans,
   },
   clearBtn: {
     padding: 4,
@@ -644,6 +781,7 @@ const styles = StyleSheet.create({
   filterTabText: {
     fontSize: 12,
     fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   filterTabTextActive: {
     color: '#ffffff',
@@ -668,6 +806,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   emptySubtitle: {
     fontSize: 11,
@@ -686,6 +825,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   orderCard: {
     borderRadius: 12,
@@ -729,6 +869,7 @@ const styles = StyleSheet.create({
     color: '#64748b',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   statusBadge: {
     borderRadius: 6,
@@ -758,12 +899,14 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   workflowTitle: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   routeBox: {
     flexDirection: 'row',
@@ -781,17 +924,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textMuted,
     flexShrink: 1,
+    fontFamily: typography.fontSans,
   },
   routeDestination: {
     fontSize: 11,
     fontWeight: '900',
     color: colors.textPrimary,
     flexShrink: 1,
+    fontFamily: typography.fontSans,
   },
   cargoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 17,
+    flexWrap: 'wrap',
+    gap: 2,
   },
   cargoContainer: {
     fontFamily: typography.fontMono,
@@ -803,11 +950,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     color: '#94a3b8',
     fontWeight: 'bold',
+    fontFamily: typography.fontSans,
   },
   cargoDetails: {
     fontSize: 11,
     color: colors.textMuted,
     fontWeight: '500',
+    fontFamily: typography.fontSans,
   },
   metaRow: {
     flexDirection: 'row',
@@ -826,6 +975,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   assignedRobot: {
     fontWeight: '900',
@@ -836,6 +986,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.textMuted,
     fontWeight: '500',
+    fontFamily: typography.fontSans,
   },
   cancelAlert: {
     flexDirection: 'row',
@@ -873,6 +1024,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
   },
   actionBtnOutline: {
     flex: 1,
@@ -889,5 +1041,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
 });

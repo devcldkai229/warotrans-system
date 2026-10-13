@@ -1,10 +1,18 @@
 import { ViewStyle } from 'react-native';
 
-export const shadows: Record<string, ViewStyle> = {
+export const shadows = {
   panel: {
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  // Calibrated from prototype --shadow-input: 0 2px 6px oklch(0.2 0.02 250 / 5%)
+  input: {
+    shadowColor: '#1e293b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
@@ -36,4 +44,4 @@ export const shadows: Record<string, ViewStyle> = {
     shadowRadius: 10,
     elevation: 4,
   },
-};
+} satisfies Record<string, ViewStyle>;

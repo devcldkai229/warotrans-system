@@ -37,11 +37,18 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
 | `textMuted` | `#64748b` | Chữ ghi chú phụ (slate-500, không được dùng màu sáng hơn) |
 | `success` | `#007a38` | Hoàn thành, pin tốt, robot trực tuyến |
 | `warning` | `#f0b21b` | Chờ handover, ETA sắp tới, cảnh báo |
+| `warningText` | `#854d0e` | Chữ / viền amber đặt trực tiếp trên `background` hoặc `surface` |
 | `danger` | `#c8272b` | Dừng khẩn cấp, sự cố hàng hóa, deadlock |
 
 > **Lưu ý:** ba giá trị trên là giá trị **thật** trong `src/shared/theme/colors.ts:28,34,40`.
 > Mỗi tone còn có các token đi kèm `*Bg`, `*Soft`, `*Border` (ví dụ `successBg: '#eefaf2'`).
 > Luôn đọc token thật từ `colors.ts` thay vì dùng giá trị ghi nhớ.
+
+> **Về `warning`:** `#f0b21b` chỉ đạt **1.81:1** trên `#f8fafc`, thấp hơn mức 3:1 mà WCAG 1.4.11
+> yêu cầu cho graphic mang ý nghĩa. Vì vậy `warning` chỉ dùng làm **nền/fill**; mọi chữ hoặc
+> viền đặt trực tiếp lên nền sáng phải dùng `warningText` (`#854d0e`, ~6.5:1).
+> Khi cần một graphic nhỏ mang tín hiệu (ví dụ chấm trạng thái), hãy dùng fill `warning`
+> kèm viền `warningText` thay vì để fill trần.
 
 ### 2.2 Quy chuẩn Typography (`src/shared/theme/typography.ts`)
 * **Hệ Font Chuẩn (Native Retina & Modern Web)**:
@@ -85,14 +92,29 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
     // Container bao bọc (cho phép click/scroll xuyên qua hai bên mép)
     dockWrapper: {
       position: 'absolute',
-      bottom: Platform.select({ android: 16, default: 24 }),
+      bottom: dockMetrics.bottomOffset,
       left: 0,
       right: 0,
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 90,
     },
-    // Viên thuốc nổi (kích thước vàng ~296px, chiếm ~76% chiều rộng màn hình 390px)
+    * **Dock là lớp phủ `position: absolute`, không tự nhận safe-area**:
+    * Mọi màn hình muốn ghim nội dung sát đáy phải chừa chỗ bằng **`dockReservedSpace(dockHeight)`**
+      (`src/shared/theme/layout.ts`) chứ **không** hardcode `paddingBottom`.
+    * `dockHeight` được đo thật qua `onLayout` trên `dockPill` (`BottomTabBar.tsx`) và phát ra
+      qua `NavigationContext`. Nhờ vậy khi metric của pill thay đổi (đổi icon, đổi padding),
+      khoảng hở tự động theo — thay vì 3 magic number cộng lại vừa khít như trước đây
+      (~2pt trên iPhone 12, dễ vỡ chỉ vì metrics chữ).
+    * ```tsx
+      const { dockHeight } = useNavigation();
+      const dockInset = dockReservedSpace(dockHeight);
+      // collapsed peek sheet
+      <View style={[styles.bottomSheet, { paddingBottom: dockInset }]} />
+      // expanded scroll content
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: dockInset }]}
+      ```
+  * **Viên thuốc nổi (kích thước vàng ~296px, chiếm ~76% chiều rộng màn hình 390px)**
     dockPill: {
       flexDirection: 'row',
       alignItems: 'center',
