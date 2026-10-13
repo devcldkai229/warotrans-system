@@ -21,7 +21,8 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 - **Text Primary**: `#071523` (Slate-950 — bold, high legibility).
 - **Text Secondary**: `#475569` (Slate-600 — crisp subtext, never `#94a3b8` for readable content).
 - **Primary Accent**: `#005cd1` (WaroTrans Cobalt Blue) with 3D bottom border `#004bb0`.
-- **Status Tones**: Success `#059669`, Warning `#d97706`, Danger `#dc2626`.
+- **Status Tones** (from `src/shared/theme/colors.ts`): Success `#007a38`, Warning `#f0b21b`, Danger `#c8272b`.
+  Each also has `*Bg`, `*Soft` and `*Border` companions. Read the real token from `colors.ts` before using one.
 
 ### 2.2 Typography Hierarchy
 - **Protocol Codes, IDs, Telemetry**: Monospace (`typography.fontMono`), font size 9-10pt, `fontWeight: '900'`, uppercase, tracking `0.12-0.16em`.
@@ -32,11 +33,20 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 - **NO root `<SafeAreaView>`**:
   - The root in `App.tsx` must be a plain `<View style={{ flex: 1, backgroundColor: colors.background }}>`. Wrapping the whole app in `SafeAreaView` causes letterbox gaps on physical iPhones.
 - **Header Top Inset**:
-  - All top headers (`AppHeader`, `SubScreenHeader`, `JobsScreen`, `TransportScreen`, `JobDetailScreen`, `LoginScreen`) MUST have:
+  - All top headers MUST keep the shared iOS inset so the notch stays covered:
     ```tsx
     paddingTop: Platform.OS === 'ios' ? 48 : 12,
-    minHeight: Platform.OS === 'ios' ? 104 : 72,
     ```
+  - The iOS `minHeight` is always `104`, but the **non-iOS `minHeight` is NOT a single constant**. Copy the value from the
+    file you are editing — do not assume `72`:
+    | File | `minHeight` |
+    | --- | --- |
+    | `src/shared/components/SubScreenHeader.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
+    | `src/features/monitoring/IssueReportingModal.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
+    | `src/features/jobs/JobsScreen.tsx` | `Platform.OS === 'ios' ? 104 : 75` |
+    | `src/features/transport/TransportScreen.tsx` | `Platform.OS === 'ios' ? 104 : 76` |
+    | `src/features/jobs/JobDetailScreen.tsx` | `Platform.OS === 'ios' ? 104 : 68` |
+    | `src/shared/components/AppHeader.tsx` | none — uses `paddingTop` + `paddingBottom: 12` |
   - Dropdown menus must open below the header: `top: Platform.OS === 'ios' ? 92 : 56`.
 - **Bottom Tab Bar**:
   - Must extend edge-to-edge to the physical bottom:

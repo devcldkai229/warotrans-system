@@ -315,14 +315,6 @@ export function IssueReportingModal({
         </View>
   );
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.webAbsoluteOverlay} pointerEvents="auto">
-        {modalBody}
-      </View>
-    );
-  }
-
   return (
     <Modal
       visible={visible}
@@ -336,15 +328,6 @@ export function IssueReportingModal({
 }
 
 const styles = StyleSheet.create({
-  webAbsoluteOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 110,
-    backgroundColor: colors.background,
-  },
   fullScreenContainer: {
     flex: 1,
     backgroundColor: colors.background,
@@ -353,9 +336,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: Platform.OS === 'ios' ? 48 : 14,
+    paddingTop: Platform.select({ android: 14, default: 48 }),
     paddingBottom: 14,
-    minHeight: Platform.OS === 'ios' ? 104 : 72,
+    minHeight: Platform.select({ android: 72, default: 104 }),
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,

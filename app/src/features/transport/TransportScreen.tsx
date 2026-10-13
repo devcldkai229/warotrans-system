@@ -41,14 +41,6 @@ function PulsingBeaconDot() {
     return () => loop.stop();
   }, [pingAnim]);
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.beaconContainer}>
-        <View style={[styles.beaconPing, { animation: 'ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite' } as any]} />
-        <View style={styles.beaconCore} />
-      </View>
-    );
-  }
 
   const scale = pingAnim.interpolate({
     inputRange: [0, 1],
@@ -356,9 +348,9 @@ const styles = StyleSheet.create({
   },
   pageHeader: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 48 : 16,
+    paddingTop: Platform.select({ android: 16, default: 48 }),
     paddingBottom: 14,
-    minHeight: Platform.OS === 'ios' ? 104 : 76,
+    minHeight: Platform.select({ android: 76, default: 104 }),
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -382,7 +374,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: Platform.select({ ios: 104, default: 96 }),
     gap: 16,
   },
   section: {

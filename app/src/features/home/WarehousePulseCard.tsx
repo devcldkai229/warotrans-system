@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 
 interface WarehousePulseCardProps {
   fleetReady: string;
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '800',
     color: colors.primaryDark,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
   },
   liveIndicator: {
     flexDirection: 'row',
@@ -120,7 +121,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: colors.textPrimary,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
   },
   valueSuccess: {
     color: colors.success,

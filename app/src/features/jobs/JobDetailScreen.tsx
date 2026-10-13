@@ -704,9 +704,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingTop: Platform.OS === 'ios' ? 48 : 12,
+    paddingTop: Platform.select({ android: 12, default: 48 }),
     paddingBottom: 12,
-    minHeight: Platform.OS === 'ios' ? 104 : 68,
+    minHeight: Platform.select({ android: 68, default: 104 }),
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -774,7 +774,10 @@ const styles = StyleSheet.create({
   },
   menuDismiss: {
     position: 'absolute',
-    inset: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 40,
   },
   menuDropdown: {

@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { typography } from '../../shared/theme/typography';
 import { JobStepSummary } from '../../shared/types/contracts';
 
 interface JobStepperProps {
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
   stepCount: {
     fontSize: 10,
     fontWeight: '800',
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     color: colors.primary,
   },
   stepsList: {
@@ -235,7 +236,7 @@ const styles = StyleSheet.create({
   },
   endpointTarget: {
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: typography.fontMono,
     fontWeight: '700',
     color: colors.textMuted,
     marginTop: 2,
