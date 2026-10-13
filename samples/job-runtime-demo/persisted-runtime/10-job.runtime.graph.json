@@ -1,0 +1,476 @@
+{
+  "note": "PERSISTED REAL RUNTIME DATA \u2014 Job / JobContainer / JobTask / JobStep from WorkflowExecution DB. TransportRequestId is synthetic (no Transportation row).",
+  "id": "4ec700e7-b42c-48a3-85e4-b31dc0299952",
+  "jobNo": "JOB-20261012-000022",
+  "workflowId": "ad360f97-02ff-4136-86ea-57412bf0c252",
+  "mapVersionId": "22222222-2222-2222-2222-222222222222",
+  "provisioningKey": "7439150f379644049f9db894b72dc3f1:BATCH-SHARED-PICKUP",
+  "status": "CREATED",
+  "contextValues": {
+    "batchKey": "BATCH-SHARED-PICKUP",
+    "warehouseId": "11111111-1111-1111-1111-111111111111",
+    "batchSequenceNo": 1,
+    "minBatteryPercent": 25,
+    "planSchemaVersion": 1,
+    "transportRequestId": "7439150f-3796-4404-9f9d-b894b72dc3f1"
+  },
+  "createdAt": "2026-10-12T11:38:04.347317+00:00",
+  "containers": [
+    {
+      "id": "632907a7-a0a6-4201-adea-c8ce8e468e75",
+      "transportRequestId": "7439150f-3796-4404-9f9d-b894b72dc3f1",
+      "containerId": "c1000000-0000-4000-8000-000000000001",
+      "sequenceNo": 1,
+      "status": "PENDING"
+    },
+    {
+      "id": "a454b0a6-d731-4dc0-aed3-7c53e40c63a8",
+      "transportRequestId": "7439150f-3796-4404-9f9d-b894b72dc3f1",
+      "containerId": "c2000000-0000-4000-8000-000000000002",
+      "sequenceNo": 2,
+      "status": "PENDING"
+    },
+    {
+      "id": "0ad18a6f-0ef5-488d-a23c-979453ea1d7c",
+      "transportRequestId": "7439150f-3796-4404-9f9d-b894b72dc3f1",
+      "containerId": "c3000000-0000-4000-8000-000000000003",
+      "sequenceNo": 3,
+      "status": "PENDING"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "ebc2fcc0-cbb0-4fc8-8d19-3042d380be0e",
+      "workflowTaskId": "73fb5b11-53c8-4ba7-a02a-23656845a1c1",
+      "sequenceNo": 1,
+      "status": "PENDING",
+      "contextValues": {
+        "executionScope": "ONCE_PER_JOB"
+      },
+      "steps": [
+        {
+          "id": "13d44e28-ecee-4e9d-b8fe-949db4436b47",
+          "workflowStepId": "af7e2ca2-bceb-4e18-8e74-76b316d3d7f7",
+          "workflowStepKey": "CHECK_READY",
+          "operationCode": "ROBOT_READY",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        },
+        {
+          "id": "d7300a1d-cf2c-4594-adf3-1f9b9c0a15a9",
+          "workflowStepId": "e3818a56-2de9-459b-a35c-13a7b487b9f7",
+          "workflowStepKey": "CHECK_BATTERY",
+          "operationCode": "BATTERY_MIN",
+          "stepType": "CHECK",
+          "sequenceNo": 2,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        },
+        {
+          "id": "8cb3a172-5796-4b89-933d-3ecc4ff7afd0",
+          "workflowStepId": "c2cd1dde-16fc-40d7-99d9-c27975b4108e",
+          "workflowStepKey": "CHECK_REQUEST",
+          "operationCode": "REQUEST_ACTIVE",
+          "stepType": "CHECK",
+          "sequenceNo": 3,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "ed8ae3d3-0ef0-4c19-9a22-282c97ca5299",
+      "workflowTaskId": "73fb5b11-53c8-4ba7-a02a-23656845a1c1",
+      "sequenceNo": 2,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "PICKUP",
+        "containerIds": [
+          "c1000000-0000-4000-8000-000000000001",
+          "c2000000-0000-4000-8000-000000000002",
+          "c3000000-0000-4000-8000-000000000003"
+        ],
+        "executionScope": "ONCE_PER_STOP",
+        "stopEndpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "stopSequenceNo": 1,
+        "jobContainerIds": [
+          "632907a7-a0a6-4201-adea-c8ce8e468e75",
+          "a454b0a6-d731-4dc0-aed3-7c53e40c63a8",
+          "0ad18a6f-0ef5-488d-a23c-979453ea1d7c"
+        ],
+        "source.endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "id": "6c2e4cc7-2752-4ba5-ac38-0e39bf91b3ad",
+          "workflowStepId": "27987daa-724f-4ab0-8e58-8ceb91357d4a",
+          "workflowStepKey": "CHECK_SOURCE_ENDPOINT",
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        },
+        {
+          "id": "128cdb50-e234-44da-b7f8-3334d78ea4a7",
+          "workflowStepId": "8a791129-04aa-4c1b-9b9c-7ee725513c88",
+          "workflowStepKey": "MOVE_PICKUP",
+          "operationCode": "PICKUP",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "2535209a-cb3d-49e2-9ba6-f4d42c87430e",
+      "workflowTaskId": "73fb5b11-53c8-4ba7-a02a-23656845a1c1",
+      "sequenceNo": 3,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "PICKUP",
+        "containerId": "c1000000-0000-4000-8000-000000000001",
+        "executionScope": "PER_CONTAINER_AT_STOP",
+        "jobContainerId": "632907a7-a0a6-4201-adea-c8ce8e468e75",
+        "source.levelNo": 1,
+        "stopEndpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "stopSequenceNo": 1,
+        "source.endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "destination.levelNo": 2,
+        "destination.endpointId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "source.storageLocationId": "b1000000-0000-4000-8000-000000000001",
+        "transportRequestDetailId": "f80a9816-6d65-453e-b618-e4573dfea992",
+        "destination.storageLocationId": "a1000000-0000-4000-8000-000000000001"
+      },
+      "steps": [
+        {
+          "id": "59731f81-24aa-42d7-8447-abd88195269e",
+          "workflowStepId": "2dabc6d6-839e-47f2-ba1a-d9d3003dc6ca",
+          "workflowStepKey": "PICKUP_CONFIRM",
+          "operationCode": "PICKUP_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "fafe2239-4078-4331-bd3a-8db708b4e4ca",
+      "workflowTaskId": "73fb5b11-53c8-4ba7-a02a-23656845a1c1",
+      "sequenceNo": 4,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "PICKUP",
+        "containerId": "c2000000-0000-4000-8000-000000000002",
+        "executionScope": "PER_CONTAINER_AT_STOP",
+        "jobContainerId": "a454b0a6-d731-4dc0-aed3-7c53e40c63a8",
+        "source.levelNo": 2,
+        "stopEndpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "stopSequenceNo": 1,
+        "source.endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "destination.levelNo": 1,
+        "destination.endpointId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "source.storageLocationId": "b2000000-0000-4000-8000-000000000002",
+        "transportRequestDetailId": "c2d21b6a-d67d-4848-8490-79b2328a87f6",
+        "destination.storageLocationId": "a2000000-0000-4000-8000-000000000002"
+      },
+      "steps": [
+        {
+          "id": "64178bd7-13ca-4805-b587-ccb6f6e0bce0",
+          "workflowStepId": "2dabc6d6-839e-47f2-ba1a-d9d3003dc6ca",
+          "workflowStepKey": "PICKUP_CONFIRM",
+          "operationCode": "PICKUP_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "e0b59747-a4ad-4721-8134-b23aa475c1e0",
+      "workflowTaskId": "73fb5b11-53c8-4ba7-a02a-23656845a1c1",
+      "sequenceNo": 5,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "PICKUP",
+        "containerId": "c3000000-0000-4000-8000-000000000003",
+        "executionScope": "PER_CONTAINER_AT_STOP",
+        "jobContainerId": "0ad18a6f-0ef5-488d-a23c-979453ea1d7c",
+        "source.levelNo": 3,
+        "stopEndpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "stopSequenceNo": 1,
+        "source.endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "destination.levelNo": 3,
+        "destination.endpointId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "source.storageLocationId": "b3000000-0000-4000-8000-000000000003",
+        "transportRequestDetailId": "f4a94467-6731-4fee-8567-8aeda7ece37b",
+        "destination.storageLocationId": "a3000000-0000-4000-8000-000000000003"
+      },
+      "steps": [
+        {
+          "id": "3fd1234d-a424-4acd-9383-c86c3d8c4045",
+          "workflowStepId": "2dabc6d6-839e-47f2-ba1a-d9d3003dc6ca",
+          "workflowStepKey": "PICKUP_CONFIRM",
+          "operationCode": "PICKUP_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "e82087f3-cb7b-4bb7-8bb2-cbdd0ea2e987",
+      "workflowTaskId": "fc30242c-2faa-4f51-bd1f-dba65a43fafd",
+      "sequenceNo": 6,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "DROPOFF",
+        "containerIds": [
+          "c1000000-0000-4000-8000-000000000001"
+        ],
+        "executionScope": "ONCE_PER_STOP",
+        "stopEndpointId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "stopSequenceNo": 2,
+        "jobContainerIds": [
+          "632907a7-a0a6-4201-adea-c8ce8e468e75"
+        ],
+        "destination.endpointId": "dddddddd-dddd-dddd-dddd-dddddddddddd"
+      },
+      "steps": [
+        {
+          "id": "7e765258-c8b0-4640-9779-f7c4c309a31d",
+          "workflowStepId": "0a65d328-bd58-4379-94f3-c24472a2bef2",
+          "workflowStepKey": "CHECK_DEST_ENDPOINT",
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        },
+        {
+          "id": "a48a1edc-4fbe-4222-b7e7-8b2a34a57b63",
+          "workflowStepId": "c21d8992-41a2-44f4-b684-2a49b80c52cd",
+          "workflowStepKey": "MOVE_DROPOFF",
+          "operationCode": "DROPOFF",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "f97347a8-4931-427e-b031-190a3312c7d9",
+      "workflowTaskId": "fc30242c-2faa-4f51-bd1f-dba65a43fafd",
+      "sequenceNo": 7,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "DROPOFF",
+        "containerId": "c1000000-0000-4000-8000-000000000001",
+        "executionScope": "PER_CONTAINER_AT_STOP",
+        "jobContainerId": "632907a7-a0a6-4201-adea-c8ce8e468e75",
+        "source.levelNo": 1,
+        "stopEndpointId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "stopSequenceNo": 2,
+        "source.endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "destination.levelNo": 2,
+        "destination.endpointId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "source.storageLocationId": "b1000000-0000-4000-8000-000000000001",
+        "transportRequestDetailId": "f80a9816-6d65-453e-b618-e4573dfea992",
+        "destination.storageLocationId": "a1000000-0000-4000-8000-000000000001"
+      },
+      "steps": [
+        {
+          "id": "0aca024b-8ec6-4a9b-9f41-6689b36433ef",
+          "workflowStepId": "c4b12adc-e2e5-461b-901d-74110c0f1a14",
+          "workflowStepKey": "DROPOFF_CONFIRM",
+          "operationCode": "DROPOFF_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "4c08f884-c188-4adf-9f24-577a64b7121b",
+      "workflowTaskId": "fc30242c-2faa-4f51-bd1f-dba65a43fafd",
+      "sequenceNo": 8,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "DROPOFF",
+        "containerIds": [
+          "c2000000-0000-4000-8000-000000000002"
+        ],
+        "executionScope": "ONCE_PER_STOP",
+        "stopEndpointId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "stopSequenceNo": 3,
+        "jobContainerIds": [
+          "a454b0a6-d731-4dc0-aed3-7c53e40c63a8"
+        ],
+        "destination.endpointId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+      },
+      "steps": [
+        {
+          "id": "6b34cfb0-1c73-4dfd-8b61-9f912d1b1aef",
+          "workflowStepId": "0a65d328-bd58-4379-94f3-c24472a2bef2",
+          "workflowStepKey": "CHECK_DEST_ENDPOINT",
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        },
+        {
+          "id": "8e9e873c-0edc-491f-b4a5-403741c086f0",
+          "workflowStepId": "c21d8992-41a2-44f4-b684-2a49b80c52cd",
+          "workflowStepKey": "MOVE_DROPOFF",
+          "operationCode": "DROPOFF",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "d49d4ab6-a723-4239-a48f-a83f8fc08ed2",
+      "workflowTaskId": "fc30242c-2faa-4f51-bd1f-dba65a43fafd",
+      "sequenceNo": 9,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "DROPOFF",
+        "containerId": "c2000000-0000-4000-8000-000000000002",
+        "executionScope": "PER_CONTAINER_AT_STOP",
+        "jobContainerId": "a454b0a6-d731-4dc0-aed3-7c53e40c63a8",
+        "source.levelNo": 2,
+        "stopEndpointId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "stopSequenceNo": 3,
+        "source.endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "destination.levelNo": 1,
+        "destination.endpointId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "source.storageLocationId": "b2000000-0000-4000-8000-000000000002",
+        "transportRequestDetailId": "c2d21b6a-d67d-4848-8490-79b2328a87f6",
+        "destination.storageLocationId": "a2000000-0000-4000-8000-000000000002"
+      },
+      "steps": [
+        {
+          "id": "d2f63afd-198e-4988-9686-2e7fce5b1033",
+          "workflowStepId": "c4b12adc-e2e5-461b-901d-74110c0f1a14",
+          "workflowStepKey": "DROPOFF_CONFIRM",
+          "operationCode": "DROPOFF_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "0c908214-9a5e-4631-80c3-755567796e13",
+      "workflowTaskId": "fc30242c-2faa-4f51-bd1f-dba65a43fafd",
+      "sequenceNo": 10,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "DROPOFF",
+        "containerIds": [
+          "c3000000-0000-4000-8000-000000000003"
+        ],
+        "executionScope": "ONCE_PER_STOP",
+        "stopEndpointId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "stopSequenceNo": 4,
+        "jobContainerIds": [
+          "0ad18a6f-0ef5-488d-a23c-979453ea1d7c"
+        ],
+        "destination.endpointId": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+      },
+      "steps": [
+        {
+          "id": "7f7ef2de-d6a0-4a10-83bd-6b0d656ca364",
+          "workflowStepId": "0a65d328-bd58-4379-94f3-c24472a2bef2",
+          "workflowStepKey": "CHECK_DEST_ENDPOINT",
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        },
+        {
+          "id": "178185b9-cb61-4c33-9cf0-62783ebd704d",
+          "workflowStepId": "c21d8992-41a2-44f4-b684-2a49b80c52cd",
+          "workflowStepKey": "MOVE_DROPOFF",
+          "operationCode": "DROPOFF",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    },
+    {
+      "id": "a914976f-6e93-4372-863d-71bc4b801235",
+      "workflowTaskId": "fc30242c-2faa-4f51-bd1f-dba65a43fafd",
+      "sequenceNo": 11,
+      "status": "PENDING",
+      "contextValues": {
+        "stopAction": "DROPOFF",
+        "containerId": "c3000000-0000-4000-8000-000000000003",
+        "executionScope": "PER_CONTAINER_AT_STOP",
+        "jobContainerId": "0ad18a6f-0ef5-488d-a23c-979453ea1d7c",
+        "source.levelNo": 3,
+        "stopEndpointId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "stopSequenceNo": 4,
+        "source.endpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "destination.levelNo": 3,
+        "destination.endpointId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "source.storageLocationId": "b3000000-0000-4000-8000-000000000003",
+        "transportRequestDetailId": "f4a94467-6731-4fee-8567-8aeda7ece37b",
+        "destination.storageLocationId": "a3000000-0000-4000-8000-000000000003"
+      },
+      "steps": [
+        {
+          "id": "55b8d5ee-7ea6-4b68-9175-ff082f17e480",
+          "workflowStepId": "c4b12adc-e2e5-461b-901d-74110c0f1a14",
+          "workflowStepKey": "DROPOFF_CONFIRM",
+          "operationCode": "DROPOFF_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 1,
+          "status": "PENDING",
+          "resolvedInputs": {},
+          "outputValues": {}
+        }
+      ]
+    }
+  ],
+  "expansionSummary": {
+    "jobContainerCount": 3,
+    "jobTaskCount": 11,
+    "jobStepCount": 17,
+    "movePickupCount": 1,
+    "moveDropoffCount": 3,
+    "pickupConfirmCount": 3,
+    "dropoffConfirmCount": 3
+  }
+}

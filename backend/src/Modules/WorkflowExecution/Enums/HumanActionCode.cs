@@ -1,0 +1,13 @@
+namespace WaroTrans.WorkflowExecution.Enums;
+
+public enum HumanActionCode
+{
+    PICKUP_CONFIRM,
+    DROPOFF_CONFIRM,
+    REPORT_ISSUE,
+    PAYLOAD_TRANSFER_CONFIRM,
+    MAINTENANCE_CONFIRM,
+    INSPECTION_CONFIRM,
+    CHARGE_CONNECT_CONFIRM,
+    CHARGE_DISCONNECT_CONFIRM
+}

@@ -1,0 +1,13 @@
+{
+  "transportRequestId": "7439150f-3796-4404-9f9d-b894b72dc3f1",
+  "jobs": [
+    {
+      "jobId": "4ec700e7-b42c-48a3-85e4-b31dc0299952",
+      "jobNo": "JOB-20261012-000022",
+      "batchKey": "BATCH-SHARED-PICKUP",
+      "jobContainerCount": 3,
+      "jobTaskCount": 11,
+      "jobStepCount": 17
+    }
+  ]
+}

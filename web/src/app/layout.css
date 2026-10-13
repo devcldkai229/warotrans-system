@@ -1,0 +1,60 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100svh;
+}
+
+.app-nav {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.app-brand {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #67e8f9;
+}
+
+.app-nav nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.app-nav a {
+  color: #cbd5e1;
+  text-decoration: none;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.4rem;
+}
+
+.app-nav a:hover,
+.app-nav a.active {
+  background: #1e293b;
+  color: #fff;
+}
+
+.app-main {
+  padding: 1.5rem 1.75rem;
+}
+
+@media (max-width: 800px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-nav {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .app-nav nav {
+    flex-direction: row;
+  }
+}
