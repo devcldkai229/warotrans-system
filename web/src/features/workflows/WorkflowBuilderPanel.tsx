@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type {
   BindingSourceType,
   InputBinding,
@@ -9,6 +9,10 @@ import type {
   WorkflowVariable,
   WorkflowVariableSource,
 } from '@/shared/api/contracts'
+import { cx } from '@/shared/lib/cx'
+import { Button, IconButton } from '@/shared/ui/Button'
+import { Field } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
 import { Icon } from '@/shared/ui/Icon'
 import {
   BINDING_SOURCES,
@@ -24,7 +28,6 @@ import {
   type InputSpec,
   type ValueType,
 } from './constants'
-import './workflows.css'
 
 interface WorkflowBuilderPanelProps {
   workflow: Workflow
@@ -122,22 +125,28 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
   const listed = list?.some((candidate) => candidate.value === binding.path) ?? false
 
   return (
-    <div className="wf-bind">
-      <div className="wf-bind__head">
-        <span className="wf-bind__name" title={input}>
+    <div className="mb-1.5 rounded-sm bg-container p-2.5">
+      <div className="mb-2 flex min-h-7 items-center gap-2">
+        <span className="min-w-0 truncate text-xs font-medium" title={input}>
           {input}
-          {spec.required ? <b title="Required"> *</b> : null}
+          {spec.required ? (
+            <b className="text-red" title="Required">
+              {' '}
+              *
+            </b>
+          ) : null}
         </span>
-        <small>{spec.type}</small>
+        <span className="mr-auto text-xs text-muted">{spec.type}</span>
         {spec.required ? null : (
-          <button type="button" className="wf-bind__x" onClick={onRemove} aria-label={`Remove ${input}`}>
-            <Icon name="close" size={11} />
-          </button>
+          <IconButton size="sm" onClick={onRemove} aria-label={`Remove ${input}`}>
+            <Icon name="close" size={13} />
+          </IconButton>
         )}
       </div>
 
-      <div className="wf-bind__pick">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-1.5">
         <select
+          className={controlClass('sm')}
           value={binding.sourceType}
           aria-label={`${input} source`}
           onChange={(event) => {
@@ -158,6 +167,7 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
 
         {list ? (
           <select
+            className={controlClass('sm')}
             value={listed ? binding.path : ''}
             aria-label={`${input} value`}
             onChange={(event) => onChange({ ...binding, path: event.target.value })}
@@ -171,6 +181,7 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
           </select>
         ) : spec.options || spec.type === 'BOOL' ? (
           <select
+            className={controlClass('sm')}
             value={binding.path}
             aria-label={`${input} value`}
             onChange={(event) => onChange({ ...binding, path: event.target.value })}
@@ -184,6 +195,7 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
           </select>
         ) : (
           <input
+            className={controlClass('sm')}
             type={spec.type === 'INT' || spec.type === 'DECIMAL' ? 'number' : 'text'}
             step={spec.type === 'DECIMAL' ? 'any' : undefined}
             value={binding.path}
@@ -195,6 +207,21 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
     </div>
   )
 }
+
+function SectionHead({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+  return (
+    <header className="mb-3 flex items-center justify-between gap-3">
+      <h3 className="flex items-baseline gap-2 text-md font-book">
+        {title}
+        {count === undefined ? null : <span className="text-sm text-muted">{count}</span>}
+      </h3>
+      {children}
+    </header>
+  )
+}
+
+const SUBHEADING = 'mt-4 mb-2 text-xs font-medium'
+const VARIABLE_GRID = 'grid grid-cols-[1.2fr_1.3fr_1.2fr_0.8fr_28px] items-center gap-1.5'
 
 export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPanelProps) {
   const [expandedTask, setExpandedTask] = useState<string | null>(workflow.tasks[0]?.id ?? null)
@@ -283,122 +310,124 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
   }
 
   return (
-    <div className="wf">
-      <label className="wf__field">
-        <span>Name</span>
-        <input value={workflow.name} onChange={(event) => patch({ name: event.target.value })} />
-      </label>
-      <p className="wf__meta">
-        Version {workflow.versionNo} · {workflow.status}
-      </p>
+    <div className="flex flex-col gap-8 px-5 pt-5 pb-10">
+      <Field label="Workflow name" hint={`Version ${workflow.versionNo}, ${workflow.status.toLowerCase()}`}>
+        <input className={controlClass()} value={workflow.name} onChange={(event) => patch({ name: event.target.value })} />
+      </Field>
 
-      <section className="wf__section">
-        <header>
-          <h4>
-            Variables <em>{workflow.variablesSchema.length}</em>
-          </h4>
-          <button type="button" className="wf__add" onClick={addVariable}>
-            + Variable
-          </button>
-        </header>
-        <div className="wf-vars">
-          <div className="wf-vars__head">
-            <span>Name</span>
-            <span>Type</span>
-            <span>Source</span>
-            <span>Value</span>
-            <span />
-          </div>
-          {workflow.variablesSchema.map((variable, index) => (
-            <div key={index} className="wf-vars__row">
-              <input
-                value={variable.key}
-                aria-label="Variable key"
-                onChange={(event) =>
-                  updateVariable(index, {
-                    key: event.target.value,
-                    label: variable.label === variable.key ? event.target.value : variable.label,
-                  })
-                }
-              />
-              <select
-                value={variable.dataType}
-                aria-label="Data type"
-                onChange={(event) => updateVariable(index, { dataType: event.target.value })}
-              >
-                {(VARIABLE_DATA_TYPES.includes(variable.dataType)
-                  ? VARIABLE_DATA_TYPES
-                  : [variable.dataType, ...VARIABLE_DATA_TYPES]
-                ).map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={variable.source}
-                aria-label="Variable source"
-                onChange={(event) => updateVariable(index, { source: event.target.value as WorkflowVariableSource })}
-              >
-                {VARIABLE_SOURCES.map((source) => (
-                  <option key={source} value={source}>
-                    {source}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={variable.source === 'ADMIN_INPUT' ? (variable.value ?? '') : ''}
-                disabled={variable.source !== 'ADMIN_INPUT'}
-                placeholder="—"
-                aria-label="Value"
-                onChange={(event) => updateVariable(index, { value: event.target.value })}
-              />
-              <button
-                type="button"
-                aria-label="Remove variable"
-                onClick={() => patch({ variablesSchema: workflow.variablesSchema.filter((_, i) => i !== index) })}
-              >
-                <Icon name="close" size={11} />
-              </button>
+      <section>
+        <SectionHead title="Variables" count={workflow.variablesSchema.length}>
+          <Button size="sm" onClick={addVariable}>
+            <Icon name="plus" size={14} /> Variable
+          </Button>
+        </SectionHead>
+        {workflow.variablesSchema.length === 0 ? (
+          <p className="text-xs text-muted">No variables yet. Add one to pass values into the steps.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <div className={cx(VARIABLE_GRID, 'text-xs text-muted')}>
+              <span>Name</span>
+              <span>Type</span>
+              <span>Source</span>
+              <span>Value</span>
+              <span />
             </div>
-          ))}
-        </div>
+            {workflow.variablesSchema.map((variable, index) => (
+              <div key={index} className={VARIABLE_GRID}>
+                <input
+                  className={controlClass('sm')}
+                  value={variable.key}
+                  aria-label="Variable key"
+                  onChange={(event) =>
+                    updateVariable(index, {
+                      key: event.target.value,
+                      label: variable.label === variable.key ? event.target.value : variable.label,
+                    })
+                  }
+                />
+                <select
+                  className={controlClass('sm')}
+                  value={variable.dataType}
+                  aria-label="Data type"
+                  onChange={(event) => updateVariable(index, { dataType: event.target.value })}
+                >
+                  {(VARIABLE_DATA_TYPES.includes(variable.dataType)
+                    ? VARIABLE_DATA_TYPES
+                    : [variable.dataType, ...VARIABLE_DATA_TYPES]
+                  ).map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className={controlClass('sm')}
+                  value={variable.source}
+                  aria-label="Variable source"
+                  onChange={(event) => updateVariable(index, { source: event.target.value as WorkflowVariableSource })}
+                >
+                  {VARIABLE_SOURCES.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className={controlClass('sm')}
+                  value={variable.source === 'ADMIN_INPUT' ? (variable.value ?? '') : ''}
+                  disabled={variable.source !== 'ADMIN_INPUT'}
+                  placeholder="—"
+                  aria-label="Value"
+                  onChange={(event) => updateVariable(index, { value: event.target.value })}
+                />
+                <IconButton
+                  size="sm"
+                  aria-label="Remove variable"
+                  onClick={() => patch({ variablesSchema: workflow.variablesSchema.filter((_, i) => i !== index) })}
+                >
+                  <Icon name="close" size={13} />
+                </IconButton>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      <section className="wf__section">
-        <header>
-          <h4>Tasks</h4>
-          <button type="button" className="wf__add" onClick={addTask}>
-            + Add task
-          </button>
-        </header>
+      <section>
+        <SectionHead title="Tasks" count={workflow.tasks.length}>
+          <Button size="sm" onClick={addTask}>
+            <Icon name="plus" size={14} /> Task
+          </Button>
+        </SectionHead>
+        {workflow.tasks.length === 0 ? <p className="text-xs text-muted">No tasks yet. A task groups the steps a robot runs in order.</p> : null}
 
         {workflow.tasks.map((task, taskIndex) => {
           const taskOpen = expandedTask === task.id
           return (
-            <div key={task.id} className="wf-task">
+            <div key={task.id} className="mb-2 rounded-md bg-container">
               <button
                 type="button"
-                className="wf-task__head"
+                className="flex w-full items-center gap-2.5 px-4 py-3.5 text-left"
+                aria-expanded={taskOpen}
                 onClick={() => setExpandedTask(taskOpen ? null : task.id)}
               >
-                <Icon name={taskOpen ? 'chevronDown' : 'chevronRight'} size={12} />
-                <strong>{task.name || task.taskKey}</strong>
-                <em>{task.steps.length}</em>
+                <Icon name={taskOpen ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
+                <strong className="min-w-0 flex-1 truncate text-base font-medium">{task.name || task.taskKey}</strong>
+                <span className="text-xs text-muted">
+                  {task.steps.length} {task.steps.length === 1 ? 'step' : 'steps'}
+                </span>
               </button>
 
               {taskOpen ? (
-                <div className="wf-task__steps">
-                  <label className="wf-name">
-                    <span>Task name</span>
+                <div className="px-3 pb-3">
+                  <Field label="Task name" hint={`Key ${task.taskKey}`} className="mb-3 px-1">
                     <input
+                      className={controlClass('sm')}
                       value={task.name}
                       disabled={!isDraft}
-                      aria-label="Task name"
                       onChange={(event) => updateTask(task.id, (current) => ({ ...current, name: event.target.value }))}
                     />
-                    <small>Key {task.taskKey}</small>
-                  </label>
+                  </Field>
                   {task.steps.map((step) => {
                     const stepOpen = expandedStep === step.id
                     const usedInputs = Object.keys(step.inputBindings)
@@ -414,39 +443,43 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                       return firstBinding(spec, ctx) !== null
                     })
                     return (
-                      <div key={step.id} className={`wf-step${stepOpen ? ' is-open' : ''}`}>
+                      <div key={step.id} className="mb-1.5 rounded-md bg-surface">
                         <button
                           type="button"
-                          className="wf-step__head"
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
+                          aria-expanded={stepOpen}
                           onClick={() => setExpandedStep(stepOpen ? null : step.id)}
                         >
-                          <span className={`wf-step__icon wf-step__icon--${step.stepType}`}>
-                            <Icon name={step.stepType === 'MOVE' ? 'navigate' : 'user'} size={12} />
+                          <span
+                            className={cx(
+                              'grid size-8 shrink-0 place-items-center rounded-full',
+                              step.stepType === 'MOVE' ? 'bg-blue-soft text-blue-ink' : 'bg-container-high text-ink-2',
+                            )}
+                          >
+                            <Icon name={step.stepType === 'MOVE' ? 'navigate' : 'user'} size={14} />
                           </span>
-                          <span>
-                            <small>
-                              Step {step.sequenceNo} · {step.stepType}
-                            </small>
-                            <strong>{step.name || step.stepKey}</strong>
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="text-xs text-muted">
+                              Step {step.sequenceNo}, {step.stepType}
+                            </span>
+                            <strong className="truncate font-medium">{step.name || step.stepKey}</strong>
                           </span>
-                          <Icon name={stepOpen ? 'chevronDown' : 'chevronRight'} size={11} />
+                          <Icon name={stepOpen ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
                         </button>
 
                         {stepOpen ? (
-                          <div className="wf-step__body">
-                            <label className="wf-name">
-                              <span>Step name</span>
+                          <div className="min-w-0 px-3 pb-3">
+                            <Field label="Step name" hint={`Key ${step.stepKey}`}>
                               <input
+                                className={controlClass('sm')}
                                 value={step.name}
                                 disabled={!isDraft}
-                                aria-label="Step name"
                                 onChange={(event) => updateStep(task.id, step.id, { name: event.target.value })}
                               />
-                              <small>Key {step.stepKey}</small>
-                            </label>
+                            </Field>
 
-                            <h5>Inputs</h5>
-                            {usedInputs.length === 0 ? <p className="wf-none">None</p> : null}
+                            <h4 className={SUBHEADING}>Inputs</h4>
+                            {usedInputs.length === 0 ? <p className="mb-2 text-xs text-muted">None</p> : null}
                             {Object.entries(step.inputBindings).map(([input, binding]) => (
                               <BindingRow
                                 key={input}
@@ -460,12 +493,12 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                             ))}
                             {addable.length > 0 ? (
                               <select
-                                className="wf__addinput"
+                                className={controlClass('sm', 'border-dashed')}
                                 value=""
                                 aria-label="Add input"
                                 onChange={(event) => addInput(task.id, step, event.target.value, ctx)}
                               >
-                                <option value="">+ Add input…</option>
+                                <option value="">Add an input…</option>
                                 {addable.map((spec) => (
                                   <option key={spec.name} value={spec.name}>
                                     {spec.name} ({spec.type})
@@ -474,14 +507,14 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                               </select>
                             ) : null}
 
-                            <h5>Outputs</h5>
+                            <h4 className={SUBHEADING}>Outputs</h4>
                             {OUTPUT_SPECS[step.stepType].length === 0 ? (
-                              <p className="wf-none">None</p>
+                              <p className="text-xs text-muted">None</p>
                             ) : (
-                              <ul className="wf-outs">
+                              <ul className="flex flex-wrap gap-1.5">
                                 {OUTPUT_SPECS[step.stepType].map((output) => (
-                                  <li key={output.name}>
-                                    {output.name} <small>{output.type}</small>
+                                  <li key={output.name} className="rounded-full bg-container-high px-2.5 py-1 text-xs">
+                                    {output.name} <span className="text-muted">{output.type}</span>
                                   </li>
                                 ))}
                               </ul>
@@ -492,19 +525,24 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                     )
                   })}
 
-                  <div className="wf-addstep">
-                    <button
-                      type="button"
-                      className="wf__ghost"
+                  <div className="relative mt-2">
+                    <Button
+                      variant="surface"
+                      size="sm"
+                      aria-expanded={stepMenuFor === task.id}
                       onClick={() => setStepMenuFor(stepMenuFor === task.id ? null : task.id)}
                     >
-                      + Add step
-                    </button>
+                      <Icon name="plus" size={14} /> Step
+                    </Button>
                     {stepMenuFor === task.id ? (
-                      <ul>
+                      <ul className="absolute top-10 left-0 z-5 min-w-48 rounded-md bg-surface p-1.5 shadow-float">
                         {SUPPORTED_STEP_TYPES.map((type) => (
                           <li key={type}>
-                            <button type="button" onClick={() => addStep(task.id, type)}>
+                            <button
+                              type="button"
+                              className="flex h-9 w-full items-center rounded-sm px-3 text-left text-sm transition-colors duration-200 hover:bg-container-high"
+                              onClick={() => addStep(task.id, type)}
+                            >
                               {type}
                             </button>
                           </li>

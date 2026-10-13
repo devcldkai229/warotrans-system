@@ -1,9 +1,12 @@
 import type { TransportRequestView } from '@/shared/api/contracts'
+import { cx } from '@/shared/lib/cx'
 import { formatDateTimeWithYear, formatDuration, secondsBetween } from '@/shared/lib/format'
 import { Icon } from '@/shared/ui/Icon'
+import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE, REQUEST_DETAIL_STATUS_TONE, REQUEST_STATUS_TONE } from '@/shared/ui/statusTones'
 import { detailProgress } from './derive'
+import { Drawer, DrawerHeading, FailureNote, LineItem, MetaList, MetaRow } from './panelParts'
 
 interface RequestDetailPanelProps {
   request: TransportRequestView
@@ -18,99 +21,76 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
 
   return (
-    <aside className="rpanel" aria-label={`${request.requestCode} detail`}>
-      <header className="rpanel__head">
-        <div>
-          <small>Transport Request</small>
-          <strong className="mono">{request.requestCode}</strong>
-        </div>
-        <StatusBadge tone={REQUEST_STATUS_TONE[request.status]}>{request.status}</StatusBadge>
-        <button type="button" aria-label="Close" onClick={onClose}>
-          <Icon name="close" size={14} />
-        </button>
-      </header>
+    <Drawer
+      label={`${request.requestCode} detail`}
+      kind="Transport request"
+      code={request.requestCode}
+      status={request.status}
+      tone={REQUEST_STATUS_TONE[request.status]}
+      onClose={onClose}
+    >
+      <div className="mb-5 flex flex-col gap-2 text-xs text-muted">
+        <Meter percent={progress.percent} tone="blue" />
+        <span>
+          {progress.done} of {progress.total} containers delivered
+        </span>
+      </div>
 
-      <div className="rpanel__scroll">
-        <div className="rpanel__progress">
-          <div className="jcard__bar">
-            <i style={{ width: `${progress.percent}%` }} />
-          </div>
-          <span>
-            {progress.done}/{progress.total} containers delivered
-          </span>
-        </div>
+      <MetaList>
+        <MetaRow label="Workflow">{request.workflowName}</MetaRow>
+        <MetaRow label="Requested by">{request.requestedByName}</MetaRow>
+        <MetaRow label="Submitted">{formatDateTimeWithYear(request.submittedAt)}</MetaRow>
+        <MetaRow label="Queued">{formatDateTimeWithYear(request.queuedAt)}</MetaRow>
+        <MetaRow label={request.completedAt ? 'Finished' : 'Elapsed'}>
+          {request.completedAt ? formatDateTimeWithYear(request.completedAt) : elapsed === null ? '—' : formatDuration(elapsed)}
+        </MetaRow>
+        {request.note ? <MetaRow label="Note">{request.note}</MetaRow> : null}
+      </MetaList>
 
-        <dl className="rpanel__meta">
-          <div>
-            <dt>Workflow</dt>
-            <dd>{request.workflowName}</dd>
-          </div>
-          <div>
-            <dt>Requested by</dt>
-            <dd>{request.requestedByName}</dd>
-          </div>
-          <div>
-            <dt>Submitted</dt>
-            <dd>{formatDateTimeWithYear(request.submittedAt)}</dd>
-          </div>
-          <div>
-            <dt>Queued</dt>
-            <dd>{formatDateTimeWithYear(request.queuedAt)}</dd>
-          </div>
-          <div>
-            <dt>{request.completedAt ? 'Finished' : 'Elapsed'}</dt>
-            <dd>{request.completedAt ? formatDateTimeWithYear(request.completedAt) : elapsed === null ? '—' : formatDuration(elapsed)}</dd>
-          </div>
-          {request.note ? (
-            <div>
-              <dt>Note</dt>
-              <dd>{request.note}</dd>
-            </div>
-          ) : null}
-        </dl>
+      {request.failureMessage ? <FailureNote>{request.failureMessage}</FailureNote> : null}
 
-        {request.failureMessage ? <p className="rpanel__failure">{request.failureMessage}</p> : null}
+      <DrawerHeading>Movement plan</DrawerHeading>
+      <ol>
+        {request.details.map((detail) => (
+          <LineItem
+            key={detail.id}
+            sequence={detail.sequenceNo}
+            title={detail.containerBarcode}
+            code
+            note={`${detail.sourceLabel} → ${detail.destinationLabel}`}
+            status={detail.status}
+            tone={REQUEST_DETAIL_STATUS_TONE[detail.status]}
+          />
+        ))}
+      </ol>
 
-        <h4>Movement plan</h4>
-        <ol className="rpanel__lines">
-          {request.details.map((detail) => (
-            <li key={detail.id}>
-              <span className="rpanel__seq">{detail.sequenceNo}</span>
-              <span className="rpanel__line">
-                <strong className="mono">{detail.containerBarcode}</strong>
-                <small>
-                  {detail.sourceLabel} → {detail.destinationLabel}
-                </small>
-              </span>
-              <StatusBadge tone={REQUEST_DETAIL_STATUS_TONE[detail.status]}>{detail.status}</StatusBadge>
+      <DrawerHeading>Jobs ({request.jobs.length})</DrawerHeading>
+      {request.jobs.length === 0 ? (
+        <p className="text-xs text-muted">No job has been planned for this request yet.</p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-1.5">
+          {request.jobs.map((job) => (
+            <li key={job.jobNo}>
+              <button
+                type="button"
+                className={cx(
+                  'flex w-full items-center gap-2 rounded-md px-3.5 py-2.5 text-left transition-colors duration-200',
+                  selectedJobNo === job.jobNo ? 'bg-container-high ring-2 ring-ink' : 'bg-container hover:bg-container-high',
+                )}
+                aria-pressed={selectedJobNo === job.jobNo}
+                onClick={() => onSelectJob(job.jobNo)}
+              >
+                <span className="flex min-w-0 flex-1 flex-col text-xs">
+                  <strong className="font-mono font-medium">{job.jobNo}</strong>
+                  <span className="text-muted">{job.robotCode ?? 'Unassigned'}</span>
+                </span>
+                <StatusBadge tone={JOB_STATUS_TONE[job.status]}>{job.status}</StatusBadge>
+                <Icon name="chevronRight" size={14} className="text-muted" />
+              </button>
             </li>
           ))}
-        </ol>
-
-        <h4>Jobs ({request.jobs.length})</h4>
-        {request.jobs.length === 0 ? (
-          <p className="rpanel__none">No Job has been planned for this request yet.</p>
-        ) : (
-          <ul className="rpanel__jobs">
-            {request.jobs.map((job) => (
-              <li key={job.jobNo}>
-                <button
-                  type="button"
-                  className={selectedJobNo === job.jobNo ? 'is-selected' : undefined}
-                  onClick={() => onSelectJob(job.jobNo)}
-                >
-                  <span>
-                    <strong className="mono">{job.jobNo}</strong>
-                    <small>{job.robotCode ?? 'Unassigned'}</small>
-                  </span>
-                  <StatusBadge tone={JOB_STATUS_TONE[job.status]}>{job.status}</StatusBadge>
-                  <Icon name="chevronRight" size={12} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </aside>
+        </ul>
+      )}
+    </Drawer>
   )
 }

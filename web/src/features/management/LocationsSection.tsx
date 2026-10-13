@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import type { StorageLocationView } from '@/shared/api/contracts'
+import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
+import { Field, FieldRow, FormError } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
+import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { ENDPOINT_OPTIONS, WAREHOUSES } from './mock'
-import { SectionHead } from './SectionHead'
+import { AddButton, SectionHead } from './SectionHead'
 
 interface LocationDraft {
   code: string
@@ -70,87 +75,95 @@ export function LocationsSection({ locations, setLocations }: LocationsSectionPr
   return (
     <>
       <SectionHead title="Storage locations" hint="Places where Containers are stored. Each one points at one map Endpoint.">
-        <button type="button" className="btn btn--blue" onClick={open}>
-          + Add location
-        </button>
+        <AddButton onClick={open}>Add location</AddButton>
       </SectionHead>
 
-      <table className="mtable">
+      <Table>
         <thead>
           <tr>
-            <th>Code</th>
-            <th>Name</th>
-            <th>Warehouse</th>
-            <th>Endpoint</th>
-            <th>Status</th>
-            <th className="is-right">Actions</th>
+            <Th>Code</Th>
+            <Th>Name</Th>
+            <Th>Warehouse</Th>
+            <Th>Endpoint</Th>
+            <Th>Status</Th>
+            <Th align="right">Actions</Th>
           </tr>
         </thead>
         <tbody>
           {locations.map((location) => (
-            <tr key={location.id}>
-              <td>{location.code}</td>
-              <td className="is-strong">{location.name}</td>
-              <td className="is-faint">{location.warehouseName}</td>
-              <td className="is-faint">
-                {location.endpointName} · {location.endpointCode}
-              </td>
-              <td>
-                <span className={`mpill mpill--${location.isActive ? 'green' : 'grey'}`}>
+            <Tr key={location.id}>
+              <Td className="font-mono text-xs">{location.code}</Td>
+              <Td tone="strong">{location.name}</Td>
+              <Td tone="faint">{location.warehouseName}</Td>
+              <Td>
+                {location.endpointName} <span className="font-mono text-xs text-muted">{location.endpointCode}</span>
+              </Td>
+              <Td>
+                <StatusBadge tone={location.isActive ? 'green' : 'grey'} withDot>
                   {location.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </td>
-              <td>
-                <div className="mrow-actions">
-                  <button
-                    type="button"
-                    className={`mbtn ${location.isActive ? 'mbtn--danger' : 'mbtn--ok'}`}
-                    onClick={() => toggle(location.id)}
-                  >
+                </StatusBadge>
+              </Td>
+              <Td>
+                <div className="flex justify-end">
+                  <Button size="sm" variant={location.isActive ? 'ghost' : 'tonal'} onClick={() => toggle(location.id)}>
                     {location.isActive ? 'Deactivate' : 'Activate'}
-                  </button>
+                  </Button>
                 </div>
-              </td>
-            </tr>
+              </Td>
+            </Tr>
           ))}
         </tbody>
-      </table>
+      </Table>
 
       {draft ? (
         <Dialog title="Add storage location" submitLabel="Create location" onClose={() => setDraft(null)} onSubmit={save}>
-          <div className="field-row">
-            <label className="field">
-              Code
-              <input value={draft.code} maxLength={100} onChange={(event) => setDraft({ ...draft, code: event.target.value })} autoFocus />
-            </label>
-            <label className="field">
-              Name
-              <input value={draft.name} maxLength={100} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-            </label>
-          </div>
-          <label className="field">
-            Warehouse
-            <select value={draft.warehouseId} onChange={(event) => setDraft({ ...draft, warehouseId: event.target.value })}>
+          <FieldRow>
+            <Field label="Code">
+              <input
+                className={controlClass()}
+                value={draft.code}
+                maxLength={100}
+                onChange={(event) => setDraft({ ...draft, code: event.target.value })}
+                autoFocus
+              />
+            </Field>
+            <Field label="Name">
+              <input
+                className={controlClass()}
+                value={draft.name}
+                maxLength={100}
+                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              />
+            </Field>
+          </FieldRow>
+          <Field label="Warehouse">
+            <select
+              className={controlClass()}
+              value={draft.warehouseId}
+              onChange={(event) => setDraft({ ...draft, warehouseId: event.target.value })}
+            >
               {WAREHOUSES.map((warehouse) => (
                 <option key={warehouse.id} value={warehouse.id}>
                   {warehouse.name}
                 </option>
               ))}
             </select>
-          </label>
-          <label className="field">
-            Map endpoint
-            <select value={draft.endpointId} onChange={(event) => setDraft({ ...draft, endpointId: event.target.value })}>
+          </Field>
+          <Field label="Map endpoint" hint="Each location uses one Endpoint, and an Endpoint can serve only one location.">
+            <select
+              className={controlClass()}
+              value={draft.endpointId}
+              onChange={(event) => setDraft({ ...draft, endpointId: event.target.value })}
+            >
               {freeEndpoints.length === 0 ? <option value="">No free endpoint</option> : null}
               {freeEndpoints.map((endpoint) => (
                 <option key={endpoint.id} value={endpoint.id}>
-                  {endpoint.name} · {endpoint.code}
+                  {endpoint.name} ({endpoint.code})
                 </option>
               ))}
             </select>
-            <small>Each location uses one Endpoint, and an Endpoint can serve only one location.</small>
-          </label>
-          {error ? <small className="field" style={{ color: 'var(--red-ink)' }}>{error}</small> : null}
+          </Field>
+          {error ? <FormError>{error}</FormError> : null}
         </Dialog>
       ) : null}
     </>

@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Wordmark } from '@/app/Wordmark'
 import { ApiError } from '@/shared/api/client'
-import { Icon } from '@/shared/ui/Icon'
+import { Button } from '@/shared/ui/Button'
+import { Field, FormError } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
 import { ConsoleAccessError, useAuth } from './authContext'
-import './auth.css'
+import { DotField } from './DotField'
 
 const DEFAULT_ROUTE = '/monitor/fleet'
 
@@ -56,57 +59,47 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login">
-      <main className="login__panel">
-        <div className="login__brand">
-          <span className="login__logo">WT</span>
-          <span className="login__brand-text">
-            <span className="login__brand-name">
-              WARO<span>TRANS</span>
-            </span>
-            <span className="login__brand-sub">FLEET ENGINE</span>
-          </span>
-        </div>
+    <div className="relative grid min-h-svh place-items-center overflow-hidden bg-surface px-6 py-16">
+      <DotField />
 
-        <section className="login__card">
-          <h1>Sign in to Fleet Manager</h1>
-          <p className="login__sub">Enter your credentials to access the admin console.</p>
+      <main className="relative w-full max-w-xl">
+        {/* A soft white pool behind the form keeps the text readable over the dots. */}
+        <div className="pointer-events-none absolute -inset-x-24 -inset-y-20 bg-[radial-gradient(closest-side,#fff_68%,transparent)]" />
 
-          <form onSubmit={handleSubmit} className="login__form">
-            <label className="login__field">
-              <span>Username</span>
+        <div className="relative flex flex-col items-center text-center">
+          <Wordmark size="lg" />
+          <h1 className="mt-10 text-4xl font-normal sm:text-5xl">Sign in to the fleet console</h1>
+          <p className="mt-4 text-base text-ink-2">For warehouse administrators. Staff accounts use the mobile app.</p>
+
+          <form onSubmit={handleSubmit} className="mt-10 flex w-full max-w-sm flex-col gap-4 text-left">
+            <Field label="Username">
               <input
+                className={controlClass('lg')}
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
                 autoFocus
                 required
               />
-            </label>
-            <label className="login__field">
-              <span>Password</span>
+            </Field>
+            <Field label="Password">
               <input
                 type="password"
+                className={controlClass('lg')}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="current-password"
                 required
               />
-            </label>
+            </Field>
 
-            {error ? (
-              <p className="login__error" role="alert">
-                {error}
-              </p>
-            ) : null}
+            {error ? <FormError>{error}</FormError> : null}
 
-            <button type="submit" className="login__submit" disabled={submitting}>
-              {submitting ? 'Signing in…' : 'Sign In to Console'} <Icon name="arrowRight" size={16} />
-            </button>
+            <Button type="submit" variant="primary" size="lg" block className="mt-2" disabled={submitting}>
+              {submitting ? 'Signing in…' : 'Sign in'}
+            </Button>
           </form>
-        </section>
-
-        <p className="login__footer">© WaroTrans</p>
+        </div>
       </main>
     </div>
   )

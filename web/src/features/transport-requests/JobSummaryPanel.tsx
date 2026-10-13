@@ -1,10 +1,12 @@
 import type { TransportRequestView } from '@/shared/api/contracts'
-import { formatDuration } from '@/shared/lib/format'
+import { formatDuration, humanize } from '@/shared/lib/format'
+import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
-import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { Meter } from '@/shared/ui/Meter'
 import { JOB_STATUS_TONE, STEP_STATUS_TONE } from '@/shared/ui/statusTones'
 import { elapsedSeconds, stepProgress } from '../jobs/derive'
 import { JOBS } from '../jobs/mock'
+import { Drawer, DrawerHeading, FailureNote, LineItem, MetaList, MetaRow } from './panelParts'
 
 interface JobSummaryPanelProps {
   jobRef: TransportRequestView['jobs'][number]
@@ -20,82 +22,56 @@ export function JobSummaryPanel({ jobRef, onClose, onOpenFull }: JobSummaryPanel
   const steps = job?.tasks.flatMap((task) => task.steps) ?? []
 
   return (
-    <aside className="rpanel rpanel--job" aria-label={`${jobRef.jobNo} summary`}>
-      <header className="rpanel__head">
-        <div>
-          <small>Job</small>
-          <strong className="mono">{jobRef.jobNo}</strong>
-        </div>
-        <StatusBadge tone={JOB_STATUS_TONE[jobRef.status]}>{jobRef.status}</StatusBadge>
-        <button type="button" aria-label="Close" onClick={onClose}>
-          <Icon name="close" size={14} />
-        </button>
-      </header>
+    <Drawer
+      label={`${jobRef.jobNo} summary`}
+      kind="Job"
+      code={jobRef.jobNo}
+      status={jobRef.status}
+      tone={JOB_STATUS_TONE[jobRef.status]}
+      onClose={onClose}
+    >
+      <MetaList>
+        <MetaRow label="Robot">
+          {jobRef.robotCode ?? 'Unassigned'}
+          {job?.assignedRobot ? `, ${job.assignedRobot.batteryPercent}% battery` : ''}
+        </MetaRow>
+        {job?.routeLabel ? <MetaRow label="Route">{job.routeLabel}</MetaRow> : null}
+        {job?.container ? <MetaRow label="Container">{job.container.barcode}</MetaRow> : null}
+        {elapsed !== null ? <MetaRow label="Elapsed">{formatDuration(elapsed)}</MetaRow> : null}
+      </MetaList>
 
-      <div className="rpanel__scroll">
-        <dl className="rpanel__meta">
-          <div>
-            <dt>Robot</dt>
-            <dd>
-              {jobRef.robotCode ?? 'Unassigned'}
-              {job?.assignedRobot ? ` · ${job.assignedRobot.batteryPercent}%` : ''}
-            </dd>
+      {job && progress ? (
+        <>
+          <div className="mt-5 flex flex-col gap-2 text-xs text-muted">
+            <Meter percent={progress.percent} tone="blue" />
+            <span>
+              {progress.done} of {progress.total} steps done
+            </span>
           </div>
-          {job?.routeLabel ? (
-            <div>
-              <dt>Route</dt>
-              <dd>{job.routeLabel}</dd>
-            </div>
-          ) : null}
-          {job?.container ? (
-            <div>
-              <dt>Container</dt>
-              <dd>{job.container.barcode}</dd>
-            </div>
-          ) : null}
-          {elapsed !== null ? (
-            <div>
-              <dt>Elapsed</dt>
-              <dd>{formatDuration(elapsed)}</dd>
-            </div>
-          ) : null}
-        </dl>
 
-        {job && progress ? (
-          <>
-            <div className="rpanel__progress">
-              <div className="jcard__bar">
-                <i style={{ width: `${progress.percent}%` }} />
-              </div>
-              <span>
-                {progress.done}/{progress.total} steps done
-              </span>
-            </div>
+          {job.failureMessage ? <FailureNote>{job.failureMessage}</FailureNote> : null}
 
-            {job.failureMessage ? <p className="rpanel__failure">{job.failureMessage}</p> : null}
+          <DrawerHeading>Steps</DrawerHeading>
+          <ol>
+            {steps.map((step) => (
+              <LineItem
+                key={step.id}
+                sequence={step.sequenceNo}
+                title={step.name}
+                note={humanize(step.stepType)}
+                status={step.status}
+                tone={STEP_STATUS_TONE[step.status]}
+              />
+            ))}
+          </ol>
 
-            <h4>Steps</h4>
-            <ol className="rpanel__lines">
-              {steps.map((step) => (
-                <li key={step.id}>
-                  <span className="rpanel__seq">{step.sequenceNo}</span>
-                  <span className="rpanel__line">
-                    <strong>{step.name}</strong>
-                    <small>{step.stepType}</small>
-                  </span>
-                  <StatusBadge tone={STEP_STATUS_TONE[step.status]}>{step.status}</StatusBadge>
-                </li>
-              ))}
-            </ol>
-
-            <button type="button" className="btn btn--primary btn--block rpanel__open" onClick={onOpenFull}>
-              Open full detail <Icon name="arrowRight" size={14} />
-            </button>
-          </>
-        ) : (
-          <p className="rpanel__none">Step detail for this Job is not available yet.</p>
-        )}
-      </div>
-    </aside>
+          <Button variant="primary" block className="mt-6" onClick={onOpenFull}>
+            Open full detail <Icon name="arrowRight" size={14} />
+          </Button>
+        </>
+      ) : (
+        <p className="mt-5 text-xs text-muted">Step detail for this job is not available yet.</p>
+      )}
+    </Drawer>
   )
 }

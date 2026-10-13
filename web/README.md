@@ -24,6 +24,20 @@ session through `POST /api/identity/refresh`.
 
 Set `VITE_MOCK_AUTO_LOGIN=true` in `.env.local` to skip sign-in and work on the mock-data screens without the API.
 
+## Styling
+
+The UI is styled with Tailwind CSS v4 utility classes; there are no per-feature stylesheets.
+
+- `src/index.css` is the only stylesheet. Its `@theme` block names every colour, type size, radius and shadow, and
+  switches the default Tailwind palettes off, so a class such as `bg-slate-100` does not exist. Add a token there
+  before using a new value.
+- Build screens from the components in `src/shared/ui` (`Button`, `StatusBadge`, `Field`, `Dialog`, `Table`, `Meter`)
+  instead of restyling raw elements. Their `className` prop is for layout only (margins, width, position): colours
+  and sizes come from the `variant`, `size` and `tone` props, because two utilities for the same property do not
+  override each other predictably.
+- The warehouse map is drawn in metres inside an SVG, so its paint is set with SVG attributes from
+  `src/shared/map/mapStyle.ts`, which follows the same tokens.
+
 ---
 
 # React + TypeScript + Vite

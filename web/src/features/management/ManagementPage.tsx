@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Account, Product, ProductCategory, StorageLocationView } from '@/shared/api/contracts'
+import { cx } from '@/shared/lib/cx'
 import { listAccounts } from '@/features/accounts/api'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AccountsSection } from './AccountsSection'
@@ -11,7 +12,6 @@ import { LocationsSection } from './LocationsSection'
 import { ProductsSection } from './ProductsSection'
 import { RolesSection } from './RolesSection'
 import { CATEGORIES, CONTAINERS, INVENTORY, PRODUCTS, STORAGE_LOCATIONS } from './mock'
-import './management.css'
 
 type TabId = 'accounts' | 'roles' | 'products' | 'categories' | 'containers' | 'inventory' | 'locations'
 
@@ -83,44 +83,49 @@ export function ManagementPage() {
   )
 
   return (
-    <div className="mgmt">
-      <header className="mgmt__head">
-        <h1>Management</h1>
-        <p>Accounts, roles and warehouse master data in one place.</p>
-      </header>
+    <div className="h-full overflow-auto">
+      <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
+        <header>
+          <h1 className="text-4xl font-book">Management</h1>
+          <p className="mt-3 text-base text-ink-2">Accounts, roles and warehouse master data in one place.</p>
+        </header>
 
-      <div className="mgmt__layout">
-        <nav className="mnav" aria-label="Management sections">
-          {MENU.map((group) => (
-            <div key={group.label} className="mnav__group">
-              <p>{group.label}</p>
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`mnav__item${tab === item.id ? ' is-active' : ''}`}
-                  aria-current={tab === item.id ? 'page' : undefined}
-                  onClick={() => setSearchParams({ tab: item.id }, { replace: true })}
-                >
-                  <span>{item.label}</span>
-                  <em>{counts[item.id]}</em>
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
+        <div className="mt-10 grid grid-cols-[220px_minmax(0,1fr)] items-start gap-10">
+          <nav className="sticky top-4 flex flex-col gap-6" aria-label="Management sections">
+            {MENU.map((group) => (
+              <div key={group.label}>
+                <p className="mb-1 px-3.5 text-xs text-muted">{group.label}</p>
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={cx(
+                      'flex h-9 w-full items-center justify-between gap-2 rounded-full px-3.5 text-left text-sm transition-colors duration-200',
+                      tab === item.id ? 'bg-container-high font-medium text-ink' : 'text-ink-2 hover:bg-container-high hover:text-ink',
+                    )}
+                    aria-current={tab === item.id ? 'page' : undefined}
+                    onClick={() => setSearchParams({ tab: item.id }, { replace: true })}
+                  >
+                    {item.label}
+                    <span className="text-xs font-normal text-muted tabular-nums">{counts[item.id]}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
 
-        <section className="msec">
-          {tab === 'accounts' ? <AccountsSection accounts={accounts} setAccounts={setAccounts} loadState={loadState} /> : null}
-          {tab === 'roles' ? <RolesSection accounts={accounts} /> : null}
-          {tab === 'products' ? <ProductsSection products={products} setProducts={setProducts} categories={categories} /> : null}
-          {tab === 'categories' ? (
-            <CategoriesSection categories={categories} setCategories={setCategories} products={products} />
-          ) : null}
-          {tab === 'containers' ? <ContainersSection containers={CONTAINERS} /> : null}
-          {tab === 'inventory' ? <InventorySection inventory={INVENTORY} /> : null}
-          {tab === 'locations' ? <LocationsSection locations={locations} setLocations={setLocations} /> : null}
-        </section>
+          <section className="min-w-0">
+            {tab === 'accounts' ? <AccountsSection accounts={accounts} setAccounts={setAccounts} loadState={loadState} /> : null}
+            {tab === 'roles' ? <RolesSection accounts={accounts} /> : null}
+            {tab === 'products' ? <ProductsSection products={products} setProducts={setProducts} categories={categories} /> : null}
+            {tab === 'categories' ? (
+              <CategoriesSection categories={categories} setCategories={setCategories} products={products} />
+            ) : null}
+            {tab === 'containers' ? <ContainersSection containers={CONTAINERS} /> : null}
+            {tab === 'inventory' ? <InventorySection inventory={INVENTORY} /> : null}
+            {tab === 'locations' ? <LocationsSection locations={locations} setLocations={setLocations} /> : null}
+          </section>
+        </div>
       </div>
     </div>
   )

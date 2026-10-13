@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react'
 import type { Account, AccountRole, AccountStatus } from '@/shared/api/contracts'
 import { formatIsoDateTime } from '@/shared/lib/format'
+import { Button } from '@/shared/ui/Button'
+import { SearchInput } from '@/shared/ui/Field'
+import { controlClass } from '@/shared/ui/controlClass'
+import { StatusBadge } from '@/shared/ui/StatusBadge'
+import type { Tone } from '@/shared/ui/statusTones'
+import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { AccountFormDialog } from '@/features/accounts/AccountFormDialog'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
-import { SectionHead } from './SectionHead'
+import { AddButton, SectionHead } from './SectionHead'
 
-const STATUS_PILL: Record<AccountStatus, { label: string; tone: 'green' | 'grey' | 'red' }> = {
-  ACTIVE: { label: 'Active', tone: 'green' },
-  INACTIVE: { label: 'Inactive', tone: 'grey' },
-  LOCKED: { label: 'Locked', tone: 'red' },
-}
+const STATUS_TONE: Record<AccountStatus, Tone> = { ACTIVE: 'green', INACTIVE: 'grey', LOCKED: 'red' }
 
 interface AccountsSectionProps {
   accounts: Account[]
@@ -56,8 +58,13 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
   return (
     <>
       <SectionHead title="Accounts" hint="People who can sign in. The role decides what each person may do.">
-        <input placeholder="Search name, username or email…" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as AccountRole | '')}>
+        <SearchInput className="w-72" placeholder="Search name, username or email" value={query} onChange={setQuery} />
+        <select
+          className={controlClass('pill')}
+          aria-label="Filter by role"
+          value={roleFilter}
+          onChange={(event) => setRoleFilter(event.target.value as AccountRole | '')}
+        >
           <option value="">All roles</option>
           {ACCOUNT_ROLES.map((role) => (
             <option key={role} value={role}>
@@ -65,70 +72,67 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn--blue" onClick={() => setEditing('new')}>
-          + Add account
-        </button>
+        <AddButton onClick={() => setEditing('new')}>Add account</AddButton>
       </SectionHead>
 
-      <table className="mtable">
+      <Table>
         <thead>
           <tr>
-            <th>Username</th>
-            <th>Full name</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Last login</th>
-            <th>Status</th>
-            <th className="is-right">Actions</th>
+            <Th>Username</Th>
+            <Th>Full name</Th>
+            <Th>Email</Th>
+            <Th>Role</Th>
+            <Th>Last login</Th>
+            <Th>Status</Th>
+            <Th align="right">Actions</Th>
           </tr>
         </thead>
         <tbody>
-          {visible.map((account) => {
-            const pill = STATUS_PILL[account.status]
-            return (
-              <tr key={account.id}>
-                <td>{account.username}</td>
-                <td className="is-strong">{account.fullName}</td>
-                <td>{account.email}</td>
-                <td>
-                  <span className={`mpill mpill--${account.role === 'ADMIN' ? 'blue' : 'grey'}`}>{account.role}</span>
-                </td>
-                <td className="is-faint">{formatIsoDateTime(account.lastLoginAt)}</td>
-                <td>
-                  <span className={`mpill mpill--${pill.tone}`}>{pill.label}</span>
-                </td>
-                <td>
-                  <div className="mrow-actions">
-                    <button type="button" className="mbtn" onClick={() => setEditing(account)}>
-                      Edit
-                    </button>
-                    {account.status === 'ACTIVE' ? (
-                      <button type="button" className="mbtn mbtn--danger" onClick={() => setStatus(account.id, 'INACTIVE')}>
-                        Deactivate
-                      </button>
-                    ) : (
-                      <button type="button" className="mbtn mbtn--ok" onClick={() => setStatus(account.id, 'ACTIVE')}>
-                        Activate
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
+          {visible.map((account) => (
+            <Tr key={account.id}>
+              <Td>{account.username}</Td>
+              <Td tone="strong">{account.fullName}</Td>
+              <Td>{account.email}</Td>
+              <Td>
+                <StatusBadge tone={account.role === 'ADMIN' ? 'blue' : 'grey'}>{account.role}</StatusBadge>
+              </Td>
+              <Td tone="faint" className="tabular-nums">
+                {formatIsoDateTime(account.lastLoginAt)}
+              </Td>
+              <Td>
+                <StatusBadge tone={STATUS_TONE[account.status]} withDot>
+                  {account.status}
+                </StatusBadge>
+              </Td>
+              <Td>
+                <div className="flex justify-end gap-1.5">
+                  <Button size="sm" onClick={() => setEditing(account)}>
+                    Edit
+                  </Button>
+                  {account.status === 'ACTIVE' ? (
+                    <Button size="sm" variant="ghost" onClick={() => setStatus(account.id, 'INACTIVE')}>
+                      Deactivate
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="tonal" onClick={() => setStatus(account.id, 'ACTIVE')}>
+                      Activate
+                    </Button>
+                  )}
+                </div>
+              </Td>
+            </Tr>
+          ))}
           {visible.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="mtable__empty">
-                {loadState === 'loading'
-                  ? 'Loading accounts…'
-                  : loadState === 'error'
-                    ? 'Could not load accounts. Check that the API is running and reload.'
-                    : 'No accounts match the filter'}
-              </td>
-            </tr>
+            <EmptyRow colSpan={7}>
+              {loadState === 'loading'
+                ? 'Loading accounts…'
+                : loadState === 'error'
+                  ? 'Could not load accounts. Check that the API is running, then reload.'
+                  : 'No accounts match this filter.'}
+            </EmptyRow>
           ) : null}
         </tbody>
-      </table>
+      </Table>
 
       {editing ? (
         <AccountFormDialog

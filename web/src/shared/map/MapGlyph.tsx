@@ -12,7 +12,14 @@ interface MapGlyphProps {
 export function MapGlyph({ icon, size }: MapGlyphProps) {
   const elements = MAP_GLYPHS[icon] ?? []
   return (
-    <g className="wglyph" transform={`translate(${-size / 2} ${-size / 2}) scale(${size / 24})`}>
+    <g
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      transform={`translate(${-size / 2} ${-size / 2}) scale(${size / 24})`}
+    >
       {elements.map(([tag, props], index) => createElement(tag, { key: index, ...props }))}
     </g>
   )

@@ -1,192 +1,140 @@
-:root {
-  --navy: #003369;
-  --navy-deep: #0b4a8f;
-  --brand: #1e3a8a;
-  --blue: #1d4ed8;
-  --blue-soft: #eff6ff;
-  --blue-line: #dbeafe;
-  --ink: #0f172a;
-  --ink-2: #334155;
-  --muted: #64748b;
-  --faint: #94a3b8;
-  --line: #e2e8f0;
-  --line-2: #cbd5e1;
-  --surface: #ffffff;
-  --canvas: #f8fafc;
-  --green: #16a34a;
-  --green-ink: #15803d;
-  --green-soft: #f0fdf4;
-  --green-line: #bbf7d0;
-  --amber: #d97706;
-  --amber-ink: #92400e;
-  --amber-soft: #fef3c7;
-  --amber-line: #fde68a;
-  --red: #dc2626;
-  --red-ink: #b91c1c;
-  --red-soft: #fef2f2;
-  --red-line: #fecaca;
-  --purple: #7c3aed;
-  --purple-soft: #f5f3ff;
-  --sans: 'Inter', 'Segoe UI', 'Helvetica Neue', sans-serif;
-  --mono: 'JetBrains Mono', 'Consolas', monospace;
+@import 'tailwindcss';
 
-  font: 14px/1.45 var(--sans);
-  color: var(--ink);
-  background: var(--canvas);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/*
+ * Design tokens. Every colour, type size, radius and shadow used by the console is named here, and the default
+ * Tailwind palettes are switched off so a screen cannot drift away from them.
+ */
+@theme {
+  --font-sans: 'Google Sans Flex', 'Google Sans', system-ui, sans-serif;
+  --font-mono: 'Google Sans Code', ui-monospace, 'Cascadia Code', monospace;
+
+  --color-*: initial;
+  --color-white: #fff;
+  /* Surface ladder: each step must read as a separate layer next to the one before it, not just in theory. */
+  --color-surface: #fff;
+  --color-container: #eef1f6;
+  --color-container-high: #e3e8ef;
+  --color-container-higher: #d6dce6;
+  --color-container-highest: #bcc5d1;
+  --color-ink: #121317;
+  --color-ink-soft: #2f3034;
+  --color-ink-2: #45474d;
+  --color-muted: #6a6a71;
+  --color-outline: rgb(33 34 38 / 0.18);
+  --color-outline-soft: rgb(33 34 38 / 0.1);
+
+  /* Status tones: `soft` is the fill, `ink` the text on it, the plain name the dot / bar / map marker. */
+  --color-blue: #3279f9;
+  --color-blue-ink: #1a5cd6;
+  --color-blue-soft: #e9f1ff;
+  --color-green: #1e8e3e;
+  --color-green-ink: #137333;
+  --color-green-soft: #e4f4e8;
+  --color-amber: #e37400;
+  --color-amber-ink: #9a4b00;
+  --color-amber-soft: #fdf1d8;
+  --color-red: #d93025;
+  --color-red-ink: #b3261e;
+  --color-red-soft: #fce8e6;
+  --color-purple: #8430ce;
+  --color-purple-ink: #6b21b8;
+  --color-purple-soft: #f3e8fd;
+
+  --text-*: initial;
+  --text-xs: 0.78125rem;
+  --text-xs--line-height: 1.3;
+  --text-xs--letter-spacing: 0.009em;
+  --text-sm: 0.90625rem;
+  --text-sm--line-height: 1.45;
+  --text-sm--letter-spacing: 0.011em;
+  --text-base: 1.09375rem;
+  --text-base--line-height: 1.45;
+  --text-base--letter-spacing: 0.01em;
+  --text-md: 1.25rem;
+  --text-md--line-height: 1.3;
+  --text-md--letter-spacing: -0.0025em;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.15;
+  --text-xl--letter-spacing: -0.003em;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 1.1;
+  --text-2xl--letter-spacing: -0.004em;
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 1.08;
+  --text-3xl--letter-spacing: -0.005em;
+  --text-4xl: 2.625rem;
+  --text-4xl--line-height: 1.04;
+  --text-4xl--letter-spacing: -0.017em;
+  --text-5xl: 3.375rem;
+  --text-5xl--line-height: 1.04;
+  --text-5xl--letter-spacing: -0.018em;
+  --text-7xl: 6.125rem;
+  --text-7xl--line-height: 0.9;
+  --text-7xl--letter-spacing: -0.02em;
+
+  --font-weight-book: 450;
+
+  --radius-*: initial;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 36px;
+
+  --shadow-*: initial;
+  --shadow-float: 0 0 0 1px rgb(33 34 38 / 0.1), 0 4px 12px rgb(0 0 0 / 0.06), 0 16px 32px -12px rgb(18 19 23 / 0.16);
+  --shadow-modal: 0 0 0 1px rgb(33 34 38 / 0.1), 0 24px 64px -16px rgb(18 19 23 / 0.3);
+
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+
+  --animate-panel-in: panel-in 0.24s var(--ease-out-quart);
+  --animate-robot-pulse: robot-pulse 1.6s ease-in-out infinite;
+
+  @keyframes panel-in {
+    from {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+  }
+
+  @keyframes robot-pulse {
+    50% {
+      transform: scale(1.22);
+      opacity: 0.55;
+    }
+  }
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+@layer base {
+  html {
+    font-optical-sizing: auto;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-container-highest) transparent;
+  }
 
-body {
-  margin: 0;
-  min-width: 1100px;
-}
+  body {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    letter-spacing: var(--text-sm--letter-spacing);
+  }
 
-#root {
-  min-height: 100svh;
-}
+  button:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
 
-h1,
-h2,
-h3,
-p {
-  margin: 0;
-}
+  :focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
+  }
 
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-input,
-select {
-  font: inherit;
-  color: inherit;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.mono {
-  font-family: var(--mono);
-}
-
-/* ---------- shared buttons ---------- */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: var(--surface);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.btn:hover {
-  background: var(--canvas);
-}
-
-.btn--primary {
-  background: var(--navy);
-  border-color: var(--navy);
-  color: #fff;
-}
-
-.btn--primary:hover {
-  background: var(--navy-deep);
-}
-
-.btn--outline {
-  border-color: var(--navy-deep);
-  color: var(--navy-deep);
-}
-
-.btn--danger {
-  border-color: var(--red-line);
-  color: var(--red-ink);
-  background: var(--red-soft);
-}
-
-.btn--block {
-  width: 100%;
-  height: 40px;
-}
-
-/* ---------- shared badge ---------- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.badge--green {
-  background: var(--green-soft);
-  color: var(--green-ink);
-  border: 1px solid var(--green-line);
-}
-
-.badge--blue {
-  background: var(--blue-soft);
-  color: var(--blue);
-  border: 1px solid var(--blue-line);
-}
-
-.badge--amber {
-  background: var(--amber-soft);
-  color: var(--amber-ink);
-  border: 1px solid var(--amber-line);
-}
-
-.badge--red {
-  background: var(--red-soft);
-  color: var(--red-ink);
-  border: 1px solid var(--red-line);
-}
-
-.badge--purple {
-  background: var(--purple-soft);
-  color: var(--purple);
-  border: 1px solid #ddd6fe;
-}
-
-.badge--grey {
-  background: #f1f5f9;
-  color: var(--muted);
-  border: 1px solid var(--line);
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  flex: none;
-}
-
-.icon {
-  flex: none;
-  vertical-align: middle;
+  ::selection {
+    background: rgb(50 121 249 / 0.2);
+  }
 }

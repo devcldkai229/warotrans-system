@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { InventoryStockView } from '@/shared/api/contracts'
 import { formatIsoDateTime } from '@/shared/lib/format'
+import { SearchInput } from '@/shared/ui/Field'
+import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { SectionHead } from './SectionHead'
 
 /**
@@ -24,40 +26,38 @@ export function InventorySection({ inventory }: { inventory: InventoryStockView[
   return (
     <>
       <SectionHead title="Inventory" hint="Containers stored per product, location and shelf level. Counts are Containers, not units.">
-        <input placeholder="Search SKU, product or location…" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <SearchInput className="w-72" placeholder="Search SKU, product or location" value={query} onChange={setQuery} />
       </SectionHead>
 
-      <table className="mtable">
+      <Table>
         <thead>
           <tr>
-            <th>SKU</th>
-            <th>Product</th>
-            <th>Location</th>
-            <th>Level</th>
-            <th className="is-right">Containers</th>
-            <th className="is-right">Updated</th>
+            <Th>SKU</Th>
+            <Th>Product</Th>
+            <Th>Location</Th>
+            <Th>Level</Th>
+            <Th align="right">Containers</Th>
+            <Th align="right">Updated</Th>
           </tr>
         </thead>
         <tbody>
           {visible.map((row) => (
-            <tr key={row.id}>
-              <td>{row.sku}</td>
-              <td className="is-strong">{row.productName}</td>
-              <td className="is-faint">{row.locationCode}</td>
-              <td className="is-faint">{row.levelNo}</td>
-              <td className="is-right is-strong">{row.containerCount}</td>
-              <td className="is-right is-faint">{formatIsoDateTime(row.updatedAt)}</td>
-            </tr>
+            <Tr key={row.id}>
+              <Td className="font-mono text-xs">{row.sku}</Td>
+              <Td tone="strong">{row.productName}</Td>
+              <Td tone="faint">{row.locationCode}</Td>
+              <Td tone="faint">{row.levelNo}</Td>
+              <Td align="right" tone="strong">
+                {row.containerCount}
+              </Td>
+              <Td align="right" tone="faint">
+                {formatIsoDateTime(row.updatedAt)}
+              </Td>
+            </Tr>
           ))}
-          {visible.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="mtable__empty">
-                No stock records match the filter
-              </td>
-            </tr>
-          ) : null}
+          {visible.length === 0 ? <EmptyRow colSpan={6}>No stock records match this filter.</EmptyRow> : null}
         </tbody>
-      </table>
+      </Table>
     </>
   )
 }

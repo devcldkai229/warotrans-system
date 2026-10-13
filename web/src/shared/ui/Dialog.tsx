@@ -1,6 +1,42 @@
 import type { FormEvent, ReactNode } from 'react'
+import { cx } from '@/shared/lib/cx'
+import { Button, IconButton } from './Button'
 import { Icon } from './Icon'
-import './Dialog.css'
+
+interface ModalProps {
+  title: string
+  subtitle?: string
+  onClose: () => void
+  /** Tailwind width class of the card. */
+  width?: string
+  children: ReactNode
+}
+
+/** Dimmed backdrop with a centred card. Clicking the backdrop closes it. */
+export function Modal({ title, subtitle, onClose, width = 'w-[480px]', children }: ModalProps) {
+  return (
+    <div className="fixed inset-0 z-100 grid place-items-center bg-ink/40 p-4" role="presentation" onClick={onClose}>
+      <div
+        className={cx('max-h-full max-w-full overflow-auto rounded-lg bg-surface shadow-modal', width)}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="flex items-start justify-between gap-4 px-6 pt-6">
+          <div>
+            <h2 className="text-xl font-book">{title}</h2>
+            {subtitle ? <p className="mt-1 text-sm text-ink-2">{subtitle}</p> : null}
+          </div>
+          <IconButton aria-label="Close" className="-mt-1 -mr-2" onClick={onClose}>
+            <Icon name="close" size={18} />
+          </IconButton>
+        </header>
+        {children}
+      </div>
+    </div>
+  )
+}
 
 interface DialogProps {
   title: string
@@ -18,31 +54,18 @@ export function Dialog({ title, submitLabel, onClose, onSubmit, children }: Dial
   }
 
   return (
-    <div className="dialog" role="presentation" onClick={onClose}>
-      <form
-        className="dialog__card"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={handleSubmit}
-      >
-        <header>
-          <h2>{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
-            <Icon name="close" size={16} />
-          </button>
-        </header>
-        <div className="dialog__body">{children}</div>
-        <footer>
-          <button type="button" className="btn" onClick={onClose}>
+    <Modal title={title} onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <div className="flex flex-col gap-4 px-6 py-5">{children}</div>
+        <footer className="flex justify-end gap-2 px-6 pb-6">
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button type="submit" className="btn btn--primary">
+          </Button>
+          <Button type="submit" variant="primary">
             {submitLabel}
-          </button>
+          </Button>
         </footer>
       </form>
-    </div>
+    </Modal>
   )
 }

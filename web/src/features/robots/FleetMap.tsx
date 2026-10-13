@@ -9,7 +9,7 @@ interface FleetMapProps {
   robots: RobotView[]
   selectedCode: string | null
   onSelect: (code: string) => void
-  /** `detail` is the full-bleed map shown behind the Robot Detail panel. */
+  /** `detail` is the map shown beside the Robot Detail panel: it follows that one Robot. */
   variant?: 'overview' | 'detail'
   /** Overview only: the robot whose summary card is open. A marker click previews; "View details" calls `onSelect`. */
   previewCode?: string | null
@@ -66,7 +66,7 @@ export function FleetMap({ robots, selectedCode, onSelect, variant = 'overview',
         x: robot.poseX,
         y: robot.poseY,
         tone: 'danger' as const,
-        lines: [`${robot.code} waiting at ${zone.name}`, `held by ${zone.heldByRobotCode} · queue +${zone.queueAfter ?? 0}`],
+        lines: [`${robot.code} waiting at ${zone.name}`, `held by ${zone.heldByRobotCode}, queue +${zone.queueAfter ?? 0}`],
       },
     ]
   })
@@ -77,7 +77,7 @@ export function FleetMap({ robots, selectedCode, onSelect, variant = 'overview',
     <>
       <WarehouseMap
         robots={mapRobots}
-        layers={{ occupancy: true, legendOpen: true }}
+        layers={{ occupancy: true }}
         labels="focus"
         focusEndpointIds={focusEndpointIds}
         focusRobotCodes={detail && selectedCode ? [selectedCode] : undefined}
@@ -91,8 +91,8 @@ export function FleetMap({ robots, selectedCode, onSelect, variant = 'overview',
           <RobotPreviewCard robot={previewed} onClose={() => onPreview?.(null)} onOpenDetails={() => onSelect(previewed.code)} />
         ) : null}
       </WarehouseMap>
-      <div className="fleet__live">
-        <span className="dot" />
+      <div className="absolute top-3 right-3 z-5 flex h-8 items-center gap-2 rounded-full bg-surface/95 px-3.5 text-xs text-ink-2 shadow-float">
+        <span className="size-1.5 rounded-full bg-green" />
         {LIVE_MAP_LABEL}
       </div>
     </>
