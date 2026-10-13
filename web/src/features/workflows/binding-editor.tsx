@@ -47,6 +47,28 @@ function compatible(sourceType: string, targetType: string): boolean {
   return sourceType === targetType || (sourceType === 'INTEGER' && targetType === 'DECIMAL')
 }
 
+/** Parse CONSTANT text without producing NaN (empty → undefined). */
+function parseConstantValue(raw: string, dataType: string): unknown {
+  const trimmed = raw.trim()
+  if (trimmed === '') return undefined
+  if (dataType === 'INTEGER') {
+    const n = Number.parseInt(trimmed, 10)
+    return Number.isFinite(n) ? n : undefined
+  }
+  if (dataType === 'DECIMAL') {
+    const n = Number.parseFloat(trimmed)
+    return Number.isFinite(n) ? n : undefined
+  }
+  if (dataType === 'BOOLEAN') return trimmed === 'true'
+  return raw
+}
+
+function displayConstantValue(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'number' && !Number.isFinite(value)) return ''
+  return String(value)
+}
+
 export function BindingEditor({
   input,
   binding,
@@ -189,8 +211,13 @@ export function BindingEditor({
             </p>
           )}
           <p className="binding-help">
-            Runtime context from TransportRequestDetail and Job planning. Admin/Staff do not enter this
-            value directly.
+            Runtime context from TransportRequestDetail / Job planning
+            {stopActionFilter === 'PICKUP'
+              ? ' · PICKUP stop → source.* only'
+              : stopActionFilter === 'DROPOFF'
+                ? ' · DROPOFF stop → destination.* only'
+                : ''}
+            . Not entered by Admin/Staff.
           </p>
         </div>
       )}
@@ -243,18 +270,22 @@ export function BindingEditor({
           </select>
         ) : (
           <input
-            value={binding?.constantValue == null ? '' : String(binding.constantValue)}
-            placeholder={`Constant ${input.dataType}`}
+            type={
+              input.dataType === 'INTEGER' || input.dataType === 'DECIMAL' ? 'number' : 'text'
+            }
+            step={input.dataType === 'DECIMAL' ? 'any' : undefined}
+            value={displayConstantValue(binding?.constantValue)}
+            placeholder={
+              input.required
+                ? `Constant ${input.dataType}`
+                : `Optional ${input.dataType} (leave empty to omit)`
+            }
             onChange={(e) => {
-              let value: unknown = e.target.value
-              if (input.dataType === 'INTEGER') value = Number.parseInt(e.target.value, 10)
-              if (input.dataType === 'DECIMAL') value = Number.parseFloat(e.target.value)
-              if (input.dataType === 'BOOLEAN') value = e.target.value === 'true'
               onChange({
                 sourceType,
                 sourceReference: null,
                 outputKey: null,
-                constantValue: value,
+                constantValue: parseConstantValue(e.target.value, input.dataType),
               })
             }}
           />

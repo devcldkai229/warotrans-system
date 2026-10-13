@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
+import { formatDateTimeWithYear } from '@/shared/lib/format'
+import { Button } from '@/shared/ui/Button'
+import { Icon } from '@/shared/ui/Icon'
+import { StatusBadge } from '@/shared/ui/StatusBadge'
+import type { Tone } from '@/shared/ui/statusTones'
 import type {
   OperationMetadata,
   StepInputBinding,
@@ -22,13 +27,17 @@ import {
   updateWorkflow,
 } from '@/shared/api/workflows'
 import { BindingEditor } from './binding-editor'
-import { isMovementFieldAvailable } from './movement-scope'
+import {
+  isMovementFieldAvailable,
+  preferredMovementEndpointPath,
+} from './movement-scope'
 import {
   emptyStep,
   emptyTask,
   emptyVariable,
   emptyWorkflow,
-  moveItem,
+  reorderItem,
+  workflowCodeFromName,
 } from './workflow-defaults'
 import './workflows.css'
 
@@ -112,8 +121,9 @@ function findOperation(
 }
 
 /**
- * When operationFieldName is also a required input on that operation (e.g. MOVE.purpose),
- * auto-bind CONSTANT = operationCode so Admin does not pick the same value twice.
+ * Seed bindings from metadata when the operation changes:
+ * - operationFieldName (e.g. MOVE.purpose) → CONSTANT = operationCode
+ * - endpoint UUID inputs → CURRENT_MOVEMENT source/destination by stopActionFilter
  */
 function bindingsForOperationChange(
   stepTypeMeta: StepTypeMetadata | null,
@@ -121,16 +131,35 @@ function bindingsForOperationChange(
   operationMeta: OperationMetadata | null,
 ): Record<string, StepInputBinding> {
   const bindings: Record<string, StepInputBinding> = {}
+  if (!operationCode || !operationMeta) return bindings
+
   const fieldName = stepTypeMeta?.operationFieldName
-  if (!fieldName || !operationCode || !operationMeta) return bindings
-  const fieldInput = operationMeta.inputs.find((i) => i.key === fieldName)
-  if (!fieldInput) return bindings
-  bindings[fieldName] = {
-    sourceType: 'CONSTANT',
-    sourceReference: null,
-    outputKey: null,
-    constantValue: operationCode,
+  if (fieldName) {
+    const fieldInput = operationMeta.inputs.find((i) => i.key === fieldName)
+    if (fieldInput) {
+      bindings[fieldName] = {
+        sourceType: 'CONSTANT',
+        sourceReference: null,
+        outputKey: null,
+        constantValue: operationCode,
+      }
+    }
   }
+
+  const movementPath = preferredMovementEndpointPath(operationMeta.stopActionFilter)
+  if (movementPath) {
+    for (const input of operationMeta.inputs) {
+      if (input.dataType !== 'UUID') continue
+      if (input.key !== 'targetEndpointId' && input.key !== 'endpointId') continue
+      bindings[input.key] = {
+        sourceType: 'CURRENT_MOVEMENT',
+        sourceReference: movementPath,
+        outputKey: null,
+        constantValue: undefined,
+      }
+    }
+  }
+
   return bindings
 }
 
@@ -305,6 +334,8 @@ export function WorkflowEditor({
   const [serverErrors, setServerErrors] = useState<string[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [showPublishWarnings, setShowPublishWarnings] = useState(false)
+  const [dragStep, setDragStep] = useState<{ taskIndex: number; stepIndex: number } | null>(null)
+  const [dropStep, setDropStep] = useState<{ taskIndex: number; stepIndex: number } | null>(null)
 
   // Sync local draft when route/query identity changes (avoid cascading setState-in-effect lint).
   if (loadedKey !== 'loading' && draftKey !== loadedKey && (isNew || detailQuery.data)) {
@@ -513,66 +544,109 @@ export function WorkflowEditor({
   }
 
   const saveLabel = isNew ? 'Create workflow' : 'Save draft'
+  const statusTone: Tone = status === 'PUBLISHED' ? 'green' : 'amber'
+  const stepCount = draft.tasks.reduce((n, t) => n + t.steps.length, 0)
+
   const actionButtons = (
     <>
       {!readOnly && (
-        <button
-          type="button"
-          className="btn primary"
-          disabled={saveMutation.isPending}
-          onClick={runSave}
-        >
+        <Button variant="primary" disabled={saveMutation.isPending} onClick={runSave}>
+          <Icon name="save" size={15} />
           {saveMutation.isPending ? 'Saving…' : saveLabel}
-        </button>
+        </Button>
       )}
       {!isNew && status === 'DRAFT' && (
-        <button
-          type="button"
-          className="btn"
-          disabled={publishMutation.isPending}
-          onClick={runPublish}
-        >
+        <Button variant="surface" disabled={publishMutation.isPending} onClick={runPublish}>
           {publishMutation.isPending ? 'Publishing…' : 'Publish'}
-        </button>
+        </Button>
       )}
       {!isNew && status === 'PUBLISHED' && (
-        <button
-          type="button"
-          className="btn primary"
+        <Button
+          variant="primary"
           disabled={versionMutation.isPending}
           onClick={() => versionMutation.mutate()}
         >
           New version
-        </button>
+        </Button>
       )}
       {isPanel && onClose && (
-        <button type="button" className="btn" onClick={onClose}>
+        <Button variant="surface" onClick={onClose}>
           Done
-        </button>
+        </Button>
       )}
     </>
   )
 
+  const pageHeader = !isPanel && (
+    <header className="wf-page-hero">
+      <div className="wf-page-hero__top">
+        <Link className="wf-page-hero__back" to="/configure/workflows">
+          <Icon name="arrowLeft" size={16} /> Workflows
+        </Link>
+        <div className="wf-actions">{actionButtons}</div>
+      </div>
+      <div className="wf-page-hero__title-row">
+        <div className="min-w-0">
+          <p className="wf-page-hero__code">
+            {draft.code || (isNew ? 'NEW DRAFT' : 'Workflow')}
+            {!isNew && detailQuery.data ? ` · v${detailQuery.data.versionNo}` : ''}
+          </p>
+          <h1 className="wf-page-hero__title">
+            {isNew ? 'New workflow template' : draft.name || draft.code || 'Workflow editor'}
+          </h1>
+          <div className="wf-page-hero__meta">
+            <StatusBadge tone={statusTone} withDot>
+              {status}
+            </StatusBadge>
+            {!isNew && detailQuery.data?.createdAt ? (
+              <span>Created {formatDateTimeWithYear(detailQuery.data.createdAt)}</span>
+            ) : null}
+            {!isNew && detailQuery.data?.publishedAt ? (
+              <span>Published {formatDateTimeWithYear(detailQuery.data.publishedAt)}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      {draft.description ? (
+        <p className="wf-page-hero__desc">{draft.description}</p>
+      ) : null}
+      <div className="wf-page-hero__stats">
+        <div className="wf-page-hero__stat">
+          <span className="wf-page-hero__stat-label">Variables</span>
+          <span className="wf-page-hero__stat-value">{draft.variables.length}</span>
+        </div>
+        <div className="wf-page-hero__stat">
+          <span className="wf-page-hero__stat-label">Tasks</span>
+          <span className="wf-page-hero__stat-value">{draft.tasks.length}</span>
+        </div>
+        <div className="wf-page-hero__stat">
+          <span className="wf-page-hero__stat-label">Steps</span>
+          <span className="wf-page-hero__stat-value">{stepCount}</span>
+        </div>
+      </div>
+    </header>
+  )
+
+  const panelHeader = isPanel && (
+    <header className="wf-header">
+      <div>
+        <h1>{isNew ? 'New workflow template' : draft.name || draft.code || 'Workflow editor'}</h1>
+        <p className="wf-panel-status">
+          <StatusBadge tone={statusTone} withDot>
+            {status}
+          </StatusBadge>
+          {!isNew && detailQuery.data ? (
+            <span className="muted">v{detailQuery.data.versionNo}</span>
+          ) : null}
+        </p>
+      </div>
+    </header>
+  )
+
   const editorBody = (
     <>
-      <header className="wf-header">
-        <div>
-          {!isPanel && (
-            <p className="crumb">
-              <Link to="/configure/workflows">Workflows</Link> / {isNew ? 'New' : draft.code || id}
-            </p>
-          )}
-          <h1>{isNew ? 'New workflow template' : draft.name || draft.code || 'Workflow editor'}</h1>
-          <p>
-            Status: <span className={`badge ${status.toLowerCase()}`}>{status}</span>
-            {!isNew && detailQuery.data ? ` · v${detailQuery.data.versionNo}` : ''}
-            {!isNew && detailQuery.data?.publishedAt
-              ? ` · published ${new Date(detailQuery.data.publishedAt).toLocaleString()}`
-              : ''}
-          </p>
-        </div>
-        {!isPanel && <div className="wf-actions">{actionButtons}</div>}
-      </header>
+      {pageHeader}
+      {panelHeader}
 
       {message && <p className="ok">{message}</p>}
       {serverErrors.length > 0 && (
@@ -607,21 +681,26 @@ export function WorkflowEditor({
       )}
 
       <fieldset className="wf-card" disabled={readOnly}>
-        <legend>Identity</legend>
-        <div className="grid-3">
-          <label>
-            Code
-            <input
-              value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-            />
-          </label>
+        <div className="grid-2">
           <label>
             Name
             <input
               value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              placeholder="e.g. Inbound Putaway"
+              onChange={(e) => {
+                const name = e.target.value
+                setDraft({
+                  ...draft,
+                  name,
+                  code: readOnly ? draft.code : workflowCodeFromName(name),
+                })
+              }}
             />
+            <span className="muted wf-code-preview">
+              Code:{' '}
+              <code>{draft.code || '—'}</code>
+              {!readOnly ? ' (from name)' : null}
+            </span>
           </label>
           <label>
             Description
@@ -649,383 +728,558 @@ export function WorkflowEditor({
             + Variable
           </button>
         </legend>
-        {draft.variables.map((variable, index) => (
-          <div key={index} className="var-row">
-            {variable.source === 'SYSTEM_VALUE' ? (
-              <select
-                value={variable.key}
-                onChange={(e) => {
-                  const sys = metadata.systemVariables.find((s) => s.key === e.target.value)
-                  updateVariable(index, {
-                    key: e.target.value,
-                    dataType: (sys?.dataType as WorkflowVariable['dataType']) ?? 'UUID',
-                    name: variable.name || e.target.value,
-                    description: sys?.description ?? variable.description,
-                  })
-                }}
-              >
-                <option value="">Select SYSTEM_VALUE…</option>
-                {metadata.systemVariables.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.key}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                placeholder="key"
-                value={variable.key}
-                onChange={(e) => updateVariable(index, { key: e.target.value })}
-              />
-            )}
-            <input
-              placeholder="name"
-              value={variable.name}
-              onChange={(e) => updateVariable(index, { name: e.target.value })}
-            />
-            <select
-              value={variable.dataType}
-              disabled={variable.source === 'SYSTEM_VALUE'}
-              onChange={(e) =>
-                updateVariable(index, {
-                  dataType: e.target.value as WorkflowVariable['dataType'],
-                })
-              }
-            >
-              {metadata.dataTypes.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            <select
-              value={variable.source}
-              onChange={(e) =>
-                updateVariable(index, {
-                  source: e.target.value as WorkflowVariable['source'],
-                  configuredValue:
-                    e.target.value === 'ADMIN_INPUT' ? variable.configuredValue : undefined,
-                })
-              }
-            >
-              {metadata.variableSources.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={variable.isRequired}
-                onChange={(e) => updateVariable(index, { isRequired: e.target.checked })}
-              />
-              required
-            </label>
-            {variable.source === 'ADMIN_INPUT' && (
-              <input
-                placeholder="configured value"
-                value={
-                  variable.configuredValue == null ? '' : String(variable.configuredValue)
-                }
-                onChange={(e) => {
-                  let value: unknown = e.target.value
-                  if (variable.dataType === 'INTEGER') value = Number.parseInt(e.target.value, 10)
-                  if (variable.dataType === 'DECIMAL') value = Number.parseFloat(e.target.value)
-                  if (variable.dataType === 'BOOLEAN') value = e.target.value === 'true'
-                  updateVariable(index, { configuredValue: value })
-                }}
-              />
-            )}
-            <button
-              type="button"
-              className="btn small danger"
-              onClick={() =>
-                setDraft({
-                  ...draft,
-                  variables: draft.variables.filter((_, i) => i !== index),
-                })
-              }
-            >
-              Remove
-            </button>
+        {draft.variables.length > 0 && (
+          <div className="var-table" tabIndex={0} aria-label="Variables table, scroll horizontally">
+            <div className="var-row var-row--head" aria-hidden>
+              <span>Key</span>
+              <span>Name</span>
+              <span>Type</span>
+              <span>Source</span>
+              <span>Required</span>
+              <span>Configured value</span>
+              <span />
+            </div>
+            {draft.variables.map((variable, index) => (
+              <div key={index} className="var-row">
+                {variable.source === 'SYSTEM_VALUE' ? (
+                  <select
+                    aria-label="System variable key"
+                    value={variable.key}
+                    onChange={(e) => {
+                      const sys = metadata.systemVariables.find((s) => s.key === e.target.value)
+                      updateVariable(index, {
+                        key: e.target.value,
+                        dataType: (sys?.dataType as WorkflowVariable['dataType']) ?? 'UUID',
+                        name: variable.name || e.target.value,
+                        description: sys?.description ?? variable.description,
+                      })
+                    }}
+                  >
+                    <option value="">Select SYSTEM_VALUE…</option>
+                    {metadata.systemVariables.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.key}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    placeholder="key"
+                    aria-label="Variable key"
+                    value={variable.key}
+                    onChange={(e) => updateVariable(index, { key: e.target.value })}
+                  />
+                )}
+                <input
+                  placeholder="name"
+                  aria-label="Variable name"
+                  value={variable.name}
+                  onChange={(e) => updateVariable(index, { name: e.target.value })}
+                />
+                <select
+                  aria-label="Data type"
+                  value={variable.dataType}
+                  disabled={variable.source === 'SYSTEM_VALUE'}
+                  onChange={(e) =>
+                    updateVariable(index, {
+                      dataType: e.target.value as WorkflowVariable['dataType'],
+                    })
+                  }
+                >
+                  {metadata.dataTypes.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Variable source"
+                  value={variable.source}
+                  onChange={(e) =>
+                    updateVariable(index, {
+                      source: e.target.value as WorkflowVariable['source'],
+                      configuredValue:
+                        e.target.value === 'ADMIN_INPUT' ? variable.configuredValue : undefined,
+                    })
+                  }
+                >
+                  {metadata.variableSources.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <label className="checkbox var-row__required">
+                  <input
+                    type="checkbox"
+                    checked={variable.isRequired}
+                    onChange={(e) => updateVariable(index, { isRequired: e.target.checked })}
+                  />
+                </label>
+                {variable.source === 'ADMIN_INPUT' ? (
+                  <input
+                    type={
+                      variable.dataType === 'INTEGER' || variable.dataType === 'DECIMAL'
+                        ? 'number'
+                        : 'text'
+                    }
+                    step={variable.dataType === 'DECIMAL' ? 'any' : undefined}
+                    placeholder="configured value"
+                    aria-label="Configured value"
+                    value={
+                      variable.configuredValue == null ||
+                      (typeof variable.configuredValue === 'number' &&
+                        !Number.isFinite(variable.configuredValue))
+                        ? ''
+                        : String(variable.configuredValue)
+                    }
+                    onChange={(e) => {
+                      const raw = e.target.value.trim()
+                      let value: unknown = e.target.value
+                      if (raw === '') value = undefined
+                      else if (variable.dataType === 'INTEGER') {
+                        const n = Number.parseInt(raw, 10)
+                        value = Number.isFinite(n) ? n : undefined
+                      } else if (variable.dataType === 'DECIMAL') {
+                        const n = Number.parseFloat(raw)
+                        value = Number.isFinite(n) ? n : undefined
+                      } else if (variable.dataType === 'BOOLEAN') {
+                        value = raw === 'true'
+                      }
+                      updateVariable(index, { configuredValue: value })
+                    }}
+                  />
+                ) : (
+                  <span className="var-row__empty muted">—</span>
+                )}
+                <button
+                  type="button"
+                  className="btn small danger"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      variables: draft.variables.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </fieldset>
 
-      <div className="wf-builder">
-        <fieldset className="wf-card" disabled={readOnly}>
-          <legend>
-            Tasks
-            <button
-              type="button"
-              className="btn small"
-              onClick={() => {
-                setDraft({
-                  ...draft,
-                  tasks: [...draft.tasks, emptyTask(draft.tasks.length + 1)],
-                })
-                setSelectedTask(draft.tasks.length)
-                setSelectedStep(0)
-              }}
-            >
-              + Task
-            </button>
-          </legend>
-          <ul className="side-list">
-            {draft.tasks.map((t, index) => (
-              <li key={index} className={index === selectedTask ? 'active' : ''}>
-                <button type="button" onClick={() => { setSelectedTask(index); setSelectedStep(0) }}>
-                  {t.taskKey || `Task ${index + 1}`}
-                </button>
-                <div className="side-actions">
-                  <button type="button" onClick={() => setDraft({ ...draft, tasks: moveItem(draft.tasks, index, -1) })}>
-                    ↑
+      <fieldset className="wf-card wf-tree" disabled={readOnly}>
+        <legend>
+          Tasks &amp; Steps
+          <button
+            type="button"
+            className="btn small"
+            onClick={() => {
+              setDraft({
+                ...draft,
+                tasks: [...draft.tasks, emptyTask(draft.tasks.length + 1)],
+              })
+              setSelectedTask(draft.tasks.length)
+              setSelectedStep(0)
+            }}
+          >
+            + Task
+          </button>
+        </legend>
+        <p className="wf-tree__hint muted">
+          Steps belong to the task above them. Click + Step to open its config right away. Drag the
+          handle to reorder steps.
+        </p>
+
+        {draft.tasks.length === 0 && (
+          <p className="muted">No tasks yet. Add a task, then add steps under that task.</p>
+        )}
+
+        <div className="wf-tree__list">
+          {draft.tasks.map((t, taskIndex) => {
+            const taskOpen = selectedTask === taskIndex
+            return (
+              <div
+                key={taskIndex}
+                className={`wf-task-block${taskOpen ? ' wf-task-block--open' : ''}`}
+              >
+                <div className="wf-task-block__head">
+                  <button
+                    type="button"
+                    className="wf-task-block__toggle"
+                    aria-expanded={taskOpen}
+                    onClick={() => {
+                      setSelectedTask(taskIndex)
+                      if (t.steps.length > 0) setSelectedStep(0)
+                    }}
+                  >
+                    <span className="wf-task-block__chevron" aria-hidden>
+                      {taskOpen ? '▾' : '▸'}
+                    </span>
+                    <span className="wf-task-block__title">
+                      Task {taskIndex + 1}
+                      {t.taskKey || t.name ? (
+                        <>
+                          : <strong>{t.name || t.taskKey}</strong>
+                          {t.taskKey && t.name && t.taskKey !== t.name ? (
+                            <span className="muted"> ({t.taskKey})</span>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </span>
+                    <span className="wf-task-block__count">
+                      {t.steps.length} {t.steps.length === 1 ? 'step' : 'steps'}
+                    </span>
                   </button>
-                  <button type="button" onClick={() => setDraft({ ...draft, tasks: moveItem(draft.tasks, index, 1) })}>
-                    ↓
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {task && (
-            <div className="grid-2">
-              <label>
-                Task key
-                <input
-                  value={task.taskKey}
-                  onChange={(e) => updateTask(selectedTask, { taskKey: e.target.value })}
-                />
-              </label>
-              <label>
-                Name
-                <input
-                  value={task.name}
-                  onChange={(e) => updateTask(selectedTask, { name: e.target.value })}
-                />
-              </label>
-            </div>
-          )}
-        </fieldset>
-
-        <fieldset className="wf-card" disabled={readOnly || !task}>
-          <legend>
-            Steps
-            <button
-              type="button"
-              className="btn small"
-              disabled={!task}
-              onClick={() => {
-                if (!task) return
-                const next = emptyStep(task.steps.length + 1)
-                updateTask(selectedTask, { steps: [...task.steps, next] })
-                setSelectedStep(task.steps.length)
-              }}
-            >
-              + Step
-            </button>
-          </legend>
-          {task && (
-            <>
-              <ul className="side-list">
-                {task.steps.map((s, index) => (
-                  <li key={index} className={index === selectedStep ? 'active' : ''}>
-                    <button type="button" onClick={() => setSelectedStep(index)}>
-                      {s.stepKey || `Step ${index + 1}`}
-                    </button>
-                    <div className="side-actions">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateTask(selectedTask, {
-                            steps: moveItem(task.steps, index, -1),
-                          })
-                        }
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateTask(selectedTask, {
-                            steps: moveItem(task.steps, index, 1),
-                          })
-                        }
-                      >
-                        ↓
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-
-              {step && (
-                <div className="step-form">
-                  <div className="grid-2">
-                    <label>
-                      Step key
-                      <input
-                        value={step.stepKey}
-                        onChange={(e) =>
-                          updateStep(selectedTask, selectedStep, { stepKey: e.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Name
-                      <input
-                        value={step.name}
-                        onChange={(e) =>
-                          updateStep(selectedTask, selectedStep, { name: e.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Step type
-                      <select
-                        value={step.stepType}
-                        onChange={(e) =>
-                          updateStep(selectedTask, selectedStep, {
-                            stepType: e.target.value as StepType,
-                            operationCode: '',
-                            inputBindings: {},
-                          })
-                        }
-                      >
-                        {metadata.stepTypes.map((s) => (
-                          <option key={s.stepType} value={s.stepType}>
-                            {s.stepType}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Operation
-                      <select
-                        value={step.operationCode}
-                        onChange={(e) => applyOperationCode(e.target.value)}
-                      >
-                        <option value="">Select…</option>
-                        {stepTypeMeta?.operations.map((o) => (
-                          <option key={o.code} value={o.code}>
-                            {o.code}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      On failure
-                      <select
-                        value={step.onFailure}
-                        onChange={(e) =>
-                          updateStep(selectedTask, selectedStep, {
-                            onFailure: e.target.value as WorkflowStepDraft['onFailure'],
-                          })
-                        }
-                      >
-                        {metadata.failurePolicies.map((p) => (
-                          <option key={p} value={p}>
-                            {p}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Timeout (s)
-                      <input
-                        type="number"
-                        value={step.timeoutSeconds}
-                        onChange={(e) =>
-                          updateStep(selectedTask, selectedStep, {
-                            timeoutSeconds: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-
-                  {operationMeta && (
-                    <div className="scope-row">
-                      <ScopeBadge
-                        scope={operationMeta.executionScope}
-                        stopAction={operationMeta.stopActionFilter}
-                      />
-                      {operationMeta.executionScope === 'ONCE_PER_JOB' && (
-                        <span className="muted scope-hint">
-                          CURRENT_MOVEMENT is not available for this operation.
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {needsAssignedRobotId && (
-                    <div className="add-system-var-prompt">
-                      <span>This operation requires robotId.</span>
-                      <button type="button" className="btn small" onClick={addAssignedRobotId}>
-                        Add required system variable: assignedRobotId
-                      </button>
-                    </div>
-                  )}
-
-                  {step.stepType === 'HUMAN_INTERACTION' && (
-                    <label>
-                      Instruction
-                      <input
-                        value={step.instructionText ?? ''}
-                        onChange={(e) =>
-                          updateStep(selectedTask, selectedStep, {
-                            instructionText: e.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                  )}
-
-                  <h3>Input bindings</h3>
-                  {!operationMeta && <p className="muted">Select an operation to bind inputs.</p>}
-                  {operationMeta?.inputs.map((input) => (
-                    <BindingEditor
-                      key={input.key}
-                      input={input}
-                      binding={step.inputBindings[input.key]}
-                      variables={draft.variables}
-                      tasks={draft.tasks}
-                      currentTaskIndex={selectedTask}
-                      currentStepIndex={selectedStep}
-                      metadata={metadata}
-                      executionScope={operationMeta.executionScope}
-                      stopActionFilter={operationMeta.stopActionFilter}
-                      readOnlyConstant={isAutoSyncedOperationField(stepTypeMeta, input.key)}
-                      onChange={(binding) =>
-                        updateStep(selectedTask, selectedStep, {
-                          inputBindings: {
-                            ...step.inputBindings,
-                            [input.key]: binding,
-                          },
-                        })
+                  <button
+                    type="button"
+                    className="btn small danger"
+                    title="Remove task"
+                    onClick={() => {
+                      const nextTasks = draft.tasks.filter((_, i) => i !== taskIndex)
+                      setDraft({ ...draft, tasks: nextTasks })
+                      if (selectedTask >= nextTasks.length) {
+                        setSelectedTask(Math.max(0, nextTasks.length - 1))
                       }
-                    />
-                  ))}
-
-                  {operationMeta && operationMeta.outputs.length > 0 && (
-                    <>
-                      <h3>Outputs (read-only metadata)</h3>
-                      <ul className="muted">
-                        {operationMeta.outputs.map((o) => (
-                          <li key={o.key}>
-                            {o.key}: {o.dataType} — {o.description}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
+                      setSelectedStep(0)
+                    }}
+                  >
+                    Remove
+                  </button>
                 </div>
-              )}
-            </>
-          )}
-        </fieldset>
-      </div>
+
+                {taskOpen && (
+                  <div className="wf-task-block__body">
+                    <div className="grid-2">
+                      <label>
+                        Task key
+                        <input
+                          value={t.taskKey}
+                          onChange={(e) => updateTask(taskIndex, { taskKey: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Name
+                        <input
+                          value={t.name}
+                          onChange={(e) => updateTask(taskIndex, { name: e.target.value })}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="wf-steps-under-task">
+                      <div className="wf-steps-under-task__bar">
+                        <strong>Steps in this task</strong>
+                        <button
+                          type="button"
+                          className="btn small"
+                          onClick={() => {
+                            const next = emptyStep(t.steps.length + 1)
+                            updateTask(taskIndex, { steps: [...t.steps, next] })
+                            setSelectedTask(taskIndex)
+                            setSelectedStep(t.steps.length)
+                          }}
+                        >
+                          + Step
+                        </button>
+                      </div>
+
+                      {t.steps.length === 0 && (
+                        <p className="muted">No steps in this task yet.</p>
+                      )}
+
+                      <ul className="wf-step-list">
+                        {t.steps.map((s, stepIndex) => {
+                          const stepOpen =
+                            selectedTask === taskIndex && selectedStep === stepIndex
+                          const isDropTarget =
+                            dropStep?.taskIndex === taskIndex &&
+                            dropStep.stepIndex === stepIndex &&
+                            dragStep != null &&
+                            !(
+                              dragStep.taskIndex === taskIndex &&
+                              dragStep.stepIndex === stepIndex
+                            )
+                          return (
+                            <li
+                              key={stepIndex}
+                              className={[
+                                'wf-step-card',
+                                stepOpen ? 'wf-step-card--open' : '',
+                                isDropTarget ? 'wf-step-card--drop' : '',
+                                dragStep?.taskIndex === taskIndex &&
+                                dragStep.stepIndex === stepIndex
+                                  ? 'wf-step-card--dragging'
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
+                              onDragOver={(e: DragEvent) => {
+                                if (dragStep?.taskIndex !== taskIndex) return
+                                e.preventDefault()
+                                setDropStep({ taskIndex, stepIndex })
+                              }}
+                              onDrop={(e: DragEvent) => {
+                                e.preventDefault()
+                                if (dragStep?.taskIndex !== taskIndex) return
+                                const from = dragStep.stepIndex
+                                const to = stepIndex
+                                setDragStep(null)
+                                setDropStep(null)
+                                if (from === to) return
+                                updateTask(taskIndex, {
+                                  steps: reorderItem(t.steps, from, to),
+                                })
+                                setSelectedTask(taskIndex)
+                                setSelectedStep(to)
+                              }}
+                            >
+                              <div className="wf-step-card__head">
+                                <button
+                                  type="button"
+                                  className="wf-step-card__handle"
+                                  title="Drag to reorder"
+                                  draggable={!readOnly}
+                                  aria-label={`Drag step ${stepIndex + 1}`}
+                                  onDragStart={(e: DragEvent) => {
+                                    e.dataTransfer.effectAllowed = 'move'
+                                    e.dataTransfer.setData('text/plain', String(stepIndex))
+                                    setDragStep({ taskIndex, stepIndex })
+                                  }}
+                                  onDragEnd={() => {
+                                    setDragStep(null)
+                                    setDropStep(null)
+                                  }}
+                                >
+                                  ⠿
+                                </button>
+                                <button
+                                  type="button"
+                                  className="wf-step-card__toggle"
+                                  aria-expanded={stepOpen}
+                                  onClick={() => {
+                                    setSelectedTask(taskIndex)
+                                    setSelectedStep(stepIndex)
+                                  }}
+                                >
+                                  <span className="wf-step-list__index">Step {stepIndex + 1}</span>
+                                  <span className="wf-step-list__label">
+                                    {s.stepKey || s.name || 'Untitled step'}
+                                  </span>
+                                  <span className="wf-step-list__meta muted">
+                                    {s.stepType}
+                                    {s.operationCode ? ` · ${s.operationCode}` : ''}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn small danger"
+                                  title="Remove step"
+                                  onClick={() => {
+                                    const nextSteps = t.steps.filter((_, i) => i !== stepIndex)
+                                    updateTask(taskIndex, { steps: nextSteps })
+                                    if (
+                                      selectedTask === taskIndex &&
+                                      selectedStep >= nextSteps.length
+                                    ) {
+                                      setSelectedStep(Math.max(0, nextSteps.length - 1))
+                                    }
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+
+                              {stepOpen && step && (
+                                <div className="step-form">
+                                  <div className="grid-2">
+                                    <label>
+                                      Step key
+                                      <input
+                                        value={step.stepKey}
+                                        onChange={(e) =>
+                                          updateStep(taskIndex, stepIndex, {
+                                            stepKey: e.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Name
+                                      <input
+                                        value={step.name}
+                                        onChange={(e) =>
+                                          updateStep(taskIndex, stepIndex, {
+                                            name: e.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Step type
+                                      <select
+                                        value={step.stepType}
+                                        onChange={(e) =>
+                                          updateStep(taskIndex, stepIndex, {
+                                            stepType: e.target.value as StepType,
+                                            operationCode: '',
+                                            inputBindings: {},
+                                          })
+                                        }
+                                      >
+                                        {metadata.stepTypes.map((meta) => (
+                                          <option key={meta.stepType} value={meta.stepType}>
+                                            {meta.stepType}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label>
+                                      Operation
+                                      <select
+                                        value={step.operationCode}
+                                        onChange={(e) => applyOperationCode(e.target.value)}
+                                      >
+                                        <option value="">Select…</option>
+                                        {stepTypeMeta?.operations.map((o) => (
+                                          <option key={o.code} value={o.code}>
+                                            {o.code}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label>
+                                      On failure
+                                      <select
+                                        value={step.onFailure}
+                                        onChange={(e) =>
+                                          updateStep(taskIndex, stepIndex, {
+                                            onFailure: e.target
+                                              .value as WorkflowStepDraft['onFailure'],
+                                          })
+                                        }
+                                      >
+                                        {metadata.failurePolicies.map((p) => (
+                                          <option key={p} value={p}>
+                                            {p}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label>
+                                      Timeout (s)
+                                      <input
+                                        type="number"
+                                        value={step.timeoutSeconds}
+                                        onChange={(e) =>
+                                          updateStep(taskIndex, stepIndex, {
+                                            timeoutSeconds: Number(e.target.value),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  </div>
+
+                                  {operationMeta && (
+                                    <div className="scope-row">
+                                      <ScopeBadge
+                                        scope={operationMeta.executionScope}
+                                        stopAction={operationMeta.stopActionFilter}
+                                      />
+                                      {operationMeta.executionScope === 'ONCE_PER_JOB' && (
+                                        <span className="muted scope-hint">
+                                          CURRENT_MOVEMENT is not available for this operation.
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {needsAssignedRobotId && (
+                                    <div className="add-system-var-prompt">
+                                      <span>This operation requires robotId.</span>
+                                      <button
+                                        type="button"
+                                        className="btn small"
+                                        onClick={addAssignedRobotId}
+                                      >
+                                        Add required system variable: assignedRobotId
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {step.stepType === 'HUMAN_INTERACTION' && (
+                                    <label>
+                                      Instruction
+                                      <input
+                                        value={step.instructionText ?? ''}
+                                        onChange={(e) =>
+                                          updateStep(taskIndex, stepIndex, {
+                                            instructionText: e.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  )}
+
+                                  <h3>Input bindings</h3>
+                                  {!operationMeta && (
+                                    <p className="muted">Select an operation to bind inputs.</p>
+                                  )}
+                                  {operationMeta?.inputs.map((input) => (
+                                    <BindingEditor
+                                      key={input.key}
+                                      input={input}
+                                      binding={step.inputBindings[input.key]}
+                                      variables={draft.variables}
+                                      tasks={draft.tasks}
+                                      currentTaskIndex={taskIndex}
+                                      currentStepIndex={stepIndex}
+                                      metadata={metadata}
+                                      executionScope={operationMeta.executionScope}
+                                      stopActionFilter={operationMeta.stopActionFilter}
+                                      readOnlyConstant={isAutoSyncedOperationField(
+                                        stepTypeMeta,
+                                        input.key,
+                                      )}
+                                      onChange={(binding) =>
+                                        updateStep(taskIndex, stepIndex, {
+                                          inputBindings: {
+                                            ...step.inputBindings,
+                                            [input.key]: binding,
+                                          },
+                                        })
+                                      }
+                                    />
+                                  ))}
+
+                                  {operationMeta && operationMeta.outputs.length > 0 && (
+                                    <>
+                                      <h3>Outputs (read-only metadata)</h3>
+                                      <ul className="muted">
+                                        {operationMeta.outputs.map((o) => (
+                                          <li key={o.key}>
+                                            {o.key}: {o.dataType} — {o.description}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </fieldset>
     </>
   )
 
@@ -1040,7 +1294,13 @@ export function WorkflowEditor({
     )
   }
 
-  return <section className="wf-page">{editorBody}</section>
+  return (
+    <div className="h-full overflow-auto">
+      <div className="mx-auto max-w-[1100px] px-10 pt-8 pb-16">
+        <section className="wf-page wf-page--full">{editorBody}</section>
+      </div>
+    </div>
+  )
 }
 
 /** Full-page route wrapper for `/configure/workflows/new` and `/:id`. */

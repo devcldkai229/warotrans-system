@@ -6,6 +6,21 @@ import type {
   WorkflowVariable,
 } from '@/shared/api/types'
 
+/** Business code from display name, e.g. "Inbound Putaway" → `INBOUND_PUTAWAY`. */
+export function workflowCodeFromName(name: string): string {
+  const ascii = name
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/đ/gi, 'd')
+  return ascii
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 100)
+}
+
 export function emptyWorkflow(): WorkflowUpsert {
   return {
     code: '',
@@ -55,10 +70,18 @@ export function emptyStep(sequenceNo: number, stepType: StepType = 'CHECK'): Wor
 }
 
 export function moveItem<T>(items: T[], index: number, delta: number): T[] {
+  return reorderItem(items, index, index + delta)
+}
+
+/** Move item from `from` to `to` and renumber sequenceNo when present. */
+export function reorderItem<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
+    return items
+  }
   const next = [...items]
-  const target = index + delta
-  if (target < 0 || target >= next.length) return items
-  ;[next[index], next[target]] = [next[target], next[index]]
+  const [removed] = next.splice(from, 1)
+  if (removed === undefined) return items
+  next.splice(to, 0, removed)
   return next.map((item, i) => {
     if (item && typeof item === 'object' && 'sequenceNo' in item) {
       return { ...item, sequenceNo: i + 1 }
