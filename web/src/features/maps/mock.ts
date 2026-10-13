@@ -1,4 +1,4 @@
-import type { MapVersion, Zone } from '@/shared/api/contracts'
+import type { MapVersion } from '@/shared/api/contracts'
 
 const WAREHOUSE_ID = 'c0000000-0000-4000-8000-000000000001'
 
@@ -58,65 +58,5 @@ export const WAREHOUSE_NAME = 'Warehouse A'
 
 export const EDITOR_DEFAULTS = {
   autosavedAt: '14:25',
-  siteLabel: 'Target Site: Distribution Center #4 - East Hub',
 }
 
-const DRAFT_MAP_ID = MAP_VERSIONS[0].id
-
-/** Zones already on the draft map; geometry is in board coordinates (px) for the mock board. */
-export const SEED_ZONES: Zone[] = [
-  {
-    id: 'zone-a',
-    mapVersionId: DRAFT_MAP_ID,
-    code: 'ZN-01',
-    name: 'Zone A',
-    zoneType: 'OPERATIONAL_AREA',
-    capacity: 4,
-    maxSpeed: null,
-    isActive: true,
-    geometry: {
-      points: [
-        { x: 48, y: 80 },
-        { x: 239, y: 80 },
-        { x: 239, y: 222 },
-        { x: 48, y: 222 },
-      ],
-    },
-  },
-  {
-    id: 'zone-b',
-    mapVersionId: DRAFT_MAP_ID,
-    code: 'ZN-02',
-    name: 'Zone B (charge)',
-    zoneType: 'OPERATIONAL_AREA',
-    capacity: 2,
-    maxSpeed: 0.5,
-    isActive: true,
-    geometry: {
-      points: [
-        { x: 348, y: 80 },
-        { x: 570, y: 80 },
-        { x: 570, y: 222 },
-        { x: 348, y: 222 },
-      ],
-    },
-  },
-  {
-    id: 'zone-x',
-    mapVersionId: DRAFT_MAP_ID,
-    code: 'ZN-03',
-    name: 'Exclusion zone',
-    zoneType: 'RESTRICTED_AREA',
-    capacity: 0,
-    maxSpeed: null,
-    isActive: true,
-    geometry: {
-      points: [
-        { x: 48, y: 349 },
-        { x: 608, y: 349 },
-        { x: 608, y: 476 },
-        { x: 48, y: 476 },
-      ],
-    },
-  },
-]

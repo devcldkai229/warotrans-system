@@ -61,11 +61,22 @@ function buildStep(
     status,
     resolvedInputs: status === 'PENDING' ? {} : resolved[stepKey],
     outputValues: stepKey === 'PICKUP_CONFIRM' && isDone ? { confirmedContainerId: container } : {},
-    targetEndpointId: null,
+    targetEndpointId:
+      stepType === 'MOVE' && status !== 'PENDING' ? String(resolved[stepKey].targetEndpointId) : null,
     startedAt: status === 'PENDING' || status === 'READY' ? null : minutesAgo(6),
     completedAt: isDone ? minutesAgo(3) : null,
     errorCode: status === 'FAILED' ? 'NAVIGATION_BLOCKED' : null,
     errorMessage: status === 'FAILED' ? 'Robot could not reach the target Endpoint' : null,
+    ...(stepType === 'HUMAN_INTERACTION' && isDone
+      ? {
+          handover: {
+            handoverType: stepKey === 'PICKUP_CONFIRM' ? ('PICKUP' as const) : ('DROPOFF' as const),
+            confirmedByName: 'Warehouse Staff',
+            confirmedAt: minutesAgo(3),
+            note: null,
+          },
+        }
+      : {}),
     stepKey,
     name: stepKey,
     inputBindings: BINDINGS[stepKey],
@@ -99,7 +110,7 @@ function buildTask(jobKey: string, container: string, statuses: StepStatuses): J
 
 function actionsFor(status: JobStatus, hasWaitingStep: boolean): JobAction[] {
   // Mock of the proposed `availableActions` API field; the real list comes from the backend per user and Job.
-  if (status === 'RUNNING') return hasWaitingStep ? ['PAUSE', 'CANCEL', 'REMOTE_CONFIRM', 'SKIP_ENDPOINT'] : ['PAUSE', 'CANCEL']
+  if (status === 'RUNNING') return hasWaitingStep ? ['PAUSE', 'CANCEL', 'REMOTE_CONFIRM'] : ['PAUSE', 'CANCEL']
   if (status === 'PAUSED' || status === 'ASSIGNED' || status === 'QUEUED') return ['CANCEL']
   return []
 }
@@ -122,7 +133,6 @@ function buildJob(seed: JobSeed): JobView {
   return {
     id: key,
     jobNo: `JOB-20260903-${seed.no.slice(-4)}`,
-    transportRequestId: `req-${seed.no}`,
     workflowId: WORKFLOW_ID,
     mapVersionId: MAP_VERSION_ID,
     status: seed.status,
@@ -136,8 +146,8 @@ function buildJob(seed: JobSeed): JobView {
     assignedRobot: seed.robot,
     container: seed.container,
     routeLabel: seed.route,
-    originLabel: 'Ch-02',
-    destinationLabel: 'QA Optical',
+    originLabel: seed.route.split(' → ')[0],
+    destinationLabel: seed.route.split(' → ')[1],
     availableActions: actionsFor(seed.status, task.steps.some((step) => step.status === 'WAITING')),
   }
 }
@@ -150,7 +160,7 @@ export const JOBS: JobView[] = [
     no: '0001',
     status: 'RUNNING',
     robot: ROBOT_001,
-    route: 'Charger-B → Line A-03',
+    route: 'Rack A-12-03 → Dock 3',
     container: { barcode: 'CTN-20260903-000118', productLabel: 'Carton Boxes (SKU 8821)' },
     steps: ['COMPLETED', 'COMPLETED', 'COMPLETED', 'WAITING'],
     startedMinutesAgo: 6.7,
@@ -218,7 +228,7 @@ export const JOBS: JobView[] = [
   }),
   buildJob({
     no: '0008',
-    status: 'FAILED',
+    status: 'RECOVERY_REQUIRED',
     robot: { code: 'RBT-003', batteryPercent: 71, status: 'ERROR' },
     route: 'Rack A-09 → Quality-01',
     container: { barcode: 'CTN-20260903-000112', productLabel: 'Sensor Modules (SKU 4410)' },
@@ -248,5 +258,4 @@ export const DISPATCH_DECISIONS: Record<string, DispatchDecision> = {
 export const JOBS_MAP = {
   coordinates: { x: 8.02, y: 9.42 },
   mapLabel: 'Live Map: v2.8 (Production Main)',
-  scheduler: 'OPTIMAL_v2.4',
 }

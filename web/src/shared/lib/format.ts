@@ -42,3 +42,13 @@ export function formatIsoDateTime(iso: string | null | undefined): string {
   const date = new Date(iso)
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
+
+/** `just now`, `3 min ago`, `2 h ago`; older values fall back to the date. */
+export function formatRelativeTime(iso: string | null | undefined): string {
+  const seconds = secondsBetween(iso)
+  if (seconds === null) return '—'
+  if (seconds < 45) return 'just now'
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`
+  if (seconds < 86_400) return `${Math.round(seconds / 3600)} h ago`
+  return formatDateTime(iso)
+}

@@ -40,7 +40,7 @@ public static class OperationsModule
     public static IEndpointRouteBuilder MapOperationsEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/operations");
-        group.MapGet("/ping", () => Results.Ok(new { module = "operations" }));
+        group.MapGet("/ping", () => Results.Ok(new { module = "operations" })).AllowAnonymous();
         return endpoints;
     }
 

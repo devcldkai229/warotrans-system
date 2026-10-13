@@ -62,6 +62,17 @@ public class ModuleDependencyTests
     }
 
     [Fact]
+    public void Transportation_must_not_depend_on_WorkflowExecution_Persistence()
+    {
+        var result = Types.InAssembly(typeof(TransportationModule).Assembly)
+            .ShouldNot()
+            .HaveDependencyOn("WaroTrans.WorkflowExecution.Persistence")
+            .GetResult();
+
+        Assert.True(result.IsSuccessful, Format(result));
+    }
+
+    [Fact]
     public void Fleet_must_not_depend_on_WorkflowExecution_Persistence()
     {
         var result = Types.InAssembly(typeof(FleetModule).Assembly)

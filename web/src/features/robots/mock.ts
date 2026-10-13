@@ -1,4 +1,4 @@
-import type { RobotView } from '@/shared/api/contracts'
+import type { AssignmentEndReason, RobotJobHistoryItem, RobotStateEvent, RobotView } from '@/shared/api/contracts'
 
 const WAREHOUSE_ID = 'c0000000-0000-4000-8000-000000000001'
 const PUBLISHED_MAP_ID = 'a1000000-0000-4000-8000-000000000007'
@@ -24,15 +24,15 @@ export const ROBOTS: RobotView[] = [
       jobStatus: 'RUNNING',
       requestCode: 'REQ-20260903-000419',
       progressPercent: 92,
-      routeLabel: 'A-12-03 → Dock 3',
+      routeLabel: 'Rack A-12-03 → Dock 3',
+      containers: [{ barcode: 'CTN-20260903-000118', status: 'ONBOARD' }],
     },
     telemetry: {
       model: 'Hiwonder RRC',
       firmware: 'fw 1.4.2',
-      payloadLabel: 'CTN-20260903-000118',
       connectionLabel: 'WSS · 16 ms',
       eStopReleased: true,
-      zone: { name: 'ZONE C — JUNCTION', heldSeconds: 52 },
+      zone: { name: 'Zone C — Junction', heldSeconds: 52 },
     },
   },
   {
@@ -53,12 +53,12 @@ export const ROBOTS: RobotView[] = [
       jobStatus: 'RUNNING',
       requestCode: 'REQ-20260903-000420',
       progressPercent: 64,
-      routeLabel: 'confirmation 08:02',
+      routeLabel: 'Buffer North → Quality-01',
+      containers: [{ barcode: 'CTN-20260903-000121', status: 'ONBOARD' }],
     },
     telemetry: {
       model: 'Hiwonder RRC',
       firmware: 'fw 1.4.2',
-      payloadLabel: 'CTN-20260903-000121',
       connectionLabel: 'WSS · 21 ms',
       eStopReleased: true,
     },
@@ -78,22 +78,22 @@ export const ROBOTS: RobotView[] = [
     isEnabled: true,
     activity: {
       jobNo: 'JOB-20260903-0008',
-      jobStatus: 'FAILED',
+      jobStatus: 'RECOVERY_REQUIRED',
       requestCode: 'REQ-20260903-000421',
       progressPercent: 38,
       routeLabel: 'Rack A-09 → Quality-01',
+      containers: [{ barcode: 'CTN-20260903-000112', status: 'ONBOARD' }],
     },
     telemetry: {
       model: 'Hiwonder RRC',
       firmware: 'fw 1.4.2',
-      payloadLabel: '12 boxes · 34 kg',
       connectionLabel: 'WSS · 18 ms',
       eStopReleased: true,
       navigationState: 'Blocked',
-      zone: { name: 'ZONE C — JUNC', heldSeconds: 45, heldByRobotCode: 'RBT-001', queueAfter: 1 },
+      zone: { name: 'Zone C — Junction', heldSeconds: 45, heldByRobotCode: 'RBT-001', queueAfter: 1 },
       error: {
         title: 'Blocked — navigation failed',
-        message: 'Robot stopped safely in Zone C, waiting for an administrator decision',
+        message: 'Robot stopped safely in Zone C, waiting for administrator confirmation',
       },
     },
   },
@@ -115,12 +115,77 @@ export const ROBOTS: RobotView[] = [
   },
 ]
 
-// TODO(backend): shift statistics and the live-map label have no endpoint yet.
-export const SHIFT_STATS = {
-  window: '14:00–22:00',
-  completed: 184,
-  active: 2,
-  failedPercent: 0.0,
-}
-
+// TODO(backend): the live-map label has no endpoint yet.
 export const LIVE_MAP_LABEL = 'Live › map v7 : latest'
+
+// TODO(backend): fleet.robot_state_events has no read endpoint yet. Newest first.
+const event = (
+  robot: number,
+  minutes: number,
+  fromStatus: RobotStateEvent['fromStatus'],
+  toStatus: RobotStateEvent['toStatus'],
+  source: RobotStateEvent['source'],
+  reason: string | null = null,
+): RobotStateEvent => ({
+  id: `0e7f3b60-0000-4000-8000-0000000${robot}${String(minutes).padStart(5, '0')}`,
+  robotId: `0d7f3b60-0000-4000-8000-00000000000${robot}`,
+  jobId: null,
+  fromStatus,
+  toStatus,
+  reason,
+  source,
+  occurredAt: minutesAgo(minutes),
+})
+
+export const ROBOT_STATE_EVENTS: RobotStateEvent[] = [
+  event(1, 6, 'RESERVED', 'EXECUTING', 'ROBOT'),
+  event(1, 7, 'AVAILABLE', 'RESERVED', 'DISPATCHER', 'Selected for JOB-20260903-0001'),
+  event(1, 95, 'OFFLINE', 'AVAILABLE', 'HEARTBEAT'),
+  event(2, 4, 'RESERVED', 'EXECUTING', 'ROBOT'),
+  event(2, 5, 'AVAILABLE', 'RESERVED', 'DISPATCHER', 'Selected for JOB-20260903-0002'),
+  event(3, 2, 'EXECUTING', 'ERROR', 'ROBOT', 'Navigation failed in Zone C'),
+  event(3, 12, 'RESERVED', 'EXECUTING', 'ROBOT'),
+  event(3, 13, 'AVAILABLE', 'RESERVED', 'DISPATCHER', 'Selected for JOB-20260903-0008'),
+  event(4, 45, 'CHARGING', 'AVAILABLE', 'ROBOT', 'Charge complete'),
+  event(4, 120, 'AVAILABLE', 'CHARGING', 'SYSTEM', 'Battery below threshold'),
+]
+
+// TODO(backend): JobAssignment joined with Job has no read endpoint yet. The UI shows the 5 newest per robot.
+const job = (
+  robot: number,
+  no: number,
+  assignedMinutesAgo: number,
+  endedMinutesAgo: number | null,
+  jobStatus: RobotJobHistoryItem['jobStatus'] = 'COMPLETED',
+  endReason: AssignmentEndReason | null = endedMinutesAgo === null ? null : 'COMPLETED',
+): RobotJobHistoryItem => ({
+  id: `0f7f3b60-0000-4000-8000-0000000${robot}${String(no).padStart(5, '0')}`,
+  robotId: `0d7f3b60-0000-4000-8000-00000000000${robot}`,
+  jobNo: `JOB-20260903-${String(no).padStart(4, '0')}`,
+  requestCode: `REQ-20260903-${String(no + 418).padStart(6, '0')}`,
+  jobStatus,
+  assignmentStatus: endedMinutesAgo === null ? 'ACTIVE' : 'ENDED',
+  assignedAt: minutesAgo(assignedMinutesAgo),
+  endedAt: endedMinutesAgo === null ? null : minutesAgo(endedMinutesAgo),
+  endReason,
+})
+
+export const ROBOT_JOB_HISTORY: RobotJobHistoryItem[] = [
+  job(1, 1, 8, null, 'RUNNING'),
+  job(1, 90, 40, 28),
+  job(1, 89, 75, 52),
+  job(1, 88, 120, 96),
+  job(1, 87, 170, 141),
+  job(1, 86, 230, 190),
+  job(2, 2, 6, null, 'RUNNING'),
+  job(2, 85, 55, 34),
+  job(2, 84, 100, 71),
+  job(3, 8, 14, null, 'RECOVERY_REQUIRED'),
+  job(3, 83, 60, 38),
+  job(3, 82, 110, 80),
+  job(3, 81, 160, 131),
+  job(3, 80, 210, 175),
+  job(4, 3, 3, null, 'ASSIGNED'),
+  job(4, 79, 70, 44),
+  job(4, 78, 130, 102),
+]

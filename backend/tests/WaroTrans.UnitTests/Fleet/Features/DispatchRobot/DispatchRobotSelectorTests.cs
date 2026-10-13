@@ -15,7 +15,8 @@ public class DispatchRobotSelectorTests
             Code = "RBT-001",
             Status = RobotStatus.AVAILABLE,
             BatteryPercent = 80,
-            IsEnabled = true
+            IsEnabled = true,
+            IsOnline = true
         };
         var robotB = new Robot
         {
@@ -23,7 +24,8 @@ public class DispatchRobotSelectorTests
             Code = "RBT-002",
             Status = RobotStatus.AVAILABLE,
             BatteryPercent = 15,
-            IsEnabled = true
+            IsEnabled = true,
+            IsOnline = true
         };
 
         var selected = DispatchRobotSelector.Select([robotA, robotB]);
@@ -39,14 +41,16 @@ public class DispatchRobotSelectorTests
             Code = "RBT-010",
             Status = RobotStatus.CHARGING,
             BatteryPercent = 99,
-            IsEnabled = true
+            IsEnabled = true,
+            IsOnline = true
         };
         var available = new Robot
         {
             Code = "RBT-011",
             Status = RobotStatus.AVAILABLE,
             BatteryPercent = 40,
-            IsEnabled = true
+            IsEnabled = true,
+            IsOnline = true
         };
 
         var selected = DispatchRobotSelector.Select([charging, available]);

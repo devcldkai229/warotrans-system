@@ -9,6 +9,10 @@ public sealed class Job
     public string JobNo { get; set; } = string.Empty;
     public Guid WorkflowId { get; set; }
     public Guid MapVersionId { get; set; }
+    /// <summary>
+    /// Idempotency key: {transportRequestId:N}:{batchKey}. Unique across jobs.
+    /// </summary>
+    public string ProvisioningKey { get; set; } = string.Empty;
     public JobStatus Status { get; set; }
     public Dictionary<string, JsonElement> ContextValues { get; set; } = new();
     public DateTimeOffset CreatedAt { get; set; }

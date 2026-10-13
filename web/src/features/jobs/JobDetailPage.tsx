@@ -1,60 +1,155 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { JobStep } from '@/shared/api/contracts'
 import { Icon } from '@/shared/ui/Icon'
 import { JOB_STATUS_TONE, STEP_STATUS_TONE } from '@/shared/ui/statusTones'
-import { formatClock, formatCoordinate, formatDuration, secondsBetween } from '@/shared/lib/format'
+import { formatClock, formatDuration, secondsBetween } from '@/shared/lib/format'
+import { WarehouseMap } from '@/shared/map/WarehouseMap'
+import { findEndpointByName } from '@/shared/map/scene'
+import { ROBOTS } from '../robots/mock'
 import { AssignmentMetricsModal } from './AssignmentMetricsModal'
 import { elapsedSeconds, stepProgress, waitingStep } from './derive'
-import { DISPATCH_DECISIONS, JOBS, JOBS_MAP } from './mock'
+import { TRANSPORT_REQUESTS } from '../transport-requests/mock'
+import { DISPATCH_DECISIONS, JOBS } from './mock'
 import './jobs.css'
 
 function bindingText(sourceType: string, path: string) {
   return sourceType === 'CONSTANT' ? path : `${sourceType}.${path}`
 }
 
-function StepRow({ step }: { step: JobStep }) {
+const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
+
+const show = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value))
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
+/** One JobStep: a single line by default, its inputs/outputs/confirmation open on click. */
+function StepRow({
+  step,
+  defaultOpen,
+  container,
+  canConfirm,
+}: {
+  step: JobStep
+  defaultOpen: boolean
+  container: { barcode: string; productLabel: string } | null
+  canConfirm: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
   const waiting = step.status === 'WAITING'
   const waited = waiting ? secondsBetween(step.waitingSince) : null
+  const inputs = Object.entries(step.inputBindings ?? {})
+  const outputs = Object.entries(step.outputValues)
 
   return (
-    <div className={`jstep jstep--${STEP_STATUS_TONE[step.status]}`}>
-      <header>
+    <div className={`jstep jstep--${STEP_STATUS_TONE[step.status]}${open ? ' is-open' : ''}`}>
+      <button type="button" className="jstep__head" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className="jstep__mark">{step.status === 'COMPLETED' ? <Icon name="check" size={10} /> : null}</span>
-        <small>Step {step.sequenceNo}</small>
-        <span className={`jstep__type jstep__type--${step.stepType === 'MOVE' ? 'blue' : 'amber'}`}>
-          {step.name}
-        </span>
-        {waiting ? <strong className="jstep__state">WAITING</strong> : null}
-        <span className="jstep__right">
+        <span className="jstep__no">Step {step.sequenceNo}</span>
+        <strong className="jstep__name">{step.name}</strong>
+        <span className="jstep__kind">{titleCase(step.stepType)}</span>
+        <span className="jstep__state">
           {waiting && waited !== null && step.maxWaitSeconds !== undefined ? (
-            <em>
+            <span className="jstep__timer">
               {formatDuration(waited)} / {Math.round(step.maxWaitSeconds / 60)}m max
-            </em>
-          ) : (
-            <b className={step.status === 'COMPLETED' ? 'is-done' : undefined}>{step.status}</b>
-          )}
-        </span>
-      </header>
-      <div className="jstep__bindings">
-        {Object.entries(step.inputBindings ?? {}).map(([input, binding]) => {
-          const resolved = step.resolvedInputs[input]
-          return (
-            <span key={input} className="jstep__bind" title={binding.sourceType}>
-              {input}
-              <i>{binding.sourceType === 'CONSTANT' ? '=' : '←'}</i>
-              <b>{bindingText(binding.sourceType, binding.path)}</b>
-              {resolved !== undefined && binding.sourceType !== 'CONSTANT' ? <em> = {String(resolved)}</em> : null}
             </span>
-          )
-        })}
-        {Object.entries(step.outputValues).map(([name, value]) => (
-          <span key={name} className="jstep__out">
-            ↳ output {name} {String(value)}
-          </span>
-        ))}
-        {step.errorMessage ? <span className="jstep__err">{step.errorMessage}</span> : null}
-      </div>
+          ) : null}
+          <span className={`badge badge--${STEP_STATUS_TONE[step.status]}`}>{step.status}</span>
+        </span>
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} />
+      </button>
+
+      {open ? (
+        <div className="jstep__body">
+          <dl className="jstep__facts">
+            <Fact label="Started">{formatClock(step.startedAt)}</Fact>
+            <Fact label="Completed">{formatClock(step.completedAt)}</Fact>
+            {step.targetEndpointId ? <Fact label="Target endpoint">{step.targetEndpointId}</Fact> : null}
+          </dl>
+
+          {step.stepType === 'HUMAN_INTERACTION' ? (
+            <>
+              <h5>Confirmation</h5>
+              {step.handover ? (
+                <dl className="jstep__facts">
+                  <Fact label="Container">{container?.barcode ?? '—'}</Fact>
+                  <Fact label="Type">{titleCase(step.handover.handoverType)}</Fact>
+                  <Fact label="Confirmed by">{step.handover.confirmedByName}</Fact>
+                  <Fact label="Confirmed at">{formatClock(step.handover.confirmedAt)}</Fact>
+                  {step.handover.note ? <Fact label="Note">{step.handover.note}</Fact> : null}
+                </dl>
+              ) : (
+                <div className="jstep__confirm">
+                  <p>
+                    {waiting
+                      ? 'Robot is waiting for an operator to confirm the Container identity.'
+                      : 'Not confirmed yet.'}
+                  </p>
+                  {container ? (
+                    <small>
+                      Expected Container: <b>{container.barcode}</b> · {container.productLabel}
+                    </small>
+                  ) : null}
+                  {waiting ? (
+                    <div>
+                      {canConfirm ? (
+                        <button type="button" className="jflow__ok">
+                          <Icon name="check" size={13} /> Confirm
+                        </button>
+                      ) : null}
+                      <button type="button" className="btn btn--danger">Report issue</button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {inputs.length > 0 ? (
+            <>
+              <h5>Inputs</h5>
+              <ul className="jstep__inputs">
+                {inputs.map(([input, binding]) => (
+                  <li key={input}>
+                    <span>{input}</span>
+                    <b>{show(step.resolvedInputs[input] ?? (binding.sourceType === 'CONSTANT' ? binding.path : '—'))}</b>
+                    <small>{binding.sourceType === 'CONSTANT' ? 'constant' : `← ${bindingText(binding.sourceType, binding.path)}`}</small>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+
+          {outputs.length > 0 ? (
+            <>
+              <h5>Outputs</h5>
+              <ul className="jstep__inputs">
+                {outputs.map(([name, value]) => (
+                  <li key={name}>
+                    <span>{name}</span>
+                    <b>{show(value)}</b>
+                    <small />
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+
+          {step.errorMessage ? (
+            <p className="jstep__err">
+              {step.errorCode ? <b>{step.errorCode}: </b> : null}
+              {step.errorMessage}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -64,13 +159,15 @@ export function JobDetailPage() {
   const navigate = useNavigate()
   const [showMetrics, setShowMetrics] = useState(false)
   const job = JOBS.find((item) => item.jobNo === jobNo)
+  // Job has no TransportRequestId; the Request is reached through JobContainer.
+  const request = TRANSPORT_REQUESTS.find((item) => item.jobs.some((ref) => ref.jobNo === jobNo))
 
   if (!job) {
     return (
       <div className="jdetail jdetail--empty">
         <p>Job {jobNo} not found.</p>
-        <Link to="/monitor/jobs" className="btn">
-          Back to Jobs
+        <Link to="/monitor/requests" className="btn">
+          Back to Transport Requests
         </Link>
       </div>
     )
@@ -81,16 +178,22 @@ export function JobDetailPage() {
   const progress = stepProgress(job)
   const elapsed = elapsedSeconds(job)
   const waited = waiting ? secondsBetween(waiting.waitingSince) : null
+  // The map shows this one movement: where the Container is picked up, where it must go, and the Robot between them.
+  const origin = findEndpointByName(job.originLabel)
+  const destination = findEndpointByName(job.destinationLabel)
+  const robotView = ROBOTS.find((robot) => robot.code === job.assignedRobot?.code)
   const can = (action: (typeof job.availableActions)[number]) => job.availableActions.includes(action)
 
   return (
     <div className="jdetail">
       <div className="jdetail__crumb">
-        <button type="button" onClick={() => navigate('/monitor/jobs')}>
-          <Icon name="arrowLeft" size={12} /> Back to Jobs
+        <button type="button" onClick={() => navigate('/monitor/requests')}>
+          <Icon name="arrowLeft" size={12} /> Back to Requests
         </button>
         <span>/</span>
-        <span className="muted">Jobs Management</span>
+        <span className="muted">Transport Requests</span>
+        <span>/</span>
+        <span className="muted mono">{request?.requestCode ?? '—'}</span>
         <span>/</span>
         <strong className="mono">{job.jobNo}</strong>
         <span className={`badge badge--${JOB_STATUS_TONE[job.status]}`}>{job.status}</span>
@@ -98,9 +201,6 @@ export function JobDetailPage() {
         <div className="jdetail__meta">
           <span>
             Created <b>{formatClock(job.createdAt)}</b>
-          </span>
-          <span>
-            Assigned <b className="jdetail__robot">{job.assignedRobot?.code ?? '—'}</b>
           </span>
         </div>
       </div>
@@ -152,7 +252,7 @@ export function JobDetailPage() {
           </h3>
           {waiting && waited !== null && waiting.maxWaitSeconds !== undefined ? (
             <div className="jcardx__wait">
-              Station wait time (idle):
+              Waiting for confirmation:
               <b>
                 {formatDuration(waited)} / {Math.round(waiting.maxWaitSeconds / 60)}m max
               </b>
@@ -160,28 +260,6 @@ export function JobDetailPage() {
           ) : null}
         </section>
 
-        <section className="jcardx jcardx--ctrl">
-          <small>MANUAL OVERRIDE / JOB CONTROLS</small>
-          {can('REMOTE_CONFIRM') ? (
-            <button type="button" className="jcardx__confirm">
-              <Icon name="bolt" size={13} /> Remote Confirm (Bypass)
-            </button>
-          ) : null}
-          <div>
-            {can('PAUSE') ? (
-              <button type="button" className="btn">
-                <Icon name="pause" size={12} /> Pause
-              </button>
-            ) : null}
-            {can('SKIP_ENDPOINT') ? (
-              <button type="button" className="btn jcardx__skip">Skip Endpoint</button>
-            ) : null}
-            {can('CANCEL') ? (
-              <button type="button" className="btn btn--danger">Cancel Job</button>
-            ) : null}
-          </div>
-          {job.availableActions.length === 0 ? <p className="jcardx__none">No commands available</p> : null}
-        </section>
       </div>
 
       <div className="jdetail__main">
@@ -206,124 +284,66 @@ export function JobDetailPage() {
                 </div>
                 <span className={`badge badge--${waiting ? 'amber' : 'blue'}`}>{task.status}</span>
               </div>
-              <p className="jflow__hint">STEPS (bound to workflow variables):</p>
               {task.steps.map((step) => (
-                <StepRow key={step.id} step={step} />
+                <StepRow
+                  key={step.id}
+                  step={step}
+                  defaultOpen={step.status === 'WAITING' || step.status === 'FAILED'}
+                  container={job.container}
+                  canConfirm={can('REMOTE_CONFIRM')}
+                />
               ))}
 
-              {waiting ? (
-                <div className="jflow__warn">
-                  <Icon name="alert" size={13} /> Robot is waiting for an operator to confirm the Container identity.
-                </div>
-              ) : null}
-
-              {job.container ? (
-                <div className="jflow__cargo">
-                  <span>
-                    Expected Container: <b>{job.container.barcode}</b> · {job.container.productLabel}
-                  </span>
-                  {waited !== null && waiting?.maxWaitSeconds !== undefined ? (
-                    <span>
-                      Wait duration: <b>{formatDuration(waited)}</b> (Max {Math.round(waiting.maxWaitSeconds / 60)}m)
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {waiting ? (
-                <div className="jflow__actions">
-                  {can('REMOTE_CONFIRM') ? (
-                    <button type="button" className="jflow__ok">
-                      <Icon name="check" size={13} /> Confirm Drop-off Complete (Remote Confirm)
-                    </button>
-                  ) : (
-                    <span />
-                  )}
-                  <button type="button" className="btn btn--danger">Report Station Issue</button>
-                </div>
-              ) : null}
             </div>
           ) : null}
 
-          <footer>
-            <span>Dispatcher Algorithm: <b>{JOBS_MAP.scheduler}</b></span>
-            {job.failureMessage ? <span className="jflow__fail">{job.failureMessage}</span> : null}
-          </footer>
+          {job.failureMessage ? (
+            <footer>
+              <span className="jflow__fail">{job.failureMessage}</span>
+            </footer>
+          ) : null}
         </section>
 
         <section className="jroute">
-          <header>
-            <span className="mono">X: {formatCoordinate(JOBS_MAP.coordinates.x)}</span>
-            <span className="mono">Y: {formatCoordinate(JOBS_MAP.coordinates.y)}</span>
-            <span className="jobs__live"><span className="dot" /> {JOBS_MAP.mapLabel}</span>
-            <span className="jroute__tools">
-              <button type="button" className="btn" aria-label="Zoom in"><Icon name="plus" size={12} /></button>
-              <button type="button" className="btn" aria-label="Zoom out"><Icon name="minus" size={12} /></button>
-              <button type="button" className="btn">Reset View</button>
-              <button type="button" className="btn"><Icon name="fit" size={12} /> Fit Job</button>
-            </span>
-          </header>
-          <div className="jroute__canvas">
-            <div className="jroute__zone jroute__zone--chargers">
-              ⚡ CHARGERS BAY
-              <div><span>CH-1</span><span>CH-2</span><span>CH-3</span></div>
-              <small>Origin Bay: {job.originLabel ?? '—'}</small>
-            </div>
-            <div className="jroute__zone jroute__zone--qa">
-              <b>QUALITY ASSURANCE</b>
-              <em>ENDPOINT B</em>
-              <div className="jroute__station">
-                <strong>Station 4 (Inspection)</strong>
-                <small>Optical Bay #03</small>
-                <span>UNLOAD TARGET</span>
-              </div>
-            </div>
-            <div className="jroute__station jroute__station--load">
-              <strong>Station 1</strong>
-              <small>P-102</small>
-              <span>LOAD POINT</span>
-            </div>
-            <div className="jroute__station jroute__station--idle">
-              <strong>Station 2</strong>
-              <small>Idle</small>
-            </div>
-            {job.assignedRobot ? (
-              <span className="jroute__amr">
-                <Icon name="box" size={13} />
-                <small>{job.assignedRobot.code}</small>
-              </span>
-            ) : null}
-            {waiting ? (
-              <div className="jroute__tip">
-                <strong>Awaiting Confirmation</strong>
-                <small>Step: {waiting.name}</small>
-                <small>Wait time: {waited === null ? '—' : formatDuration(waited)}</small>
-                <small>Robot: {job.assignedRobot?.code ?? '—'}</small>
-              </div>
-            ) : null}
-            <div className="jroute__zone jroute__zone--highway">
-              → DYNAMIC HIGHWAY &amp; CORRIDOR ROUTE
-              <div className="jroute__jct">
-                JCT-A4
-                <span>YIELD PRIORITY</span>
-              </div>
-            </div>
+          <div className="jroute__map">
+            <WarehouseMap
+              robots={
+                robotView
+                  ? [
+                      {
+                        code: robotView.code,
+                        status: robotView.status,
+                        x: robotView.poseX,
+                        y: robotView.poseY,
+                        yaw: robotView.poseYaw,
+                        alert: robotView.status === 'ERROR',
+                      },
+                    ]
+                  : []
+              }
+              layers={{ occupancy: false }}
+              labels="focus"
+              focusEndpointIds={[origin?.id, destination?.id].filter((id): id is string => Boolean(id))}
+              movements={origin && destination ? [{ from: origin, to: destination, label: job.container?.barcode }] : []}
+              callouts={
+                waiting && robotView
+                  ? [
+                      {
+                        x: robotView.poseX,
+                        y: robotView.poseY,
+                        tone: 'warn',
+                        lines: [
+                          'Awaiting confirmation',
+                          `${waiting.name} · waited ${waited === null ? '—' : formatDuration(waited)}`,
+                        ],
+                      },
+                    ]
+                  : []
+              }
+            />
           </div>
-          <footer>
-            <b>MAP LEGEND</b>
-            <span><i className="lg lg--green" /> Endpoint A (Load Point)</span>
-            <span><i className="lg lg--orange" /> Endpoint B (Unload Point)</span>
-            <span><i className="lg lg--green" /> Robot Awaiting Confirmation</span>
-            <span><kbd>Space</kbd> Pan <kbd>Scroll</kbd> Zoom</span>
-          </footer>
         </section>
       </div>
-
-      <footer className="jdetail__foot">
-        <span>Transport request: <b className="mono">{job.transportRequestId}</b></span>
-        <span>Active Job: <b className="mono">{job.jobNo}</b></span>
-        <span className="is-ok"><span className="dot" /> Auto-Sync Enabled</span>
-      </footer>
 
       {showMetrics ? (
         <AssignmentMetricsModal

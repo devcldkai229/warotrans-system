@@ -1,11 +1,23 @@
 import { createContext, useContext } from 'react'
 import type { Account } from '@/shared/api/contracts'
 
+/** `loading` while the stored session is being restored after a page load. */
+export type AuthStatus = 'loading' | 'authenticated' | 'anonymous'
+
 export interface AuthValue {
+  status: AuthStatus
   account: Account | null
-  /** Mock sign-in. TODO(backend): replace with POST /api/identity/login (not implemented yet) and keep the JWT in the API client. */
-  signIn: (account: Account) => void
-  signOut: () => void
+  /** Rejects with an `ApiError` (wrong credentials, locked account) or a `ConsoleAccessError` (not an Admin). */
+  signIn: (username: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+}
+
+/** The credentials were valid, but the web console is for Admin accounts only. */
+export class ConsoleAccessError extends Error {
+  constructor() {
+    super('This console is for administrators. Staff accounts sign in on the mobile app.')
+    this.name = 'ConsoleAccessError'
+  }
 }
 
 export const AuthContext = createContext<AuthValue | null>(null)

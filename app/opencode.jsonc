@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Model is deliberately NOT pinned here.
+  // This project is driven through sub-agents, which inherit the parent session's
+  // model, so a `model` field would be dead weight and would break whenever the
+  // pinned ID or one of the vendor's variant names changed.
+  // Pick the model per session with /models.
+  // Gotcha: with no `model` set, a standalone `opencode run` picks a fallback that
+  // is currently the deprecated exo-free. Always pass --model for one-off CLI runs.
+  // Sub-agents launched from a parent session are unaffected; they inherit its model.
+
+  "agents": {
+    // Read-only search. Lower the variant in-session when you want speed, not here.
+    "explore": {
+      "mode": "subagent",
+      "description": "Fast read-only search across src/ and rules/",
+    },
+
+    // Audit agent. The part worth keeping: it cannot edit, and it is told to
+    // verify claims against source instead of trusting the docs.
+    "reviewer": {
+      "mode": "subagent",
+      "description": "Audits WaroTrans FE code against AGENTS.md rules; reports only",
+      "system": "Audit only. Never edit files. Report findings in severity order with exact file:line citations. Verify every claim against the source before reporting it; if the documentation and the code disagree, report the discrepancy explicitly rather than trusting either one.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "git commit *", "effect": "deny" },
+        { "action": "shell", "resource": "git push *", "effect": "deny" }
+      ]
+    }
+  },
+
+  // AGENTS.md §4 states a FE-only boundary in prose. These rules enforce it at the
+  // tool level, so it holds for sub-agents too. Workspace is app/.
+  "permissions": [
+    { "action": "edit", "resource": "../backend/**", "effect": "deny" },
+    { "action": "edit", "resource": "../infrastructure/**", "effect": "deny" },
+    { "action": "edit", "resource": "../web/**", "effect": "deny" },
+    { "action": "shell", "resource": "git push *", "effect": "ask" }
+  ],
+
+  // V2 does not resolve the `instructions` array, so the rule files outside the
+  // workspace are exposed as a reference instead.
+  "references": {
+    "rules": {
+      "path": "../rules",
+      "description": "WaroTrans backend/domain rule set. Read 09-FRONTEND-RULES.md before frontend structural changes; note its listed feature folders are stale and do not match app/src. All other rule files govern backend work, which is out of scope for this app."
+    }
+  },
+
+  "watcher": {
+    "ignore": ["dist/**", "node_modules/**", ".expo/**"]
+  }
+}

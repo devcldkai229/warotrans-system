@@ -1,0 +1,265 @@
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
+import {
+  Animated,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {
+  AlertOctagon,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  MapPin,
+} from 'lucide-react-native';
+import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
+
+export type ToastType = 'info' | 'success' | 'warning' | 'error';
+
+export interface ToastConfig {
+  icon?: string | ReactNode;
+  duration?: number;
+}
+
+export interface ToastOptions {
+  type?: ToastType;
+  message: string;
+  description?: string;
+  duration?: number;
+  icon?: string | ReactNode;
+}
+
+interface ToastContextType {
+  showToast: (options: ToastOptions) => void;
+  hideToast: () => void;
+  info: (message: string, description?: string, options?: ToastConfig | string) => void;
+  success: (message: string, description?: string, options?: ToastConfig | string) => void;
+  warning: (message: string, description?: string, options?: ToastConfig | string) => void;
+  error: (message: string, description?: string, options?: ToastConfig | string) => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+type ToastListener = (options: ToastOptions) => void;
+let toastListener: ToastListener | null = null;
+
+const buildToastOptions = (
+  type: ToastType,
+  message: string,
+  description?: string,
+  options?: ToastConfig | string
+): ToastOptions => {
+  if (typeof options === 'string') {
+    return { type, message, description, icon: options };
+  }
+  return { type, message, description, ...options };
+};
+
+export const toast = {
+  info: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('info', message, description, options));
+  },
+  success: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('success', message, description, options));
+  },
+  warning: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('warning', message, description, options));
+  },
+  error: (message: string, description?: string, options?: ToastConfig | string) => {
+    toastListener?.(buildToastOptions('error', message, description, options));
+  },
+};
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [currentToast, setCurrentToast] = useState<ToastOptions | null>(null);
+  const animValue = useRef(new Animated.Value(0)).current;
+  const isWeb = Platform.OS === 'web';
+
+  const hideToast = () => {
+    Animated.timing(animValue, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: !isWeb,
+    }).start(() => {
+      setCurrentToast(null);
+    });
+  };
+
+  const showToast = (options: ToastOptions) => {
+    setCurrentToast(options);
+    animValue.setValue(0);
+    Animated.timing(animValue, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: !isWeb,
+    }).start();
+  };
+
+  useEffect(() => {
+    toastListener = showToast;
+    return () => {
+      toastListener = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentToast) return;
+    const duration = currentToast.duration ?? 3200;
+    const timer = setTimeout(() => {
+      hideToast();
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [currentToast]);
+
+  const info = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('info', msg, desc, opts));
+  const success = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('success', msg, desc, opts));
+  const warning = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('warning', msg, desc, opts));
+  const error = (msg: string, desc?: string, opts?: ToastConfig | string) =>
+    showToast(buildToastOptions('error', msg, desc, opts));
+
+  const translateY = animValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-40, 0],
+  });
+
+  const opacity = animValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  const toastType = currentToast?.type || 'info';
+
+  return (
+    <ToastContext.Provider value={{ showToast, hideToast, info, success, warning, error }}>
+      {children}
+
+      {/* Floating Sonner-Style Toast Banner */}
+      {currentToast && (
+        <View style={styles.toastContainer} pointerEvents="box-none">
+          <Animated.View
+            style={[
+              styles.toastCard,
+              {
+                opacity,
+                transform: [{ translateY }],
+              },
+            ]}
+          >
+            <Pressable
+              onPress={hideToast}
+              style={styles.toastPressable}
+              accessibilityRole="alert"
+              accessibilityLabel={currentToast.message}
+            >
+              <View style={styles.iconCol}>
+                {currentToast.icon ? (
+                  typeof currentToast.icon === 'string' &&
+                  (currentToast.icon === 'pin' || currentToast.icon === '📍') ? (
+                    <MapPin size={16} color={colors.primary} />
+                  ) : typeof currentToast.icon === 'string' ? (
+                    <Text style={{ fontSize: 15 }}>{currentToast.icon}</Text>
+                  ) : (
+                    currentToast.icon
+                  )
+                ) : (
+                  <>
+                    {toastType === 'info' && <Info size={16} color={colors.textPrimary} />}
+                    {toastType === 'success' && <CheckCircle2 size={16} color={colors.success} />}
+                    {toastType === 'warning' && <AlertTriangle size={16} color={colors.warning} />}
+                    {toastType === 'error' && <AlertOctagon size={16} color={colors.danger} />}
+                  </>
+                )}
+              </View>
+
+              <View style={styles.textCol}>
+                <Text style={styles.toastMessage} numberOfLines={2}>
+                  {currentToast.message}
+                </Text>
+                {currentToast.description ? (
+                  <Text style={styles.toastDesc} numberOfLines={2}>
+                    {currentToast.description}
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
+          </Animated.View>
+        </View>
+      )}
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
+}
+
+const styles = StyleSheet.create({
+  toastContainer: {
+    position: 'absolute',
+    top: Platform.select({ android: 14, default: 54 }),
+    left: 0,
+    right: 0,
+    zIndex: 999999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    elevation: 999999,
+  },
+  toastCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    elevation: 12,
+  },
+  toastPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  iconCol: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textCol: {
+    flex: 1,
+  },
+  toastMessage: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  toastDesc: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+    marginTop: 2,
+  },
+});

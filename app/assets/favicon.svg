@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- 3D Tactile Diagonal Shelf (bottom & right bevel) -->
+  <rect x="3" y="4" width="61" height="60" rx="14" fill="#003882"/>
+  
+  <!-- Industrial Rounded Brandmark Base -->
+  <rect width="61" height="60" rx="14" fill="#005CD1"/>
+  
+  <!-- WaroTrans Route & Waypoint Icon -->
+  <g transform="translate(10, 8) scale(1.833)" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="6" cy="19" r="3" fill="#FFFFFF"/>
+    <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" stroke="#FFFFFF" stroke-width="2.6"/>
+    <circle cx="18" cy="5" r="3" fill="#FFFFFF"/>
+  </g>
+</svg>

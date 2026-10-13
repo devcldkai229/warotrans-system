@@ -134,10 +134,13 @@ WORKFLOW_VAR.speedProfile
 
 ### CURRENT_MOVEMENT
 Binds from the **active JobContainer** (and matching Detail fields for source/destination), not from a JSON movements array.
+Runtime snapshot lives on `JobTask.ContextValues` (not a separate ExecutionScope entity in V1).
 
 Supported paths:
 ```text
 containerId
+transportRequestDetailId
+jobContainerId
 source.endpointId
 source.storageLocationId
 source.levelNo
@@ -145,6 +148,16 @@ destination.endpointId
 destination.storageLocationId
 destination.levelNo
 ```
+
+Required-capable paths (may bind to required step inputs): `containerId`, `transportRequestDetailId`, `jobContainerId`, `source.endpointId`, `destination.endpointId`. Storage/level paths are optional-only.
+
+Do **not** store `TransportRequestDetailId` as a column on `JobContainer`; match Detail by RequestId+ContainerId when provisioning. `transportRequestDetailId` / `jobContainerId` exist only as ContextValues catalog keys for Job Runtime later.
+
+Staff-facing form schema (STAFF_INPUT variables + CURRENT_MOVEMENT keys used by bindings):
+```text
+GET /api/workflow-execution/workflows/{id}/request-input-schema
+```
+Movement `key` values use the same dotted catalog paths. Do not expose ADMIN_INPUT / SYSTEM_VALUE / CONSTANT / STEP_OUTPUT on that schema.
 
 Example:
 ```text
@@ -180,17 +193,17 @@ A single TransportRequest may create **N** Jobs. Container allocation lives on `
 ```text
 TransportRequestDetail lines
                 ↓
-Job Planning → 1..N Jobs + JobContainer rows
+Job Planning → JobBatchPlan[] (stops + containers)
                 ↓
-select active JobContainer (CURRENT_MOVEMENT context)
+IJobRuntimeProvisioner → 1..N Jobs + JobContainer rows
                 ↓
-instantiate runtime JobTask(s) from WorkflowTask template(s)
+expand each WorkflowTask into 1..N JobTask segments by ExecutionScope
                 ↓
-JobTask.ContextValues snapshots CURRENT_MOVEMENT
+JobTask.ContextValues (scope-typed: JOB / STOP / CONTAINER_AT_STOP)
                 ↓
 WorkflowStep.InputBindings
                 ↓
-JobStep.ResolvedInputs
+JobStep.ResolvedInputs (just-in-time at execution — empty at provision)
                 ↓
 Step executor
                 ↓
@@ -199,9 +212,34 @@ JobStep.OutputValues
 
 `Job` must not have a direct `ContainerId`.
 `Job` must not have a direct `TransportRequestId` (resolve via JobContainer).
+**One WorkflowTask may produce multiple JobTask execution segments.** Do not assume WorkflowTask : JobTask is strictly 1:1.
 JobTask/JobStep remain workflow graph instances; do not map 1:1 to Detail/movement.
+
+### JobTask.ContextValues by execution scope
+
+| Scope | Context contents |
+|---|---|
+| `ONCE_PER_JOB` | Request/batch info only (on Job.ContextValues / empty movement). No CURRENT_MOVEMENT. |
+| `ONCE_PER_STOP` | `stopSequenceNo`, `stopAction`, `stopEndpointId`, `containerIds[]`, `jobContainerIds[]`, plus stop-derived `source.endpointId` (PICKUP) or `destination.endpointId` (DROPOFF). **No** singular `containerId` / `jobContainerId` / `transportRequestDetailId`. |
+| `PER_CONTAINER_AT_STOP` | Stop keys + `containerId`, `jobContainerId`, `transportRequestDetailId`, and Detail `source.*` / `destination.*`. |
+
+CURRENT_MOVEMENT resolution must reject container-scoped paths on a STOP-scope JobTask (no silent "first container").
+## StepType Registry (closed)
+Backend `StepTypeRegistry` is the source of truth for StepType metadata (operation codes, inputs, outputs).
+Admin Web must load metadata from the API; Admin cannot invent StepTypes, operation codes, input keys, or output keys.
+
+## Execution expansion scope (provision-time)
+Job Runtime Provisioner expands WorkflowSteps using a **code-only** `OperationExecutionScopeCatalog`
+(`ONCE_PER_JOB` / `ONCE_PER_STOP` / `PER_CONTAINER_AT_STOP`). Scope is not persisted on `WorkflowStep`
+and must not be inferred from TaskKey/StepKey strings.
+
+Status:
+- **Provisioning is implemented** (`IJobRuntimeProvisioner`).
+- **Execution/orchestration is not** (no Job loop, no HumanTask runtime, no robot MOVE bridge yet).
+- TransportRequest HTTP API and Job Planner are separate later tasks.
+
 ## CHECK
-Initial examples:
+Closed condition codes:
 ```text
 ROBOT_READY
 BATTERY_MIN
@@ -212,36 +250,26 @@ INVENTORY_AVAILABLE
 ```
 
 If `INVENTORY_AVAILABLE` is used, it must respect the Container/InventoryStock model and must not imply item-level robot transport.
-
-Typical outputs:
-```text
-passed
-observedValue?
-```
+Prefer `containerId` in V1 when product/quantity paths are not yet supported by Warehouse.
+Registry outputs for V1: `passed`, `reason`, `checkedAt` (no item-quantity fields).
 
 ## MOVE
-Typical inputs:
+Closed purposes:
 ```text
-targetEndpointId
-targetEndpointGroupId?
-purpose
-speedProfile
-positionToleranceMeters
-yawToleranceDegrees
-allowReplan
-timeout
+PICKUP
+DROPOFF
+PARK
+CHARGE
+TRANSIT
 ```
 
-Typical outputs:
-```text
-reachedEndpointId
-arrivedAt
-```
+Required inputs (registry): `robotId`, `targetEndpointId`, `purpose`.
+Optional: `commandTimeoutSeconds`.
 
 MOVE does not update inventory by itself.
 
 ## HUMAN_INTERACTION
-Supported examples:
+Closed action codes:
 ```text
 PICKUP_CONFIRM
 DROPOFF_CONFIRM
@@ -253,15 +281,7 @@ CHARGE_CONNECT_CONFIRM
 CHARGE_DISCONNECT_CONFIRM
 ```
 
-Typical outputs:
-```text
-confirmationId
-confirmedContainerId?
-confirmedBy
-confirmedAt
-result
-details?
-```
+Common outputs: `confirmed`, `confirmedBy`, `confirmedAt`, `note`.
 
 ## WAIT
 Modes:
@@ -271,6 +291,7 @@ EVENT
 ROBOT_STATE
 ```
 
+`timeoutSeconds` is an optional input on `EVENT` / `ROBOT_STATE`, not a separate WAIT mode.
 Do not use WAIT for Zone/Edge traffic coordination.
 
 ## Failure policies

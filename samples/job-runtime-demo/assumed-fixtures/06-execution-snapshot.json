@@ -1,0 +1,43 @@
+{
+  "transportRequestId": "7439150f-3796-4404-9f9d-b894b72dc3f1",
+  "warehouseId": "11111111-1111-1111-1111-111111111111",
+  "mapVersionId": "22222222-2222-2222-2222-222222222222",
+  "workflowId": "ad360f97-02ff-4136-86ea-57412bf0c252",
+  "planSchemaVersion": 1,
+  "workflowInputs": {},
+  "details": [
+    {
+      "detailId": "f80a9816-6d65-453e-b618-e4573dfea992",
+      "sequenceNo": 1,
+      "containerId": "c1000000-0000-4000-8000-000000000001",
+      "sourceStorageLocationId": "b1000000-0000-4000-8000-000000000001",
+      "sourceEndpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "sourceLevelNo": 1,
+      "destinationStorageLocationId": "a1000000-0000-4000-8000-000000000001",
+      "destinationEndpointId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "destinationLevelNo": 2
+    },
+    {
+      "detailId": "c2d21b6a-d67d-4848-8490-79b2328a87f6",
+      "sequenceNo": 2,
+      "containerId": "c2000000-0000-4000-8000-000000000002",
+      "sourceStorageLocationId": "b2000000-0000-4000-8000-000000000002",
+      "sourceEndpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "sourceLevelNo": 2,
+      "destinationStorageLocationId": "a2000000-0000-4000-8000-000000000002",
+      "destinationEndpointId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      "destinationLevelNo": 1
+    },
+    {
+      "detailId": "f4a94467-6731-4fee-8567-8aeda7ece37b",
+      "sequenceNo": 3,
+      "containerId": "c3000000-0000-4000-8000-000000000003",
+      "sourceStorageLocationId": "b3000000-0000-4000-8000-000000000003",
+      "sourceEndpointId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "sourceLevelNo": 3,
+      "destinationStorageLocationId": "a3000000-0000-4000-8000-000000000003",
+      "destinationEndpointId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "destinationLevelNo": 3
+    }
+  ]
+}

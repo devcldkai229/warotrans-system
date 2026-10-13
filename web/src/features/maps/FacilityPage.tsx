@@ -3,8 +3,13 @@ import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { MAP_STATUS_TONE } from '@/shared/ui/statusTones'
 import { formatDateTime } from '@/shared/lib/format'
+import { WarehouseMap } from '@/shared/map/WarehouseMap'
+import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES } from '@/shared/map/scene'
 import { MAP_VERSIONS, WAREHOUSE_NAME } from './mock'
 import './maps.css'
+
+// What a MapVersion holds (rules/05): Zones, Edges and Endpoints.
+const SCENE_STATS = `${SCENE_ZONES.length} zones · ${SCENE_EDGES.length} edges · ${SCENE_ENDPOINTS.length} endpoints`
 
 export function FacilityPage() {
   const navigate = useNavigate()
@@ -21,15 +26,14 @@ export function FacilityPage() {
           <article className="mapcard">
             <div className="mapcard__thumb mapcard__thumb--draft">
               <StatusBadge tone={MAP_STATUS_TONE[draft.status]}>{draft.status}</StatusBadge>
-              <span className="mapcard__icon">
-                <Icon name="map" size={22} />
-              </span>
+              <WarehouseMap layers={{ legend: false, controls: false, coordinates: false, robots: false }} labels="none" />
             </div>
             <div className="mapcard__body">
               <h3>
                 {WAREHOUSE_NAME} — Version {draft.versionNo}
               </h3>
               <p>Last modified {formatDateTime(draft.modifiedAt ?? draft.createdAt)}</p>
+              <p className="mapcard__stats">{SCENE_STATS}</p>
               <div className="mapcard__actions">
                 <button
                   type="button"
@@ -57,15 +61,14 @@ export function FacilityPage() {
           <article className="mapcard">
             <div className="mapcard__thumb mapcard__thumb--live">
               <StatusBadge tone={MAP_STATUS_TONE[published.status]}>{published.status}</StatusBadge>
-              <span className="mapcard__icon mapcard__icon--live">
-                <Icon name="shield" size={26} />
-              </span>
+              <WarehouseMap layers={{ legend: false, controls: false, coordinates: false, robots: false }} labels="none" />
             </div>
             <div className="mapcard__body">
               <h3>
                 {WAREHOUSE_NAME} — Version {published.versionNo}
               </h3>
               <p>Published {formatDateTime(published.publishedAt)}</p>
+              <p className="mapcard__stats">{SCENE_STATS}</p>
               <div className="mapcard__actions mapcard__actions--single">
                 <button type="button" className="btn btn--outline">
                   <Icon name="route" size={14} /> Distribute to robots

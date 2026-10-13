@@ -1,0 +1,262 @@
+{
+  "id": "ad360f97-02ff-4136-86ea-57412bf0c252",
+  "code": "DEMO_INTERNAL_RELOCATION_113751",
+  "versionNo": 1,
+  "name": "Demo Internal Relocation (not canonical WTCP-49)",
+  "description": "DEMO fixture. Canonical INTERNAL_RELOCATION v1 is owned by WTCP-49.",
+  "status": "PUBLISHED",
+  "createdBy": "00000000-0000-0000-0000-000000000001",
+  "createdAt": "2026-10-12T11:37:51.97025+00:00",
+  "publishedAt": "2026-10-12T11:37:51.970263+00:00",
+  "variables": [
+    {
+      "key": "minBatteryPercent",
+      "name": "minBatteryPercent",
+      "dataType": "DECIMAL",
+      "source": "ADMIN_INPUT",
+      "isRequired": true,
+      "configuredValue": 25,
+      "sequenceNo": 0
+    },
+    {
+      "key": "assignedRobotId",
+      "name": "assignedRobotId",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "sequenceNo": 0
+    },
+    {
+      "key": "transportRequestId",
+      "name": "transportRequestId",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "sequenceNo": 0
+    },
+    {
+      "key": "jobId",
+      "name": "jobId",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "sequenceNo": 0
+    }
+  ],
+  "tasks": [
+    {
+      "id": "73fb5b11-53c8-4ba7-a02a-23656845a1c1",
+      "taskKey": "PICKUP",
+      "name": "Pickup",
+      "sequenceNo": 1,
+      "steps": [
+        {
+          "id": "af7e2ca2-bceb-4e18-8e74-76b316d3d7f7",
+          "stepKey": "CHECK_READY",
+          "name": "CHECK_READY",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "ROBOT_READY",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "e3818a56-2de9-459b-a35c-13a7b487b9f7",
+          "stepKey": "CHECK_BATTERY",
+          "name": "CHECK_BATTERY",
+          "stepType": "CHECK",
+          "sequenceNo": 2,
+          "operationCode": "BATTERY_MIN",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "minimumBatteryPercent": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "minBatteryPercent"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "c2cd1dde-16fc-40d7-99d9-c27975b4108e",
+          "stepKey": "CHECK_REQUEST",
+          "name": "CHECK_REQUEST",
+          "stepType": "CHECK",
+          "sequenceNo": 3,
+          "operationCode": "REQUEST_ACTIVE",
+          "inputBindings": {
+            "transportRequestId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "transportRequestId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "27987daa-724f-4ab0-8e58-8ceb91357d4a",
+          "stepKey": "CHECK_SOURCE_ENDPOINT",
+          "name": "CHECK_SOURCE_ENDPOINT",
+          "stepType": "CHECK",
+          "sequenceNo": 4,
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "inputBindings": {
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "8a791129-04aa-4c1b-9b9c-7ee725513c88",
+          "stepKey": "MOVE_PICKUP",
+          "name": "MOVE_PICKUP",
+          "stepType": "MOVE",
+          "sequenceNo": 5,
+          "operationCode": "PICKUP",
+          "inputBindings": {
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "PICKUP"
+            },
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "2dabc6d6-839e-47f2-ba1a-d9d3003dc6ca",
+          "stepKey": "PICKUP_CONFIRM",
+          "name": "PICKUP_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 6,
+          "operationCode": "PICKUP_CONFIRM",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId"
+            },
+            "containerId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "containerId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        }
+      ]
+    },
+    {
+      "id": "fc30242c-2faa-4f51-bd1f-dba65a43fafd",
+      "taskKey": "DELIVERY",
+      "name": "Delivery",
+      "sequenceNo": 2,
+      "steps": [
+        {
+          "id": "0a65d328-bd58-4379-94f3-c24472a2bef2",
+          "stepKey": "CHECK_DEST_ENDPOINT",
+          "name": "CHECK_DEST_ENDPOINT",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "inputBindings": {
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "c21d8992-41a2-44f4-b684-2a49b80c52cd",
+          "stepKey": "MOVE_DROPOFF",
+          "name": "MOVE_DROPOFF",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "operationCode": "DROPOFF",
+          "inputBindings": {
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "DROPOFF"
+            },
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "c4b12adc-e2e5-461b-901d-74110c0f1a14",
+          "stepKey": "DROPOFF_CONFIRM",
+          "name": "DROPOFF_CONFIRM",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 3,
+          "operationCode": "DROPOFF_CONFIRM",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId"
+            },
+            "containerId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "containerId"
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        }
+      ]
+    }
+  ]
+}

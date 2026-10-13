@@ -16,6 +16,9 @@ public sealed class Container
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
+    public Product? Product { get; set; }
+    public StorageLocation? CurrentStorageLocation { get; set; }
+
     public void Reserve()
     {
         if (Status != ContainerStatus.CREATED)

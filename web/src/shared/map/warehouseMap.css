@@ -1,0 +1,577 @@
+/* One map for every screen: an SVG square in metres plus an HTML overlay in the same square.
+   Styled to sit in the console: soft slate canvas, white sheet, the same blues/ambers/reds as badges and chips. */
+.wmap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  container-type: size;
+  overflow: hidden;
+  background: #eef2f7;
+  font-family: inherit;
+  user-select: none;
+}
+
+.wmap.is-zoomed {
+  cursor: grab;
+}
+
+.wmap__stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+  transform-origin: center;
+}
+
+.wmap__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 8px 28px rgba(15, 23, 42, 0.08);
+}
+
+.wmap text {
+  font-family: inherit;
+}
+
+.wmap__bg {
+  fill: #fbfcfe;
+}
+
+/* ---- zones: soft tinted areas with a thin edge, a coloured dot and the name ---- */
+.wz polygon {
+  stroke-width: 0.1;
+  stroke-linejoin: round;
+}
+
+.wz--OPERATIONAL_AREA {
+  color: #3b82f6;
+}
+
+.wz--NARROW_AREA {
+  color: #e11d48;
+}
+
+.wz--INTERSECTION {
+  color: #d97706;
+}
+
+.wz--RESTRICTED_AREA {
+  color: #dc2626;
+}
+
+.wz polygon {
+  fill: color-mix(in srgb, currentColor 7%, transparent);
+  stroke: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+.wz--INTERSECTION polygon {
+  fill: color-mix(in srgb, currentColor 11%, transparent);
+}
+
+.wz polygon.wz__hatch {
+  fill: url(#wmap-hatch);
+  stroke: none;
+}
+
+.wz.is-off polygon {
+  fill: rgba(148, 163, 184, 0.08);
+  stroke: #94a3b8;
+  stroke-dasharray: 0.5 0.4;
+}
+
+.wz.is-full polygon {
+  fill: color-mix(in srgb, #f59e0b 20%, transparent);
+  stroke: #d97706;
+}
+
+.wz.is-over polygon {
+  fill: color-mix(in srgb, #dc2626 18%, transparent);
+  stroke: #dc2626;
+  stroke-width: 0.22;
+}
+
+.wz.is-selected polygon {
+  stroke: currentColor;
+  stroke-width: 0.32;
+}
+
+.wz.is-clickable {
+  cursor: pointer;
+}
+
+.wz__accent {
+  fill: currentColor;
+}
+
+.wz__name,
+.wz__meta,
+.wep__label {
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 0.22;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.wz__name {
+  font-size: 0.82px;
+  font-weight: 650;
+  fill: #1e293b;
+}
+
+.wz__meta {
+  font-size: 0.6px;
+  fill: #64748b;
+}
+
+/* ---- edges: a pale lane with a thin coloured centre line ---- */
+.we__lane {
+  fill: none;
+  stroke: #e9eef4;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.we__line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.15;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+
+.we__chevron {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.14;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.we.is-off .we__lane {
+  stroke: #eef1f5;
+}
+
+.we.is-off .we__line {
+  stroke: #94a3b8;
+  stroke-dasharray: 0.6 0.5;
+}
+
+.we.is-selected .we__lane {
+  stroke: color-mix(in srgb, currentColor 22%, white);
+}
+
+.we.is-selected .we__line {
+  stroke-width: 0.3;
+  opacity: 1;
+}
+
+.we__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.we__vertex {
+  fill: #fff;
+  stroke: currentColor;
+  stroke-width: 0.16;
+}
+
+.we.is-drawing .we__line {
+  stroke-width: 0.22;
+  stroke-dasharray: 0.5 0.6;
+  opacity: 1;
+}
+
+.we__load rect {
+  fill: #fff;
+  stroke: #cbd5e1;
+  stroke-width: 0.08;
+}
+
+.we__load text {
+  font-size: 0.68px;
+  font-weight: 700;
+  fill: #334155;
+}
+
+/* ---- movements (a TransportRequestDetail: pick up here, drop off there) ---- */
+.wm__line {
+  fill: none;
+  stroke: #1e3a8a;
+  stroke-width: 0.2;
+  stroke-dasharray: 0.7 0.55;
+  stroke-linecap: round;
+}
+
+.wm circle {
+  fill: #1e3a8a;
+}
+
+.wm text {
+  font-size: 0.66px;
+  font-weight: 700;
+  fill: #fff;
+}
+
+.wm__chip {
+  fill: #fff;
+  stroke: #c7d2fe;
+  stroke-width: 0.07;
+}
+
+.wm text.wm__label {
+  fill: #1e3a8a;
+  font-size: 0.62px;
+}
+
+/* ---- endpoints: a ring in the type colour and a wedge for the arrival heading ---- */
+.wep__dot {
+  fill: #fff;
+  stroke: currentColor;
+  stroke-width: 0.16;
+}
+
+.wep__glyph {
+  color: currentColor;
+  pointer-events: none;
+}
+
+.wep.is-focus .wep__glyph {
+  color: #fff;
+}
+
+.wglyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wep__wedge {
+  fill: currentColor;
+  opacity: 0.85;
+}
+
+.wep__halo {
+  fill: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.wep.is-focus .wep__dot {
+  fill: currentColor;
+  stroke: #fff;
+}
+
+.wep.is-focus .wep.is-selected .wep__dot {
+  stroke: #f59e0b;
+  stroke-width: 0.32;
+}
+
+.wep.is-off {
+  opacity: 0.4;
+}
+
+.wep.is-clickable {
+  cursor: pointer;
+}
+
+.wep__chip {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: #dbe2ec;
+  stroke-width: 0.06;
+}
+
+.wep__label {
+  font-weight: 600;
+  fill: #1e293b;
+  stroke: none;
+}
+
+/* ---- robots: a status-coloured body with a soft halo and a code chip ---- */
+.wr__halo {
+  fill: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.wr__body {
+  fill: currentColor;
+  stroke: #fff;
+  stroke-width: 0.2;
+}
+
+.wr__pointer {
+  fill: currentColor;
+  stroke: #fff;
+  stroke-width: 0.12;
+  stroke-linejoin: round;
+}
+
+.wr__glyph {
+  color: #fff;
+  pointer-events: none;
+}
+
+.wr__chip {
+  fill: #fff;
+  stroke: #cbd5e1;
+  stroke-width: 0.07;
+}
+
+.wr text {
+  font-size: 0.68px;
+  font-weight: 700;
+  fill: #1e293b;
+}
+
+.wr__ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.18;
+  stroke-dasharray: 0.5 0.4;
+}
+
+.wr.is-alert .wr__halo {
+  fill: color-mix(in srgb, #dc2626 22%, transparent);
+  animation: wr-pulse 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes wr-pulse {
+  50% {
+    transform: scale(1.22);
+    opacity: 0.55;
+  }
+}
+
+.wr.is-faded {
+  opacity: 0.25;
+}
+
+.wr.is-clickable {
+  cursor: pointer;
+}
+
+/* ---- HTML overlay ---- */
+.wmap__overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wmap__overlay > :not(.wmap__tip) {
+  pointer-events: auto;
+}
+
+.wmap__tip {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 24px)) scale(calc(1 / var(--z, 1)));
+  transform-origin: 50% 100%;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.28);
+}
+
+.wmap__tip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.wmap__tip span:first-child {
+  font-weight: 700;
+}
+
+.wmap__tip span + span {
+  color: #cbd5e1;
+}
+
+.wmap__tip--warn {
+  background: #b45309;
+}
+
+.wmap__tip--danger {
+  background: #b91c1c;
+}
+
+.wmap__tip--warn span + span,
+.wmap__tip--danger span + span {
+  color: #fee2e2;
+}
+
+/* ---- chrome: legend, zoom, coordinates (same cards as the rest of the console) ---- */
+.wmap__ui {
+  position: absolute;
+  z-index: 4;
+}
+
+.wmap__legend {
+  left: 14px;
+  top: 14px;
+  min-width: 150px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.wmap__legend summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.wmap__legend section {
+  margin-top: 8px;
+}
+
+.wmap__legend h5 {
+  margin: 0 0 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.wmap__legend ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wmap__legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.wmap__legend i {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.wmap__legend .wl-zone {
+  border-radius: 3px;
+  border-width: 1.5px;
+  border-style: solid;
+}
+
+.wl-zone--OPERATIONAL_AREA {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: #3b82f6;
+}
+
+.wl-zone--NARROW_AREA {
+  background: rgba(225, 29, 72, 0.14);
+  border-color: #e11d48;
+}
+
+.wl-zone--INTERSECTION {
+  background: rgba(217, 119, 6, 0.18);
+  border-color: #d97706;
+}
+
+.wl-zone--RESTRICTED_AREA {
+  background: repeating-linear-gradient(45deg, rgba(220, 38, 38, 0.28) 0 2px, transparent 2px 4px);
+  border-color: #dc2626;
+}
+
+.wmap__legend .wl-edge {
+  width: 16px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.wmap__legend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+.wmap__controls {
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+}
+
+.wmap__controls button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink-2);
+}
+
+.wmap__controls button:last-child {
+  border-bottom: 0;
+}
+
+.wmap__controls button:hover:not(:disabled) {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.wmap__controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.wmap__coords {
+  left: 14px;
+  bottom: 14px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+
+.wmap__legend .wl-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+}

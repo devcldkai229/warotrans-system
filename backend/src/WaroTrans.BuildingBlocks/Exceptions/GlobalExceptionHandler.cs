@@ -21,6 +21,11 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
                 "validation_failed",
                 string.Join("; ", fluent.Errors.Select(e => e.ErrorMessage)),
                 "validation_failed"),
+            BadHttpRequestException bad => (
+                bad.StatusCode > 0 ? bad.StatusCode : StatusCodes.Status400BadRequest,
+                "bad_request",
+                bad.Message,
+                "bad_request"),
             _ => (StatusCodes.Status500InternalServerError, "server_error", "An unexpected error occurred.", "server_error")
         };
 
@@ -42,6 +47,13 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         };
         problem.Extensions["code"] = code;
         problem.Extensions["traceId"] = httpContext.TraceIdentifier;
+
+        if (exception is ValidationException fluentEx)
+        {
+            problem.Extensions["errors"] = fluentEx.Errors
+                .Select(e => new { path = e.PropertyName, message = e.ErrorMessage })
+                .ToList();
+        }
 
         httpContext.Response.StatusCode = statusCode;
         httpContext.Response.ContentType = "application/problem+json";

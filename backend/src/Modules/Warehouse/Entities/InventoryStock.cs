@@ -8,4 +8,7 @@ public sealed class InventoryStock
     public short LevelNo { get; set; }
     public int ContainerCount { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public Product? Product { get; set; }
+    public StorageLocation? StorageLocation { get; set; }
 }

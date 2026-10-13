@@ -21,7 +21,7 @@ public static class TransportationModule
     public static IEndpointRouteBuilder MapTransportationEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/transportation");
-        group.MapGet("/ping", () => Results.Ok(new { module = "transportation" }));
+        group.MapGet("/ping", () => Results.Ok(new { module = "transportation" })).AllowAnonymous();
         return endpoints;
     }
 }

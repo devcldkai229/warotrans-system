@@ -24,4 +24,8 @@ public sealed class MqttOptions
     public string? Username { get; set; }
     public string? Password { get; set; }
     public string ClientId { get; set; } = "warotrans-host";
+    public string TopicPrefix { get; set; } = "warotrans/v1";
+    public int HeartbeatTimeoutSeconds { get; set; } = 5;
+    /// <summary>Max wait for command_ack after publish.</summary>
+    public int CommandAckTimeoutSeconds { get; set; } = 10;
 }

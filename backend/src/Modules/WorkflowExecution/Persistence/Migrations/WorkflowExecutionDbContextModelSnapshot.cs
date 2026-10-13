@@ -111,6 +111,12 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("map_version_id");
 
+                    b.Property<string>("ProvisioningKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provisioning_key");
+
                     b.Property<DateTimeOffset?>("QueuedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("queued_at");
@@ -135,6 +141,16 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.HasIndex("JobNo")
                         .IsUnique()
                         .HasDatabaseName("i_x_jobs_job_no");
+
+                    b.HasIndex("ProvisioningKey")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_jobs_provisioning_key");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("i_x_jobs_status");
+
+                    b.HasIndex("Status", "QueuedAt")
+                        .HasDatabaseName("i_x_jobs_status_queued_at");
 
                     b.ToTable("jobs", "execution");
                 });
@@ -398,6 +414,11 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("Config")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("config");
 
                     b.Property<string>("InputBindings")
                         .IsRequired()
