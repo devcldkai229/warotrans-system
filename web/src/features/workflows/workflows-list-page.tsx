@@ -3,8 +3,17 @@ import { Link } from 'react-router-dom'
 import { listWorkflows } from '@/shared/api/workflows'
 import './workflows.css'
 
+function formatWhen(value?: string | null) {
+  if (!value) return '—'
+  try {
+    return new Date(value).toLocaleString()
+  } catch {
+    return value
+  }
+}
+
 export function WorkflowsListPage() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['workflows'],
     queryFn: () => listWorkflows(),
   })
@@ -16,9 +25,14 @@ export function WorkflowsListPage() {
           <h1>Workflow templates</h1>
           <p>Define HOW warehouse operations execute. Runtime values stay on Jobs.</p>
         </div>
-        <Link className="btn primary" to="/configure/workflows/new">
-          New workflow
-        </Link>
+        <div className="wf-actions">
+          <button type="button" className="btn" disabled={isFetching} onClick={() => refetch()}>
+            Refresh
+          </button>
+          <Link className="btn primary" to="/configure/workflows/new">
+            New workflow
+          </Link>
+        </div>
       </header>
 
       {isLoading && <p>Loading…</p>}
@@ -32,6 +46,8 @@ export function WorkflowsListPage() {
               <th>Version</th>
               <th>Name</th>
               <th>Status</th>
+              <th>Created</th>
+              <th>Published</th>
               <th></th>
             </tr>
           </thead>
@@ -44,14 +60,24 @@ export function WorkflowsListPage() {
                 <td>
                   <span className={`badge ${w.status.toLowerCase()}`}>{w.status}</span>
                 </td>
+                <td>{formatWhen(w.createdAt)}</td>
+                <td>{formatWhen(w.publishedAt)}</td>
                 <td>
-                  <Link to={`/configure/workflows/${w.id}`}>Open</Link>
+                  <Link to={`/configure/workflows/${w.id}`}>
+                    {w.status === 'PUBLISHED' ? 'View' : 'Edit'}
+                  </Link>
+                  {w.status === 'DRAFT' ? (
+                    <>
+                      {' · '}
+                      <Link to={`/configure/workflows/${w.id}`}>Publish</Link>
+                    </>
+                  ) : null}
                 </td>
               </tr>
             ))}
             {data.items.length === 0 && (
               <tr>
-                <td colSpan={5}>No workflows yet.</td>
+                <td colSpan={7}>No workflows yet. Create one to get started.</td>
               </tr>
             )}
           </tbody>

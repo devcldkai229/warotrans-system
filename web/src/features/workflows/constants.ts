@@ -1,3 +1,10 @@
+/**
+ * @deprecated Legacy hard-coded step/input/output specs for the Map Editor mock only.
+ * Do NOT use for production Workflow authoring. Source of truth is
+ * GET /api/workflow-execution/metadata/step-types (StepTypeRegistry).
+ * Divergences include: speedProfile, positionToleranceMeters, yawToleranceDegrees,
+ * checkType/interactionType as inputs, confirmedContainerId outputs, ENDPOINT/CONTAINER types.
+ */
 import type {
   BindingSourceType,
   CurrentMovementPath,

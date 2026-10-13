@@ -1,3 +1,9 @@
+/**
+ * @deprecated Legacy Map Editor mock builder. Do not use for real Workflow authoring.
+ * Canonical editor: `/configure/workflows` → WorkflowEditorPage (metadata API + UpsertWorkflowRequest).
+ * This panel uses hard-coded INPUT_SPECS/OUTPUT_SPECS that diverge from StepTypeRegistry
+ * (e.g. speedProfile, confirmedContainerId). Kept only so accidental imports fail loudly in review.
+ */
 import { useState, type ReactNode } from 'react'
 import type {
   BindingSourceType,

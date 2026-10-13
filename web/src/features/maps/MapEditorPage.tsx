@@ -1,12 +1,11 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useState, type ReactNode } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type {
   Edge,
   EdgeDirection,
   Endpoint,
   EndpointType,
   Point,
-  Workflow,
   Zone,
   ZoneType,
 } from '@/shared/api/contracts'
@@ -20,27 +19,11 @@ import { WarehouseMap } from '@/shared/map/WarehouseMap'
 import { toPercent } from '@/shared/map/mapStyle'
 import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES } from '@/shared/map/scene'
 import { HeadingDial } from './HeadingDial'
-import { WorkflowBuilderPanel } from '@/features/workflows/WorkflowBuilderPanel'
-import { WORKFLOWS } from '@/features/workflows/mock'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
 import { EDITOR_DEFAULTS, MAP_VERSIONS } from './mock'
 import { normalizeYaw } from './yaw'
 
-const PANEL_WIDTH = { min: 320, default: 460, key: 'warotrans.workflowPanelWidth' }
-
-const clampPanelWidth = (width: number) =>
-  Math.min(Math.max(width, PANEL_WIDTH.min), Math.max(PANEL_WIDTH.min, Math.round(window.innerWidth * 0.7)))
-
-function readPanelWidth(): number {
-  try {
-    const stored = Number(window.localStorage.getItem(PANEL_WIDTH.key))
-    return stored ? clampPanelWidth(stored) : PANEL_WIDTH.default
-  } catch {
-    return PANEL_WIDTH.default
-  }
-}
-
-// Width of the Endpoint / Edge / Zone inspector. The workflow panel is wider and resizable.
+// Width of the Endpoint / Edge / Zone inspector.
 const INSPECTOR_WIDTH = 340
 
 type Tool = 'workflows' | 'endpoints' | 'traffic'
@@ -48,7 +31,6 @@ type Tool = 'workflows' | 'endpoints' | 'traffic'
 type Mode =
   | { kind: 'idle' }
   | { kind: 'picker'; tool: Tool }
-  | { kind: 'workflow'; workflowId: string }
   | { kind: 'placing'; endpointType: EndpointType; at: { x: number; y: number }; yaw: number }
   | { kind: 'endpoint'; endpointId: string }
   | { kind: 'zone'; zoneId: string }
@@ -70,7 +52,7 @@ const DEFAULT_YAW = 0
 /** Map clicks are kept to 0.1 m. */
 const snap = (value: number) => Math.round(value * 10) / 10
 
-/** Deep-link helper for demos/screenshots: /edit?state=workflows|endpoints|traffic|workflow|placing|zone */
+/** Deep-link helper for demos/screenshots: /edit?state=workflows|endpoints|traffic|placing|zone */
 function initialMode(state: string | null): Mode {
   switch (state) {
     case 'workflows':
@@ -78,7 +60,8 @@ function initialMode(state: string | null): Mode {
     case 'traffic':
       return { kind: 'picker', tool: state }
     case 'workflow':
-      return { kind: 'workflow', workflowId: WORKFLOWS[0].id }
+      // Workflow authoring lives at /configure/workflows — open the redirect picker.
+      return { kind: 'picker', tool: 'workflows' }
     case 'placing':
       return { kind: 'placing', endpointType: 'CHARGING', at: PENDING_ENDPOINT_AT, yaw: DEFAULT_YAW }
     case 'zone':
@@ -109,73 +92,26 @@ export function MapEditorPage() {
   const [edges, setEdges] = useState<Edge[]>(() =>
     SCENE_EDGES.map((item) => ({ ...item, mapVersionId: version.id, geometry: { points: [...item.geometry.points] } })),
   )
-  const [workflows, setWorkflows] = useState<Workflow[]>(WORKFLOWS)
   const [query, setQuery] = useState('')
-  const [panelWidth, setPanelWidth] = useState(readPanelWidth)
-  const latestWidth = useRef(panelWidth)
-
-  /** Drag the left edge of the workflow panel: dragging left widens it so long names and options stay readable. */
-  function startPanelResize(event: ReactPointerEvent) {
-    event.preventDefault()
-    const startX = event.clientX
-    const startWidth = panelWidth
-    document.body.style.userSelect = 'none'
-    const move = (moveEvent: PointerEvent) => {
-      latestWidth.current = clampPanelWidth(startWidth + (startX - moveEvent.clientX))
-      setPanelWidth(latestWidth.current)
-    }
-    const stop = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', stop)
-      document.body.style.userSelect = ''
-      try {
-        window.localStorage.setItem(PANEL_WIDTH.key, String(latestWidth.current))
-      } catch {
-        // Storage can be blocked; the width then simply resets on the next visit.
-      }
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', stop)
-  }
 
   const activeTool: Tool | null =
     mode.kind === 'picker'
       ? mode.tool
-      : mode.kind === 'workflow'
-        ? 'workflows'
-        : mode.kind === 'placing' || mode.kind === 'endpoint'
-          ? 'endpoints'
-          : mode.kind === 'zone'
+      : mode.kind === 'placing' || mode.kind === 'endpoint'
+        ? 'endpoints'
+        : mode.kind === 'zone'
+          ? 'traffic'
+          : mode.kind === 'drawingEdge' || mode.kind === 'edge'
             ? 'traffic'
-            : mode.kind === 'drawingEdge' || mode.kind === 'edge'
-              ? 'traffic'
-              : null
+            : null
 
   const selectedZone = mode.kind === 'zone' ? zones.find((zone) => zone.id === mode.zoneId) : undefined
-  const selectedWorkflow =
-    mode.kind === 'workflow' ? workflows.find((workflow) => workflow.id === mode.workflowId) : undefined
   const selectedEndpoint =
     mode.kind === 'endpoint' ? endpoints.find((endpoint) => endpoint.id === mode.endpointId) : undefined
   const selectedEdge = mode.kind === 'edge' ? edges.find((edge) => edge.id === mode.edgeId) : undefined
-  const panelOpen = Boolean(selectedZone ?? selectedWorkflow ?? selectedEndpoint ?? selectedEdge)
+  const panelOpen = Boolean(selectedZone ?? selectedEndpoint ?? selectedEdge)
   // Panels float over the canvas instead of squeezing it, so the map and the Endpoints on it never shift.
-  const openPanelWidth = selectedWorkflow ? panelWidth : selectedZone || selectedEndpoint || selectedEdge ? INSPECTOR_WIDTH : 0
-
-  function createWorkflow() {
-    const count = workflows.length + 1
-    const workflow: Workflow = {
-      // Temporary client id/code: the backend generates the code (never typed by the Admin), the id and the version on save.
-      id: `draft-workflow-${count}`,
-      code: `WORKFLOW_${String(count).padStart(2, '0')}`,
-      versionNo: 1,
-      name: `Workflow ${String(count).padStart(2, '0')}`,
-      status: 'DRAFT',
-      variablesSchema: [],
-      tasks: [],
-    }
-    setWorkflows((current) => [...current, workflow])
-    setMode({ kind: 'workflow', workflowId: workflow.id })
-  }
+  const openPanelWidth = selectedZone || selectedEndpoint || selectedEdge ? INSPECTOR_WIDTH : 0
 
   function openTool(tool: Tool) {
     setQuery('')
@@ -317,21 +253,9 @@ export function MapEditorPage() {
       <div className="relative flex h-12 flex-none items-center justify-between px-4">
         <div className="flex items-center gap-2">
           {panelOpen ? (
-            <>
-              <Button variant="primary" size="sm" onClick={() => setMode({ kind: 'idle' })}>
-                Done
-              </Button>
-              {selectedWorkflow ? (
-                <>
-                  <Button size="sm">Save</Button>
-                  <span className="ml-2 inline-flex items-center gap-2 text-sm text-muted">
-                    <Icon name="workflow" size={15} /> Workflows
-                    <Icon name="chevronRight" size={12} />
-                    <strong className="font-medium text-ink">{selectedWorkflow.name}</strong>
-                  </span>
-                </>
-              ) : null}
-            </>
+            <Button variant="primary" size="sm" onClick={() => setMode({ kind: 'idle' })}>
+              Done
+            </Button>
           ) : (
             <>
               <Button variant="ghost" size="sm">
@@ -455,21 +379,25 @@ export function MapEditorPage() {
             <div className="absolute top-3 left-1/2 z-20 max-h-[calc(100%-24px)] w-[380px] -translate-x-1/2 overflow-auto rounded-lg bg-surface p-2 shadow-float">
               {mode.tool === 'workflows' ? (
                 <>
-                  <PickerHead title="Workflows">
-                    <Button variant="primary" size="sm" onClick={createWorkflow}>
+                  <PickerHead title="Workflows" />
+                  <div className="px-3 py-4 text-sm text-ink-2">
+                    <p className="mb-3">
+                      Workflow templates are authored in the Admin Workflow editor (metadata-driven API), not
+                      inside the Map Editor.
+                    </p>
+                    <Link
+                      className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3.5 text-sm text-surface"
+                      to="/configure/workflows"
+                    >
+                      <Icon name="workflow" size={14} /> Manage workflows
+                    </Link>
+                    <Link
+                      className="ml-2 inline-flex h-9 items-center gap-2 rounded-md px-3.5 text-sm text-ink-2 hover:bg-container-high"
+                      to="/configure/workflows/new"
+                    >
                       <Icon name="plus" size={14} /> New workflow
-                    </Button>
-                  </PickerHead>
-                  <ul>
-                    {workflows.map((workflow) => (
-                      <PickerItem
-                        key={workflow.id}
-                        title={workflow.name}
-                        note={`Version ${workflow.versionNo}, ${workflow.status.toLowerCase()}`}
-                        onClick={() => setMode({ kind: 'workflow', workflowId: workflow.id })}
-                      />
-                    ))}
-                  </ul>
+                    </Link>
+                  </div>
                 </>
               ) : null}
 
@@ -514,32 +442,6 @@ export function MapEditorPage() {
               ) : null}
             </div>
           </>
-        ) : null}
-
-        {selectedWorkflow ? (
-          <aside className={SIDE_PANEL} style={{ width: panelWidth }}>
-            <div
-              className="group absolute inset-y-0 left-0 z-6 w-2 cursor-col-resize"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize panel"
-              title="Drag to resize, double-click to reset"
-              onPointerDown={startPanelResize}
-              onDoubleClick={() => {
-                latestWidth.current = PANEL_WIDTH.default
-                setPanelWidth(PANEL_WIDTH.default)
-              }}
-            >
-              <div className="absolute inset-y-6 left-0.5 w-0.5 rounded-full transition-colors duration-200 group-hover:bg-blue" />
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              <WorkflowBuilderPanel
-                key={selectedWorkflow.id}
-                workflow={selectedWorkflow}
-                onChange={(next) => setWorkflows((current) => current.map((item) => (item.id === next.id ? next : item)))}
-              />
-            </div>
-          </aside>
         ) : null}
 
         {selectedEndpoint ? (
