@@ -15,6 +15,13 @@ export interface ListRobotsResponse {
   total: number
 }
 
+export interface RegisterRobotRequest {
+  warehouseId: string
+  currentMapVersionId: string
+  code: string
+  name: string
+}
+
 export function listRobots(params: ListRobotsParams = {}) {
   const query = new URLSearchParams()
   if (params.warehouseId) query.set('warehouseId', params.warehouseId)
@@ -25,4 +32,23 @@ export function listRobots(params: ListRobotsParams = {}) {
   if (params.take !== undefined) query.set('take', String(params.take))
   const qs = query.toString()
   return apiFetch<ListRobotsResponse>(`/api/fleet/robots${qs ? `?${qs}` : ''}`)
+}
+
+export function getRobot(id: string) {
+  return apiFetch<Robot>(`/api/fleet/robots/${id}`)
+}
+
+export function registerRobot(body: RegisterRobotRequest) {
+  return apiFetch<Robot>('/api/fleet/robots', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function enableRobot(id: string) {
+  return apiFetch<Robot>(`/api/fleet/robots/${id}/enable`, { method: 'POST' })
+}
+
+export function disableRobot(id: string) {
+  return apiFetch<Robot>(`/api/fleet/robots/${id}/disable`, { method: 'POST' })
 }

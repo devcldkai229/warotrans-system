@@ -13,6 +13,7 @@ import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
 import { ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
 import { FleetMap } from './FleetMap'
+import { RegisterRobotDialog } from './RegisterRobotDialog'
 import { RobotDetailPanel } from './RobotDetailPanel'
 import { ROBOT_STATUS_ORDER } from './constants'
 
@@ -32,6 +33,7 @@ export function FleetPage() {
   const [query, setQuery] = useState('')
   const [previewCode, setPreviewCode] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<RobotStatus | null>(null)
+  const [registerOpen, setRegisterOpen] = useState(false)
   const statusRailRef = useRef<HTMLDivElement>(null)
   const debouncedQuery = useDebouncedValue(query.trim(), 250)
   const search = debouncedQuery || undefined
@@ -77,6 +79,10 @@ export function FleetPage() {
     statusRailRef.current?.scrollBy({ left: direction * 160, behavior: 'smooth' })
   }
 
+  function openRegister() {
+    setRegisterOpen(true)
+  }
+
   return (
     // The side panel is the Robot list, or one Robot's detail; the map keeps the rest of the frame either way.
     <div className={cx('grid h-full gap-3 px-3 pb-3', selected ? 'grid-cols-[400px_minmax(0,1fr)]' : 'grid-cols-[360px_minmax(0,1fr)]')}>
@@ -88,9 +94,9 @@ export function FleetPage() {
             <header className="flex items-center gap-3 px-4 pt-5">
               <h1 className="text-xl font-book">Fleet</h1>
               <span className="text-sm text-muted">{totalForHeader} robots</span>
-              <IconButton aria-label="More" className="-mr-1 ml-auto">
-                <Icon name="more" size={18} />
-              </IconButton>
+              <Button variant="primary" size="sm" className="ml-auto" onClick={openRegister}>
+                <Icon name="plus" size={14} /> Register Robot
+              </Button>
             </header>
 
             <div className="px-4 pt-3">
@@ -149,9 +155,10 @@ export function FleetPage() {
                         <span className="min-w-0">
                           <strong className="block font-medium">{robot.code}</strong>
                           <span className="block truncate text-xs text-muted">
-                            {robot.activity
-                              ? `${robot.activity.requestCode}${robot.activity.routeLabel ? `, ${robot.activity.routeLabel}` : ''}`
-                              : 'No active job'}
+                            {robot.name}
+                            {' · '}
+                            {robot.isOnline ? 'Online' : 'Offline'}
+                            {!robot.isEnabled ? ' · Disabled' : ''}
                           </span>
                         </span>
                         <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
@@ -180,8 +187,8 @@ export function FleetPage() {
                         : 'Add a robot to start monitoring the fleet.'}
                     </p>
                   </div>
-                  <Button type="button" variant="primary" size="sm">
-                    <Icon name="plus" size={14} /> Create Robot
+                  <Button type="button" variant="primary" size="sm" onClick={openRegister}>
+                    <Icon name="plus" size={14} /> Register Robot
                   </Button>
                 </li>
               ) : null}
@@ -189,9 +196,6 @@ export function FleetPage() {
 
             <footer className="flex items-center justify-between px-4 py-3 text-xs text-muted">
               <span>{robots.length} shown</span>
-              <Button variant="surface" size="sm">
-                Actions <Icon name="chevronDown" size={13} />
-              </Button>
             </footer>
           </>
         )}
@@ -207,6 +211,16 @@ export function FleetPage() {
           onPreview={setPreviewCode}
         />
       </div>
+
+      {registerOpen ? (
+        <RegisterRobotDialog
+          onClose={() => setRegisterOpen(false)}
+          onRegistered={(code) => {
+            setRegisterOpen(false)
+            navigate(`/monitor/fleet/${code}`)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

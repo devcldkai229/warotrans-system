@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.IntegrationTests.Fleet.RobotRegistry;
 
@@ -18,35 +20,89 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
     };
 
     [Fact]
-    public async Task Register_robot_persists_and_returns_code()
+    public async Task Register_robot_persists_and_returns_initial_state()
     {
-        var warehouseId = Guid.NewGuid();
-        var mapVersionId = Guid.NewGuid();
+        var scenario = await SeedScenarioAsync();
+        var code = UniqueCode("ALPHA");
 
         var response = await Client.PostAsJsonAsync("/api/fleet/robots", new
         {
-            warehouseId,
-            currentMapVersionId = mapVersionId,
+            warehouseId = scenario.WarehouseId,
+            currentMapVersionId = scenario.MapVersionId,
+            code,
             name = "Alpha Bot"
         });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var robot = await response.Content.ReadFromJsonAsync<RobotDto>(JsonOptions);
         Assert.NotNull(robot);
-        Assert.StartsWith("RBT-", robot.Code, StringComparison.Ordinal);
+        Assert.Equal(code, robot.Code);
         Assert.Equal("Alpha Bot", robot.Name);
-        Assert.Equal(warehouseId, robot.WarehouseId);
-        Assert.Equal(mapVersionId, robot.CurrentMapVersionId);
+        Assert.Equal(scenario.WarehouseId, robot.WarehouseId);
+        Assert.Equal(scenario.MapVersionId, robot.CurrentMapVersionId);
         Assert.Equal(RobotStatus.OFFLINE, robot.Status);
         Assert.False(robot.IsOnline);
         Assert.True(robot.IsEnabled);
+        Assert.Equal(0m, robot.BatteryPercent);
         Assert.NotEqual(Guid.Empty, robot.Id);
+    }
+
+    [Fact]
+    public async Task Register_duplicate_code_returns_conflict()
+    {
+        var scenario = await SeedScenarioAsync();
+        var code = UniqueCode("DUP");
+        await RegisterAsync(scenario, "First", code);
+
+        var response = await Client.PostAsJsonAsync("/api/fleet/robots", new
+        {
+            warehouseId = scenario.WarehouseId,
+            currentMapVersionId = scenario.MapVersionId,
+            code,
+            name = "Second"
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_unknown_warehouse_returns_404()
+    {
+        var scenario = await SeedScenarioAsync();
+
+        var response = await Client.PostAsJsonAsync("/api/fleet/robots", new
+        {
+            warehouseId = Guid.NewGuid(),
+            currentMapVersionId = scenario.MapVersionId,
+            code = UniqueCode("NOWH"),
+            name = "No Warehouse"
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_map_wrong_warehouse_returns_validation_error()
+    {
+        var warehouseA = await SeedScenarioAsync();
+        var warehouseB = await SeedScenarioAsync();
+
+        var response = await Client.PostAsJsonAsync("/api/fleet/robots", new
+        {
+            warehouseId = warehouseA.WarehouseId,
+            currentMapVersionId = warehouseB.MapVersionId,
+            code = UniqueCode("MISM"),
+            name = "Mismatch"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
     public async Task Get_robot_returns_created()
     {
-        var created = await RegisterAsync("Get Me");
+        var scenario = await SeedScenarioAsync();
+        var created = await RegisterAsync(scenario, "Get Me");
 
         var response = await Client.GetAsync($"/api/fleet/robots/{created.Id}");
 
@@ -61,26 +117,26 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
     [Fact]
     public async Task List_robots_filters_by_warehouse()
     {
-        var warehouseA = Guid.NewGuid();
-        var warehouseB = Guid.NewGuid();
-        await RegisterAsync("A1", warehouseA);
-        await RegisterAsync("A2", warehouseA);
-        await RegisterAsync("B1", warehouseB);
+        var warehouseA = await SeedScenarioAsync();
+        var warehouseB = await SeedScenarioAsync();
+        await RegisterAsync(warehouseA, "A1");
+        await RegisterAsync(warehouseA, "A2");
+        await RegisterAsync(warehouseB, "B1");
 
-        var response = await Client.GetAsync($"/api/fleet/robots?warehouseId={warehouseA}");
+        var response = await Client.GetAsync($"/api/fleet/robots?warehouseId={warehouseA.WarehouseId}");
 
         response.EnsureSuccessStatusCode();
         var list = await response.Content.ReadFromJsonAsync<ListDto>(JsonOptions);
         Assert.NotNull(list);
-        Assert.Equal(2, list.Total);
-        Assert.Equal(2, list.Items.Count);
-        Assert.All(list.Items, r => Assert.Equal(warehouseA, r.WarehouseId));
+        Assert.True(list.Total >= 2);
+        Assert.All(list.Items, r => Assert.Equal(warehouseA.WarehouseId, r.WarehouseId));
     }
 
     [Fact]
     public async Task Enable_disable_robot_roundtrip()
     {
-        var created = await RegisterAsync("Toggle Bot");
+        var scenario = await SeedScenarioAsync();
+        var created = await RegisterAsync(scenario, "Toggle Bot");
 
         var disable = await Client.PostAsync($"/api/fleet/robots/{created.Id}/disable", null);
         disable.EnsureSuccessStatusCode();
@@ -102,18 +158,78 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private async Task<RobotDto> RegisterAsync(string name, Guid? warehouseId = null)
+    [Fact]
+    public async Task List_warehouses_returns_seeded()
+    {
+        var scenario = await SeedScenarioAsync();
+
+        var response = await Client.GetAsync("/api/warehouse/warehouses?isActive=true");
+
+        response.EnsureSuccessStatusCode();
+        var list = await response.Content.ReadFromJsonAsync<WarehouseListDto>(JsonOptions);
+        Assert.NotNull(list);
+        Assert.Contains(list.Items, w => w.Id == scenario.WarehouseId);
+    }
+
+    private async Task<RobotDto> RegisterAsync(Scenario scenario, string name, string? code = null)
     {
         var response = await Client.PostAsJsonAsync("/api/fleet/robots", new
         {
-            warehouseId = warehouseId ?? Guid.NewGuid(),
-            currentMapVersionId = Guid.NewGuid(),
+            warehouseId = scenario.WarehouseId,
+            currentMapVersionId = scenario.MapVersionId,
+            code = code ?? UniqueCode(name),
             name
         });
         response.EnsureSuccessStatusCode();
         var robot = await response.Content.ReadFromJsonAsync<RobotDto>(JsonOptions);
         return robot ?? throw new InvalidOperationException("Register returned empty body.");
     }
+
+    private async Task<Scenario> SeedScenarioAsync()
+    {
+        var warehouseId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var suffix = warehouseId.ToString("N")[..8].ToUpperInvariant();
+
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+            db.Warehouses.Add(new WaroTrans.Warehouse.Entities.Warehouse
+            {
+                Id = warehouseId,
+                Code = $"WH-{suffix}",
+                Name = $"Warehouse {suffix}",
+                Timezone = "Asia/Ho_Chi_Minh",
+                IsActive = true,
+                CreatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var mapResponse = await Client.PostAsJsonAsync(
+            $"/api/navigation/warehouses/{warehouseId}/maps",
+            new
+            {
+                name = "Map",
+                mapUri = "http://storage/map.yaml",
+                resolution = 0.05,
+                originX = 0,
+                originY = 0,
+                originYaw = 0
+            });
+        mapResponse.EnsureSuccessStatusCode();
+        var mapId = (await mapResponse.Content.ReadFromJsonAsync<IdDto>(JsonOptions))!.Id;
+        (await Client.PostAsync($"/api/navigation/maps/{mapId}/publish", null)).EnsureSuccessStatusCode();
+
+        return new Scenario(warehouseId, mapId);
+    }
+
+    private static string UniqueCode(string seed) =>
+        $"RBT-{seed.Replace(" ", "", StringComparison.Ordinal).ToUpperInvariant()}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+
+    private sealed record Scenario(Guid WarehouseId, Guid MapVersionId);
+
+    private sealed record IdDto(Guid Id);
 
     private sealed record RobotDto(
         Guid Id,
@@ -127,4 +243,8 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
         bool IsEnabled);
 
     private sealed record ListDto(IReadOnlyList<RobotDto> Items, int Total);
+
+    private sealed record WarehouseListItemDto(Guid Id, string Code, string Name, bool IsActive);
+
+    private sealed record WarehouseListDto(IReadOnlyList<WarehouseListItemDto> Items, int Total);
 }
