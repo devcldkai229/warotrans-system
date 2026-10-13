@@ -61,8 +61,9 @@ interface MapLayers {
   robots?: boolean
   /** Count Robots inside each Zone and on each Edge against its capacity (the in-memory TrafficCoordinator view). */
   occupancy?: boolean
+  /** Show the floating Guide panel. */
   legend?: boolean
-  /** Start with the legend expanded (wide maps); small panes keep it folded. */
+  /** Start with the Guide expanded (wide maps); small panes keep it folded. */
   legendOpen?: boolean
   controls?: boolean
   coordinates?: boolean
@@ -79,7 +80,7 @@ export interface WarehouseMapProps {
   labels?: 'none' | 'focus' | 'all'
   /** Editor: the layers the current tool works on; the others fade back. */
   emphasis?: MapEmphasis[]
-  /** Pixels on the right that panels cover: the zoom controls and legend stay clear of them without moving the map. */
+  /** Pixels on the right that panels cover: the zoom controls and Guide stay clear of them without moving the map. */
   uiInset?: number
   focusEndpointIds?: string[]
   /** When given, every other Robot fades back. */
@@ -111,7 +112,7 @@ const TEXT_HALO = {
 
 const CALLOUT_TONE = { dark: 'bg-ink', warn: 'bg-amber-ink', danger: 'bg-red-ink' }
 
-// Map chrome (legend, zoom, coordinates): floating white cards, the same as panels elsewhere in the console.
+// Map chrome (Guide, zoom, coordinates): floating white cards, the same as panels elsewhere in the console.
 const CHROME = 'absolute z-4 bg-surface/95 shadow-float'
 const ZOOM_BUTTON =
   'grid size-8 place-items-center rounded-full text-ink-2 transition-colors duration-200 hover:bg-container-high hover:text-ink disabled:pointer-events-none disabled:opacity-35'
@@ -637,50 +638,50 @@ export function WarehouseMap({
           className={cx(CHROME, 'top-3 left-3 min-w-40 rounded-md px-3.5 py-2.5 text-xs text-ink-2')}
           open={show.legendOpen ? true : undefined}
         >
-          <summary className="font-medium text-ink">Legend</summary>
+          <summary className="font-medium text-ink">Guide</summary>
           {present.robots.length > 0 ? (
-            <LegendSection title="Robots">
+            <GuideSection title="Robots">
               {present.robots.map((status) => (
-                <LegendItem key={status} label={humanize(status)}>
+                <GuideItem key={status} label={humanize(status)}>
                   <svg className="shrink-0" width="18" height="18" viewBox="-1.2 -1.2 2.4 2.4" color={ROBOT_COLOR[status]}>
                     <circle r={1.05} fill="currentColor" />
                     <g color="#fff">
                       <MapGlyph icon="robot" size={1.3} />
                     </g>
                   </svg>
-                </LegendItem>
+                </GuideItem>
               ))}
-            </LegendSection>
+            </GuideSection>
           ) : null}
           {show.zones && present.zones.length > 0 ? (
-            <LegendSection title="Zones">
+            <GuideSection title="Zones">
               {present.zones.map((type) => (
-                <LegendItem key={type} label={ZONE_LABEL[type]}>
+                <GuideItem key={type} label={ZONE_LABEL[type]}>
                   <i className="size-2.5 shrink-0 rounded-xs border-[1.5px]" style={zoneSwatchStyle(type)} />
-                </LegendItem>
+                </GuideItem>
               ))}
-            </LegendSection>
+            </GuideSection>
           ) : null}
           {show.edges && present.edges.length > 0 ? (
-            <LegendSection title="Paths">
+            <GuideSection title="Paths">
               {present.edges.map((direction) => (
-                <LegendItem key={direction} label={direction === 'ONE_WAY' ? 'One-way edge' : 'Two-way edge'}>
+                <GuideItem key={direction} label={direction === 'ONE_WAY' ? 'One-way edge' : 'Two-way edge'}>
                   <i className="h-1 w-4 shrink-0 rounded-full" style={{ background: EDGE_COLOR[direction] }} />
-                </LegendItem>
+                </GuideItem>
               ))}
-            </LegendSection>
+            </GuideSection>
           ) : null}
           {show.endpoints && present.endpointTypes.length > 0 ? (
-            <LegendSection title="Endpoints" note="The wedge shows the arrival heading." columns>
+            <GuideSection title="Endpoints" note="The wedge shows the arrival heading." columns>
               {present.endpointTypes.map((type) => (
-                <LegendItem key={type} label={ENDPOINT_NAME[type]}>
+                <GuideItem key={type} label={ENDPOINT_NAME[type]}>
                   <svg className="shrink-0" width="18" height="18" viewBox="-1 -1 2 2" color={ENDPOINT_COLOR[type]}>
                     <rect x={-0.85} y={-0.85} width={1.7} height={1.7} rx={0.42} fill="#fff" stroke="currentColor" strokeWidth={0.16} />
                     <MapGlyph icon={type} size={1.05} />
                   </svg>
-                </LegendItem>
+                </GuideItem>
               ))}
-            </LegendSection>
+            </GuideSection>
           ) : null}
         </details>
       ) : null}
@@ -710,7 +711,7 @@ export function WarehouseMap({
   )
 }
 
-function LegendSection({ title, note, columns = false, children }: { title: string; note?: string; columns?: boolean; children: ReactNode }) {
+function GuideSection({ title, note, columns = false, children }: { title: string; note?: string; columns?: boolean; children: ReactNode }) {
   return (
     <section className="mt-2.5">
       <h5 className="mb-1 text-muted">{title}</h5>
@@ -720,7 +721,7 @@ function LegendSection({ title, note, columns = false, children }: { title: stri
   )
 }
 
-function LegendItem({ label, children }: { label: string; children: ReactNode }) {
+function GuideItem({ label, children }: { label: string; children: ReactNode }) {
   return (
     <li className="flex items-center gap-2 py-0.5">
       {children}

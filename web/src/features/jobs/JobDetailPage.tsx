@@ -22,7 +22,7 @@ function bindingText(sourceType: string, path: string) {
 
 const show = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value))
 
-const CARD = 'flex flex-col rounded-lg bg-container p-6'
+const CARD = 'flex flex-col rounded-lg border border-outline-soft bg-surface p-6 shadow-float'
 const CARD_LABEL = 'text-sm text-ink-2'
 const STEP_HEADING = 'mt-4 mb-1 text-xs font-medium'
 const VALUE_ROW =
@@ -37,6 +37,8 @@ const STEP_MARK: Record<Tone, string> = {
   blue: 'bg-blue text-white',
   purple: 'bg-purple text-white',
   grey: 'border border-outline',
+  teal: 'bg-teal text-white',
+  rose: 'bg-rose text-white',
 }
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -244,7 +246,7 @@ export function JobDetailPage() {
         </header>
 
         <div className="mt-8 grid grid-cols-[1fr_1.2fr_1fr] gap-4">
-          <section className={CARD}>
+          <section className={cx(CARD, 'border-l-4 border-l-blue bg-blue-soft/40')}>
             <div className="flex items-center justify-between gap-3">
               <h2 className={CARD_LABEL}>Assigned robot</h2>
               {job.assignedRobot ? (
@@ -269,7 +271,7 @@ export function JobDetailPage() {
             </Button>
           </section>
 
-          <section className={CARD}>
+          <section className={cx(CARD, 'border-l-4 border-l-teal bg-teal-soft/40')}>
             <div className="flex items-center justify-between gap-3">
               <h2 className={CARD_LABEL}>Progress</h2>
               <span className="text-xs text-muted tabular-nums">
@@ -289,7 +291,7 @@ export function JobDetailPage() {
             </div>
           </section>
 
-          <section className={CARD}>
+          <section className={cx(CARD, 'border-l-4 border-l-amber bg-amber-soft/40')}>
             <h2 className={CARD_LABEL}>Execution time</h2>
             <p className="mt-3 text-4xl font-book">{elapsed === null ? '—' : formatDuration(elapsed)}</p>
             <p className="mt-1 text-xs text-muted">elapsed</p>
@@ -302,7 +304,7 @@ export function JobDetailPage() {
         </div>
 
         <div className="mt-4 grid min-h-[520px] flex-1 grid-cols-[1fr_1.05fr] gap-4">
-          <section className="rounded-lg bg-container p-6">
+          <section className="rounded-lg border border-outline-soft border-l-4 border-l-purple bg-surface p-6 shadow-float">
             <header className="flex items-baseline justify-between gap-3">
               <h2 className="text-xl font-book">Execution steps</h2>
               <span className="text-xs text-muted">
@@ -338,7 +340,7 @@ export function JobDetailPage() {
             {job.failureMessage ? <p className="mt-4 text-sm text-red-ink">{job.failureMessage}</p> : null}
           </section>
 
-          <section className="relative min-h-[480px] overflow-hidden rounded-lg bg-container">
+          <section className="relative min-h-[480px] overflow-hidden rounded-lg border border-outline-soft bg-container shadow-float">
             <div className="absolute inset-0">
               <WarehouseMap
                 robots={

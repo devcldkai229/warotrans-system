@@ -181,18 +181,18 @@ export function TransportRequestsPage() {
           </Button>
         </header>
 
-        <div className="flex items-center gap-1.5 px-4 py-3">
+        <div className="mt-3 mb-3 flex h-9 items-center gap-1.5 px-4">
           <SearchInput
             tone="surface"
-            className="flex-1"
+            className="h-9 min-w-0 flex-1"
             placeholder="Search request code or container"
             value={query}
             onChange={setQuery}
           />
-          <IconButton tone="surface" aria-label="Filter">
+          <IconButton tone="surface" className="size-9 shrink-0" aria-label="Filter">
             <Icon name="filter" size={15} />
           </IconButton>
-          <IconButton tone="surface" aria-label="Sort">
+          <IconButton tone="surface" className="size-9 shrink-0" aria-label="Sort">
             <Icon name="sort" size={15} />
           </IconButton>
         </div>

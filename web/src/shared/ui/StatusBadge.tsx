@@ -9,6 +9,8 @@ const TONE_FILL: Record<Tone, string> = {
   red: 'bg-red-soft',
   purple: 'bg-purple-soft',
   grey: 'bg-container-high',
+  teal: 'bg-teal-soft',
+  rose: 'bg-rose-soft',
 }
 
 const TONE_TEXT: Record<Tone, string> = {
@@ -18,6 +20,8 @@ const TONE_TEXT: Record<Tone, string> = {
   red: 'text-red-ink',
   purple: 'text-purple-ink',
   grey: 'text-ink-2',
+  teal: 'text-teal-ink',
+  rose: 'text-rose-ink',
 }
 
 interface StatusBadgeProps {

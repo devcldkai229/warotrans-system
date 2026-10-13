@@ -295,13 +295,6 @@ export function MapEditorPage() {
 
   const lowered = query.toLowerCase()
 
-  function deleteSelection() {
-    if (selectedZone) removeZone(selectedZone.id)
-    else if (selectedEdge) removeEdge(selectedEdge.id)
-    else if (selectedEndpoint) removeEndpoint(selectedEndpoint.id)
-    else setMode({ kind: 'idle' })
-  }
-
   return (
     <div className="fixed inset-0 z-40 flex min-w-[1100px] flex-col bg-surface">
       <header className="flex h-14 flex-none items-center gap-3 pr-6 pl-3">
@@ -371,24 +364,6 @@ export function MapEditorPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-1">
-          {panelOpen ? (
-            <>
-              <Button variant="ghost" size="sm">
-                <Icon name="copy" size={14} /> Duplicate
-              </Button>
-              <Button variant="dangerGhost" size="sm" onClick={deleteSelection}>
-                <Icon name="trash" size={14} /> Delete
-              </Button>
-            </>
-          ) : null}
-          <Button variant="ghost" size="sm">
-            <Icon name="undo" size={14} /> Undo
-          </Button>
-          <Button variant="ghost" size="sm">
-            <Icon name="redo" size={14} /> Redo
-          </Button>
-        </div>
       </div>
 
       <div className="relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-lg bg-container">
