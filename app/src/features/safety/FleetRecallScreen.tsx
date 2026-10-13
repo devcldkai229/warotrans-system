@@ -25,7 +25,9 @@ export function FleetRecallScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-11-MAINT"
+        /* Prototype ref: SCR-STF-11-MAINT (routes/index.tsx). Spec IDs must never
+           ship in operator-facing UI — they are design traceability only. */
+        label="FLEET RECALL"
         title="Fleet Status Notice"
         onBack={goBack}
       />
@@ -41,7 +43,6 @@ export function FleetRecallScreen() {
               <View style={styles.adminBadge}>
                 <Text style={styles.adminBadgeText}>ADMIN-EXCLUSIVE AUTHORITY</Text>
               </View>
-              <Text style={styles.screenTag}>SCREEN W-06</Text>
             </View>
             <Text style={styles.warningTitle}>Scheduled Fleet Maintenance in Progress</Text>
             <Text style={styles.warningDesc}>
@@ -104,11 +105,11 @@ export function FleetRecallScreen() {
           </View>
         </View>
 
-        {/* Section 8.1 RBAC Policy Clarification Card */}
+        {/* Access Control Policy Card */}
         <View style={styles.rbacCard}>
           <View style={styles.rbacHeader}>
             <ShieldCheck size={18} color={colors.primary} />
-            <Text style={styles.rbacTitle}>Section 8.1 RBAC Operational Rule</Text>
+            <Text style={styles.rbacTitle}>Access Control Policy</Text>
           </View>
           <Text style={styles.rbacDesc}>
             In accordance with industrial ISO 3691-4 safety protocols, whole-fleet recall (MAINTENANCE_ALL_ROBOTS) is strictly restricted to Administrator and Maintenance Technician web consoles. Floor staff mobile devices operate in operational supervision mode.
@@ -174,12 +175,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: typography.fontMono,
   },
-  screenTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
-  },
   warningTitle: {
     fontSize: 13,
     fontWeight: '900',
@@ -206,6 +201,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   recallModeBadge: {
     backgroundColor: colors.primaryLight,
@@ -326,6 +322,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   rbacDesc: {
     fontSize: 11,

@@ -32,34 +32,53 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 ### 2.3 Edge-to-Edge Layout & Mobile Safe Insets (iPhone 12 / Modern Smartphones)
 - **NO root `<SafeAreaView>`**:
   - The root in `App.tsx` must be a plain `<View style={{ flex: 1, backgroundColor: colors.background }}>`. Wrapping the whole app in `SafeAreaView` causes letterbox gaps on physical iPhones.
-- **Header Top Inset**:
-  - All top headers MUST keep the shared iOS inset so the notch stays covered:
+- **Header Top Inset — dùng `useTopInset()`, KHÔNG hardcode số**:
+  ```tsx
+  import { useTopInset } from '../theme/layout';
+  const topInset = useTopInset();
+  <View style={[styles.header, { paddingTop: topInset }]} />
+  ```
+  `useTopInset()` (`src/shared/theme/layout.ts`) trả về:
+  - **web** → `SIMULATED_STATUS_BAR (44) + 4 = 48`, chừa chỗ cho status bar giả mà `App.tsx` vẽ trong khung điện thoại (mô phỏng tai thỏ / nối ruồi).
+  - **native** → `insets.top` thật của thiết bị, dao động **20pt (SE) → 47pt (iPhone 12/13) → 59pt (Dynamic Island 14/15/16 Pro)**.
+
+  Trước đây cả hai trường hợp dùng chung một hằng số `48`, chỉ đúng ở iPhone 12/13. **Đừng viết lại `Platform.OS === 'ios' ? 48 : 12`** — đó chính là lỗi lệch inset mà `useTopInset` sinh ra để tránh.
+- **SafeAreaProvider**: root trong `App.tsx` đã bọc `<SafeAreaProvider>` (bắt buộc cho `useSafeAreaInsets`), nhưng root vẫn là plain `<View>` — **không** dùng `SafeAreaView`.
+- **Dropdown neo theo chiều cao header thật** — `AppHeader` đo bằng `onLayout` và truyền `anchorStyle = { top: headerHeight }`. Đừng hardcode `top: 92`: header cao cỡ 99–105pt tùy thiết bị, nên 92 sẽ chồm vào trong header.
+  - **Migration đang dở** — các file sau vẫn còn `paddingTop: Platform.select(...)` và **phải** chuyển sang `useTopInset()`:
+    `SubScreenHeader.tsx`, `JobsScreen.tsx`, `JobDetailScreen.tsx`, `TransportScreen.tsx`,
+    `IssueReportingModal.tsx`, `InventoryLookupScreen.tsx`, `OfflineBannerHUD.tsx`, `BarcodeScannerHUD.tsx`.
+    Đừng copy pattern cũ từ các file này.
+- **Bottom Tab Bar (`src/app/navigation/BottomTabBar.tsx`)**:
+  - The dock is a **floating pill**, not an edge-to-edge bar. This is deliberate: it keeps the
+    tablet's thumb free to reach the bottom of the screen one-handed on a PDA. The full spec
+    lives in [`docs/DESIGN_SYSTEM_AND_RULES.md`](./docs/DESIGN_SYSTEM_AND_RULES.md) §3.1.
+  - It is `position: 'absolute'` and therefore carries **no automatic safe-area handling**:
     ```tsx
-    paddingTop: Platform.OS === 'ios' ? 48 : 12,
+    bottom: dockMetrics.bottomOffset, // iOS 24, Android 16
     ```
-  - The iOS `minHeight` is always `104`, but the **non-iOS `minHeight` is NOT a single constant**. Copy the value from the
-    file you are editing — do not assume `72`:
-    | File | `minHeight` |
-    | --- | --- |
-    | `src/shared/components/SubScreenHeader.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
-    | `src/features/monitoring/IssueReportingModal.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
-    | `src/features/jobs/JobsScreen.tsx` | `Platform.OS === 'ios' ? 104 : 75` |
-    | `src/features/transport/TransportScreen.tsx` | `Platform.OS === 'ios' ? 104 : 76` |
-    | `src/features/jobs/JobDetailScreen.tsx` | `Platform.OS === 'ios' ? 104 : 68` |
-    | `src/shared/components/AppHeader.tsx` | none — uses `paddingTop` + `paddingBottom: 12` |
-  - Dropdown menus must open below the header: `top: Platform.OS === 'ios' ? 92 : 56`.
-- **Bottom Tab Bar**:
-  - Must extend edge-to-edge to the physical bottom:
+  - **Never hardcode a bottom `paddingBottom` to clear the dock.** Use the measured inset:
     ```tsx
-    height: Platform.OS === 'ios' ? 86 : 72,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    const { dockHeight } = useNavigation();
+    const dockInset = dockReservedSpace(dockHeight); // height + bottomOffset + gutter
     ```
-  - Tab job count badge sits at `top: -2, right: 0` (never overlap the icon).
+    `dockHeight` is measured via `onLayout` on `dockPill` and published through
+    `NavigationContext`. Three hand-tuned constants previously summed to ~2pt of slack, which
+    broke whenever font metrics shifted.
+  - Tab job count badge sits at `top: -8, right: -13`, fill `colors.warning` with
+    `colors.textPrimary` text and a `colors.warningText` ring, so the counter reads as a
+    separate chip instead of overlapping the icon glyph.
+  - **Touch target floor is 44pt** (iOS HIG / Material) for every interactive element on the
+    main tabs. `tabBtn` uses `paddingVertical: 11` around a 23pt icon = 45pt.
 - **Sonner Toast Banner**:
   - Position below the iOS notch: `top: Platform.OS === 'ios' ? 54 : 14`.
   - Support custom icons (e.g. `MapPin` for "Locate Me"). Tap to dismiss, no close `X` button.
 - **Thumb Zone & Bottom Sheet Docking**:
-  - The `NEXT HANDOVER TASK` card must dock flush above the Bottom Tab Bar without empty voids.
+  - The `NEXT HANDOVER TASK` card must dock flush above the Floating Dock without empty voids,
+    using the `dockInset` value above — never a fixed padding.
+  - `ScrollView` must stay **scrollable in both sheet states**. Locking scroll while collapsed
+    clips the sheet handle on short devices (iPhone SE at 667pt, and 640dp warehouse PDAs),
+    making the fleet view impossible to expand.
   - Implement `PanResponder` vertical swipe gestures: swipe UP (`dy < -25`) expands fleet view; swipe DOWN (`dy > 25`) collapses it.
 
 ### 2.4 Haptic Vibration Policy (`src/shared/utils/haptics.ts`)

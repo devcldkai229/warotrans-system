@@ -92,9 +92,9 @@ export function SafetyHubCard({
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
           <ShieldAlert size={20} color={colors.primary} />
-          <View>
-            <Text style={styles.headerTitle}>SAFETY & INCIDENT HUB</Text>
-            <Text style={styles.headerSubtitle}>Field Safety & AMR Perimeter Controls</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.headerTitle} numberOfLines={1}>SAFETY & INCIDENT HUB</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>Field Safety & AMR Perimeter Controls</Text>
           </View>
         </View>
         <View style={styles.incidentBadge}>
@@ -112,11 +112,11 @@ export function SafetyHubCard({
       {/* Active Incident Alert Box */}
       <View style={styles.incidentBox}>
         <View style={styles.incidentTopRow}>
-          <View style={styles.incidentPingRow}>
+          <View style={[styles.incidentPingRow, { flex: 1, minWidth: 0 }]}>
             <PulsingBeaconDot />
-            <Text style={styles.incidentTitle}>AMR-01 STALLED · PAYLOAD AT RISK</Text>
+            <Text style={styles.incidentTitle} numberOfLines={1}>AMR-01 STALLED · PAYLOAD AT RISK</Text>
           </View>
-          <Text style={styles.incidentLocation}>Zone A · Aisle 2</Text>
+          <Text style={styles.incidentLocation} numberOfLines={1}>Zone A · Aisle 2</Text>
         </View>
         <Text style={styles.incidentDesc}>
           Hardware motor fault with cargo BOX-101 (45 units). Rescue AMR-02 is ready for tote transfer.
@@ -129,7 +129,7 @@ export function SafetyHubCard({
           ]}
         >
           <LifeBuoy size={16} color="#ffffff" style={styles.rescueBtnIcon} />
-          <Text style={styles.rescueBtnText}>Launch Rescue Mission (SCR-STF-11)</Text>
+          <Text style={styles.rescueBtnText} numberOfLines={1}>Launch Rescue</Text>
         </Pressable>
       </View>
 
@@ -224,6 +224,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: '#0f172a',
+    fontFamily: typography.fontSans,
   },
   headerSubtitle: {
     fontSize: 10,
@@ -257,6 +258,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
     textAlign: 'center',
+    fontFamily: typography.fontSans,
   },
   incidentBox: {
     backgroundColor: '#fef2f2',
@@ -271,6 +273,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 6,
+    gap: 6,
+    flexWrap: 'wrap',
   },
   incidentPingRow: {
     flexDirection: 'row',
@@ -302,6 +306,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
     color: '#991b1b',
+    fontFamily: typography.fontSans,
   },
   incidentLocation: {
     fontSize: 10,
@@ -333,6 +338,8 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
+    flexShrink: 1,
   },
   actionsRow: {
     flexDirection: 'row',
@@ -363,11 +370,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     color: '#64748b',
+    fontFamily: typography.fontSans,
   },
   safetyBtnTitle: {
     fontSize: 11,
     fontWeight: '800',
     color: '#0f172a',
+    fontFamily: typography.fontSans,
   },
   safetyBtnTitleActive: {
     color: colors.primary,

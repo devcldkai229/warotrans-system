@@ -13,11 +13,13 @@ import {
   ArrowRight,
   Box,
   CheckCircle2,
+  Filter,
   MapPin,
   Navigation,
   Printer,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   Truck,
   X,
 } from 'lucide-react-native';
@@ -175,9 +177,13 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
   },
 ];
 
+type CategoryFilter = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | 'EXCEPTION';
+
 export function TransportHistoryScreen() {
   const { navigate, goBack } = useNavigation();
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
+  const [showCategoryChips, setShowCategoryChips] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const inProgressCount = TRANSPORT_ORDERS.filter((o) => o.status === 'IN_PROGRESS').length;
@@ -186,6 +192,7 @@ export function TransportHistoryScreen() {
 
   const filteredOrders = TRANSPORT_ORDERS.filter((order) => {
     if (filter !== 'ALL' && order.status !== filter) return false;
+    if (categoryFilter !== 'ALL' && order.category !== categoryFilter) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -213,13 +220,16 @@ export function TransportHistoryScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Metric Summary Counters */}
+        {/* Metric Summary Filter Cards */}
         <View style={styles.metricsGrid}>
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
               setFilter('ALL');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter all ${TRANSPORT_ORDERS.length} transport orders`}
+            accessibilityState={{ selected: filter === 'ALL' }}
             style={[
               styles.metricCard,
               filter === 'ALL' && styles.metricCardAllActive,
@@ -234,6 +244,9 @@ export function TransportHistoryScreen() {
               triggerHaptic('tap');
               setFilter('IN_PROGRESS');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter ${inProgressCount} active transport orders`}
+            accessibilityState={{ selected: filter === 'IN_PROGRESS' }}
             style={[
               styles.metricCard,
               filter === 'IN_PROGRESS' && styles.metricCardWarningActive,
@@ -248,6 +261,9 @@ export function TransportHistoryScreen() {
               triggerHaptic('tap');
               setFilter('COMPLETED');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter ${completedCount} done transport orders`}
+            accessibilityState={{ selected: filter === 'COMPLETED' }}
             style={[
               styles.metricCard,
               filter === 'COMPLETED' && styles.metricCardSuccessActive,
@@ -262,6 +278,9 @@ export function TransportHistoryScreen() {
               triggerHaptic('tap');
               setFilter('CANCELLED');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter ${cancelledCount} void transport orders`}
+            accessibilityState={{ selected: filter === 'CANCELLED' }}
             style={[
               styles.metricCard,
               filter === 'CANCELLED' && styles.metricCardDangerActive,
@@ -272,66 +291,94 @@ export function TransportHistoryScreen() {
           </Pressable>
         </View>
 
-        {/* Search Input Bar */}
-        <View style={styles.searchBox}>
-          <Search size={16} color="#94a3b8" style={styles.searchIcon} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search TR, location, container, robot..."
-            placeholderTextColor="#94a3b8"
-            style={styles.searchInput}
-          />
-          {searchQuery ? (
+        {/* Search & Filter Bar */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchRow}>
+            <View style={styles.searchBox}>
+              <Search size={16} color="#94a3b8" style={styles.searchIcon} />
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search TR, location, container, robot..."
+                placeholderTextColor="#94a3b8"
+                style={styles.searchInput}
+              />
+              {searchQuery ? (
+                <Pressable
+                  onPress={() => setSearchQuery('')}
+                  style={styles.clearBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                >
+                  <X size={15} color="#94a3b8" />
+                </Pressable>
+              ) : null}
+            </View>
+
             <Pressable
-              onPress={() => setSearchQuery('')}
-              style={styles.clearBtn}
+              onPress={() => {
+                triggerHaptic('tap');
+                setShowCategoryChips(!showCategoryChips);
+              }}
+              style={[
+                styles.filterBtn,
+                (categoryFilter !== 'ALL' || showCategoryChips) && styles.filterBtnActive,
+              ]}
               accessibilityRole="button"
-              accessibilityLabel="Clear search"
+              accessibilityLabel="Toggle category filter"
             >
-              <X size={15} color="#94a3b8" />
+              <SlidersHorizontal
+                size={16}
+                color={categoryFilter !== 'ALL' || showCategoryChips ? colors.primary : '#64748b'}
+              />
+              {categoryFilter !== 'ALL' && <View style={styles.filterDotBadge} />}
             </Pressable>
-          ) : null}
+          </View>
+
+          {/* Quick Category Chips */}
+          {showCategoryChips && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChipsRow}
+            >
+              {[
+                { key: 'ALL', label: 'All Categories' },
+                { key: 'INBOUND', label: 'Inbound' },
+                { key: 'OUTBOUND', label: 'Outbound' },
+                { key: 'INTERNAL', label: 'Internal Move' },
+                { key: 'EXCEPTION', label: 'Safety / Rescue' },
+              ].map((chip) => {
+                const isActive = categoryFilter === chip.key;
+                return (
+                  <Pressable
+                    key={chip.key}
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setCategoryFilter(chip.key as CategoryFilter);
+                    }}
+                    style={[
+                      styles.filterChip,
+                      isActive && styles.filterChipActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by ${chip.label}`}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {chip.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
 
-        {/* Status Filter Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterTabsScroll}
-          contentContainerStyle={styles.filterTabsRow}
-        >
-          {[
-            { id: 'ALL', label: `All (${TRANSPORT_ORDERS.length})` },
-            { id: 'IN_PROGRESS', label: `In Progress (${inProgressCount})` },
-            { id: 'COMPLETED', label: `Completed (${completedCount})` },
-            { id: 'CANCELLED', label: `Cancelled (${cancelledCount})` },
-          ].map((tabItem) => {
-            const isSelected = filter === tabItem.id;
-            return (
-              <Pressable
-                key={tabItem.id}
-                onPress={() => {
-                  triggerHaptic('tap');
-                  setFilter(tabItem.id as any);
-                }}
-                style={[
-                  styles.filterTab,
-                  isSelected ? styles.filterTabActive : styles.filterTabInactive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.filterTabText,
-                    isSelected ? styles.filterTabTextActive : styles.filterTabTextInactive,
-                  ]}
-                >
-                  {tabItem.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
 
         {/* Order Cards List */}
         <View style={styles.ordersList}>
@@ -340,11 +387,12 @@ export function TransportHistoryScreen() {
               <Search size={28} color="#94a3b8" style={{ marginBottom: 8 }} />
               <Text style={styles.emptyTitle}>No transport records found</Text>
               <Text style={styles.emptySubtitle}>Try adjusting your filter or search query.</Text>
-              {(searchQuery || filter !== 'ALL') && (
+              {(searchQuery || filter !== 'ALL' || categoryFilter !== 'ALL') && (
                 <Pressable
                   onPress={() => {
                     setSearchQuery('');
                     setFilter('ALL');
+                    setCategoryFilter('ALL');
                   }}
                   style={styles.resetBtn}
                 >
@@ -451,7 +499,7 @@ export function TransportHistoryScreen() {
                           accessibilityRole="button"
                         >
                           <Navigation size={13} color="#ffffff" style={{ marginRight: 6 }} />
-                          <Text style={styles.actionBtnPrimaryText}>Track on Map</Text>
+                          <Text style={styles.actionBtnPrimaryText}>Live Map</Text>
                         </Pressable>
 
                         <Pressable
@@ -462,7 +510,7 @@ export function TransportHistoryScreen() {
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
                         >
-                          <Text style={styles.actionBtnOutlineText}>View Job Detail</Text>
+                          <Text style={styles.actionBtnOutlineText}>View Job</Text>
                         </Pressable>
                       </>
                     )}
@@ -564,28 +612,29 @@ const styles = StyleSheet.create({
   },
   metricCardAllActive: {
     borderColor: colors.primary,
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(0, 92, 209, 0.10)',
   },
   metricCardWarningActive: {
     borderColor: '#f59e0b',
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
   },
   metricCardSuccessActive: {
     borderColor: '#10b981',
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
   },
   metricCardDangerActive: {
     borderColor: '#ef4444',
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
   },
   metricNumber: {
     fontSize: 16,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   metricLabel: {
     fontSize: 9,
@@ -593,17 +642,78 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 2,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
+  },
+  searchSection: {
+    marginBottom: 16,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
-    height: 44,
-    marginBottom: 16,
+    height: 42,
+  },
+  filterBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  filterBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(0, 92, 209, 0.08)',
+  },
+  filterDotBadge: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingTop: 10,
+    paddingBottom: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '900',
   },
   searchIcon: {
     marginRight: 8,
@@ -614,42 +724,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.textPrimary,
     paddingVertical: 0,
+    fontFamily: typography.fontSans,
   },
   clearBtn: {
     padding: 4,
-  },
-  filterTabsScroll: {
-    marginBottom: 16,
-  },
-  filterTabsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingBottom: 4,
-  },
-  filterTab: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    height: 30,
-    justifyContent: 'center',
-  },
-  filterTabActive: {
-    backgroundColor: colors.primary,
-  },
-  filterTabInactive: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  filterTabTextActive: {
-    color: '#ffffff',
-  },
-  filterTabTextInactive: {
-    color: colors.textMuted,
   },
   ordersList: {
     gap: 12,
@@ -668,6 +746,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   emptySubtitle: {
     fontSize: 11,
@@ -686,6 +765,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   orderCard: {
     borderRadius: 12,
@@ -729,6 +809,7 @@ const styles = StyleSheet.create({
     color: '#64748b',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   statusBadge: {
     borderRadius: 6,
@@ -758,12 +839,14 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   workflowTitle: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   routeBox: {
     flexDirection: 'row',
@@ -781,17 +864,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textMuted,
     flexShrink: 1,
+    fontFamily: typography.fontSans,
   },
   routeDestination: {
     fontSize: 11,
     fontWeight: '900',
     color: colors.textPrimary,
     flexShrink: 1,
+    fontFamily: typography.fontSans,
   },
   cargoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 17,
+    flexWrap: 'wrap',
+    gap: 2,
   },
   cargoContainer: {
     fontFamily: typography.fontMono,
@@ -803,11 +890,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     color: '#94a3b8',
     fontWeight: 'bold',
+    fontFamily: typography.fontSans,
   },
   cargoDetails: {
     fontSize: 11,
     color: colors.textMuted,
     fontWeight: '500',
+    fontFamily: typography.fontSans,
   },
   metaRow: {
     flexDirection: 'row',
@@ -826,6 +915,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   assignedRobot: {
     fontWeight: '900',
@@ -836,6 +926,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.textMuted,
     fontWeight: '500',
+    fontFamily: typography.fontSans,
   },
   cancelAlert: {
     flexDirection: 'row',
@@ -873,6 +964,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
   },
   actionBtnOutline: {
     flex: 1,
@@ -889,5 +981,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
 });

@@ -1,9 +1,10 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { shadows } from '../theme/shadows';
 import { typography } from '../theme/typography';
+import { useTopInset } from '../theme/layout';
 
 interface SubScreenHeaderProps {
   label: string;
@@ -12,14 +13,23 @@ interface SubScreenHeaderProps {
   rightAction?: React.ReactNode;
 }
 
+/**
+ * Height of the header content row + bottom padding, excluding the top inset.
+ * The iOS `104` minHeight equals `48 (notch) + 56`, so keeping 56 constant
+ * preserves the original height when the inset is 48 while letting the header
+ * grow on Dynamic Island devices (59) and shrink on an iPhone SE (20).
+ */
+const HEADER_CONTENT = 56;
+
 export function SubScreenHeader({
   label,
   title,
   onBack,
   rightAction,
 }: SubScreenHeaderProps) {
+  const topInset = useTopInset();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: topInset, minHeight: topInset + HEADER_CONTENT }]}>
       <View style={styles.leftGroup}>
         <Pressable
           onPress={onBack}
@@ -55,9 +65,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: 12,
-    paddingTop: Platform.select({ android: 14, default: 48 }),
+    paddingTop: 0,
     paddingBottom: 14,
-    minHeight: Platform.select({ android: 72, default: 104 }),
+    minHeight: 0,
     zIndex: 30,
     ...shadows.panel,
   },
@@ -86,11 +96,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.6,
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   title: {
     fontSize: 16,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   rightAction: {
     marginLeft: 10,

@@ -129,31 +129,67 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
+  /**
+   * CTA label budget: long labels must never escape the pill.
+   *
+   * Yoga defaults to `flexShrink: 0`, so an over-long label kept its full
+   * intrinsic width inside a narrower box and — because `justifyContent` is
+   * `center` — bled out of BOTH sides of the button. `flexShrink: 1` +
+   * `minWidth: 0` hand the overflow back to the text so it wraps inside the
+   * pill instead.
+   *
+   * There is deliberately NO `numberOfLines` cap here: truncating a CTA to
+   * `GENERATE & INGEST BAR…` hides the action the key performs, which on a
+   * handheld in a warehouse is worse than a two-line key. Every button in the
+   * app sizes itself with `minHeight`/`paddingVertical` (never a fixed height),
+   * so a wrapped label grows the pill safely. `flexShrink: 0` on the icon slots
+   * keeps the glyph from squashing when the label does wrap.
+   */
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 1,
+    minWidth: 0,
   },
   iconLeft: {
     marginRight: 8,
+    flexShrink: 0,
   },
   iconRight: {
     marginLeft: 8,
+    flexShrink: 0,
   },
 });
 
+/**
+ * Press physics: every button compresses 2% on touch-down so the press reads as a
+ * mechanical key travel rather than a flat colour swap.
+ *
+ * `primary` / `danger` carry a 3px bottom bevel. A real beveled key does not shrink —
+ * it is pushed *into* the surface — so these variants keep `borderBottomWidth` at 3
+ * and instead collapse it via the 2% scale (shrinking the bevel would reflow the
+ * button and jitter the label by 2pt on every touch). `primary` additionally drops
+ * its cast shadow, since a depressed key casts none.
+ */
 const pressedStyles = StyleSheet.create({
   primary: {
     backgroundColor: colors.primaryDark,
+    transform: [{ scale: 0.98 }],
+    shadowOpacity: 0,
+    elevation: 0,
   },
   secondary: {
     backgroundColor: colors.surfaceMuted,
+    transform: [{ scale: 0.98 }],
   },
   outline: {
     backgroundColor: colors.primaryLight,
+    transform: [{ scale: 0.98 }],
   },
   danger: {
     backgroundColor: '#b91c1c',
+    transform: [{ scale: 0.98 }],
   },
 });
 
@@ -163,6 +199,9 @@ const textStyles = StyleSheet.create({
     fontFamily: typography.fontSans,
     letterSpacing: 0.5,
     textAlign: 'center',
+    // Pairs with `contentRow.flexShrink`: the label is the only element allowed
+    // to give up width, and it wraps rather than escaping the pill.
+    flexShrink: 1,
   },
   primary: {
     color: colors.textInverse,
@@ -179,15 +218,18 @@ const textStyles = StyleSheet.create({
   sm: {
     fontSize: 12,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   md: {
     fontSize: 14,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   lg: {
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.8,
+    fontFamily: typography.fontSans,
   },
   disabled: {
     color: colors.textMuted,

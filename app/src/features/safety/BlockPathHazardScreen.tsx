@@ -53,7 +53,7 @@ export function BlockPathHazardScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-26 · SAFETY EXCEPTION"
+        label="SAFETY EXCEPTION"
         title="Report Block Path Hazard"
         onBack={goBack}
       />
@@ -113,7 +113,7 @@ export function BlockPathHazardScreen() {
                 style={styles.doneBtn}
                 accessibilityRole="button"
               >
-                <Text style={styles.doneBtnText}>Done & Return</Text>
+                <Text style={styles.doneBtnText}>Back to Hub</Text>
               </Pressable>
             </View>
           </View>
@@ -127,15 +127,15 @@ export function BlockPathHazardScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.introTitle}>Floor Hazard & Temporary Obstacle</Text>
                 <Text style={styles.introDesc}>
-                  Section 8.2 Rule 5: Reports aisle blockages so AMRs automatically detour around the hazard.
+                  Report an aisle blockage and the fleet detours around the hazard automatically.
                 </Text>
               </View>
             </View>
 
-            {/* 1. Select Blocked Corridor / Edge */}
+            {/* Blocked Corridor / Edge */}
             <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>
-                1. Select Blocked Corridor / Edge:
+                BLOCKED CORRIDOR
               </Text>
               <View style={{ gap: 8 }}>
                 {EDGES.map((e) => {
@@ -165,10 +165,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 2. Hazard Category */}
+            {/* Hazard Category */}
             <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>
-                2. Hazard Category:
+                HAZARD CATEGORY
               </Text>
               <View style={styles.hazardGrid}>
                 {HAZARD_CATEGORIES.map((h) => {
@@ -192,10 +192,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 3. Severity & Routing Policy */}
+            {/* Severity & Routing Policy */}
             <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>
-                3. Severity & Routing Policy:
+                SEVERITY & ROUTING POLICY
               </Text>
               <View style={styles.severityRow}>
                 <Pressable
@@ -229,10 +229,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 4. Estimated Duration Until Clear */}
+            {/* Estimated Duration Until Clear */}
             <View style={{ gap: 6 }}>
               <Text style={styles.sectionLabel}>
-                Estimated Duration Until Clear:
+                DURATION UNTIL CLEAR
               </Text>
               <View style={styles.durationRow}>
                 {['15m', '30m', '60m', 'Until Clear'].map((dur) => {
@@ -260,10 +260,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 5. Field Observation Notes */}
+            {/* Field Observation Notes */}
             <View style={{ gap: 6 }}>
               <Text style={styles.sectionLabel}>
-                Field Observation Notes:
+                FIELD NOTES
               </Text>
               <Input
                 value={notes}
@@ -329,7 +329,8 @@ const styles = StyleSheet.create({
   },
   introDesc: {
     fontSize: 11,
-    color: colors.textMuted,
+    fontWeight: '600',
+    color: colors.textSecondary,
     lineHeight: 16,
     marginTop: 2,
   },
@@ -339,6 +340,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: colors.textMuted,
+    // DESIGN_SYSTEM 2.2: ALL-CAPS 9-10pt / weight 900 protocol labels are
+    // monospace, same as the other eyebrow slots in the app.
+    fontFamily: typography.fontMono,
   },
   edgeCard: {
     flexDirection: 'row',
@@ -381,6 +385,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   hazardGrid: {
     flexDirection: 'row',
@@ -388,7 +393,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hazardCard: {
-    width: 195,
+    // Was a hard `width: 195`, which forced ONE card per 343pt row and left
+    // ~148pt of dead space to the right. `flex: 1` + `minWidth: 140` gives a real
+    // 2-up grid (2 x 140 + 8 gap = 288 <= 343). Note the break point is pinned by
+    // `minWidth`, not by label length: a longer label wraps *inside* the card.
+    flex: 1,
+    minWidth: 140,
     minHeight: 57,
     borderRadius: 12,
     borderWidth: 1,
@@ -405,14 +415,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   hazardTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '900',
     color: colors.textPrimary,
-    lineHeight: 16,
+    lineHeight: 17,
+    fontFamily: typography.fontSans,
   },
+  // The sub-label is load-bearing disambiguation in a 2x2 picker (it is what
+  // separates "Liquid Spill" from "Fallen Pallet" at a glance), so it stays.
+  // What it did NOT need was the 10pt/textMuted treatment, which is below the
+  // DESIGN_SYSTEM 2.2 floor for card body copy (11-13pt on textSecondary).
   hazardDesc: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
     lineHeight: 15,
     marginTop: 2,
   },
@@ -445,16 +461,19 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#ef4444',
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   severityBtnCautionTitle: {
     fontSize: 12,
     fontWeight: '900',
     color: '#b45309',
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   severityBtnSub: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
     lineHeight: 15,
     marginTop: 2,
   },
@@ -481,6 +500,7 @@ const styles = StyleSheet.create({
   durationBtnText: {
     fontSize: 12,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   durationBtnTextNormal: {
     color: colors.textPrimary,
@@ -505,6 +525,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.5,
+    fontFamily: typography.fontSans,
   },
   submittedCard: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -539,6 +560,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 16,
     lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   receiptBox: {
     width: '100%',
@@ -558,16 +580,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   receiptVal: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   receiptHighlight: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   receiptDanger: {
     fontSize: 12,
@@ -608,6 +633,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   doneBtn: {
     flex: 1,
@@ -621,5 +647,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#ffffff',
+    fontFamily: typography.fontSans,
   },
 });

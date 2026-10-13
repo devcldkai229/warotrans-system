@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +25,7 @@ import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
@@ -89,6 +89,7 @@ export function IssueReportingModal({
   robotCode = 'AMR-01',
   jobId = 'JOB-2026-0812',
 }: IssueReportingModalProps) {
+  const topInset = useTopInset();
   const [selectedCat, setSelectedCat] = useState<IncidentCategory>('CONTAINER_DAMAGED');
   const [notes, setNotes] = useState('');
   const [photoAttached, setPhotoAttached] = useState(false);
@@ -112,7 +113,7 @@ export function IssueReportingModal({
   const modalBody = (
     <View style={styles.fullScreenContainer}>
         {/* Header matching prototype AppHeader */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: topInset, minHeight: topInset + 56 }]}>
           <Pressable
             onPress={onClose}
             style={styles.backBtn}
@@ -122,8 +123,9 @@ export function IssueReportingModal({
             <ArrowLeft size={22} color={colors.textPrimary} />
           </Pressable>
           <View style={styles.headerTitleWrap}>
+            {/* Prototype ref: SCR-STF-16 (routes/index.tsx) */}
             <Text style={styles.headerTag}>
-              SCR-STF-16 · {robotCode} · {jobId}
+              REPORT INCIDENT · {robotCode} · {jobId}
             </Text>
             <Text style={styles.title}>Report Exception & Incident</Text>
           </View>
@@ -209,11 +211,11 @@ export function IssueReportingModal({
               </View>
             </View>
 
-            {/* 2. Photo Evidence (SCR-STF-17) */}
+            {/* Photo Evidence (prototype ref: SCR-STF-17) */}
             <View style={styles.evidenceCard}>
               <View style={styles.evidenceHeader}>
                 <View>
-                  <Text style={styles.sectionLabel}>2. SCR-STF-17: PHOTO EVIDENCE</Text>
+                  <Text style={styles.sectionLabel}>2. PHOTO EVIDENCE</Text>
                   <Text style={styles.evidenceSub}>Attach physical proof for supervisor</Text>
                 </View>
                 <View style={[styles.evidenceBadge, photoAttached && styles.evidenceBadgeAttached]}>
@@ -336,9 +338,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: Platform.select({ android: 14, default: 48 }),
+    paddingTop: 0,
     paddingBottom: 14,
-    minHeight: Platform.select({ android: 72, default: 104 }),
+    minHeight: 0,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -398,6 +400,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.danger,
+    fontFamily: typography.fontSans,
   },
   safetyDesc: {
     fontSize: 12,
@@ -413,6 +416,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   catCard: {
     flexDirection: 'row',
@@ -449,10 +453,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   catTitleSelected: {
     color: colors.danger,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   catDesc: {
     fontSize: 11,
@@ -479,6 +485,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     marginTop: 1,
+    fontFamily: typography.fontSans,
   },
   evidenceBadge: {
     backgroundColor: colors.surfaceSubtle,
@@ -552,6 +559,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: 'rgba(255, 255, 255, 0.7)',
+    fontFamily: typography.fontSans,
   },
   camActions: {
     flexDirection: 'row',
@@ -611,6 +619,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   deletePhotoBtn: {
     padding: 6,

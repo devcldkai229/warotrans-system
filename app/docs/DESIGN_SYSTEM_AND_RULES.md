@@ -37,11 +37,18 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
 | `textMuted` | `#64748b` | Chữ ghi chú phụ (slate-500, không được dùng màu sáng hơn) |
 | `success` | `#007a38` | Hoàn thành, pin tốt, robot trực tuyến |
 | `warning` | `#f0b21b` | Chờ handover, ETA sắp tới, cảnh báo |
+| `warningText` | `#854d0e` | Chữ / viền amber đặt trực tiếp trên `background` hoặc `surface` |
 | `danger` | `#c8272b` | Dừng khẩn cấp, sự cố hàng hóa, deadlock |
 
 > **Lưu ý:** ba giá trị trên là giá trị **thật** trong `src/shared/theme/colors.ts:28,34,40`.
 > Mỗi tone còn có các token đi kèm `*Bg`, `*Soft`, `*Border` (ví dụ `successBg: '#eefaf2'`).
 > Luôn đọc token thật từ `colors.ts` thay vì dùng giá trị ghi nhớ.
+
+> **Về `warning`:** `#f0b21b` chỉ đạt **1.81:1** trên `#f8fafc`, thấp hơn mức 3:1 mà WCAG 1.4.11
+> yêu cầu cho graphic mang ý nghĩa. Vì vậy `warning` chỉ dùng làm **nền/fill**; mọi chữ hoặc
+> viền đặt trực tiếp lên nền sáng phải dùng `warningText` (`#854d0e`, ~6.5:1).
+> Khi cần một graphic nhỏ mang tín hiệu (ví dụ chấm trạng thái), hãy dùng fill `warning`
+> kèm viền `warningText` thay vì để fill trần.
 
 ### 2.2 Quy chuẩn Typography (`src/shared/theme/typography.ts`)
 * **Hệ Font Chuẩn (Native Retina & Modern Web)**:
@@ -85,14 +92,29 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
     // Container bao bọc (cho phép click/scroll xuyên qua hai bên mép)
     dockWrapper: {
       position: 'absolute',
-      bottom: Platform.select({ android: 16, default: 24 }),
+      bottom: dockMetrics.bottomOffset,
       left: 0,
       right: 0,
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 90,
     },
-    // Viên thuốc nổi (kích thước vàng ~296px, chiếm ~76% chiều rộng màn hình 390px)
+    * **Dock là lớp phủ `position: absolute`, không tự nhận safe-area**:
+    * Mọi màn hình muốn ghim nội dung sát đáy phải chừa chỗ bằng **`dockReservedSpace(dockHeight)`**
+      (`src/shared/theme/layout.ts`) chứ **không** hardcode `paddingBottom`.
+    * `dockHeight` được đo thật qua `onLayout` trên `dockPill` (`BottomTabBar.tsx`) và phát ra
+      qua `NavigationContext`. Nhờ vậy khi metric của pill thay đổi (đổi icon, đổi padding),
+      khoảng hở tự động theo — thay vì 3 magic number cộng lại vừa khít như trước đây
+      (~2pt trên iPhone 12, dễ vỡ chỉ vì metrics chữ).
+    * ```tsx
+      const { dockHeight } = useNavigation();
+      const dockInset = dockReservedSpace(dockHeight);
+      // collapsed peek sheet
+      <View style={[styles.bottomSheet, { paddingBottom: dockInset }]} />
+      // expanded scroll content
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: dockInset }]}
+      ```
+  * **Viên thuốc nổi (kích thước vàng ~296px, chiếm ~76% chiều rộng màn hình 390px)**
     dockPill: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -124,6 +146,40 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
   * Kèm hiệu ứng chuyển động mượt: `LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)`.
 * **Kích thước vùng bấm (Touch Targets)**:
   * Mọi icon tròn bấm được (Back, Bell, Logout) phải có kích thước tối thiểu `36x36px` với `hitSlop` hoặc đệm $\ge 44\times 44\text{px}$ (chuẩn WCAG 2.2 Level AA).
+
+### 3.3. Ngân sách nhãn CTA — chữ KHÔNG được tràn ra ngoài viên nút
+
+* **Hiện tượng (đã xảy ra)**: `Button` render `<View style={contentRow}><Text>{label}</Text></View>` mà
+  **không khai báo `flexShrink`**. Yoga mặc định `flexShrink: 0`, nên một nhãn quá dài giữ nguyên bề rộng
+  nội tại của nó (~340pt cho 35 ký tự @ 15pt/900/ls 0.8) trong khung ~237pt; `justifyContent: 'center'`
+  chia đều phần dư ra **cả hai bên**, tạo ra đúng triệu chứng "chữ tràn ra ngoài viên pill ở cả trái lẫn phải".
+* **Luật bắt buộc**: nhãn dài **phải xuống dòng bên trong** viên nút, tuyệt đối không tràn và không bị cắt
+  bằng ellipsis (một CTA bị cắt `GENERATE & INGEST BAR…` còn tệ hơn hẳn một CTA hai dòng — nó che mất chính
+  hành động mà nút thực hiện). `Button.tsx` đã xử lý ở tầng component: `contentRow` có `flexShrink: 1` +
+  `minWidth: 0`, nhãn có `flexShrink: 1`, icon có `flexShrink: 0` (để icon không bị bóp méo khi nhãn xuống dòng).
+  **Không** đặt `numberOfLines` cho nhãn nút. Mọi nút trong app tự giãn theo `minHeight`/`paddingVertical`
+  (không nào dùng `height` cố định), nên nhãn xuống dòng làm viên nút cao thêm mà không vỡ layout.
+* **Ngân sách thực tế** trên iPhone 375pt (khung card nội): `375 − 32 − 32 = 311`; trừ padding `lg` 48 và icon 26
+  → chỉ còn **~237pt cho chữ**. Ở `size="lg"` (15pt / weight 900 / letterSpacing 0.8) ứng với **~24 ký tự**.
+* **Quy tắc copy cho CTA**: verb + object, tối đa 3 từ, bỏ tiền tố ALL-CAPS dài, bỏ thông tin đã hiện ở nơi khác
+  (ví dụ card máy in đã ghi `Model: Zebra ZT411` thì nút không cần `(ZEBRA ZT411)`).
+* **Hàng lọc ngang (filter tabs)**: khi số tab ≤ 4 và nhãn ngắn, dùng **cột đều `flex: 1` trong một `View` thường**,
+  **không** dùng `ScrollView` ngang. Nguyên nhân: nằm trong ScrollView ngang, chip cuối luôn bị viewport cắt cụt
+  và trông như layout hỏng chứ không phải "kéo đi xem thêm". `paddingRight` **không sửa được** hiện tượng cắt —
+  nó chỉ thêm khoảng trắng *sau* chip cuối khi đã cuộn hết. Thêm `numberOfLines={1}` + `flexShrink: 1` vào nhãn tab
+  để phòng thủ nếu nhãn sau này dài hơn.
+
+### 3.4. Mã đặc tả prototype (`SCR-STF-xx`) KHÔNG được xuất hiện trong UI
+
+* `SCR-STF-xx` là **mã định danh màn hình trong prototype** (`ui-design-prototype/.../routes/index.tsx`), chỉ có
+  giá trị truy vết thiết kế. Chúng **không được** nằm trong bất kỳ chuỗi nào người dùng đọc được — eyebrow,
+  badge, tiêu đề section, header tag. Operator không cần biết mã màn hình prototype, và chúng làm nhiễu
+  nhịp thị giác của label nghiệp vụ.
+* Khi gỡ khỏi UI, **giữ lại mã trong code comment** dạng `Prototype ref: SCR-STF-xx (routes/index.tsx)`
+  để không mất khả năng đối chiếu với prototype.
+* Quy tắc này áp dụng cho **mọi** chuỗi dạng mã đặc tả giả: `SCR-STF-xx`, `SCREEN W-xx`, `Section 8.x Rule y`.
+  Văn bản nghiệp vụ có giá trị thật (ví dụ "AMRs automatically detour around the hazard") thì **giữ lại**,
+  chỉ gỡ tiền tố trích dẫn giả.
 
 ---
 
@@ -164,3 +220,6 @@ Khi phát triển ứng dụng React Native / Expo:
    * Không chạm vào Backend hoặc Database khi chưa có yêu cầu cụ thể.
 2. **Kiểm tra biên dịch trước khi hoàn tất**:
    * Luôn chạy `npm run typecheck` (`tsc --noEmit`) trong `warotrans-system/app` để đảm bảo **0 lỗi compilation**.
+3. **Truy vết thiết kế không được lọt sang UI**:
+   * Mọi mã đặc tả prototype (`SCR-STF-xx`, `SCREEN W-xx`, `Section 8.x`) chỉ tồn tại trong **code comment**
+     (`Prototype ref: ...`) — xem [§3.4](#34-mã-đặc-tả-prototype-scr-stf-xx-không-được-xuất-hiện-trong-ui).

@@ -9,10 +9,10 @@ import {
   BatteryMedium,
   Clock3,
   LocateFixed,
-  Navigation,
 } from 'lucide-react-native';
-import Svg, { Defs, Line, Pattern, Rect } from 'react-native-svg';
+import Svg, { Defs, G, Line, Path, Pattern, Rect } from 'react-native-svg';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { ROBOT_HEADING_ARROW_PATH } from '../home/MiniFacilityMap';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
@@ -39,7 +39,9 @@ export function JobLiveMapScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label={`SCR-STF-25 · ${jobId}`}
+        /* Prototype ref: SCR-STF-25 (routes/index.tsx). The job ID stays in the
+           eyebrow — it is the only place this screen states which job is tracked. */
+        label={`LIVE FLEET MAP · ${jobId}`}
         title={`Tracking ${selectedRobot}`}
         onBack={goBack}
       />
@@ -132,9 +134,17 @@ export function JobLiveMapScreen() {
           {/* Sonar Radar Cone */}
           {!isAmr2 && <View style={styles.sonarCone} />}
           <View style={[styles.robotCircle, !isAmr2 && styles.robotCircleSelected]}>
-            <View style={{ transform: [{ rotate: '45deg' }] }}>
-              <Navigation size={20} color="#ffffff" fill="#ffffff" />
-            </View>
+            <Svg width={24} height={24} viewBox="0 0 24 24">
+              <G rotation={45} origin="12, 12">
+                <Path
+                  d={ROBOT_HEADING_ARROW_PATH}
+                  fill="#ffffff"
+                  stroke="#ffffff"
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                />
+              </G>
+            </Svg>
           </View>
           <View style={styles.robotTag}>
             <Text style={styles.robotTagId}>AMR-01 · (12.4m, 8.2m)</Text>
@@ -153,9 +163,17 @@ export function JobLiveMapScreen() {
         >
           {isAmr2 && <View style={styles.sonarCone} />}
           <View style={[styles.robotCircle, isAmr2 && styles.robotCircleSelected]}>
-            <View style={{ transform: [{ rotate: '180deg' }] }}>
-              <Navigation size={20} color="#ffffff" fill="#ffffff" />
-            </View>
+            <Svg width={24} height={24} viewBox="0 0 24 24">
+              <G rotation={180} origin="12, 12">
+                <Path
+                  d={ROBOT_HEADING_ARROW_PATH}
+                  fill="#ffffff"
+                  stroke="#ffffff"
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                />
+              </G>
+            </Svg>
           </View>
           <View style={styles.robotTag}>
             <Text style={styles.robotTagId}>AMR-02 · (18.2m, 14.5m)</Text>
@@ -228,6 +246,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
+    fontFamily: typography.fontSans,
   },
   mapViewport: {
     flex: 1,
@@ -463,6 +482,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 2,
     maxWidth: 220,
+    fontFamily: typography.fontSans,
   },
   statusBadge: {
     backgroundColor: colors.successSoft,
@@ -500,6 +520,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textMuted,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   targetBanner: {
     flexDirection: 'row',
@@ -515,5 +536,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.primary,
     flex: 1,
+    fontFamily: typography.fontSans,
   },
 });

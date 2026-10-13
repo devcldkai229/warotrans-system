@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +17,7 @@ import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { useTopInset } from '../../shared/theme/layout';
 
 interface PendingTask {
   id: string;
@@ -49,6 +49,7 @@ const INITIAL_TASKS: PendingTask[] = [
 
 export function OfflineBannerHUD() {
   const { goBack } = useNavigation();
+  const topInset = useTopInset();
   const [tasks, setTasks] = useState<PendingTask[]>(INITIAL_TASKS);
   const [countdown, setCountdown] = useState(5);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -79,7 +80,7 @@ export function OfflineBannerHUD() {
   return (
     <View style={styles.container}>
       {/* Amber Reconnecting Banner */}
-      <View style={styles.banner}>
+      <View style={[styles.banner, { paddingTop: topInset, minHeight: topInset + 48 }]}>
         <View style={styles.bannerLeft}>
           <View style={styles.bannerIconBox}>
             <Zap size={16} color="#fbbf24" />
@@ -105,7 +106,8 @@ export function OfflineBannerHUD() {
 
         {/* Header Content */}
         <View style={styles.headerSection}>
-          <Text style={styles.headerTag}>SCR-STF-18 · OFFLINE RECONNECTING MODE</Text>
+          {/* Prototype ref: SCR-STF-18 (routes/index.tsx) */}
+          <Text style={styles.headerTag}>OFFLINE RECONNECTING MODE</Text>
           <Text style={styles.headerTitle}>Offline Operation Mode</Text>
           <Text style={styles.headerDesc}>
             PDA terminal continues scanning and logging handovers without disrupting warehouse workflow.
@@ -179,9 +181,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#f59e0b',
     paddingHorizontal: 16,
-    paddingTop: Platform.select({ android: 12, default: 48 }),
+    paddingTop: 0,
     paddingBottom: 12,
-    minHeight: Platform.select({ android: 56, default: 96 }),
+    minHeight: 0,
     ...shadows.panel,
   },
   bannerLeft: {
@@ -210,6 +212,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(15, 23, 42, 0.85)',
     marginTop: 1,
+    fontFamily: typography.fontSans,
   },
   retryPill: {
     backgroundColor: 'rgba(15, 23, 42, 0.2)',
@@ -240,6 +243,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: colors.success,
+    fontFamily: typography.fontSans,
   },
   headerSection: {
     marginTop: 4,
@@ -283,6 +287,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.warning,
+    fontFamily: typography.fontSans,
   },
   queueCount: {
     fontSize: 10,
@@ -305,6 +310,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
+    fontFamily: typography.fontSans,
   },
   taskTime: {
     fontSize: 10,

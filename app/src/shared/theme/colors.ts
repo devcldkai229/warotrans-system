@@ -35,6 +35,10 @@ export const colors = {
   warningBg: '#fffbf0',
   warningSoft: '#fef3c7',
   warningBorder: '#fcd34d',
+  // Deep amber for text/outlines that sit directly on `background` or `surface`.
+  // `warning` itself is only 1.81:1 on #f8fafc and cannot carry meaning alone
+  // (WCAG 1.4.11 requires 3:1 for non-text graphics).
+  warningText: '#854d0e',
 
   // Danger (Industrial emergency red matching prototype oklch(0.55 0.22 26))
   danger: '#c8272b',

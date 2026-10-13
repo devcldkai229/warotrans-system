@@ -21,6 +21,7 @@ import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { colors } from '../../shared/theme/colors';
+import { useTopInset } from '../../shared/theme/layout';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { useToast } from '../../shared/context/ToastContext';
@@ -59,6 +60,7 @@ export function LoginScreen() {
   const { login } = useAuth();
   const { success: showToastSuccess } = useToast();
   const zoneSelectorRef = useRef<View>(null);
+  const topInset = useTopInset();
   const [username, setUsername] = useState('alex.tran');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -112,7 +114,7 @@ export function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: topInset }]}>
           {/* Top Section with high stacking context to overlay over actionSection */}
           <View style={styles.topSection}>
             {/* Centered Brand Hero */}
@@ -163,6 +165,7 @@ export function LoginScreen() {
                       setShowPassword(!showPassword);
                     }}
                     hitSlop={12}
+                    style={({ pressed }) => [styles.passwordToggle, pressed && styles.passwordTogglePressed]}
                     accessibilityRole="button"
                     accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                     accessibilityState={{ selected: showPassword }}
@@ -308,7 +311,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 48 : 20,
+    paddingTop: 0,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     backgroundColor: colors.background,
     justifyContent: 'space-between',
@@ -379,6 +382,16 @@ const styles = StyleSheet.create({
   identifierInput: {
     fontFamily: typography.fontMono,
     letterSpacing: 0.4,
+  },
+  passwordToggle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+  },
+  passwordTogglePressed: {
+    backgroundColor: colors.surfaceSubtle,
   },
   zoneSelector: {
     minHeight: 56,
@@ -484,6 +497,7 @@ const styles = StyleSheet.create({
   dropdownItemTitleSelected: {
     color: colors.primary,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   dropdownItemDesc: {
     fontSize: 10,

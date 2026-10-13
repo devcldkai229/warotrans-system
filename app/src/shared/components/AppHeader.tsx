@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -19,6 +18,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { useTopInset } from '../theme/layout';
 import { shadows } from '../theme/shadows';
 import { typography } from '../theme/typography';
 import { toast } from '../context/ToastContext';
@@ -54,6 +54,14 @@ export function AppHeader({
   const [isZoneDropdownOpen, setIsZoneDropdownOpen] = useState(false);
   const [isAvatarDropdownOpen, setIsAvatarDropdownOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(true);
+  // Measured so the dropdowns anchor to the header's real bottom edge. The
+  // old hardcoded `92` assumed a 99pt header, which only holds on the exact
+  // iPhone 12/13 inset — it sat 7pt inside the header and would drift by up
+  // to 39pt once the top inset follows the device.
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const topInset = useTopInset();
+
+  const anchorStyle = headerHeight > 0 ? { top: headerHeight } : null;
 
   const handleOpenNotifications = () => {
     triggerHaptic('tap');
@@ -73,7 +81,10 @@ export function AppHeader({
   };
 
   return (
-    <View style={styles.header}>
+    <View
+      style={[styles.header, { paddingTop: topInset }]}
+      onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+    >
       {/* Brand & Zone Dropdown */}
       <View style={styles.leftGroup}>
         {/* Authentic WaroTrans BrandMark */}
@@ -112,8 +123,8 @@ export function AppHeader({
             style={styles.dropdownBackdrop}
             onPress={() => setIsZoneDropdownOpen(false)}
           />
-          <View style={styles.zoneDropdownMenu}>
-            <Text style={styles.zoneDropdownEyebrow}>SCR-STF-02: WORK ZONE</Text>
+          <View style={[styles.zoneDropdownMenu, anchorStyle]}>
+            <Text style={styles.zoneDropdownEyebrow}>ACTIVE WORK ZONE</Text>
             {WORK_ZONE_DROPDOWN_ITEMS.map((item) => {
               const isSelected =
                 zone === item ||
@@ -217,7 +228,7 @@ export function AppHeader({
             style={styles.dropdownBackdrop}
             onPress={() => setIsNotifModalOpen(false)}
           />
-          <View style={styles.notifDropdownMenu}>
+          <View style={[styles.notifDropdownMenu, anchorStyle]}>
             <Text style={styles.notifDropdownEyebrow}>NOTIFICATIONS</Text>
             <View style={styles.notifDropdownList}>
               <Pressable
@@ -272,7 +283,7 @@ export function AppHeader({
             style={styles.dropdownBackdrop}
             onPress={() => setIsAvatarDropdownOpen(false)}
           />
-          <View style={styles.avatarDropdownMenu}>
+          <View style={[styles.avatarDropdownMenu, anchorStyle]}>
             <Text style={styles.avatarName}>{operatorName || 'Alex Tran'}</Text>
             <Text style={styles.avatarRole}>Warehouse Operator · {zone}</Text>
             <View style={styles.dropdownDivider} />
@@ -374,7 +385,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingTop: Platform.select({ android: 12, default: 48 }),
+    // paddingTop is applied inline from `useTopInset()`.
+    paddingTop: 0,
     paddingBottom: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -434,7 +446,6 @@ const styles = StyleSheet.create({
   },
   zoneDropdownMenu: {
     position: 'absolute',
-    top: Platform.select({ android: 56, default: 92 }),
     left: 16,
     width: 250,
     backgroundColor: '#ffffff',
@@ -457,6 +468,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   zoneDropdownItem: {
     flexDirection: 'row',
@@ -472,10 +484,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   zoneDropdownItemTextActive: {
     color: colors.primary,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   rightGroup: {
     flexDirection: 'row',
@@ -483,9 +497,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    // 44pt floor for touch targets (iOS HIG / Material). These three header
+    // controls were 36pt and sit furthest from the thumb on the screen.
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
@@ -496,8 +512,9 @@ const styles = StyleSheet.create({
   },
   bellBadge: {
     position: 'absolute',
-    top: 7,
-    right: 7,
+    // Scales with the circle: was 7 on a 36pt circle (0.39 of the radius).
+    top: 9,
+    right: 9,
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -506,9 +523,9 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
   logoutCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
@@ -520,9 +537,9 @@ const styles = StyleSheet.create({
     borderColor: colors.dangerBorder,
   },
   avatarCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -543,7 +560,6 @@ const styles = StyleSheet.create({
   },
   notifDropdownMenu: {
     position: 'absolute',
-    top: Platform.select({ android: 56, default: 92 }),
     right: 12,
     width: 288,
     backgroundColor: '#ffffff',
@@ -567,6 +583,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingTop: 4,
     paddingBottom: 6,
+    fontFamily: typography.fontSans,
   },
   notifDropdownList: {
     gap: 4,
@@ -607,6 +624,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   notifItemDesc: {
     fontSize: 11,
@@ -620,10 +638,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     paddingLeft: 32,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   avatarDropdownMenu: {
     position: 'absolute',
-    top: Platform.select({ android: 56, default: 92 }),
     right: 12,
     width: 224,
     backgroundColor: '#ffffff',
@@ -665,6 +683,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: '500',
     flex: 1,
+    fontFamily: typography.fontSans,
   },
   avatarLogoutBtn: {
     flexDirection: 'row',
@@ -678,6 +697,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.danger,
+    fontFamily: typography.fontSans,
   },
   logoutModalOverlay: {
     flex: 1,

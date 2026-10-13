@@ -89,13 +89,13 @@ export function WorkflowTemplateCard({
           {renderIcon()}
         </View>
         <View style={[styles.badge, { backgroundColor: badgeStyle.bg, borderColor: badgeStyle.border }]}>
-          <Text style={[styles.badgeText, { color: badgeStyle.text }]}>
+          <Text style={[styles.badgeText, { color: badgeStyle.text }]} numberOfLines={1}>
             {workflow.category}
           </Text>
         </View>
       </View>
 
-      <Text style={styles.name}>{workflow.name}</Text>
+      <Text style={styles.name} numberOfLines={1}>{workflow.name}</Text>
       <Text style={styles.note} numberOfLines={2}>
         {workflow.note}
       </Text>
@@ -127,6 +127,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+    gap: 8,
   },
   iconBox: {
     width: 40,
@@ -134,12 +135,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 999,
     borderWidth: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   badgeText: {
     fontSize: 8,
@@ -160,5 +164,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 14,
     marginTop: 4,
+    fontFamily: typography.fontSans,
   },
 });

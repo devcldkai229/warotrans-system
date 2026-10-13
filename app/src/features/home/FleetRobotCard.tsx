@@ -101,6 +101,7 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 8,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   textInfo: {
     color: colors.info,
@@ -125,10 +126,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   payloadText: {
     fontSize: 10,
     fontWeight: '600',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
 });

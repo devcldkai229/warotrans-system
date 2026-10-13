@@ -42,6 +42,7 @@ interface VerifyModalProps {
   initialMismatch?: boolean;
   initialBarcodeInput?: string;
   otherContainers?: OtherContainerInfo[];
+  isBulkMode?: boolean;
   onClose: () => void;
   onSuccess: (code: string) => void;
   onReportIssue: () => void;
@@ -61,6 +62,7 @@ export function VerifyModal({
     { code: 'BOX-102', slot: 'Slot 2 (Mid)' },
     { code: 'BOX-103', slot: 'Slot 3 (Rear)' },
   ],
+  isBulkMode = false,
   onClose,
   onSuccess,
   onReportIssue,
@@ -119,7 +121,7 @@ export function VerifyModal({
       <View style={[styles.sheetContainer, !mismatch && styles.sheetContainerVerify]}>
           {!mismatch ? (
             /* ================================================================
-               SCR-STF-14: HANDOVER CONFIRMATION HUD
+               Prototype ref: SCR-STF-14 (routes/index.tsx) — HANDOVER CONFIRMATION HUD
                ================================================================ */
             <ScrollView
               style={styles.sheetScroll}
@@ -130,7 +132,9 @@ export function VerifyModal({
               <View style={styles.headerRow}>
                 <View style={styles.headerTitleCol}>
                   <View style={styles.eyebrowRow}>
-                    <Text style={styles.eyebrow}>SCR-STF-14 · HANDOVER CONFIRMATION HUD</Text>
+                    <Text style={styles.eyebrow}>
+                      {isBulkMode ? 'DOCK BATCH HANDOVER' : 'HANDOVER VERIFICATION'}
+                    </Text>
                     <View
                       style={[
                         styles.timerBadge,
@@ -144,12 +148,12 @@ export function VerifyModal({
                           isUrgent && styles.timerTextUrgent,
                         ]}
                       >
-                        {timeLeft > 0 ? `${mins}:${secs} (300s Timeout)` : 'Timed Out!'}
+                        {timeLeft > 0 ? `${mins}:${secs}` : 'Timed Out!'}
                       </Text>
                     </View>
                   </View>
                   <Text style={styles.sheetTitle}>
-                    Confirm Handover Execution · {robotCode}
+                    {isBulkMode ? `Confirm Batch Handover · ${robotCode}` : `Confirm Handover · ${robotCode}`}
                   </Text>
                   <Text style={styles.sheetSubtitle}>{location}</Text>
                 </View>
@@ -163,21 +167,13 @@ export function VerifyModal({
                 </Pressable>
               </View>
 
-              {/* Flatbed Tray Layout Guidance */}
-              <View style={styles.schematicHeader}>
-                <Text style={styles.schematicTitle}>
-                  AMR FLATBED DECK · PHYSICAL SLOT GUIDE:
-                </Text>
-                <Text style={styles.schematicBadge}>Flatbed 3-Tray Layout</Text>
-              </View>
-
               {/* 3-Slot Physical Flatbed Tray Schematic */}
               <View style={styles.schematicCard}>
                 <View style={styles.slotsRow}>
                   {[
                     { label: 'Slot 1 (Front)', code: targetContainer, isTarget: true },
-                    { label: 'Slot 2 (Mid)', code: otherContainers[0]?.code || 'EMPTY', isTarget: false },
-                    { label: 'Slot 3 (Rear)', code: otherContainers[1]?.code || 'EMPTY', isTarget: false },
+                    { label: 'Slot 2 (Mid)', code: otherContainers[0]?.code || 'EMPTY', isTarget: isBulkMode },
+                    { label: 'Slot 3 (Rear)', code: otherContainers[1]?.code || 'EMPTY', isTarget: isBulkMode },
                   ].map((s) => (
                     <View
                       key={s.label}
@@ -207,7 +203,7 @@ export function VerifyModal({
                             s.isTarget && styles.slotTagTextTarget,
                           ]}
                         >
-                          {s.isTarget ? 'TARGET' : 'LOCKED'}
+                          {isBulkMode ? 'BATCH' : s.isTarget ? 'TARGET' : 'LOCKED'}
                         </Text>
                       </View>
                     </View>
@@ -215,134 +211,173 @@ export function VerifyModal({
                 </View>
               </View>
 
-              {/* Container To Unload Highlight Box */}
-              <View style={styles.targetContainerCard}>
-                <View style={styles.targetCardTop}>
-                  <View style={styles.targetIconRow}>
-                    <Text style={styles.targetCardTag}>📦 UNLOAD CONTAINER AT THIS STATION</Text>
-                  </View>
-                  <View style={styles.actionPill}>
-                    <Text style={styles.actionPillText}>SCAN TO UNLOAD</Text>
-                  </View>
-                </View>
-
-                <View style={styles.targetInfoRow}>
-                  <Text style={styles.targetCodeText}>{targetContainer}</Text>
-                  <Text style={styles.targetQtyText}>
-                    {quantity} × {productName}
-                  </Text>
-                </View>
-
-                <View style={styles.targetDestBox}>
-                  <Text style={styles.targetDestLabel}>Target Shelf Destination</Text>
-                  <Text style={styles.targetDestValue}>{targetShelf}</Text>
-                </View>
-              </View>
-
-              {/* Keep Onboard Warning */}
-              {otherContainers.length > 0 && (
-                <View style={styles.keepOnboardCard}>
-                  <View style={styles.keepOnboardHeader}>
-                    <Text style={styles.keepOnboardTitle}>
-                      🔒 KEEP ONBOARD (DO NOT UNLOAD):
-                    </Text>
-                    <Text style={styles.keepOnboardCount}>
-                      {otherContainers.length} Totes for next stops
-                    </Text>
-                  </View>
-                  {otherContainers.map((c) => (
-                    <View key={c.code} style={styles.keepOnboardItem}>
-                      <Text style={styles.keepOnboardCode}>• {c.code} ({c.slot})</Text>
-                      <Text style={styles.keepOnboardNote}>Keep Onboard</Text>
+              {isBulkMode ? (
+                /* Bulk Batch Handover Mode (At Dock) */
+                <View style={styles.targetContainerCard}>
+                  <View style={styles.targetCardTop}>
+                    <Text style={styles.targetCardTag}>📦 BATCH LOAD / UNLOAD AT DOCK</Text>
+                    <View style={styles.actionPill}>
+                      <Text style={styles.actionPillText}>{otherContainers.length + 1} CONTAINERS</Text>
                     </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Hybrid Barcode Input: Text Input + Camera Scan */}
-              <View style={styles.barcodeSection}>
-                <Text style={styles.barcodeSectionTitle}>
-                  BARCODE VERIFICATION (HYBRID INPUT)
-                </Text>
-
-                <View style={styles.inputRow}>
-                  <TextInput
-                    value={barcodeInput}
-                    onChangeText={setBarcodeInput}
-                    placeholder={`Scan or enter code ${targetContainer}...`}
-                    placeholderTextColor="#94a3b8"
-                    autoCapitalize="characters"
-                    style={styles.barcodeTextInput}
-                  />
-                  <Pressable
-                    onPress={() => setIsScannerOpen(true)}
-                    style={({ pressed }) => [
-                      styles.cameraScanBtn,
-                      pressed && styles.cameraScanBtnPressed,
-                    ]}
-                  >
-                    <Camera size={18} color="#ffffff" />
-                    <Text style={styles.cameraScanText}>SCAN</Text>
-                  </Pressable>
-                </View>
-
-                {/* Quick Simulation Chips */}
-                <View style={styles.simRow}>
-                  <Text style={styles.simLabel}>Quick Sim:</Text>
-                  <View style={styles.simChips}>
-                    <Pressable
+                  </View>
+                  <View style={styles.targetInfoRow}>
+                    <Text style={styles.targetCodeText}>Batch Handover</Text>
+                    <Text style={styles.targetQtyText}>
+                      Transfer all {otherContainers.length + 1} containers at {location}
+                    </Text>
+                  </View>
+                  <View style={{ marginTop: 14 }}>
+                    <Button
+                      label={`Confirm All (${otherContainers.length + 1} Totes)`}
+                      variant="primary"
+                      icon={<Check size={16} color="#ffffff" />}
                       onPress={() => {
-                        setBarcodeInput(targetContainer);
-                        handleVerify(targetContainer);
+                        triggerHaptic('success');
+                        onSuccess(targetContainer);
+                        toast.success(`Batch handover completed for ${otherContainers.length + 1} containers.`);
                       }}
-                      style={styles.simChipSuccess}
-                    >
-                      <Text style={styles.simChipSuccessText}>
-                        Match ({targetContainer})
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => {
-                        setBarcodeInput('BOX-999');
-                        handleVerify('BOX-999');
-                      }}
-                      style={styles.simChipDanger}
-                    >
-                      <Text style={styles.simChipDangerText}>
-                        Mismatch (BOX-999)
-                      </Text>
-                    </Pressable>
+                      style={{ width: '100%', minHeight: 48, borderRadius: 8 }}
+                      textStyle={{ fontWeight: '900', fontSize: 13 }}
+                    />
                   </View>
                 </View>
-              </View>
+              ) : (
+                /* Selective Handover Mode (At Rack Stop) */
+                <>
+                  {/* Container To Unload Highlight Box */}
+                  <View style={styles.targetContainerCard}>
+                    <View style={styles.targetCardTop}>
+                      <Text style={styles.targetCardTag}>📦 TARGET CONTAINER TO UNLOAD</Text>
+                      <View style={styles.actionPill}>
+                        <Text style={styles.actionPillText}>SCAN TO UNLOAD</Text>
+                      </View>
+                    </View>
 
-              {/* Action Buttons */}
-              <View style={styles.actionsGrid}>
-                <Button
-                  label="Report Issue"
-                  variant="outline"
-                  icon={<AlertTriangle size={15} color={colors.danger} />}
-                  onPress={onReportIssue}
-                  style={styles.reportIssueBtn}
-                  textStyle={{ color: colors.danger, fontWeight: '900', fontSize: 12 }}
-                />
-                <Button
-                  label="Confirm Handover"
-                  variant="primary"
-                  icon={<Check size={16} color="#ffffff" />}
-                  onPress={() => handleVerify()}
-                  disabled={!barcodeInput.trim()}
-                  style={styles.confirmBtn}
-                  textStyle={{ fontWeight: '900', fontSize: 12 }}
-                />
-              </View>
+                    <View style={styles.targetInfoRow}>
+                      <Text style={styles.targetCodeText}>{targetContainer}</Text>
+                      <Text style={styles.targetQtyText}>
+                        {quantity} × {productName}
+                      </Text>
+                    </View>
+
+                    <View style={styles.targetDestBox}>
+                      <Text style={styles.targetDestLabel}>Target Shelf Destination</Text>
+                      <Text style={styles.targetDestValue}>{targetShelf}</Text>
+                    </View>
+                  </View>
+
+                  {/* Keep Onboard Warning */}
+                  {otherContainers.length > 0 && (
+                    <View style={styles.keepOnboardCard}>
+                      <View style={styles.keepOnboardHeader}>
+                        <Text style={styles.keepOnboardTitle}>
+                          🔒 KEEP ONBOARD (DO NOT TOUCH):
+                        </Text>
+                        <Text style={styles.keepOnboardCount}>
+                          {otherContainers.length} Totes for next stops
+                        </Text>
+                      </View>
+                      {otherContainers.map((c) => (
+                        <View key={c.code} style={styles.keepOnboardItem}>
+                          <Text style={styles.keepOnboardCode}>• {c.code} ({c.slot})</Text>
+                          <Text style={styles.keepOnboardNote}>Keep Onboard</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Hybrid Barcode Input: Text Input + Camera Scan */}
+                  <View style={styles.barcodeSection}>
+                    <Text style={styles.barcodeSectionTitle}>
+                      SCAN OR ENTER CONTAINER BARCODE
+                    </Text>
+
+                    <View style={styles.inputRow}>
+                      <TextInput
+                        value={barcodeInput}
+                        onChangeText={setBarcodeInput}
+                        placeholder={`Scan barcode (${targetContainer})...`}
+                        placeholderTextColor="#94a3b8"
+                        autoCapitalize="characters"
+                        style={styles.barcodeTextInput}
+                      />
+                      <Pressable
+                        onPress={() => setIsScannerOpen(true)}
+                        style={({ pressed }) => [
+                          styles.cameraScanBtn,
+                          pressed && styles.cameraScanBtnPressed,
+                        ]}
+                      >
+                        <Camera size={18} color="#ffffff" />
+                        <Text style={styles.cameraScanText}>SCAN</Text>
+                      </Pressable>
+                    </View>
+
+                    {/* Quick Simulation Chips */}
+                    <View style={styles.simRow}>
+                      <Text style={styles.simLabel}>Demo Sim:</Text>
+                      <View style={styles.simChips}>
+                        <Pressable
+                          onPress={() => {
+                            setBarcodeInput(targetContainer);
+                            handleVerify(targetContainer);
+                          }}
+                          style={styles.simChipSuccess}
+                        >
+                          <Text style={styles.simChipSuccessText}>
+                            Match ({targetContainer})
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => {
+                            setBarcodeInput('BOX-999');
+                            handleVerify('BOX-999');
+                          }}
+                          style={styles.simChipDanger}
+                        >
+                          <Text style={styles.simChipDangerText}>
+                            Mismatch (BOX-999)
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Action Buttons */}
+                  <View style={styles.actionsGrid}>
+                    <Button
+                      label="Report Issue"
+                      variant="outline"
+                      icon={<AlertTriangle size={15} color={colors.danger} />}
+                      onPress={onReportIssue}
+                      style={styles.reportIssueBtn}
+                      textStyle={{ color: colors.danger, fontWeight: '900', fontSize: 12 }}
+                    />
+                    <Button
+                      label="Confirm Handover"
+                      variant="primary"
+                      icon={<Check size={16} color="#ffffff" />}
+                      onPress={() => handleVerify()}
+                      disabled={!barcodeInput.trim()}
+                      style={styles.confirmBtn}
+                      textStyle={{ fontWeight: '900', fontSize: 12 }}
+                    />
+                  </View>
+                </>
+              )}
 
               {timeLeft <= 0 && (
                 <View style={styles.timeoutAlert}>
                   <Text style={styles.timeoutAlertText}>
                     300s Handover timeout exceeded!
                   </Text>
-                  <Pressable onPress={() => setTimeLeft(60)}>
+                  <Pressable
+                    onPress={() => setTimeLeft(60)}
+                    style={({ pressed }) => [styles.timeoutExtendBtn, pressed && styles.timeoutExtendBtnPressed]}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Request 60 second extension"
+                  >
                     <Text style={styles.timeoutExtendText}>
                       + Request 60s Extension
                     </Text>
@@ -352,7 +387,7 @@ export function VerifyModal({
             </ScrollView>
           ) : (
             /* ================================================================
-               SCR-STF-15: BARCODE MISMATCH ALERT MODAL
+               Prototype ref: SCR-STF-15 (routes/index.tsx) — BARCODE MISMATCH ALERT MODAL
                ================================================================ */
             <View style={styles.mismatchContainer}>
               <View style={styles.mismatchHeaderRow}>
@@ -361,7 +396,7 @@ export function VerifyModal({
                 </View>
                 <View style={styles.mismatchTitleCol}>
                   <Text style={styles.mismatchTitle}>
-                    SCR-STF-15: Barcode Mismatch!
+                    Barcode Mismatch!
                   </Text>
                   <Text style={styles.mismatchSubtitle}>
                     Scanned barcode does not match expected target {targetContainer} assigned for {location}.
@@ -391,7 +426,7 @@ export function VerifyModal({
               {/* Recovery Action Buttons */}
               <View style={styles.mismatchActions}>
                 <Button
-                  label="Retry Barcode Scan"
+                  label="Retry Scan"
                   variant="primary"
                   icon={<RefreshCw size={18} color="#ffffff" />}
                   onPress={() => {
@@ -401,7 +436,7 @@ export function VerifyModal({
                   style={{ width: '100%', minHeight: 64, borderRadius: 6 }}
                 />
                 <Button
-                  label="Report Misplaced Container"
+                  label="Report Misplaced"
                   variant="outline"
                   icon={<AlertTriangle size={15} color={colors.danger} />}
                   onPress={onReportIssue}
@@ -609,6 +644,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.textMuted,
     marginBottom: 2,
+    fontFamily: typography.fontSans,
   },
   slotCode: {
     fontSize: 11,
@@ -632,9 +668,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   slotTagText: {
-    fontSize: 7,
+    // 9pt floor per AGENTS.md §2.2; was 7pt, illegible at warehouse distance.
+    fontSize: 9,
     fontWeight: '900',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   slotTagTextTarget: {
     color: '#ffffff',
@@ -662,6 +700,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   actionPill: {
     backgroundColor: colors.primary,
@@ -673,6 +712,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 8,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   targetInfoRow: {
     flexDirection: 'row',
@@ -690,6 +730,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   targetDestBox: {
     backgroundColor: colors.surface,
@@ -704,12 +745,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.textMuted,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   targetDestValue: {
     fontSize: 12,
     fontWeight: '900',
     color: colors.textPrimary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   keepOnboardCard: {
     borderWidth: 1,
@@ -731,11 +774,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   keepOnboardCount: {
     fontSize: 10,
     fontWeight: '700',
     color: colors.primary,
+    fontFamily: typography.fontSans,
   },
   keepOnboardItem: {
     flexDirection: 'row',
@@ -761,6 +806,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     letterSpacing: 0.5,
     marginBottom: 8,
+    fontFamily: typography.fontSans,
   },
   inputRow: {
     flexDirection: 'row',
@@ -798,6 +844,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   simRow: {
     flexDirection: 'row',
@@ -810,6 +857,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   simChips: {
     flexDirection: 'row',
@@ -869,6 +917,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.danger,
+    fontFamily: typography.fontSans,
   },
   timeoutExtendText: {
     fontSize: 11,
@@ -876,6 +925,18 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textDecorationLine: 'underline',
     marginTop: 4,
+    fontFamily: typography.fontSans,
+  },
+  timeoutExtendBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  timeoutExtendBtnPressed: {
+    opacity: 0.6,
+    transform: [{ scale: 0.97 }],
   },
   mismatchContainer: {
     padding: 16,
@@ -939,6 +1000,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.textMuted,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   comparisonExpectedVal: {
     fontSize: 14,
@@ -957,6 +1019,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.danger,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   comparisonScannedVal: {
     fontSize: 14,

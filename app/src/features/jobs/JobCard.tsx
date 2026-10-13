@@ -213,12 +213,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.primary,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   payloadSummary: {
     marginTop: 2,
     fontSize: 10,
     fontWeight: '700',
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   statusTag: {
     paddingHorizontal: 7,
@@ -231,27 +233,36 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.3,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   tagWaiting: {
     backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.25)',
   },
   tagWaitingText: {
     color: '#92400e',
   },
   tagTransit: {
     backgroundColor: '#e0f2fe',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 92, 209, 0.25)',
   },
   tagTransitText: {
     color: colors.primary,
   },
   tagComplete: {
     backgroundColor: '#dcfce7',
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.25)',
   },
   tagCompleteText: {
     color: '#15803d',
   },
   tagQueued: {
     backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   tagQueuedText: {
     color: colors.textSecondary,
@@ -265,6 +276,8 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     backgroundColor: 'rgba(241, 245, 249, 0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.8)',
   },
   targetIconWrap: {
     width: 40,
@@ -286,23 +299,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
+    fontFamily: typography.fontSans,
   },
   targetTitle: {
     fontSize: 12,
     fontWeight: '900',
     color: colors.textPrimary,
     marginTop: 1,
+    fontFamily: typography.fontSans,
   },
   targetRoute: {
     fontSize: 10,
     fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: 10,
@@ -311,11 +328,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
   },
   robotLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   robotCode: {
     fontFamily: typography.fontMono,

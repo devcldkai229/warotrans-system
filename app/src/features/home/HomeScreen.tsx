@@ -20,6 +20,7 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 import { colors } from '../../shared/theme/colors';
+import { dockReservedSpace } from '../../shared/theme/layout';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { useToast } from '../../shared/context/ToastContext';
@@ -48,7 +49,7 @@ const INITIAL_ROBOTS: MapRobot[] = [
 
 export function HomeScreen() {
   const { session } = useAuth();
-  const { navigate } = useNavigation();
+  const { navigate, dockHeight } = useNavigation();
   const { success: showToastSuccess } = useToast();
   const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
   const [sheetExpanded, setSheetExpanded] = useState<boolean>(() => {
@@ -75,6 +76,10 @@ export function HomeScreen() {
   }, []);
 
   const activeZone = session?.zone || 'Inbound Dock 01';
+
+  // Measured against the live dock height, so the peek sheet always clears it
+  // with a real gutter instead of three hand-tuned constants that can drift.
+  const dockInset = dockReservedSpace(dockHeight);
 
   const handleOpenHandoverTask = () => {
     triggerHaptic('tap');
@@ -150,9 +155,10 @@ export function HomeScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           !sheetExpanded && styles.scrollContentCollapsed,
+          sheetExpanded && { paddingBottom: dockInset },
         ]}
         bounces={false}
-        scrollEnabled={sheetExpanded}
+        scrollEnabled
       >
         {/* 1. Technical Blueprint Facility Radar Map */}
         <MiniFacilityMap
@@ -167,7 +173,10 @@ export function HomeScreen() {
 
         {/* 2. Interactive 2-Stage Bottom Sheet (Grab/Uber style with swipe up/down) */}
         <View
-          style={[styles.bottomSheet, !sheetExpanded && styles.bottomSheetCollapsed]}
+          style={[
+            styles.bottomSheet,
+            !sheetExpanded && { paddingBottom: dockInset },
+          ]}
           {...panResponder.panHandlers}
         >
           {/* Handle Bar & Sheet Header Toggle */}
@@ -409,7 +418,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingBottom: Platform.select({ ios: 80, default: 72 }),
+    // Bottom padding is applied inline from the measured dock height.
+    paddingBottom: 0,
   },
   scrollContentCollapsed: {
     flexGrow: 1,
@@ -418,7 +428,11 @@ const styles = StyleSheet.create({
   },
   mapCollapsed: {
     flex: 1,
-    minHeight: 360,
+    // `flex: 1` already fills all leftover space, so this floor only binds on
+    // short devices. At 360 the peek sheet could not fit below a 667pt screen
+    // (iPhone SE) or a 640dp warehouse PDA, which clipped the sheet handle and
+    // left the fleet view impossible to expand.
+    minHeight: 240,
   },
   mapExpanded: {
     height: 250,
@@ -438,13 +452,10 @@ const styles = StyleSheet.create({
     zIndex: 30,
     paddingBottom: 0,
   },
-  bottomSheetCollapsed: {
-    paddingBottom: Platform.select({ ios: 78, default: 70 }),
-  },
   sheetHandleArea: {
     alignItems: 'center',
     paddingTop: 10,
-    paddingBottom: 6,
+    paddingBottom: 9,
     paddingHorizontal: 16,
   },
   handlePill: {
@@ -466,10 +477,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   amberDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     backgroundColor: colors.warning,
+    // A bare `warning` fill is only 1.81:1 on #f8fafc. The deep amber ring
+    // supplies the >=3:1 boundary WCAG 1.4.11 requires for meaningful graphics,
+    // while keeping the amber signal readable at a glance.
+    borderWidth: 1.5,
+    borderColor: colors.warningText,
   },
   sheetTitle: {
     fontSize: 10,
@@ -537,7 +553,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   etaText: {
-    color: '#854d0e',
+    color: colors.warningText,
     fontSize: 9,
     fontFamily: typography.fontMono,
     fontWeight: '800',
@@ -565,7 +581,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   openTaskBtn: {
-    height: 32,
+    // 44pt: this is the primary CTA of the home screen and was previously 32pt,
+    // only 73% of the minimum touch target for gloved operation.
+    minHeight: 44,
     backgroundColor: colors.primary,
     paddingHorizontal: 14,
     justifyContent: 'center',
@@ -593,7 +611,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     backgroundColor: colors.primary,
     borderRadius: 12,
-    paddingVertical: 12,
+    // 13pt text + 28pt padding = 45pt tall target.
+    paddingVertical: 14,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -767,7 +786,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   robotStatusTextEnRoute: {
-    fontSize: 8,
+    // 9pt is the floor in AGENTS.md §2.2 for protocol/status codes; 8pt was
+    // ~2.7mm cap height at 3x and unreadable at arm's length.
+    fontSize: 9,
     fontWeight: '900',
     color: colors.primary,
     fontFamily: typography.fontSans,
@@ -779,7 +800,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   robotStatusTextStandby: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     color: colors.success,
     fontFamily: typography.fontSans,
@@ -838,7 +859,7 @@ const styles = StyleSheet.create({
   },
   normalSubtitle: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 1,
     fontFamily: typography.fontSans,

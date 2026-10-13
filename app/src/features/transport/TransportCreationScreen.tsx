@@ -129,14 +129,14 @@ export function TransportCreationScreen() {
       <SubScreenHeader
         label={
           step === 1
-            ? 'NEW TRANSPORT REQUEST'
-            : `SCR-STF-11 · ${selectedWorkflow.name.toUpperCase()}`
+            ? 'NEW TRANSPORT ORDER'
+            : selectedWorkflow.name.toUpperCase()
         }
         title={
           step === 1
             ? 'Select Workflow'
             : step === 2
-            ? 'Configure Transport Mission'
+            ? 'Configure Mission Payload'
             : 'Dispatch Confirmed'
         }
         onBack={() => {
@@ -154,10 +154,10 @@ export function TransportCreationScreen() {
           <View style={{ gap: 12 }}>
             <View style={styles.workflowIntro}>
               <Text style={styles.workflowIntroTitle}>
-                SCR-STF-10: 5 Routine + 1 Safety Workflow
+                Select Workflow Template
               </Text>
               <View style={styles.rbacPill}>
-                <Text style={styles.rbacPillText}>Section 8 RBAC</Text>
+                <Text style={styles.rbacPillText}>5 Templates</Text>
               </View>
             </View>
 
@@ -179,11 +179,13 @@ export function TransportCreationScreen() {
           <View style={{ gap: 14 }}>
             {/* Workflow Banner */}
             <View style={styles.flowBanner}>
-              <View style={styles.flowBadge}>
-                <Text style={styles.flowBadgeText}>{selectedWorkflow.category}</Text>
+              <View style={styles.flowBannerTop}>
+                <View style={styles.flowBadge}>
+                  <Text style={styles.flowBadgeText}>{selectedWorkflow.category}</Text>
+                </View>
+                <Text style={styles.flowTitle} numberOfLines={1}>{selectedWorkflow.name}</Text>
               </View>
-              <Text style={styles.flowTitle}>{selectedWorkflow.name}</Text>
-              <Text style={styles.flowNote}>{selectedWorkflow.note}</Text>
+              <Text style={styles.flowCode} numberOfLines={1}>{selectedWorkflow.code}</Text>
             </View>
 
             {/* Flatbed 3-Slot Selector */}
@@ -281,7 +283,7 @@ export function TransportCreationScreen() {
             </View>
 
             <Button
-              label={`Dispatch Multi-Tote Mission (${slots.length} Totes ➔ AMR-01)`}
+              label={`Dispatch (AMR-01 · ${slots.length} ${slots.length === 1 ? 'Tote' : 'Totes'})`}
               icon={<Rocket size={18} color="#ffffff" />}
               onPress={handleConfirmDispatch}
               variant="primary"
@@ -296,7 +298,7 @@ export function TransportCreationScreen() {
             <View style={styles.successIconBadge}>
               <Check size={28} color="#ffffff" />
             </View>
-            <Text style={styles.successTitle}>Smart Multi-Tote Dispatch Queued</Text>
+            <Text style={styles.successTitle}>Transport Order Dispatched</Text>
             <Text style={styles.successSub}>
               {slots.length} container{slots.length !== 1 ? 's' : ''} allocated to AMR-01 for autonomous transport.
             </Text>
@@ -311,7 +313,7 @@ export function TransportCreationScreen() {
                 <Text style={styles.receiptHighlight}>{selectedWorkflow.name}</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Assigned Robot:</Text>
+                <Text style={styles.receiptLabel}>Assigned Carrier:</Text>
                 <Text style={styles.receiptSuccess}>AMR-01 (Online · 85%)</Text>
               </View>
               <View style={styles.receiptRow}>
@@ -326,14 +328,14 @@ export function TransportCreationScreen() {
 
             <View style={{ width: '100%', gap: 8, marginTop: 16 }}>
               <Button
-                label="Track on Live Nav2 Map"
+                label="Track on Live Map"
                 icon={<MapPin size={16} color="#ffffff" />}
                 onPress={() => navigate('live_map', { robotId: 'AMR-01', jobId: 'TR-2049' })}
                 variant="primary"
                 size="lg"
               />
               <Button
-                label="Done & Return to Console"
+                label="Back to Hub"
                 onPress={goBack}
                 variant="outline"
                 size="md"
@@ -353,7 +355,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 130,
   },
   workflowIntro: {
     flexDirection: 'row',
@@ -389,15 +391,20 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
+    padding: 12,
+    gap: 6,
     ...shadows.panel,
+  },
+  flowBannerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   flowBadge: {
     backgroundColor: colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
-    alignSelf: 'flex-start',
   },
   flowBadgeText: {
     fontSize: 9,
@@ -406,16 +413,19 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontMono,
   },
   flowTitle: {
-    fontSize: 16,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
     fontWeight: '900',
     color: colors.textPrimary,
-    marginTop: 6,
     fontFamily: typography.fontSans,
   },
-  flowNote: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
+  flowCode: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
   },
   deckCard: {
     backgroundColor: '#ffffff',
@@ -435,6 +445,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   deckSlotsCount: {
     fontSize: 10,
@@ -464,10 +475,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   slotTabLabelActive: {
     color: colors.primary,
     fontWeight: '900',
+    fontFamily: typography.fontSans,
   },
   slotTabCode: {
     fontSize: 11,
@@ -494,6 +507,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.primary,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   configCard: {
     backgroundColor: '#ffffff',
@@ -551,6 +565,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 16,
+    fontFamily: typography.fontSans,
   },
   receiptBox: {
     width: '100%',
@@ -569,6 +584,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   receiptVal: {
     fontSize: 11,

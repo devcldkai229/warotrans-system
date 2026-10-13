@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -12,12 +11,13 @@ import {
   Rocket,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { dockMetrics } from '../../shared/theme/layout';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { MainTab, useNavigation } from './NavigationContext';
 
 export function BottomTabBar() {
-  const { activeTab, switchTab, activeJobCount } = useNavigation();
+  const { activeTab, switchTab, activeJobCount, setDockHeight } = useNavigation();
 
   const handleTabPress = (tab: MainTab) => {
     triggerHaptic('tap');
@@ -30,7 +30,7 @@ export function BottomTabBar() {
 
   return (
     <View style={styles.dockWrapper} pointerEvents="box-none">
-      <View style={styles.dockPill}>
+      <View style={styles.dockPill} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}>
         {/* 1. HOME TAB */}
         <Pressable
           onPress={() => handleTabPress('home')}
@@ -102,7 +102,7 @@ export function BottomTabBar() {
 const styles = StyleSheet.create({
   dockWrapper: {
     position: 'absolute',
-    bottom: Platform.select({ android: 16, default: 24 }),
+    bottom: dockMetrics.bottomOffset,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -131,7 +131,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 84,
     paddingHorizontal: 26,
-    paddingVertical: 10,
+    // 23pt icon + 22pt padding = 45pt tall, clearing the 44pt minimum target
+    // (iOS HIG / Material) for the app's primary navigation.
+    paddingVertical: 11,
     borderRadius: 999,
   },
   tabBtnActive: {
@@ -150,20 +152,25 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -8,
-    backgroundColor: colors.danger,
+    // Nudged up and out so the counter reads as a separate chip instead of
+    // sitting on top of the PackageCheck glyph. Overlap with the icon's top
+    // corner drops from ~9x13pt to ~4x9pt.
+    top: -8,
+    right: -13,
+    backgroundColor: colors.warning,
     borderRadius: 99,
     minWidth: 17,
     height: 17,
     alignItems: 'center',
     justifyContent: 'center',
+    // Deep amber ring rather than white: a white ring disappears against the
+    // white dock pill, and this matches the amberDot treatment on Home.
     borderWidth: 1.5,
-    borderColor: '#ffffff',
+    borderColor: colors.warningText,
     paddingHorizontal: 3,
   },
   badgeText: {
-    color: '#ffffff',
+    color: colors.textPrimary,
     fontSize: 9,
     fontWeight: '900',
     fontFamily: typography.fontMono,

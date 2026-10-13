@@ -11,14 +11,48 @@ import {
 import {
   BatteryMedium,
   LocateFixed,
-  Navigation,
   Search,
   User,
 } from 'lucide-react-native';
-import Svg, { Line, Defs, Pattern, Rect } from 'react-native-svg';
+import Svg, { Line, Defs, G, Pattern, Rect, Path } from 'react-native-svg';
 import { colors } from '../../shared/theme/colors';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
+
+/**
+ * AMR heading chevron for the 40pt puck marker.
+ *
+ * The puck's inner disc is 40 - 2*3(border) = 34pt across, i.e. 17pt radius.
+ * Geometry below is expressed in viewBox units, centred on (12, 12) with
+ * forward = -y (heading 0deg points up):
+ *
+ *   tip   (12,  1.50)  R_tip   = 10.50u -> 9.6pt from centre (22pt Svg)
+ *   wing  (20.75,18.25) R_wings = 10.78u -> 9.9pt from centre
+ *   notch (12, 16.25)  R_notch =  4.25u
+ *
+ * Two rules are baked in:
+ *
+ * 1. AREA CENTROID == (12, 12) exactly. The notch removes mass from the tail,
+ *    so a bounding-box-centred chevron always has its mass sitting behind the
+ *    dot; the previous path was 1.50u (1.38pt) low, which is what read as
+ *    "thụt / lệch tâm" at every heading. Notch depth is the free variable
+ *    that fixes this.
+ *
+ * 2. EVEN RADIAL ENVELOPE: R_wings ~= R_tip (ratio 1.03, was 1.41). Keeping
+ *    both within ~0.3u of each other means the rim gap is ~7.2pt all the way
+ *    round instead of 9.2pt at the front and 6.0pt at the wings - the front of
+ *    the puck no longer reads as empty.
+ *
+ * Resulting silhouette: tip angle 55.2deg (blunter than the old 53.1deg), +17%
+ * rendered ink area (a deliberate "beo them 1 chut", not a redesign), and the
+ * wings sit 2.25u further forward than before, so it reads as a squat solid
+ * puck arrow rather than a thin dart. Stroked with a round join to fatten by
+ * 0.75u and soften the corners for the industrial AMR look.
+ *
+ * Bumping the Svg from 22 to 24pt is the one-line escalation if the arrow still
+ * reads small on a physical PDA; that adds a further ~19% ink area on top.
+ */
+export const ROBOT_HEADING_ARROW_PATH = 'M12 1.5 L20.75 18.25 L12 16.25 L3.25 18.25 Z';
 
 export interface MapRobot {
   id: string;
@@ -316,6 +350,10 @@ export function MiniFacilityMap({
             ]}
             accessibilityRole="button"
             accessibilityLabel={`Select ${robot.id}`}
+            // The marker itself is 40pt and the ID tag is absolutely
+            // positioned, so the layout box is 40x40. hitSlop lifts the
+            // effective target to 52pt without disturbing marker geometry.
+            hitSlop={6}
           >
             {/* Directional Sonar Radar Cone on Web */}
             {isWeb && (
@@ -334,7 +372,7 @@ export function MiniFacilityMap({
             {/* Pulsing Radiating Radar Wave when Selected */}
             <RobotSelectionRadarWave isSelected={isSelected} />
 
-            {/* Directional Robot Marker with Geometrically Centered SVG Navigation Arrow */}
+            {/* Directional Robot Marker with Geometrically Centered Chubby Navigation Arrow */}
             <View
               style={[
                 styles.robotMarker,
@@ -342,21 +380,20 @@ export function MiniFacilityMap({
                 isSelected && styles.robotSelectedGlow,
               ]}
             >
-              <View
-                style={{
-                  width: 24,
-                  height: 24,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transform: [{ rotate: `${robot.headingDeg}deg` }],
-                }}
-              >
-                <Navigation
-                  size={18}
-                  color="#ffffff"
-                  fill="#ffffff"
-                />
-              </View>
+              <Svg width={22} height={22} viewBox="0 0 24 24">
+                {/* Rotate about the viewBox centre explicitly rather than via a
+                    centred wrapper View: the origin stays pinned to the puck
+                    centre even if the rendered Svg size changes later. */}
+                <G rotation={robot.headingDeg} origin="12, 12">
+                  <Path
+                    d={ROBOT_HEADING_ARROW_PATH}
+                    fill="#ffffff"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    strokeLinejoin="round"
+                  />
+                </G>
+              </Svg>
             </View>
 
             {/* Speed & ID Floating Tag - Single-line nowrap horizontal pill */}
@@ -497,7 +534,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   onlinePillText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     color: colors.success,
     fontFamily: typography.fontMono,
@@ -518,9 +555,9 @@ const styles = StyleSheet.create({
     top: 72,
     right: 14,
     zIndex: 30,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderWidth: 1,
     borderColor: colors.border,
@@ -690,6 +727,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+    // Android ignores the shadow* props entirely; without elevation this label
+    // renders completely flat and detaches from the map underneath.
+    elevation: 2,
     ...(Platform.OS === 'web'
       ? ({
           left: '50%',
@@ -706,7 +746,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   workerLabelText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
@@ -780,8 +820,10 @@ const styles = StyleSheet.create({
   robotTag: {
     position: 'absolute',
     top: 44,
-    left: '50%',
-    transform: [{ translateX: -42 }],
+    // Was `left: 50%` + `translateX: -42`, which silently assumed the tag was
+    // exactly 84pt wide. At 9pt the tag grows past that, so centering is now
+    // delegated to the wrapper's `alignItems: 'center'` to stay true at any width.
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -811,7 +853,7 @@ const styles = StyleSheet.create({
   },
   robotTagText: {
     color: colors.textPrimary,
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '900',
     fontFamily: typography.fontMono,
     textAlign: 'center',

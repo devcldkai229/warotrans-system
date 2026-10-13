@@ -137,6 +137,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   stepCount: {
     fontSize: 10,
@@ -177,6 +178,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   circleTextActive: {
     color: colors.textInverse,
@@ -203,6 +205,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   stepTitleExecuting: {
     color: colors.primary,
@@ -221,6 +224,7 @@ const styles = StyleSheet.create({
   typeBadgeText: {
     fontSize: 8,
     fontWeight: '800',
+    fontFamily: typography.fontSans,
   },
   typeTextMove: {
     color: colors.info,
@@ -262,5 +266,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: colors.primaryDark,
+    fontFamily: typography.fontSans,
   },
 });
