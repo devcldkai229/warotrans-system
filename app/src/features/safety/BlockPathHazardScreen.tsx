@@ -53,7 +53,7 @@ export function BlockPathHazardScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-26 · SAFETY EXCEPTION"
+        label="SAFETY EXCEPTION"
         title="Report Block Path Hazard"
         onBack={goBack}
       />
@@ -113,7 +113,7 @@ export function BlockPathHazardScreen() {
                 style={styles.doneBtn}
                 accessibilityRole="button"
               >
-                <Text style={styles.doneBtnText}>Done & Return</Text>
+                <Text style={styles.doneBtnText}>Back to Hub</Text>
               </Pressable>
             </View>
           </View>
@@ -127,15 +127,15 @@ export function BlockPathHazardScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.introTitle}>Floor Hazard & Temporary Obstacle</Text>
                 <Text style={styles.introDesc}>
-                  Section 8.2 Rule 5: Reports aisle blockages so AMRs automatically detour around the hazard.
+                  Report an aisle blockage and the fleet detours around the hazard automatically.
                 </Text>
               </View>
             </View>
 
-            {/* 1. Select Blocked Corridor / Edge */}
+            {/* Blocked Corridor / Edge */}
             <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>
-                1. Select Blocked Corridor / Edge:
+                BLOCKED CORRIDOR
               </Text>
               <View style={{ gap: 8 }}>
                 {EDGES.map((e) => {
@@ -165,10 +165,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 2. Hazard Category */}
+            {/* Hazard Category */}
             <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>
-                2. Hazard Category:
+                HAZARD CATEGORY
               </Text>
               <View style={styles.hazardGrid}>
                 {HAZARD_CATEGORIES.map((h) => {
@@ -192,10 +192,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 3. Severity & Routing Policy */}
+            {/* Severity & Routing Policy */}
             <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>
-                3. Severity & Routing Policy:
+                SEVERITY & ROUTING POLICY
               </Text>
               <View style={styles.severityRow}>
                 <Pressable
@@ -229,10 +229,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 4. Estimated Duration Until Clear */}
+            {/* Estimated Duration Until Clear */}
             <View style={{ gap: 6 }}>
               <Text style={styles.sectionLabel}>
-                Estimated Duration Until Clear:
+                DURATION UNTIL CLEAR
               </Text>
               <View style={styles.durationRow}>
                 {['15m', '30m', '60m', 'Until Clear'].map((dur) => {
@@ -260,10 +260,10 @@ export function BlockPathHazardScreen() {
               </View>
             </View>
 
-            {/* 5. Field Observation Notes */}
+            {/* Field Observation Notes */}
             <View style={{ gap: 6 }}>
               <Text style={styles.sectionLabel}>
-                Field Observation Notes:
+                FIELD NOTES
               </Text>
               <Input
                 value={notes}
@@ -329,7 +329,8 @@ const styles = StyleSheet.create({
   },
   introDesc: {
     fontSize: 11,
-    color: colors.textMuted,
+    fontWeight: '600',
+    color: colors.textSecondary,
     lineHeight: 16,
     marginTop: 2,
   },
@@ -390,7 +391,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hazardCard: {
-    width: 195,
+    // Was a hard `width: 195`, which forced ONE card per 343pt row and left
+    // ~148pt of dead space to the right. `flex: 1` + `minWidth` gives a real 2-up
+    // grid that fills the row, and still wraps if a future label gets long.
+    flex: 1,
+    minWidth: 140,
     minHeight: 57,
     borderRadius: 12,
     borderWidth: 1,
@@ -407,15 +412,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   hazardTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '900',
     color: colors.textPrimary,
-    lineHeight: 16,
+    lineHeight: 17,
     fontFamily: typography.fontSans,
   },
+  // The sub-label is load-bearing disambiguation in a 2x2 picker (it is what
+  // separates "Liquid Spill" from "Fallen Pallet" at a glance), so it stays.
+  // What it did NOT need was the 10pt/textMuted treatment, which is below the
+  // DESIGN_SYSTEM 2.2 floor for card body copy (11-13pt on textSecondary).
   hazardDesc: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
     lineHeight: 15,
     marginTop: 2,
   },
@@ -458,8 +468,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   severityBtnSub: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
     lineHeight: 15,
     marginTop: 2,
   },

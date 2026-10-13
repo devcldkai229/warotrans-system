@@ -123,8 +123,9 @@ export function IssueReportingModal({
             <ArrowLeft size={22} color={colors.textPrimary} />
           </Pressable>
           <View style={styles.headerTitleWrap}>
+            {/* Prototype ref: SCR-STF-16 (routes/index.tsx) */}
             <Text style={styles.headerTag}>
-              SCR-STF-16 · {robotCode} · {jobId}
+              REPORT INCIDENT · {robotCode} · {jobId}
             </Text>
             <Text style={styles.title}>Report Exception & Incident</Text>
           </View>
@@ -210,11 +211,11 @@ export function IssueReportingModal({
               </View>
             </View>
 
-            {/* 2. Photo Evidence (SCR-STF-17) */}
+            {/* Photo Evidence (prototype ref: SCR-STF-17) */}
             <View style={styles.evidenceCard}>
               <View style={styles.evidenceHeader}>
                 <View>
-                  <Text style={styles.sectionLabel}>2. SCR-STF-17: PHOTO EVIDENCE</Text>
+                  <Text style={styles.sectionLabel}>2. PHOTO EVIDENCE</Text>
                   <Text style={styles.evidenceSub}>Attach physical proof for supervisor</Text>
                 </View>
                 <View style={[styles.evidenceBadge, photoAttached && styles.evidenceBadgeAttached]}>

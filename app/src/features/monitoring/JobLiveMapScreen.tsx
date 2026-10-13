@@ -39,7 +39,9 @@ export function JobLiveMapScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label={`SCR-STF-25 · ${jobId}`}
+        /* Prototype ref: SCR-STF-25 (routes/index.tsx). The job ID stays in the
+           eyebrow — it is the only place this screen states which job is tracked. */
+        label={`LIVE FLEET MAP · ${jobId}`}
         title={`Tracking ${selectedRobot}`}
         onBack={goBack}
       />

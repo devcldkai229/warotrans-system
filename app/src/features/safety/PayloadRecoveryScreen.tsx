@@ -56,7 +56,8 @@ export function PayloadRecoveryScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-11-RESCUE"
+        /* Prototype ref: SCR-STF-11-RESCUE (routes/index.tsx) */
+        label="PAYLOAD RECOVERY"
         title="Emergency Payload Recovery"
         onBack={goBack}
       />

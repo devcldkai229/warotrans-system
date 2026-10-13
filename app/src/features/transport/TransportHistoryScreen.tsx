@@ -367,18 +367,21 @@ export function TransportHistoryScreen() {
           )}
         </View>
 
-        {/* Status Filter Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterTabsScroll}
-          contentContainerStyle={styles.filterTabsRow}
-        >
+        {/* Status Filter Tabs
+            Deliberately NOT a horizontal ScrollView: these four tabs drive the same
+            `filter` state as the metric cards directly above, and four short labels
+            fit the 343pt content width. A scroll container here only bought us a
+            chip hard-clipped by the viewport edge (`Cancelled (2)` → `Cancell…`),
+            which reads as a broken layout rather than as "scroll me". Equal-width
+            columns instead: no clipping is possible, and the tab edges line up with
+            the metric cards above. Labels reuse the card vocabulary (ALL / ACTIVE /
+            DONE / VOID) so the operator never translates two names for one axis. */}
+        <View style={styles.filterTabsRow}>
           {[
             { id: 'ALL', label: `All (${TRANSPORT_ORDERS.length})` },
-            { id: 'IN_PROGRESS', label: `In Progress (${inProgressCount})` },
-            { id: 'COMPLETED', label: `Completed (${completedCount})` },
-            { id: 'CANCELLED', label: `Cancelled (${cancelledCount})` },
+            { id: 'IN_PROGRESS', label: `Active (${inProgressCount})` },
+            { id: 'COMPLETED', label: `Done (${completedCount})` },
+            { id: 'CANCELLED', label: `Void (${cancelledCount})` },
           ].map((tabItem) => {
             const isSelected = filter === tabItem.id;
             return (
@@ -388,12 +391,15 @@ export function TransportHistoryScreen() {
                   triggerHaptic('tap');
                   setFilter(tabItem.id as any);
                 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter by ${tabItem.label}`}
                 style={[
                   styles.filterTab,
                   isSelected ? styles.filterTabActive : styles.filterTabInactive,
                 ]}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.filterTabText,
                     isSelected ? styles.filterTabTextActive : styles.filterTabTextInactive,
@@ -404,7 +410,7 @@ export function TransportHistoryScreen() {
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
 
         {/* Order Cards List */}
         <View style={styles.ordersList}>
@@ -755,17 +761,17 @@ const styles = StyleSheet.create({
   clearBtn: {
     padding: 4,
   },
-  filterTabsScroll: {
-    marginBottom: 16,
-  },
   filterTabsRow: {
     flexDirection: 'row',
     gap: 6,
     paddingBottom: 4,
+    marginBottom: 16,
   },
   filterTab: {
+    flex: 1,
+    minWidth: 0,
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 6,
     height: 30,
     justifyContent: 'center',
@@ -781,6 +787,7 @@ const styles = StyleSheet.create({
   filterTabText: {
     fontSize: 12,
     fontWeight: '700',
+    flexShrink: 1,
     fontFamily: typography.fontSans,
   },
   filterTabTextActive: {

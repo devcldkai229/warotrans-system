@@ -396,7 +396,7 @@ export function VerifyModal({
                 </View>
                 <View style={styles.mismatchTitleCol}>
                   <Text style={styles.mismatchTitle}>
-                    SCR-STF-15: Barcode Mismatch!
+                    Barcode Mismatch!
                   </Text>
                   <Text style={styles.mismatchSubtitle}>
                     Scanned barcode does not match expected target {targetContainer} assigned for {location}.

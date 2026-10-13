@@ -106,7 +106,8 @@ export function OfflineBannerHUD() {
 
         {/* Header Content */}
         <View style={styles.headerSection}>
-          <Text style={styles.headerTag}>SCR-STF-18 · OFFLINE RECONNECTING MODE</Text>
+          {/* Prototype ref: SCR-STF-18 (routes/index.tsx) */}
+          <Text style={styles.headerTag}>OFFLINE RECONNECTING MODE</Text>
           <Text style={styles.headerTitle}>Offline Operation Mode</Text>
           <Text style={styles.headerDesc}>
             PDA terminal continues scanning and logging handovers without disrupting warehouse workflow.

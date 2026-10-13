@@ -45,7 +45,8 @@ export function BarcodeScannerHUD({
         <View style={styles.header}>
           <View>
             <View style={styles.hudBadge}>
-              <Text style={styles.hudBadgeText}>SCR-STF-13 · CAMERA HUD</Text>
+              {/* Prototype ref: SCR-STF-13 (routes/index.tsx) */}
+              <Text style={styles.hudBadgeText}>CAMERA HUD</Text>
             </View>
             <Text style={styles.hudTitle}>Scan Container Barcode</Text>
           </View>

@@ -60,6 +60,9 @@ export function CreateContainerScreen() {
   const packQty = Number(quantity) || 0;
   const numContainers = Number(batchCount) || 0;
   const totalBatchUnits = packQty * numContainers;
+  // Guards the CTA copy: a cleared "Number of Continuous Totes" field used to
+  // render "Generate Batch ( Totes)".
+  const batchCountLabel = batchCount.trim() || '0';
 
   const handleGenerate = () => {
     if (mode === 'single') {
@@ -98,7 +101,7 @@ export function CreateContainerScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SCR-STF-24 · CARGO INDUCTION"
+        label="CARGO INDUCTION"
         title="Pack & Ingest Container"
         onBack={goBack}
       />
@@ -205,8 +208,8 @@ export function CreateContainerScreen() {
               <Button
                 label={
                   batchGenerated
-                    ? `PRINT ALL ${batchGenerated.count} LABELS (ZEBRA ZT411)`
-                    : 'PRINT BARCODE LABEL (ZEBRA ZT411)'
+                    ? `Print All ${batchGenerated.count} Labels`
+                    : 'Print Barcode Label'
                 }
                 icon={<Printer size={16} color="#ffffff" />}
                 onPress={handlePrint}
@@ -218,7 +221,7 @@ export function CreateContainerScreen() {
             {/* Next Steps CTA */}
             <View style={styles.successActions}>
               <Button
-                label="DISPATCH INBOUND PUTAWAY NOW"
+                label="Dispatch Inbound Putaway"
                 icon={<Rocket size={16} color="#ffffff" />}
                 onPress={handleDispatchInbound}
                 variant="primary"
@@ -315,8 +318,8 @@ export function CreateContainerScreen() {
             <Button
               label={
                 mode === 'single'
-                  ? 'GENERATE CONTAINER BARCODE & INGEST'
-                  : `GENERATE BATCH (${batchCount} TOTES & LABELS)`
+                  ? 'Generate & Ingest Barcode'
+                  : `Generate Batch (${batchCountLabel} Totes)`
               }
               icon={<PackageCheck size={18} color="#ffffff" />}
               onPress={handleGenerate}

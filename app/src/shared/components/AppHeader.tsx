@@ -124,7 +124,7 @@ export function AppHeader({
             onPress={() => setIsZoneDropdownOpen(false)}
           />
           <View style={[styles.zoneDropdownMenu, anchorStyle]}>
-            <Text style={styles.zoneDropdownEyebrow}>SCR-STF-02: WORK ZONE</Text>
+            <Text style={styles.zoneDropdownEyebrow}>ACTIVE WORK ZONE</Text>
             {WORK_ZONE_DROPDOWN_ITEMS.map((item) => {
               const isSelected =
                 zone === item ||

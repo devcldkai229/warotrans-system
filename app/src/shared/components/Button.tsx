@@ -60,6 +60,7 @@ export function Button({
         <View style={styles.contentRow}>
           {icon && <View style={styles.iconLeft}>{icon}</View>}
           <Text
+            numberOfLines={2}
             style={[
               textStyles.base,
               textStyles[variant],
@@ -129,16 +130,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
+  /**
+   * CTA label budget: long labels must never escape the pill.
+   *
+   * Yoga defaults to `flexShrink: 0`, so an over-long label kept its full
+   * intrinsic width inside a narrower box and — because `justifyContent` is
+   * `center` — bled out of BOTH sides of the button. `flexShrink: 1` +
+   * `minWidth: 0` hand the overflow back to the text so it wraps inside the
+   * pill instead. The label is additionally capped at `numberOfLines={2}`:
+   * a CTA needing three lines is a copy bug, and an uncapped string would grow
+   * the pill to an absurd 150pt key. `flexShrink: 0` on the icon slots keeps
+   * the glyph from squashing when the label does wrap.
+   */
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 1,
+    minWidth: 0,
   },
   iconLeft: {
     marginRight: 8,
+    flexShrink: 0,
   },
   iconRight: {
     marginLeft: 8,
+    flexShrink: 0,
   },
 });
 
@@ -179,6 +196,9 @@ const textStyles = StyleSheet.create({
     fontFamily: typography.fontSans,
     letterSpacing: 0.5,
     textAlign: 'center',
+    // Pairs with `contentRow.flexShrink`: the label is the only element allowed
+    // to give up width, and it wraps rather than escaping the pill.
+    flexShrink: 1,
   },
   primary: {
     color: colors.textInverse,
