@@ -220,13 +220,16 @@ export function TransportHistoryScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Metric Summary Counters */}
+        {/* Metric Summary Filter Cards */}
         <View style={styles.metricsGrid}>
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
               setFilter('ALL');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter all ${TRANSPORT_ORDERS.length} transport orders`}
+            accessibilityState={{ selected: filter === 'ALL' }}
             style={[
               styles.metricCard,
               filter === 'ALL' && styles.metricCardAllActive,
@@ -241,6 +244,9 @@ export function TransportHistoryScreen() {
               triggerHaptic('tap');
               setFilter('IN_PROGRESS');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter ${inProgressCount} active transport orders`}
+            accessibilityState={{ selected: filter === 'IN_PROGRESS' }}
             style={[
               styles.metricCard,
               filter === 'IN_PROGRESS' && styles.metricCardWarningActive,
@@ -255,6 +261,9 @@ export function TransportHistoryScreen() {
               triggerHaptic('tap');
               setFilter('COMPLETED');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter ${completedCount} done transport orders`}
+            accessibilityState={{ selected: filter === 'COMPLETED' }}
             style={[
               styles.metricCard,
               filter === 'COMPLETED' && styles.metricCardSuccessActive,
@@ -269,6 +278,9 @@ export function TransportHistoryScreen() {
               triggerHaptic('tap');
               setFilter('CANCELLED');
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`Filter ${cancelledCount} void transport orders`}
+            accessibilityState={{ selected: filter === 'CANCELLED' }}
             style={[
               styles.metricCard,
               filter === 'CANCELLED' && styles.metricCardDangerActive,
@@ -367,52 +379,6 @@ export function TransportHistoryScreen() {
           )}
         </View>
 
-        {/* Status Filter Tabs
-            Deliberately NOT a horizontal ScrollView: these four tabs drive the same
-            `filter` state as the metric cards directly above, and four short labels
-            fit the 343pt content width. A scroll container here only bought us a
-            chip hard-clipped by the viewport edge (`Cancelled (2)` → `Cancell…`),
-            which reads as a broken layout rather than as "scroll me". Equal-width
-            columns instead: no clipping is possible, and the tab edges line up with
-            the metric cards above. Labels reuse the card vocabulary (ALL / ACTIVE /
-            DONE / VOID) so the operator never translates two names for one axis. */}
-        <View style={styles.filterTabsRow}>
-          {[
-            { id: 'ALL', label: `All (${TRANSPORT_ORDERS.length})` },
-            { id: 'IN_PROGRESS', label: `Active (${inProgressCount})` },
-            { id: 'COMPLETED', label: `Done (${completedCount})` },
-            { id: 'CANCELLED', label: `Void (${cancelledCount})` },
-          ].map((tabItem) => {
-            const isSelected = filter === tabItem.id;
-            return (
-              <Pressable
-                key={tabItem.id}
-                onPress={() => {
-                  triggerHaptic('tap');
-                  setFilter(tabItem.id as any);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Filter by ${tabItem.label}`}
-                // 30pt visual chip -> 44pt effective touch target (AGENTS.md 2.3).
-                hitSlop={{ top: 7, bottom: 7, left: 0, right: 0 }}
-                style={[
-                  styles.filterTab,
-                  isSelected ? styles.filterTabActive : styles.filterTabInactive,
-                ]}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.filterTabText,
-                    isSelected ? styles.filterTabTextActive : styles.filterTabTextInactive,
-                  ]}
-                >
-                  {tabItem.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
 
         {/* Order Cards List */}
         <View style={styles.ordersList}>
@@ -646,22 +612,22 @@ const styles = StyleSheet.create({
   },
   metricCardAllActive: {
     borderColor: colors.primary,
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(0, 92, 209, 0.10)',
   },
   metricCardWarningActive: {
     borderColor: '#f59e0b',
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
   },
   metricCardSuccessActive: {
     borderColor: '#10b981',
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
   },
   metricCardDangerActive: {
     borderColor: '#ef4444',
-    borderWidth: 1,
+    borderWidth: 1.5,
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
   },
   metricNumber: {
@@ -679,7 +645,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   searchSection: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
   searchRow: {
     flexDirection: 'row',
@@ -762,44 +728,6 @@ const styles = StyleSheet.create({
   },
   clearBtn: {
     padding: 4,
-  },
-  filterTabsRow: {
-    flexDirection: 'row',
-    // Matches `metricsGrid.gap` so the four tabs are exactly as wide as the four
-    // metric cards above them (79.75pt each on a 375pt device) and their edges
-    // line up column-for-column.
-    gap: 8,
-    paddingBottom: 4,
-    marginBottom: 16,
-  },
-  filterTab: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    height: 30,
-    justifyContent: 'center',
-  },
-  filterTabActive: {
-    backgroundColor: colors.primary,
-  },
-  filterTabInactive: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: '700',
-    flexShrink: 1,
-    fontFamily: typography.fontSans,
-  },
-  filterTabTextActive: {
-    color: '#ffffff',
-  },
-  filterTabTextInactive: {
-    color: colors.textMuted,
   },
   ordersList: {
     gap: 12,
