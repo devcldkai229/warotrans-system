@@ -1,0 +1,8 @@
+{
+  "name": "Sơ đồ kho demo",
+  "mapUri": "http://storage/maps/wh-demo.yaml",
+  "resolution": 0.05,
+  "originX": 0,
+  "originY": 0,
+  "originYaw": 0
+}

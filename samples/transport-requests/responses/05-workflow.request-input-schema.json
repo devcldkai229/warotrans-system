@@ -1,0 +1,27 @@
+{
+  "workflowId": "15a7f3f5-cdfb-4fc3-a896-37dc1d9d5ccf",
+  "workflowInputs": [],
+  "movementInputs": [
+    {
+      "key": "containerId",
+      "dataType": "UUID",
+      "required": true,
+      "label": "Container",
+      "description": "Container selected for this transport movement."
+    },
+    {
+      "key": "destination.endpointId",
+      "dataType": "UUID",
+      "required": true,
+      "label": "Destination endpoint",
+      "description": "Destination endpoint from matching TransportRequestDetail (or stop endpoint at DROPOFF stop scope)."
+    },
+    {
+      "key": "source.endpointId",
+      "dataType": "UUID",
+      "required": true,
+      "label": "Source endpoint",
+      "description": "Source endpoint from matching TransportRequestDetail (or stop endpoint at PICKUP stop scope)."
+    }
+  ]
+}

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.Transportation.Features.CreateTransportRequest;
+using WaroTrans.Transportation.Features.QueueTransportRequest;
 using WaroTrans.Transportation.Persistence;
 
 namespace WaroTrans.Transportation;
@@ -20,6 +21,7 @@ public static class TransportationModule
         services.AddValidatorsFromAssembly(typeof(TransportationModule).Assembly);
 
         services.AddScoped<CreateTransportRequestHandler>();
+        services.AddScoped<QueueTransportRequestHandler>();
 
         return services;
     }
@@ -30,6 +32,7 @@ public static class TransportationModule
         group.MapGet("/ping", () => Results.Ok(new { module = "transportation" })).AllowAnonymous();
 
         CreateTransportRequestEndpoint.Map(group);
+        QueueTransportRequestEndpoint.Map(group);
 
         return endpoints;
     }

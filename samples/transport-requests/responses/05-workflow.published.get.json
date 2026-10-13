@@ -1,0 +1,318 @@
+{
+  "id": "15a7f3f5-cdfb-4fc3-a896-37dc1d9d5ccf",
+  "code": "INTERNAL_RELOCATION",
+  "versionNo": 1,
+  "name": "Vận chuyển giữa các kệ",
+  "description": "Robot lấy container từ kệ nguồn, nhân viên xác nhận pickup, di chuyển tới kệ đích, xác nhận dropoff. Dùng cho REALLOCATION / chuyển vị trí trong kho. Movement fields bind qua CURRENT_MOVEMENT (không STAFF_INPUT).",
+  "status": "PUBLISHED",
+  "createdBy": "a0000000-0000-4000-8000-000000000001",
+  "createdAt": "2026-10-13T02:59:25.942159+00:00",
+  "publishedAt": "2026-10-13T02:59:26.173818+00:00",
+  "variables": [
+    {
+      "key": "minBatteryPercent",
+      "name": "Pin tối thiểu (%)",
+      "dataType": "DECIMAL",
+      "source": "ADMIN_INPUT",
+      "isRequired": true,
+      "defaultValue": null,
+      "configuredValue": 25,
+      "description": "Admin cấu hình sẵn lúc tạo template. Runtime chỉ đọc lại giá trị này.",
+      "sequenceNo": 0
+    },
+    {
+      "key": "assignedRobotId",
+      "name": "Robot được gán",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "defaultValue": null,
+      "configuredValue": null,
+      "description": "Runtime resolve từ JobAssignment — Admin/Staff không nhập.",
+      "sequenceNo": 1
+    },
+    {
+      "key": "transportRequestId",
+      "name": "TransportRequest",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "defaultValue": null,
+      "configuredValue": null,
+      "description": "Id request nghiệp vụ đang chạy.",
+      "sequenceNo": 2
+    },
+    {
+      "key": "jobId",
+      "name": "Job",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "defaultValue": null,
+      "configuredValue": null,
+      "description": "Id Job runtime khởi tạo từ template.",
+      "sequenceNo": 3
+    }
+  ],
+  "tasks": [
+    {
+      "id": "51b09fef-2ecc-4ec5-a313-0b5e06284f5a",
+      "taskKey": "PICKUP",
+      "name": "Lấy hàng tại kệ nguồn",
+      "sequenceNo": 1,
+      "steps": [
+        {
+          "id": "8399cd1c-177f-4b38-bdea-cf63f100d460",
+          "stepKey": "CHECK_READY",
+          "name": "Kiểm tra robot sẵn sàng",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "ROBOT_READY",
+          "instructionText": null,
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        },
+        {
+          "id": "e44bbc9b-1d9a-44ee-9544-c6c2c7fddebe",
+          "stepKey": "CHECK_BATTERY",
+          "name": "Kiểm tra pin tối thiểu",
+          "stepType": "CHECK",
+          "sequenceNo": 2,
+          "operationCode": "BATTERY_MIN",
+          "instructionText": null,
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId",
+              "outputKey": null,
+              "constantValue": null
+            },
+            "minimumBatteryPercent": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "minBatteryPercent",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "REQUEST_REASSIGN"
+        },
+        {
+          "id": "5803fee9-1056-4596-89bf-742839d3c6a5",
+          "stepKey": "CHECK_REQUEST",
+          "name": "Kiểm tra request còn hiệu lực",
+          "stepType": "CHECK",
+          "sequenceNo": 3,
+          "operationCode": "REQUEST_ACTIVE",
+          "instructionText": null,
+          "inputBindings": {
+            "transportRequestId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "transportRequestId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB"
+        },
+        {
+          "id": "505b33cb-1c05-417c-beeb-cb111a71dd5b",
+          "stepKey": "CHECK_SOURCE_ENDPOINT",
+          "name": "Kiểm tra kệ nguồn khả dụng",
+          "stepType": "CHECK",
+          "sequenceNo": 4,
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "instructionText": null,
+          "inputBindings": {
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 2,
+          "retryBackoffSeconds": 5,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        },
+        {
+          "id": "a54ee92b-c75f-4b41-8c5c-442e149fd345",
+          "stepKey": "MOVE_PICKUP",
+          "name": "Di chuyển tới kệ nguồn",
+          "stepType": "MOVE",
+          "sequenceNo": 5,
+          "operationCode": "PICKUP",
+          "instructionText": null,
+          "inputBindings": {
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "sourceReference": null,
+              "outputKey": null,
+              "constantValue": "PICKUP"
+            },
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId",
+              "outputKey": null,
+              "constantValue": null
+            },
+            "targetEndpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 600,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "REQUEST_REASSIGN"
+        },
+        {
+          "id": "9837b21e-5581-4017-adfd-47aceffe1728",
+          "stepKey": "PICKUP_CONFIRM",
+          "name": "Staff xác nhận đã đặt container lên robot",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 6,
+          "operationCode": "PICKUP_CONFIRM",
+          "instructionText": "Đặt container lên robot tại kệ nguồn rồi xác nhận.",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId",
+              "outputKey": null,
+              "constantValue": null
+            },
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "source.endpointId",
+              "outputKey": null,
+              "constantValue": null
+            },
+            "containerId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "containerId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 900,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        }
+      ]
+    },
+    {
+      "id": "cf268235-dd3e-447f-8b23-8eaf7311b508",
+      "taskKey": "DELIVERY",
+      "name": "Giao hàng tại kệ đích",
+      "sequenceNo": 2,
+      "steps": [
+        {
+          "id": "1b6a8b6d-85b8-403c-9cc9-8f37a1519293",
+          "stepKey": "CHECK_DEST_ENDPOINT",
+          "name": "Kiểm tra kệ đích khả dụng",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "instructionText": null,
+          "inputBindings": {
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 30,
+          "maxAttempts": 2,
+          "retryBackoffSeconds": 5,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        },
+        {
+          "id": "ce100e87-8bf8-461f-9c39-e03961c7abb3",
+          "stepKey": "MOVE_DROPOFF",
+          "name": "Di chuyển tới kệ đích",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "operationCode": "DROPOFF",
+          "instructionText": null,
+          "inputBindings": {
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "sourceReference": null,
+              "outputKey": null,
+              "constantValue": "DROPOFF"
+            },
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId",
+              "outputKey": null,
+              "constantValue": null
+            },
+            "targetEndpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 600,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "REQUEST_REASSIGN"
+        },
+        {
+          "id": "7caf4315-5126-40df-ab5a-c88abce39063",
+          "stepKey": "DROPOFF_CONFIRM",
+          "name": "Staff xác nhận đã lấy container khỏi robot",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 3,
+          "operationCode": "DROPOFF_CONFIRM",
+          "instructionText": "Lấy container khỏi robot tại kệ đích rồi xác nhận.",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId",
+              "outputKey": null,
+              "constantValue": null
+            },
+            "endpointId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "destination.endpointId",
+              "outputKey": null,
+              "constantValue": null
+            },
+            "containerId": {
+              "sourceType": "CURRENT_MOVEMENT",
+              "sourceReference": "containerId",
+              "outputKey": null,
+              "constantValue": null
+            }
+          },
+          "timeoutSeconds": 900,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR"
+        }
+      ]
+    }
+  ]
+}

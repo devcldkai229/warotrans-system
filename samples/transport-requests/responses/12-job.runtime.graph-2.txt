@@ -1,0 +1,23 @@
+       job_no        | task |         scope         | stop_action | stop_endpoint |    container    |  current_movement  |                   steps                   
+---------------------+------+-----------------------+-------------+---------------+-----------------+--------------------+-------------------------------------------
+ JOB-20261013-000004 |    1 | ONCE_PER_JOB          |             |               |                 |                    | CHECK_READY, CHECK_BATTERY, CHECK_REQUEST
+ JOB-20261013-000004 |    2 | ONCE_PER_STOP         | PICKUP      | EP-KE-A       |                 |                    | CHECK_SOURCE_ENDPOINT, MOVE_PICKUP
+ JOB-20261013-000004 |    3 | PER_CONTAINER_AT_STOP | PICKUP      | EP-KE-A       | CTN-DEMO-000006 | EP-KE-A -> EP-KE-D | PICKUP_CONFIRM
+ JOB-20261013-000004 |    4 | ONCE_PER_STOP         | PICKUP      | EP-KE-B       |                 |                    | CHECK_SOURCE_ENDPOINT, MOVE_PICKUP
+ JOB-20261013-000004 |    5 | PER_CONTAINER_AT_STOP | PICKUP      | EP-KE-B       | CTN-DEMO-000007 | EP-KE-B -> EP-KE-E | PICKUP_CONFIRM
+ JOB-20261013-000004 |    6 | ONCE_PER_STOP         | PICKUP      | EP-KE-C       |                 |                    | CHECK_SOURCE_ENDPOINT, MOVE_PICKUP
+ JOB-20261013-000004 |    7 | PER_CONTAINER_AT_STOP | PICKUP      | EP-KE-C       | CTN-DEMO-000008 | EP-KE-C -> EP-KE-F | PICKUP_CONFIRM
+ JOB-20261013-000004 |    8 | ONCE_PER_STOP         | DROPOFF     | EP-KE-D       |                 |                    | CHECK_DEST_ENDPOINT, MOVE_DROPOFF
+ JOB-20261013-000004 |    9 | PER_CONTAINER_AT_STOP | DROPOFF     | EP-KE-D       | CTN-DEMO-000006 | EP-KE-A -> EP-KE-D | DROPOFF_CONFIRM
+ JOB-20261013-000004 |   10 | ONCE_PER_STOP         | DROPOFF     | EP-KE-E       |                 |                    | CHECK_DEST_ENDPOINT, MOVE_DROPOFF
+ JOB-20261013-000004 |   11 | PER_CONTAINER_AT_STOP | DROPOFF     | EP-KE-E       | CTN-DEMO-000007 | EP-KE-B -> EP-KE-E | DROPOFF_CONFIRM
+ JOB-20261013-000004 |   12 | ONCE_PER_STOP         | DROPOFF     | EP-KE-F       |                 |                    | CHECK_DEST_ENDPOINT, MOVE_DROPOFF
+ JOB-20261013-000004 |   13 | PER_CONTAINER_AT_STOP | DROPOFF     | EP-KE-F       | CTN-DEMO-000008 | EP-KE-C -> EP-KE-F | DROPOFF_CONFIRM
+(13 rows)
+
+       job_no        | status  |              provisioning_key              | sequence_no |     barcode     | job_container_status 
+---------------------+---------+--------------------------------------------+-------------+-----------------+----------------------
+ JOB-20261013-000004 | CREATED | acfcf9b6eec84c5b8eadcf4ef7b4f690:BATCH-001 |           1 | CTN-DEMO-000006 | PENDING
+ JOB-20261013-000004 | CREATED | acfcf9b6eec84c5b8eadcf4ef7b4f690:BATCH-001 |           2 | CTN-DEMO-000007 | PENDING
+ JOB-20261013-000004 | CREATED | acfcf9b6eec84c5b8eadcf4ef7b4f690:BATCH-001 |           3 | CTN-DEMO-000008 | PENDING
+(3 rows)

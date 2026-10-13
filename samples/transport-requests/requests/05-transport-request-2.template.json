@@ -1,0 +1,27 @@
+{
+  "warehouseId": "11111111-1111-1111-1111-111111111111",
+  "mapVersionId": "{{MAP_VERSION_ID}}",
+  "workflowId": "{{WORKFLOW_ID}}",
+  "workflowInputs": {},
+  "note": "Lấy ở 3 kệ khác nhau A, B, C rồi giao tới D, E, F",
+  "details": [
+    {
+      "sequenceNo": 1,
+      "containerId": "c6000000-0000-4000-8000-000000000006",
+      "sourceEndpointId": "{{EP_A}}",
+      "destinationEndpointId": "{{EP_D}}"
+    },
+    {
+      "sequenceNo": 2,
+      "containerId": "c7000000-0000-4000-8000-000000000007",
+      "sourceEndpointId": "{{EP_B}}",
+      "destinationEndpointId": "{{EP_E}}"
+    },
+    {
+      "sequenceNo": 3,
+      "containerId": "c8000000-0000-4000-8000-000000000008",
+      "sourceEndpointId": "{{EP_C}}",
+      "destinationEndpointId": "{{EP_F}}"
+    }
+  ]
+}

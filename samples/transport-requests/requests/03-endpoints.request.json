@@ -1,0 +1,26 @@
+[
+  {
+    "alias": "A",
+    "body": { "name": "Ke A", "endpointType": "STORAGE", "x": 1.0, "y": 1.0, "yaw": 0.0, "positionTolerance": 0.1, "yawTolerance": 0.2 }
+  },
+  {
+    "alias": "B",
+    "body": { "name": "Ke B", "endpointType": "STORAGE", "x": 1.0, "y": 3.0, "yaw": 0.0, "positionTolerance": 0.1, "yawTolerance": 0.2 }
+  },
+  {
+    "alias": "C",
+    "body": { "name": "Ke C", "endpointType": "STORAGE", "x": 1.0, "y": 5.0, "yaw": 0.0, "positionTolerance": 0.1, "yawTolerance": 0.2 }
+  },
+  {
+    "alias": "D",
+    "body": { "name": "Ke D", "endpointType": "STORAGE", "x": 6.0, "y": 1.0, "yaw": 1.57, "positionTolerance": 0.1, "yawTolerance": 0.2 }
+  },
+  {
+    "alias": "E",
+    "body": { "name": "Ke E", "endpointType": "STORAGE", "x": 6.0, "y": 3.0, "yaw": 1.57, "positionTolerance": 0.1, "yawTolerance": 0.2 }
+  },
+  {
+    "alias": "F",
+    "body": { "name": "Ke F", "endpointType": "STORAGE", "x": 6.0, "y": 5.0, "yaw": 1.57, "positionTolerance": 0.1, "yawTolerance": 0.2 }
+  }
+]
