@@ -340,7 +340,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: colors.textMuted,
-    fontFamily: typography.fontSans,
+    // DESIGN_SYSTEM 2.2: ALL-CAPS 9-10pt / weight 900 protocol labels are
+    // monospace, same as the other eyebrow slots in the app.
+    fontFamily: typography.fontMono,
   },
   edgeCard: {
     flexDirection: 'row',
@@ -392,8 +394,9 @@ const styles = StyleSheet.create({
   },
   hazardCard: {
     // Was a hard `width: 195`, which forced ONE card per 343pt row and left
-    // ~148pt of dead space to the right. `flex: 1` + `minWidth` gives a real 2-up
-    // grid that fills the row, and still wraps if a future label gets long.
+    // ~148pt of dead space to the right. `flex: 1` + `minWidth: 140` gives a real
+    // 2-up grid (2 x 140 + 8 gap = 288 <= 343). Note the break point is pinned by
+    // `minWidth`, not by label length: a longer label wraps *inside* the card.
     flex: 1,
     minWidth: 140,
     minHeight: 57,

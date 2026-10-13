@@ -393,6 +393,8 @@ export function TransportHistoryScreen() {
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Filter by ${tabItem.label}`}
+                // 30pt visual chip -> 44pt effective touch target (AGENTS.md 2.3).
+                hitSlop={{ top: 7, bottom: 7, left: 0, right: 0 }}
                 style={[
                   styles.filterTab,
                   isSelected ? styles.filterTabActive : styles.filterTabInactive,
@@ -763,7 +765,10 @@ const styles = StyleSheet.create({
   },
   filterTabsRow: {
     flexDirection: 'row',
-    gap: 6,
+    // Matches `metricsGrid.gap` so the four tabs are exactly as wide as the four
+    // metric cards above them (79.75pt each on a 375pt device) and their edges
+    // line up column-for-column.
+    gap: 8,
     paddingBottom: 4,
     marginBottom: 16,
   },

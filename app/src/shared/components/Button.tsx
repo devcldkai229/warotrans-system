@@ -60,7 +60,6 @@ export function Button({
         <View style={styles.contentRow}>
           {icon && <View style={styles.iconLeft}>{icon}</View>}
           <Text
-            numberOfLines={2}
             style={[
               textStyles.base,
               textStyles[variant],
@@ -137,10 +136,14 @@ const styles = StyleSheet.create({
    * intrinsic width inside a narrower box and — because `justifyContent` is
    * `center` — bled out of BOTH sides of the button. `flexShrink: 1` +
    * `minWidth: 0` hand the overflow back to the text so it wraps inside the
-   * pill instead. The label is additionally capped at `numberOfLines={2}`:
-   * a CTA needing three lines is a copy bug, and an uncapped string would grow
-   * the pill to an absurd 150pt key. `flexShrink: 0` on the icon slots keeps
-   * the glyph from squashing when the label does wrap.
+   * pill instead.
+   *
+   * There is deliberately NO `numberOfLines` cap here: truncating a CTA to
+   * `GENERATE & INGEST BAR…` hides the action the key performs, which on a
+   * handheld in a warehouse is worse than a two-line key. Every button in the
+   * app sizes itself with `minHeight`/`paddingVertical` (never a fixed height),
+   * so a wrapped label grows the pill safely. `flexShrink: 0` on the icon slots
+   * keeps the glyph from squashing when the label does wrap.
    */
   contentRow: {
     flexDirection: 'row',

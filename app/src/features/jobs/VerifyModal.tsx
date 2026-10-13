@@ -121,7 +121,7 @@ export function VerifyModal({
       <View style={[styles.sheetContainer, !mismatch && styles.sheetContainerVerify]}>
           {!mismatch ? (
             /* ================================================================
-               SCR-STF-14: HANDOVER CONFIRMATION HUD
+               Prototype ref: SCR-STF-14 (routes/index.tsx) — HANDOVER CONFIRMATION HUD
                ================================================================ */
             <ScrollView
               style={styles.sheetScroll}
@@ -387,7 +387,7 @@ export function VerifyModal({
             </ScrollView>
           ) : (
             /* ================================================================
-               SCR-STF-15: BARCODE MISMATCH ALERT MODAL
+               Prototype ref: SCR-STF-15 (routes/index.tsx) — BARCODE MISMATCH ALERT MODAL
                ================================================================ */
             <View style={styles.mismatchContainer}>
               <View style={styles.mismatchHeaderRow}>

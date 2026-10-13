@@ -43,7 +43,6 @@ export function FleetRecallScreen() {
               <View style={styles.adminBadge}>
                 <Text style={styles.adminBadgeText}>ADMIN-EXCLUSIVE AUTHORITY</Text>
               </View>
-              <Text style={styles.screenTag}>MAINTENANCE-ALL</Text>
             </View>
             <Text style={styles.warningTitle}>Scheduled Fleet Maintenance in Progress</Text>
             <Text style={styles.warningDesc}>
@@ -174,12 +173,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '900',
     color: '#ffffff',
-    fontFamily: typography.fontMono,
-  },
-  screenTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.textMuted,
     fontFamily: typography.fontMono,
   },
   warningTitle: {

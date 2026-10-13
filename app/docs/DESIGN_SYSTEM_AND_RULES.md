@@ -154,9 +154,11 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
   nội tại của nó (~340pt cho 35 ký tự @ 15pt/900/ls 0.8) trong khung ~237pt; `justifyContent: 'center'`
   chia đều phần dư ra **cả hai bên**, tạo ra đúng triệu chứng "chữ tràn ra ngoài viên pill ở cả trái lẫn phải".
 * **Luật bắt buộc**: nhãn dài **phải xuống dòng bên trong** viên nút, tuyệt đối không tràn và không bị cắt
-  bằng ellipsis (một CTA bị cắt `GENERATE & INGEST BAR…` còn tệ hơn hẳn một CTA hai dòng).
-  `Button.tsx` đã xử lý ở tầng component: `contentRow` có `flexShrink: 1` + `minWidth: 0`, nhãn có
-  `flexShrink: 1` và `numberOfLines={2}`, icon có `flexShrink: 0` (để icon không bị bóp méo khi nhãn xuống dòng).
+  bằng ellipsis (một CTA bị cắt `GENERATE & INGEST BAR…` còn tệ hơn hẳn một CTA hai dòng — nó che mất chính
+  hành động mà nút thực hiện). `Button.tsx` đã xử lý ở tầng component: `contentRow` có `flexShrink: 1` +
+  `minWidth: 0`, nhãn có `flexShrink: 1`, icon có `flexShrink: 0` (để icon không bị bóp méo khi nhãn xuống dòng).
+  **Không** đặt `numberOfLines` cho nhãn nút. Mọi nút trong app tự giãn theo `minHeight`/`paddingVertical`
+  (không nào dùng `height` cố định), nên nhãn xuống dòng làm viên nút cao thêm mà không vỡ layout.
 * **Ngân sách thực tế** trên iPhone 375pt (khung card nội): `375 − 32 − 32 = 311`; trừ padding `lg` 48 và icon 26
   → chỉ còn **~237pt cho chữ**. Ở `size="lg"` (15pt / weight 900 / letterSpacing 0.8) ứng với **~24 ký tự**.
 * **Quy tắc copy cho CTA**: verb + object, tối đa 3 từ, bỏ tiền tố ALL-CAPS dài, bỏ thông tin đã hiện ở nơi khác
@@ -170,8 +172,8 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
 ### 3.4. Mã đặc tả prototype (`SCR-STF-xx`) KHÔNG được xuất hiện trong UI
 
 * `SCR-STF-xx` là **mã định danh màn hình trong prototype** (`ui-design-prototype/.../routes/index.tsx`), chỉ có
-  giá trị truy vết thiết kế. Chúng **không được** nằm trong chuỗi hiển thị cho người dùng (eyebrow, badge,
-* tiêu đề section, header tag) — operator không cần biết mã màn hình prototype, và chúng làm nhiễu
+  giá trị truy vết thiết kế. Chúng **không được** nằm trong bất kỳ chuỗi nào người dùng đọc được — eyebrow,
+  badge, tiêu đề section, header tag. Operator không cần biết mã màn hình prototype, và chúng làm nhiễu
   nhịp thị giác của label nghiệp vụ.
 * Khi gỡ khỏi UI, **giữ lại mã trong code comment** dạng `Prototype ref: SCR-STF-xx (routes/index.tsx)`
   để không mất khả năng đối chiếu với prototype.

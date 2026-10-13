@@ -719,7 +719,7 @@ export function JobDetailScreen() {
         )}
       </View>
 
-      {/* Verification Modal (SCR-STF-14 / SCR-STF-15) */}
+      {/* Verification Modal — prototype ref: SCR-STF-14 / SCR-STF-15 */}
       <VerifyModal
         visible={isVerifyOpen}
         targetContainer={targetContainer}
@@ -737,7 +737,7 @@ export function JobDetailScreen() {
         }}
       />
 
-      {/* Incident Issue Reporting Modal (SCR-STF-16 / SCR-STF-17) */}
+      {/* Incident Issue Reporting Modal — prototype ref: SCR-STF-16 / SCR-STF-17 */}
       <IssueReportingModal
         visible={isIssueOpen}
         robotCode={job.robot}

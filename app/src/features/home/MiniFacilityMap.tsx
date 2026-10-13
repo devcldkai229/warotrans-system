@@ -11,14 +11,48 @@ import {
 import {
   BatteryMedium,
   LocateFixed,
-  Navigation,
   Search,
   User,
 } from 'lucide-react-native';
-import Svg, { Line, Defs, Pattern, Rect } from 'react-native-svg';
+import Svg, { Line, Defs, G, Pattern, Rect, Path } from 'react-native-svg';
 import { colors } from '../../shared/theme/colors';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
+
+/**
+ * AMR heading chevron for the 40pt puck marker.
+ *
+ * The puck's inner disc is 40 - 2*3(border) = 34pt across, i.e. 17pt radius.
+ * Geometry below is expressed in viewBox units, centred on (12, 12) with
+ * forward = -y (heading 0deg points up):
+ *
+ *   tip   (12,  1.50)  R_tip   = 10.50u -> 9.6pt from centre (22pt Svg)
+ *   wing  (20.75,18.25) R_wings = 10.78u -> 9.9pt from centre
+ *   notch (12, 16.25)  R_notch =  4.25u
+ *
+ * Two rules are baked in:
+ *
+ * 1. AREA CENTROID == (12, 12) exactly. The notch removes mass from the tail,
+ *    so a bounding-box-centred chevron always has its mass sitting behind the
+ *    dot; the previous path was 1.50u (1.38pt) low, which is what read as
+ *    "thụt / lệch tâm" at every heading. Notch depth is the free variable
+ *    that fixes this.
+ *
+ * 2. EVEN RADIAL ENVELOPE: R_wings ~= R_tip (ratio 1.03, was 1.41). Keeping
+ *    both within ~0.3u of each other means the rim gap is ~7.2pt all the way
+ *    round instead of 9.2pt at the front and 6.0pt at the wings - the front of
+ *    the puck no longer reads as empty.
+ *
+ * Resulting silhouette: tip angle 55.2deg (blunter than the old 53.1deg), +17%
+ * rendered ink area (a deliberate "beo them 1 chut", not a redesign), and the
+ * wings sit 2.25u further forward than before, so it reads as a squat solid
+ * puck arrow rather than a thin dart. Stroked with a round join to fatten by
+ * 0.75u and soften the corners for the industrial AMR look.
+ *
+ * Bumping the Svg from 22 to 24pt is the one-line escalation if the arrow still
+ * reads small on a physical PDA; that adds a further ~19% ink area on top.
+ */
+export const ROBOT_HEADING_ARROW_PATH = 'M12 1.5 L20.75 18.25 L12 16.25 L3.25 18.25 Z';
 
 export interface MapRobot {
   id: string;
@@ -338,7 +372,7 @@ export function MiniFacilityMap({
             {/* Pulsing Radiating Radar Wave when Selected */}
             <RobotSelectionRadarWave isSelected={isSelected} />
 
-            {/* Directional Robot Marker with Geometrically Centered SVG Navigation Arrow */}
+            {/* Directional Robot Marker with Geometrically Centered Chubby Navigation Arrow */}
             <View
               style={[
                 styles.robotMarker,
@@ -346,21 +380,20 @@ export function MiniFacilityMap({
                 isSelected && styles.robotSelectedGlow,
               ]}
             >
-              <View
-                style={{
-                  width: 24,
-                  height: 24,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transform: [{ rotate: `${robot.headingDeg}deg` }],
-                }}
-              >
-                <Navigation
-                  size={18}
-                  color="#ffffff"
-                  fill="#ffffff"
-                />
-              </View>
+              <Svg width={22} height={22} viewBox="0 0 24 24">
+                {/* Rotate about the viewBox centre explicitly rather than via a
+                    centred wrapper View: the origin stays pinned to the puck
+                    centre even if the rendered Svg size changes later. */}
+                <G rotation={robot.headingDeg} origin="12, 12">
+                  <Path
+                    d={ROBOT_HEADING_ARROW_PATH}
+                    fill="#ffffff"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    strokeLinejoin="round"
+                  />
+                </G>
+              </Svg>
             </View>
 
             {/* Speed & ID Floating Tag - Single-line nowrap horizontal pill */}
