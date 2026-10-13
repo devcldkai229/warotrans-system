@@ -18,6 +18,7 @@ using WaroTrans.WorkflowExecution.Features.UpdateWorkflow;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 using WaroTrans.WorkflowExecution.Persistence;
+using WaroTrans.WorkflowExecution.Planning;
 using WaroTrans.WorkflowExecution.Runtime;
 using WaroTrans.WorkflowExecution.Services;
 
@@ -45,6 +46,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<WorkflowVariableContextBuilder>();
         services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
         services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
+        services.AddSingleton<IJobBatchPlanner, CollectThenDeliverJobBatchPlanner>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
 

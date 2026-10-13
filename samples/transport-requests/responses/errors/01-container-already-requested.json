@@ -1,0 +1,40 @@
+{
+  "case": "Gui lai dung request vua tao (C1..C3 dang o request active)",
+  "expectedStatus": 409,
+  "expectedCode": "container_already_requested",
+  "request": {
+    "warehouseId": "11111111-1111-1111-1111-111111111111",
+    "mapVersionId": "52bba2c6-52d9-41f0-acbd-74c1d9b2a3b9",
+    "workflowId": "15a7f3f5-cdfb-4fc3-a896-37dc1d9d5ccf",
+    "workflowInputs": {},
+    "note": "Chuyển 3 container từ kệ A sang D, E, F",
+    "details": [
+      {
+        "sequenceNo": 1,
+        "containerId": "c1000000-0000-4000-8000-000000000001",
+        "sourceEndpointId": "96876cd0-1387-43f4-bd16-75547a465c42",
+        "destinationEndpointId": "ffd647f5-70cc-484b-9582-1c087c3a9c78"
+      },
+      {
+        "sequenceNo": 2,
+        "containerId": "c2000000-0000-4000-8000-000000000002",
+        "sourceEndpointId": "96876cd0-1387-43f4-bd16-75547a465c42",
+        "destinationEndpointId": "cb2d2e43-084f-4796-a24d-621d391e85b8"
+      },
+      {
+        "sequenceNo": 3,
+        "containerId": "c3000000-0000-4000-8000-000000000003",
+        "sourceEndpointId": "96876cd0-1387-43f4-bd16-75547a465c42",
+        "destinationEndpointId": "01706f20-20c3-4f82-9b01-67bf52d4f430"
+      }
+    ]
+  },
+  "response": {
+    "title": "container_already_requested",
+    "status": 409,
+    "detail": "Container 'CTN-DEMO-000002' is already part of an active TransportRequest.",
+    "instance": "/api/transportation/transport-requests",
+    "code": "container_already_requested",
+    "traceId": "0HNP8VM44OR3L:00000013"
+  }
+}

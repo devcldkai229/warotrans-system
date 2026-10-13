@@ -1,0 +1,16 @@
+{
+  "transportRequestId": "acfcf9b6-eec8-4c5b-8ead-cf4ef7b4f690",
+  "requestCode": "REQ-20261013-000016",
+  "status": "QUEUED",
+  "queuedAt": "2026-10-13T07:42:44.7739376+00:00",
+  "jobs": [
+    {
+      "jobId": "c9e0bd94-1679-42f4-b7c6-b4c261835f50",
+      "jobNo": "JOB-20261013-000004",
+      "batchKey": "BATCH-001",
+      "jobContainerCount": 3,
+      "jobTaskCount": 13,
+      "jobStepCount": 21
+    }
+  ]
+}

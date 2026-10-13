@@ -4,6 +4,7 @@ using WaroTrans.BuildingBlocks.Enums;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 using WaroTrans.UnitTests.WorkflowExecution.Fixtures;
+using static WaroTrans.UnitTests.WorkflowExecution.Fixtures.JobRuntimeTestDb;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;

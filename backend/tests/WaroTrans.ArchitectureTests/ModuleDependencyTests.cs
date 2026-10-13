@@ -73,6 +73,26 @@ public class ModuleDependencyTests
     }
 
     [Fact]
+    public void Transportation_must_use_only_public_contracts_of_other_modules()
+    {
+        var result = Types.InAssembly(typeof(TransportationModule).Assembly)
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                "WaroTrans.Warehouse.Entities",
+                "WaroTrans.Warehouse.Features",
+                "WaroTrans.Warehouse.Services",
+                "WaroTrans.Navigation.Entities",
+                "WaroTrans.Navigation.Features",
+                "WaroTrans.Navigation.Services",
+                "WaroTrans.WorkflowExecution.Entities",
+                "WaroTrans.WorkflowExecution.Features",
+                "WaroTrans.WorkflowExecution.Services")
+            .GetResult();
+
+        Assert.True(result.IsSuccessful, Format(result));
+    }
+
+    [Fact]
     public void Fleet_must_not_depend_on_WorkflowExecution_Persistence()
     {
         var result = Types.InAssembly(typeof(FleetModule).Assembly)

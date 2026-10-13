@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Features.ArchiveMapVersion;
 using WaroTrans.Navigation.Features.CreateEdge;
 using WaroTrans.Navigation.Features.CreateEndpoint;
@@ -19,6 +20,7 @@ using WaroTrans.Navigation.Features.UpdateEdge;
 using WaroTrans.Navigation.Features.UpdateEndpoint;
 using WaroTrans.Navigation.Features.UpdateMapVersion;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 
 namespace WaroTrans.Navigation;
 
@@ -44,6 +46,8 @@ public static class NavigationModule
         services.AddScoped<GetEdgeHandler>();
         services.AddScoped<UpdateEdgeHandler>();
         services.AddScoped<DeleteEdgeHandler>();
+
+        services.AddScoped<INavigationModule, NavigationModuleApi>();
 
         return services;
     }
