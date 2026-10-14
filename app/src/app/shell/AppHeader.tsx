@@ -1,44 +1,28 @@
-import {
-  ChevronDown,
-  MapPin,
-  ShieldAlert,
-  ShieldCheck,
-} from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
-import { toast } from '../../shared/context/ToastContext';
+import { Bell, ChevronDown, MapPin } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { Text } from '../../shared/ui';
+import { BrandMark } from '../../shared/components/BrandMark';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { useNavigation } from '../navigation/NavigationContext';
+import { toast } from '../../shared/context/ToastContext';
 import { AccountSheet } from './AccountSheet';
-import { SafetyActionSheet } from './SafetyActionSheet';
+import { NotificationSheet } from './NotificationSheet';
 import { ZonePickerModal } from './ZonePickerModal';
-
-/**
- * The soft hold is a local simulator: nothing reaches an AMR until the backend
- * route is wired. Stated here because the shield button is where an operator
- * decides whether it is safe to walk into an aisle, and the toasts below repeat
- * it so the answer survives the sheet closing.
- */
-const SIMULATION_NOTICE =
-  'Soft pause is a local simulation — it is not broadcast to AMRs until /api/fleet/soft-hold is wired.';
 
 interface AppHeaderProps {
   operatorName?: string;
   operatorRole?: string;
-  /** Avatar initials. Falls back to the operator name's first two initials. */
   initials?: string;
   zone?: string;
   onLogout?: () => void;
   onZoneChange?: (zone: string) => void;
+  initialOpen?: 'zone' | 'account' | 'notifications';
 }
 
-/** `Alex Tran` -> `AT`. */
 function initialsOf(name: string): string {
   return (
     name
@@ -52,24 +36,11 @@ function initialsOf(name: string): string {
 }
 
 /**
- * The shell header: who is on shift, where they are working, and that the WMS
- * link is up.
+ * Enterprise Calm Operations Home Header.
  *
- * Google Cloud Console framing rather than an industrial HUD — a flat white
- * surface, a single hairline, and exactly two rows:
- *
- *   row 1   avatar + name + role badge ......... WMS status · shield
- *   row 2   work-zone selector pill
- *
- * Everything here answers a question the operator asks without looking at the
- * screen ("am I on the right shift, right zone, right system?"), so it never
- * competes with the screen's own title.
- *
- * This file is deliberately just the two rows plus the wiring: the three
- * overlays it can open live beside it (`ZonePickerModal`, `AccountSheet`,
- * `SafetyActionSheet`) over a shared `SheetDialog` frame. They were inline here
- * until the header was 519 lines, most of them three copies of the same modal
- * chrome.
+ * Structure:
+ *   - Left: BrandMark (40px) + Work Zone Selector Pill (40px height).
+ *   - Right: Quick Search (40px) + Notification Bell with Badge (40px) + Operator Avatar (40px).
  */
 export function AppHeader({
   operatorName = 'Alex Tran',
@@ -78,13 +49,13 @@ export function AppHeader({
   zone = 'Inbound Dock 01',
   onLogout,
   onZoneChange,
+  initialOpen,
 }: AppHeaderProps) {
   const topInset = useTopInset();
-  const { navigate } = useNavigation();
-  const { isHolding, toggleHold } = useSafetyHold();
-  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
-  const [isAccountOpen, setIsAccountOpen] = useState(false);
-  const [isSafetyOpen, setIsSafetyOpen] = useState(false);
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(initialOpen === 'zone');
+  const [isAccountOpen, setIsAccountOpen] = useState(initialOpen === 'account');
+  const [isNotificationOpen, setIsNotificationOpen] = useState(initialOpen === 'notifications');
+  const [unreadCount, setUnreadCount] = useState(3);
 
   const avatarInitials = initials ?? initialsOf(operatorName);
 
@@ -95,89 +66,64 @@ export function AppHeader({
     toast.info(`Switched zone to ${nextZone}`);
   };
 
-  const handleToggleHold = () => {
-    triggerHaptic(isHolding ? 'success' : 'warning');
-    toggleHold();
-    if (isHolding) {
-      toast.success('Soft pause released. Navigation resumed.', 'Local Fleet Simulation.');
-    } else {
-      toast.warning(
-        'Robots within 3m are holding.',
-        'Cross the aisle, then release the hold. (Local Fleet Simulation)'
-      );
-    }
-  };
-
   return (
-    <View style={[styles.header, { paddingTop: topInset }]}>
-      {/* Row 1 — identity, system state, safety */}
+    <View style={[styles.header, { paddingTop: topInset + 4 }]}>
       <View style={styles.row}>
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            setIsAccountOpen(true);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`Account menu for ${operatorName}`}
-          style={({ pressed }) => [styles.avatar, pressed && styles.avatarPressed]}
-        >
-          <Text variant="label" color={colors.textInverse} style={styles.avatarText}>
-            {avatarInitials}
-          </Text>
-        </Pressable>
+        {/* Left: Brand Mark (40px) + Work Zone Selector Pill */}
+        <View style={styles.leftGroup}>
+          <BrandMark size={40} />
 
-        <View style={styles.identity}>
-          <Text variant="bodyMedium" color={colors.textPrimary} numberOfLines={1} style={styles.name}>
-            {operatorName}
-          </Text>
-          <View style={styles.roleBadge}>
-            <Text variant="caption" color={colors.textSecondary} style={styles.roleText}>
-              {operatorRole}
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              setIsZoneModalOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Work zone: ${zone}. Tap to change.`}
+            style={({ pressed }) => [styles.zonePill, pressed && styles.zonePillPressed]}
+          >
+            <MapPin size={13} color={colors.primaryText} strokeWidth={2.4} />
+            <Text variant="label" color={colors.textPrimary} numberOfLines={1} style={styles.zoneName}>
+              {zone}
             </Text>
-          </View>
+            <ChevronDown size={13} color={colors.textMuted} strokeWidth={2.2} />
+          </Pressable>
         </View>
 
-        <View style={styles.statusPill}>
-          <View style={styles.statusDot} />
-          <Text variant="caption" color={colors.successText} numberOfLines={1}>
-            WMS Connected
-          </Text>
-        </View>
+        {/* Right: Notification Bell + Operator Avatar */}
+        <View style={styles.rightGroup}>
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              setIsNotificationOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Notifications, ${unreadCount} unread`}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+          >
+            <Bell size={18} color={colors.textPrimary} strokeWidth={2.2} />
+            {unreadCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
 
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            setIsSafetyOpen(true);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Operational safety and exceptions"
-          accessibilityHint={isHolding ? SIMULATION_NOTICE : 'Hold a nearby robot, report a hazard or a cargo defect.'}
-          style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-        >
-          {isHolding ? (
-            <ShieldAlert size={20} color={colors.warningText} />
-          ) : (
-            <ShieldCheck size={20} color={colors.textSecondary} />
-          )}
-        </Pressable>
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              setIsAccountOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Account menu for ${operatorName}`}
+            style={({ pressed }) => [styles.avatar, pressed && styles.avatarPressed]}
+          >
+            <Text variant="label" color={colors.textInverse} style={styles.avatarText}>
+              {avatarInitials}
+            </Text>
+          </Pressable>
+        </View>
       </View>
-
-      {/* Row 2 — work zone */}
-      <Pressable
-        onPress={() => {
-          triggerHaptic('tap');
-          setIsZoneModalOpen(true);
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={`Work zone: ${zone}. Tap to change.`}
-        style={({ pressed }) => [styles.zonePill, pressed && styles.zonePillPressed]}
-      >
-        <MapPin size={15} color={colors.primary} />
-        <Text variant="label" color={colors.textPrimary} numberOfLines={1} style={styles.zoneName}>
-          {zone}
-        </Text>
-        <ChevronDown size={15} color={colors.textMuted} />
-      </Pressable>
 
       <ZonePickerModal
         visible={isZoneModalOpen}
@@ -196,21 +142,10 @@ export function AppHeader({
         onLogout={onLogout}
       />
 
-      <SafetyActionSheet
-        visible={isSafetyOpen}
-        isHolding={isHolding}
-        onClose={() => setIsSafetyOpen(false)}
-        onToggleHold={handleToggleHold}
-        onReportHazard={() => navigate('block_path')}
-        /**
-         * A cargo defect is a *payload* problem — damaged packaging, unreadable
-         * barcode — and belongs in the incident report. It used to route to
-         * `payload_recovery`, which is the chassis rescue flow: the operator
-         * reporting a crushed tote was taken to a screen about lifting a
-         * stalled AMR off a pallet.
-         */
-        onReportDefect={() => navigate('job_detail', { modal: 'issue' })}
-        onOpenMaintenance={() => navigate('fleet_recall')}
+      <NotificationSheet
+        visible={isNotificationOpen}
+        onClose={() => setIsNotificationOpen(false)}
+        onUnreadCountChange={setUnreadCount}
       />
     </View>
   );
@@ -223,104 +158,97 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     paddingHorizontal: 16,
     paddingBottom: 10,
-    zIndex: 80,
-    // Android reads `elevation` for depth and ignores the iOS shadow* props;
-    // `shadows.sm` supplies 1, which is what a hairline-bordered header wants.
+    zIndex: 999,
     ...shadows.sm,
   },
-  /**
-   * 8pt gaps, not 10: the identity name is the one flexible element in this
-   * row, and every extra point here comes straight out of its budget. At 10pt
-   * it truncated to "Alex Tr..." on a 390pt screen.
-   */
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    minHeight: 48,
+    justifyContent: 'space-between',
+    minHeight: 56,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  leftGroup: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  avatarPressed: {
-    opacity: 0.85,
-  },
-  avatarText: {
-    fontWeight: '700',
-  },
-  identity: {
+    gap: 10,
     flex: 1,
     minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  name: {
-    flexShrink: 1,
-    fontWeight: '600',
-  },
-  roleBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  roleText: {
-    fontWeight: '500',
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.successBg,
-    borderWidth: 1,
-    borderColor: colors.successBorder,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.success,
-  },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconBtnPressed: {
-    backgroundColor: colors.surfaceSubtle,
   },
   zonePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 8,
-    minHeight: 44,
-    maxWidth: '100%',
-    marginTop: 8,
+    gap: 6,
+    height: 40,
     paddingHorizontal: 12,
-    borderRadius: radii.pill,
+    borderRadius: radii.full,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
+    maxWidth: 180,
   },
   zonePillPressed: {
     backgroundColor: colors.surfaceMuted,
   },
   zoneName: {
-    flexShrink: 1,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  rightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  iconBtnPressed: {
+    backgroundColor: colors.surfaceMuted,
+    transform: [{ scale: 0.95 }],
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#ef4444',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  notifBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 12,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#121317', // Solid deep ink / black
+  },
+  avatarPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.95 }],
+  },
+  avatarText: {
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

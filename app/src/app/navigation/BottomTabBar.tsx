@@ -1,38 +1,32 @@
 import React from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ClipboardList, Home, Map as MapIcon, Navigation } from 'lucide-react-native';
+import { ClipboardList, Home, Navigation } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { MainTab, useNavigation } from './NavigationContext';
 
 /** Height of the tab row itself, excluding the bottom safe-area inset. */
-const TAB_ROW_HEIGHT = 56;
+const TAB_ROW_HEIGHT = 54;
+
+/** Fallback bottom padding when the platform reports no inset. */
+const FALLBACK_BOTTOM_INSET = 10;
 
 /**
- * Fallback bottom padding when the platform reports no inset (web inside the
- * phone frame). 8pt is enough to clear the home indicator drawn by the frame.
- */
-const FALLBACK_BOTTOM_INSET = 8;
-
-/**
- * Bottom navigation.
+ * Minimalist, Icon-Only Bottom Navigation.
  *
- * Flat and edge to edge: a white surface, a single hairline on top, no pill and
- * no floating shadow. Content scrolls underneath it (see `dockReservedSpace` in
- * `shared/theme/layout`), which is what lets a card run the full width of the
- * screen the way a Google console does.
+ * 3 Core Tabs for Warehouse Operators:
+ *   1. Home      — Live Telemetry Facility Map & Next Handover Task
+ *   2. Jobs      — Task Execution Center (My Tasks, Fleet Queue, History)
+ *   3. Transport — Dispatch & Transport Requests
  *
- * Four tabs, 12pt Title Case labels, and a 48pt-min tap target per tab inside
- * the 56pt row. The Jobs count rides as a chip on the icon rather than as a pill
- * behind the whole tab, so the label stays legible.
- *
- * The active tab uses `colors.primaryText`, not `colors.primary`. Both are the
- * same value today (see `theme/colors`), but the label is 12pt text on a
- * *white* bar — the case the accent has to clear 4.5:1 in as a foreground, not
- * only as a fill.
+ * Designed with Google Workspace / Calm Operations precision:
+ *   - Icon-only: no text labels underneath for maximum elegance and touch focus.
+ *   - Active state: soft rounded-full pill highlight (`primaryLight`).
+ *   - Touch targets: >= 64pt width x 48pt height.
  */
 export function BottomTabBar() {
   const { activeTab, switchTab, activeJobCount, setDockHeight } = useNavigation();
@@ -62,38 +56,32 @@ export function BottomTabBar() {
               accessibilityRole="tab"
               accessibilityLabel={tab.label}
               accessibilityState={{ selected: isActive }}
-              style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
+              style={({ pressed }) => [
+                styles.tabBtn,
+                isActive && styles.tabBtnActive,
+                pressed && styles.tabBtnPressed,
+              ]}
             >
               <View style={styles.iconSlot}>
                 <IconCmp
-                  size={22}
+                  size={24}
                   color={isActive ? colors.primaryText : colors.textMuted}
-                  strokeWidth={isActive ? 2.4 : 2}
+                  strokeWidth={isActive ? 2.4 : 2.0}
                 />
                 {tab.value === 'jobs' && activeJobCount > 0 ? (
                   <View style={styles.badge}>
-                    <Text variant="caption" color={colors.textPrimary} style={styles.badgeText}>
+                    <Text variant="caption" color="#78350f" style={styles.badgeText}>
                       {activeJobCount}
                     </Text>
                   </View>
                 ) : null}
               </View>
-
-              <Text
-                variant="caption"
-                color={isActive ? colors.primaryText : colors.textMuted}
-                numberOfLines={1}
-                style={[styles.label, isActive && styles.labelActive]}
-              >
-                {tab.label}
-              </Text>
             </Pressable>
           );
         })}
       </View>
 
-      {/* The safe-area strip is painted in, not left to the parent, so the bar
-          background stays unbroken on a device with a home indicator. */}
+      {/* Safe-area bottom inset padding */}
       <View style={[styles.safeArea, { height: bottomInset }]} pointerEvents="none" />
     </View>
   );
@@ -106,7 +94,6 @@ const TABS: ReadonlyArray<{
 }> = [
   { label: 'Home', value: 'home', icon: Home },
   { label: 'Jobs', value: 'jobs', icon: ClipboardList },
-  { label: 'Live Map', value: 'live_map', icon: MapIcon },
   { label: 'Transport', value: 'transport', icon: Navigation },
 ];
 
@@ -125,48 +112,49 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 4,
+    justifyContent: 'space-around',
+    paddingHorizontal: 24,
   },
-  tab: {
-    flex: 1,
+  tabBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    minHeight: 48,
-    paddingHorizontal: 4,
+    minWidth: 72,
+    height: 44,
+    borderRadius: radii.full,
+    paddingHorizontal: 18,
   },
-  tabPressed: {
-    opacity: 0.6,
+  tabBtnActive: {
+    backgroundColor: 'rgba(21, 87, 208, 0.08)',
+  },
+  tabBtnPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.94 }],
   },
   iconSlot: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: {
-    fontWeight: '500',
-  },
-  labelActive: {
-    fontWeight: '600',
-  },
-  /** Count chip: amber fill with a ring so it reads as a separate element. */
+  /** Lighter warm amber badge chip with crisp white border */
   badge: {
     position: 'absolute',
     top: -6,
-    right: -12,
+    right: -13,
     minWidth: 18,
     paddingHorizontal: 4,
     height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 9,
-    backgroundColor: colors.warning,
+    borderRadius: radii.full,
+    backgroundColor: '#fbbf24', // Amber 400: bright, light, warm golden
     borderWidth: 1.5,
-    borderColor: colors.warningText,
+    borderColor: '#ffffff',
   },
   badgeText: {
-    fontWeight: '700',
-    lineHeight: 14,
+    fontWeight: '800',
+    fontSize: 11,
+    lineHeight: 13,
+    color: '#78350f',
   },
   safeArea: {
     backgroundColor: colors.surface,

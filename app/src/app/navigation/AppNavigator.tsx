@@ -26,7 +26,7 @@ import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
   const { session, isAuthenticated, logout, updateZone } = useAuth();
-  const { currentScreen, goBack } = useNavigation();
+  const { currentScreen, goBack, params, navigate } = useNavigation();
 
   if (!isAuthenticated || !session) {
     return <LoginScreen />;
@@ -88,7 +88,7 @@ export function AppNavigator() {
 
   return (
     <View style={styles.root}>
-      {isMainTab && (
+      {currentScreen === 'home' && (
         <AppHeader
           operatorName={session.fullName}
           operatorRole={session.role === 'ADMIN' ? 'Admin' : 'Staff'}
@@ -96,6 +96,15 @@ export function AppNavigator() {
           zone={session.zone}
           onLogout={logout}
           onZoneChange={updateZone}
+          initialOpen={
+            params?.modal === 'zone'
+              ? 'zone'
+              : params?.modal === 'account'
+                ? 'account'
+                : params?.modal === 'notifications'
+                  ? 'notifications'
+                  : undefined
+          }
         />
       )}
 
@@ -117,5 +126,6 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
+    zIndex: 1,
   },
 });

@@ -1,19 +1,20 @@
 import { LogOut } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { toast } from '../../shared/context/ToastContext';
 import { colors } from '../../shared/theme/colors';
+import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
+import { shadows } from '../../shared/theme/shadows';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { SheetDialog } from './SheetDialog';
 
 export interface AccountSheetProps {
   visible: boolean;
   onClose: () => void;
   operatorName: string;
   operatorRole: string;
-  /** Avatar initials. Falls back to the operator name's first two initials. */
+  /** Avatar initials, computed by the caller from the operator name. */
   initials: string;
   zone: string;
   /** Omitted when the shell is embedded somewhere that owns sign-out itself. */
@@ -21,12 +22,10 @@ export interface AccountSheetProps {
 }
 
 /**
- * Who is on shift, and the one way out of it.
+ * Anchored Account Dropdown Card.
  *
- * Signing out is a full-width `danger` row on a `dangerBg` fill, placed *after*
- * the shift summary rather than under the avatar: an operator ending a shift is
- * reaching for this deliberately, and a bare icon in the corner is the one
- * control on the shell a mis-tap would end their session over.
+ * Drops down cleanly right beneath the avatar with an ultra-lightweight,
+ * transparent dismiss layer instead of a heavy centered screen modal.
  */
 export function AccountSheet({
   visible,
@@ -37,6 +36,8 @@ export function AccountSheet({
   zone,
   onLogout,
 }: AccountSheetProps) {
+  const topInset = useTopInset();
+
   const handleSignOut = () => {
     triggerHaptic('warning');
     onClose();
@@ -45,68 +46,111 @@ export function AccountSheet({
   };
 
   return (
-    <SheetDialog visible={visible} onClose={onClose} closeLabel="Close account menu">
-      <View style={styles.row}>
-        <View style={styles.avatar}>
-          <Text variant="bodyMedium" color={colors.textInverse}>
-            {initials}
-          </Text>
-        </View>
-        <View style={styles.text}>
-          <Text variant="bodyMedium" numberOfLines={1}>
-            {operatorName}
-          </Text>
-          <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-            {operatorRole} · {zone}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.shiftRow}>
-        <Text variant="caption" color={colors.textSecondary}>
-          Current shift
-        </Text>
-        <Text variant="label">Morning (06:00 – 14:00)</Text>
-      </View>
-
-      {onLogout ? (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={StyleSheet.absoluteFill}>
         <Pressable
-          onPress={handleSignOut}
+          style={styles.backdrop}
+          onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Sign out of shift"
-          style={({ pressed }) => [styles.signOutBtn, pressed && styles.signOutBtnPressed]}
-        >
-          <LogOut size={16} color={colors.danger} />
-          <Text variant="label" color={colors.danger}>
-            Sign out of shift
-          </Text>
-        </Pressable>
-      ) : null}
-    </SheetDialog>
+          accessibilityLabel="Close account menu"
+        />
+
+        <View style={[styles.dropdownCard, { top: topInset + 50 }]}>
+          {/* Operator Profile */}
+          <View style={styles.profileRow}>
+            <View style={styles.avatar}>
+              <Text variant="caption" color={colors.textInverse} style={styles.avatarText}>
+                {initials}
+              </Text>
+            </View>
+            <View style={styles.profileText}>
+              <Text variant="bodyMedium" numberOfLines={1} style={styles.operatorName}>
+                {operatorName}
+              </Text>
+              <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+                {operatorRole} · {zone}
+              </Text>
+            </View>
+          </View>
+
+          {/* Shift Details */}
+          <View style={styles.shiftBox}>
+            <Text variant="caption" color={colors.textSecondary}>
+              Current shift
+            </Text>
+            <Text variant="label" color={colors.textPrimary}>
+              Morning (06:00 – 14:00)
+            </Text>
+          </View>
+
+          {/* Sign Out Action */}
+          {onLogout ? (
+            <Pressable
+              onPress={handleSignOut}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out of shift"
+              style={({ pressed }) => [styles.signOutBtn, pressed && styles.signOutBtnPressed]}
+            >
+              <LogOut size={15} color={colors.dangerText} />
+              <Text variant="label" color={colors.dangerText}>
+                Sign Out
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  backdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(15, 23, 42, 0.18)',
+  },
+  dropdownCard: {
+    position: 'absolute',
+    right: 16,
+    width: 260,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 10,
+    ...shadows.lg,
+  },
+  profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: '#121317', // Calm monochrome ink
   },
-  text: {
+  avatarText: {
+    fontWeight: '700',
+  },
+  profileText: {
     flex: 1,
     minWidth: 0,
   },
-  shiftRow: {
-    marginTop: 4,
-    padding: 12,
+  operatorName: {
+    fontWeight: '700',
+  },
+  shiftBox: {
+    padding: 8,
     borderRadius: radii.md,
     backgroundColor: colors.surfaceSubtle,
     gap: 2,
@@ -116,8 +160,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    minHeight: 48,
-    marginTop: 4,
+    height: 38,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.dangerBorder,
