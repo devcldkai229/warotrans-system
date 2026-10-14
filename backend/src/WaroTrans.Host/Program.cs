@@ -127,9 +127,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseAuthentication();
-app.UseAuthorization();
 
+// Map occupancy assets are referenced by <img>/<image> without an Authorization header.
+// Serve them before auth so PreviewImageUri works in the Admin Map Editor.
 var mapAssetsRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "data", "maps"));
 Directory.CreateDirectory(mapAssetsRoot);
 var mapContentTypes = new FileExtensionContentTypeProvider();
@@ -142,6 +142,9 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/map-assets",
     ContentTypeProvider = mapContentTypes
 });
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapHub<NotificationsHub>("/hubs/notifications");

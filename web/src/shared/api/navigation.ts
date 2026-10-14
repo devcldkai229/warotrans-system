@@ -1,15 +1,14 @@
 import { apiFetch, apiRequest } from './client'
-import type { EdgeDirection, EndpointType, MapStatus, ZoneType } from './contracts'
+import type {
+  EdgeDirection,
+  EndpointType,
+  GeoJsonLineString,
+  GeoJsonPolygon,
+  MapStatus,
+  ZoneType,
+} from './contracts'
 
-export interface GeoJsonLineString {
-  type: 'LineString'
-  coordinates: [number, number][]
-}
-
-export interface GeoJsonPolygon {
-  type: 'Polygon'
-  coordinates: [number, number][][]
-}
+export type { GeoJsonLineString, GeoJsonPolygon }
 
 export interface MapVersionDto {
   id: string
@@ -111,6 +110,39 @@ export function importMapVersion(warehouseId: string, yaml: File, pgm: File, nam
     method: 'POST',
     body: form,
   })
+}
+
+export function listEndpoints(mapVersionId: string) {
+  return apiFetch<EndpointDto[]>(`/api/navigation/maps/${mapVersionId}/endpoints`)
+}
+
+export function deleteEndpoint(id: string) {
+  return apiRequest<void>(`/api/navigation/endpoints/${id}`, { method: 'DELETE' })
+}
+
+export function listEdges(mapVersionId: string) {
+  return apiFetch<EdgeDto[]>(`/api/navigation/maps/${mapVersionId}/edges`)
+}
+
+export function listZones(mapVersionId: string) {
+  return apiFetch<ZoneDto[]>(`/api/navigation/maps/${mapVersionId}/zones`)
+}
+
+/** Fetch bundled sample ROS map for DEV import (same files Admin would upload). */
+export async function fetchSampleMapFiles(): Promise<{ yaml: File; pgm: File }> {
+  const [yamlRes, pgmRes] = await Promise.all([
+    fetch('/test-maps/sample/map.yaml'),
+    fetch('/test-maps/sample/map.pgm'),
+  ])
+  if (!yamlRes.ok || !pgmRes.ok) {
+    throw new Error('Sample map fixture not found at /test-maps/sample/.')
+  }
+  const yamlBlob = await yamlRes.blob()
+  const pgmBlob = await pgmRes.blob()
+  return {
+    yaml: new File([yamlBlob], 'map.yaml', { type: 'text/yaml' }),
+    pgm: new File([pgmBlob], 'map.pgm', { type: 'application/octet-stream' }),
+  }
 }
 
 export function createEndpoint(
@@ -236,6 +268,8 @@ export function deleteZone(id: string) {
 export function resolveMapAssetUrl(uri: string | null | undefined): string | null {
   if (!uri) return null
   if (uri.startsWith('http://') || uri.startsWith('https://')) return uri
-  const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:5090').replace(/\/+$/, '')
-  return `${apiUrl}${uri.startsWith('/') ? uri : `/${uri}`}`
+  const path = uri.startsWith('/') ? uri : `/${uri}`
+  // Empty VITE_API_URL → same-origin (Vite proxies /map-assets in dev).
+  const apiUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
+  return apiUrl ? `${apiUrl}${path}` : path
 }

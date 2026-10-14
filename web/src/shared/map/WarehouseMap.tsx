@@ -24,6 +24,7 @@ import {
   toPercent,
   zoneSwatchStyle,
 } from './mapStyle'
+import { lineStringToPoints, polygonToPoints } from './geoJson'
 import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES, distanceToPolyline, pointInPolygon } from './scene'
 
 /** A Robot as the map draws it: pose from fleet.robots, status for the colour. */
@@ -195,12 +196,22 @@ export function WarehouseMap({
   // Occupancy against capacity, from the Robots currently drawn (rules/05: Zone and Edge occupancy).
   const zoneLoad = useMemo(
     () =>
-      new Map(zones.map((zone) => [zone.id, robots.filter((robot) => pointInPolygon(robot, zone.geometry.points)).length])),
+      new Map(
+        zones.map((zone) => [
+          zone.id,
+          robots.filter((robot) => pointInPolygon(robot, polygonToPoints(zone.geometry))).length,
+        ]),
+      ),
     [zones, robots],
   )
   const edgeLoad = useMemo(
     () =>
-      new Map(edges.map((edge) => [edge.id, robots.filter((robot) => distanceToPolyline(robot, edge.geometry.points) < 1.2).length])),
+      new Map(
+        edges.map((edge) => [
+          edge.id,
+          robots.filter((robot) => distanceToPolyline(robot, lineStringToPoints(edge.geometry)) < 1.2).length,
+        ]),
+      ),
     [edges, robots],
   )
 
@@ -284,7 +295,7 @@ export function WarehouseMap({
           {show.zones ? (
             <g opacity={layerOpacity('zones')}>
               {zones.map((zone) => {
-                const points = zone.geometry.points
+                const points = polygonToPoints(zone.geometry)
                 const xs = points.map((point) => X(point.x))
                 const ys = points.map((point) => Y(point.y))
                 const load = zoneLoad.get(zone.id) ?? 0
@@ -350,7 +361,7 @@ export function WarehouseMap({
           {show.edges ? (
             <g opacity={layerOpacity('edges')}>
               {edges.map((edge) => {
-                const points = edge.geometry.points
+                const points = lineStringToPoints(edge.geometry)
                 const mid = points[Math.floor(points.length / 2)]
                 const load = edgeLoad.get(edge.id) ?? 0
                 const lane = stagePoints(points)

@@ -68,7 +68,7 @@ export function LoginPage() {
 
         <div className="relative flex flex-col items-center text-center">
           <Wordmark size="lg" />
-          <h1 className="mt-10 text-4xl font-normal sm:text-5xl">Sign in to the fleet console</h1>
+          <h1 className="mt-10 text-4xl font-normal sm:text-5xl">Sign in to the console</h1>
           <p className="mt-4 text-base text-ink-2">For warehouse administrators. Staff accounts use the mobile app.</p>
 
           <form onSubmit={handleSubmit} className="mt-10 flex w-full max-w-sm flex-col gap-4 text-left">
