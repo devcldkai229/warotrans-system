@@ -38,23 +38,50 @@ interface SearchInputProps {
   placeholder?: string
   /** `surface` when the field sits on a grey container. */
   tone?: 'tonal' | 'surface'
+  /**
+   * `pill` — toolbar search (rounded-full).
+   * `field` — form control aligned with `controlClass` selects (full width, bordered, icon inset).
+   */
+  variant?: 'pill' | 'field'
   autoFocus?: boolean
   className?: string
 }
 
-export function SearchInput({ value, onChange, placeholder, tone = 'tonal', autoFocus, className }: SearchInputProps) {
+export function SearchInput({
+  value,
+  onChange,
+  placeholder,
+  tone = 'tonal',
+  variant = 'pill',
+  autoFocus,
+  className,
+}: SearchInputProps) {
+  const field = variant === 'field'
+
   return (
     <label
       className={cx(
-        'flex h-9 min-w-0 items-center gap-2 rounded-full px-3.5 text-muted transition-colors duration-200',
-        'focus-within:outline-2 focus-within:outline-blue/60',
-        tone === 'surface' ? 'bg-surface' : 'bg-container-high',
+        // Explicit row + nowrap so icon and text stay on one line.
+        'box-border flex h-9 w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-muted',
+        'transition-colors duration-200',
+        field
+          ? 'rounded-sm border border-outline bg-surface px-2.5 hover:border-ink/30 focus-within:border-blue focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-blue/25'
+          : cx(
+              'rounded-full px-3.5 focus-within:outline-2 focus-within:outline-blue/60',
+              tone === 'surface' ? 'bg-surface' : 'bg-container-high',
+            ),
         className,
       )}
+      style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center' }}
     >
-      <Icon name="search" size={15} className="shrink-0" />
+      <Icon name="search" size={15} className="pointer-events-none block shrink-0" />
       <input
-        className="m-0 h-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-sm leading-none text-ink shadow-none outline-none placeholder:text-muted"
+        className={cx(
+          'box-border m-0 min-h-0 min-w-0 flex-1 appearance-none border-0 bg-transparent p-0',
+          'align-middle text-ink shadow-none outline-none placeholder:text-muted',
+          field ? 'h-auto text-xs leading-normal' : 'h-auto text-sm leading-normal',
+        )}
+        style={{ border: 'none', padding: 0, margin: 0, minWidth: 0, height: 'auto' }}
         placeholder={placeholder}
         aria-label={placeholder ?? 'Search'}
         value={value}

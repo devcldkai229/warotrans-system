@@ -362,15 +362,23 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-label {
+/* Scoped to workflow pages only — unscoped label/input rules were leaking into Fleet,
+   Transport requests, and the Movement Builder search fields (flex-col + input padding). */
+.wf-page label,
+.wf-card label,
+.wf label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
 }
 
-input,
-select {
+.wf-page input,
+.wf-page select,
+.wf-card input,
+.wf-card select,
+.wf input,
+.wf select {
   border: 1px solid #cbd5e1;
   border-radius: 0.4rem;
   padding: 0.4rem 0.55rem;
