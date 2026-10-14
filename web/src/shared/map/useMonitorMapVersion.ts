@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   getActiveMapVersion,
@@ -57,10 +57,19 @@ export interface MonitorMapVersionState {
  */
 export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}): MonitorMapVersionState {
   const enabled = options.enabled !== false
+  const preferredWarehouseId = options.preferredWarehouseId ?? null
+  const preferredMapVersionId = options.preferredMapVersionId ?? null
+
   const [storedWarehouseId, setStoredWarehouseId] = useState(() => readStored(WAREHOUSE_KEY))
   const [storedMapVersionId, setStoredMapVersionId] = useState(() => readStored(MAP_KEY))
-  /** When set, overrides stored map until the user picks another map manually. */
-  const [followPreferredMap, setFollowPreferredMap] = useState(true)
+  /** Manual map pick; cleared when preferredMapVersionId changes (follow selection again). */
+  const [manualMapVersionId, setManualMapVersionId] = useState<string | null>(null)
+  const [seenPreferredMapId, setSeenPreferredMapId] = useState(preferredMapVersionId)
+
+  if (preferredMapVersionId !== seenPreferredMapId) {
+    setSeenPreferredMapId(preferredMapVersionId)
+    setManualMapVersionId(null)
+  }
 
   const warehousesQuery = useQuery({
     queryKey: ['warehouses', 'active'],
@@ -68,15 +77,18 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
     enabled,
   })
 
-  const warehouses = warehousesQuery.data?.items ?? []
+  const warehouseItems = warehousesQuery.data?.items
 
   const warehouseId = useMemo(() => {
-    if (!warehouses.length) return ''
-    const preferred = options.preferredWarehouseId
-    if (preferred && warehouses.some((w) => w.id === preferred)) return preferred
-    if (storedWarehouseId && warehouses.some((w) => w.id === storedWarehouseId)) return storedWarehouseId
-    return warehouses[0].id
-  }, [warehouses, storedWarehouseId, options.preferredWarehouseId])
+    if (!warehouseItems?.length) return ''
+    if (preferredWarehouseId && warehouseItems.some((w) => w.id === preferredWarehouseId)) {
+      return preferredWarehouseId
+    }
+    if (storedWarehouseId && warehouseItems.some((w) => w.id === storedWarehouseId)) {
+      return storedWarehouseId
+    }
+    return warehouseItems[0].id
+  }, [warehouseItems, storedWarehouseId, preferredWarehouseId])
 
   const mapsQuery = useQuery({
     queryKey: ['navigation', 'maps', warehouseId],
@@ -90,28 +102,25 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
     enabled: enabled && Boolean(warehouseId),
   })
 
-  const maps = mapsQuery.data ?? []
+  const mapItems = mapsQuery.data
   const activeMapId = activeMapQuery.data?.id ?? null
 
   const mapVersionId = useMemo(() => {
-    if (!maps.length) return ''
-    const preferred = options.preferredMapVersionId
-    if (followPreferredMap && preferred && maps.some((m) => m.id === preferred)) {
-      return preferred
+    if (!mapItems?.length) return ''
+    if (manualMapVersionId && mapItems.some((m) => m.id === manualMapVersionId)) {
+      return manualMapVersionId
     }
-    if (storedMapVersionId && maps.some((m) => m.id === storedMapVersionId)) {
+    if (preferredMapVersionId && mapItems.some((m) => m.id === preferredMapVersionId)) {
+      return preferredMapVersionId
+    }
+    if (storedMapVersionId && mapItems.some((m) => m.id === storedMapVersionId)) {
       return storedMapVersionId
     }
-    if (activeMapId && maps.some((m) => m.id === activeMapId)) return activeMapId
-    const published = maps.find((m) => m.status === 'PUBLISHED')
+    if (activeMapId && mapItems.some((m) => m.id === activeMapId)) return activeMapId
+    const published = mapItems.find((m) => m.status === 'PUBLISHED')
     if (published) return published.id
-    return maps[0].id
-  }, [maps, storedMapVersionId, activeMapId, options.preferredMapVersionId, followPreferredMap])
-
-  // When preferred map changes (select another request/robot), resume following it.
-  useEffect(() => {
-    if (options.preferredMapVersionId) setFollowPreferredMap(true)
-  }, [options.preferredMapVersionId])
+    return mapItems[0].id
+  }, [mapItems, storedMapVersionId, activeMapId, preferredMapVersionId, manualMapVersionId])
 
   const detailQuery = useQuery({
     queryKey: ['navigation', 'map-detail', mapVersionId],
@@ -125,8 +134,13 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
   )
 
   const version = useMemo(
-    () => maps.find((m) => m.id === mapVersionId) ?? detailQuery.data ?? null,
-    [maps, mapVersionId, detailQuery.data],
+    () => mapItems?.find((m) => m.id === mapVersionId) ?? detailQuery.data ?? null,
+    [mapItems, mapVersionId, detailQuery.data],
+  )
+
+  const warehouses = useMemo(
+    () => (warehouseItems ?? []).map((w) => ({ id: w.id, code: w.code, name: w.name })),
+    [warehouseItems],
   )
 
   function setWarehouseId(id: string) {
@@ -134,13 +148,13 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
     writeStored(WAREHOUSE_KEY, id)
     setStoredMapVersionId('')
     writeStored(MAP_KEY, '')
-    setFollowPreferredMap(false)
+    setManualMapVersionId(null)
   }
 
   function setMapVersionId(id: string) {
     setStoredMapVersionId(id)
     writeStored(MAP_KEY, id)
-    setFollowPreferredMap(false)
+    setManualMapVersionId(id)
   }
 
   return {
@@ -148,8 +162,8 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
     mapVersionId,
     setWarehouseId,
     setMapVersionId,
-    warehouses: warehouses.map((w) => ({ id: w.id, code: w.code, name: w.name })),
-    maps,
+    warehouses,
+    maps: mapItems ?? [],
     activeMapId,
     version,
     geometry: mapVersionId ? geometry : EMPTY_MAP_GEOMETRY,
