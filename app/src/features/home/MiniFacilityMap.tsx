@@ -11,47 +11,14 @@ import {
 import {
   BatteryMedium,
   LocateFixed,
-  Search,
   User,
 } from 'lucide-react-native';
-import Svg, { Line, Defs, G, Pattern, Rect, Path } from 'react-native-svg';
+import Svg, { Line, Defs, Pattern, Rect, Path } from 'react-native-svg';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
-/**
- * AMR heading chevron for the 40pt puck marker.
- *
- * The puck's inner disc is 40 - 2*3(border) = 34pt across, i.e. 17pt radius.
- * Geometry below is expressed in viewBox units, centred on (12, 12) with
- * forward = -y (heading 0deg points up):
- *
- *   tip   (12,  1.50)  R_tip   = 10.50u -> 9.6pt from centre (22pt Svg)
- *   wing  (20.75,18.25) R_wings = 10.78u -> 9.9pt from centre
- *   notch (12, 16.25)  R_notch =  4.25u
- *
- * Two rules are baked in:
- *
- * 1. AREA CENTROID == (12, 12) exactly. The notch removes mass from the tail,
- *    so a bounding-box-centred chevron always has its mass sitting behind the
- *    dot; the previous path was 1.50u (1.38pt) low, which is what read as
- *    "thụt / lệch tâm" at every heading. Notch depth is the free variable
- *    that fixes this.
- *
- * 2. EVEN RADIAL ENVELOPE: R_wings ~= R_tip (ratio 1.03, was 1.41). Keeping
- *    both within ~0.3u of each other means the rim gap is ~7.2pt all the way
- *    round instead of 9.2pt at the front and 6.0pt at the wings - the front of
- *    the puck no longer reads as empty.
- *
- * Resulting silhouette: tip angle 55.2deg (blunter than the old 53.1deg), +17%
- * rendered ink area (a deliberate "beo them 1 chut", not a redesign), and the
- * wings sit 2.25u further forward than before, so it reads as a squat solid
- * puck arrow rather than a thin dart. Stroked with a round join to fatten by
- * 0.75u and soften the corners for the industrial AMR look.
- *
- * Bumping the Svg from 22 to 24pt is the one-line escalation if the arrow still
- * reads small on a physical PDA; that adds a further ~19% ink area on top.
- */
 export const ROBOT_HEADING_ARROW_PATH = 'M12 1.5 L20.75 18.25 L12 16.25 L3.25 18.25 Z';
 
 export interface MapRobot {
@@ -74,10 +41,6 @@ interface MiniFacilityMapProps {
   style?: any;
 }
 
-/**
- * Animated radiating radar wave ring when a robot is actively selected
- * Matches prototype `animate-ping` / radar wave radiation effect
- */
 function RobotSelectionRadarWave({ isSelected }: { isSelected: boolean }) {
   const waveAnim = useRef(new Animated.Value(0)).current;
 
@@ -89,7 +52,7 @@ function RobotSelectionRadarWave({ isSelected }: { isSelected: boolean }) {
     const a = Animated.loop(
       Animated.timing(waveAnim, {
         toValue: 1,
-        duration: 1200,
+        duration: 1400,
         easing: Easing.out(Easing.ease),
         useNativeDriver: Platform.OS !== 'web',
       })
@@ -104,11 +67,11 @@ function RobotSelectionRadarWave({ isSelected }: { isSelected: boolean }) {
 
   const scale = waveAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 2.3],
+    outputRange: [1, 2.2],
   });
   const opacity = waveAnim.interpolate({
     inputRange: [0, 0.7, 1],
-    outputRange: [0.85, 0.35, 0],
+    outputRange: [0.7, 0.25, 0],
   });
 
   return (
@@ -141,7 +104,7 @@ export function MiniFacilityMap({
     const loop = Animated.loop(
       Animated.timing(spinAnim, {
         toValue: 1,
-        duration: 6000,
+        duration: 8000,
         easing: Easing.linear,
         useNativeDriver: Platform.OS !== 'web',
       })
@@ -159,15 +122,15 @@ export function MiniFacilityMap({
 
   const getWorkerPosition = () => {
     if (currentZone.includes('Inbound') || currentZone.includes('Dock 01')) {
-      return { left: '22%', top: '84%', name: 'Dock 01' };
+      return { left: '24%', top: '78%', name: 'Dock 01' };
     }
     if (currentZone.includes('Zone B')) {
-      return { left: '60%', top: '34%', name: 'Zone B' };
+      return { left: '65%', top: '34%', name: 'Zone B' };
     }
     if (currentZone.includes('Outbound') || currentZone.includes('Shipping') || currentZone.includes('Dock 04')) {
-      return { left: '78%', top: '84%', name: 'Dock Out' };
+      return { left: '76%', top: '78%', name: 'Dock Out' };
     }
-    return { left: '24%', top: '30%', name: 'Zone A' };
+    return { left: '26%', top: '30%', name: 'Zone A' };
   };
 
   const workerPos = getWorkerPosition();
@@ -183,12 +146,12 @@ export function MiniFacilityMap({
 
   return (
     <View style={[styles.mapContainer, style]}>
-      {/* 1. Blueprint Grid Background (Active across Mobile and Web) */}
+      {/* 1. Blueprint Grid Background */}
       <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
         <Defs>
-          <Pattern id="facility-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <Line x1="0" y1="0" x2="24" y2="0" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
-            <Line x1="0" y1="0" x2="0" y2="24" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
+          <Pattern id="facility-grid" width="28" height="28" patternUnits="userSpaceOnUse">
+            <Line x1="0" y1="0" x2="28" y2="0" stroke="rgba(33, 34, 38, 0.07)" strokeWidth="1" />
+            <Line x1="0" y1="0" x2="0" y2="28" stroke="rgba(33, 34, 38, 0.07)" strokeWidth="1" />
           </Pattern>
         </Defs>
         <Rect width="100%" height="100%" fill="url(#facility-grid)" />
@@ -201,7 +164,7 @@ export function MiniFacilityMap({
         <View style={[styles.sonarRing, styles.ringSmall]} />
       </View>
 
-      {/* 2b. Rotating Radar Sweep (Conic gradient on web, sweeping indicator) */}
+      {/* 2b. Rotating Radar Sweep */}
       <Animated.View
         pointerEvents="none"
         style={[
@@ -210,43 +173,28 @@ export function MiniFacilityMap({
             transform: [{ rotate: spin }],
           },
           isWeb ? ({
-            backgroundImage: 'conic-gradient(from 0deg, transparent 65%, rgba(0, 92, 209, 0.18) 100%)',
+            backgroundImage: 'conic-gradient(from 0deg, transparent 70%, rgba(21, 87, 208, 0.12) 100%)',
           } as any) : undefined,
         ]}
       />
 
-      {/* 3. Floating Search Bar (Top) */}
-      <View style={styles.searchBarWrapper}>
-        <Pressable
-          onPress={onSearch}
-          style={({ pressed }) => [
-            styles.searchBar,
-            pressed && styles.searchBarPressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Search inventory or locations"
-        >
-          <Search size={18} color={colors.primary} />
-          <Text style={styles.searchPlaceholder}>Search inventory or locations...</Text>
-        </Pressable>
-      </View>
 
-      {/* 4. Active Robot Telemetry Badge (Top Left under search) */}
+      {/* 4. Active Robot Telemetry Badge */}
       {selectedRobot && (
         <View style={styles.telemetryBadge}>
           <View style={styles.telemetryDot} />
           <Text style={styles.telemetryId}>{selectedRobot.id}</Text>
           <View style={styles.onlinePill}>
-            <Text style={styles.onlinePillText}>ONLINE</Text>
+            <Text style={styles.onlinePillText}>Online</Text>
           </View>
           <View style={styles.batteryGroup}>
-            <BatteryMedium size={12} color={colors.textSecondary} />
+            <BatteryMedium size={14} color={colors.textSecondary} />
             <Text style={styles.batteryText}>{selectedRobot.battery}%</Text>
           </View>
         </View>
       )}
 
-      {/* 5. Locate Me GPS Button (Top Right under search) */}
+      {/* 5. Locate Me GPS Button */}
       <Pressable
         onPress={handleLocateMe}
         style={({ pressed }) => [
@@ -256,12 +204,12 @@ export function MiniFacilityMap({
         accessibilityRole="button"
         accessibilityLabel="Locate current position"
       >
-        <LocateFixed size={18} color={colors.primary} />
+        <LocateFixed size={18} color={colors.primaryText} />
       </Pressable>
 
       {/* 6. Storage Zone A Card */}
       <View style={styles.zoneCardA}>
-        <Text style={styles.zoneTitle}>ZONE A</Text>
+        <Text style={styles.zoneTitle}>Zone A · Storage</Text>
         <View style={styles.rackGridA}>
           {Array.from({ length: 12 }).map((_, i) => (
             <View key={i} style={styles.rackPill} />
@@ -271,7 +219,7 @@ export function MiniFacilityMap({
 
       {/* 7. Storage Zone B Card */}
       <View style={styles.zoneCardB}>
-        <Text style={styles.zoneTitle}>ZONE B</Text>
+        <Text style={styles.zoneTitle}>Zone B · Storage</Text>
         <View style={styles.rackGridB}>
           {Array.from({ length: 8 }).map((_, i) => (
             <View key={i} style={styles.rackPill} />
@@ -279,27 +227,24 @@ export function MiniFacilityMap({
         </View>
       </View>
 
-      {/* 8. Loading Docks Area (Bottom Dashed Outline) */}
+      {/* 8. Loading Docks Area */}
       <View style={styles.docksContainer}>
-        <Text style={styles.zoneTitle}>LOADING DOCKS</Text>
+        <Text style={styles.zoneTitle}>Loading Docks</Text>
         <View style={styles.docksRow}>
           <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>DOCK-01</Text>
+            <Text style={styles.dockSlotText}>Dock 01</Text>
           </View>
           <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>DOCK-02</Text>
+            <Text style={styles.dockSlotText}>Dock 02</Text>
           </View>
           <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>DOCK-03</Text>
+            <Text style={styles.dockSlotText}>Dock 03</Text>
           </View>
         </View>
       </View>
 
-      {/* 9. Dynamic Nav2 Trajectory Wayline (Matches prototype line 928) */}
-      <View
-        pointerEvents="none"
-        style={styles.trajectoryStrip}
-      />
+      {/* 9. Dynamic Trajectory Wayline */}
+      <View pointerEvents="none" style={styles.trajectoryStrip} />
 
       {/* 10. Dynamic Worker Position Marker */}
       <View
@@ -348,65 +293,43 @@ export function MiniFacilityMap({
                 top: `${robot.yPercent}%` as any,
               },
             ]}
-            accessibilityRole="button"
-            accessibilityLabel={`Select ${robot.id}`}
-            // The marker itself is 40pt and the ID tag is absolutely
-            // positioned, so the layout box is 40x40. hitSlop lifts the
-            // effective target to 52pt without disturbing marker geometry.
-            hitSlop={6}
           >
-            {/* Directional Sonar Radar Cone on Web */}
-            {isWeb && (
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.directionalSonarCone,
-                  {
-                    transform: [{ rotate: `${robot.headingDeg - 45}deg` }],
-                    backgroundImage: 'conic-gradient(from 0deg, transparent 75%, rgba(2, 132, 199, 0.40) 100%)',
-                  } as any,
-                ]}
-              />
-            )}
-
-            {/* Pulsing Radiating Radar Wave when Selected */}
             <RobotSelectionRadarWave isSelected={isSelected} />
 
-            {/* Directional Robot Marker with Geometrically Centered Chubby Navigation Arrow */}
             <View
               style={[
-                styles.robotMarker,
-                isMoving ? styles.robotMoving : styles.robotIdle,
-                isSelected && styles.robotSelectedGlow,
+                styles.robotPuck,
+                isSelected && styles.robotPuckSelected,
+                isMoving && styles.robotPuckMoving,
               ]}
             >
-              <Svg width={22} height={22} viewBox="0 0 24 24">
-                {/* Rotate about the viewBox centre explicitly rather than via a
-                    centred wrapper View: the origin stays pinned to the puck
-                    centre even if the rendered Svg size changes later. */}
-                <G rotation={robot.headingDeg} origin="12, 12">
+              <View
+                style={{
+                  transform: [{ rotate: `${robot.headingDeg}deg` }],
+                  width: 20,
+                  height: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Svg width="18" height="18" viewBox="0 0 24 24">
                   <Path
                     d={ROBOT_HEADING_ARROW_PATH}
-                    fill="#ffffff"
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
-                    strokeLinejoin="round"
+                    fill={isMoving ? '#ffffff' : colors.primaryText}
                   />
-                </G>
-              </Svg>
+                </Svg>
+              </View>
             </View>
 
-            {/* Speed & ID Floating Tag - Single-line nowrap horizontal pill */}
-            <View style={styles.robotTag}>
+            <View style={styles.robotLabelPill}>
               <View
                 style={[
-                  styles.tagDot,
-                  { backgroundColor: isMoving ? colors.primary : colors.success },
+                  styles.robotDot,
+                  { backgroundColor: isMoving ? colors.primaryText : colors.success },
                 ]}
               />
-              <Text style={styles.robotTagText} numberOfLines={1}>
-                {robot.id} · {robot.speed}
-              </Text>
+              <Text style={styles.robotLabelText} numberOfLines={1}>{robot.id}</Text>
+              <Text style={styles.robotSpeedText} numberOfLines={1}>{robot.speed}</Text>
             </View>
           </Pressable>
         );
@@ -418,100 +341,73 @@ export function MiniFacilityMap({
 const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
-    minHeight: 340,
-    backgroundColor: colors.mapBackground, // High-contrast blueprint cyan (#e0f2fe)
+    backgroundColor: '#eef1f6',
     position: 'relative',
     overflow: 'hidden',
   },
   sonarCenter: {
     position: 'absolute',
     left: '50%',
-    top: '48%',
+    top: '45%',
     alignItems: 'center',
     justifyContent: 'center',
+    width: 0,
+    height: 0,
   },
   sonarRing: {
     position: 'absolute',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.12)',
-  },
-  ringLarge: {
-    width: 320,
-    height: 320,
-  },
-  ringMedium: {
-    width: 220,
-    height: 220,
+    borderColor: 'rgba(21, 87, 208, 0.08)',
   },
   ringSmall: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
+    marginLeft: -70,
+    marginTop: -70,
+  },
+  ringMedium: {
+    width: 260,
+    height: 260,
+    marginLeft: -130,
+    marginTop: -130,
+  },
+  ringLarge: {
+    width: 380,
+    height: 380,
+    marginLeft: -190,
+    marginTop: -190,
   },
   radarSweep: {
     position: 'absolute',
     left: '50%',
-    top: '48%',
-    width: 340,
-    height: 340,
-    marginLeft: -170,
-    marginTop: -170,
-    borderRadius: 170,
+    top: '45%',
+    width: 320,
+    height: 320,
+    marginLeft: -160,
+    marginTop: -160,
+    borderRadius: 160,
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.15)',
+    borderColor: 'rgba(21, 87, 208, 0.10)',
     backgroundColor: 'transparent',
-  },
-  searchBarWrapper: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    right: 14,
-    zIndex: 35,
-  },
-  searchBar: {
-    height: 48,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(215, 223, 233, 0.85)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    gap: 10,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  searchBarPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  searchPlaceholder: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    flex: 1,
-    fontFamily: typography.fontSans,
   },
   telemetryBadge: {
     position: 'absolute',
-    top: 72,
+    top: 14,
     left: 14,
     zIndex: 30,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     gap: 6,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
   },
@@ -523,21 +419,19 @@ const styles = StyleSheet.create({
   },
   telemetryId: {
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '700',
     color: colors.textPrimary,
-    fontFamily: typography.fontSans,
   },
   onlinePill: {
-    backgroundColor: colors.successSoft,
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 4,
+    backgroundColor: colors.successBg,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radii.full,
   },
   onlinePillText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.success,
-    fontFamily: typography.fontMono,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.successText,
   },
   batteryGroup: {
     flexDirection: 'row',
@@ -545,76 +439,71 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   batteryText: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textSecondary,
-    fontFamily: typography.fontSans,
   },
   locateButton: {
     position: 'absolute',
-    top: 72,
+    top: 14,
     right: 14,
     zIndex: 30,
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 5,
     elevation: 3,
   },
   locateButtonPressed: {
     backgroundColor: colors.surfaceSubtle,
-    transform: [{ scale: 0.92 }],
+    transform: [{ scale: 0.94 }],
   },
   zoneCardA: {
     position: 'absolute',
     left: '6%',
-    top: '9%',
-    marginTop: 48,
-    height: '26%',
-    width: '39%',
-    backgroundColor: colors.mapZoneBg,
-    borderWidth: 1.5,
-    borderColor: colors.mapLine,
-    borderRadius: 8,
-    padding: 7,
+    top: '12%',
+    height: '24%',
+    width: '40%',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 8,
   },
   zoneCardB: {
     position: 'absolute',
     right: '6%',
-    top: '11%',
-    marginTop: 48,
-    height: '24%',
-    width: '37%',
-    backgroundColor: colors.mapZoneBg,
-    borderWidth: 1.5,
-    borderColor: colors.mapLine,
-    borderRadius: 8,
-    padding: 7,
+    top: '14%',
+    height: '22%',
+    width: '38%',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 8,
   },
   zoneTitle: {
-    fontSize: 9,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.textSecondary,
-    letterSpacing: 0.5,
-    fontFamily: typography.fontSans,
   },
   rackGridA: {
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 3,
     justifyContent: 'space-between',
   },
   rackGridB: {
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 3,
@@ -622,23 +511,22 @@ const styles = StyleSheet.create({
   },
   rackPill: {
     width: '30%',
-    height: 12,
+    height: 10,
     borderRadius: 2,
-    backgroundColor: colors.mapRack,
+    backgroundColor: '#cbd5e1',
   },
   docksContainer: {
     position: 'absolute',
     left: '6%',
-    bottom: 16,
+    bottom: 220,
     width: '88%',
-    height: '22%',
-    maxHeight: 74,
-    backgroundColor: colors.mapZoneBg,
-    borderWidth: 1.5,
+    height: 68,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: colors.mapLine,
-    borderRadius: 8,
-    padding: 7,
+    borderColor: colors.borderStrong,
+    borderRadius: 12,
+    padding: 8,
   },
   docksRow: {
     flexDirection: 'row',
@@ -647,18 +535,17 @@ const styles = StyleSheet.create({
   },
   dockSlot: {
     flex: 1,
-    height: 32,
-    borderRadius: 4,
+    height: 28,
+    borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: 'rgba(203, 213, 225, 0.8)',
-    backgroundColor: 'rgba(241, 245, 249, 0.7)',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dockSlotText: {
-    fontSize: 9,
-    fontFamily: typography.fontMono,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.textSecondary,
   },
   workerMarker: {
@@ -670,41 +557,37 @@ const styles = StyleSheet.create({
   },
   workerPulse: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 92, 209, 0.22)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(21, 87, 208, 0.18)',
   },
   workerPulseActive: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: 'rgba(0, 92, 209, 0.45)',
-    transform: [{ scale: 1.25 }],
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(21, 87, 208, 0.35)',
+    transform: [{ scale: 1.2 }],
   },
   workerAvatar: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#071523',
+    backgroundColor: colors.textPrimary,
     borderWidth: 2,
     borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
     elevation: 3,
   },
   trajectoryStrip: {
     position: 'absolute',
-    left: '39%',
-    top: '26%',
-    height: '38%',
-    width: 4,
-    transform: [{ rotate: '12deg' }],
-    backgroundColor: 'rgba(0, 92, 209, 0.20)',
+    left: '40%',
+    top: '28%',
+    height: '34%',
+    width: 3,
+    transform: [{ rotate: '14deg' }],
+    backgroundColor: 'rgba(21, 87, 208, 0.22)',
     borderRadius: 2,
     zIndex: 15,
   },
@@ -712,151 +595,98 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 32,
     left: -24,
-    minWidth: 76,
+    minWidth: 80,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     gap: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    // Android ignores the shadow* props entirely; without elevation this label
-    // renders completely flat and detaches from the map underneath.
     elevation: 2,
-    ...(Platform.OS === 'web'
-      ? ({
-          left: '50%',
-          transform: [{ translateX: -38 }],
-          whiteSpace: 'nowrap',
-          width: 'max-content',
-        } as any)
-      : {}),
   },
   workerBlueDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: colors.primary,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primaryText,
   },
   workerLabelText: {
-    fontSize: 9,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-    textAlign: 'center',
-    ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   robotWrapper: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ translateX: -20 }, { translateY: -20 }],
+    transform: [{ translateX: -18 }, { translateY: -18 }],
     zIndex: 26,
   },
-  directionalSonarCone: {
+  robotPulseDefault: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    top: -20,
-    left: -20,
-    opacity: 0.35,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(21, 87, 208, 0.12)',
   },
   robotPulseWave: {
     position: 'absolute',
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: 'rgba(21, 87, 208, 0.25)',
+  },
+  robotPuck: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
     borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  robotActiveHalo: {
-    position: 'absolute',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: 'rgba(0, 92, 209, 0.55)',
-  },
-  robotPulseDefault: {
-    position: 'absolute',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(84, 101, 125, 0.25)',
-  },
-  robotMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 4,
+    elevation: 3,
   },
-  robotMoving: {
-    backgroundColor: colors.primary, // Rich cobalt blue marker
+  robotPuckSelected: {
+    borderColor: colors.primaryText,
+    borderWidth: 2.5,
   },
-  robotIdle: {
-    backgroundColor: colors.success, // Rich forest green standby marker
+  robotPuckMoving: {
+    backgroundColor: colors.primaryText,
   },
-  robotSelectedGlow: {
-    borderColor: '#bae6fd',
-    borderWidth: 3.5,
-  },
-  robotTag: {
-    position: 'absolute',
-    top: 44,
-    // Was `left: 50%` + `translateX: -42`, which silently assumed the tag was
-    // exactly 84pt wide. At 9pt the tag grows past that, so centering is now
-    // delegated to the wrapper's `alignItems: 'center'` to stay true at any width.
-    alignSelf: 'center',
+  robotLabelPill: {
+    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 4,
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: 'rgba(203, 213, 225, 0.8)',
-    paddingHorizontal: 6,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    gap: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-    ...(Platform.OS === 'web'
-      ? ({
-          whiteSpace: 'nowrap',
-          width: 'max-content',
-        } as any)
-      : { minWidth: 84 }),
+    flexWrap: 'nowrap',
   },
-  tagDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+  robotDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    flexShrink: 0,
   },
-  robotTagText: {
+  robotLabelText: {
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
-    fontSize: 9,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    textAlign: 'center',
-    ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
+    flexShrink: 0,
+  },
+  robotSpeedText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    flexShrink: 0,
   },
 });
