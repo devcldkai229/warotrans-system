@@ -7,9 +7,9 @@
 
 Ready for Admin map import + draft editing against real Navigation APIs. Graph planner, junctions, From/ToEndpoint, PostGIS, cloud storage, and OTTO-specific ZoneType values remain out of scope.
 
-## Rules conflict (documented)
+## Rules status
 
-[`rules/05-NAVIGATION-RULES.md`](../../rules/05-NAVIGATION-RULES.md) still describes Edge/Zone geometry as `{ "points": [{x,y}] }`. **Persisted contract is now GeoJSON** (`LineString` / `Polygon` in world meters, frame = `MapVersion.FrameId`). Update the rules doc in a follow-up; this audit is the source of truth until then.
+[`rules/05-NAVIGATION-RULES.md`](../../rules/05-NAVIGATION-RULES.md) now matches the GeoJSON contract (`LineString` / `Polygon` in world meters, frame = `MapVersion.FrameId`). Pixel coordinates are never persisted. Conflict resolved.
 
 ## Schema / migration
 
@@ -55,7 +55,7 @@ Zone:
 
 - ROS/Nav2: `origin` is the world pose of the **lower-left** corner of the occupancy image.
 - `OriginYaw` is radians (CCW) of that frame relative to world.
-- Frontend: `pixelToWorld` / `worldToPixel` in `web/src/shared/map/mapCoordinateTransform.ts` (image Y down → world Y via `imageHeight - 1 - v`).
+- Frontend: `pixelToWorld` / `worldToPixel` in `web/src/shared/map/mapCoordinateTransform.ts` (continuous image coords; image Y down → world Y via `imageHeight - v`).
 
 ## ZoneType policies (existing enums only)
 

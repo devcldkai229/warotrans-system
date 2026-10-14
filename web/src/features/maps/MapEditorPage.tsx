@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type {
   Edge,
   EdgeDirection,
@@ -11,11 +11,13 @@ import type {
   Zone,
   ZoneType,
 } from '@/shared/api/contracts'
+import { ApiError } from '@/shared/api/client'
 import {
   createEdge,
   createEndpoint,
   createZone,
   deleteEdge,
+  deleteEndpoint,
   deleteZone,
   getMapVersionDetail,
   publishMapVersion,
@@ -23,66 +25,32 @@ import {
   updateEdge,
   updateEndpoint,
   updateZone,
-  type MapVersionDetailDto,
+  type EdgeDto,
+  type EndpointDto,
+  type ZoneDto,
 } from '@/shared/api/navigation'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
-import { DEFAULT_MAP_BOUNDS } from '@/shared/lib/mapView'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Field, FieldRow, SearchInput } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { MAP_STATUS_TONE } from '@/shared/ui/statusTones'
-import { WarehouseMap } from '@/shared/map/WarehouseMap'
-import { lineStringToPoints, pointsToLineString, pointsToPolygon, polygonToPoints } from '@/shared/map/geoJson'
-import { boundsFromMapMeta } from '@/shared/map/mapBounds'
-import { toPercent } from '@/shared/map/mapStyle'
+import { pointsToLineString, pointsToPolygon } from '@/shared/map/geoJson'
+import type { PixelCoord, WorldCoord } from '@/shared/map/mapCoordinateTransform'
 import { WorkflowEditor } from '@/features/workflows/workflow-editor-page'
 import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
-import { normalizeYaw } from './yaw'
-
-function detailToLocal(detail: MapVersionDetailDto) {
-  const endpoints: Endpoint[] = detail.endpoints.map((e) => ({
-    id: e.id,
-    mapVersionId: e.mapVersionId,
-    code: e.code,
-    name: e.name,
-    endpointType: e.endpointType as EndpointType,
-    x: e.x,
-    y: e.y,
-    yaw: e.yaw,
-    positionTolerance: e.positionTolerance,
-    yawTolerance: e.yawTolerance,
-    isEnabled: e.isEnabled,
-  }))
-  const edges: Edge[] = detail.edges.map((e) => ({
-    id: e.id,
-    mapVersionId: e.mapVersionId,
-    code: e.code,
-    geometry: { points: lineStringToPoints(e.geometry) },
-    widthMeters: e.widthMeters,
-    direction: e.direction as EdgeDirection,
-    capacity: e.capacity,
-    maxSpeed: e.maxSpeed,
-    isActive: e.isActive,
-  }))
-  const zones: Zone[] = detail.zones.map((z) => ({
-    id: z.id,
-    mapVersionId: z.mapVersionId,
-    code: z.code,
-    name: z.name,
-    zoneType: z.zoneType as ZoneType,
-    geometry: { points: polygonToPoints(z.geometry) },
-    capacity: z.capacity,
-    maxSpeed: z.maxSpeed,
-    isActive: z.isActive,
-  }))
-  return { endpoints, edges, zones }
-}
+import { MapEditorCanvas, type EditorTool } from './editor/MapEditorCanvas'
+import { degToRad, normalizeYaw, radToDeg } from './yaw'
 
 const WORKFLOW_PANEL = { min: 320, default: 460, key: 'warotrans.workflowPanelWidth' }
+const INSPECTOR_WIDTH = 340
+const PANEL_GAP = 12
+const DEFAULT_YAW_DEG = 0
+const DEFAULT_YAW_TOL_DEG = 5
+const DEFAULT_POS_TOL_M = 0.1
 
 const clampPanelWidth = (width: number) =>
   Math.min(Math.max(width, WORKFLOW_PANEL.min), Math.max(WORKFLOW_PANEL.min, Math.round(window.innerWidth * 0.7)))
@@ -96,51 +64,72 @@ function readPanelWidth(): number {
   }
 }
 
-// Width of the Endpoint / Edge / Zone inspector. Workflow panel is wider and resizable.
-const INSPECTOR_WIDTH = 340
-
-type Tool = 'workflows' | 'endpoints' | 'traffic'
-
 type Mode =
   | { kind: 'idle' }
-  | { kind: 'picker'; tool: Tool }
+  | { kind: 'picker'; tool: 'workflows' }
   | { kind: 'workflow'; workflowId: string }
-  | { kind: 'placing'; endpointType: EndpointType; at: { x: number; y: number }; yaw: number }
+  | { kind: 'placing'; endpointType: EndpointType; at: Point; yawDeg: number }
   | { kind: 'endpoint'; endpointId: string }
   | { kind: 'zone'; zoneId: string }
   | { kind: 'drawingEdge'; direction: EdgeDirection; points: Point[] }
   | { kind: 'edge'; edgeId: string }
+  | { kind: 'drawingZone'; zoneType: ZoneType; title: string; points: Point[] }
 
-const TOOLS: { tool: Tool; label: string; icon: IconName }[] = [
-  { tool: 'workflows', label: 'Workflows', icon: 'workflow' },
-  { tool: 'endpoints', label: 'Endpoints', icon: 'target' },
-  { tool: 'traffic', label: 'Traffic', icon: 'navigate' },
+const MAP_TOOLS: { tool: EditorTool; label: string; icon: IconName }[] = [
+  { tool: 'select', label: 'Select', icon: 'target' },
+  { tool: 'pan', label: 'Pan', icon: 'navigate' },
+  { tool: 'endpoint', label: 'Endpoint', icon: 'crosshair' },
+  { tool: 'edge', label: 'Edge', icon: 'route' },
+  { tool: 'zone', label: 'Zone', icon: 'layers' },
 ]
 
-// Where a new Endpoint first appears (metres); the Admin clicks the map to move it.
-const PENDING_ENDPOINT_AT = { x: 25, y: 25 }
+function snap(value: number) {
+  return Math.round(value * 1000) / 1000
+}
 
-// A new Endpoint faces +X (east, 0°) until the Admin turns the dial.
-const DEFAULT_YAW = 0
+function toEndpoint(e: EndpointDto): Endpoint {
+  return {
+    id: e.id,
+    mapVersionId: e.mapVersionId,
+    code: e.code,
+    name: e.name,
+    endpointType: e.endpointType as EndpointType,
+    x: e.x,
+    y: e.y,
+    yaw: e.yaw,
+    positionTolerance: e.positionTolerance,
+    yawTolerance: e.yawTolerance,
+    isEnabled: e.isEnabled,
+  }
+}
 
-/** Map clicks are kept to 0.1 m. */
-const snap = (value: number) => Math.round(value * 10) / 10
+function toEdge(e: EdgeDto): Edge {
+  return {
+    id: e.id,
+    mapVersionId: e.mapVersionId,
+    code: e.code,
+    geometry: e.geometry,
+    widthMeters: e.widthMeters,
+    direction: e.direction as EdgeDirection,
+    capacity: e.capacity,
+    maxSpeed: e.maxSpeed,
+    isActive: e.isActive,
+  }
+}
 
-/** Deep-link helper for demos/screenshots: /edit?state=workflows|endpoints|traffic|workflow|placing|zone */
-function initialMode(state: string | null): Mode {
-  switch (state) {
-    case 'workflows':
-    case 'endpoints':
-    case 'traffic':
-      return { kind: 'picker', tool: state }
-    case 'workflow':
-      return { kind: 'workflow', workflowId: 'new' }
-    case 'placing':
-      return { kind: 'placing', endpointType: 'CHARGING', at: PENDING_ENDPOINT_AT, yaw: DEFAULT_YAW }
-    case 'zone':
-      return { kind: 'zone', zoneId: 'zone-3' }
-    default:
-      return { kind: 'idle' }
+function toZone(z: ZoneDto): Zone {
+  return {
+    id: z.id,
+    mapVersionId: z.mapVersionId,
+    code: z.code,
+    name: z.name,
+    zoneType: z.zoneType as ZoneType,
+    geometry: z.geometry,
+    capacity: z.capacity,
+    maxSpeed: z.maxSpeed,
+    isActive: z.isActive,
+    policy: z.policy,
+    policySchemaVersion: z.policySchemaVersion,
   }
 }
 
@@ -148,10 +137,17 @@ function Backdrop({ onClick }: { onClick: () => void }) {
   return <div className="absolute inset-0 z-10" onClick={onClick} />
 }
 
+function errMessage(err: unknown) {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error) return err.message
+  return 'Request failed'
+}
+
 export function MapEditorPage() {
   const { mapId } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
 
   const detailQuery = useQuery({
     queryKey: ['navigation', 'map-detail', mapId],
@@ -161,41 +157,37 @@ export function MapEditorPage() {
 
   const version = detailQuery.data
   const isDraft = version?.status === 'DRAFT'
+  const endpoints = useMemo(() => (version?.endpoints ?? []).map(toEndpoint), [version])
+  const edges = useMemo(() => (version?.edges ?? []).map(toEdge), [version])
+  const zones = useMemo(() => (version?.zones ?? []).map(toZone), [version])
 
-  const [searchParams] = useSearchParams()
-  const [mode, setMode] = useState<Mode>(() => initialMode(searchParams.get('state')))
-  const [endpoints, setEndpoints] = useState<Endpoint[]>([])
-  const [zones, setZones] = useState<Zone[]>([])
-  const [edges, setEdges] = useState<Edge[]>([])
-  const [saveMessage, setSaveMessage] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [mode, setMode] = useState<Mode>(() =>
+    searchParams.get('state') === 'workflow' ? { kind: 'workflow', workflowId: 'new' } : { kind: 'idle' },
+  )
+  const [tool, setTool] = useState<EditorTool>('select')
   const [query, setQuery] = useState('')
   const [panelWidth, setPanelWidth] = useState(readPanelWidth)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionOk, setActionOk] = useState<string | null>(null)
+  const [epDraft, setEpDraft] = useState<Partial<Endpoint> | null>(null)
+  const [edgeDraft, setEdgeDraft] = useState<{
+    direction: EdgeDirection
+    capacity: number
+    widthMeters: number
+    maxSpeed: string
+    isActive: boolean
+  } | null>(null)
+  const [zoneDraft, setZoneDraft] = useState<{
+    name: string
+    zoneType: ZoneType
+    capacity: number
+    maxSpeed: string
+    isActive: boolean
+    preferredDirectionYawDeg: string
+    headingToleranceDeg: string
+    costMultiplier: string
+  } | null>(null)
   const latestWidth = useRef(panelWidth)
-  const hydrated = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!detailQuery.data || hydrated.current === detailQuery.data.id) return
-    const local = detailToLocal(detailQuery.data)
-    setEndpoints(local.endpoints)
-    setEdges(local.edges)
-    setZones(local.zones)
-    hydrated.current = detailQuery.data.id
-  }, [detailQuery.data])
-
-  const mapBounds = useMemo(() => {
-    if (!version || version.imageWidthPixels <= 0 || version.imageHeightPixels <= 0) return DEFAULT_MAP_BOUNDS
-    return boundsFromMapMeta({
-      resolution: version.resolution,
-      originX: version.originX,
-      originY: version.originY,
-      originYaw: version.originYaw,
-      imageWidthPixels: version.imageWidthPixels,
-      imageHeightPixels: version.imageHeightPixels,
-    })
-  }, [version])
-
-  const occupancyUrl = resolveMapAssetUrl(version?.previewImageUri)
 
   const workflowsQuery = useQuery({
     queryKey: ['workflows'],
@@ -203,89 +195,54 @@ export function MapEditorPage() {
     enabled: mode.kind === 'picker' && mode.tool === 'workflows',
   })
 
+  const invalidate = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['navigation', 'map-detail', mapId] })
+  }
+
   const publishMutation = useMutation({
     mutationFn: () => publishMapVersion(mapId!),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['navigation', 'map-detail', mapId] })
+      await invalidate()
       navigate('/configure/facility')
     },
+    onError: (err) => setActionError(errMessage(err)),
   })
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!version || !isDraft) throw new Error('Only DRAFT maps can be edited.')
-      const existing = detailToLocal(version)
+  const transform = useMemo(() => {
+    if (!version) return null
+    return {
+      resolution: version.resolution,
+      originX: version.originX,
+      originY: version.originY,
+      originYaw: version.originYaw,
+      imageWidthPixels: version.imageWidthPixels,
+      imageHeightPixels: version.imageHeightPixels,
+      frameId: version.frameId,
+    }
+  }, [version])
 
-      for (const endpoint of endpoints) {
-        const body = {
-          name: endpoint.name,
-          endpointType: endpoint.endpointType,
-          x: endpoint.x,
-          y: endpoint.y,
-          yaw: endpoint.yaw,
-          positionTolerance: endpoint.positionTolerance,
-          yawTolerance: endpoint.yawTolerance,
-          isEnabled: endpoint.isEnabled,
-        }
-        if (endpoint.id.startsWith('draft-')) {
-          await createEndpoint(version.id, body)
-        } else {
-          await updateEndpoint(endpoint.id, body)
-        }
-      }
+  const occupancyUrl = resolveMapAssetUrl(version?.previewImageUri)
 
-      const edgeIds = new Set(edges.map((e) => e.id))
-      for (const edge of existing.edges) {
-        if (!edgeIds.has(edge.id)) await deleteEdge(edge.id)
-      }
-      for (const edge of edges) {
-        const body = {
-          geometry: pointsToLineString(edge.geometry.points),
-          widthMeters: edge.widthMeters ?? 1,
-          direction: edge.direction,
-          capacity: edge.capacity,
-          maxSpeed: edge.maxSpeed,
-          isActive: edge.isActive,
-        }
-        if (edge.id.startsWith('draft-')) {
-          await createEdge(version.id, body)
-        } else {
-          await updateEdge(edge.id, body)
-        }
-      }
+  const selectedEndpoint =
+    mode.kind === 'endpoint' ? endpoints.find((e) => e.id === mode.endpointId) : undefined
+  const selectedEdge = mode.kind === 'edge' ? edges.find((e) => e.id === mode.edgeId) : undefined
+  const selectedZone = mode.kind === 'zone' ? zones.find((z) => z.id === mode.zoneId) : undefined
+  const workflowOpen = mode.kind === 'workflow'
+  const panelOpen = Boolean(selectedZone ?? selectedEndpoint ?? selectedEdge ?? workflowOpen)
+  const openPanelWidth = workflowOpen
+    ? panelWidth
+    : selectedZone || selectedEndpoint || selectedEdge
+      ? INSPECTOR_WIDTH
+      : 0
 
-      const zoneIds = new Set(zones.map((z) => z.id))
-      for (const zone of existing.zones) {
-        if (!zoneIds.has(zone.id)) await deleteZone(zone.id)
-      }
-      for (const zone of zones) {
-        const body = {
-          name: zone.name,
-          zoneType: zone.zoneType,
-          geometry: pointsToPolygon(zone.geometry.points),
-          capacity: Math.max(1, zone.capacity),
-          maxSpeed: zone.maxSpeed,
-          isActive: zone.isActive,
-        }
-        if (zone.id.startsWith('draft-')) {
-          await createZone(version.id, body)
-        } else {
-          await updateZone(zone.id, body)
-        }
-      }
-    },
-    onSuccess: async () => {
-      hydrated.current = null
-      setSaveError(null)
-      setSaveMessage(`Saved ${new Date().toLocaleTimeString()}`)
-      await queryClient.invalidateQueries({ queryKey: ['navigation', 'map-detail', mapId] })
-    },
-    onError: (err) => {
-      setSaveError(err instanceof Error ? err.message : 'Save failed')
-    },
-  })
+  const draftWorldPoints =
+    mode.kind === 'drawingEdge' || mode.kind === 'drawingZone'
+      ? mode.points
+      : mode.kind === 'placing'
+        ? [mode.at]
+        : []
+  const draftKind = mode.kind === 'drawingEdge' ? 'edge' : mode.kind === 'drawingZone' ? 'zone' : null
 
-  /** Drag the left edge of the workflow panel: dragging left widens it. */
   function startPanelResize(event: ReactPointerEvent) {
     event.preventDefault()
     const startX = event.clientX
@@ -302,175 +259,322 @@ export function MapEditorPage() {
       try {
         window.localStorage.setItem(WORKFLOW_PANEL.key, String(latestWidth.current))
       } catch {
-        // Storage can be blocked; width resets on next visit.
+        // ignore
       }
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', stop)
   }
 
-  const activeTool: Tool | null =
-    mode.kind === 'picker'
-      ? mode.tool
-      : mode.kind === 'workflow'
-        ? 'workflows'
-        : mode.kind === 'placing' || mode.kind === 'endpoint'
-          ? 'endpoints'
-          : mode.kind === 'zone'
-            ? 'traffic'
-            : mode.kind === 'drawingEdge' || mode.kind === 'edge'
-              ? 'traffic'
-              : null
-
-  const selectedZone = mode.kind === 'zone' ? zones.find((zone) => zone.id === mode.zoneId) : undefined
-  const selectedEndpoint =
-    mode.kind === 'endpoint' ? endpoints.find((endpoint) => endpoint.id === mode.endpointId) : undefined
-  const selectedEdge = mode.kind === 'edge' ? edges.find((edge) => edge.id === mode.edgeId) : undefined
-  const workflowOpen = mode.kind === 'workflow'
-  const panelOpen = Boolean(selectedZone ?? selectedEndpoint ?? selectedEdge ?? workflowOpen)
-  // Panels float over the canvas instead of squeezing it, so the map and the Endpoints on it never shift.
-  const openPanelWidth = workflowOpen
-    ? panelWidth
-    : selectedZone || selectedEndpoint || selectedEdge
-      ? INSPECTOR_WIDTH
-      : 0
-
-  function openTool(tool: Tool) {
-    setQuery('')
-    setMode(mode.kind === 'picker' && mode.tool === tool ? { kind: 'idle' } : { kind: 'picker', tool })
+  function selectEndpoint(id: string) {
+    const ep = endpoints.find((e) => e.id === id)
+    if (!ep) return
+    setEpDraft({ ...ep })
+    setMode({ kind: 'endpoint', endpointId: id })
+    setTool('select')
   }
 
-  function startPlacing(endpointType: EndpointType) {
-    setMode({ kind: 'placing', endpointType, at: PENDING_ENDPOINT_AT, yaw: DEFAULT_YAW })
+  function selectEdge(id: string) {
+    const edge = edges.find((e) => e.id === id)
+    if (!edge) return
+    setEdgeDraft({
+      direction: edge.direction,
+      capacity: edge.capacity,
+      widthMeters: edge.widthMeters ?? 1,
+      maxSpeed: edge.maxSpeed?.toString() ?? '',
+      isActive: edge.isActive,
+    })
+    setMode({ kind: 'edge', edgeId: id })
+    setTool('select')
   }
 
-  function confirmEndpoint(endpointType: EndpointType, at: { x: number; y: number }, yaw: number) {
-    if (!version || !isDraft) return
-    const count = endpoints.length + 1
-    const endpoint: Endpoint = {
-      id: `draft-endpoint-${count}`,
-      mapVersionId: version.id,
-      // Temporary client code: the backend generates the real one on save; the Admin never types it.
-      code: `EP-${endpointType}-${String(count).padStart(2, '0')}`,
-      name: `${endpointType} ${count}`,
-      endpointType,
-      x: at.x,
-      y: at.y,
-      yaw,
-      positionTolerance: 0.1,
-      yawTolerance: 5,
-      isEnabled: true,
+  function selectZone(id: string) {
+    const zone = zones.find((z) => z.id === id)
+    if (!zone) return
+    const policy = (zone.policy ?? {}) as Record<string, number>
+    setZoneDraft({
+      name: zone.name,
+      zoneType: zone.zoneType,
+      capacity: zone.capacity,
+      maxSpeed: zone.maxSpeed?.toString() ?? '',
+      isActive: zone.isActive,
+      preferredDirectionYawDeg:
+        policy.preferredDirectionYaw != null ? String(radToDeg(policy.preferredDirectionYaw)) : '',
+      headingToleranceDeg:
+        policy.headingToleranceRadians != null ? String(radToDeg(policy.headingToleranceRadians)) : '',
+      costMultiplier: policy.costMultiplier != null ? String(policy.costMultiplier) : '',
+    })
+    setMode({ kind: 'zone', zoneId: id })
+    setTool('select')
+  }
+
+  function handleWorldClick(world: WorldCoord, _image: PixelCoord) {
+    if (!isDraft || !version) return
+    setActionError(null)
+    const at = { x: snap(world.x), y: snap(world.y) }
+
+    if (tool === 'endpoint' && mode.kind !== 'placing') {
+      setMode({ kind: 'placing', endpointType: 'CHARGING', at, yawDeg: DEFAULT_YAW_DEG })
+      return
     }
-    setEndpoints((current) => [...current, endpoint])
-    setMode({ kind: 'endpoint', endpointId: endpoint.id })
-  }
-
-  function patchEndpoint(endpointId: string, patch: Partial<Endpoint>) {
-    setEndpoints((current) =>
-      current.map((endpoint) => (endpoint.id === endpointId ? { ...endpoint, ...patch } : endpoint)),
-    )
-  }
-
-  function removeEndpoint(endpointId: string) {
-    setEndpoints((current) => current.filter((endpoint) => endpoint.id !== endpointId))
-    setMode({ kind: 'idle' })
-  }
-
-  function addZone(zoneType: ZoneType, title: string) {
-    if (!version || !isDraft) return
-    const count = zones.length + 1
-    const left = mapBounds.minX + 4 + (count % 5) * 2
-    const top = mapBounds.minY + 4 + (count % 5) * 2
-    const zone: Zone = {
-      id: `draft-zone-${count}`,
-      mapVersionId: version.id,
-      // Temporary client code: the backend generates the real one on save; the Admin never types it.
-      code: `ZN-${String(count).padStart(2, '0')}`,
-      name: `${title} - ${count}`,
-      zoneType,
-      capacity: zoneType === 'NARROW_AREA' ? 1 : 2,
-      maxSpeed: null,
-      isActive: true,
-      geometry: {
-        points: [
-          { x: left, y: top },
-          { x: left + 9, y: top },
-          { x: left + 9, y: top + 6 },
-          { x: left, y: top + 6 },
-        ],
-      },
+    if (mode.kind === 'placing') {
+      setMode({ ...mode, at })
+      return
     }
-    setZones((current) => [...current, zone])
-    setMode({ kind: 'zone', zoneId: zone.id })
+    if (mode.kind === 'drawingEdge') {
+      setMode({ ...mode, points: [...mode.points, at] })
+      return
+    }
+    if (mode.kind === 'drawingZone') {
+      const first = mode.points[0]
+      if (
+        mode.points.length >= 3 &&
+        first &&
+        Math.hypot(at.x - first.x, at.y - first.y) < version.resolution * 4
+      ) {
+        void finishZone(mode.points)
+        return
+      }
+      setMode({ ...mode, points: [...mode.points, at] })
+    }
+  }
+
+  function handleWorldDoubleClick() {
+    if (mode.kind === 'drawingEdge' && mode.points.length >= 2) void finishEdge(mode.points, mode.direction)
+    if (mode.kind === 'drawingZone' && mode.points.length >= 3) void finishZone(mode.points)
+  }
+
+  async function placeEndpoint(endpointType: EndpointType, at: Point, yawDeg: number) {
+    if (!version || !isDraft) return
+    setActionError(null)
+    try {
+      const created = await createEndpoint(version.id, {
+        name: `${endpointType} ${endpoints.length + 1}`,
+        endpointType,
+        x: at.x,
+        y: at.y,
+        yaw: degToRad(yawDeg),
+        positionTolerance: DEFAULT_POS_TOL_M,
+        yawTolerance: degToRad(DEFAULT_YAW_TOL_DEG),
+      })
+      await invalidate()
+      setActionOk(`Created ${created.code}`)
+      setMode({ kind: 'endpoint', endpointId: created.id })
+      setEpDraft(toEndpoint(created))
+      setTool('select')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  async function saveEndpoint() {
+    if (!epDraft?.id || !isDraft) return
+    setActionError(null)
+    try {
+      await updateEndpoint(epDraft.id, {
+        name: epDraft.name ?? '',
+        endpointType: epDraft.endpointType ?? 'TRANSIT',
+        x: Number(epDraft.x),
+        y: Number(epDraft.y),
+        yaw: Number(epDraft.yaw),
+        positionTolerance: Number(epDraft.positionTolerance),
+        yawTolerance: Number(epDraft.yawTolerance),
+        isEnabled: epDraft.isEnabled ?? true,
+      })
+      await invalidate()
+      setActionOk('Endpoint saved')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  async function removeEndpoint(id: string) {
+    if (!isDraft) return
+    try {
+      await deleteEndpoint(id)
+      await invalidate()
+      setMode({ kind: 'idle' })
+      setEpDraft(null)
+      setActionOk('Endpoint deleted')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  async function finishEdge(points: Point[], direction: EdgeDirection) {
+    if (!version || !isDraft || points.length < 2) return
+    setActionError(null)
+    try {
+      const created = await createEdge(version.id, {
+        geometry: pointsToLineString(points),
+        widthMeters: 1,
+        direction,
+        capacity: 1,
+        maxSpeed: null,
+        isActive: true,
+      })
+      await invalidate()
+      setActionOk(`Created ${created.code}`)
+      setEdgeDraft({
+        direction: created.direction as EdgeDirection,
+        capacity: created.capacity,
+        widthMeters: created.widthMeters,
+        maxSpeed: created.maxSpeed?.toString() ?? '',
+        isActive: created.isActive,
+      })
+      setMode({ kind: 'edge', edgeId: created.id })
+      setTool('select')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  async function saveEdge() {
+    if (mode.kind !== 'edge' || !edgeDraft || !isDraft) return
+    const edge = edges.find((e) => e.id === mode.edgeId)
+    if (!edge) return
+    setActionError(null)
+    try {
+      await updateEdge(edge.id, {
+        geometry: edge.geometry,
+        widthMeters: edgeDraft.widthMeters,
+        direction: edgeDraft.direction,
+        capacity: edgeDraft.capacity,
+        maxSpeed: edgeDraft.maxSpeed === '' ? null : Number(edgeDraft.maxSpeed),
+        isActive: edgeDraft.isActive,
+      })
+      await invalidate()
+      setActionOk('Edge saved')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  async function removeEdge(id: string) {
+    if (!isDraft) return
+    try {
+      await deleteEdge(id)
+      await invalidate()
+      setMode({ kind: 'idle' })
+      setEdgeDraft(null)
+      setActionOk('Edge deleted')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  function buildZonePolicy(draft: NonNullable<typeof zoneDraft>) {
+    if (draft.zoneType === 'INTERSECTION') {
+      const policy: Record<string, number> = {}
+      if (draft.preferredDirectionYawDeg !== '') {
+        policy.preferredDirectionYaw = degToRad(Number(draft.preferredDirectionYawDeg))
+      }
+      if (draft.headingToleranceDeg !== '') {
+        policy.headingToleranceRadians = degToRad(Number(draft.headingToleranceDeg))
+      }
+      return Object.keys(policy).length ? policy : null
+    }
+    if (draft.zoneType === 'OPERATIONAL_AREA' && draft.costMultiplier !== '') {
+      return { costMultiplier: Number(draft.costMultiplier) }
+    }
+    return null
+  }
+
+  async function finishZone(points: Point[], zoneType?: ZoneType, title?: string) {
+    if (!version || !isDraft || points.length < 3) return
+    const type = zoneType ?? (mode.kind === 'drawingZone' ? mode.zoneType : 'RESTRICTED_AREA')
+    const name =
+      title ?? (mode.kind === 'drawingZone' ? `${mode.title} - ${zones.length + 1}` : `Zone ${zones.length + 1}`)
+    setActionError(null)
+    try {
+      const created = await createZone(version.id, {
+        name,
+        zoneType: type,
+        geometry: pointsToPolygon(points),
+        capacity: type === 'NARROW_AREA' ? 1 : 2,
+        maxSpeed: type === 'NARROW_AREA' ? 0.5 : null,
+        isActive: true,
+      })
+      await invalidate()
+      setActionOk(`Created ${created.code}`)
+      setZoneDraft({
+        name: created.name,
+        zoneType: created.zoneType as ZoneType,
+        capacity: created.capacity,
+        maxSpeed: created.maxSpeed?.toString() ?? '',
+        isActive: created.isActive,
+        preferredDirectionYawDeg: '',
+        headingToleranceDeg: '',
+        costMultiplier: '',
+      })
+      setMode({ kind: 'zone', zoneId: created.id })
+      setTool('select')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  async function saveZone() {
+    if (mode.kind !== 'zone' || !zoneDraft || !isDraft) return
+    const zone = zones.find((z) => z.id === mode.zoneId)
+    if (!zone) return
+    setActionError(null)
+    try {
+      await updateZone(zone.id, {
+        name: zoneDraft.name,
+        zoneType: zoneDraft.zoneType,
+        geometry: zone.geometry,
+        capacity: zoneDraft.capacity,
+        maxSpeed: zoneDraft.maxSpeed === '' ? null : Number(zoneDraft.maxSpeed),
+        isActive: zoneDraft.isActive,
+        policy: buildZonePolicy(zoneDraft),
+        policySchemaVersion: 1,
+      })
+      await invalidate()
+      setActionOk('Zone saved')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  async function removeZone(id: string) {
+    if (!isDraft) return
+    try {
+      await deleteZone(id)
+      await invalidate()
+      setMode({ kind: 'idle' })
+      setZoneDraft(null)
+      setActionOk('Zone deleted')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
   }
 
   function startEdge(direction: EdgeDirection) {
+    if (!isDraft) return
+    setTool('edge')
     setMode({ kind: 'drawingEdge', direction, points: [] })
   }
 
-  function finishEdge() {
-    if (!version || !isDraft || mode.kind !== 'drawingEdge' || mode.points.length < 2) return
-    const count = edges.length + 1
-    const edge: Edge = {
-      id: `draft-edge-${count}`,
-      mapVersionId: version.id,
-      // Temporary client code: the backend generates the real one on save; the Admin never types it.
-      code: `EG-${String(count).padStart(2, '0')}`,
-      geometry: { points: mode.points },
-      widthMeters: 1,
-      direction: mode.direction,
-      capacity: 1,
-      maxSpeed: null,
-      isActive: true,
-    }
-    setEdges((current) => [...current, edge])
-    setMode({ kind: 'edge', edgeId: edge.id })
-  }
-
-  function patchEdge(edgeId: string, patch: Partial<Edge>) {
-    setEdges((current) => current.map((edge) => (edge.id === edgeId ? { ...edge, ...patch } : edge)))
-  }
-
-  function removeEdge(edgeId: string) {
-    setEdges((current) => current.filter((edge) => edge.id !== edgeId))
-    setMode({ kind: 'idle' })
-  }
-
-  function patchZone(zoneId: string, patch: Partial<Zone>) {
-    setZones((current) => current.map((zone) => (zone.id === zoneId ? { ...zone, ...patch } : zone)))
-  }
-
-  function removeZone(zoneId: string) {
-    setZones((current) => current.filter((zone) => zone.id !== zoneId))
-    setMode({ kind: 'idle' })
-  }
-
-  const picking = mode.kind === 'placing' || mode.kind === 'drawingEdge'
-
-  /** A click on empty map: move the Endpoint being placed, or add a point to the Edge being drawn.
-   * Coordinates from WarehouseMap are already world meters (pan/zoom do not alter domain coords). */
-  function handleMapClick(point: Point) {
+  function startZone(zoneType: ZoneType, title: string) {
     if (!isDraft) return
-    const at = { x: snap(point.x), y: snap(point.y) }
-    if (mode.kind === 'placing') setMode({ ...mode, at })
-    else if (mode.kind === 'drawingEdge') setMode({ ...mode, points: [...mode.points, at] })
+    setTool('zone')
+    setMode({ kind: 'drawingZone', zoneType, title, points: [] })
   }
 
   const lowered = query.toLowerCase()
 
   if (detailQuery.isLoading) {
     return (
-      <div className="fixed inset-0 z-40 grid place-items-center bg-surface text-sm text-muted">
-        Loading map…
-      </div>
+      <div className="fixed inset-0 z-40 grid place-items-center bg-surface text-sm text-muted">Loading map…</div>
     )
   }
 
-  if (!version) {
+  if (!version || !transform || version.imageWidthPixels <= 0) {
     return (
       <div className="fixed inset-0 z-40 grid place-items-center bg-surface">
         <div className="text-center">
-          <p className="text-sm text-ink-2">Map version not found.</p>
+          <p className="text-sm text-ink-2">Map version not found or missing image metadata.</p>
           <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>
             Back to Facility
           </Button>
@@ -488,18 +592,16 @@ export function MapEditorPage() {
         <h1 className="text-base font-medium">
           {version.code} · v{version.versionNo}
         </h1>
-        <StatusBadge tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}>
-          {version.status}
-        </StatusBadge>
+        <StatusBadge tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}>{version.status}</StatusBadge>
         <span className="ml-2 flex items-center gap-2 text-xs text-muted">
-          {saveError ? (
-            <span className="text-red">{saveError}</span>
-          ) : saveMessage ? (
+          {actionError ? (
+            <span className="text-red">{actionError}</span>
+          ) : actionOk ? (
             <>
-              <span className="size-1.5 rounded-full bg-green" /> {saveMessage}
+              <span className="size-1.5 rounded-full bg-green" /> {actionOk}
             </>
           ) : isDraft ? (
-            'World coordinates (meters). Pan/zoom do not change saved geometry.'
+            'World meters · pan/zoom display-only · continuous image coords'
           ) : (
             'Read-only: only DRAFT maps can be edited.'
           )}
@@ -510,7 +612,7 @@ export function MapEditorPage() {
           </Button>
           <Button
             variant="primary"
-            disabled={!isDraft || publishMutation.isPending || saveMutation.isPending}
+            disabled={!isDraft || publishMutation.isPending}
             onClick={() => publishMutation.mutate()}
           >
             Publish
@@ -522,7 +624,16 @@ export function MapEditorPage() {
         <div className="flex items-center gap-2">
           {panelOpen ? (
             <>
-              <Button variant="primary" size="sm" onClick={() => setMode({ kind: 'idle' })}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setMode({ kind: 'idle' })
+                  setEpDraft(null)
+                  setEdgeDraft(null)
+                  setZoneDraft(null)
+                }}
+              >
                 Done
               </Button>
               {workflowOpen ? (
@@ -530,272 +641,114 @@ export function MapEditorPage() {
                   <Icon name="workflow" size={15} /> Workflows
                   <Icon name="chevronRight" size={12} />
                   <strong className="font-medium text-ink">
-                    {mode.workflowId === 'new' ? 'New workflow' : 'Edit workflow'}
+                    {mode.kind === 'workflow' && mode.workflowId === 'new' ? 'New workflow' : 'Edit workflow'}
                   </strong>
                 </span>
               ) : null}
             </>
           ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setMode({ kind: 'picker', tool: 'workflows' })}
+            >
+              <Icon name="workflow" size={14} /> Workflows
+            </Button>
+          )}
+          {(mode.kind === 'drawingEdge' || mode.kind === 'drawingZone') && (
             <>
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={!isDraft || saveMutation.isPending}
-                onClick={() => saveMutation.mutate()}
+                disabled={mode.points.length === 0}
+                onClick={() => setMode({ ...mode, points: mode.points.slice(0, -1) })}
               >
-                <Icon name="save" size={14} /> {saveMutation.isPending ? 'Saving…' : 'Save'}
+                Undo point
               </Button>
-              <Button variant="ghost" size="sm">
-                <Icon name="more" size={14} /> More
+              <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={
+                  mode.kind === 'drawingEdge' ? mode.points.length < 2 : mode.points.length < 3
+                }
+                onClick={() => {
+                  if (mode.kind === 'drawingEdge') void finishEdge(mode.points, mode.direction)
+                  if (mode.kind === 'drawingZone') void finishZone(mode.points)
+                }}
+              >
+                Finish
               </Button>
             </>
           )}
         </div>
 
-        {panelOpen ? null : (
+        {!panelOpen ? (
           <div className="absolute top-1/2 left-1/2 flex -translate-1/2 items-center gap-1 rounded-full bg-container-high p-1">
-            {TOOLS.map((item) => (
+            {MAP_TOOLS.map((item) => (
               <button
                 key={item.tool}
                 type="button"
+                disabled={!isDraft && item.tool !== 'select' && item.tool !== 'pan'}
                 className={cx(
-                  'flex h-8 items-center gap-2 rounded-full px-3.5 text-sm transition-colors duration-200',
-                  activeTool === item.tool ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-surface hover:text-ink',
+                  'flex h-8 items-center gap-2 rounded-full px-3.5 text-sm transition-colors duration-200 disabled:opacity-40',
+                  tool === item.tool ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-surface hover:text-ink',
                 )}
-                aria-pressed={activeTool === item.tool}
-                onClick={() => openTool(item.tool)}
+                aria-pressed={tool === item.tool}
+                onClick={() => {
+                  setTool(item.tool)
+                  if (item.tool === 'select' || item.tool === 'pan') setMode({ kind: 'idle' })
+                }}
               >
                 <Icon name={item.icon} size={15} />
                 {item.label}
               </button>
             ))}
           </div>
-        )}
-
+        ) : null}
       </div>
 
       <div className="relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-lg bg-container">
-        <div className="absolute inset-0">
-          <WarehouseMap
-            zones={zones}
-            edges={edges}
+        <div className="absolute inset-0" style={{ right: openPanelWidth ? openPanelWidth + PANEL_GAP : 0 }}>
+          <MapEditorCanvas
+            transform={transform}
+            previewUrl={occupancyUrl}
             endpoints={endpoints}
-            bounds={mapBounds}
-            occupancyImageUrl={occupancyUrl}
-            layers={{ robots: false, occupancy: false, legendOpen: true }}
-            labels={activeTool === 'endpoints' ? 'all' : 'focus'}
-            emphasis={activeTool === 'endpoints' ? ['endpoints'] : activeTool === 'traffic' ? ['zones', 'edges'] : []}
-            selected={{ zoneId: selectedZone?.id, edgeId: selectedEdge?.id, endpointId: selectedEndpoint?.id }}
-            onZoneClick={
-              isDraft && !picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'zone', zoneId: id }) : undefined
-            }
-            onEdgeClick={
-              isDraft && !picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'edge', edgeId: id }) : undefined
-            }
-            onEndpointClick={
-              isDraft && !picking && activeTool === 'endpoints'
-                ? (id) => setMode({ kind: 'endpoint', endpointId: id })
-                : undefined
-            }
-            onBackgroundClick={handleMapClick}
-            drawing={mode.kind === 'drawingEdge' ? { points: mode.points, direction: mode.direction } : undefined}
-            uiInset={openPanelWidth ? openPanelWidth + PANEL_GAP : 0}
-          >
-            {selectedEndpoint ? (
-              <div className={ANCHOR} style={toPercent(selectedEndpoint)}>
-                <HeadingDial
-                  x={0}
-                  y={0}
-                  yaw={selectedEndpoint.yaw}
-                  onChange={(yaw) => patchEndpoint(selectedEndpoint.id, { yaw })}
-                />
-              </div>
-            ) : null}
+            edges={edges}
+            zones={zones}
+            tool={tool}
+            readOnly={!isDraft}
+            selected={{
+              endpointId: selectedEndpoint?.id,
+              edgeId: selectedEdge?.id,
+              zoneId: selectedZone?.id,
+            }}
+            draftWorldPoints={draftWorldPoints}
+            draftKind={draftKind}
+            onWorldClick={handleWorldClick}
+            onWorldDoubleClick={handleWorldDoubleClick}
+            onEndpointClick={isDraft ? selectEndpoint : undefined}
+            onEdgeClick={isDraft ? selectEdge : undefined}
+            onZoneClick={isDraft ? selectZone : undefined}
+          />
 
-            {mode.kind === 'placing' ? (
-              <div className={ANCHOR} style={toPercent(mode.at)}>
-                <HeadingDial x={0} y={0} yaw={mode.yaw} onChange={(yaw) => setMode({ ...mode, yaw })} />
-                <div className="absolute -top-14 left-28 z-8 flex w-64 flex-col gap-2.5 rounded-md bg-surface p-3.5 text-xs shadow-float">
-                  <p className="text-ink-2">Click the map to move it. Drag the arrow to set the heading ({mode.yaw}°).</p>
-                  <select
-                    className={controlClass('sm')}
-                    value={mode.endpointType}
-                    aria-label="Endpoint type"
-                    onChange={(event) => setMode({ ...mode, endpointType: event.target.value as EndpointType })}
-                  >
-                    {ENDPOINT_TEMPLATES.map((item) => (
-                      <option key={item.type} value={item.type}>
-                        {item.title}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex justify-end gap-1.5">
-                    <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
-                      Cancel
-                    </Button>
-                    <Button variant="primary" size="sm" onClick={() => confirmEndpoint(mode.endpointType, mode.at, mode.yaw)}>
-                      Place endpoint
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {mode.kind === 'drawingEdge' ? (
-              <div className="absolute top-3 left-1/2 z-9 flex origin-top -translate-x-1/2 scale-[calc(1/var(--z,1))] cursor-default items-center gap-1 rounded-full bg-surface py-1 pr-1 pl-4 text-xs whitespace-nowrap shadow-float">
-                <span className="mr-2 text-ink-2">
-                  {mode.points.length < 2 ? 'Click the map to add points (at least 2)' : `${mode.points.length} points`}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={mode.points.length === 0}
-                  onClick={() => setMode({ ...mode, points: mode.points.slice(0, -1) })}
-                >
-                  Undo point
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
-                  Cancel
-                </Button>
-                <Button variant="primary" size="sm" disabled={mode.points.length < 2} onClick={finishEdge}>
-                  Finish edge
-                </Button>
-              </div>
-            ) : null}
-          </WarehouseMap>
-        </div>
-
-        {mode.kind === 'picker' ? (
-          <>
-            <Backdrop onClick={() => setMode({ kind: 'idle' })} />
-            <div className="absolute top-3 left-1/2 z-20 max-h-[calc(100%-24px)] w-[380px] -translate-x-1/2 overflow-auto rounded-lg bg-surface p-2 shadow-float">
-              {mode.tool === 'workflows' ? (
-                <>
-                  <PickerHead title="Workflows">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setMode({ kind: 'workflow', workflowId: 'new' })}
-                    >
-                      <Icon name="plus" size={14} /> New workflow
-                    </Button>
-                  </PickerHead>
-                  {workflowsQuery.isLoading ? <p className="px-3 py-2 text-xs text-muted">Loading…</p> : null}
-                  {workflowsQuery.error ? (
-                    <p className="px-3 py-2 text-xs text-muted">{(workflowsQuery.error as Error).message}</p>
-                  ) : null}
-                  <ul>
-                    {(workflowsQuery.data?.items ?? []).map((workflow) => (
-                      <PickerItem
-                        key={workflow.id}
-                        title={workflow.name || workflow.code}
-                        note={`${workflow.code} · v${workflow.versionNo} · ${workflow.status.toLowerCase()}`}
-                        onClick={() => setMode({ kind: 'workflow', workflowId: workflow.id })}
-                      />
-                    ))}
-                    {workflowsQuery.data && workflowsQuery.data.items.length === 0 ? (
-                      <li className="px-3 py-2 text-xs text-muted">No workflows yet.</li>
-                    ) : null}
-                  </ul>
-                  <div className="mt-2 border-t border-black/5 px-3 py-3">
-                    <Link
-                      className="inline-flex items-center gap-2 text-xs text-ink-2 hover:text-ink"
-                      to="/configure/workflows"
-                    >
-                      <Icon name="workflow" size={13} /> Open full Workflows page
-                    </Link>
-                  </div>
-                </>
-              ) : null}
-
-              {mode.tool === 'endpoints' ? (
-                <>
-                  <PickerHead title="Endpoints">
-                    <Button variant="primary" size="sm" onClick={() => startPlacing('STORAGE')}>
-                      <Icon name="plus" size={14} /> Add endpoint
-                    </Button>
-                  </PickerHead>
-                  <SearchInput value={query} onChange={setQuery} placeholder="Search endpoint types" autoFocus className="mx-1" />
-                  <PickerHeading>Groups</PickerHeading>
-                  <ul>
-                    <PickerItem title="Endpoint group" note="A set of endpoints that can be used interchangeably" />
-                  </ul>
-                  <PickerHeading>Endpoint types</PickerHeading>
-                  <ul>
-                    {ENDPOINT_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
-                      <PickerItem key={item.type} title={item.title} note={item.description} onClick={() => startPlacing(item.type)} />
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-
-              {mode.tool === 'traffic' ? (
-                <>
-                  <PickerHead title="Traffic" />
-                  <SearchInput value={query} onChange={setQuery} placeholder="Search zones and edges" className="mx-1" />
-                  <PickerHeading>Zones</PickerHeading>
-                  <ul>
-                    {ZONE_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
-                      <PickerItem key={item.type} title={item.title} note={item.description} onClick={() => addZone(item.type, item.title)} />
-                    ))}
-                  </ul>
-                  <PickerHeading>Edges</PickerHeading>
-                  <ul>
-                    {EDGE_TEMPLATES.filter((item) => item.title.toLowerCase().includes(lowered)).map((item) => (
-                      <PickerItem key={item.direction} title={item.title} note={item.description} onClick={() => startEdge(item.direction)} />
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-            </div>
-          </>
-        ) : null}
-
-        {workflowOpen ? (
-          <aside className={SIDE_PANEL} style={{ width: panelWidth }}>
-            <div
-              className="group absolute inset-y-0 left-0 z-6 w-2 cursor-col-resize"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize panel"
-              title="Drag to resize, double-click to reset"
-              onPointerDown={startPanelResize}
-              onDoubleClick={() => {
-                latestWidth.current = WORKFLOW_PANEL.default
-                setPanelWidth(WORKFLOW_PANEL.default)
-              }}
-            >
-              <div className="absolute inset-y-6 left-0.5 w-0.5 rounded-full transition-colors duration-200 group-hover:bg-blue" />
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <WorkflowEditor
-                workflowId={mode.workflowId}
+          {mode.kind === 'placing' ? (
+            <div className="absolute top-3 left-1/2 z-20 w-72 -translate-x-1/2 rounded-md bg-surface p-3.5 text-xs shadow-float">
+              <p className="text-ink-2">
+                Click the map to move. Set heading ({mode.yawDeg}°). Yaw is sent as radians to the API.
+              </p>
+              <HeadingDial
                 variant="panel"
-                onClose={() => setMode({ kind: 'idle' })}
-                onSaved={(id) => setMode({ kind: 'workflow', workflowId: id })}
+                yaw={mode.yawDeg}
+                onChange={(yaw) => setMode({ ...mode, yawDeg: yaw })}
               />
-            </div>
-          </aside>
-        ) : null}
-
-        {selectedEndpoint ? (
-          <Inspector
-            title={`${ENDPOINT_TEMPLATES.find((item) => item.type === selectedEndpoint.endpointType)?.title} endpoint`}
-            deleteLabel="Delete endpoint"
-            onDelete={() => removeEndpoint(selectedEndpoint.id)}
-          >
-            <Field label="Name">
-              <input
-                className={controlClass()}
-                value={selectedEndpoint.name}
-                onChange={(event) => patchEndpoint(selectedEndpoint.id, { name: event.target.value })}
-              />
-            </Field>
-            <Field label="Type">
               <select
-                className={controlClass()}
-                value={selectedEndpoint.endpointType}
-                onChange={(event) => patchEndpoint(selectedEndpoint.id, { endpointType: event.target.value as EndpointType })}
+                className={controlClass('sm')}
+                value={mode.endpointType}
+                aria-label="Endpoint type"
+                onChange={(event) => setMode({ ...mode, endpointType: event.target.value as EndpointType })}
               >
                 {ENDPOINT_TEMPLATES.map((item) => (
                   <option key={item.type} value={item.type}>
@@ -803,134 +756,203 @@ export function MapEditorPage() {
                   </option>
                 ))}
               </select>
-            </Field>
-            <FieldRow>
-              <Field label="X (m)">
-                <input
-                  type="number"
-                  step={0.1}
-                  className={controlClass()}
-                  value={selectedEndpoint.x}
-                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { x: Number(event.target.value) })}
-                />
-              </Field>
-              <Field label="Y (m)">
-                <input
-                  type="number"
-                  step={0.1}
-                  className={controlClass()}
-                  value={selectedEndpoint.y}
-                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { y: Number(event.target.value) })}
-                />
-              </Field>
-            </FieldRow>
-            <FieldRow>
-              <Field label="Yaw (°)">
-                <input
-                  type="number"
-                  className={controlClass()}
-                  value={selectedEndpoint.yaw}
-                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { yaw: normalizeYaw(Number(event.target.value)) })}
-                />
-              </Field>
-              <Field label="Yaw tolerance (°)">
-                <input
-                  type="number"
-                  min={0}
-                  className={controlClass()}
-                  value={selectedEndpoint.yawTolerance}
-                  onChange={(event) => patchEndpoint(selectedEndpoint.id, { yawTolerance: Number(event.target.value) })}
-                />
-              </Field>
-            </FieldRow>
-            <Field label="Position tolerance (m)">
-              <input
-                type="number"
-                min={0}
-                step={0.05}
-                className={controlClass()}
-                value={selectedEndpoint.positionTolerance}
-                onChange={(event) => patchEndpoint(selectedEndpoint.id, { positionTolerance: Number(event.target.value) })}
-              />
-            </Field>
-            <Toggle
-              label="Enabled"
-              checked={selectedEndpoint.isEnabled}
-              onChange={(isEnabled) => patchEndpoint(selectedEndpoint.id, { isEnabled })}
-            />
-          </Inspector>
+              <div className="mt-2 flex justify-end gap-1.5">
+                <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => void placeEndpoint(mode.endpointType, mode.at, mode.yawDeg)}
+                >
+                  Create endpoint
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {tool === 'endpoint' && mode.kind === 'idle' && isDraft ? (
+            <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-xs text-ink-2 shadow-float">
+              Click the map to place an Endpoint
+            </div>
+          ) : null}
+
+          {tool === 'edge' && mode.kind === 'idle' && isDraft ? (
+            <div className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 gap-2 rounded-md bg-surface p-2 shadow-float">
+              {EDGE_TEMPLATES.map((item) => (
+                <Button key={item.direction} size="sm" variant="outline" onClick={() => startEdge(item.direction)}>
+                  {item.title}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+
+          {tool === 'zone' && mode.kind === 'idle' && isDraft ? (
+            <div className="absolute top-3 left-1/2 z-20 flex max-w-[90%] -translate-x-1/2 flex-wrap justify-center gap-2 rounded-md bg-surface p-2 shadow-float">
+              {ZONE_TEMPLATES.map((item) => (
+                <Button key={item.type} size="sm" variant="outline" onClick={() => startZone(item.type, item.title)}>
+                  {item.title}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {mode.kind === 'picker' ? (
+          <>
+            <Backdrop onClick={() => setMode({ kind: 'idle' })} />
+            <div className="absolute top-3 left-1/2 z-20 max-h-[calc(100%-24px)] w-[380px] -translate-x-1/2 overflow-auto rounded-lg bg-surface p-2 shadow-float">
+              <div className="flex items-center justify-between px-2 py-2">
+                <h3 className="text-sm font-medium">Workflows</h3>
+                <Button variant="primary" size="sm" onClick={() => setMode({ kind: 'workflow', workflowId: 'new' })}>
+                  New
+                </Button>
+              </div>
+              <SearchInput value={query} onChange={setQuery} placeholder="Search workflows" className="mb-2" />
+              {workflowsQuery.isLoading ? (
+                <p className="px-2 py-4 text-sm text-muted">Loading…</p>
+              ) : (
+                (workflowsQuery.data?.items ?? [])
+                  .filter((w) => w.name.toLowerCase().includes(lowered))
+                  .map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-container-high"
+                      onClick={() => setMode({ kind: 'workflow', workflowId: w.id })}
+                    >
+                      <span>{w.name}</span>
+                      <StatusBadge tone={w.status === 'PUBLISHED' ? 'green' : 'amber'}>{w.status}</StatusBadge>
+                    </button>
+                  ))
+              )}
+            </div>
+          </>
         ) : null}
 
-        {selectedEdge ? (
-          <Inspector
-            title={EDGE_TEMPLATES.find((item) => item.direction === selectedEdge.direction)?.title ?? 'Edge'}
-            deleteLabel="Delete edge"
-            onDelete={() => removeEdge(selectedEdge.id)}
-          >
-            <Field label="Direction">
-              <select
-                className={controlClass()}
-                value={selectedEdge.direction}
-                onChange={(event) => patchEdge(selectedEdge.id, { direction: event.target.value as EdgeDirection })}
-              >
-                {EDGE_TEMPLATES.map((item) => (
-                  <option key={item.direction} value={item.direction}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
+        {selectedEndpoint && epDraft ? (
+          <Inspector title="Endpoint" onClose={() => setMode({ kind: 'idle' })}>
+            <Field label="Code">
+              <input className={controlClass()} value={selectedEndpoint.code} readOnly disabled />
             </Field>
-            <FieldRow>
-              <Field label="Capacity">
-                <input
-                  type="number"
-                  min={0}
-                  className={controlClass()}
-                  value={selectedEdge.capacity}
-                  onChange={(event) => patchEdge(selectedEdge.id, { capacity: Number(event.target.value) })}
-                />
-              </Field>
-              <Field label="Max speed (m/s)">
-                <input
-                  type="number"
-                  min={0}
-                  step={0.1}
-                  className={controlClass()}
-                  value={selectedEdge.maxSpeed ?? ''}
-                  placeholder="—"
-                  onChange={(event) =>
-                    patchEdge(selectedEdge.id, { maxSpeed: event.target.value === '' ? null : Number(event.target.value) })
-                  }
-                />
-              </Field>
-            </FieldRow>
-            <Toggle label="Active" checked={selectedEdge.isActive} onChange={(isActive) => patchEdge(selectedEdge.id, { isActive })} />
-            <p className="text-xs text-muted">{selectedEdge.geometry.points.length} points on the path</p>
-          </Inspector>
-        ) : null}
-
-        {selectedZone ? (
-          <Inspector
-            title={ZONE_TEMPLATES.find((item) => item.type === selectedZone.zoneType)?.title ?? 'Zone'}
-            deleteLabel="Delete zone"
-            onDelete={() => removeZone(selectedZone.id)}
-          >
             <Field label="Name">
               <input
                 className={controlClass()}
-                value={selectedZone.name}
-                onChange={(event) => patchZone(selectedZone.id, { name: event.target.value })}
+                value={epDraft.name ?? ''}
+                disabled={!isDraft}
+                onChange={(e) => setEpDraft({ ...epDraft, name: e.target.value })}
               />
             </Field>
             <Field label="Type">
               <select
                 className={controlClass()}
-                value={selectedZone.zoneType}
-                onChange={(event) => patchZone(selectedZone.id, { zoneType: event.target.value as ZoneType })}
+                value={epDraft.endpointType}
+                disabled={!isDraft}
+                onChange={(e) => setEpDraft({ ...epDraft, endpointType: e.target.value as EndpointType })}
               >
-                {ZONE_TEMPLATES.map((item) => (
-                  <option key={item.type} value={item.type}>
-                    {item.title}
+                {ENDPOINT_TEMPLATES.map((t) => (
+                  <option key={t.type} value={t.type}>
+                    {t.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <FieldRow>
+              <Field label="X (m)">
+                <input
+                  className={controlClass()}
+                  type="number"
+                  step="0.001"
+                  value={epDraft.x ?? 0}
+                  disabled={!isDraft}
+                  onChange={(e) => setEpDraft({ ...epDraft, x: Number(e.target.value) })}
+                />
+              </Field>
+              <Field label="Y (m)">
+                <input
+                  className={controlClass()}
+                  type="number"
+                  step="0.001"
+                  value={epDraft.y ?? 0}
+                  disabled={!isDraft}
+                  onChange={(e) => setEpDraft({ ...epDraft, y: Number(e.target.value) })}
+                />
+              </Field>
+            </FieldRow>
+            <Field label={`Yaw (${radToDeg(epDraft.yaw ?? 0).toFixed(1)}° → rad)`}>
+              <input
+                className={controlClass()}
+                type="number"
+                step="0.1"
+                value={radToDeg(epDraft.yaw ?? 0)}
+                disabled={!isDraft}
+                onChange={(e) => setEpDraft({ ...epDraft, yaw: degToRad(Number(e.target.value)) })}
+              />
+            </Field>
+            <HeadingDial
+              variant="panel"
+              yaw={radToDeg(epDraft.yaw ?? 0)}
+              onChange={(deg) => isDraft && setEpDraft({ ...epDraft, yaw: degToRad(normalizeYaw(deg)) })}
+            />
+            <FieldRow>
+              <Field label="Pos. tol (m)">
+                <input
+                  className={controlClass()}
+                  type="number"
+                  step="0.01"
+                  value={epDraft.positionTolerance ?? 0.1}
+                  disabled={!isDraft}
+                  onChange={(e) => setEpDraft({ ...epDraft, positionTolerance: Number(e.target.value) })}
+                />
+              </Field>
+              <Field label="Yaw tol (°)">
+                <input
+                  className={controlClass()}
+                  type="number"
+                  step="0.1"
+                  value={radToDeg(epDraft.yawTolerance ?? degToRad(5))}
+                  disabled={!isDraft}
+                  onChange={(e) => setEpDraft({ ...epDraft, yawTolerance: degToRad(Number(e.target.value)) })}
+                />
+              </Field>
+            </FieldRow>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={epDraft.isEnabled ?? true}
+                disabled={!isDraft}
+                onChange={(e) => setEpDraft({ ...epDraft, isEnabled: e.target.checked })}
+              />
+              Enabled
+            </label>
+            {isDraft ? (
+              <div className="mt-4 flex gap-2">
+                <Button variant="primary" onClick={() => void saveEndpoint()}>
+                  Save
+                </Button>
+                <Button variant="ghost" onClick={() => void removeEndpoint(selectedEndpoint.id)}>
+                  Delete
+                </Button>
+              </div>
+            ) : null}
+          </Inspector>
+        ) : null}
+
+        {selectedEdge && edgeDraft ? (
+          <Inspector title="Edge" onClose={() => setMode({ kind: 'idle' })}>
+            <Field label="Code">
+              <input className={controlClass()} value={selectedEdge.code} readOnly disabled />
+            </Field>
+            <Field label="Direction">
+              <select
+                className={controlClass()}
+                value={edgeDraft.direction}
+                disabled={!isDraft}
+                onChange={(e) => setEdgeDraft({ ...edgeDraft, direction: e.target.value as EdgeDirection })}
+              >
+                {EDGE_TEMPLATES.map((t) => (
+                  <option key={t.direction} value={t.direction}>
+                    {t.title}
                   </option>
                 ))}
               </select>
@@ -938,96 +960,210 @@ export function MapEditorPage() {
             <FieldRow>
               <Field label="Capacity">
                 <input
-                  type="number"
-                  min={0}
                   className={controlClass()}
-                  value={selectedZone.capacity}
-                  onChange={(event) => patchZone(selectedZone.id, { capacity: Number(event.target.value) })}
+                  type="number"
+                  min={1}
+                  value={edgeDraft.capacity}
+                  disabled={!isDraft}
+                  onChange={(e) => setEdgeDraft({ ...edgeDraft, capacity: Number(e.target.value) })}
+                />
+              </Field>
+              <Field label="Width (m)">
+                <input
+                  className={controlClass()}
+                  type="number"
+                  step="0.05"
+                  min={0.01}
+                  value={edgeDraft.widthMeters}
+                  disabled={!isDraft}
+                  onChange={(e) => setEdgeDraft({ ...edgeDraft, widthMeters: Number(e.target.value) })}
+                />
+              </Field>
+            </FieldRow>
+            <Field label="Max speed (m/s)">
+              <input
+                className={controlClass()}
+                value={edgeDraft.maxSpeed}
+                disabled={!isDraft}
+                placeholder="optional"
+                onChange={(e) => setEdgeDraft({ ...edgeDraft, maxSpeed: e.target.value })}
+              />
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={edgeDraft.isActive}
+                disabled={!isDraft}
+                onChange={(e) => setEdgeDraft({ ...edgeDraft, isActive: e.target.checked })}
+              />
+              Active
+            </label>
+            <p className="text-xs text-muted">{selectedEdge.geometry.coordinates.length} LineString vertices (world m)</p>
+            {isDraft ? (
+              <div className="mt-4 flex gap-2">
+                <Button variant="primary" onClick={() => void saveEdge()}>
+                  Save
+                </Button>
+                <Button variant="ghost" onClick={() => void removeEdge(selectedEdge.id)}>
+                  Delete
+                </Button>
+              </div>
+            ) : null}
+          </Inspector>
+        ) : null}
+
+        {selectedZone && zoneDraft ? (
+          <Inspector title="Zone" onClose={() => setMode({ kind: 'idle' })}>
+            <Field label="Code">
+              <input className={controlClass()} value={selectedZone.code} readOnly disabled />
+            </Field>
+            <Field label="Name">
+              <input
+                className={controlClass()}
+                value={zoneDraft.name}
+                disabled={!isDraft}
+                onChange={(e) => setZoneDraft({ ...zoneDraft, name: e.target.value })}
+              />
+            </Field>
+            <Field label="Type">
+              <select
+                className={controlClass()}
+                value={zoneDraft.zoneType}
+                disabled={!isDraft}
+                onChange={(e) =>
+                  setZoneDraft({
+                    ...zoneDraft,
+                    zoneType: e.target.value as ZoneType,
+                    capacity: e.target.value === 'NARROW_AREA' ? 1 : zoneDraft.capacity,
+                  })
+                }
+              >
+                {ZONE_TEMPLATES.map((t) => (
+                  <option key={t.type} value={t.type}>
+                    {t.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {zoneDraft.zoneType === 'NARROW_AREA' ? (
+              <p className="text-xs text-amber-ink">NARROW_AREA requires Capacity = 1 and MaxSpeed (m/s).</p>
+            ) : null}
+            <FieldRow>
+              <Field label="Capacity">
+                <input
+                  className={controlClass()}
+                  type="number"
+                  min={1}
+                  value={zoneDraft.capacity}
+                  disabled={!isDraft}
+                  onChange={(e) => setZoneDraft({ ...zoneDraft, capacity: Number(e.target.value) })}
                 />
               </Field>
               <Field label="Max speed (m/s)">
                 <input
-                  type="number"
-                  min={0}
-                  step={0.1}
                   className={controlClass()}
-                  value={selectedZone.maxSpeed ?? ''}
-                  placeholder="—"
-                  onChange={(event) =>
-                    patchZone(selectedZone.id, { maxSpeed: event.target.value === '' ? null : Number(event.target.value) })
-                  }
+                  value={zoneDraft.maxSpeed}
+                  disabled={!isDraft}
+                  onChange={(e) => setZoneDraft({ ...zoneDraft, maxSpeed: e.target.value })}
                 />
               </Field>
             </FieldRow>
-            <Toggle label="Active" checked={selectedZone.isActive} onChange={(isActive) => patchZone(selectedZone.id, { isActive })} />
+            {zoneDraft.zoneType === 'INTERSECTION' ? (
+              <FieldRow>
+                <Field label="Preferred yaw (°)">
+                  <input
+                    className={controlClass()}
+                    value={zoneDraft.preferredDirectionYawDeg}
+                    disabled={!isDraft}
+                    onChange={(e) => setZoneDraft({ ...zoneDraft, preferredDirectionYawDeg: e.target.value })}
+                  />
+                </Field>
+                <Field label="Heading tol (°)">
+                  <input
+                    className={controlClass()}
+                    value={zoneDraft.headingToleranceDeg}
+                    disabled={!isDraft}
+                    onChange={(e) => setZoneDraft({ ...zoneDraft, headingToleranceDeg: e.target.value })}
+                  />
+                </Field>
+              </FieldRow>
+            ) : null}
+            {zoneDraft.zoneType === 'OPERATIONAL_AREA' ? (
+              <Field label="Cost multiplier">
+                <input
+                  className={controlClass()}
+                  value={zoneDraft.costMultiplier}
+                  disabled={!isDraft}
+                  placeholder="optional > 0"
+                  onChange={(e) => setZoneDraft({ ...zoneDraft, costMultiplier: e.target.value })}
+                />
+              </Field>
+            ) : null}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={zoneDraft.isActive}
+                disabled={!isDraft}
+                onChange={(e) => setZoneDraft({ ...zoneDraft, isActive: e.target.checked })}
+              />
+              Active
+            </label>
+            {isDraft ? (
+              <div className="mt-4 flex gap-2">
+                <Button variant="primary" onClick={() => void saveZone()}>
+                  Save
+                </Button>
+                <Button variant="ghost" onClick={() => void removeZone(selectedZone.id)}>
+                  Delete
+                </Button>
+              </div>
+            ) : null}
           </Inspector>
+        ) : null}
+
+        {workflowOpen && mode.kind === 'workflow' ? (
+          <aside
+            className="absolute top-0 right-0 z-20 flex h-full flex-col border-l border-outline-soft bg-surface shadow-float"
+            style={{ width: panelWidth }}
+          >
+            <div
+              className="absolute top-0 bottom-0 left-0 w-1.5 cursor-ew-resize"
+              onPointerDown={startPanelResize}
+            />
+            <WorkflowEditor
+              workflowId={mode.workflowId === 'new' ? 'new' : mode.workflowId}
+              variant="panel"
+              onSaved={(id) => setMode({ kind: 'workflow', workflowId: id })}
+              onClose={() => setMode({ kind: 'idle' })}
+            />
+          </aside>
         ) : null}
       </div>
     </div>
   )
 }
 
-// Panels float over the right edge of the canvas, this far from its border.
-const PANEL_GAP = 12
-const SIDE_PANEL = 'absolute top-3 right-3 bottom-3 z-12 flex flex-col overflow-hidden rounded-lg bg-surface shadow-float'
-// Widgets pinned to a map point keep their size while the map is zoomed.
-const ANCHOR = 'absolute size-0 origin-top-left scale-[calc(1/var(--z,1))]'
-
-function PickerHead({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <header className="flex min-h-8 items-center justify-between gap-3 px-3 pt-2 pb-3">
-      <h2 className="text-md font-book">{title}</h2>
-      {children}
-    </header>
-  )
-}
-
-function PickerHeading({ children }: { children: ReactNode }) {
-  return <h3 className="px-3 pt-4 pb-1 text-xs text-muted">{children}</h3>
-}
-
-function PickerItem({ title, note, onClick }: { title: string; note: string; onClick?: () => void }) {
-  return (
-    <li>
-      <button
-        type="button"
-        className="flex w-full flex-col items-start rounded-md px-3 py-2.5 text-left transition-colors duration-200 hover:bg-container-high"
-        onClick={onClick}
-      >
-        <strong className="font-medium">{title}</strong>
-        <span className="text-xs text-muted">{note}</span>
-      </button>
-    </li>
-  )
-}
-
-interface InspectorProps {
+function Inspector({
+  title,
+  onClose,
+  children,
+}: {
   title: string
-  deleteLabel: string
-  onDelete: () => void
+  onClose: () => void
   children: ReactNode
-}
-
-/** Properties of the selected Endpoint, Edge or Zone. */
-function Inspector({ title, deleteLabel, onDelete, children }: InspectorProps) {
+}) {
   return (
-    <aside className={SIDE_PANEL} style={{ width: INSPECTOR_WIDTH }}>
-      <h2 className="px-5 pt-5 pb-2 text-md font-book">{title}</h2>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-5 py-3">{children}</div>
-      <div className="px-5 pt-2 pb-5">
-        <Button variant="danger" block onClick={onDelete}>
-          <Icon name="trash" size={15} /> {deleteLabel}
-        </Button>
+    <aside
+      className="absolute top-0 right-0 z-20 flex h-full flex-col gap-3 overflow-auto border-l border-outline-soft bg-surface p-4 shadow-float"
+      style={{ width: INSPECTOR_WIDTH }}
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <IconButton aria-label="Close" onClick={onClose}>
+          <Icon name="close" size={16} />
+        </IconButton>
       </div>
+      {children}
     </aside>
-  )
-}
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-2.5 text-sm">
-      <input type="checkbox" className="size-4 accent-ink" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      {label}
-    </label>
   )
 }

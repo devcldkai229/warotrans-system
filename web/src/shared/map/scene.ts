@@ -26,13 +26,16 @@ function zone(
   capacity: number,
   maxSpeed: number | null = null,
 ): Zone {
+  const ring = rect(...area).map((p) => [p.x, p.y] as [number, number])
+  const first = ring[0]
+  ring.push([first[0], first[1]])
   return {
     id: `zone-${n}`,
     mapVersionId: NO_VERSION,
     code: `ZN-${String(n).padStart(2, '0')}`,
     name,
     zoneType,
-    geometry: { points: rect(...area) },
+    geometry: { type: 'Polygon', coordinates: [ring] },
     capacity,
     maxSpeed,
     isActive: true,
@@ -50,7 +53,8 @@ function edge(
     id: `edge-${n}`,
     mapVersionId: NO_VERSION,
     code: `EG-${String(n).padStart(2, '0')}`,
-    geometry: { points: points.map(([x, y]) => ({ x, y })) },
+    geometry: { type: 'LineString', coordinates: points.map(([x, y]) => [x, y] as [number, number]) },
+    widthMeters: 1,
     direction,
     capacity,
     maxSpeed,

@@ -12,6 +12,23 @@ These are different concepts.
 ## MapVersion
 Navigation entities belong to a MapVersion.
 
+ROS/Nav2 occupancy metadata on MapVersion includes:
+```text
+Code (unique per Warehouse)
+MapUri (occupancy raster, typically map.pgm)
+MapYamlUri
+PreviewImageUri (browser PNG)
+FrameId (normally "map")
+ImageWidthPixels / ImageHeightPixels
+Resolution (m/px)
+OriginX / OriginY / OriginYaw
+Negate / OccupiedThreshold / FreeThreshold
+ContentHash
+```
+
+Geometry on Edge and Zone is expressed in **world meters** in `MapVersion.FrameId`.
+**Pixel coordinates are never persisted.**
+
 ## Endpoint
 A semantic robot destination.
 
@@ -24,13 +41,13 @@ EP-CHARGING-01
 EP-MAINTENANCE-01
 ```
 
-Stores map pose:
+Stores map pose (world meters / radians):
 ```text
-X
-Y
-Yaw
-PositionTolerance
-YawTolerance
+X                 meters
+Y                 meters
+Yaw               radians
+PositionTolerance meters
+YawTolerance      radians
 ```
 
 ## EndpointGroup
@@ -42,17 +59,23 @@ Zone is a coordinate-defined polygon on a MapVersion.
 
 **Zone is not required to reference an Endpoint.**
 
-Example:
+Canonical persisted geometry is GeoJSON Polygon in world meters (`FrameId`):
 ```json
 {
-  "points": [
-    { "x": 1.0, "y": 1.0 },
-    { "x": 4.0, "y": 1.0 },
-    { "x": 4.0, "y": 3.0 },
-    { "x": 1.0, "y": 3.0 }
+  "type": "Polygon",
+  "coordinates": [
+    [
+      [1.0, 1.0],
+      [4.0, 1.0],
+      [4.0, 3.0],
+      [1.0, 3.0],
+      [1.0, 1.0]
+    ]
   ]
 }
 ```
+
+Rules: finite numbers, at least 3 unique vertices, outer ring closed (first == last).
 
 Typical types:
 ```text
@@ -62,38 +85,60 @@ OPERATIONAL_AREA
 RESTRICTED_AREA
 ```
 
-Zone may define:
+Zone columns:
 ```text
 capacity
-maxSpeed?
+maxSpeed?            meters/second
 isActive
+policy               jsonb (type-specific, schema-versioned)
+policySchemaVersion  int (v1)
 ```
+
+### Zone policy (schema v1)
+Typed common fields stay on columns; `policy` only holds type-specific extras.
+
+| ZoneType | Policy rules |
+|----------|----------------|
+| `RESTRICTED_AREA` | empty/null policy OK; Capacity ≥ 1 |
+| `NARROW_AREA` | Capacity must be 1; MaxSpeed required (m/s) |
+| `INTERSECTION` | optional `{ preferredDirectionYaw, headingToleranceRadians }` (radians) |
+| `OPERATIONAL_AREA` | optional `{ costMultiplier > 0 }` |
+
+Do not invent ZoneType values beyond the enum above.
 
 ## Edge
 Edge is a coordinate-defined ordered polyline/path segment on a MapVersion.
 
 **Edge is not required to start/end at an Endpoint.**
 
-Example:
+Canonical persisted geometry is GeoJSON LineString in world meters (`FrameId`):
 ```json
 {
-  "points": [
-    { "x": 1.0, "y": 2.0 },
-    { "x": 2.5, "y": 2.2 },
-    { "x": 4.0, "y": 3.0 }
+  "type": "LineString",
+  "coordinates": [
+    [1.0, 2.0],
+    [2.5, 2.2],
+    [4.0, 3.0]
   ]
 }
 ```
 
+Rules: finite numbers, at least 2 positions.
+
 Properties:
 ```text
-direction = ONE_WAY | BIDIRECTIONAL
+widthMeters          meters, must be > 0
+direction            ONE_WAY | BIDIRECTIONAL
 capacity
-maxSpeed?
+maxSpeed?            meters/second
 isActive
 ```
 
 Do not force `sourceEndpointId` or `destinationEndpointId` onto Edge.
+
+## Map lifecycle
+Only **DRAFT** MapVersions accept Endpoint / Edge / Zone create, update, or delete.
+PUBLISHED and ARCHIVED geometry is immutable at the API.
 
 ## Traffic coordination
 V1 does not persist:

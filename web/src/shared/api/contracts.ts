@@ -407,8 +407,16 @@ export interface MapVersion {
   notes?: string
 }
 
-export interface ZoneGeometry {
-  points: Point[]
+/** GeoJSON LineString in world meters (MapVersion.FrameId). Pixel coords are never persisted. */
+export interface GeoJsonLineString {
+  type: 'LineString'
+  coordinates: [number, number][]
+}
+
+/** GeoJSON Polygon in world meters (MapVersion.FrameId). Outer ring must be closed. */
+export interface GeoJsonPolygon {
+  type: 'Polygon'
+  coordinates: [number, number][][]
 }
 
 /** navigation.edges: an ordered polyline Robots may travel along (rules/05). Not tied to any Endpoint. */
@@ -416,7 +424,7 @@ export interface Edge {
   id: string
   mapVersionId: string
   code: string
-  geometry: ZoneGeometry
+  geometry: GeoJsonLineString
   /** Corridor width in meters (API: widthMeters). */
   widthMeters?: number
   direction: EdgeDirection
@@ -431,10 +439,12 @@ export interface Zone {
   code: string
   name: string
   zoneType: ZoneType
-  geometry: ZoneGeometry
+  geometry: GeoJsonPolygon
   capacity: number
   maxSpeed: number | null
   isActive: boolean
+  policy?: Record<string, unknown> | null
+  policySchemaVersion?: number
 }
 
 export interface Endpoint {

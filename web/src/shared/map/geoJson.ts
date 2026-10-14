@@ -1,5 +1,4 @@
-import type { Point } from '@/shared/api/contracts'
-import type { GeoJsonLineString, GeoJsonPolygon } from '@/shared/api/navigation'
+import type { GeoJsonLineString, GeoJsonPolygon, Point } from '@/shared/api/contracts'
 
 export function lineStringToPoints(geometry: GeoJsonLineString): Point[] {
   return geometry.coordinates.map(([x, y]) => ({ x, y }))
@@ -8,13 +7,13 @@ export function lineStringToPoints(geometry: GeoJsonLineString): Point[] {
 export function pointsToLineString(points: Point[]): GeoJsonLineString {
   return {
     type: 'LineString',
-    coordinates: points.map((p) => [p.x, p.y]),
+    coordinates: points.map((p) => [p.x, p.y] as [number, number]),
   }
 }
 
 export function polygonToPoints(geometry: GeoJsonPolygon): Point[] {
   const ring = geometry.coordinates[0] ?? []
-  // Drop closing duplicate for editor point lists.
+  // Drop closing duplicate for editor / SVG point lists.
   if (ring.length >= 2) {
     const first = ring[0]
     const last = ring[ring.length - 1]

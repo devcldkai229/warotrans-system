@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { MapStatus } from '@/shared/api/contracts'
 import {
+  fetchSampleMapFiles,
   importMapVersion,
   listMapVersionsForWarehouse,
   publishMapVersion,
@@ -21,6 +22,9 @@ import { formatDateTime } from '@/shared/lib/format'
 import { WarehouseMap } from '@/shared/map/WarehouseMap'
 import { boundsFromMapMeta } from '@/shared/map/mapBounds'
 import { DEFAULT_MAP_BOUNDS } from '@/shared/lib/mapView'
+import { controlClass } from '@/shared/ui/controlClass'
+
+const WAREHOUSE_KEY = 'warotrans.facilityWarehouseId'
 
 interface MapCardProps {
   version: MapVersionDto
@@ -64,7 +68,12 @@ function MapCard({ version, warehouseName, when, children }: MapCardProps) {
             labels="none"
           />
         </div>
-        <StatusBadge tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'} withDot surface className="absolute top-4 left-4 shadow-float">
+        <StatusBadge
+          tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}
+          withDot
+          surface
+          className="absolute top-4 left-4 shadow-float"
+        >
           {version.status}
         </StatusBadge>
       </div>
@@ -74,7 +83,9 @@ function MapCard({ version, warehouseName, when, children }: MapCardProps) {
             {warehouseName}, {version.code}
           </h3>
           <p className="mt-1 text-sm text-ink-2">{when}</p>
-          <p className="mt-0.5 text-xs text-muted">v{version.versionNo} · {version.name}</p>
+          <p className="mt-0.5 text-xs text-muted">
+            v{version.versionNo} · {version.name}
+          </p>
         </div>
         <div className="flex gap-2">{children}</div>
       </div>
@@ -101,14 +112,30 @@ export function FacilityPage() {
   const [pendingYaml, setPendingYaml] = useState<File | null>(null)
   const [pendingPgm, setPendingPgm] = useState<File | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(WAREHOUSE_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  })
 
   const warehousesQuery = useQuery({
     queryKey: ['warehouses', 'active'],
     queryFn: () => listWarehouses({ isActive: true, take: 50 }),
   })
 
-  const warehouse = warehousesQuery.data?.items[0]
-  const warehouseId = warehouse?.id
+  const warehouses = warehousesQuery.data?.items ?? []
+  const warehouseId = useMemo(() => {
+    const items = warehousesQuery.data?.items
+    if (!items?.length) return ''
+    if (selectedWarehouseId && items.some((w) => w.id === selectedWarehouseId)) {
+      return selectedWarehouseId
+    }
+    return items[0].id
+  }, [warehousesQuery.data?.items, selectedWarehouseId])
+
+  const warehouse = warehouses.find((w) => w.id === warehouseId) ?? warehouses[0]
 
   const mapsQuery = useQuery({
     queryKey: ['navigation', 'maps', warehouseId],
@@ -129,22 +156,36 @@ export function FacilityPage() {
   })
 
   const importMutation = useMutation({
-    mutationFn: async () => {
-      if (!warehouseId || !pendingYaml || !pendingPgm) {
-        throw new Error('Select a warehouse and both yaml + pgm files.')
-      }
-      return importMapVersion(warehouseId, pendingYaml, pendingPgm, importName || undefined)
+    mutationFn: async (files: { yaml: File; pgm: File; name?: string }) => {
+      if (!warehouseId) throw new Error('Select a warehouse.')
+      return importMapVersion(warehouseId, files.yaml, files.pgm, files.name)
     },
-    onSuccess: async () => {
+    onSuccess: async (created) => {
       setImportOpen(false)
       setPendingYaml(null)
       setPendingPgm(null)
       setImportName('')
       setImportError(null)
       await queryClient.invalidateQueries({ queryKey: ['navigation', 'maps', warehouseId] })
+      navigate(`/configure/facility/maps/${created.id}/edit`)
     },
     onError: (err) => {
       setImportError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Import failed')
+    },
+  })
+
+  const sampleMutation = useMutation({
+    mutationFn: async () => {
+      const files = await fetchSampleMapFiles()
+      if (!warehouseId) throw new Error('Select a warehouse.')
+      return importMapVersion(warehouseId, files.yaml, files.pgm, 'Sample ROS map')
+    },
+    onSuccess: async (created) => {
+      await queryClient.invalidateQueries({ queryKey: ['navigation', 'maps', warehouseId] })
+      navigate(`/configure/facility/maps/${created.id}/edit`)
+    },
+    onError: (err) => {
+      setImportError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Sample import failed')
     },
   })
 
@@ -174,18 +215,39 @@ export function FacilityPage() {
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
-        <h1 className="text-4xl font-book">Facility</h1>
-        <p className="mt-3 text-base text-ink-2">
-          The map robots navigate by: import a ROS occupancy map, edit the draft, then publish it.
-        </p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-book">Facility</h1>
+            <p className="mt-3 text-base text-ink-2">
+              The map robots navigate by: import a ROS occupancy map, edit the draft, then publish it.
+            </p>
+          </div>
+          <label className="text-sm text-ink-2">
+            Warehouse
+            <select
+              className={cx(controlClass(), 'mt-1 block min-w-56')}
+              value={warehouseId}
+              onChange={(e) => {
+                setSelectedWarehouseId(e.target.value)
+                try {
+                  window.localStorage.setItem(WAREHOUSE_KEY, e.target.value)
+                } catch {
+                  // ignore
+                }
+              }}
+            >
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.code} — {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <div className="mt-10 grid grid-cols-2 gap-4">
           {draft ? (
-            <MapCard
-              version={draft}
-              warehouseName={warehouseName}
-              when={`Created ${formatDateTime(draft.createdAt)}`}
-            >
+            <MapCard version={draft} warehouseName={warehouseName} when={`Created ${formatDateTime(draft.createdAt)}`}>
               <Button
                 variant="surface"
                 disabled={publishMutation.isPending}
@@ -222,13 +284,22 @@ export function FacilityPage() {
             <IconButton aria-label="Search maps">
               <Icon name="search" size={16} />
             </IconButton>
+            {import.meta.env.DEV ? (
+              <Button
+                variant="outline"
+                disabled={sampleMutation.isPending}
+                onClick={() => sampleMutation.mutate()}
+              >
+                <Icon name="bolt" size={15} /> {sampleMutation.isPending ? 'Loading…' : 'Load Sample Map'}
+              </Button>
+            ) : null}
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Icon name="upload" size={15} /> Import
             </Button>
           </div>
         </header>
 
-        {importOpen ? (
+        {importOpen || importError ? (
           <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
             <h3 className="text-md font-book">Import ROS map (yaml + pgm)</h3>
             <p className="mt-1 text-sm text-ink-2">Creates a DRAFT MapVersion with preview PNG under /map-assets.</p>
@@ -253,11 +324,17 @@ export function FacilityPage() {
               <Button
                 variant="primary"
                 disabled={!pendingYaml || !pendingPgm || importMutation.isPending}
-                onClick={() => importMutation.mutate()}
+                onClick={() =>
+                  importMutation.mutate({
+                    yaml: pendingYaml!,
+                    pgm: pendingPgm!,
+                    name: importName || undefined,
+                  })
+                }
               >
                 {importMutation.isPending ? 'Importing…' : 'Import'}
               </Button>
-              <Button variant="ghost" onClick={() => setImportOpen(false)}>
+              <Button variant="ghost" onClick={() => { setImportOpen(false); setImportError(null) }}>
                 Cancel
               </Button>
             </div>

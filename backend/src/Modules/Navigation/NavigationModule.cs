@@ -12,6 +12,7 @@ using WaroTrans.Navigation.Features.CreateEndpoint;
 using WaroTrans.Navigation.Features.CreateMapVersion;
 using WaroTrans.Navigation.Features.CreateZone;
 using WaroTrans.Navigation.Features.DeleteEdge;
+using WaroTrans.Navigation.Features.DeleteEndpoint;
 using WaroTrans.Navigation.Features.DeleteZone;
 using WaroTrans.Navigation.Features.GetActiveMapVersion;
 using WaroTrans.Navigation.Features.GetEdge;
@@ -47,6 +48,7 @@ public static class NavigationModule
         services.AddScoped<CreateEndpointHandler>();
         services.AddScoped<GetEndpointHandler>();
         services.AddScoped<UpdateEndpointHandler>();
+        services.AddScoped<DeleteEndpointHandler>();
         services.AddScoped<CreateEdgeHandler>();
         services.AddScoped<GetEdgeHandler>();
         services.AddScoped<UpdateEdgeHandler>();
@@ -78,6 +80,7 @@ public static class NavigationModule
         CreateEndpointEndpoint.Map(group);
         GetEndpointEndpoint.Map(group);
         UpdateEndpointEndpoint.Map(group);
+        DeleteEndpointEndpoint.Map(group);
         CreateEdgeEndpoint.Map(group);
         GetEdgeEndpoint.Map(group);
         UpdateEdgeEndpoint.Map(group);
