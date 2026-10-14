@@ -1,63 +1,132 @@
+/**
+ * "Calm Operations" palette.
+ *
+ * Read the real token from this file instead of hardcoding a hex value: the
+ * Phase 1 redesign re-tunes several tones, and a literal silently drifts.
+ *
+ * Structure:
+ *   1. Neutral surfaces  — canvas, cards, hairlines
+ *   2. Text              — near-black / grey, readable on canvas AND on white
+ *   3. Brand accent      — cobalt, plus the tint used for selected chips
+ *   4. Semantics         — success / warning / danger / info, each with
+ *                         `*Bg` (tint surface), `*Border` (hairline) and
+ *                         `*Text` (WCAG-safe foreground on that tint)
+ *   5. Legacy aliases    — tokens kept because un-migrated screens still read
+ *                         them; delete each one as its last caller moves.
+ */
+
+/** Legacy — un-migrated screens only. Alias of `border`. */
+const LEGACY_BORDER = '#e2e8f0';
+
 export const colors = {
-  // Brand colors (Calibrated rich cobalt blue matching prototype oklch(0.5 0.2 256))
-  primary: '#005cd1', // Rich industrial cobalt blue
-  primaryDark: '#004bb0',
-  primaryLight: '#ebf3ff', // Soft subtle blue tint
-  primaryBorder: '#b8d5ff',
-
-  // Backgrounds
-  background: '#f8fafc',
+  /* ---------------------------------------------------------------- */
+  /* Neutral surfaces                                                  */
+  /* ---------------------------------------------------------------- */
+  /** Canvas behind every screen. */
+  background: '#eef1f6',
+  /** Cards, sheets, modals, headers. */
   surface: '#ffffff',
-  surfaceSubtle: '#f1f5f9',
-  surfaceMuted: '#e2e8f0',
+  /** Inset fill inside a card: route rows, detail blocks, icon wells. */
+  surfaceSubtle: '#f4f6fa',
+  /** Quieter still: segmented control tracks, skeleton rows, disabled fills. */
+  surfaceMuted: '#e5e9f0',
 
-  // Blueprint Map Tokens
-  mapBackground: '#e0f2fe',
-  mapGrid: '#bae6fd',
-  mapLine: '#7dd3fc',
-  mapRack: '#cbd5e1',
-  mapZoneBg: 'rgba(255, 255, 255, 0.85)',
+  /* ---------------------------------------------------------------- */
+  /* Borders                                                           */
+  /* ---------------------------------------------------------------- */
+  /** Default 1px hairline. Translucent so it works on any surface. */
+  border: 'rgba(33, 34, 38, 0.08)',
+  /** Hairline that must read as a boundary on top of `background`. */
+  borderStrong: '#c4c8d0',
 
-  // Text colors (Calibrated high-contrast slate tones matching prototype oklch(0.19 0.035 250) and oklch(0.46 0.025 250))
-  textPrimary: '#071523', // Deep midnight navy-black
-  textSecondary: '#475569', // Rich slate-600
-  textMuted: '#64748b', // Strong legible slate-500 (replaces washed-out #8b9cb0)
+  /* ---------------------------------------------------------------- */
+  /* Text                                                             */
+  /* ---------------------------------------------------------------- */
+  textPrimary: '#121317',
+  textSecondary: '#45474d',
+  /** Notes and placeholders only — never for content an operator must read. */
+  textMuted: '#6a6a71',
   textInverse: '#ffffff',
 
-  // Status Tones (Deep forest green matching prototype oklch(0.5 0.15 154))
-  success: '#007a38', // Darker rich forest green
-  successBg: '#eefaf2',
-  successSoft: '#d2f4dc',
-  successBorder: '#a3e5b9',
+  /* ---------------------------------------------------------------- */
+  /* Brand accent                                                     */
+  /* ---------------------------------------------------------------- */
+  /**
+   * Filled accent. `#1557d0` = 6.35:1 against `textInverse` (#ffffff), so
+   * white-on-primary clears WCAG AA (4.5:1) with a margin to spare — an accent
+   * at `#3279f9` (3.53:1) is the single most common contrast failure in a
+   * control library, because the fill looks fine in a mock and fails the moment
+   * an operator reads it under aisle lighting.
+   */
+  primary: '#1557d0',
+  /** Pressed / bevel depth. Always darker than `primary`, never used as text on white. */
+  primaryDark: '#0f3f9e',
+  /** Tinted surface for selected chips / active segments. */
+  primaryLight: '#ebf2fe',
+  /** Hairline for accent-bordered controls. */
+  primaryBorder: '#b8d5ff',
+  /**
+   * Accent foreground — on `primaryLight`, on `surface`, and as the active
+   * colour in the bottom tab bar (whose white surface the active label has to
+   * clear 4.5:1 on). Same value as `primary` by design: one accent that is
+   * legible as a fill *and* as text, so a screen never has to guess which of
+   * the two it is looking at.
+   */
+  primaryText: '#1557d0',
 
-  // Warning (Industrial amber yellow matching prototype oklch(0.8 0.16 82))
-  warning: '#f0b21b',
-  warningBg: '#fffbf0',
-  warningSoft: '#fef3c7',
-  warningBorder: '#fcd34d',
-  // Deep amber for text/outlines that sit directly on `background` or `surface`.
-  // `warning` itself is only 1.81:1 on #f8fafc and cannot carry meaning alone
-  // (WCAG 1.4.11 requires 3:1 for non-text graphics).
-  warningText: '#854d0e',
+  /* ---------------------------------------------------------------- */
+  /* Semantics                                                        */
+  /* ---------------------------------------------------------------- */
+  success: '#059669',
+  successBg: '#ecfdf5',
+  successBorder: '#a7f3d0',
+  /** Foreground on `successBg` (emerald-700, ~5.2:1). */
+  successText: '#047857',
 
-  // Danger (Industrial emergency red matching prototype oklch(0.55 0.22 26))
-  danger: '#c8272b',
+  warning: '#d97706',
+  warningBg: '#fffbeb',
+  warningBorder: '#fde68a',
+  /** Foreground on `warningBg` (amber-800, ~6.8:1). */
+  warningText: '#92400e',
+
+  danger: '#dc2626',
   dangerBg: '#fef2f2',
+  dangerBorder: '#fecaca',
+  /** Foreground on `dangerBg` (red-700, ~6.1:1). */
+  dangerText: '#b91c1c',
+
+  info: '#0284c7',
+  infoBg: '#f0f9ff',
+  infoBorder: '#bae6fd',
+  /** Foreground on `infoBg` (sky-800, ~5.6:1). */
+  infoText: '#0369a1',
+
+  /* ---------------------------------------------------------------- */
+  /* Blueprint map tokens — used by the facility map preview and by    */
+  /* JobLiveMapScreen. Retuned off cyan so the map reads as a quiet    */
+  /* slate canvas rather than a saturated blueprint.                  */
+  /* ---------------------------------------------------------------- */
+  mapBackground: '#e9eefa',
+  mapGrid: '#d5dcee',
+  mapLine: '#bccae2',
+  mapRack: '#c4c8d0',
+  mapZoneBg: 'rgba(255, 255, 255, 0.92)',
+
+  /* ---------------------------------------------------------------- */
+  /* Legacy aliases — remove as callers migrate                        */
+  /* ---------------------------------------------------------------- */
+  borderSubtle: LEGACY_BORDER,
+  borderDark: '#9aa0a6',
+  successSoft: '#d1fae5',
+  warningSoft: '#fef3c7',
   dangerSoft: '#fee2e2',
-  dangerBorder: '#fca5a5',
-
-  // Info
-  info: '#005cd1',
-  infoBg: '#ebf3ff',
-  infoBorder: '#b8d5ff',
-
-  // Border & Dividers (Crisp visible boundaries matching prototype slate-200 / slate-300)
-  border: '#cbd5e1', // Slate-300 crisp card & input boundaries
-  borderSubtle: '#e2e8f0', // Slate-200
-  borderDark: '#94a3b8', // Slate-400
-
-  // Overlay
-  overlay: 'rgba(7, 21, 35, 0.55)',
+  overlay: 'rgba(15, 23, 42, 0.45)',
 } as const;
 
 export type ColorToken = keyof typeof colors;
+
+/** Semantic tone shared by `StatusPill`, `Badge`, and screen-level tone maps. */
+export type SemanticTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+
+/** Every value in the palette, typed as a plain string for style props. */
+export type ColorValue = (typeof colors)[ColorToken];

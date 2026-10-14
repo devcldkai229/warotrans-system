@@ -106,21 +106,34 @@ export function JobDetailScreen() {
   const activeUnload = primaryTarget;
   const [targetContainer, setTargetContainer] = useState(primaryTarget?.code || 'BOX-101');
 
-  const isEnRoute = job.kind === 'transit';
-  const isWaiting = job.kind === 'waiting';
-  const isCompleted = job.kind === 'complete';
-  const isQueued = job.kind === 'queued';
+  /**
+   * Lifecycle straight off the backend enum. The screen used to read a second
+   * `kind` axis off the fixture, which is how the Jobs list and this screen
+   * could disagree about the same job.
+   */
+  const isEnRoute = job.status === 'RUNNING';
+  const isWaiting = job.status === 'ASSIGNED';
+  const isCompleted = job.status === 'COMPLETED';
 
   const handleNudge = (delta: string) => {
     toast.info(`Nudged ${job.robot} ${delta}. Dock alignment recalibrated.`);
   };
 
+  /**
+   * The 3m hold is a *fleet* switch, so it is the same switch as the header
+   * shield's, the safety sheet's and the Transport hub's. This screen used to
+   * keep a private `useState` copy, which meant holding from here left every
+   * other surface still reading "not holding" — the exact failure the
+   * `SafetyHoldContext` exists to prevent.
+   */
   const handleToggleSoftHold = () => {
-    if (!isSoftHold) {
-      setIsSoftHold(true);
-      toast.warning(`HOLD ROBOT: Soft-paused ${job.robot} within 3m perimeter. (Local pause, not warehouse E-Stop)`);
+    if (!isHolding) {
+      toggleHold();
+      toast.warning(
+        `HOLD ROBOT: Soft-paused ${job.robot} within 3m perimeter. (Local Fleet Simulation — not warehouse E-Stop)`
+      );
     } else {
-      setIsSoftHold(false);
+      toggleHold();
       toast.success(`HOLD RELEASED: ${job.robot} ready to proceed.`);
     }
   };

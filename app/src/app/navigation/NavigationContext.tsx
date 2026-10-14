@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Platform } from 'react-native';
+import { countMyActiveJobs } from '../../features/jobs/jobData';
 
-export type MainTab = 'home' | 'jobs' | 'transport';
+export type MainTab = 'home' | 'jobs' | 'live_map' | 'transport';
 
 export type AppScreen =
   | 'home'
@@ -22,6 +23,19 @@ export type AppScreen =
   | 'offline_hud'
   | 'scanner_hud';
 
+/** Screens that own the shell (AppHeader + bottom bar). Keep in one place. */
+const MAIN_TABS: ReadonlySet<string> = new Set<MainTab>([
+  'home',
+  'jobs',
+  'live_map',
+  'transport',
+]);
+
+/** True when `screen` is one of the four tab roots. */
+export function isMainTabScreen(screen: string): screen is MainTab {
+  return MAIN_TABS.has(screen);
+}
+
 export interface NavigationState {
   currentScreen: AppScreen;
   activeTab: MainTab;
@@ -37,7 +51,7 @@ interface NavigationContextType {
   goBack: () => void;
   activeJobCount: number;
   setActiveJobCount: (count: number) => void;
-  /** Measured height of the floating dock pill, published by BottomTabBar. */
+  /** Measured height of the bottom bar, published by BottomTabBar. */
   dockHeight: number;
   setDockHeight: (height: number) => void;
 }
@@ -93,7 +107,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 
       if (mapped) {
         let activeTab: MainTab = 'home';
-        if (mapped === 'home' || mapped === 'jobs' || mapped === 'transport') {
+        if (isMainTabScreen(mapped)) {
           activeTab = mapped;
         } else if (mapped === 'job_detail' || mapped === 'job_monitoring') {
           activeTab = 'jobs';
@@ -116,17 +130,23 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<{ screen: AppScreen; params: Record<string, any> }[]>([
     { screen: initial.screen, params: initial.params },
   ]);
-  const [activeJobCount, setActiveJobCount] = useState<number>(1);
-  // Initial guess until BottomTabBar's onLayout reports the real pill height.
+  // Seeded from the same helper the Jobs screen counts with, so the bar's badge
+  // and the screen's "My Tasks (n)" cannot disagree. The badge used to be a
+  // hardcoded 1 sitting next to a list of four.
+  const [activeJobCount, setActiveJobCount] = useState<number>(countMyActiveJobs);
+  // Initial guess until BottomTabBar's onLayout reports the real bar height
+  // (56pt + the bottom safe-area inset, so 64 on web, ~90 on a notched phone).
   // Prevents a visible one-frame jump in the screens that dock content.
-  const [dockHeight, setDockHeight] = useState<number>(60);
+  const [dockHeight, setDockHeight] = useState<number>(64);
 
   const navigate = (screen: AppScreen, newParams: Record<string, any> = {}) => {
     setHistory((prev) => [...prev, { screen, params: newParams }]);
     setCurrentScreen(screen);
     setParams(newParams);
 
-    if (screen === 'home' || screen === 'jobs' || screen === 'transport') {
+    // Landing on a tab root from anywhere re-activates that tab, so the bar
+    // never shows Home highlighted while the Jobs screen is on screen.
+    if (isMainTabScreen(screen)) {
       setActiveTab(screen);
     }
   };
@@ -149,11 +169,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       setCurrentScreen(prevEntry.screen);
       setParams(prevEntry.params);
 
-      if (
-        prevEntry.screen === 'home' ||
-        prevEntry.screen === 'jobs' ||
-        prevEntry.screen === 'transport'
-      ) {
+      if (isMainTabScreen(prevEntry.screen)) {
         setActiveTab(prevEntry.screen);
       }
     } else {

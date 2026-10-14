@@ -36,7 +36,7 @@ export function BrandMark({ size = 40, style }: BrandMarkProps) {
 
 const styles = StyleSheet.create({
   badge: {
-    backgroundColor: colors.primary, // Rich cobalt blue (#005cd1)
+    backgroundColor: colors.primary, // Brand cobalt
     alignItems: 'center',
     justifyContent: 'center',
     // 3D tactile control shelf under foot and right edge for diagonal extruded depth

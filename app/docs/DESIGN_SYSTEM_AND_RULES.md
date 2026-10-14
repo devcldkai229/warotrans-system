@@ -4,6 +4,15 @@
 > **Source of Truth Prototype**: `/mnt/Data/Capstone Project - WaroTrans/ui-design-prototype/prototype-staff-web/src/routes/index.tsx`  
 > **Target Devices**: Physical Smartphones (iPhone 12/13/14/15, Xiaomi, Samsung 19.5:9 / 19:9 ratio) and Rugged Warehouse PDAs (Zebra/Honeywell).
 
+> ⚠️ **Migration in progress.** This document describes the *legacy* (Industrial) system.
+> The current design language is **"Calm Operations"** (Apple / Linear clean minimal) and its
+> Phase 1 foundation — the token set, the type scale, the status→tone table and the
+> `src/shared/ui` primitives — is documented in
+> [`CALM_OPERATIONS_FOUNDATION.md`](./CALM_OPERATIONS_FOUNDATION.md).
+> Rules here still apply to un-migrated screens; new and migrated screens follow the
+> foundation document. Where the two disagree, the foundation document wins for anything
+> that imports `src/shared/ui`.
+
 ---
 
 ## 1. Triết lý Thiết kế & Ngôn ngữ Thẩm mỹ (Silicon Valley Industrial UX)
@@ -84,59 +93,34 @@ WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp ro
     | `src/features/jobs/JobsScreen.tsx` | `Platform.OS === 'ios' ? 104 : 75` |
     | `src/features/transport/TransportScreen.tsx` | `Platform.OS === 'ios' ? 104 : 76` |
     | `src/features/jobs/JobDetailScreen.tsx` | `Platform.OS === 'ios' ? 104 : 68` |
-    | `src/shared/components/AppHeader.tsx` | không dùng — chỉ `paddingTop` + `paddingBottom: 12` |
-  * Dropdown menus bên trong header phải đặt: `top: Platform.OS === 'ios' ? 92 : 56`.
-* **Quy chuẩn Floating Navigation Dock (Silicon Valley Modern Industrial)**:
-  * Thanh điều hướng dạng viên thuốc nổi (`borderRadius: 999`), tách biệt khỏi đáy tạo cảm giác thoáng đãng, sang trọng:
+    | `src/app/shell/AppHeader.tsx` | không dùng — `useTopInset()` + hai hàng nội dung |
+  * **Phase 2 đã bỏ dropdown neo theo header**: zone picker, account sheet và safety sheet giờ là `Modal`, không còn `top: 92` hay `top: Platform.OS === 'ios' ? 92 : 56`.
+* **Quy chuẩn Bottom Navigation (Phase 2 — Calm Operations)**:
+  * > **LƯU Ý**: mục này đã được viết lại ở Phase 2. Bản "viên thuốc nổi" (floating pill)
+    > bên dưới là **Phase 0 / prototype parity**, đã bị bỏ. Tham chiếu hiện hành:
+    > [`CALM_OPERATIONS_SHELL_AND_PILOTS.md`](./CALM_OPERATIONS_SHELL_AND_PILOTS.md) §3.3 và
+    > [`AGENTS.md`](../AGENTS.md) §2.3.
+  * Thanh điều hướng phẳng, tràn viền (edge to edge): nền trắng, 1px hairline trên, **không** pill, **không** shadow nổi.
+  * 4 tab: Home · Jobs · Live Map · Transport. Nhãn 12pt Title Case (không ALL-CAPS).
+  * **Lớp phủ `position: absolute`, không tự nhận safe-area** — inset được áp bằng một dải anh em
+    (`<View style={[styles.safeArea, { height: insets.bottom || 8 }]} pointerEvents="none" />`)
+    để mặt trắng liền mạch, không bị lùn vào trên icon.
+  * Mọi màn hình muốn ghim nội dung sát đáy phải chừa chỗ bằng **`dockReservedSpace(dockHeight)`**
+    (`src/shared/theme/layout.ts`) chứ **không** hardcode `paddingBottom`.
+  * `dockHeight` được đo thật qua `onLayout` trên thanh bar (`BottomTabBar.tsx`) và phát ra qua
+    `NavigationContext`, nên khi đổi icon/padding khoảng hở tự động theo.
     ```tsx
-    // Container bao bọc (cho phép click/scroll xuyên qua hai bên mép)
-    dockWrapper: {
-      position: 'absolute',
-      bottom: dockMetrics.bottomOffset,
-      left: 0,
-      right: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 90,
-    },
-    * **Dock là lớp phủ `position: absolute`, không tự nhận safe-area**:
-    * Mọi màn hình muốn ghim nội dung sát đáy phải chừa chỗ bằng **`dockReservedSpace(dockHeight)`**
-      (`src/shared/theme/layout.ts`) chứ **không** hardcode `paddingBottom`.
-    * `dockHeight` được đo thật qua `onLayout` trên `dockPill` (`BottomTabBar.tsx`) và phát ra
-      qua `NavigationContext`. Nhờ vậy khi metric của pill thay đổi (đổi icon, đổi padding),
-      khoảng hở tự động theo — thay vì 3 magic number cộng lại vừa khít như trước đây
-      (~2pt trên iPhone 12, dễ vỡ chỉ vì metrics chữ).
-    * ```tsx
-      const { dockHeight } = useNavigation();
-      const dockInset = dockReservedSpace(dockHeight);
-      // collapsed peek sheet
-      <View style={[styles.bottomSheet, { paddingBottom: dockInset }]} />
-      // expanded scroll content
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: dockInset }]}
-      ```
-  * **Viên thuốc nổi (kích thước vàng ~296px, chiếm ~76% chiều rộng màn hình 390px)**
-    dockPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(255, 255, 255, 0.96)',
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      borderWidth: 1.5,
-      borderColor: colors.border,
-      shadowColor: '#071523',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.14,
-      shadowRadius: 18,
-      elevation: 10,
-      gap: 10,
-    },
+    const { dockHeight } = useNavigation();
+    const bottomInset = dockReservedSpace(dockHeight); // height + bottomOffset(0) + gutter(16)
+    contentContainerStyle={[styles.listContent, { paddingBottom: bottomInset }]}
     ```
-  * Badge đếm Job: đặt tại `top: -4, right: -8`, nền `colors.danger`, viền trắng `1.5px`, chữ mono 9px đậm 900.
+  * Tab active: `colors.primary` + weight 600. Inactive: `colors.textMuted` + weight 500.
+  * Badge đếm Job: `top: -6, right: -12`, nền `colors.warning`, viền `colors.warningText`, chữ `colors.textPrimary`.
+  * *(Phase 0, đã bỏ — giữ để tham chiếu lịch sử)*: viên thuốc nổi `borderRadius: 999`, `paddingVertical: 7`, shadow nổi.
 * **Khu vực ngón cái (Thumb Zone) & Bệ Đỡ Đáy (Solid Surface Foundation)**:
   * Nửa dưới màn hình (40–50% từ dưới lên) là nơi ngón tay cái thao tác thuận tiện nhất khi cầm máy 1 tay.
-  * **Bệ đỡ đáy (Solid Bottom Surface)**: Bề mặt của Bottom Sheet kéo dài chạm sát mép đáy vật lý của màn hình (`bottom: 0`), triệt tiêu hoàn toàn khe hở lọt map phía dưới. Thanh Floating Dock nổi trôi đè lên trên bệ đỡ này tạo hiệu ứng chiều sâu 3D sang trọng.
-  * **Khoảng đệm cuộn an toàn (Safe Scroll Insets)**: Mọi màn hình cuộn (`HomeScreen`, `JobsScreen`, `TransportScreen`) đều khai báo `paddingBottom: Platform.select({ ios: 104, default: 96 })` để nội dung cuối cùng không bao giờ bị thanh dock che khuất.
+  * **Bệ đỡ đáy (Solid Bottom Surface)**: thanh điều hướng nằm sát mép đáy vật lý (`bottom: 0`), triệt tiêu hoàn toàn khe hở lọt nội dung phía dưới.
+  * **Khoảng đệm cuộn an toàn (Safe Scroll Insets)**: mọi màn hình cuộn (`HomeScreen`, `JobsScreen`) lấy `paddingBottom` từ `dockReservedSpace(dockHeight)`; `HomeScreen` giữ thêm sàn 100pt để trang ngắn không kết thúc sát thanh. `TransportScreen` (chưa migrate) vẫn dùng `Platform.select({ ios: 104, default: 96 })` — hãy sửa khi migrate.
 
 ### 3.2 Cử chỉ Cảm ứng (Touch Gestures)
 * **Bottom Sheet kéo vuốt (PanResponder)**:

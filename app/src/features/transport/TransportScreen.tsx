@@ -22,11 +22,33 @@ import {
   ShieldAlert,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { JOB_STATUS_PRESENTATION, MOCK_JOBS } from '../jobs/jobData';
+import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { colors } from '../../shared/theme/colors';
+import { dockReservedSpace } from '../../shared/theme/layout';
+import { radii } from '../../shared/theme/radii';
+import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
-import { useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+
+/**
+ * The stalled AMR's payload comes out of the job fixture, not out of this file.
+ *
+ * The copy here used to say `BOX-101 (45 units)` while the same tote is 12 pcs
+ * everywhere else in the app. An incident report that disagrees with the
+ * container it is about is worse than one that quotes nothing.
+ */
+const INCIDENT_PAYLOAD = MOCK_JOBS[0].containers[0];
+const INCIDENT_PAYLOAD_QTY = INCIDENT_PAYLOAD.qty;
+
+/**
+ * The two "Recent Dispatches" rows are the same jobs the Jobs list shows, so
+ * their badges read their copy from `JOB_STATUS_PRESENTATION` too. They used to
+ * hand-write `ALLOCATING AMR` and `EN ROUTE` while the Jobs list called those
+ * jobs *Waiting Handover* and *Running*.
+ */
+const RECENT_DISPATCHES = [MOCK_JOBS[0], MOCK_JOBS[1]] as const;
 
 function PulsingBeaconDot() {
   const pingAnim = useRef(new Animated.Value(0)).current;
@@ -71,38 +93,61 @@ function PulsingBeaconDot() {
 }
 
 export function TransportScreen() {
-  const { navigate } = useNavigation();
-  const topInset = useTopInset();
-  const [isHolding, setIsHolding] = useState(false);
+  const { navigate, dockHeight } = useNavigation();
+  const { isHolding, toggleHold: toggleFleetHold } = useSafetyHold();
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
 
+  /**
+   * Clearance for the absolute bottom bar, measured.
+   *
+   * This screen had `paddingBottom: 140` — the exact thing AGENTS.md §2.3 bans,
+   * because it only cleared the bar on the device the number was measured on.
+   * `dockReservedSpace` is the one way to do this (AGENTS.md §2.3).
+   */
+  const bottomInset = dockReservedSpace(dockHeight);
+
+  /**
+   * The soft pause lives in `SafetyHoldContext` because the header shield and
+   * the safety sheet act on the same fleet state — holding from either of those
+   * must show up here, and vice versa.
+   *
+   * Both toasts carry "(Local Fleet Simulation)": the toggle flips a local
+   * boolean, and an operator reading "AMRs soft-paused" on a safety hub would
+   * otherwise believe robots further down the aisle had stopped too.
+   */
   const toggleHold = () => {
     triggerHaptic('tap');
+    toggleFleetHold();
     if (isHolding) {
-      setIsHolding(false);
-      toast.success('Nearby AMR soft-pause released. Normal Nav2 navigation resumed.');
+      toast.success(
+        'Nearby AMR soft-pause released. Normal Nav2 navigation resumed. (Local Fleet Simulation)'
+      );
     } else {
-      setIsHolding(true);
-      toast.warning('HOLD ROBOT ACTIVE: Nearby AMRs within 3m perimeter soft-paused. (Admin E-STOP ALL not triggered).');
+      toast.warning(
+        'HOLD ROBOT ACTIVE: Nearby AMRs within 3m perimeter soft-paused. (Admin E-STOP ALL not triggered). Local Fleet Simulation.'
+      );
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Sticky Page Header */}
-      <View style={[styles.pageHeader, { paddingTop: topInset, minHeight: topInset + 56 }]}>
-        <Text style={styles.eyebrow}>LOGISTICS COMMAND</Text>
-        <Text style={styles.pageTitle}>Transport Hub</Text>
-      </View>
-
+      {/*
+        Transport is a main tab, so the shell `AppHeader` owns the status-bar
+        inset and the identity row. This screen keeps only its own title, and
+        scrolls with it, so it no longer needs `useTopInset()` at all.
+      */}
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + 16 }]}
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.screenTitle}>
+          <Text style={styles.pageTitle}>Transport Hub</Text>
+          <Text style={styles.eyebrow}>Logistics command</Text>
+        </View>
         {/* 1. Primary Hero Actions (Dispatch Operations) */}
         <View style={styles.section}>
-          <Text style={styles.sectionEyebrow}>DISPATCH OPERATIONS</Text>
+          <Text style={styles.sectionEyebrow}>Dispatch Operations</Text>
           <View style={styles.heroGrid}>
             <Pressable
               onPress={() => {
@@ -150,7 +195,7 @@ export function TransportScreen() {
                 <ShieldAlert size={16} color="#b45309" />
               </View>
               <View style={styles.safetyTitleBlock}>
-                <Text style={styles.safetyTitle}>SAFETY & INCIDENT HUB</Text>
+                <Text style={styles.safetyTitle}>Safety & Incident Hub</Text>
               </View>
             </View>
             <View style={styles.incidentBadge}>
@@ -196,7 +241,8 @@ export function TransportScreen() {
             </Pressable>
             {showIncidentDetails ? (
               <Text style={styles.incidentAlertDesc}>
-                Hardware motor stall with payload BOX-101 (45 units). Standby carrier AMR-02 is ready for payload transfer.
+                Hardware motor stall with payload BOX-101 ({INCIDENT_PAYLOAD_QTY} units).
+                Standby carrier AMR-02 is ready for payload transfer.
               </Text>
             ) : null}
             <Pressable
@@ -306,7 +352,9 @@ export function TransportScreen() {
                   <Text style={styles.recentWfName}>Inbound Putaway</Text>
                 </View>
                 <View style={styles.statusAllocatingBadge}>
-                  <Text style={styles.statusAllocatingText}>ALLOCATING AMR</Text>
+                  <Text style={styles.statusAllocatingText}>
+                    {JOB_STATUS_PRESENTATION[RECENT_DISPATCHES[0].status].label}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.recentRouteText} numberOfLines={1}>
@@ -339,7 +387,9 @@ export function TransportScreen() {
                   <Text style={styles.recentWfName}>Outbound Retrieval</Text>
                 </View>
                 <View style={styles.statusEnRouteBadge}>
-                  <Text style={styles.statusEnRouteText}>EN ROUTE</Text>
+                  <Text style={styles.statusEnRouteText}>
+                    {JOB_STATUS_PRESENTATION[RECENT_DISPATCHES[1].status].label}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.recentRouteText} numberOfLines={1}>
@@ -396,24 +446,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  pageHeader: {
+  screenTitle: {
     paddingHorizontal: 20,
-    paddingBottom: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   eyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    color: colors.primary,
-    textTransform: 'uppercase',
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
   pageTitle: {
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: '700',
     lineHeight: 28,
     color: colors.textPrimary,
     marginTop: 2,
@@ -424,18 +470,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 140,
     gap: 16,
   },
   section: {
     gap: 8,
   },
+  /**
+   * Section eyebrow: 12pt Title Case with ordinary tracking.
+   *
+   * `textTransform: 'uppercase'` plus 1.4pt of letter-spacing is the Phase 0
+   * industrial-HUD voice. Transport is one of the four main tabs and its
+   * sibling tabs (Home, Jobs, Live Map) are all Calm Operations, so the eyebrow
+   * is the last place on this screen that reads like a different app.
+   */
   sectionEyebrow: {
     fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.4,
+    fontWeight: '700',
     color: colors.textSecondary,
-    textTransform: 'uppercase',
     fontFamily: typography.fontSans,
   },
   heroGrid: {
@@ -446,18 +497,15 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 112,
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    borderBottomWidth: 3,
-    borderBottomColor: '#004bb0',
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
     gap: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    // Flat surface: one hairline and one shadow step, no 3D bevel (AGENTS.md §0).
+    borderWidth: 1,
+    borderColor: colors.primaryDark,
+    ...shadows.md,
   },
   heroBtnSecondary: {
     flex: 1,
@@ -532,9 +580,8 @@ const styles = StyleSheet.create({
   },
   safetyTitle: {
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '700',
     color: colors.textPrimary,
-    textTransform: 'uppercase',
     fontFamily: typography.fontSans,
   },
   safetyTitleBlock: {

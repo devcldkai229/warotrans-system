@@ -4,6 +4,34 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 
 ---
 
+## 0. Current Design Language — "Calm Operations"
+
+The app follows **"Calm Operations"** (Apple / Linear / Google Workspace clean minimal).
+Phase 1 landed the foundation (tokens, contracts, the `src/shared/ui` primitive
+library). Phase 2 landed the **shell** (`AppHeader`, `BottomTabBar`,
+`SafetyActionSheet`) and the **pilot screens** (`Home`, `Jobs`, `JobCard`).
+
+- **Foundation doc**: [`docs/CALM_OPERATIONS_FOUNDATION.md`](./docs/CALM_OPERATIONS_FOUNDATION.md).
+- **Shell + pilot doc**: [`docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md`](./docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md).
+- The shell lives in **`src/app/shell/`** (`AppHeader`, `SafetyActionSheet`), not `src/shared/components/*`:
+  it navigates, so it sits above the feature layer and may import `NavigationContext`. `src/shared/**`
+  stays a leaf layer that never imports from `src/app/**`.
+- **New screens and migrated screens import primitives from the barrel**, never from `shared/components/*`:
+  ```tsx
+  import { Button, Card, Text, StatusPill, SegmentedControl, TextField, ProgressMeter, EmptyState } from '../../shared/ui';
+  ```
+- **Overriding rules for anything that uses `src/shared/ui`:**
+  - `Text` is the only text element. No inline `fontSize`; the scale bottoms out at **12pt** (never below 11pt anywhere).
+  - Flat surfaces: 1px hairline + one of `shadows.sm | md | lg`. **No 3D bevels** (`borderBottomWidth` keys) in new UI.
+  - Touch floor is 44pt (`sm`), 48pt (`md`, every primary action) and 52pt (`lg`).
+  - Status colour is derived, never hand-picked: pass the status to `StatusPill` (`RECOVERY_REQUIRED` -> danger).
+  - **Copy is Title Case.** Never `textTransform: 'uppercase'` in new UI — it reads as shouting on a screen an operator glances at while walking.
+  - Header insets still come from `useTopInset()` — see §2.3, which is unchanged.
+- **Contracts**: `src/shared/types/contracts.ts` mirrors the C# backend 1:1 (camelCase, string enums). The Phase 0 view models (`UserSession`, `JobSummary`, `RobotSummary`, ...) remain for un-migrated screens and are deleted per-screen as DTOs land.
+- The legacy rules in §2 below still govern **un-migrated** screens. When the two conflict for a migrated screen, this section wins.
+
+---
+
 ## 1. Source of Truth & Design Philosophy
 
 - **Prototype Source of Truth**: `/mnt/Data/Capstone Project - WaroTrans/ui-design-prototype/prototype-staff-web/src/routes/index.tsx`
@@ -15,19 +43,21 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 ## 2. Mandatory Design & Ergonomic Rules
 
 ### 2.1 Palette & Contrast (Never use faded gray)
-- **Background**: `#f8fafc` (Slate-50).
-- **Surface**: `#ffffff` (Card, Sheet, Modal).
-- **Borders**: `#cbd5e1` (Slate-300 — high-contrast boundary, never faint borders).
-- **Text Primary**: `#071523` (Slate-950 — bold, high legibility).
-- **Text Secondary**: `#475569` (Slate-600 — crisp subtext, never `#94a3b8` for readable content).
-- **Primary Accent**: `#005cd1` (WaroTrans Cobalt Blue) with 3D bottom border `#004bb0`.
-- **Status Tones** (from `src/shared/theme/colors.ts`): Success `#007a38`, Warning `#f0b21b`, Danger `#c8272b`.
-  Each also has `*Bg`, `*Soft` and `*Border` companions. Read the real token from `colors.ts` before using one.
+- **Background**: `#eef1f6` (`colors.background`).
+- **Surface**: `#ffffff` (`colors.surface`) — Card, Sheet, Modal, Header.
+- **Inset**: `#f4f6fa` (`colors.surfaceSubtle`) — route rows and detail blocks inside a card.
+- **Borders**: `rgba(33, 34, 38, 0.08)` (`colors.border`), heavier `colors.borderStrong` `#c4c8d0`.
+- **Text Primary**: `#121317` (`colors.textPrimary`).
+- **Text Secondary**: `#45474d` (`colors.textSecondary`) — never `#6a6a71` (`textMuted`) for readable content.
+- **Primary Accent**: `#1557d0` (`colors.primary`, and `colors.primaryText` for accent text); white on that fill is 6.35:1. Pressed/darker tone is `primaryDark` (`#0f3f9e`); `danger`/`warning` text comes from the `*Text` companions.
+- **Status Tones** (from `src/shared/theme/colors.ts`): Success `#059669`, Warning `#d97706`, Danger `#dc2626`, Info `#0284c7`.
+  Each also has `*Bg`, `*Border` and `*Text` companions. Read the real token from `colors.ts` before using one.
 
 ### 2.2 Typography Hierarchy
-- **Protocol Codes, IDs, Telemetry**: Monospace (`typography.fontMono`), font size 9-10pt, `fontWeight: '900'`, uppercase, tracking `0.12-0.16em`.
-- **Card Headings & Titles**: `fontSans`, font size 13-16pt, `fontWeight: '900'`. Important info must be bold.
-- **Labels & Subtext**: `fontSans`, font size 10-12pt, `fontWeight: '600' - '700'`, `#475569`.
+Type scale lives in `src/shared/theme/typography.ts` and bottoms out at **12pt**: Display 24 · Title 20 · Headline 16 · Body 14 · Label 13 · Caption 12 · Code 12 (mono).
+- **Protocol Codes, IDs, Telemetry**: `variant="code"` (JetBrains Mono / Menlo, 12pt, weight 500-700). No ALL-CAPS transform — the uppercase was the Phase 0 look and it is gone from new UI.
+- **Card Headings & Titles**: `variant="headline"` (16pt, weight 600). Important info must not be skimmed past.
+- **Labels & Subtext**: `variant="label"` (13pt) and `variant="caption"` (12pt), `colors.textSecondary`.
 
 ### 2.3 Edge-to-Edge Layout & Mobile Safe Insets (iPhone 12 / Modern Smartphones)
 - **NO root `<SafeAreaView>`**:
@@ -44,42 +74,40 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 
   Trước đây cả hai trường hợp dùng chung một hằng số `48`, chỉ đúng ở iPhone 12/13. **Đừng viết lại `Platform.OS === 'ios' ? 48 : 12`** — đó chính là lỗi lệch inset mà `useTopInset` sinh ra để tránh.
 - **SafeAreaProvider**: root trong `App.tsx` đã bọc `<SafeAreaProvider>` (bắt buộc cho `useSafeAreaInsets`), nhưng root vẫn là plain `<View>` — **không** dùng `SafeAreaView`.
-- **Dropdown neo theo chiều cao header thật** — `AppHeader` đo bằng `onLayout` và truyền `anchorStyle = { top: headerHeight }`. Đừng hardcode `top: 92`: header cao cỡ 99–105pt tùy thiết bị, nên 92 sẽ chồm vào trong header.
-  - **Migration đang dở** — các file sau vẫn còn `paddingTop: Platform.select(...)` và **phải** chuyển sang `useTopInset()`:
-    `SubScreenHeader.tsx`, `JobsScreen.tsx`, `JobDetailScreen.tsx`, `TransportScreen.tsx`,
-    `IssueReportingModal.tsx`, `InventoryLookupScreen.tsx`, `OfflineBannerHUD.tsx`, `BarcodeScannerHUD.tsx`.
-    Đừng copy pattern cũ từ các file này.
 - **Bottom Tab Bar (`src/app/navigation/BottomTabBar.tsx`)**:
-  - The dock is a **floating pill**, not an edge-to-edge bar. This is deliberate: it keeps the
-    tablet's thumb free to reach the bottom of the screen one-handed on a PDA. The full spec
-    lives in [`docs/DESIGN_SYSTEM_AND_RULES.md`](./docs/DESIGN_SYSTEM_AND_RULES.md) §3.1.
-  - It is `position: 'absolute'` and therefore carries **no automatic safe-area handling**:
+  - The bar is **flat and edge to edge**: white surface, a single 1px top hairline, no pill, no
+    floating shadow. Four tabs — Home, Jobs, Live Map, Transport — with 12pt Title Case labels.
+  - It is `position: 'absolute'` (content scrolls underneath it, the Google-console pattern) and
+    therefore carries **no automatic safe-area handling**. The inset is a sibling strip, not a
+    `paddingBottom`, so the white surface stays unbroken on a device with a home indicator:
     ```tsx
-    bottom: dockMetrics.bottomOffset, // iOS 24, Android 16
+    const insets = useSafeAreaInsets();
+    const bottomInset = insets.bottom || 8; // 8 is the web phone-frame fallback
+    <View style={[styles.safeArea, { height: bottomInset }]} pointerEvents="none" />
     ```
-  - **Never hardcode a bottom `paddingBottom` to clear the dock.** Use the measured inset:
+  - **Never hardcode a bottom `paddingBottom` to clear the bar.** Use the measured height:
     ```tsx
     const { dockHeight } = useNavigation();
-    const dockInset = dockReservedSpace(dockHeight); // height + bottomOffset + gutter
+    const bottomInset = dockReservedSpace(dockHeight); // height + bottomOffset(0) + gutter(16)
     ```
-    `dockHeight` is measured via `onLayout` on `dockPill` and published through
-    `NavigationContext`. Three hand-tuned constants previously summed to ~2pt of slack, which
-    broke whenever font metrics shifted.
-  - Tab job count badge sits at `top: -8, right: -13`, fill `colors.warning` with
+    `dockHeight` is measured via `onLayout` on the bar and published through `NavigationContext`.
+    Three hand-tuned constants previously summed to ~2pt of slack, which broke whenever font metrics shifted.
+  - Active tab: `colors.primary` icon + label at weight 600. Inactive: `colors.textMuted` at 500.
+  - Tab job count badge sits at `top: -6, right: -12`, fill `colors.warning` with
     `colors.textPrimary` text and a `colors.warningText` ring, so the counter reads as a
     separate chip instead of overlapping the icon glyph.
   - **Touch target floor is 44pt** (iOS HIG / Material) for every interactive element on the
-    main tabs. `tabBtn` uses `paddingVertical: 11` around a 23pt icon = 45pt.
+    main tabs. Each tab is a 48pt-min row inside the 56pt bar.
 - **Sonner Toast Banner**:
   - Position below the iOS notch: `top: Platform.OS === 'ios' ? 54 : 14`.
   - Support custom icons (e.g. `MapPin` for "Locate Me"). Tap to dismiss, no close `X` button.
-- **Thumb Zone & Bottom Sheet Docking**:
-  - The `NEXT HANDOVER TASK` card must dock flush above the Floating Dock without empty voids,
-    using the `dockInset` value above — never a fixed padding.
-  - `ScrollView` must stay **scrollable in both sheet states**. Locking scroll while collapsed
-    clips the sheet handle on short devices (iPhone SE at 667pt, and 640dp warehouse PDAs),
-    making the fleet view impossible to expand.
-  - Implement `PanResponder` vertical swipe gestures: swipe UP (`dy < -25`) expands fleet view; swipe DOWN (`dy > 25`) collapses it.
+- **Header overlays & modals**:
+  - `AppHeader` no longer anchors dropdowns to a measured header height. The zone picker, the
+    account sheet and the safety sheet are all `Modal`s — occasional actions do not earn a
+    permanently mounted popover, and an anchored one drifted by up to 39pt between an SE and a
+    Dynamic Island.
+  - A screen that floats its own chrome over scrolling content (the Live Map telemetry sheet)
+    must offset itself by `dockReservedSpace(dockHeight)`, not by a constant.
 
 ### 2.4 Haptic Vibration Policy (`src/shared/utils/haptics.ts`)
 - **Zero Motor Spam**: Routine taps (`'tap'`), ticks (`'tick'`), tab switching, and opening standard dialogs MUST be silenced.

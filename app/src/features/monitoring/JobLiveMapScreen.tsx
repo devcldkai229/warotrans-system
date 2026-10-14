@@ -13,13 +13,48 @@ import {
 import Svg, { Defs, G, Line, Path, Pattern, Rect } from 'react-native-svg';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { ROBOT_HEADING_ARROW_PATH } from '../home/MiniFacilityMap';
-import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { dockReservedSpace } from '../../shared/theme/layout';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+// This screen is mid-migration: everything below still uses RN's `Text`, but the
+// floating chip added in Phase 2 is new UI, so it uses the primitive.
+import { Text as PrimitiveText } from '../../shared/ui';
+
+/** Air between the floating telemetry sheet and the viewport edge. */
+const SHEET_GAP = 8;
+/** Air between the telemetry sheet and the dock zone stacked above it. */
+const DOCK_ZONE_GAP = 12;
+/**
+ * Used only for the first frame, before `onLayout` reports the real sheet
+ * height. Roughly the sheet's height at the default font size — it only has to
+ * stop the dock zone flashing under the sheet for one frame.
+ */
+const SHEET_FALLBACK_HEIGHT = 174;
 
 export function JobLiveMapScreen() {
-  const { goBack, params } = useNavigation();
+  const { params, dockHeight } = useNavigation();
+  /**
+   * The map is edge to edge under the bottom bar, so its floating telemetry
+   * sheet has to be lifted by the measured bar height — hardcoding an offset
+   * here is how the sheet ends up behind the bar on a device with a taller
+   * safe area than the one it was drawn on.
+   */
+  const dockInset = dockReservedSpace(dockHeight);
+  /**
+   * The telemetry sheet's measured height.
+   *
+   * The `LOADING DOCKS` zone used to sit at a hardcoded `bottom: 120`, which
+   * only cleared the sheet while the sheet was also at a constant. The moment
+   * the sheet moved to the measured bar clearance, the dock zone ended up
+   * *behind* it — an opaque 174pt panel over the only label saying where the
+   * docks are. Measuring the sheet and stacking the zone on top of it is what
+   * keeps both true on an SE and on a Dynamic Island.
+   */
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const sheetBottom = dockInset + SHEET_GAP;
+  const dockZoneBottom = sheetBottom + (sheetHeight || SHEET_FALLBACK_HEIGHT) + DOCK_ZONE_GAP;
   const [selectedRobot, setSelectedRobot] = useState<'AMR-01' | 'AMR-02'>(
     params?.robotId === 'AMR-02' ? 'AMR-02' : 'AMR-01'
   );
@@ -38,22 +73,29 @@ export function JobLiveMapScreen() {
 
   return (
     <View style={styles.container}>
-      <SubScreenHeader
-        /* Prototype ref: SCR-STF-25 (routes/index.tsx). The job ID stays in the
-           eyebrow — it is the only place this screen states which job is tracked. */
-        label={`LIVE FLEET MAP · ${jobId}`}
-        title={`Tracking ${selectedRobot}`}
-        onBack={goBack}
-      />
-
-      {toastFeedback && (
-        <View style={styles.toast}>
-          <Text style={styles.toastText}>{toastFeedback}</Text>
-        </View>
-      )}
-
-      {/* Blueprint Radar Telemetry Viewport */}
+      {/*
+        Live Map is a main tab, so the shell `AppHeader` already owns the top of
+        the screen. The job being tracked therefore rides as a floating chip on
+        the viewport instead of a second header bar.
+      */}
       <View style={styles.mapViewport}>
+        <View style={styles.trackingChip}>
+          <PrimitiveText
+            variant="caption"
+            color={colors.textPrimary}
+            numberOfLines={1}
+            style={styles.trackingChipText}
+          >
+            {jobId} · Tracking {selectedRobot}
+          </PrimitiveText>
+        </View>
+
+        {toastFeedback && (
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toastFeedback}</Text>
+          </View>
+        )}
+
         {/* Background Blueprint Grid Pattern */}
         <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
           <Defs>
@@ -88,7 +130,7 @@ export function JobLiveMapScreen() {
           <View style={styles.rackCellBulk} />
         </View>
 
-        <View style={styles.zoneDocks}>
+        <View style={[styles.zoneDocks, { bottom: dockZoneBottom }]}>
           <Text style={styles.zoneLabel}>LOADING DOCKS</Text>
           <View style={styles.docksRow}>
             <View style={styles.dockBox}>
@@ -130,6 +172,9 @@ export function JobLiveMapScreen() {
             { left: '42%', top: '44%' },
             !isAmr2 && styles.robotWrapperActive,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="AMR-01, at Rack A-02, 45 seconds to target"
+          accessibilityState={{ selected: !isAmr2 }}
         >
           {/* Sonar Radar Cone */}
           {!isAmr2 && <View style={styles.sonarCone} />}
@@ -160,6 +205,9 @@ export function JobLiveMapScreen() {
             { left: '65%', top: '35%' },
             isAmr2 && styles.robotWrapperActive,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="AMR-02, at Docking Bay 02, on standby"
+          accessibilityState={{ selected: isAmr2 }}
         >
           {isAmr2 && <View style={styles.sonarCone} />}
           <View style={[styles.robotCircle, isAmr2 && styles.robotCircleSelected]}>
@@ -182,7 +230,7 @@ export function JobLiveMapScreen() {
         </Pressable>
 
         {/* Telemetry Bottom Sheet */}
-        <View style={styles.telemetrySheet}>
+        <View style={[styles.telemetrySheet, { bottom: sheetBottom }]} onLayout={(event) => setSheetHeight(event.nativeEvent.layout.height)}>
           <View style={styles.sheetTop}>
             <View>
               <Text style={styles.sheetRobotId}>{selectedRobot}</Text>
@@ -191,7 +239,7 @@ export function JobLiveMapScreen() {
               </Text>
             </View>
             <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>LIVE TELEMETRY</Text>
+              <Text style={styles.statusBadgeText}>Live Telemetry</Text>
             </View>
           </View>
 
@@ -231,9 +279,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  trackingChip: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 45,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  trackingChipText: {
+    fontWeight: '700',
+  },
   toast: {
     position: 'absolute',
-    top: 60,
+    top: 58,
     alignSelf: 'center',
     backgroundColor: '#0f172a',
     paddingHorizontal: 14,
@@ -296,14 +360,18 @@ const styles = StyleSheet.create({
     borderColor: colors.mapLine,
     padding: 8,
   },
+  /**
+   * Narrower than the rest of the map furniture: stacked above the telemetry
+   * sheet it has to live in the left column, which is where `Rack B`'s right
+   * edge starts.
+   */
   zoneDocks: {
     position: 'absolute',
     left: '7%',
-    bottom: 120,
-    width: '86%',
-    height: 70,
+    width: '46%',
+    height: 66,
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: colors.mapLine,
@@ -355,8 +423,9 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     position: 'absolute',
-    left: 14,
-    top: 14,
+    left: 12,
+    // Below the tracking chip, which now owns the top strip of the viewport.
+    top: 60,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -382,10 +451,11 @@ const styles = StyleSheet.create({
   },
   locateBtn: {
     position: 'absolute',
-    right: 14,
-    top: 14,
-    width: 38,
-    height: 38,
+    right: 12,
+    // Sits beside the Nav2 path pill rather than behind the tracking chip.
+    top: 54,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     backgroundColor: '#ffffff',
     alignItems: 'center',
@@ -457,7 +527,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     right: 14,
-    bottom: 14,
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderRadius: 16,
     borderWidth: 1,
@@ -490,10 +559,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
+  /**
+   * Title Case at the 12pt scale floor, mono. This badge used to be 9pt at
+   * weight 900 in ALL-CAPS — below the type scale *and* shouting, while sitting
+   * in one of the four main tabs.
+   */
   statusBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.success,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.successText,
     fontFamily: typography.fontMono,
   },
   metricRow: {

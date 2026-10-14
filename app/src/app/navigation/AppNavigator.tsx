@@ -19,10 +19,10 @@ import { ReplenishmentScreen } from '../../features/transport/ReplenishmentScree
 import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
 import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
-import { AppHeader } from '../../shared/components/AppHeader';
+import { AppHeader } from '../shell/AppHeader';
 import { colors } from '../../shared/theme/colors';
 import { BottomTabBar } from './BottomTabBar';
-import { useNavigation } from './NavigationContext';
+import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
   const { session, isAuthenticated, logout, updateZone } = useAuth();
@@ -32,8 +32,12 @@ export function AppNavigator() {
     return <LoginScreen />;
   }
 
-  const isMainTab =
-    currentScreen === 'home' || currentScreen === 'jobs' || currentScreen === 'transport';
+  /**
+   * Tab roots share one shell: `AppHeader` above, `BottomTabBar` below. Every
+   * other route is a full-screen destination and brings its own header, which
+   * is why `isMainTabScreen` is the single gate for both.
+   */
+  const isMainTab = isMainTabScreen(currentScreen);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -84,12 +88,14 @@ export function AppNavigator() {
 
   return (
     <View style={styles.root}>
-      {currentScreen === 'home' && (
+      {isMainTab && (
         <AppHeader
           operatorName={session.fullName}
+          operatorRole={session.role === 'ADMIN' ? 'Admin' : 'Staff'}
+          initials={session.avatarInitials}
           zone={session.zone}
           onLogout={logout}
-          onZoneChange={(newZone) => updateZone(newZone)}
+          onZoneChange={updateZone}
         />
       )}
 
