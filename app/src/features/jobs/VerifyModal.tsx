@@ -24,6 +24,7 @@ import { typography } from '../../shared/theme/typography';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { confirmHandover } from '../../shared/api';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 
 interface OtherContainerInfo {
@@ -34,6 +35,9 @@ interface OtherContainerInfo {
 interface VerifyModalProps {
   visible: boolean;
   targetContainer?: string;
+  targetContainerId?: string;
+  jobStepId?: string;
+  operatorId?: string;
   robotCode?: string;
   location?: string;
   targetShelf?: string;
@@ -51,6 +55,9 @@ interface VerifyModalProps {
 export function VerifyModal({
   visible,
   targetContainer = 'BOX-101',
+  targetContainerId,
+  jobStepId,
+  operatorId,
   robotCode = 'AMR-01',
   location = 'Stop 2/3: Rack A-02',
   targetShelf = 'Rack A · Level 2 · Bin 03',
@@ -71,12 +78,14 @@ export function VerifyModal({
   const [barcodeInput, setBarcodeInput] = useState(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
   const [mismatch, setMismatch] = useState(initialMismatch);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     setTimeLeft(300);
     setBarcodeInput(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
     setMismatch(initialMismatch);
+    setIsSubmitting(false);
   }, [visible, initialMismatch, initialBarcodeInput]);
 
   useEffect(() => {
@@ -91,15 +100,28 @@ export function VerifyModal({
   const secs = (timeLeft % 60).toString().padStart(2, '0');
   const isUrgent = timeLeft < 30;
 
-  const handleVerify = (codeToVerify?: string) => {
+  const handleVerify = async (codeToVerify?: string) => {
     const code = (codeToVerify ?? barcodeInput).trim();
-    if (!code) return;
+    if (!code || isSubmitting) return;
 
     if (code.toUpperCase() === targetContainer.toUpperCase()) {
-      triggerHaptic('success');
-      setMismatch(false);
-      onSuccess(code);
-      toast.success(`Payload ${code} verified. Handover completed.`);
+      setIsSubmitting(true);
+      try {
+        await confirmHandover(jobStepId || 'step-handover-01', {
+          containerId: targetContainerId || code,
+          confirmedBy: operatorId || 'staff-01',
+          handoverType: 'DROPOFF',
+          note: `Handover confirmed for ${code} on ${robotCode}`,
+        });
+        triggerHaptic('success');
+        setMismatch(false);
+        toast.success(`Payload ${code} verified. Handover completed.`);
+        onSuccess(code);
+      } catch (err: any) {
+        toast.error(err?.message || 'Handover confirmation failed');
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       triggerHaptic('error');
       setMismatch(true);
@@ -273,10 +295,10 @@ export function VerifyModal({
                   style={styles.issueButton}
                 />
                 <Button
-                  title="Confirm Handover"
+                  title={isSubmitting ? 'Confirming...' : 'Confirm Handover'}
                   variant="primary"
                   onPress={() => handleVerify()}
-                  disabled={!barcodeInput.trim()}
+                  disabled={!barcodeInput.trim() || isSubmitting}
                   icon={Check}
                   size="lg"
                   style={styles.confirmButton}

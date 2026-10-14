@@ -61,6 +61,8 @@ interface JobCardProps {
   job: AppJobItem;
   /** Opens the job. Wired to both the card itself and its footer button. */
   onPress: () => void;
+  /** Optional quick action to claim / accept an unassigned task from the queue. */
+  onAccept?: () => void;
 }
 
 /**
@@ -89,7 +91,7 @@ function workflowTag(workflowName: string): string {
  * Lifecycle is read from the backend `JobStatus` alone — one axis, one table per
  * concern, no second "kind" field to drift out of sync with it.
  */
-export function JobCard({ job, onPress }: JobCardProps) {
+export function JobCard({ job, onPress, onAccept }: JobCardProps) {
   const status = JOB_STATUS_PRESENTATION[job.status];
   const action = ACTION_BY_STATUS[job.status];
   const containerCode = job.containers?.[0]?.code ?? job.payloadSummary;
@@ -164,16 +166,39 @@ export function JobCard({ job, onPress }: JobCardProps) {
         </Text>
       </View>
 
-      <Button
-        title={action.title}
-        onPress={onPress}
-        variant={action.variant}
-        size="md"
-        fullWidth
-        icon={action.icon}
-        iconPosition={action.iconPosition ?? 'left'}
-        accessibilityLabel={`${action.title} for ${job.id}`}
-      />
+      {!job.isMine && onAccept && (job.status === 'ASSIGNED' || job.status === 'PAUSED' || job.status === 'CREATED' || job.status === 'QUEUED') ? (
+        <View style={styles.actionRow}>
+          <Button
+            title="Accept Task"
+            onPress={onAccept}
+            variant="primary"
+            size="md"
+            style={styles.flexBtn}
+            icon={ArrowRight}
+            iconPosition="right"
+            accessibilityLabel={`Accept task ${job.id}`}
+          />
+          <Button
+            title="Details"
+            onPress={onPress}
+            variant="outline"
+            size="md"
+            style={styles.flexBtn}
+            accessibilityLabel={`View details for ${job.id}`}
+          />
+        </View>
+      ) : (
+        <Button
+          title={action.title}
+          onPress={onPress}
+          variant={action.variant}
+          size="md"
+          fullWidth
+          icon={action.icon}
+          iconPosition={action.iconPosition ?? 'left'}
+          accessibilityLabel={`${action.title} for ${job.id}`}
+        />
+      )}
     </Card>
   );
 }
@@ -231,5 +256,13 @@ const styles = StyleSheet.create({
   },
   progressBlock: {
     gap: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  flexBtn: {
+    flex: 1,
   },
 });

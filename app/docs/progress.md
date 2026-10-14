@@ -52,6 +52,25 @@
     - Live feed of recent dispatches dynamically queried from backend.
   - Zero TypeScript compiler errors (`npm run typecheck` passed).
 
+- [x] **Sprint 2: Task WTCP-61 — Build Staff Human Work Queue Accept and Confirm UI**
+  - Branch: `feature/WTCP-61-build-staff-work-queue-accept-confirm-ui`
+  - Created execution API client in `app/src/shared/api/executionApi.ts`:
+    - `acceptHumanTask`: Claims human task step from queue.
+    - `confirmHandover`: Records `HandoverConfirmation` with `jobStepId`, `containerId`, `confirmedBy`, and `handoverType`.
+    - `reportTaskProblem`: Submits issue/hazard report for a task.
+  - Enhanced `contracts.ts` with `HandoverType` enum matching backend C# 1:1.
+  - Upgraded `JobsScreen.tsx`:
+    - Staff work queue dual-view with reactive `jobsList` state.
+    - Added "Accept Task" workflow: operators can browse the Available Fleet Queue and claim tasks with 1 tap, automatically transferring them into "My Tasks" with dynamic active badges.
+  - Upgraded `JobCard.tsx`:
+    - Dual-action button cluster ("Accept Task" + "Details") on unassigned tasks in the fleet queue.
+  - Upgraded `VerifyModal.tsx`:
+    - Direct integration with `confirmHandover` API during barcode verification.
+    - Supports `jobStepId`, `operatorId`, loading states, and haptic feedback.
+  - Upgraded `JobDetailScreen.tsx`:
+    - Integrated `reportTaskProblem` for supervisor alert escalation and AMR safety pause.
+  - Zero TypeScript compiler errors (`npm run typecheck` passed).
+
 ## Workspace & Documentation Maintenance Rules
 1. **Strict Local Boundaries**: Work strictly inside `warotrans-system/` (`app/` and `backend/`). Do not look into or rely on external folders (`WaroTrans-specs`).
 2. **Synchronized Documentation**: Maintain and update `AGENTS.md` and all files in `app/docs/` after every code modification to prevent context drift across conversations.

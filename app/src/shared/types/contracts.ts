@@ -293,6 +293,16 @@ export type JobContainerStatus =
 /** `WorkflowExecution/Enums/StepType.cs`. */
 export type StepType = 'CHECK' | 'MOVE' | 'HUMAN_INTERACTION' | 'WAIT';
 
+/** `WorkflowExecution/Enums/HandoverType.cs`. */
+export type HandoverType =
+  | 'PICKUP'
+  | 'DROPOFF'
+  | 'PAYLOAD_TRANSFER'
+  | 'MAINTENANCE'
+  | 'INSPECTION'
+  | 'CHARGE_CONNECT'
+  | 'CHARGE_DISCONNECT';
+
 /** `WorkflowExecution/Enums/StepFailurePolicy.cs`. */
 export type StepFailurePolicy =
   | 'FAIL_JOB'

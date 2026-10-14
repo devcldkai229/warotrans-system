@@ -12,7 +12,9 @@ import {
   Text,
   TextField,
 } from '../../shared/ui';
+import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { acceptHumanTask } from '../../shared/api';
 import { JobCard } from './JobCard';
 import { AppJobItem, countMyActiveJobs, isTerminalJobStatus, MOCK_JOBS } from './jobData';
 
@@ -180,19 +182,7 @@ const EMPTY_COPY: Record<JobScope, { title: string; message: string }> = {
  * Jobs — the execution centre.
  *
  * One screen, three scopes: what is assigned to me, what the fleet is working,
- * and what has already been done. The scopes are a segmented control rather
- * than separate tabs because an operator moves between them constantly (check
- * mine, glance at the fleet, back to mine) and re-picking a bottom tab for each
- * hop would cost more than the list is worth.
- *
- * Search runs across every scope's data — the query is what the operator
- * remembers, not the filter they happened to be on — so typing a container code
- * while History is selected still finds the job that is still running.
- *
- * The zone filter is a *second*, narrower axis on top of that: the operator's
- * shift is in one zone, and the header already says which one. It is off by
- * default (an operator checking the fleet still wants the whole fleet) and says
- * so on the chip when it is on.
+ * and what has already been done.
  */
 export function JobsScreen() {
   const { navigate, params, dockHeight, setActiveJobCount } = useNavigation();
@@ -201,27 +191,17 @@ export function JobsScreen() {
   const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'mine');
   const [query, setQuery] = useState('');
   const [isZoneOnly, setIsZoneOnly] = useState(false);
+  const [jobsList, setJobsList] = useState<AppJobItem[]>(MOCK_JOBS);
 
-  /**
-   * Re-syncing on `params.view` (rather than only reading it as a `useState`
-   * initialiser) matters because `navigate('jobs', { view: 'history' })` from
-   * another screen re-uses this component instance instead of remounting it —
-   * without the effect the screen would stay on whatever the operator last
-   * tapped.
-   */
   useEffect(() => {
     if (deepLinkedScope) setScope(deepLinkedScope);
   }, [deepLinkedScope]);
 
-  /** Measured against the live bottom bar. `dockReservedSpace` already carries
-   *  the gutter, so this adds nothing on top of it. */
   const bottomInset = dockReservedSpace(dockHeight);
-
-  /** `null` while the filter is off, or when there is no signed-in session. */
   const zoneScope = isZoneOnly && session?.zone ? session.zone : null;
 
   const counts = useMemo(() => {
-    const filtered = MOCK_JOBS.filter(
+    const filtered = jobsList.filter(
       (job) => matchesQuery(job, query) && matchesZoneFilter(job, zoneScope)
     );
     return {
@@ -229,25 +209,19 @@ export function JobsScreen() {
       fleet: filtered.filter((job) => inScope(job, 'fleet')).length,
       history: filtered.filter((job) => inScope(job, 'history')).length,
     } as Record<JobScope, number>;
-  }, [query, zoneScope]);
+  }, [jobsList, query, zoneScope]);
 
-  /**
-   * The bar's badge counts *my open work*, unfiltered — a badge that changed
-   * every keystroke would be noise, and a badge that counted completed history
-   * would be a lie. It is seeded once from the same helper the screen counts
-   * with, and pushed again whenever the shell asks, so the badge and the list
-   * cannot drift apart.
-   */
   useEffect(() => {
-    setActiveJobCount(countMyActiveJobs());
-  }, [setActiveJobCount]);
+    const myActive = jobsList.filter((j) => j.isMine && !isTerminalJobStatus(j.status)).length;
+    setActiveJobCount(myActive);
+  }, [jobsList, setActiveJobCount]);
 
   const visible = useMemo(
     () =>
-      MOCK_JOBS.filter(
+      jobsList.filter(
         (job) => inScope(job, scope) && matchesQuery(job, query) && matchesZoneFilter(job, zoneScope)
       ),
-    [scope, query, zoneScope]
+    [jobsList, scope, query, zoneScope]
   );
 
   const options = useMemo(
@@ -273,6 +247,28 @@ export function JobsScreen() {
   const openJob = (job: AppJobItem) => {
     triggerHaptic('tap');
     navigate('job_detail', { jobId: job.id });
+  };
+
+  const handleAcceptTask = async (job: AppJobItem) => {
+    triggerHaptic('success');
+    try {
+      await acceptHumanTask(job.id, session?.id || 'staff-01');
+      toast.success(`Task ${job.id} accepted! Moved to My Tasks.`);
+      setJobsList((prev) =>
+        prev.map((j) =>
+          j.id === job.id
+            ? {
+                ...j,
+                isMine: true,
+                status: j.status === 'CREATED' || j.status === 'QUEUED' ? 'ASSIGNED' : j.status,
+              }
+            : j
+        )
+      );
+      setScope('mine');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to accept task');
+    }
   };
 
   const topInset = useTopInset();
@@ -371,7 +367,11 @@ export function JobsScreen() {
         data={visible}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <JobCard job={item} onPress={() => openJob(item)} />
+          <JobCard
+            job={item}
+            onPress={() => openJob(item)}
+            onAccept={() => handleAcceptTask(item)}
+          />
         )}
         ItemSeparatorComponent={ListSeparator}
         contentContainerStyle={[styles.listContent, { paddingBottom: bottomInset }]}

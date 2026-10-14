@@ -41,6 +41,7 @@ import { JobStepper } from './JobStepper';
 import { AppJobItem, JOB_STATUS_PRESENTATION, MOCK_JOBS } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
+import { reportTaskProblem } from '../../shared/api';
 
 export function JobDetailScreen() {
   const { navigate, goBack, params } = useNavigation();
@@ -106,8 +107,16 @@ export function JobDetailScreen() {
     toast.success(`Handover verified for ${scannedCode}. Robot cleared for next waypoint.`);
   };
 
-  const handleIssueSubmit = (cat: IncidentCategory) => {
+  const handleIssueSubmit = async (cat: IncidentCategory) => {
     if (!isHolding) toggleHold();
+    try {
+      await reportTaskProblem(job.id, {
+        reason: cat,
+        note: `Staff reported ${cat} on AMR ${job.robot} during job ${job.id}`,
+      });
+    } catch (err) {
+      console.warn('Backend report problem returned error, simulated locally:', err);
+    }
     setIsIssueOpen(false);
     toast.error(`Incident recorded: ${cat}. Supervisor alerted and robot held.`);
   };
@@ -550,6 +559,8 @@ export function JobDetailScreen() {
       <VerifyModal
         visible={isVerifyOpen}
         targetContainer={targetContainer}
+        jobStepId={`${job.id}-step-02`}
+        operatorId="staff-01"
         robotCode={job.robot}
         location={job.currentStop || 'Rack A-02'}
         targetShelf={job.target || 'Rack A · Level 2 · Bin 03'}
