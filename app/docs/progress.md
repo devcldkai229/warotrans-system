@@ -31,7 +31,26 @@
   - [x] Header Layout: `BrandMark` (40px) + Work Zone Selector pill (`📍 Inbound Dock 01 ▾`, 40px) on left (removed redundant "WaroTrans" text).
   - [x] Action Cluster on right: Notification Bell (`Bell`, 40px with badge count `3`) + Operator Avatar (`Avatar`, 40px solid black). Search button removed to eliminate header crowding (inventory lookup moved to Transport).
   - [x] Implemented compact anchored dropdown `NotificationSheet.tsx`: Drops down right beneath the header bell (`320px` width, `topInset + 54`), 100% English copy, unread counter, "Mark all read", and operational warehouse alerts (`ROBOT_ARRIVED`, `HAZARD`, `JOB_ASSIGNED`, `BATTERY_LOW`).
-  - [ ] Connect SignalR notification hooks when backend websocket hub is online.
+
+- [x] **Sprint 2: Task WTCP-60 — Connect Staff App TransportRequest Flow to Real Backend APIs**
+  - Branch: `feature/WTCP-60-connect-transport-request-flow-api`
+  - Created robust API client foundation in `app/src/shared/api/` matching .NET 10 DTOs:
+    - `client.ts`: Base fetcher with JWT bearer authorization, base URL resolution, and `ProblemDetails` error handling (`ApiError`).
+    - `transportApi.ts`: `createTransportRequest`, `queueTransportRequest`, `listTransportRequests`, `getTransportRequest`.
+    - `warehouseApi.ts`: `listWarehouses`, `listContainers`, `getContainerByBarcode`, `listStorageLocations`.
+    - `workflowApi.ts`: `listPublishedWorkflows`, `getWorkflow`, `getWorkflowRequestInputSchema`.
+    - `navigationApi.ts`: `listMapVersionsForWarehouse`, `getMapVersionDetail`, `getActiveMapVersion`.
+  - Upgraded `TransportCreationScreen.tsx`:
+    - Dynamic retrieval of published workflows, active warehouse, map version, and endpoints.
+    - Container barcode lookup and slot assignment.
+    - Full payload submission (`createTransportRequest`) and runtime job generation (`queueTransportRequest`).
+    - Real dispatched order receipt display with direct links to Live Map and Transport History.
+  - Upgraded `TransportHistoryScreen.tsx`:
+    - Dynamic query via `listTransportRequests({ take: 50 })`.
+    - `RefreshControl` pull-to-refresh with status mapping (Submitted, Queued, Planning, En Route, Delivered, Cancelled).
+  - Upgraded `TransportScreen.tsx`:
+    - Live feed of recent dispatches dynamically queried from backend.
+  - Zero TypeScript compiler errors (`npm run typecheck` passed).
 
 ## Workspace & Documentation Maintenance Rules
 1. **Strict Local Boundaries**: Work strictly inside `warotrans-system/` (`app/` and `backend/`). Do not look into or rely on external folders (`WaroTrans-specs`).

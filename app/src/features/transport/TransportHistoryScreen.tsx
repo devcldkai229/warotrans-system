@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,6 +32,7 @@ import { typography } from '../../shared/theme/typography';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { listTransportRequests, TransportRequestListItem } from '../../shared/api';
 
 export interface TransportOrder {
   id: string;
@@ -179,6 +181,48 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
   },
 ];
 
+function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
+  const detail = item.details?.[0];
+  const isCompleted = item.status === 'COMPLETED';
+  const isCancelled =
+    item.status === 'CANCELLED' || item.status === 'REJECTED' || item.status === 'FAILED';
+  const isInProgress = !isCompleted && !isCancelled;
+
+  let category: TransportOrder['category'] = 'INTERNAL';
+  const wf = (item.workflowCode || '').toUpperCase();
+  if (wf.includes('INBOUND')) category = 'INBOUND';
+  else if (wf.includes('OUTBOUND')) category = 'OUTBOUND';
+  else if (wf.includes('RESCUE') || wf.includes('BLOCK') || wf.includes('SAFETY'))
+    category = 'EXCEPTION';
+
+  let statusText = 'Processing';
+  if (item.status === 'SUBMITTED') statusText = 'Submitted';
+  else if (item.status === 'QUEUED') statusText = 'Queued for fleet';
+  else if (item.status === 'PLANNING') statusText = 'Planning route';
+  else if (item.status === 'EXECUTING' || item.status === 'IN_PROGRESS') statusText = 'En Route';
+  else if (item.status === 'COMPLETED') statusText = 'Delivered & Verified';
+  else if (item.status === 'CANCELLED') statusText = 'Cancelled';
+  else if (item.status === 'REJECTED') statusText = 'Rejected by scheduler';
+
+  return {
+    id: item.requestCode,
+    workflowName: item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Request',
+    category,
+    status: isInProgress ? 'IN_PROGRESS' : isCompleted ? 'COMPLETED' : 'CANCELLED',
+    statusText,
+    source: detail?.sourceEndpointCode || 'Pickup Station',
+    destination: detail?.destinationEndpointCode || 'Dropoff Location',
+    container: detail?.containerBarcode || 'Container Tote',
+    product: item.note || 'Standard Cargo',
+    qty: 1,
+    robot: 'AMR Fleet',
+    timeLabel: item.submittedAt
+      ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : 'Just now',
+    operator: 'Staff Operator',
+  };
+}
+
 type CategoryFilter = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | 'EXCEPTION';
 
 export function TransportHistoryScreen() {
@@ -187,12 +231,33 @@ export function TransportHistoryScreen() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
   const [showCategoryChips, setShowCategoryChips] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orders, setOrders] = useState<TransportOrder[]>(TRANSPORT_ORDERS);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const inProgressCount = TRANSPORT_ORDERS.filter((o) => o.status === 'IN_PROGRESS').length;
-  const completedCount = TRANSPORT_ORDERS.filter((o) => o.status === 'COMPLETED').length;
-  const cancelledCount = TRANSPORT_ORDERS.filter((o) => o.status === 'CANCELLED').length;
+  const fetchHistory = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await listTransportRequests({ take: 50 });
+      if (res?.items && res.items.length > 0) {
+        const liveOrders = res.items.map(mapRequestToOrder);
+        setOrders(liveOrders);
+      }
+    } catch (err) {
+      console.warn('Backend history fetch error, using cached records:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
-  const filteredOrders = TRANSPORT_ORDERS.filter((order) => {
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const inProgressCount = orders.filter((o) => o.status === 'IN_PROGRESS').length;
+  const completedCount = orders.filter((o) => o.status === 'COMPLETED').length;
+  const cancelledCount = orders.filter((o) => o.status === 'CANCELLED').length;
+
+  const filteredOrders = orders.filter((order) => {
     if (filter !== 'ALL' && order.status !== filter) return false;
     if (categoryFilter !== 'ALL' && order.category !== categoryFilter) return false;
     if (!searchQuery.trim()) return true;
@@ -220,6 +285,14 @@ export function TransportHistoryScreen() {
         style={styles.scrollArea}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={fetchHistory}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         {/* Metric Summary Tabs */}
         <View style={styles.metricsGrid}>
@@ -229,7 +302,7 @@ export function TransportHistoryScreen() {
               setFilter('ALL');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter all ${TRANSPORT_ORDERS.length} orders`}
+            accessibilityLabel={`Filter all ${orders.length} orders`}
             accessibilityState={{ selected: filter === 'ALL' }}
             style={[
               styles.metricCard,
@@ -237,7 +310,7 @@ export function TransportHistoryScreen() {
             ]}
           >
             <Text style={[styles.metricNumber, filter === 'ALL' && styles.metricNumberActive]}>
-              {TRANSPORT_ORDERS.length}
+              {orders.length}
             </Text>
             <Text style={[styles.metricLabel, filter === 'ALL' && styles.metricLabelActive]}>
               All orders

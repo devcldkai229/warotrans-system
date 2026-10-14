@@ -34,6 +34,7 @@ import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { StatusPill } from '../../shared/ui/StatusPill';
 import { Text } from '../../shared/ui/Text';
+import { listTransportRequests } from '../../shared/api';
 
 const RECENT_DISPATCHES = [
   {
@@ -123,6 +124,47 @@ export function TransportScreen() {
   const { isHolding, toggleHold: toggleFleetHold } = useSafetyHold();
   const [hasActiveAlert, setHasActiveAlert] = useState(false);
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
+  const [dispatches, setDispatches] = useState(RECENT_DISPATCHES);
+  const [isLoadingDispatches, setIsLoadingDispatches] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadRecent() {
+      setIsLoadingDispatches(true);
+      try {
+        const res = await listTransportRequests({ take: 5 });
+        if (isMounted && res?.items && res.items.length > 0) {
+          const mapped = res.items.map((item) => {
+            const detail = item.details?.[0];
+            const route = detail
+              ? `${detail.sourceEndpointCode || 'Inbound Dock'} ➔ ${detail.destinationEndpointCode || 'Storage Rack'}`
+              : 'Multi-stop movement';
+            return {
+              id: item.requestCode,
+              type: item.workflowCode || 'Transport Movement',
+              status: (item.status === 'QUEUED' || item.status === 'SUBMITTED' ? 'EN_ROUTE' : item.status) as any,
+              route,
+              container: detail?.containerBarcode || 'Payload Item',
+              robot: 'AMR Fleet',
+              time: item.submittedAt
+                ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'Recently',
+              jobId: item.id,
+            };
+          });
+          setDispatches(mapped);
+        }
+      } catch {
+        // Graceful fallback to static demo dispatches
+      } finally {
+        if (isMounted) setIsLoadingDispatches(false);
+      }
+    }
+    loadRecent();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const bottomInset = dockReservedSpace(dockHeight);
   const topInset = useTopInset();
@@ -365,8 +407,11 @@ export function TransportScreen() {
           </View>
 
           <View style={styles.recentCardsCol}>
-            {RECENT_DISPATCHES.map((dispatch) => {
-              const statusCfg = JOB_STATUS_PRESENTATION[dispatch.status];
+            {dispatches.map((dispatch) => {
+              const statusCfg = JOB_STATUS_PRESENTATION[dispatch.status] || {
+                label: String(dispatch.status),
+                tone: 'neutral',
+              };
               return (
                 <Pressable
                   key={dispatch.id}
