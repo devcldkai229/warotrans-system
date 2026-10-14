@@ -8,6 +8,7 @@ public sealed class RegisterRobotRequestValidator : AbstractValidator<RegisterRo
     {
         RuleFor(x => x.WarehouseId).NotEmpty();
         RuleFor(x => x.CurrentMapVersionId).NotEmpty();
+        RuleFor(x => x.Code).NotEmpty().MaximumLength(30);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
     }
 }

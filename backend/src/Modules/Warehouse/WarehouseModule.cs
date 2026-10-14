@@ -10,6 +10,7 @@ using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Features.CreateContainer;
 using WaroTrans.Warehouse.Features.GetContainer;
 using WaroTrans.Warehouse.Features.GetProductInventoryContext;
+using WaroTrans.Warehouse.Features.ListWarehouses;
 using WaroTrans.Warehouse.Features.ResolveProduct;
 using WaroTrans.Warehouse.Persistence;
 using WaroTrans.Warehouse.Services;
@@ -29,6 +30,7 @@ public static class WarehouseModule
         services.AddScoped<CreateContainerHandler>();
         services.AddScoped<GetContainerHandler>();
         services.AddScoped<GetProductInventoryContextHandler>();
+        services.AddScoped<ListWarehousesHandler>();
 
         services.AddScoped<IWarehouseModule, WarehouseModuleApi>();
 
@@ -39,6 +41,7 @@ public static class WarehouseModule
     {
         var group = endpoints.MapGroup("/api/warehouse");
         group.MapGet("/ping", () => Results.Ok(new { module = "warehouse" })).AllowAnonymous();
+        group.MapListWarehouses();
         return endpoints;
     }
 }

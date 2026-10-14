@@ -7,6 +7,7 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Features.ProcessRobotCommandAck;
 using WaroTrans.Fleet.Features.ProcessRobotHeartbeat;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.IntegrationTests.Fleet.RobotCommand;
 
@@ -116,15 +117,53 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
 
     private async Task<RobotDto> RegisterAsync(string name)
     {
+        var warehouseId = Guid.NewGuid();
+        var suffix = warehouseId.ToString("N")[..8].ToUpperInvariant();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+            db.Warehouses.Add(new WaroTrans.Warehouse.Entities.Warehouse
+            {
+                Id = warehouseId,
+                Code = $"WH-{suffix}",
+                Name = $"Warehouse {suffix}",
+                Timezone = "Asia/Ho_Chi_Minh",
+                IsActive = true,
+                CreatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var mapResponse = await Client.PostAsJsonAsync(
+            $"/api/navigation/warehouses/{warehouseId}/maps",
+            new
+            {
+                name = "Map",
+                mapUri = "http://storage/map.yaml",
+                resolution = 0.05,
+                originX = 0,
+                originY = 0,
+                originYaw = 0
+            });
+        mapResponse.EnsureSuccessStatusCode();
+        var mapId = (await mapResponse.Content.ReadFromJsonAsync<IdDto>(JsonOptions))!.Id;
+        (await Client.PostAsync($"/api/navigation/maps/{mapId}/publish", null)).EnsureSuccessStatusCode();
+
+        var code = $"RBT-{suffix}";
         var response = await Client.PostAsJsonAsync("/api/fleet/robots", new
         {
-            warehouseId = Guid.NewGuid(),
-            currentMapVersionId = Guid.NewGuid(),
+            warehouseId,
+            currentMapVersionId = mapId,
+            code,
             name
         });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<RobotDto>(JsonOptions))!;
     }
+
+    private sealed record IdDto(Guid Id);
 
     private async Task<RobotDto> GetRobotAsync(Guid id)
     {

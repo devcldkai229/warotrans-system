@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { RobotView } from '@/shared/api/contracts'
+import { ApiError } from '@/shared/api/client'
+import { disableRobot, enableRobot } from '@/shared/api/fleet'
 import { formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
@@ -25,6 +28,8 @@ const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCas
 const TIMELINE = 'divide-y divide-outline-soft'
 const TIMELINE_NOTE = 'mt-1 block text-xs text-muted'
 const EMPTY = 'py-2.5 text-sm text-muted'
+const dash = (value: string | number | null | undefined) =>
+  value === null || value === undefined || value === '' ? '—' : String(value)
 
 interface Section {
   id: string
@@ -50,41 +55,122 @@ function buildSections(robot: RobotView): Section[] {
   const recentJobs = ROBOT_JOB_HISTORY.filter((item) => item.robotId === robot.id)
     .sort((a, b) => b.assignedAt.localeCompare(a.assignedAt))
     .slice(0, 5)
+  const hasTelemetry = Boolean(robot.lastTelemetryAt)
 
   return [
     {
-      id: 'robot',
-      label: 'Robot',
-      summary: `${robot.name}, ${robot.isEnabled ? 'enabled' : 'disabled'}`,
+      id: 'identity',
+      label: 'Identity',
+      summary: robot.name,
       body: (
         <dl>
-          <Field label="Name">{robot.name}</Field>
           <Field label="Code">{robot.code}</Field>
-          <Field label="Status">{titleCase(robot.status)}</Field>
-          <Field label="Enabled">{robot.isEnabled ? 'Yes' : 'No'}</Field>
-          <Field label="Last heartbeat">
-            {formatRelativeTime(robot.lastHeartbeatAt)}
-            <span className="basis-full text-xs font-normal text-muted">{formatDateTimeWithYear(robot.lastHeartbeatAt)}</span>
-          </Field>
+          <Field label="Name">{robot.name}</Field>
+          <Field label="Warehouse">{dash(robot.warehouseId)}</Field>
+          <Field label="Current map version">{dash(robot.currentMapVersionId)}</Field>
         </dl>
       ),
     },
     {
-      id: 'battery',
-      label: 'Battery and position',
+      id: 'operational',
+      label: 'Operational',
       summary: (
         <>
-          {robot.batteryPercent}% <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
+          <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
+            {robot.status}
+          </StatusBadge>
+          <span className="text-muted">{robot.isEnabled ? 'Enabled' : 'Disabled'}</span>
         </>
       ),
       body: (
         <dl>
-          <Field label="Battery">
-            {robot.batteryPercent}% <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
+          <Field label="Operational status">
+            <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
+              {robot.status}
+            </StatusBadge>
           </Field>
-          <Field label="Position X">{robot.poseX.toFixed(2)} m</Field>
-          <Field label="Position Y">{robot.poseY.toFixed(2)} m</Field>
-          <Field label="Heading">{robot.poseYaw}°</Field>
+          <Field label="Enabled">{robot.isEnabled ? 'Yes' : 'No'}</Field>
+          <Field label="Connectivity">{robot.isOnline ? 'Online' : 'Offline'}</Field>
+        </dl>
+      ),
+    },
+    {
+      id: 'navigation',
+      label: 'Navigation',
+      summary: robot.navigationStatus ?? 'No telemetry yet',
+      body: (
+        <dl>
+          <Field label="Navigation status">{dash(robot.navigationStatus)}</Field>
+          <Field label="Localization status">{dash(robot.localizationStatus)}</Field>
+          <Field label="Current command">{dash(robot.currentCommandId)}</Field>
+        </dl>
+      ),
+    },
+    {
+      id: 'telemetry',
+      label: 'Telemetry',
+      summary: hasTelemetry ? `${robot.batteryPercent}%` : 'No telemetry yet',
+      body: (
+        <dl>
+          <Field label="Battery">
+            {hasTelemetry ? (
+              <>
+                {robot.batteryPercent}% <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
+              </>
+            ) : (
+              '—'
+            )}
+          </Field>
+          <Field label="Pose X">{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
+          <Field label="Pose Y">{hasTelemetry ? `${robot.poseY.toFixed(2)} m` : '—'}</Field>
+          <Field label="Pose yaw">{hasTelemetry ? `${robot.poseYaw}°` : '—'}</Field>
+          <Field label="Linear velocity">{dash(robot.linearVelocity)}</Field>
+          <Field label="Angular velocity">{dash(robot.angularVelocity)}</Field>
+          <Field label="Last telemetry">{formatDateTimeWithYear(robot.lastTelemetryAt)}</Field>
+          {!hasTelemetry ? (
+            <p className="py-2 text-xs text-muted">
+              Pose and battery default to 0 until the first telemetry message. Values shown as "—" until
+              telemetry is received.
+            </p>
+          ) : null}
+        </dl>
+      ),
+    },
+    {
+      id: 'connectivity',
+      label: 'Connectivity',
+      summary: robot.isOnline ? 'Online' : 'Offline',
+      body: (
+        <dl>
+          <Field label="Online">{robot.isOnline ? 'Yes' : 'No'}</Field>
+          <Field label="Last heartbeat">
+            {formatRelativeTime(robot.lastHeartbeatAt)}
+            <span className="basis-full text-xs font-normal text-muted">
+              {formatDateTimeWithYear(robot.lastHeartbeatAt)}
+            </span>
+          </Field>
+          <Field label="Map version code">{dash(robot.mapVersionCode)}</Field>
+        </dl>
+      ),
+    },
+    {
+      id: 'health',
+      label: 'Health',
+      summary: robot.errorCode ?? 'OK',
+      body: (
+        <dl>
+          <Field label="Error code">{dash(robot.errorCode)}</Field>
+        </dl>
+      ),
+    },
+    {
+      id: 'system',
+      label: 'System',
+      summary: formatDateTimeWithYear(robot.createdAt),
+      body: (
+        <dl>
+          <Field label="Created">{formatDateTimeWithYear(robot.createdAt)}</Field>
+          <Field label="Updated">{formatDateTimeWithYear(robot.updatedAt)}</Field>
         </dl>
       ),
     },
@@ -178,11 +264,37 @@ function buildSections(robot: RobotView): Section[] {
 }
 
 export function RobotDetailPanel({ robot, onBack }: RobotDetailPanelProps) {
+  const queryClient = useQueryClient()
   const sections = buildSections(robot)
-  const [openIds, setOpenIds] = useState<string[]>(['robot'])
+  const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
   const [confirmed, setConfirmed] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
   const error = robot.telemetry?.error
   const navigationState = robot.telemetry?.navigationState
+
+  const enableMutation = useMutation({
+    mutationFn: () => enableRobot(robot.id),
+    onSuccess: () => {
+      setActionError(null)
+      queryClient.invalidateQueries({ queryKey: ['fleet-robots'] })
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : (err as Error).message)
+    },
+  })
+
+  const disableMutation = useMutation({
+    mutationFn: () => disableRobot(robot.id),
+    onSuccess: () => {
+      setActionError(null)
+      queryClient.invalidateQueries({ queryKey: ['fleet-robots'] })
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : (err as Error).message)
+    },
+  })
+
+  const toggling = enableMutation.isPending || disableMutation.isPending
 
   return (
     <div className="flex h-full flex-col">
@@ -190,12 +302,40 @@ export function RobotDetailPanel({ robot, onBack }: RobotDetailPanelProps) {
         <Button variant="surface" size="sm" className="self-start" onClick={onBack}>
           <Icon name="arrowLeft" size={14} /> Fleet
         </Button>
-        <div className="mt-3 mb-5 flex items-center justify-between gap-3">
+        <div className="mt-3 mb-2 flex items-center justify-between gap-3">
           <h1 className="text-3xl font-book">{robot.code}</h1>
           <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
             {robot.status}
           </StatusBadge>
         </div>
+        <p className="mb-4 text-sm text-muted">
+          Connectivity: {robot.isOnline ? 'Online' : 'Offline'}
+          {' · '}
+          {robot.isEnabled ? 'Enabled' : 'Disabled'}
+        </p>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          {robot.isEnabled ? (
+            <Button
+              variant="surface"
+              size="sm"
+              disabled={toggling}
+              onClick={() => disableMutation.mutate()}
+            >
+              Disable
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={toggling}
+              onClick={() => enableMutation.mutate()}
+            >
+              Enable
+            </Button>
+          )}
+        </div>
+        {actionError ? <p className="mb-4 text-xs text-red-ink">{actionError}</p> : null}
 
         {error ? (
           <div className="flex gap-3 rounded-md bg-red-soft p-4 text-red-ink">
@@ -203,13 +343,6 @@ export function RobotDetailPanel({ robot, onBack }: RobotDetailPanelProps) {
             <div>
               <strong className="font-medium">{error.title}</strong>
               <p className="mt-1 text-xs text-ink-2">{error.message}</p>
-              <a
-                href="#details"
-                className="mt-2 inline-block text-xs font-medium underline underline-offset-2"
-                onClick={(event) => event.preventDefault()}
-              >
-                View details
-              </a>
             </div>
           </div>
         ) : null}
