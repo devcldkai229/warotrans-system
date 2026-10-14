@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import type { ContainerStatus } from './contracts'
 
 export interface WarehouseListItem {
   id: string
@@ -13,6 +14,38 @@ export interface ListWarehousesResponse {
   total: number
 }
 
+export interface ContainerListItem {
+  id: string
+  barcode: string
+  status: ContainerStatus | string
+  productId: string
+  productSku: string
+  productName: string
+  currentStorageLocationId: string | null
+  currentStorageLocationCode: string | null
+  currentEndpointId: string | null
+  currentLevelNo: number | null
+}
+
+export interface ListContainersResponse {
+  items: ContainerListItem[]
+  total: number
+}
+
+export interface StorageLocationListItem {
+  id: string
+  warehouseId: string
+  endpointId: string
+  code: string
+  name: string
+  isActive: boolean
+}
+
+export interface ListStorageLocationsResponse {
+  items: StorageLocationListItem[]
+  total: number
+}
+
 export function listWarehouses(params?: { isActive?: boolean; skip?: number; take?: number }) {
   const query = new URLSearchParams()
   if (params?.isActive !== undefined) query.set('isActive', String(params.isActive))
@@ -20,4 +53,25 @@ export function listWarehouses(params?: { isActive?: boolean; skip?: number; tak
   if (params?.take !== undefined) query.set('take', String(params.take))
   const qs = query.toString()
   return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${qs ? `?${qs}` : ''}`)
+}
+
+export function listContainers(params: {
+  warehouseId: string
+  search?: string
+  eligibleOnly?: boolean
+  take?: number
+}) {
+  const query = new URLSearchParams()
+  query.set('warehouseId', params.warehouseId)
+  if (params.search) query.set('search', params.search)
+  if (params.eligibleOnly !== undefined) query.set('eligibleOnly', String(params.eligibleOnly))
+  if (params.take !== undefined) query.set('take', String(params.take))
+  return apiFetch<ListContainersResponse>(`/api/warehouse/containers?${query}`)
+}
+
+export function listStorageLocations(params: { warehouseId: string; activeOnly?: boolean }) {
+  const query = new URLSearchParams()
+  query.set('warehouseId', params.warehouseId)
+  if (params.activeOnly !== undefined) query.set('activeOnly', String(params.activeOnly))
+  return apiFetch<ListStorageLocationsResponse>(`/api/warehouse/storage-locations?${query}`)
 }

@@ -1,4 +1,5 @@
-import type { ContainerStatus, Endpoint, MapVersion, Workflow, WorkflowVariable } from '@/shared/api/contracts'
+import type { ContainerStatus, Endpoint, MapVersion } from '@/shared/api/contracts'
+import type { WorkflowRequestInputField } from '@/shared/api/types'
 
 /** UI draft for a new TransportRequest — movement intent only (no Job/Planner fields). */
 export interface TransportRequestDraft {
@@ -59,9 +60,13 @@ export interface ComposerContainer {
   currentEndpointName: string | null
 }
 
-export interface ComposerWorkflow extends Workflow {
-  /** Short card blurb for the picker. */
+export interface ComposerWorkflow {
+  id: string
+  code: string
+  name: string
+  versionNo: number
   cardSummary: string
+  status: 'PUBLISHED' | string
 }
 
 export type Panel2Mode = 'build' | 'selectContainers' | 'review'
@@ -78,10 +83,15 @@ export interface ComposerData {
   warehouses: ComposerWarehouse[]
   maps: MapVersion[]
   workflows: ComposerWorkflow[]
+  staffInputFields: WorkflowRequestInputField[]
   containers: ComposerContainer[]
   storageLocations: ComposerStorageLocation[]
   endpoints: Endpoint[]
   requestedByName: string
+  isLoading: boolean
+  error: string | null
+  containerSearch: string
+  setContainerSearch: (value: string) => void
 }
 
 /** Keys that belong to Movement Details — never rendered as Workflow Parameters. */
@@ -96,14 +106,6 @@ export const MOVEMENT_PARAM_KEYS = new Set([
   'sourceLevelNo',
   'destinationLevelNo',
 ])
-
-export function requestLevelVariables(schema: WorkflowVariable[]): WorkflowVariable[] {
-  return schema.filter(
-    (variable) =>
-      (variable.source === 'ADMIN_INPUT' || variable.source === 'STAFF_INPUT') &&
-      !MOVEMENT_PARAM_KEYS.has(variable.key),
-  )
-}
 
 export function emptyDraft(): TransportRequestDraft {
   return {

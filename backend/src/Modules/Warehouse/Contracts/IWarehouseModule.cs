@@ -12,8 +12,25 @@ public interface IWarehouseModule
     Task<IReadOnlyList<ContainerSnapshot>> GetContainersAsync(
         IReadOnlyCollection<Guid> containerIds,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsAsync(
+        IReadOnlyCollection<Guid> storageLocationIds,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record WarehouseSnapshot(Guid Id, string Code, bool IsActive);
 
-public sealed record ContainerSnapshot(Guid Id, string Barcode, ContainerStatus Status);
+public sealed record ContainerSnapshot(
+    Guid Id,
+    string Barcode,
+    ContainerStatus Status,
+    Guid? CurrentStorageLocationId,
+    short? CurrentLevelNo);
+
+public sealed record StorageLocationSnapshot(
+    Guid Id,
+    Guid WarehouseId,
+    Guid EndpointId,
+    string Code,
+    string Name,
+    bool IsActive);

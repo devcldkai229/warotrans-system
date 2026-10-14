@@ -3,10 +3,8 @@ import { Field } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { controlClass } from '@/shared/ui/controlClass'
-import { cx } from '@/shared/lib/cx'
-import { DEMO_SCENARIOS } from './demoScenarios'
 import { mapsForWarehouse } from './useTransportRequestComposerData'
-import { requestLevelVariables, type ComposerData, type TransportRequestDraft } from './types'
+import type { ComposerData, TransportRequestDraft } from './types'
 
 interface RequestSetupPanelProps {
   data: ComposerData
@@ -14,7 +12,40 @@ interface RequestSetupPanelProps {
   onChange: (next: TransportRequestDraft) => void
   onBackToList: () => void
   onClose: () => void
-  onLoadScenario: (draft: TransportRequestDraft) => void
+}
+
+function staffInputControl(
+  dataType: string,
+  value: string,
+  onValue: (next: string) => void,
+) {
+  const upper = dataType.toUpperCase()
+  if (upper === 'BOOLEAN') {
+    return (
+      <select className={controlClass('sm')} value={value} onChange={(event) => onValue(event.target.value)}>
+        <option value="">Select…</option>
+        <option value="true">Yes</option>
+        <option value="false">No</option>
+      </select>
+    )
+  }
+
+  const inputType =
+    upper === 'INTEGER' || upper === 'DECIMAL'
+      ? 'number'
+      : upper === 'DATETIME'
+        ? 'datetime-local'
+        : 'text'
+
+  return (
+    <input
+      className={controlClass('sm')}
+      type={inputType}
+      step={upper === 'DECIMAL' ? 'any' : undefined}
+      value={value}
+      onChange={(event) => onValue(event.target.value)}
+    />
+  )
 }
 
 export function RequestSetupPanel({
@@ -23,11 +54,10 @@ export function RequestSetupPanel({
   onChange,
   onBackToList,
   onClose,
-  onLoadScenario,
 }: RequestSetupPanelProps) {
   const maps = mapsForWarehouse(data, draft.warehouseId)
   const workflow = data.workflows.find((item) => item.id === draft.workflowId)
-  const params = workflow ? requestLevelVariables(workflow.variablesSchema) : []
+  const params = data.staffInputFields
 
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container animate-panel-in">
@@ -45,6 +75,11 @@ export function RequestSetupPanel({
       </header>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-2 pb-4">
+        {data.error ? (
+          <p className="rounded-md bg-red-soft/50 px-3 py-2 text-[11px] text-red-ink">{data.error}</p>
+        ) : null}
+        {data.isLoading ? <p className="text-[11px] text-muted">Loading reference data…</p> : null}
+
         <Field label="Warehouse *">
           <select
             className={controlClass('sm')}
@@ -89,25 +124,25 @@ export function RequestSetupPanel({
           {!workflow ? (
             <>
               <p className="mb-2 text-[11px] text-muted">Choose what you want to move</p>
-              <div className="flex flex-col gap-2">
-                {data.workflows.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="rounded-md bg-surface p-3 text-left transition-shadow hover:shadow-float"
-                    onClick={() => {
-                      const workflowInputs: Record<string, string> = {}
-                      for (const variable of requestLevelVariables(item.variablesSchema)) {
-                        if (variable.defaultValue != null) workflowInputs[variable.key] = variable.defaultValue
-                      }
-                      onChange({ ...draft, workflowId: item.id, workflowInputs })
-                    }}
-                  >
-                    <p className="text-sm font-medium">{item.name}</p>
-                    <p className="mt-1 text-[11px] text-muted">{item.cardSummary}</p>
-                  </button>
-                ))}
-              </div>
+              {data.workflows.length === 0 && !data.isLoading ? (
+                <p className="rounded-md bg-surface px-3 py-2 text-[11px] text-muted">
+                  No published workflows available.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {data.workflows.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="rounded-md bg-surface p-3 text-left transition-shadow hover:shadow-float"
+                      onClick={() => onChange({ ...draft, workflowId: item.id, workflowInputs: {} })}
+                    >
+                      <p className="text-sm font-medium">{item.name}</p>
+                      <p className="mt-1 text-[11px] text-muted">{item.cardSummary}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <div className="rounded-md bg-surface p-3 ring-2 ring-blue/30">
@@ -141,33 +176,17 @@ export function RequestSetupPanel({
               </p>
             ) : (
               <div className="space-y-3">
-                {params.map((variable) => (
-                  <Field key={variable.key} label={variable.label + (variable.required ? ' *' : '')} hint={variable.description}>
-                    {variable.dataType === 'BOOL' ? (
-                      <select
-                        className={controlClass('sm')}
-                        value={draft.workflowInputs[variable.key] ?? variable.defaultValue ?? ''}
-                        onChange={(event) =>
-                          onChange({
-                            ...draft,
-                            workflowInputs: { ...draft.workflowInputs, [variable.key]: event.target.value },
-                          })
-                        }
-                      >
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                    ) : (
-                      <input
-                        className={controlClass('sm')}
-                        value={draft.workflowInputs[variable.key] ?? ''}
-                        onChange={(event) =>
-                          onChange({
-                            ...draft,
-                            workflowInputs: { ...draft.workflowInputs, [variable.key]: event.target.value },
-                          })
-                        }
-                      />
+                {params.map((field) => (
+                  <Field
+                    key={field.key}
+                    label={field.label + (field.required ? ' *' : '')}
+                    hint={field.description ?? undefined}
+                  >
+                    {staffInputControl(field.dataType, draft.workflowInputs[field.key] ?? '', (value) =>
+                      onChange({
+                        ...draft,
+                        workflowInputs: { ...draft.workflowInputs, [field.key]: value },
+                      }),
                     )}
                   </Field>
                 ))}
@@ -191,26 +210,6 @@ export function RequestSetupPanel({
           <p className="text-[11px] text-muted">
             Initial state: <span className="font-medium text-ink-2">SUBMITTED</span> (set after create)
           </p>
-        </section>
-
-        <section className="border-t border-outline/50 pt-3">
-          <p className="mb-2 text-[10px] font-medium tracking-wide text-muted uppercase">Demo presets</p>
-          <div className="flex flex-wrap gap-1.5">
-            {DEMO_SCENARIOS.map((scenario) => (
-              <button
-                key={scenario.id}
-                type="button"
-                className={cx(
-                  'rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-ink-2',
-                  'hover:bg-container-high',
-                )}
-                onClick={() => onLoadScenario(scenario.load())}
-                title={scenario.label}
-              >
-                {scenario.id}
-              </button>
-            ))}
-          </div>
         </section>
       </div>
     </aside>

@@ -16,16 +16,9 @@ export function validateDraft(draft: TransportRequestDraft, data: ComposerData):
     errors.push('Only published maps can be used.')
   }
 
-  const workflow = data.workflows.find((item) => item.id === draft.workflowId)
-  if (workflow) {
-    for (const variable of workflow.variablesSchema) {
-      if (
-        variable.required &&
-        variable.source === 'ADMIN_INPUT' &&
-        !(draft.workflowInputs[variable.key] ?? '').trim()
-      ) {
-        errors.push(`${variable.label} is required.`)
-      }
+  for (const field of data.staffInputFields) {
+    if (field.required && !(draft.workflowInputs[field.key] ?? '').trim()) {
+      errors.push(`${field.label} is required.`)
     }
   }
 
