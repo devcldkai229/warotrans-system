@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
@@ -12,6 +12,10 @@ import { formatDuration, secondsBetween, humanize } from '@/shared/lib/format'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { findEndpointByName } from '@/shared/map/scene'
 import { ROBOTS } from '../robots/mock'
+import {
+  TransportRequestComposer,
+  type ComposerMapState,
+} from './composer/TransportRequestComposer'
 import { REQUEST_STATUS_GROUPS } from './constants'
 import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
@@ -80,12 +84,14 @@ export function TransportRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedJobNo, setSelectedJobNo] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  const [composing, setComposing] = useState(false)
+  const [composerMap, setComposerMap] = useState<ComposerMapState | null>(null)
+  const [banner, setBanner] = useState<string | null>(null)
 
   const selected = TRANSPORT_REQUESTS.find((request) => request.id === selectedId) ?? null
   const selectedJob = selected?.jobs.find((job) => job.jobNo === selectedJobNo) ?? null
 
   function selectRequest(id: string) {
-    // Picking the open request again closes it; picking another one resets the Job column.
     setSelectedId(selectedId === id ? null : id)
     setSelectedJobNo(null)
     setCollapsed(false)
@@ -116,9 +122,7 @@ export function TransportRequestsPage() {
     [],
   )
 
-  // What the map shows depends on what is selected: nothing -> every running Job; a Request -> its movement plan
-  // (pick up -> drop off per Container) and the Robots of its Jobs; a Job -> only that Robot.
-  const mapView = useMemo(() => {
+  const listMapView = useMemo(() => {
     const requests = selected ? [selected] : TRANSPORT_REQUESTS
     const callouts: MapCallout[] = requests.flatMap((request) =>
       request.jobs
@@ -161,6 +165,22 @@ export function TransportRequestsPage() {
     return { callouts, movements, focusEndpointIds, focusRobotCodes }
   }, [selected, selectedJob])
 
+  const handleComposerMapState = useCallback((state: ComposerMapState) => {
+    setComposerMap(state)
+  }, [])
+
+  function startCompose() {
+    setSelectedId(null)
+    setSelectedJobNo(null)
+    setComposing(true)
+    setBanner(null)
+  }
+
+  function endCompose() {
+    setComposing(false)
+    setComposerMap(null)
+  }
+
   function toggle(status: TransportRequestStatus) {
     setOpen((current) => {
       const next = new Set(current)
@@ -170,81 +190,114 @@ export function TransportRequestsPage() {
     })
   }
 
+  const gridClass = composing
+    ? composerMap?.panel2Open
+      ? 'grid h-full grid-cols-[minmax(320px,360px)_minmax(430px,500px)_minmax(0,1fr)] gap-3 px-3 pb-3'
+      : 'grid h-full grid-cols-[minmax(320px,360px)_minmax(0,1fr)] gap-3 px-3 pb-3'
+    : 'grid h-full grid-cols-[400px_minmax(0,1fr)] gap-3 px-3 pb-3'
+
+  const mapFocus = composing && composerMap ? composerMap.focusEndpointIds : listMapView.focusEndpointIds
+  const mapMovements = composing && composerMap ? composerMap.movements : listMapView.movements
+  const mapCallouts = composing && composerMap ? composerMap.callouts : listMapView.callouts
+
   return (
-    <div className="grid h-full grid-cols-[400px_minmax(0,1fr)] gap-3 px-3 pb-3">
-      <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">
-        <header className="flex items-center gap-3 px-5 pt-5">
-          <h1 className="text-xl font-book whitespace-nowrap">Transport requests</h1>
-          <span className="text-sm text-muted">{TRANSPORT_REQUESTS.length}</span>
-          <Button variant="primary" size="sm" className="ml-auto">
-            <Icon name="plus" size={14} /> New request
-          </Button>
-        </header>
+    <div className={cx(gridClass, 'relative')}>
+      {composing ? (
+        <TransportRequestComposer
+          onClose={endCompose}
+          onSubmitted={(code) => {
+            setBanner(`Mock created ${code}. TODO(backend): persist TransportRequest.`)
+            endCompose()
+          }}
+          onMapState={handleComposerMapState}
+          onBanner={setBanner}
+        />
+      ) : (
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">
+          <header className="flex items-center gap-3 px-5 pt-5">
+            <h1 className="text-xl font-book whitespace-nowrap">Transport requests</h1>
+            <span className="text-sm text-muted">{TRANSPORT_REQUESTS.length}</span>
+            <Button variant="primary" size="sm" className="ml-auto" onClick={startCompose}>
+              <Icon name="plus" size={14} /> New request
+            </Button>
+          </header>
 
-        <div className="mt-3 mb-3 flex h-9 items-center gap-1.5 px-4">
-          <SearchInput
-            tone="surface"
-            className="h-9 min-w-0 flex-1"
-            placeholder="Search request code or container"
-            value={query}
-            onChange={setQuery}
-          />
-          <IconButton tone="surface" className="size-9 shrink-0" aria-label="Filter">
-            <Icon name="filter" size={15} />
-          </IconButton>
-          <IconButton tone="surface" className="size-9 shrink-0" aria-label="Sort">
-            <Icon name="sort" size={15} />
-          </IconButton>
-        </div>
+          <div className="mt-3 mb-3 flex h-9 items-center gap-1.5 px-4">
+            <SearchInput
+              tone="surface"
+              className="h-9 min-w-0 flex-1"
+              placeholder="Search request code or container"
+              value={query}
+              onChange={setQuery}
+            />
+            <IconButton tone="surface" className="size-9 shrink-0" aria-label="Filter">
+              <Icon name="filter" size={15} />
+            </IconButton>
+            <IconButton tone="surface" className="size-9 shrink-0" aria-label="Sort">
+              <Icon name="sort" size={15} />
+            </IconButton>
+          </div>
 
-        <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
-          {REQUEST_STATUS_GROUPS.map((status) => {
-            const requests = grouped.get(status) ?? []
-            const expanded = open.has(status)
-            return (
-              <section key={status}>
-                <button
-                  type="button"
-                  className="flex h-10 w-full items-center gap-2.5 rounded-full px-3 text-left text-sm transition-colors duration-200 hover:bg-surface"
-                  aria-expanded={expanded}
-                  onClick={() => toggle(status)}
-                >
-                  <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
-                  <ToneDot tone={REQUEST_STATUS_TONE[status]} />
-                  <span className="flex-1 font-medium">{humanize(status)}</span>
-                  <span className="text-xs text-muted tabular-nums">{requests.length}</span>
-                </button>
-                {expanded ? (
-                  <div className="flex flex-col gap-2 px-2 pt-1 pb-3">
-                    {requests.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No requests</p> : null}
-                    {requests.map((request) => (
-                      <RequestCard
-                        key={request.id}
-                        request={request}
-                        selected={request.id === selectedId}
-                        onSelect={() => selectRequest(request.id)}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </section>
-            )
-          })}
-        </div>
-      </aside>
+          <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
+            {REQUEST_STATUS_GROUPS.map((status) => {
+              const requests = grouped.get(status) ?? []
+              const expanded = open.has(status)
+              return (
+                <section key={status}>
+                  <button
+                    type="button"
+                    className="flex h-10 w-full items-center gap-2.5 rounded-full px-3 text-left text-sm transition-colors duration-200 hover:bg-surface"
+                    aria-expanded={expanded}
+                    onClick={() => toggle(status)}
+                  >
+                    <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
+                    <ToneDot tone={REQUEST_STATUS_TONE[status]} />
+                    <span className="flex-1 font-medium">{humanize(status)}</span>
+                    <span className="text-xs text-muted tabular-nums">{requests.length}</span>
+                  </button>
+                  {expanded ? (
+                    <div className="flex flex-col gap-2 px-2 pt-1 pb-3">
+                      {requests.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No requests</p> : null}
+                      {requests.map((request) => (
+                        <RequestCard
+                          key={request.id}
+                          request={request}
+                          selected={request.id === selectedId}
+                          onSelect={() => selectRequest(request.id)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+              )
+            })}
+          </div>
+        </aside>
+      )}
 
       <section className="relative min-w-0 overflow-hidden rounded-lg bg-container">
         <WarehouseMap
-          robots={mapRobots}
+          robots={composing ? [] : mapRobots}
           layers={{ occupancy: true }}
           labels="focus"
-          focusEndpointIds={mapView.focusEndpointIds}
-          focusRobotCodes={mapView.focusRobotCodes}
-          movements={mapView.movements}
-          callouts={mapView.callouts}
+          focusEndpointIds={mapFocus}
+          focusRobotCodes={composing ? undefined : listMapView.focusRobotCodes}
+          movements={mapMovements}
+          callouts={mapCallouts}
+          uiInset={composing ? composerMap?.uiInset : undefined}
+          onEndpointClick={composing ? composerMap?.onEndpointClick : undefined}
         />
 
-        {selected ? (
+        {composing ? (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-float">
+            Preview only — final robot route is planned after submission.
+            {composerMap?.pickHint ? (
+              <p className="mt-1 font-medium text-ink">{composerMap.pickHint}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!composing && selected ? (
           <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex gap-3 p-3">
             {collapsed ? null : (
               <>
@@ -282,6 +335,12 @@ export function TransportRequestsPage() {
           <Icon name="bolt" size={15} /> Facility E-stop
         </button>
       </section>
+
+      {banner ? (
+        <div className="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs text-surface shadow-float">
+          {banner}
+        </div>
+      ) : null}
     </div>
   )
 }
