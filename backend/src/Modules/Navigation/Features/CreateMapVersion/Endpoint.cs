@@ -18,7 +18,9 @@ public static class CreateMapVersionEndpoint
             return Results.Created($"/api/navigation/maps/{response.Id}", response);
         })
         .WithName("CreateMapVersion")
-        .WithSummary("Create a new draft map version for a warehouse")
-        .WithDescription("Creates a new MapVersion in DRAFT status with auto-incremented VersionNo for the specified warehouse.");
+        .WithSummary("Create a draft map version (metadata)")
+        .WithDescription(
+            "Creates a DRAFT MapVersion without importing ROS files. " +
+            "Omit MapUri/MapYamlUri/PreviewImageUri to store pending:// placeholders until Import uploads assets (Local or S3).");
     }
 }

@@ -4,6 +4,8 @@ namespace WaroTrans.Navigation.Services;
 
 public sealed class LocalMapAssetStore(IHostEnvironment environment) : IMapAssetStore
 {
+    public string ProviderName => "Local";
+
     public string RootPath { get; } = Path.GetFullPath(
         Path.Combine(environment.ContentRootPath, "data", "maps"));
 
