@@ -15,7 +15,6 @@ interface ContainerSelectorProps {
 }
 
 export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: ContainerSelectorProps) {
-  const [query, setQuery] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [productFilter, setProductFilter] = useState('')
@@ -36,21 +35,14 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
   )
 
   const rows = useMemo(() => {
-    const needle = query.trim().toLowerCase()
     return data.containers.filter((item) => {
       if (excludeIds.has(item.id)) return false
       if (locationFilter && item.currentLocationCode !== locationFilter) return false
       if (statusFilter && item.status !== statusFilter) return false
       if (productFilter && item.productName !== productFilter) return false
-      if (!needle) return true
-      return (
-        item.barcode.toLowerCase().includes(needle) ||
-        item.productName.toLowerCase().includes(needle) ||
-        item.sku.toLowerCase().includes(needle) ||
-        (item.currentEndpointCode?.toLowerCase().includes(needle) ?? false)
-      )
+      return true
     })
-  }, [data.containers, excludeIds, locationFilter, statusFilter, productFilter, query])
+  }, [data.containers, excludeIds, locationFilter, statusFilter, productFilter])
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -69,8 +61,8 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
         <h2 className="text-sm font-medium">Select containers</h2>
         <SearchInput
           variant="field"
-          value={query}
-          onChange={setQuery}
+          value={data.containerSearch}
+          onChange={data.setContainerSearch}
           placeholder="code / product / barcode"
         />
         <div className="grid grid-cols-3 gap-2">

@@ -1,7 +1,14 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
+import { listRobots } from '@/shared/api/fleet'
+import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
+import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
+import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
+import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
+import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
@@ -9,9 +16,6 @@ import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
 import { REQUEST_STATUS_TONE } from '@/shared/ui/statusTones'
 import { formatDuration, secondsBetween, humanize } from '@/shared/lib/format'
-import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
-import { findEndpointByName } from '@/shared/map/scene'
-import { ROBOTS } from '../robots/mock'
 import {
   TransportRequestComposer,
   type ComposerMapState,
@@ -19,8 +23,8 @@ import {
 import { REQUEST_STATUS_GROUPS } from './constants'
 import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
+import { detailToView, listItemToView } from './mapTransportRequest'
 import { RequestDetailPanel } from './RequestDetailPanel'
-import { TRANSPORT_REQUESTS } from './mock'
 
 function RequestCard({
   request,
@@ -80,7 +84,7 @@ function RequestCard({
 export function TransportRequestsPage() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [open, setOpen] = useState<Set<TransportRequestStatus>>(new Set(['IN_PROGRESS']))
+  const [open, setOpen] = useState<Set<TransportRequestStatus>>(new Set(['SUBMITTED', 'IN_PROGRESS']))
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedJobNo, setSelectedJobNo] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
@@ -88,8 +92,73 @@ export function TransportRequestsPage() {
   const [composerMap, setComposerMap] = useState<ComposerMapState | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
 
-  const selected = TRANSPORT_REQUESTS.find((request) => request.id === selectedId) ?? null
+  const listQuery = useQuery({
+    queryKey: ['transport-requests', 'list', query],
+    queryFn: () => listTransportRequests({ search: query.trim() || undefined, take: 100 }),
+  })
+
+  const workflowsQuery = useQuery({
+    queryKey: ['workflows', 'published'],
+    queryFn: () => listWorkflows({ status: 'PUBLISHED' }),
+  })
+
+  const workflowNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of workflowsQuery.data?.items ?? []) {
+      map.set(item.id, item.name)
+    }
+    return map
+  }, [workflowsQuery.data])
+
+  const requests = useMemo(
+    () => (listQuery.data?.items ?? []).map((item) => listItemToView(item, workflowNameById)),
+    [listQuery.data, workflowNameById],
+  )
+
+  const detailQuery = useQuery({
+    queryKey: ['transport-requests', 'detail', selectedId],
+    queryFn: () => getTransportRequest(selectedId!),
+    enabled: Boolean(selectedId) && !composing,
+  })
+
+  const selected = useMemo(() => {
+    if (!selectedId) return null
+    if (detailQuery.data?.id === selectedId) {
+      return detailToView(detailQuery.data, workflowNameById)
+    }
+    return requests.find((request) => request.id === selectedId) ?? null
+  }, [selectedId, detailQuery.data, requests, workflowNameById])
+
   const selectedJob = selected?.jobs.find((job) => job.jobNo === selectedJobNo) ?? null
+
+  const preferredWarehouseId =
+    selected?.warehouseId ??
+    (requests[0] ? listQuery.data?.items.find((item) => item.id === requests[0]?.id)?.warehouseId : null) ??
+    null
+  const preferredMapVersionId =
+    (selected && detailQuery.data?.id === selected.id
+      ? detailQuery.data.mapVersionId
+      : null) ??
+    (requests[0]
+      ? listQuery.data?.items.find((item) => item.id === requests[0]?.id)?.mapVersionId
+      : null) ??
+    null
+
+  const monitorMap = useMonitorMapVersion({
+    preferredWarehouseId,
+    preferredMapVersionId,
+    enabled: !composing,
+  })
+
+  const robotsQuery = useQuery({
+    queryKey: ['fleet', 'robots', monitorMap.warehouseId || selected?.warehouseId],
+    queryFn: () =>
+      listRobots({
+        warehouseId: monitorMap.warehouseId || selected?.warehouseId,
+        take: 100,
+      }),
+    enabled: !composing,
+  })
 
   function selectRequest(id: string) {
     setSelectedId(selectedId === id ? null : id)
@@ -98,20 +167,23 @@ export function TransportRequestsPage() {
   }
 
   const grouped = useMemo(() => {
-    const needle = query.trim().toLowerCase()
     const map = new Map<TransportRequestStatus, TransportRequestView[]>()
     REQUEST_STATUS_GROUPS.forEach((status) => map.set(status, []))
-    TRANSPORT_REQUESTS.filter(
-      (request) =>
-        request.requestCode.toLowerCase().includes(needle) ||
-        request.details.some((detail) => detail.containerBarcode.toLowerCase().includes(needle)),
-    ).forEach((request) => map.get(request.status)?.push(request))
+    requests.forEach((request) => map.get(request.status)?.push(request))
     return map
-  }, [query])
+  }, [requests])
+
+  const mapEndpoints = monitorMap.geometry.endpoints
+  const mapBounds = monitorMap.geometry.bounds
+
+  const endpointById = useMemo(
+    () => new Map(mapEndpoints.map((endpoint) => [endpoint.id, endpoint])),
+    [mapEndpoints],
+  )
 
   const mapRobots = useMemo<MapRobot[]>(
     () =>
-      ROBOTS.map((robot) => ({
+      (robotsQuery.data?.items ?? []).map((robot) => ({
         code: robot.code,
         status: robot.status,
         x: robot.poseX,
@@ -119,39 +191,24 @@ export function TransportRequestsPage() {
         yaw: robot.poseYaw,
         alert: robot.status === 'ERROR',
       })),
-    [],
+    [robotsQuery.data],
   )
 
   const listMapView = useMemo(() => {
-    const requests = selected ? [selected] : TRANSPORT_REQUESTS
-    const callouts: MapCallout[] = requests.flatMap((request) =>
-      request.jobs
-        .filter((job) => job.robotCode && (selected || job.status === 'RUNNING' || job.status === 'RECOVERY_REQUIRED'))
-        .flatMap((job) => {
-          const robot = ROBOTS.find((item) => item.code === job.robotCode)
-          if (!robot) return []
-          return [
-            {
-              x: robot.poseX,
-              y: robot.poseY,
-              tone: job.status === 'RECOVERY_REQUIRED' ? ('danger' as const) : ('dark' as const),
-              lines: [
-                `${request.requestCode}: ${humanize(job.status).toLowerCase()}`,
-                `${job.jobNo}, ${job.robotCode}, ${robot.batteryPercent}% battery`,
-              ],
-            },
-          ]
-        }),
-    )
-
+    const callouts: MapCallout[] = []
     const movements: MapMovement[] = []
     const focusEndpointIds: string[] = []
+
     if (selected) {
       selected.details.forEach((detail) => {
-        const from = findEndpointByName(detail.sourceLabel)
-        const to = findEndpointByName(detail.destinationLabel)
+        const from = endpointById.get(detail.sourceEndpointId)
+        const to = endpointById.get(detail.destinationEndpointId)
         if (!from || !to) return
-        movements.push({ from, to, sequence: detail.sequenceNo })
+        movements.push({
+          from: { x: from.x, y: from.y },
+          to: { x: to.x, y: to.y },
+          sequence: detail.sequenceNo,
+        })
         focusEndpointIds.push(from.id, to.id)
       })
     }
@@ -163,7 +220,7 @@ export function TransportRequestsPage() {
         : null
     const focusRobotCodes = robotCodes ? robotCodes.filter((code): code is string => Boolean(code)) : undefined
     return { callouts, movements, focusEndpointIds, focusRobotCodes }
-  }, [selected, selectedJob])
+  }, [selected, selectedJob, endpointById])
 
   const handleComposerMapState = useCallback((state: ComposerMapState) => {
     setComposerMap(state)
@@ -205,9 +262,11 @@ export function TransportRequestsPage() {
       {composing ? (
         <TransportRequestComposer
           onClose={endCompose}
-          onSubmitted={(code) => {
-            setBanner(`Mock created ${code}. TODO(backend): persist TransportRequest.`)
+          onSubmitted={({ id, requestCode }) => {
+            setBanner(`Created ${requestCode}`)
             endCompose()
+            setSelectedId(id)
+            setOpen((current) => new Set(current).add('SUBMITTED'))
           }}
           onMapState={handleComposerMapState}
           onBanner={setBanner}
@@ -216,7 +275,7 @@ export function TransportRequestsPage() {
         <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">
           <header className="flex items-center gap-3 px-5 pt-5">
             <h1 className="text-xl font-book whitespace-nowrap">Transport requests</h1>
-            <span className="text-sm text-muted">{TRANSPORT_REQUESTS.length}</span>
+            <span className="text-sm text-muted">{listQuery.data?.total ?? requests.length}</span>
             <Button variant="primary" size="sm" className="ml-auto" onClick={startCompose}>
               <Icon name="plus" size={14} /> New request
             </Button>
@@ -239,8 +298,19 @@ export function TransportRequestsPage() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
+            {listQuery.isLoading ? (
+              <p className="px-3 py-4 text-xs text-muted">Loading transport requests…</p>
+            ) : null}
+            {listQuery.error ? (
+              <p className="px-3 py-4 text-xs text-red-ink">
+                {(listQuery.error as Error).message || 'Failed to load transport requests.'}
+              </p>
+            ) : null}
+            {!listQuery.isLoading && !listQuery.error && requests.length === 0 ? (
+              <p className="px-3 py-4 text-xs text-muted">No transport requests yet. Create one to get started.</p>
+            ) : null}
             {REQUEST_STATUS_GROUPS.map((status) => {
-              const requests = grouped.get(status) ?? []
+              const group = grouped.get(status) ?? []
               const expanded = open.has(status)
               return (
                 <section key={status}>
@@ -253,12 +323,12 @@ export function TransportRequestsPage() {
                     <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
                     <ToneDot tone={REQUEST_STATUS_TONE[status]} />
                     <span className="flex-1 font-medium">{humanize(status)}</span>
-                    <span className="text-xs text-muted tabular-nums">{requests.length}</span>
+                    <span className="text-xs text-muted tabular-nums">{group.length}</span>
                   </button>
                   {expanded ? (
                     <div className="flex flex-col gap-2 px-2 pt-1 pb-3">
-                      {requests.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No requests</p> : null}
-                      {requests.map((request) => (
+                      {group.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No requests</p> : null}
+                      {group.map((request) => (
                         <RequestCard
                           key={request.id}
                           request={request}
@@ -277,6 +347,13 @@ export function TransportRequestsPage() {
 
       <section className="relative min-w-0 overflow-hidden rounded-lg bg-container">
         <WarehouseMap
+          zones={composing ? composerMap?.zones ?? [] : monitorMap.geometry.zones}
+          edges={composing ? composerMap?.edges ?? [] : monitorMap.geometry.edges}
+          endpoints={composing ? composerMap?.endpoints ?? [] : mapEndpoints}
+          bounds={composing ? composerMap?.bounds : mapBounds}
+          occupancyImageUrl={
+            composing ? composerMap?.occupancyImageUrl ?? null : monitorMap.geometry.occupancyImageUrl
+          }
           robots={composing ? [] : mapRobots}
           layers={{ occupancy: true }}
           labels="focus"
@@ -287,6 +364,18 @@ export function TransportRequestsPage() {
           uiInset={composing ? composerMap?.uiInset : undefined}
           onEndpointClick={composing ? composerMap?.onEndpointClick : undefined}
         />
+
+        {!composing ? (
+          <MapVersionToolbar
+            warehouses={monitorMap.warehouses}
+            warehouseId={monitorMap.warehouseId}
+            onWarehouseChange={monitorMap.setWarehouseId}
+            maps={monitorMap.maps}
+            mapVersionId={monitorMap.mapVersionId}
+            onMapVersionChange={monitorMap.setMapVersionId}
+            activeMapId={monitorMap.activeMapId}
+          />
+        ) : null}
 
         {composing ? (
           <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-float">
@@ -323,7 +412,7 @@ export function TransportRequestsPage() {
               title={collapsed ? 'Show panels' : 'Hide panels'}
               onClick={() => setCollapsed(!collapsed)}
             >
-              <Icon name="chevronRight" size={14} className={collapsed ? undefined : 'rotate-180'} />
+              <Icon name={collapsed ? 'chevronRight' : 'chevronRight'} size={14} className={collapsed ? undefined : 'rotate-180'} />
             </button>
           </div>
         ) : null}

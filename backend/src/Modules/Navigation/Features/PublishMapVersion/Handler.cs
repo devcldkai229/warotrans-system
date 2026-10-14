@@ -3,6 +3,7 @@ using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Features.Shared;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 
 namespace WaroTrans.Navigation.Features.PublishMapVersion;
 
@@ -32,6 +33,13 @@ public sealed class PublishMapVersionHandler(NavigationDbContext dbContext)
             throw new DomainValidationException(
                 $"MapVersion with ID '{id}' is ARCHIVED and cannot be published directly.",
                 "cannot_publish_archived_map");
+        }
+
+        if (PendingMapAssetUris.IsPending(mapVersion.MapUri))
+        {
+            throw new DomainValidationException(
+                "Cannot publish a map without occupancy assets. Import yaml + pgm first.",
+                "map_assets_pending");
         }
 
         var currentlyPublishedMaps = await dbContext.MapVersions

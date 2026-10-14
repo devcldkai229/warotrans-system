@@ -2,12 +2,12 @@ namespace WaroTrans.Navigation.Services;
 
 public interface IMapAssetStore
 {
-    /// <summary>Absolute root directory for map assets (e.g. data/maps).</summary>
-    string RootPath { get; }
+    /// <summary>Storage provider label: Local or S3.</summary>
+    string ProviderName { get; }
 
     /// <summary>
-    /// Writes map.pgm, map.yaml, and map-preview.png under warehouse/mapVersion.
-    /// Returns public URL paths under /map-assets/...
+    /// Writes map.pgm, map.yaml, and map-preview.png for a map version.
+    /// Returns URIs persisted on MapVersion (local /map-assets/... or S3 HTTPS URLs).
     /// </summary>
     Task<MapAssetUris> SaveImportedAsync(
         Guid warehouseId,
@@ -19,3 +19,15 @@ public interface IMapAssetStore
 }
 
 public sealed record MapAssetUris(string MapUri, string MapYamlUri, string PreviewImageUri);
+
+/// <summary>Placeholder MapUri for metadata-only DRAFT maps before assets are uploaded.</summary>
+public static class PendingMapAssetUris
+{
+    public const string MapUri = "pending://map";
+    public const string MapYamlUri = "pending://map.yaml";
+    public const string PreviewImageUri = "pending://map-preview.png";
+
+    public static bool IsPending(string? uri) =>
+        string.IsNullOrWhiteSpace(uri)
+        || uri.StartsWith("pending://", StringComparison.OrdinalIgnoreCase);
+}

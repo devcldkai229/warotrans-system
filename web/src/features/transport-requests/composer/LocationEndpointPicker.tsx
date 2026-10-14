@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { cx } from '@/shared/lib/cx'
 import { controlClass } from '@/shared/ui/controlClass'
 import { SearchInput } from '@/shared/ui/Field'
-import { DIRECT_ENDPOINT_TYPES } from './fixtures'
+import { DIRECT_ENDPOINT_TYPES } from './constants'
 import { endpointById, locationById } from './labels'
 import type { ComposerData } from './types'
 

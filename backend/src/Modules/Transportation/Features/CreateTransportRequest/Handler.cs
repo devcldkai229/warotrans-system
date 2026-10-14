@@ -59,6 +59,7 @@ public sealed class CreateTransportRequestHandler(
         await EnsureWarehouseAsync(request.WarehouseId, cancellationToken);
         await EnsureMapVersionAsync(request.WarehouseId, request.MapVersionId, cancellationToken);
         await EnsureEndpointsAsync(request.MapVersionId, details, cancellationToken);
+        await EnsureStorageLocationsAsync(request.WarehouseId, details, cancellationToken);
         await EnsureContainersAsync(details, cancellationToken);
 
         var requestCode = await businessCodeGenerator.NextRequestCodeAsync(cancellationToken: cancellationToken);
@@ -173,6 +174,62 @@ public sealed class CreateTransportRequestHandler(
                 throw new DomainValidationException(
                     $"Endpoint '{endpoint.Code}' is disabled.",
                     "endpoint_disabled");
+            }
+        }
+    }
+
+    private async Task EnsureStorageLocationsAsync(
+        Guid warehouseId,
+        IReadOnlyList<CreateTransportRequestDetailRequest> details,
+        CancellationToken cancellationToken)
+    {
+        var locationRefs = details
+            .SelectMany(d => new[]
+            {
+                (LocationId: d.SourceStorageLocationId, EndpointId: d.SourceEndpointId, Side: "Source"),
+                (LocationId: d.DestinationStorageLocationId, EndpointId: d.DestinationEndpointId, Side: "Destination")
+            })
+            .Where(x => x.LocationId.HasValue)
+            .Select(x => (LocationId: x.LocationId!.Value, x.EndpointId, x.Side))
+            .ToList();
+
+        if (locationRefs.Count == 0)
+        {
+            return;
+        }
+
+        var locationIds = locationRefs.Select(x => x.LocationId).Distinct().ToList();
+        var locations = (await warehouseModule.GetStorageLocationsAsync(locationIds, cancellationToken))
+            .ToDictionary(l => l.Id);
+
+        foreach (var (locationId, endpointId, side) in locationRefs)
+        {
+            if (!locations.TryGetValue(locationId, out var location))
+            {
+                throw new NotFoundException(
+                    $"StorageLocation '{locationId}' was not found.",
+                    "storage_location_not_found");
+            }
+
+            if (!location.IsActive)
+            {
+                throw new DomainValidationException(
+                    $"StorageLocation '{location.Code}' is inactive.",
+                    "storage_location_inactive");
+            }
+
+            if (location.WarehouseId != warehouseId)
+            {
+                throw new DomainValidationException(
+                    $"StorageLocation '{location.Code}' does not belong to Warehouse '{warehouseId}'.",
+                    "storage_location_warehouse_mismatch");
+            }
+
+            if (location.EndpointId != endpointId)
+            {
+                throw new DomainValidationException(
+                    $"{side} StorageLocation '{location.Code}' is bound to a different Endpoint than the Detail.",
+                    "storage_location_endpoint_mismatch");
             }
         }
     }

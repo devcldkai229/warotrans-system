@@ -6,6 +6,8 @@ import { listRobots } from '@/shared/api/fleet'
 import { cx } from '@/shared/lib/cx'
 import { humanize } from '@/shared/lib/format'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
+import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
@@ -74,6 +76,26 @@ export function FleetPage() {
   const selected = robotsForCounts.find((robot) => robot.code === robotCode) ?? null
   const isLoading = listQuery.isLoading || countsQuery.isLoading
   const error = listQuery.error ?? countsQuery.error
+
+  const preferredWarehouseId =
+    selected?.warehouseId ?? robotsForCounts[0]?.warehouseId ?? null
+  const preferredMapVersionId =
+    selected?.currentMapVersionId ?? robotsForCounts[0]?.currentMapVersionId ?? null
+
+  const monitorMap = useMonitorMapVersion({
+    preferredWarehouseId,
+    preferredMapVersionId,
+  })
+
+  const robotsOnMap = useMemo(
+    () =>
+      robotsForCounts.filter(
+        (robot) =>
+          !monitorMap.warehouseId ||
+          robot.warehouseId === monitorMap.warehouseId,
+      ),
+    [robotsForCounts, monitorMap.warehouseId],
+  )
 
   function scrollStatuses(direction: 1 | -1) {
     statusRailRef.current?.scrollBy({ left: direction * 160, behavior: 'smooth' })
@@ -203,13 +225,37 @@ export function FleetPage() {
 
       <div className="relative min-w-0 overflow-hidden rounded-lg bg-container">
         <FleetMap
-          robots={robotsForCounts}
+          robots={robotsOnMap}
           selectedCode={robotCode ?? null}
           onSelect={(code) => navigate(`/monitor/fleet/${code}`)}
           variant={selected ? 'detail' : 'overview'}
           previewCode={previewCode}
           onPreview={setPreviewCode}
+          endpoints={monitorMap.geometry.endpoints}
+          edges={monitorMap.geometry.edges}
+          zones={monitorMap.geometry.zones}
+          bounds={monitorMap.geometry.bounds}
+          occupancyImageUrl={monitorMap.geometry.occupancyImageUrl}
         />
+        <MapVersionToolbar
+          warehouses={monitorMap.warehouses}
+          warehouseId={monitorMap.warehouseId}
+          onWarehouseChange={monitorMap.setWarehouseId}
+          maps={monitorMap.maps}
+          mapVersionId={monitorMap.mapVersionId}
+          onMapVersionChange={monitorMap.setMapVersionId}
+          activeMapId={monitorMap.activeMapId}
+        />
+        {monitorMap.isLoading ? (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-5 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-float">
+            Loading map…
+          </div>
+        ) : null}
+        {monitorMap.error ? (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-5 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-xs text-red-ink shadow-float">
+            {monitorMap.error.message || 'Failed to load map version.'}
+          </div>
+        ) : null}
       </div>
 
       {registerOpen ? (

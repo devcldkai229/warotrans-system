@@ -1,19 +1,24 @@
+import { createTransportRequest, type CreateTransportRequestResponse } from '@/shared/api/transportRequests'
+import { toCreateRequestBody } from './toCreateRequestBody'
 import type { TransportRequestDraft } from './types'
 
 export interface SubmitResult {
   ok: true
+  id: string
   requestCode: string
-  /** Mock payload — not persisted. */
-  draft: TransportRequestDraft
+  response: CreateTransportRequestResponse
 }
 
-/**
- * UI-only submit. Does not call the backend.
- * TODO(backend): POST TransportRequest + details; replace this adapter.
- */
-export async function submitTransportRequest(draft: TransportRequestDraft): Promise<SubmitResult> {
-  const requestCode = `TR-DRAFT-${Date.now().toString(36).toUpperCase()}`
-  console.info('[TransportRequestComposer] TODO(backend) submitTransportRequest', { requestCode, draft })
-  await Promise.resolve()
-  return { ok: true, requestCode, draft }
+/** POST TransportRequest + Details. Does not queue or plan Jobs. */
+export async function submitTransportRequest(
+  draft: TransportRequestDraft,
+  staffInputTypes: Record<string, string> = {},
+): Promise<SubmitResult> {
+  const response = await createTransportRequest(toCreateRequestBody(draft, staffInputTypes))
+  return {
+    ok: true,
+    id: response.id,
+    requestCode: response.requestCode,
+    response,
+  }
 }

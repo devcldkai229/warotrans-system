@@ -22,6 +22,7 @@ public sealed class FakeWarehouseModule : IWarehouseModule
 {
     public Dictionary<Guid, WarehouseSnapshot> Warehouses { get; } = [];
     public Dictionary<Guid, ContainerSnapshot> Containers { get; } = [];
+    public Dictionary<Guid, StorageLocationSnapshot> StorageLocations { get; } = [];
 
     public Task<WarehouseSnapshot?> GetWarehouseAsync(Guid warehouseId, CancellationToken cancellationToken = default) =>
         Task.FromResult(Warehouses.GetValueOrDefault(warehouseId));
@@ -31,6 +32,12 @@ public sealed class FakeWarehouseModule : IWarehouseModule
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<ContainerSnapshot>>(
             containerIds.Where(Containers.ContainsKey).Select(id => Containers[id]).ToList());
+
+    public Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsAsync(
+        IReadOnlyCollection<Guid> storageLocationIds,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<StorageLocationSnapshot>>(
+            storageLocationIds.Where(StorageLocations.ContainsKey).Select(id => StorageLocations[id]).ToList());
 }
 
 public sealed class FakeNavigationModule : INavigationModule

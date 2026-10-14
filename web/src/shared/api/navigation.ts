@@ -1,4 +1,4 @@
-import { apiFetch, apiRequest } from './client'
+import { ApiError, apiFetch, apiRequest } from './client'
 import type {
   EdgeDirection,
   EndpointType,
@@ -91,6 +91,63 @@ export function getMapVersion(id: string) {
 
 export function getMapVersionDetail(id: string) {
   return apiFetch<MapVersionDetailDto>(`/api/navigation/maps/${id}/detail`)
+}
+
+export async function getActiveMapVersion(warehouseId: string): Promise<MapVersionDto | null> {
+  try {
+    return await apiFetch<MapVersionDto>(`/api/navigation/warehouses/${warehouseId}/active-map`)
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.code === 'active_map_not_found')) {
+      return null
+    }
+    throw err
+  }
+}
+
+export function createMapVersion(
+  warehouseId: string,
+  body: {
+    name: string
+    resolution: number
+    originX: number
+    originY: number
+    originYaw: number
+    mapUri?: string | null
+    mapYamlUri?: string | null
+    previewImageUri?: string | null
+    frameId?: string | null
+  },
+) {
+  return apiRequest<MapVersionDto>(`/api/navigation/warehouses/${warehouseId}/maps`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateMapVersion(
+  id: string,
+  body: {
+    name: string
+    mapUri: string
+    resolution: number
+    originX: number
+    originY: number
+    originYaw: number
+    mapYamlUri?: string | null
+    previewImageUri?: string | null
+    frameId?: string | null
+    imageWidthPixels?: number | null
+    imageHeightPixels?: number | null
+    negate?: boolean | null
+    occupiedThreshold?: number | null
+    freeThreshold?: number | null
+    contentHash?: string | null
+  },
+) {
+  return apiRequest<MapVersionDto>(`/api/navigation/maps/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
 }
 
 export function publishMapVersion(id: string) {
@@ -267,7 +324,8 @@ export function deleteZone(id: string) {
 /** Resolve a public map-asset path against the API origin when needed. */
 export function resolveMapAssetUrl(uri: string | null | undefined): string | null {
   if (!uri) return null
-  if (uri.startsWith('http://') || uri.startsWith('https://')) return uri
+  if (uri.startsWith('pending://')) return null
+  if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('s3://')) return uri
   const path = uri.startsWith('/') ? uri : `/${uri}`
   // Empty VITE_API_URL → same-origin (Vite proxies /map-assets in dev).
   const apiUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')

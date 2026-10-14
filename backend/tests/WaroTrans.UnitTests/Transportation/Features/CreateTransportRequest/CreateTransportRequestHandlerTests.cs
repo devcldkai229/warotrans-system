@@ -42,10 +42,10 @@ public sealed class CreateTransportRequestHandlerTests
     public CreateTransportRequestHandlerTests()
     {
         _warehouse.Warehouses[WarehouseId] = new WarehouseSnapshot(WarehouseId, "WH-001", true);
-        _warehouse.Containers[C1] = new ContainerSnapshot(C1, "CTN-1", ContainerStatus.STORED);
-        _warehouse.Containers[C2] = new ContainerSnapshot(C2, "CTN-2", ContainerStatus.STORED);
-        _warehouse.Containers[C3] = new ContainerSnapshot(C3, "CTN-3", ContainerStatus.PACKED);
-        _warehouse.Containers[ReservedContainer] = new ContainerSnapshot(ReservedContainer, "CTN-R", ContainerStatus.RESERVED);
+        _warehouse.Containers[C1] = new ContainerSnapshot(C1, "CTN-1", ContainerStatus.STORED, null, null);
+        _warehouse.Containers[C2] = new ContainerSnapshot(C2, "CTN-2", ContainerStatus.STORED, null, null);
+        _warehouse.Containers[C3] = new ContainerSnapshot(C3, "CTN-3", ContainerStatus.PACKED, null, null);
+        _warehouse.Containers[ReservedContainer] = new ContainerSnapshot(ReservedContainer, "CTN-R", ContainerStatus.RESERVED, null, null);
 
         _navigation.MapVersions[MapVersionId] = new MapVersionSnapshot(MapVersionId, WarehouseId, 1, MapStatus.PUBLISHED);
         _navigation.MapVersions[OtherMapVersionId] = new MapVersionSnapshot(OtherMapVersionId, WarehouseId, 2, MapStatus.DRAFT);
@@ -58,7 +58,7 @@ public sealed class CreateTransportRequestHandlerTests
     }
 
     private void AddEndpoint(Guid id, Guid mapVersionId, string code, bool isEnabled = true) =>
-        _navigation.Endpoints[id] = new EndpointSnapshot(id, mapVersionId, code, EndpointType.STORAGE, isEnabled);
+        _navigation.Endpoints[id] = new EndpointSnapshot(id, mapVersionId, code, code, EndpointType.STORAGE, isEnabled);
 
     private CreateTransportRequestHandler CreateHandler(out Persistence db)
     {
@@ -353,10 +353,11 @@ public sealed class CreateTransportRequestHandlerTests
         {
             ["handlingInstruction"] = JsonSerializer.SerializeToElement("fragile")
         };
-        var sourceLocation = Guid.NewGuid();
+        var sourceLocation = AddLocation(EndpointA, "LOC-A");
+        var destinationLocation = AddLocation(EndpointD, "LOC-D");
         var request = Request(
             Detail(2, C2, EndpointA, EndpointE),
-            Detail(1, C1, EndpointA, EndpointD, sourceLocation, 1, Guid.NewGuid(), 2)) with { WorkflowInputs = inputs };
+            Detail(1, C1, EndpointA, EndpointD, sourceLocation, 1, destinationLocation, 2)) with { WorkflowInputs = inputs };
 
         var response = await handler.HandleAsync(request);
 
@@ -392,8 +393,8 @@ public sealed class CreateTransportRequestHandlerTests
     public async Task Storage_location_and_level_are_optional_and_stored_as_given()
     {
         var handler = CreateHandler(out var db);
-        var sourceLocation = Guid.NewGuid();
-        var destinationLocation = Guid.NewGuid();
+        var sourceLocation = AddLocation(EndpointA, "LOC-A");
+        var destinationLocation = AddLocation(EndpointE, "LOC-E");
 
         var response = await handler.HandleAsync(Request(
             Detail(1, C1, EndpointA, EndpointD),
@@ -408,5 +409,75 @@ public sealed class CreateTransportRequestHandlerTests
         Assert.Equal((short)3, details[1].SourceLevelNo);
         Assert.Equal(destinationLocation, details[1].DestinationStorageLocationId);
         Assert.Null(details[1].DestinationLevelNo);
+    }
+
+    [Fact]
+    public async Task Rejects_nonexistent_storage_location()
+    {
+        var handler = CreateHandler(out var db);
+
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
+            handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD, Guid.NewGuid(), 1))));
+
+        Assert.Equal("storage_location_not_found", ex.Code);
+        Assert.Equal(0, db.RequestCount());
+    }
+
+    [Fact]
+    public async Task Rejects_storage_location_endpoint_mismatch()
+    {
+        var handler = CreateHandler(out _);
+        var locationOnA = AddLocation(EndpointA, "LOC-A");
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD, null, null, locationOnA, 1))));
+
+        Assert.Equal("storage_location_endpoint_mismatch", ex.Code);
+    }
+
+    [Fact]
+    public async Task Rejects_inactive_storage_location()
+    {
+        var handler = CreateHandler(out _);
+        var locationId = AddLocation(EndpointA, "LOC-A", isActive: false);
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD, locationId, 1))));
+
+        Assert.Equal("storage_location_inactive", ex.Code);
+    }
+
+    [Fact]
+    public async Task Rejects_storage_location_of_another_warehouse()
+    {
+        var handler = CreateHandler(out _);
+        var otherWarehouse = Guid.NewGuid();
+        var locationId = Guid.NewGuid();
+        _warehouse.StorageLocations[locationId] = new StorageLocationSnapshot(
+            locationId, otherWarehouse, EndpointA, "LOC-X", "Other", true);
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD, locationId, 1))));
+
+        Assert.Equal("storage_location_warehouse_mismatch", ex.Code);
+    }
+
+    [Fact]
+    public async Task Rejects_level_below_one()
+    {
+        var handler = CreateHandler(out var db);
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD, null, 0))));
+
+        Assert.Equal(0, db.RequestCount());
+    }
+
+    private Guid AddLocation(Guid endpointId, string code, bool isActive = true)
+    {
+        var id = Guid.NewGuid();
+        _warehouse.StorageLocations[id] = new StorageLocationSnapshot(
+            id, WarehouseId, endpointId, code, code, isActive);
+        return id;
     }
 }

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import type { RobotView } from '@/shared/api/contracts'
+import type { Edge, Endpoint, RobotView, Zone } from '@/shared/api/contracts'
+import type { MapBounds } from '@/shared/lib/mapView'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { findEndpointByName } from '@/shared/map/scene'
 import { LIVE_MAP_LABEL } from './mock'
@@ -14,16 +15,33 @@ interface FleetMapProps {
   /** Overview only: the robot whose summary card is open. A marker click previews; "View details" calls `onSelect`. */
   previewCode?: string | null
   onPreview?: (code: string | null) => void
+  endpoints?: Endpoint[]
+  edges?: Edge[]
+  zones?: Zone[]
+  bounds?: MapBounds
+  occupancyImageUrl?: string | null
 }
 
 /** "Rack A-12 → Dock 3" → the two Endpoints it names, when both exist on the map. */
-function endpointsOfRoute(routeLabel: string | undefined) {
-  const [from, to] = (routeLabel ?? '').split('→').map((part) => findEndpointByName(part))
+function endpointsOfRoute(routeLabel: string | undefined, endpoints: Endpoint[]) {
+  const [from, to] = (routeLabel ?? '').split('→').map((part) => findEndpointByName(part, endpoints))
   return from && to ? { from, to } : null
 }
 
 /** The fleet on the shared map: Robots by status, Zone/Edge occupancy, and where each active job is heading. */
-export function FleetMap({ robots, selectedCode, onSelect, variant = 'overview', previewCode = null, onPreview }: FleetMapProps) {
+export function FleetMap({
+  robots,
+  selectedCode,
+  onSelect,
+  variant = 'overview',
+  previewCode = null,
+  onPreview,
+  endpoints = [],
+  edges = [],
+  zones = [],
+  bounds,
+  occupancyImageUrl = null,
+}: FleetMapProps) {
   const mapRobots = useMemo<MapRobot[]>(
     () =>
       robots.map((robot) => ({
@@ -41,9 +59,9 @@ export function FleetMap({ robots, selectedCode, onSelect, variant = 'overview',
     () =>
       robots
         .filter((robot) => robot.activity)
-        .map((robot) => ({ robot, route: endpointsOfRoute(robot.activity?.routeLabel) }))
+        .map((robot) => ({ robot, route: endpointsOfRoute(robot.activity?.routeLabel, endpoints) }))
         .filter((item) => item.route !== null),
-    [robots],
+    [robots, endpoints],
   )
 
   const detail = variant === 'detail'
@@ -76,6 +94,11 @@ export function FleetMap({ robots, selectedCode, onSelect, variant = 'overview',
   return (
     <>
       <WarehouseMap
+        zones={zones}
+        edges={edges}
+        endpoints={endpoints}
+        bounds={bounds}
+        occupancyImageUrl={occupancyImageUrl}
         robots={mapRobots}
         layers={{ occupancy: true }}
         labels="focus"

@@ -3,11 +3,15 @@ import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'rea
 import { useNavigate } from 'react-router-dom'
 import type { MapStatus } from '@/shared/api/contracts'
 import {
+  archiveMapVersion,
+  createMapVersion,
   fetchSampleMapFiles,
+  getActiveMapVersion,
   importMapVersion,
   listMapVersionsForWarehouse,
   publishMapVersion,
   resolveMapAssetUrl,
+  updateMapVersion,
   type MapVersionDto,
 } from '@/shared/api/navigation'
 import { listWarehouses } from '@/shared/api/warehouses'
@@ -30,10 +34,11 @@ interface MapCardProps {
   version: MapVersionDto
   warehouseName: string
   when: string
+  active?: boolean
   children: ReactNode
 }
 
-function MapCard({ version, warehouseName, when, children }: MapCardProps) {
+function MapCard({ version, warehouseName, when, active, children }: MapCardProps) {
   const tint =
     version.status === 'DRAFT'
       ? 'border-amber/40 bg-amber-soft/50'
@@ -68,14 +73,21 @@ function MapCard({ version, warehouseName, when, children }: MapCardProps) {
             labels="none"
           />
         </div>
-        <StatusBadge
-          tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}
-          withDot
-          surface
-          className="absolute top-4 left-4 shadow-float"
-        >
-          {version.status}
-        </StatusBadge>
+        <div className="absolute top-4 left-4 flex flex-wrap gap-2">
+          <StatusBadge
+            tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}
+            withDot
+            surface
+            className="shadow-float"
+          >
+            {version.status}
+          </StatusBadge>
+          {active ? (
+            <StatusBadge tone="green" withDot surface className="shadow-float">
+              Active
+            </StatusBadge>
+          ) : null}
+        </div>
       </div>
       <div className="flex items-end justify-between gap-4 border-t border-outline-soft bg-surface/70 p-6">
         <div>
@@ -87,7 +99,7 @@ function MapCard({ version, warehouseName, when, children }: MapCardProps) {
             v{version.versionNo} · {version.name}
           </p>
         </div>
-        <div className="flex gap-2">{children}</div>
+        <div className="flex flex-wrap justify-end gap-2">{children}</div>
       </div>
     </article>
   )
@@ -102,6 +114,32 @@ function MissingMapCard({ title, children }: { title: string; children: ReactNod
   )
 }
 
+interface MetadataFormState {
+  name: string
+  resolution: string
+  originX: string
+  originY: string
+  originYaw: string
+}
+
+const emptyCreateForm = (): MetadataFormState => ({
+  name: '',
+  resolution: '0.05',
+  originX: '0',
+  originY: '0',
+  originYaw: '0',
+})
+
+function formFromVersion(version: MapVersionDto): MetadataFormState {
+  return {
+    name: version.name,
+    resolution: String(version.resolution),
+    originX: String(version.originX),
+    originY: String(version.originY),
+    originYaw: String(version.originYaw),
+  }
+}
+
 export function FacilityPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -112,6 +150,13 @@ export function FacilityPage() {
   const [pendingYaml, setPendingYaml] = useState<File | null>(null)
   const [pendingPgm, setPendingPgm] = useState<File | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createForm, setCreateForm] = useState<MetadataFormState>(emptyCreateForm)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [editTarget, setEditTarget] = useState<MapVersionDto | null>(null)
+  const [editForm, setEditForm] = useState<MetadataFormState>(emptyCreateForm)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(() => {
     try {
       return window.localStorage.getItem(WAREHOUSE_KEY) ?? ''
@@ -143,15 +188,115 @@ export function FacilityPage() {
     enabled: Boolean(warehouseId),
   })
 
+  const activeMapQuery = useQuery({
+    queryKey: ['navigation', 'active-map', warehouseId],
+    queryFn: () => getActiveMapVersion(warehouseId!),
+    enabled: Boolean(warehouseId),
+  })
+
   const maps = mapsQuery.data ?? []
   const draft = maps.find((m) => m.status === 'DRAFT')
   const published = maps.find((m) => m.status === 'PUBLISHED')
+  const activeMap = activeMapQuery.data
   const warehouseName = warehouse?.name ?? warehouse?.code ?? 'Warehouse'
+
+  async function invalidateMaps() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['navigation', 'maps', warehouseId] }),
+      queryClient.invalidateQueries({ queryKey: ['navigation', 'active-map', warehouseId] }),
+    ])
+  }
 
   const publishMutation = useMutation({
     mutationFn: (id: string) => publishMapVersion(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['navigation', 'maps', warehouseId] })
+      setActionError(null)
+      await invalidateMaps()
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Publish failed')
+    },
+  })
+
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) => archiveMapVersion(id),
+    onSuccess: async () => {
+      setActionError(null)
+      await invalidateMaps()
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Archive failed')
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: async (form: MetadataFormState) => {
+      if (!warehouseId) throw new Error('Select a warehouse.')
+      const name = form.name.trim()
+      if (!name) throw new Error('Name is required.')
+      const resolution = Number(form.resolution)
+      const originX = Number(form.originX)
+      const originY = Number(form.originY)
+      const originYaw = Number(form.originYaw)
+      if (!(resolution > 0) || Number.isNaN(originX) || Number.isNaN(originY) || Number.isNaN(originYaw)) {
+        throw new Error('Resolution must be > 0; origin values must be numbers.')
+      }
+      return createMapVersion(warehouseId, {
+        name,
+        resolution,
+        originX,
+        originY,
+        originYaw,
+      })
+    },
+    onSuccess: async (created) => {
+      setCreateOpen(false)
+      setCreateForm(emptyCreateForm())
+      setCreateError(null)
+      await invalidateMaps()
+      navigate(`/configure/facility/maps/${created.id}/edit`)
+    },
+    onError: (err) => {
+      setCreateError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Create failed')
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ version, form }: { version: MapVersionDto; form: MetadataFormState }) => {
+      const name = form.name.trim()
+      if (!name) throw new Error('Name is required.')
+      const resolution = Number(form.resolution)
+      const originX = Number(form.originX)
+      const originY = Number(form.originY)
+      const originYaw = Number(form.originYaw)
+      if (!(resolution > 0) || Number.isNaN(originX) || Number.isNaN(originY) || Number.isNaN(originYaw)) {
+        throw new Error('Resolution must be > 0; origin values must be numbers.')
+      }
+      return updateMapVersion(version.id, {
+        name,
+        mapUri: version.mapUri,
+        mapYamlUri: version.mapYamlUri,
+        previewImageUri: version.previewImageUri,
+        frameId: version.frameId,
+        imageWidthPixels: version.imageWidthPixels,
+        imageHeightPixels: version.imageHeightPixels,
+        resolution,
+        originX,
+        originY,
+        originYaw,
+        negate: version.negate,
+        occupiedThreshold: version.occupiedThreshold,
+        freeThreshold: version.freeThreshold,
+        contentHash: version.contentHash,
+      })
+    },
+    onSuccess: async () => {
+      setEditTarget(null)
+      setEditError(null)
+      await invalidateMaps()
+    },
+    onError: (err) => {
+      setEditError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Update failed')
     },
   })
 
@@ -166,7 +311,7 @@ export function FacilityPage() {
       setPendingPgm(null)
       setImportName('')
       setImportError(null)
-      await queryClient.invalidateQueries({ queryKey: ['navigation', 'maps', warehouseId] })
+      await invalidateMaps()
       navigate(`/configure/facility/maps/${created.id}/edit`)
     },
     onError: (err) => {
@@ -181,7 +326,7 @@ export function FacilityPage() {
       return importMapVersion(warehouseId, files.yaml, files.pgm, 'Sample ROS map')
     },
     onSuccess: async (created) => {
-      await queryClient.invalidateQueries({ queryKey: ['navigation', 'maps', warehouseId] })
+      await invalidateMaps()
       navigate(`/configure/facility/maps/${created.id}/edit`)
     },
     onError: (err) => {
@@ -197,6 +342,12 @@ export function FacilityPage() {
     setPendingPgm(event.target.files?.[0] ?? null)
   }
 
+  function openEdit(version: MapVersionDto) {
+    setEditTarget(version)
+    setEditForm(formFromVersion(version))
+    setEditError(null)
+  }
+
   if (warehousesQuery.isLoading || (warehouseId && mapsQuery.isLoading)) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted">Loading facility maps…</div>
@@ -207,7 +358,7 @@ export function FacilityPage() {
     return (
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
         <h1 className="text-4xl font-book">Facility</h1>
-        <p className="mt-3 text-base text-ink-2">Create an active warehouse before importing maps.</p>
+        <p className="mt-3 text-base text-ink-2">Create an active warehouse before managing maps.</p>
       </div>
     )
   }
@@ -219,8 +370,23 @@ export function FacilityPage() {
           <div>
             <h1 className="text-4xl font-book">Facility</h1>
             <p className="mt-3 text-base text-ink-2">
-              The map robots navigate by: import a ROS occupancy map, edit the draft, then publish it.
+              Create a draft map, import ROS assets, edit metadata, publish to activate, or archive old versions.
             </p>
+            {activeMap ? (
+              <p className="mt-2 text-sm text-ink-2">
+                Active map:{' '}
+                <button
+                  type="button"
+                  className="font-medium text-ink hover:underline"
+                  onClick={() => navigate(`/configure/facility/maps/${activeMap.id}/edit`)}
+                >
+                  {activeMap.code}
+                </button>{' '}
+                · {activeMap.name}
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-muted">No active (published) map for this warehouse.</p>
+            )}
           </div>
           <label className="text-sm text-ink-2">
             Warehouse
@@ -245,6 +411,8 @@ export function FacilityPage() {
           </label>
         </div>
 
+        {actionError ? <p className="mt-4 text-sm text-red">{actionError}</p> : null}
+
         <div className="mt-10 grid grid-cols-2 gap-4">
           {draft ? (
             <MapCard version={draft} warehouseName={warehouseName} when={`Created ${formatDateTime(draft.createdAt)}`}>
@@ -255,12 +423,26 @@ export function FacilityPage() {
               >
                 Publish map
               </Button>
+              <Button variant="outline" onClick={() => openEdit(draft)}>
+                Metadata
+              </Button>
               <Button variant="primary" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>
                 Edit
               </Button>
+              <Button
+                variant="ghost"
+                disabled={archiveMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Archive draft ${draft.code}?`)) archiveMutation.mutate(draft.id)
+                }}
+              >
+                Archive
+              </Button>
             </MapCard>
           ) : (
-            <MissingMapCard title="No draft map">Import a yaml + pgm pair to create a draft MapVersion.</MissingMapCard>
+            <MissingMapCard title="No draft map">
+              Create a metadata-only draft or import a yaml + pgm pair.
+            </MissingMapCard>
           )}
 
           {published ? (
@@ -268,9 +450,21 @@ export function FacilityPage() {
               version={published}
               warehouseName={warehouseName}
               when={`Published ${formatDateTime(published.publishedAt)}`}
+              active={activeMap?.id === published.id}
             >
               <Button variant="surface" onClick={() => navigate(`/configure/facility/maps/${published.id}/edit`)}>
                 View
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={archiveMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Archive published ${published.code}? Robots will lose the active map.`)) {
+                    archiveMutation.mutate(published.id)
+                  }
+                }}
+              >
+                Archive
               </Button>
             </MapCard>
           ) : (
@@ -293,16 +487,157 @@ export function FacilityPage() {
                 <Icon name="bolt" size={15} /> {sampleMutation.isPending ? 'Loading…' : 'Load Sample Map'}
               </Button>
             ) : null}
+            <Button
+              variant="outline"
+              disabled={Boolean(draft)}
+              title={draft ? 'Archive or publish the current draft first' : undefined}
+              onClick={() => {
+                setCreateOpen(true)
+                setCreateForm(emptyCreateForm())
+                setCreateError(null)
+              }}
+            >
+              <Icon name="plus" size={15} /> Create
+            </Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Icon name="upload" size={15} /> Import
             </Button>
           </div>
         </header>
 
+        {createOpen ? (
+          <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
+            <h3 className="text-md font-book">Create map (metadata only)</h3>
+            <p className="mt-1 text-sm text-ink-2">
+              Creates a DRAFT without importing files. Asset URIs stay pending:// until you Import yaml + pgm
+              (stored locally or on S3 per server MapAssetStorage config).
+            </p>
+            <div className="mt-4 flex flex-wrap items-end gap-4">
+              <label className="text-sm">
+                Name
+                <input
+                  className="mt-1 block w-64 rounded border border-outline-soft bg-container px-3 py-2"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Floor 1 draft"
+                />
+              </label>
+              <label className="text-sm">
+                Resolution (m/px)
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={createForm.resolution}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, resolution: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Origin X
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={createForm.originX}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, originX: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Origin Y
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={createForm.originY}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, originY: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Origin Yaw
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={createForm.originYaw}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, originYaw: e.target.value }))}
+                />
+              </label>
+              <Button
+                variant="primary"
+                disabled={createMutation.isPending}
+                onClick={() => createMutation.mutate(createForm)}
+              >
+                {createMutation.isPending ? 'Creating…' : 'Create draft'}
+              </Button>
+              <Button variant="ghost" onClick={() => { setCreateOpen(false); setCreateError(null) }}>
+                Cancel
+              </Button>
+            </div>
+            {createError ? <p className="mt-3 text-sm text-red">{createError}</p> : null}
+          </div>
+        ) : null}
+
+        {editTarget ? (
+          <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
+            <h3 className="text-md font-book">Update map metadata · {editTarget.code}</h3>
+            <p className="mt-1 text-sm text-ink-2">
+              DRAFT only. Asset URIs are kept as-is (local /map-assets or S3 HTTPS after import).
+            </p>
+            <div className="mt-4 flex flex-wrap items-end gap-4">
+              <label className="text-sm">
+                Name
+                <input
+                  className="mt-1 block w-64 rounded border border-outline-soft bg-container px-3 py-2"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Resolution (m/px)
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={editForm.resolution}
+                  onChange={(e) => setEditForm((f) => ({ ...f, resolution: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Origin X
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={editForm.originX}
+                  onChange={(e) => setEditForm((f) => ({ ...f, originX: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Origin Y
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={editForm.originY}
+                  onChange={(e) => setEditForm((f) => ({ ...f, originY: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Origin Yaw
+                <input
+                  className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
+                  value={editForm.originYaw}
+                  onChange={(e) => setEditForm((f) => ({ ...f, originYaw: e.target.value }))}
+                />
+              </label>
+              <Button
+                variant="primary"
+                disabled={updateMutation.isPending}
+                onClick={() => updateMutation.mutate({ version: editTarget, form: editForm })}
+              >
+                {updateMutation.isPending ? 'Saving…' : 'Save metadata'}
+              </Button>
+              <Button variant="ghost" onClick={() => { setEditTarget(null); setEditError(null) }}>
+                Cancel
+              </Button>
+            </div>
+            {editError ? <p className="mt-3 text-sm text-red">{editError}</p> : null}
+          </div>
+        ) : null}
+
         {importOpen || importError ? (
           <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
             <h3 className="text-md font-book">Import ROS map (yaml + pgm)</h3>
-            <p className="mt-1 text-sm text-ink-2">Creates a DRAFT MapVersion with preview PNG under /map-assets.</p>
+            <p className="mt-1 text-sm text-ink-2">
+              Creates a DRAFT MapVersion. Files are stored by MapAssetStorage (Local or S3); URIs are saved on the
+              map row.
+            </p>
             <div className="mt-4 flex flex-wrap items-end gap-4">
               <label className="text-sm">
                 Name
@@ -351,11 +686,12 @@ export function FacilityPage() {
               <Th>Created</Th>
               <Th>Published</Th>
               <Th>Name</Th>
+              <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
             {maps.length === 0 ? (
-              <EmptyRow colSpan={6}>No map versions yet. Import a yaml + pgm to begin.</EmptyRow>
+              <EmptyRow colSpan={7}>No map versions yet. Create a draft or import yaml + pgm.</EmptyRow>
             ) : (
               maps.map((version) => (
                 <Tr key={version.id}>
@@ -367,6 +703,9 @@ export function FacilityPage() {
                     >
                       {version.code}
                     </button>
+                    {activeMap?.id === version.id ? (
+                      <span className="ml-2 text-xs font-medium text-green">Active</span>
+                    ) : null}
                   </Td>
                   <Td className="tabular-nums">v{version.versionNo}</Td>
                   <Td>
@@ -377,6 +716,41 @@ export function FacilityPage() {
                   <Td className="tabular-nums">{formatDateTime(version.createdAt)}</Td>
                   <Td className="tabular-nums">{version.publishedAt ? formatDateTime(version.publishedAt) : '—'}</Td>
                   <Td className="max-w-80 truncate">{version.name}</Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-2">
+                      {version.status === 'DRAFT' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="text-sm text-ink hover:underline"
+                            onClick={() => openEdit(version)}
+                          >
+                            Metadata
+                          </button>
+                          <button
+                            type="button"
+                            className="text-sm text-ink hover:underline"
+                            disabled={publishMutation.isPending}
+                            onClick={() => publishMutation.mutate(version.id)}
+                          >
+                            Publish
+                          </button>
+                        </>
+                      ) : null}
+                      {version.status !== 'ARCHIVED' ? (
+                        <button
+                          type="button"
+                          className="text-sm text-ink-2 hover:underline"
+                          disabled={archiveMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm(`Archive ${version.code}?`)) archiveMutation.mutate(version.id)
+                          }}
+                        >
+                          Archive
+                        </button>
+                      ) : null}
+                    </div>
+                  </Td>
                 </Tr>
               ))
             )}

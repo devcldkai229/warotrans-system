@@ -25,7 +25,34 @@ public sealed class WarehouseModuleApi(WarehouseDbContext dbContext) : IWarehous
         return await dbContext.Containers
             .AsNoTracking()
             .Where(c => containerIds.Contains(c.Id))
-            .Select(c => new ContainerSnapshot(c.Id, c.Barcode, c.Status))
+            .Select(c => new ContainerSnapshot(
+                c.Id,
+                c.Barcode,
+                c.Status,
+                c.CurrentStorageLocationId,
+                c.CurrentLevelNo))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsAsync(
+        IReadOnlyCollection<Guid> storageLocationIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (storageLocationIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await dbContext.StorageLocations
+            .AsNoTracking()
+            .Where(s => storageLocationIds.Contains(s.Id))
+            .Select(s => new StorageLocationSnapshot(
+                s.Id,
+                s.WarehouseId,
+                s.EndpointId,
+                s.Code,
+                s.Name,
+                s.IsActive))
             .ToListAsync(cancellationToken);
     }
 }

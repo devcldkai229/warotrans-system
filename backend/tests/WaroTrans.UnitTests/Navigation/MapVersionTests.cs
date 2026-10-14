@@ -9,6 +9,7 @@ using WaroTrans.Navigation.Features.GetActiveMapVersion;
 using WaroTrans.Navigation.Features.PublishMapVersion;
 using WaroTrans.Navigation.Features.UpdateMapVersion;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 using WaroTrans.Warehouse.Contracts;
 
 namespace WaroTrans.UnitTests.Navigation;
@@ -26,6 +27,11 @@ public class MapVersionTests
             IReadOnlyCollection<Guid> containerIds,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ContainerSnapshot>>([]);
+
+        public Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsAsync(
+            IReadOnlyCollection<Guid> storageLocationIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<StorageLocationSnapshot>>([]);
     }
 
     private sealed class FakeCodeGenerator : IBusinessCodeGenerator
@@ -88,13 +94,13 @@ public class MapVersionTests
         var handler = new CreateMapVersionHandler(
             dbContext, warehouses, new FakeCodeGenerator(), new CreateMapVersionValidator());
 
-        var res1 = await handler.HandleAsync(warehouseId, new CreateMapVersionRequest("Map V1", "/map.pgm", 0.05, 0, 0, 0));
+        var res1 = await handler.HandleAsync(warehouseId, new CreateMapVersionRequest("Map V1", 0.05, 0, 0, 0, MapUri: "/map.pgm"));
         Assert.Equal(1, res1.VersionNo);
         Assert.Equal("DRAFT", res1.Status);
         Assert.Equal("MAP-WH01-V001", res1.Code);
         Assert.Null(res1.PublishedAt);
 
-        var res2 = await handler.HandleAsync(warehouseId, new CreateMapVersionRequest("Map V2", "/map.pgm", 0.05, 0, 0, 0));
+        var res2 = await handler.HandleAsync(warehouseId, new CreateMapVersionRequest("Map V2", 0.05, 0, 0, 0, MapUri: "/map.pgm"));
         Assert.Equal(2, res2.VersionNo);
         Assert.Equal("MAP-WH01-V002", res2.Code);
     }
@@ -107,7 +113,7 @@ public class MapVersionTests
             dbContext, new FakeWarehouseModule(), new FakeCodeGenerator(), new CreateMapVersionValidator());
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            handler.HandleAsync(Guid.NewGuid(), new CreateMapVersionRequest("Map", "/map.pgm", 0.05, 0, 0, 0)));
+            handler.HandleAsync(Guid.NewGuid(), new CreateMapVersionRequest("Map", 0.05, 0, 0, 0, MapUri: "/map.pgm")));
 
         Assert.Equal("warehouse_not_found", ex.Code);
     }
@@ -124,7 +130,28 @@ public class MapVersionTests
             new CreateMapVersionValidator());
 
         await Assert.ThrowsAsync<FluentValidation.ValidationException>(() =>
-            handler.HandleAsync(warehouseId, new CreateMapVersionRequest("Invalid", "/map.pgm", 0, 0, 0, 0)));
+            handler.HandleAsync(warehouseId, new CreateMapVersionRequest("Invalid", 0, 0, 0, 0, MapUri: "/map.pgm")));
+    }
+
+    [Fact]
+    public async Task CreateMapVersion_WithoutMapUri_StoresPendingPlaceholders()
+    {
+        using var dbContext = CreateDbContext();
+        var warehouseId = Guid.NewGuid();
+        var handler = new CreateMapVersionHandler(
+            dbContext,
+            new FakeWarehouseModule(new WarehouseSnapshot(warehouseId, "WH01", true)),
+            new FakeCodeGenerator(),
+            new CreateMapVersionValidator());
+
+        var res = await handler.HandleAsync(
+            warehouseId,
+            new CreateMapVersionRequest("Metadata only", 0.05, -10, -20, 0));
+
+        Assert.Equal("DRAFT", res.Status);
+        Assert.Equal(PendingMapAssetUris.MapUri, res.MapUri);
+        Assert.Equal(PendingMapAssetUris.MapYamlUri, res.MapYamlUri);
+        Assert.Equal(PendingMapAssetUris.PreviewImageUri, res.PreviewImageUri);
     }
 
     [Fact]
@@ -185,6 +212,20 @@ public class MapVersionTests
 
         await Assert.ThrowsAsync<DomainValidationException>(() =>
             new PublishMapVersionHandler(dbContext).HandleAsync(map.Id));
+    }
+
+    [Fact]
+    public async Task PublishMapVersion_Throws_WhenAssetsPending()
+    {
+        using var dbContext = CreateDbContext();
+        var map = SeedMap(dbContext, Guid.NewGuid(), MapStatus.DRAFT);
+        map.MapUri = PendingMapAssetUris.MapUri;
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            new PublishMapVersionHandler(dbContext).HandleAsync(map.Id));
+
+        Assert.Equal("map_assets_pending", ex.Code);
     }
 
     [Fact]
