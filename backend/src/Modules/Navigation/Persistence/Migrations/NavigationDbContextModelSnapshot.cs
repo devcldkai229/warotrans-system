@@ -64,6 +64,10 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("max_speed");
 
+                    b.Property<double>("WidthMeters")
+                        .HasColumnType("double precision")
+                        .HasColumnName("width_meters");
+
                     b.HasKey("Id")
                         .HasName("p_k_edges");
 
@@ -80,7 +84,12 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_edges_map_version_id_code");
 
-                    b.ToTable("edges", "navigation");
+                    b.ToTable("edges", "navigation", t =>
+                        {
+                            t.HasCheckConstraint("ck_edges_capacity_positive", "capacity >= 1");
+
+                            t.HasCheckConstraint("ck_edges_width_meters_positive", "width_meters > 0");
+                        });
                 });
 
             modelBuilder.Entity("WaroTrans.Navigation.Entities.Endpoint", b =>
@@ -233,9 +242,38 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("content_hash");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("FrameId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("frame_id");
+
+                    b.Property<double>("FreeThreshold")
+                        .HasColumnType("double precision")
+                        .HasColumnName("free_threshold");
+
+                    b.Property<int>("ImageHeightPixels")
+                        .HasColumnType("integer")
+                        .HasColumnName("image_height_pixels");
+
+                    b.Property<int>("ImageWidthPixels")
+                        .HasColumnType("integer")
+                        .HasColumnName("image_width_pixels");
 
                     b.Property<string>("MapUri")
                         .IsRequired()
@@ -243,11 +281,24 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("map_uri");
 
+                    b.Property<string>("MapYamlUri")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("map_yaml_uri");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("name");
+
+                    b.Property<bool>("Negate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("negate");
+
+                    b.Property<double>("OccupiedThreshold")
+                        .HasColumnType("double precision")
+                        .HasColumnName("occupied_threshold");
 
                     b.Property<double>("OriginX")
                         .HasColumnType("double precision")
@@ -260,6 +311,11 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                     b.Property<double>("OriginYaw")
                         .HasColumnType("double precision")
                         .HasColumnName("origin_yaw");
+
+                    b.Property<string>("PreviewImageUri")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("preview_image_uri");
 
                     b.Property<DateTimeOffset?>("PublishedAt")
                         .HasColumnType("timestamp with time zone")
@@ -285,6 +341,10 @@ namespace WaroTrans.Navigation.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("p_k_map_versions");
+
+                    b.HasIndex("WarehouseId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_map_versions_warehouse_id_code");
 
                     b.HasIndex("WarehouseId", "VersionNo")
                         .IsUnique()
@@ -333,6 +393,14 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
 
+                    b.Property<JsonDocument>("Policy")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("policy");
+
+                    b.Property<int>("PolicySchemaVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("policy_schema_version");
+
                     b.Property<string>("ZoneType")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -355,7 +423,10 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_zones_map_version_id_code");
 
-                    b.ToTable("zones", "navigation");
+                    b.ToTable("zones", "navigation", t =>
+                        {
+                            t.HasCheckConstraint("ck_zones_capacity_positive", "capacity >= 1");
+                        });
                 });
 #pragma warning restore 612, 618
         }

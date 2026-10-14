@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.IntegrationTests.Navigation.Endpoints;
 
@@ -41,11 +43,31 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
         yawTolerance = 0.2
     };
 
+    private async Task<Guid> SeedWarehouseAsync()
+    {
+        var warehouseId = Guid.NewGuid();
+        var suffix = warehouseId.ToString("N")[..8].ToUpperInvariant();
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+        db.Warehouses.Add(new WaroTrans.Warehouse.Entities.Warehouse
+        {
+            Id = warehouseId,
+            Code = $"WH-{suffix}",
+            Name = $"Warehouse {suffix}",
+            Timezone = "Asia/Ho_Chi_Minh",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        return warehouseId;
+    }
+
     private async Task<Guid> CreateDraftMapAsync()
     {
+        var warehouseId = await SeedWarehouseAsync();
         var response = await Client.PostAsJsonAsync(
-            $"/api/navigation/warehouses/{Guid.NewGuid()}/maps",
-            new { name = "Map", mapUri = "http://storage/map.yaml", resolution = 0.05, originX = 0, originY = 0, originYaw = 0 });
+            $"/api/navigation/warehouses/{warehouseId}/maps",
+            new { name = "Map", mapUri = "/map-assets/map.pgm", resolution = 0.05, originX = 0, originY = 0, originYaw = 0 });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<MapDto>())!.Id;
     }

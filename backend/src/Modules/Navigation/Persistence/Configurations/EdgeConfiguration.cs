@@ -13,7 +13,11 @@ public sealed class EdgeConfiguration : IEntityTypeConfiguration<Edge>
 
         builder.Property(x => x.Code).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Geometry).HasColumnType("jsonb").IsRequired();
+        builder.Property(x => x.WidthMeters).IsRequired();
         builder.Property(x => x.Direction).HasConversion<string>().HasMaxLength(50).IsRequired();
+
+        builder.ToTable(t => t.HasCheckConstraint("ck_edges_width_meters_positive", "width_meters > 0"));
+        builder.ToTable(t => t.HasCheckConstraint("ck_edges_capacity_positive", "capacity >= 1"));
 
         builder.HasIndex(x => new { x.MapVersionId, x.Code }).IsUnique();
         builder.HasIndex(x => x.MapVersionId);

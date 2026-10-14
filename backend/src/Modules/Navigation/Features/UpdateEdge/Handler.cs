@@ -1,8 +1,9 @@
-using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Enums;
+using WaroTrans.Navigation.Features.Shared;
+using WaroTrans.Navigation.Geometry;
 using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Features.UpdateEdge;
@@ -11,7 +12,7 @@ public sealed class UpdateEdgeHandler(
     NavigationDbContext dbContext,
     IValidator<UpdateEdgeRequest> validator)
 {
-    public async Task<UpdateEdgeResponse> HandleAsync(
+    public async Task<EdgeResponse> HandleAsync(
         Guid id,
         UpdateEdgeRequest request,
         CancellationToken cancellationToken = default)
@@ -50,9 +51,9 @@ public sealed class UpdateEdgeHandler(
                 "map_version_not_draft");
         }
 
-        var points = request.Geometry.Points.Select(p => new EdgePointResponse(p.X, p.Y)).ToList();
-
-        edge.Geometry = JsonSerializer.SerializeToDocument(new { points = points.Select(p => new { x = p.X, y = p.Y }) });
+        edge.Geometry?.Dispose();
+        edge.Geometry = GeoJsonGeometry.NormalizeLineString(request.Geometry);
+        edge.WidthMeters = request.WidthMeters;
         edge.Direction = Enum.Parse<EdgeDirection>(request.Direction, ignoreCase: true);
         edge.Capacity = request.Capacity;
         edge.MaxSpeed = request.MaxSpeed;
@@ -60,14 +61,6 @@ public sealed class UpdateEdgeHandler(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new UpdateEdgeResponse(
-            edge.Id,
-            edge.MapVersionId,
-            edge.Code,
-            new EdgeGeometryResponse(points),
-            edge.Direction.ToString(),
-            edge.Capacity,
-            edge.MaxSpeed,
-            edge.IsActive);
+        return EdgeResponse.From(edge);
     }
 }

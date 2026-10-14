@@ -67,7 +67,8 @@ function send(path: string, init: RequestInit, token: string | null): Promise<Re
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  if (init.body !== undefined && !headers.has('Content-Type')) {
+  // Let the browser set multipart boundary for FormData; JSON otherwise.
+  if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
   // `include` lets Identity endpoints receive/rotate the refresh cookie across dev origins.

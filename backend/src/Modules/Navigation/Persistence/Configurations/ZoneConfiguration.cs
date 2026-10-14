@@ -15,6 +15,10 @@ public sealed class ZoneConfiguration : IEntityTypeConfiguration<Zone>
         builder.Property(x => x.Name).HasMaxLength(255).IsRequired();
         builder.Property(x => x.ZoneType).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.Geometry).HasColumnType("jsonb").IsRequired();
+        builder.Property(x => x.Policy).HasColumnType("jsonb");
+        builder.Property(x => x.PolicySchemaVersion).IsRequired();
+
+        builder.ToTable(t => t.HasCheckConstraint("ck_zones_capacity_positive", "capacity >= 1"));
 
         builder.HasIndex(x => new { x.MapVersionId, x.Code }).IsUnique();
         builder.HasIndex(x => x.MapVersionId);

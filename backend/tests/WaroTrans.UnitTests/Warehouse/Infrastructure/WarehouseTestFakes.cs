@@ -36,6 +36,9 @@ public sealed class FakeBusinessCodeGenerator(string containerCode = "CTN-202610
     public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult("EDGE-001");
 
+    public Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
+        Task.FromResult($"ZONE-{suffix}");
+
     public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult("RBT-001");
 

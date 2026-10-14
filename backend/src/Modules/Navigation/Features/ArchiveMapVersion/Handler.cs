@@ -1,13 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Enums;
+using WaroTrans.Navigation.Features.Shared;
 using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Features.ArchiveMapVersion;
 
 public sealed class ArchiveMapVersionHandler(NavigationDbContext dbContext)
 {
-    public async Task<ArchiveMapVersionResponse> HandleAsync(
+    public async Task<MapVersionResponse> HandleAsync(
         Guid id,
         CancellationToken cancellationToken = default)
     {
@@ -30,18 +31,6 @@ public sealed class ArchiveMapVersionHandler(NavigationDbContext dbContext)
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new ArchiveMapVersionResponse(
-            mapVersion.Id,
-            mapVersion.WarehouseId,
-            mapVersion.VersionNo,
-            mapVersion.Name,
-            mapVersion.Status.ToString(),
-            mapVersion.MapUri,
-            mapVersion.Resolution,
-            mapVersion.OriginX,
-            mapVersion.OriginY,
-            mapVersion.OriginYaw,
-            mapVersion.CreatedAt,
-            mapVersion.PublishedAt);
+        return MapVersionResponse.From(mapVersion);
     }
 }

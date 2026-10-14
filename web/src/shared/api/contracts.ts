@@ -417,6 +417,8 @@ export interface Edge {
   mapVersionId: string
   code: string
   geometry: ZoneGeometry
+  /** Corridor width in meters (API: widthMeters). */
+  widthMeters?: number
   direction: EdgeDirection
   capacity: number
   maxSpeed: number | null

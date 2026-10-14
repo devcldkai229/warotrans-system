@@ -10,15 +10,20 @@ using WaroTrans.Navigation.Features.ArchiveMapVersion;
 using WaroTrans.Navigation.Features.CreateEdge;
 using WaroTrans.Navigation.Features.CreateEndpoint;
 using WaroTrans.Navigation.Features.CreateMapVersion;
+using WaroTrans.Navigation.Features.CreateZone;
 using WaroTrans.Navigation.Features.DeleteEdge;
+using WaroTrans.Navigation.Features.DeleteZone;
 using WaroTrans.Navigation.Features.GetActiveMapVersion;
 using WaroTrans.Navigation.Features.GetEdge;
 using WaroTrans.Navigation.Features.GetEndpoint;
 using WaroTrans.Navigation.Features.GetMapVersion;
+using WaroTrans.Navigation.Features.GetZone;
+using WaroTrans.Navigation.Features.ImportMapVersion;
 using WaroTrans.Navigation.Features.PublishMapVersion;
 using WaroTrans.Navigation.Features.UpdateEdge;
 using WaroTrans.Navigation.Features.UpdateEndpoint;
 using WaroTrans.Navigation.Features.UpdateMapVersion;
+using WaroTrans.Navigation.Features.UpdateZone;
 using WaroTrans.Navigation.Persistence;
 using WaroTrans.Navigation.Services;
 
@@ -46,6 +51,12 @@ public static class NavigationModule
         services.AddScoped<GetEdgeHandler>();
         services.AddScoped<UpdateEdgeHandler>();
         services.AddScoped<DeleteEdgeHandler>();
+        services.AddScoped<CreateZoneHandler>();
+        services.AddScoped<GetZoneHandler>();
+        services.AddScoped<UpdateZoneHandler>();
+        services.AddScoped<DeleteZoneHandler>();
+        services.AddScoped<ImportMapVersionHandler>();
+        services.AddSingleton<IMapAssetStore, LocalMapAssetStore>();
 
         services.AddScoped<INavigationModule, NavigationModuleApi>();
 
@@ -63,6 +74,7 @@ public static class NavigationModule
         GetActiveMapVersionEndpoint.Map(group);
         PublishMapVersionEndpoint.Map(group);
         ArchiveMapVersionEndpoint.Map(group);
+        ImportMapVersionEndpoint.Map(group);
         CreateEndpointEndpoint.Map(group);
         GetEndpointEndpoint.Map(group);
         UpdateEndpointEndpoint.Map(group);
@@ -70,6 +82,10 @@ public static class NavigationModule
         GetEdgeEndpoint.Map(group);
         UpdateEdgeEndpoint.Map(group);
         DeleteEdgeEndpoint.Map(group);
+        CreateZoneEndpoint.Map(group);
+        GetZoneEndpoint.Map(group);
+        UpdateZoneEndpoint.Map(group);
+        DeleteZoneEndpoint.Map(group);
 
         return endpoints;
     }

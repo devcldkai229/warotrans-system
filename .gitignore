@@ -8,6 +8,9 @@ web-build/
 *.tsbuildinfo
 ./cursor/*
 
+# Local ROS map assets (Host static /map-assets)
+backend/src/WaroTrans.Host/data/maps/
+
 # Expo
 .expo/
 expo-env.d.ts

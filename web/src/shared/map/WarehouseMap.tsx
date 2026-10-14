@@ -96,6 +96,8 @@ export interface WarehouseMapProps {
   onBackgroundClick?: (point: Point) => void
   /** Edge being drawn in the editor. */
   drawing?: { points: Point[]; direction: EdgeDirection }
+  /** Occupancy preview PNG (MapVersion.previewImageUri), stretched to map bounds. */
+  occupancyImageUrl?: string | null
   className?: string
   /** HTML drawn on top of the map: positioned with `toPercent`, inside the same square as the map. */
   children?: ReactNode
@@ -139,6 +141,7 @@ export function WarehouseMap({
   onEndpointClick,
   onBackgroundClick,
   drawing,
+  occupancyImageUrl,
   className,
   children,
 }: WarehouseMapProps) {
@@ -262,7 +265,20 @@ export function WarehouseMap({
           </defs>
 
           <rect x={0} y={0} width={width} height={height} fill="#fff" />
-          <rect x={0} y={0} width={width} height={height} fill="url(#wmap-dots)" />
+          {occupancyImageUrl ? (
+            <image
+              href={occupancyImageUrl}
+              x={0}
+              y={0}
+              width={width}
+              height={height}
+              preserveAspectRatio="none"
+              opacity={0.85}
+              style={{ pointerEvents: 'none' }}
+            />
+          ) : (
+            <rect x={0} y={0} width={width} height={height} fill="url(#wmap-dots)" />
+          )}
 
           {/* Zones: soft tinted areas with a thin edge, a coloured dot and the name. */}
           {show.zones ? (

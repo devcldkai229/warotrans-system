@@ -33,6 +33,13 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
     public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) =>
         NextFixedAsync("edge", "EDGE-", 3, cancellationToken);
 
+    public async Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default)
+    {
+        var normalized = suffix.Trim().ToUpperInvariant().Replace(' ', '-');
+        _ = await NextValueAsync($"zone:{normalized}", null, cancellationToken);
+        return $"ZONE-{normalized}";
+    }
+
     public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) =>
         NextFixedAsync("robot", "RBT-", 3, cancellationToken);
 
