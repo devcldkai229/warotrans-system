@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import {
@@ -15,8 +14,9 @@ import {
   Truck,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
-import { typography } from '../../shared/theme/typography';
+import { Text } from '../../shared/ui/Text';
 import { WorkflowItem } from './workflowTemplates';
 
 interface WorkflowTemplateCardProps {
@@ -31,47 +31,28 @@ export function WorkflowTemplateCard({
   const isSafety = workflow.category === 'SAFETY';
 
   const renderIcon = () => {
+    const iconSize = 20;
+    const iconColor = isSafety ? colors.danger : colors.primary;
+
     switch (workflow.icon) {
       case 'package-check':
-        return <PackageCheck size={20} color={workflow.badgeTone} />;
+        return <PackageCheck size={iconSize} color={iconColor} />;
       case 'truck':
-        return <Truck size={20} color={workflow.badgeTone} />;
+        return <Truck size={iconSize} color={iconColor} />;
       case 'rotate-cw':
-        return <RotateCw size={20} color={workflow.badgeTone} />;
+        return <RotateCw size={iconSize} color={iconColor} />;
       case 'navigation':
-        return <Navigation size={20} color={workflow.badgeTone} />;
+        return <Navigation size={iconSize} color={iconColor} />;
       case 'layers':
-        return <Layers size={20} color={workflow.badgeTone} />;
+        return <Layers size={iconSize} color={iconColor} />;
       case 'octagon':
-        return <AlertOctagon size={20} color={workflow.badgeTone} />;
+        return <AlertOctagon size={iconSize} color={iconColor} />;
       case 'life-buoy':
-        return <LifeBuoy size={20} color={workflow.badgeTone} />;
+        return <LifeBuoy size={iconSize} color={iconColor} />;
       default:
-        return <PackageCheck size={20} color={workflow.badgeTone} />;
+        return <PackageCheck size={iconSize} color={iconColor} />;
     }
   };
-
-  const getBadgeStyle = () => {
-    if (workflow.id === 'replenishment') {
-      return { bg: 'rgba(0, 92, 209, 0.1)', text: colors.primary, border: 'rgba(0, 92, 209, 0.2)' };
-    }
-    switch (workflow.category) {
-      case 'INBOUND':
-        return { bg: 'rgba(0, 92, 209, 0.1)', text: colors.primary, border: 'rgba(0, 92, 209, 0.2)' };
-      case 'OUTBOUND':
-        return { bg: '#fef3c7', text: '#78350f', border: 'rgba(245, 158, 11, 0.25)' };
-      case 'INTERNAL':
-        return { bg: '#d2f4dc', text: colors.success, border: 'rgba(0, 122, 56, 0.25)' };
-      case 'DIRECT':
-        return { bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' };
-      case 'SAFETY':
-        return { bg: '#fee2e2', text: colors.danger, border: 'rgba(200, 39, 43, 0.25)' };
-      default:
-        return { bg: '#f1f5f9', text: colors.textSecondary, border: colors.border };
-    }
-  };
-
-  const badgeStyle = getBadgeStyle();
 
   return (
     <Pressable
@@ -85,18 +66,25 @@ export function WorkflowTemplateCard({
       accessibilityLabel={`Select workflow ${workflow.name}`}
     >
       <View style={styles.topRow}>
-        <View style={[styles.iconBox, { backgroundColor: workflow.tone }]}>
+        <View style={[styles.iconBox, isSafety && styles.iconBoxSafety]}>
           {renderIcon()}
         </View>
-        <View style={[styles.badge, { backgroundColor: badgeStyle.bg, borderColor: badgeStyle.border }]}>
-          <Text style={[styles.badgeText, { color: badgeStyle.text }]} numberOfLines={1}>
+        <View style={[styles.badge, isSafety ? styles.badgeSafety : styles.badgeDefault]}>
+          <Text
+            variant="caption"
+            color={isSafety ? colors.danger : colors.primaryText}
+            style={styles.badgeText}
+            numberOfLines={1}
+          >
             {workflow.category}
           </Text>
         </View>
       </View>
 
-      <Text style={styles.name} numberOfLines={1}>{workflow.name}</Text>
-      <Text style={styles.note} numberOfLines={2}>
+      <Text variant="bodyMedium" numberOfLines={1} style={styles.name}>
+        {workflow.name}
+      </Text>
+      <Text variant="caption" color={colors.textSecondary} numberOfLines={2} style={styles.note}>
         {workflow.note}
       </Text>
     </Pressable>
@@ -105,18 +93,19 @@ export function WorkflowTemplateCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: radii.lg,
     padding: 14,
-    minHeight: 144,
+    minHeight: 124,
     justifyContent: 'space-between',
-    ...shadows.panel,
+    gap: 8,
+    ...shadows.sm,
   },
   cardSafety: {
     borderColor: colors.dangerBorder,
-    backgroundColor: '#fffdfd',
+    backgroundColor: colors.surface,
   },
   cardPressed: {
     borderColor: colors.primary,
@@ -126,44 +115,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
     gap: 8,
   },
   iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 38,
+    height: 38,
+    borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
     flexShrink: 0,
+  },
+  iconBoxSafety: {
+    backgroundColor: colors.dangerBg,
   },
   badge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
     borderWidth: 1,
     flexShrink: 1,
-    minWidth: 0,
+  },
+  badgeDefault: {
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
+  },
+  badgeSafety: {
+    backgroundColor: colors.dangerBg,
+    borderColor: colors.dangerBorder,
   },
   badgeText: {
-    fontSize: 8,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    letterSpacing: 0.8,
+    fontWeight: '700',
+    fontSize: 11,
   },
   name: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-    marginTop: 'auto',
+    fontWeight: '700',
   },
   note: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    lineHeight: 14,
-    marginTop: 4,
-    fontFamily: typography.fontSans,
+    lineHeight: 16,
   },
 });

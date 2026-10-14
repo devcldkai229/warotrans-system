@@ -4,6 +4,7 @@ import { ArrowRight, Boxes, Truck } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
+import { typography } from '../../shared/theme/typography';
 import { JobStatus } from '../../shared/types/contracts';
 import { Button, Card, ProgressMeter, StatusPill, Text } from '../../shared/ui';
 import type { ButtonVariant, MeterTone } from '../../shared/ui';
@@ -130,7 +131,7 @@ export function JobCard({ job, onPress }: JobCardProps) {
           <Text variant="caption" color={colors.textSecondary}>
             Route
           </Text>
-          <Text variant="body" numberOfLines={1} style={styles.insetValue}>
+          <Text variant="body" numberOfLines={1} style={[styles.insetValue, styles.routeValue]}>
             {job.route}
           </Text>
         </View>
@@ -141,7 +142,13 @@ export function JobCard({ job, onPress }: JobCardProps) {
             Details
           </Text>
           <Text variant="body" numberOfLines={1} style={styles.insetValue}>
-            {containerCode} · {job.robot}
+            <Text style={styles.boldMono}>{containerCode}</Text>
+            {job.robot ? (
+              <>
+                <Text style={styles.dotSeparator}> · </Text>
+                <Text style={styles.boldRobot}>{job.robot}</Text>
+              </>
+            ) : null}
           </Text>
         </View>
       </View>
@@ -203,7 +210,24 @@ const styles = StyleSheet.create({
   insetValue: {
     flex: 1,
     minWidth: 0,
-    fontWeight: '500',
+    fontWeight: '400',
+    color: colors.textSecondary,
+  },
+  routeValue: {
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  boldMono: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  boldRobot: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  dotSeparator: {
+    color: colors.textMuted,
   },
   progressBlock: {
     gap: 6,

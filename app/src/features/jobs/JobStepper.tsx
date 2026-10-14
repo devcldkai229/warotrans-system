@@ -1,22 +1,34 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { StyleSheet, View } from 'react-native';
+import { Check, Clock, User, Navigation } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
-import { typography } from '../../shared/theme/typography';
+import { radii } from '../../shared/theme/radii';
 import { JobStepSummary } from '../../shared/types/contracts';
+import { Text } from '../../shared/ui';
 
 interface JobStepperProps {
   steps: JobStepSummary[];
 }
 
 export function JobStepper({ steps }: JobStepperProps) {
+  const completedCount = steps.filter((s) => s.status === 'COMPLETED').length;
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>WORKFLOW EXECUTION STEPPER</Text>
-        <Text style={styles.stepCount}>
-          {steps.filter((s) => s.status === 'COMPLETED').length} / {steps.length} Steps Done
-        </Text>
+        <View>
+          <Text variant="headline" style={styles.headerTitle}>
+            Workflow Execution Plan
+          </Text>
+          <Text variant="caption" color={colors.textSecondary}>
+            Step-by-step task itinerary
+          </Text>
+        </View>
+        <View style={styles.progressBadge}>
+          <Text variant="caption" color={colors.textSecondary} style={styles.badgeText}>
+            {completedCount} of {steps.length} Steps
+          </Text>
+        </View>
       </View>
 
       <View style={styles.stepsList}>
@@ -24,10 +36,11 @@ export function JobStepper({ steps }: JobStepperProps) {
           const isCompleted = step.status === 'COMPLETED';
           const isExecuting = step.status === 'EXECUTING';
           const isLast = idx === steps.length - 1;
+          const isHuman = step.type === 'HUMAN_INTERACTION';
 
           return (
             <View key={step.sequenceNo} style={styles.stepItem}>
-              {/* Stepper Left Indicator */}
+              {/* Vertical timeline spine */}
               <View style={styles.indicatorCol}>
                 <View
                   style={[
@@ -37,14 +50,11 @@ export function JobStepper({ steps }: JobStepperProps) {
                   ]}
                 >
                   {isCompleted ? (
-                    <Check size={12} color="#ffffff" strokeWidth={3} />
+                    <Check size={14} color="#ffffff" strokeWidth={2.8} />
+                  ) : isExecuting ? (
+                    <View style={styles.executingDot} />
                   ) : (
-                    <Text
-                      style={[
-                        styles.circleText,
-                        isExecuting && styles.circleTextActive,
-                      ]}
-                    >
+                    <Text variant="caption" color={colors.textMuted} style={styles.circleNumber}>
                       {step.sequenceNo}
                     </Text>
                   )}
@@ -59,50 +69,59 @@ export function JobStepper({ steps }: JobStepperProps) {
                 )}
               </View>
 
-              {/* Stepper Content */}
+              {/* Step content */}
               <View style={styles.contentCol}>
                 <View style={styles.titleRow}>
                   <Text
+                    variant="bodyMedium"
                     style={[
                       styles.stepTitle,
                       isExecuting && styles.stepTitleExecuting,
+                      isCompleted && styles.stepTitleCompleted,
                     ]}
                   >
                     {step.title}
                   </Text>
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      step.type === 'HUMAN_INTERACTION'
-                        ? styles.typeBadgeHuman
-                        : styles.typeBadgeMove,
-                    ]}
-                  >
+
+                  <View style={[styles.typeBadge, isHuman ? styles.typeBadgeHuman : styles.typeBadgeMove]}>
+                    {isHuman ? (
+                      <User size={12} color={colors.warning} style={{ marginRight: 4 }} />
+                    ) : (
+                      <Navigation size={12} color={colors.primary} style={{ marginRight: 4 }} />
+                    )}
                     <Text
-                      style={[
-                        styles.typeBadgeText,
-                        step.type === 'HUMAN_INTERACTION'
-                          ? styles.typeTextHuman
-                          : styles.typeTextMove,
-                      ]}
+                      variant="caption"
+                      color={isHuman ? colors.warning : colors.primary}
+                      style={styles.typeBadgeText}
                     >
-                      {step.type.replace('_', ' ')}
+                      {isHuman ? 'Handover' : 'Move'}
                     </Text>
                   </View>
                 </View>
 
-                <Text style={styles.stepDesc}>{step.description}</Text>
-
-                {step.targetEndpointCode && (
-                  <Text style={styles.endpointTarget}>
-                    Endpoint: {step.targetEndpointCode}
+                {step.description ? (
+                  <Text variant="caption" color={colors.textSecondary} style={styles.stepDesc}>
+                    {step.description}
                   </Text>
-                )}
+                ) : null}
+
+                {step.targetEndpointCode ? (
+                  <View style={styles.endpointRow}>
+                    <Text variant="caption" color={colors.textMuted} style={styles.endpointLabel}>
+                      Location:
+                    </Text>
+                    <Text variant="caption" color={colors.textPrimary} style={styles.endpointCode}>
+                      {step.targetEndpointCode}
+                    </Text>
+                  </View>
+                ) : null}
 
                 {isExecuting && (
                   <View style={styles.executingPill}>
-                    <View style={styles.pulseDot} />
-                    <Text style={styles.executingText}>In Progress Now</Text>
+                    <Clock size={12} color={colors.primaryDark} />
+                    <Text variant="caption" color={colors.primaryDark} style={styles.executingText}>
+                      Active Step · Action Required
+                    </Text>
                   </View>
                 )}
               </View>
@@ -117,36 +136,36 @@ export function JobStepper({ steps }: JobStepperProps) {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    padding: 16,
+    gap: 14,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceSubtle,
-    paddingBottom: 8,
+    borderBottomColor: colors.border,
+    paddingBottom: 12,
   },
-  title: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
+  headerTitle: {
+    fontWeight: '700',
   },
-  stepCount: {
-    fontSize: 10,
-    fontWeight: '800',
-    fontFamily: typography.fontMono,
-    color: colors.primary,
+  progressBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  badgeText: {
+    fontWeight: '600',
   },
   stepsList: {
-    gap: 4,
+    gap: 0,
   },
   stepItem: {
     flexDirection: 'row',
@@ -154,34 +173,37 @@ const styles = StyleSheet.create({
   },
   indicatorCol: {
     alignItems: 'center',
-    width: 24,
+    width: 28,
   },
   circle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.surfaceSubtle,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
   circleCompleted: {
     backgroundColor: colors.success,
     borderColor: colors.success,
   },
   circleExecuting: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: '#ffffff',
+    borderColor: colors.darkAction,
+    borderWidth: 2,
   },
-  circleText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
+  executingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.darkAction,
   },
-  circleTextActive: {
-    color: colors.textInverse,
+  circleNumber: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   verticalLine: {
     width: 2,
@@ -190,82 +212,76 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   lineCompleted: {
-    backgroundColor: colors.successBorder,
+    backgroundColor: colors.success,
   },
   contentCol: {
     flex: 1,
-    paddingBottom: 16,
+    paddingBottom: 20,
+    gap: 4,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   stepTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
+    fontWeight: '600',
+    flex: 1,
   },
   stepTitleExecuting: {
-    color: colors.primary,
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  stepTitleCompleted: {
+    color: colors.textSecondary,
   },
   typeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
   },
   typeBadgeMove: {
-    backgroundColor: colors.infoBg,
+    backgroundColor: colors.primaryLight,
   },
   typeBadgeHuman: {
     backgroundColor: colors.warningBg,
   },
   typeBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    fontFamily: typography.fontSans,
-  },
-  typeTextMove: {
-    color: colors.info,
-  },
-  typeTextHuman: {
-    color: colors.warning,
+    fontWeight: '700',
+    fontSize: 11,
   },
   stepDesc: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-    lineHeight: 15,
+    lineHeight: 18,
   },
-  endpointTarget: {
-    fontSize: 10,
-    fontFamily: typography.fontMono,
-    fontWeight: '700',
-    color: colors.textMuted,
+  endpointRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 2,
+  },
+  endpointLabel: {
+    fontSize: 12,
+  },
+  endpointCode: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   executingPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     backgroundColor: colors.primaryLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
     alignSelf: 'flex-start',
-    marginTop: 6,
-  },
-  pulseDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: colors.primary,
+    marginTop: 4,
   },
   executingText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.primaryDark,
-    fontFamily: typography.fontSans,
+    fontWeight: '700',
+    fontSize: 11,
   },
 });

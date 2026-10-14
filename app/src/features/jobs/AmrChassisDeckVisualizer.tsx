@@ -1,65 +1,12 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
-import { Box, Layers, Lock } from 'lucide-react-native';
+import React from 'react';
+import { StyleSheet, View, Pressable } from 'react-native';
+import { Box, Layers, Lock, ArrowDownRight, ArrowUpRight } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { ContainerSlot } from '../../shared/types/contracts';
+import { Text } from '../../shared/ui';
 import { JobContainerItem } from './jobData';
-
-function TargetTrayPulseWrapper({
-  isTarget,
-  children,
-  style,
-}: {
-  isTarget: boolean;
-  children: React.ReactNode;
-  style: any;
-}) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (!isTarget) {
-      pulseAnim.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 0.58,
-          duration: 900,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: Platform.OS !== 'web',
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 900,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: Platform.OS !== 'web',
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [isTarget, pulseAnim]);
-
-  if (!isTarget) {
-    return <View style={style}>{children}</View>;
-  }
-
-  return (
-    <Animated.View
-      style={[
-        style,
-        {
-          opacity: pulseAnim,
-        },
-        Platform.OS === 'web' ? ({ className: 'animate-pulse' } as any) : undefined,
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
-}
 
 interface AmrChassisDeckVisualizerProps {
   containers?: JobContainerItem[];
@@ -68,6 +15,7 @@ interface AmrChassisDeckVisualizerProps {
   isWaiting?: boolean;
   robotId?: string;
   robotCode?: string;
+  onSelectSlot?: (containerCode: string) => void;
 }
 
 export function AmrChassisDeckVisualizer({
@@ -77,136 +25,151 @@ export function AmrChassisDeckVisualizer({
   isWaiting = false,
   robotId = 'AMR-01',
   robotCode,
+  onSelectSlot,
 }: AmrChassisDeckVisualizerProps) {
   const activeRobot = robotCode || robotId;
   const slotDefinitions = [
-    { id: 1, name: 'Slot 1 (Front)', label: 'TRAY 1 · FRONT' },
-    { id: 2, name: 'Slot 2 (Mid)', label: 'TRAY 2 · MID' },
-    { id: 3, name: 'Slot 3 (Rear)', label: 'TRAY 3 · REAR' },
+    { id: 1, name: 'Tray 1', position: 'Front' },
+    { id: 2, name: 'Tray 2', position: 'Mid' },
+    { id: 3, name: 'Tray 3', position: 'Rear' },
   ];
 
-  const items = containers || (legacySlots?.map(s => ({
-    code: s.containerBarcode || '',
-    slot: s.slotLabel,
-    action: s.action as any,
-    location: '',
-    product: s.productName || '',
-    qty: s.quantity || 0,
-  }))) || [];
+  const items =
+    containers ||
+    legacySlots?.map((s) => ({
+      code: s.containerBarcode || '',
+      slot: s.slotLabel,
+      action: s.action as any,
+      location: '',
+      product: s.productName || '',
+      qty: s.quantity || 0,
+    })) ||
+    [];
 
-  const filledCount = items.filter(c => c.action && c.action !== 'EMPTY' && c.code).length;
+  const loadedCount = items.filter((c) => c.action && c.action !== 'EMPTY' && c.code).length;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Deck Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
-          <View style={styles.iconWrap}>
-            <Layers size={14} color={colors.primary} />
+          <View style={styles.iconWell}>
+            <Layers size={16} color={colors.primary} />
           </View>
-          <Text style={styles.title}>
-            {activeRobot} Flatbed Deck
-          </Text>
+          <View>
+            <Text variant="headline" style={styles.titleText}>
+              {activeRobot} Payload Deck
+            </Text>
+            <Text variant="caption" color={colors.textSecondary}>
+              Multi-tote transport configuration
+            </Text>
+          </View>
         </View>
-        <View style={styles.slotsBadge}>
-          <Text style={styles.slotsBadgeText}>{filledCount}/3 SLOTS</Text>
+
+        <View style={styles.deckCapacityBadge}>
+          <Text variant="caption" color={colors.textSecondary} style={styles.capacityText}>
+            {loadedCount} / 3 Trays
+          </Text>
         </View>
       </View>
 
-      {/* Industrial AMR Chassis Schematic Graphic */}
+      {/* Industrial Flatbed Graphic */}
       <View style={styles.schematicWrapper}>
-        {/* Drive Wheels */}
-        <View style={styles.wheelLeft} />
-        <View style={styles.wheelRight} />
-
-        {/* Heading Indicator Arrow */}
-        <View style={styles.headingIndicator}>
-          <Text style={styles.headingIndicatorText}>▲ FRONT HEADING</Text>
+        <View style={styles.headingTrack}>
+          <Text variant="caption" color={colors.textSecondary} style={styles.headingText}>
+            ▲ Forward Heading
+          </Text>
         </View>
 
-        {/* 3 Physical Tray Bays */}
-        <View style={styles.chassisBody}>
+        <View style={styles.trayStack}>
           {slotDefinitions.map((s) => {
             const matchingContainer = items.find((c) => c.slot.includes(String(s.id)));
             const isUnload = matchingContainer?.action === 'UNLOAD';
             const isPickup = matchingContainer?.action === 'PICKUP';
-            const isKeep = matchingContainer?.action === 'KEEP ONBOARD' || matchingContainer?.action === 'KEEP_ONBOARD';
-            const isTarget = isWaiting && isUnload;
+            const isTarget = isWaiting && (isUnload || matchingContainer?.code === targetCode);
+            const isKeep =
+              matchingContainer?.action === 'KEEP ONBOARD' ||
+              matchingContainer?.action === 'KEEP_ONBOARD' ||
+              (!isTarget && matchingContainer && !isPickup);
 
             return (
-              <TargetTrayPulseWrapper
-                isTarget={Boolean(isTarget)}
+              <Pressable
                 key={s.id}
-                style={[
-                  styles.slotTray,
-                  isTarget && styles.slotTrayTarget,
-                  matchingContainer && !isTarget && styles.slotTrayFilled,
-                  !matchingContainer && styles.slotTrayEmpty,
+                onPress={() => {
+                  if (matchingContainer?.code && onSelectSlot) {
+                    onSelectSlot(matchingContainer.code);
+                  }
+                }}
+                disabled={!matchingContainer?.code || !onSelectSlot}
+                style={({ pressed }) => [
+                  styles.trayCard,
+                  isTarget && styles.trayCardTarget,
+                  isKeep && styles.trayCardKeep,
+                  !matchingContainer && styles.trayCardEmpty,
+                  pressed && styles.trayPressed,
                 ]}
               >
-                <Text style={styles.slotLabelText}>{s.label}</Text>
+                {/* Left position indicator */}
+                <View style={styles.trayPositionCol}>
+                  <Text
+                    variant="caption"
+                    color={isTarget ? colors.primaryText : colors.textMuted}
+                    style={styles.trayPositionNum}
+                  >
+                    0{s.id}
+                  </Text>
+                  <Text variant="caption" color={colors.textMuted} style={styles.trayPositionLabel}>
+                    {s.position}
+                  </Text>
+                </View>
 
+                {/* Content */}
                 {matchingContainer && matchingContainer.code ? (
-                  <View style={styles.slotCargo}>
-                    <View style={styles.boxIconWrap}>
-                      <Box size={14} color={isTarget ? colors.primary : colors.textSecondary} />
+                  <View style={styles.trayContent}>
+                    <View style={styles.trayCodeRow}>
+                      <Text
+                        variant="bodyMedium"
+                        style={[styles.trayCodeText, isTarget && styles.trayCodeTextTarget]}
+                        numberOfLines={1}
+                      >
+                        {matchingContainer.code}
+                      </Text>
+                      {isTarget ? (
+                        <View style={styles.targetActionBadge}>
+                          <ArrowDownRight size={12} color="#ffffff" style={{ marginRight: 4 }} />
+                          <Text variant="caption" style={styles.targetActionBadgeText}>
+                            Unload Target
+                          </Text>
+                        </View>
+                      ) : isPickup ? (
+                        <View style={styles.pickupActionBadge}>
+                          <ArrowUpRight size={12} color="#ffffff" style={{ marginRight: 4 }} />
+                          <Text variant="caption" style={styles.targetActionBadgeText}>
+                            Pickup
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.keepActionBadge}>
+                          <Lock size={11} color={colors.textMuted} style={{ marginRight: 4 }} />
+                          <Text variant="caption" color={colors.textSecondary} style={styles.keepActionText}>
+                            Keep Onboard
+                          </Text>
+                        </View>
+                      )}
                     </View>
-                    <Text
-                      style={[
-                        styles.cargoBarcode,
-                        isTarget && styles.cargoBarcodeTarget,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {matchingContainer.code}
-                    </Text>
-                    <Text style={styles.cargoQty} numberOfLines={1}>
-                      {matchingContainer.qty} pcs
+
+                    <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+                      <Text style={styles.boldQty}>{matchingContainer.qty} pcs</Text> · {matchingContainer.product || 'Standard Tote'}
                     </Text>
                   </View>
                 ) : (
-                  <View style={styles.emptySlotWrap}>
-                    <Text style={styles.emptySlotText}>EMPTY</Text>
+                  <View style={styles.trayContentEmpty}>
+                    <Text variant="caption" color={colors.textMuted}>
+                      Empty Slot · Ready for load
+                    </Text>
                   </View>
                 )}
-
-                <View
-                  style={[
-                    styles.actionTag,
-                    isTarget
-                      ? styles.tagTarget
-                      : isUnload
-                      ? styles.tagUnload
-                      : isPickup
-                      ? styles.tagPickup
-                      : isKeep
-                      ? styles.tagKeep
-                      : styles.tagEmpty,
-                  ]}
-                >
-                  {isKeep ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <Lock size={9} color="#64748b" />
-                      <Text style={[styles.actionTagText, styles.textKeep]}>KEEP</Text>
-                    </View>
-                  ) : (
-                    <Text
-                      style={[
-                        styles.actionTagText,
-                        isTarget
-                          ? styles.textTarget
-                          : isUnload
-                          ? styles.textUnload
-                          : isPickup
-                          ? styles.textPickup
-                          : styles.textEmpty,
-                      ]}
-                    >
-                      {isTarget ? 'UNLOAD' : matchingContainer ? matchingContainer.action : 'EMPTY'}
-                    </Text>
-                  )}
-                </View>
-              </TargetTrayPulseWrapper>
+              </Pressable>
             );
           })}
         </View>
@@ -218,220 +181,170 @@ export function AmrChassisDeckVisualizer({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 14,
-    padding: 14,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    padding: 16,
+    gap: 14,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 10,
-    marginBottom: 12,
   },
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0, 102, 204, 0.1)',
+  iconWell: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.sm,
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    textTransform: 'uppercase',
-    fontFamily: typography.fontSans,
+  titleText: {
+    fontWeight: '700',
   },
-  slotsBadge: {
-    backgroundColor: 'rgba(0, 102, 204, 0.1)',
+  deckCapacityBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: 'rgba(0, 102, 204, 0.2)',
+    borderColor: colors.border,
   },
-  slotsBadgeText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.primary,
+  capacityText: {
+    fontWeight: '600',
   },
   schematicWrapper: {
-    backgroundColor: 'rgba(241, 245, 249, 0.5)',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(0, 102, 204, 0.3)',
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: 12,
-    position: 'relative',
-    marginHorizontal: 4,
-  },
-  wheelLeft: {
-    position: 'absolute',
-    left: -3,
-    top: '50%',
-    marginTop: -16,
-    width: 4,
-    height: 32,
-    borderRadius: 99,
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-  },
-  wheelRight: {
-    position: 'absolute',
-    right: -3,
-    top: '50%',
-    marginTop: -16,
-    width: 4,
-    height: 32,
-    borderRadius: 99,
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-  },
-  headingIndicator: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  headingIndicatorText: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
-  chassisBody: {
-    flexDirection: 'row',
     gap: 8,
   },
-  slotTray: {
-    flex: 1,
-    minHeight: 100,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 8,
+  headingTrack: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    paddingBottom: 4,
   },
-  slotTrayTarget: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-    backgroundColor: 'rgba(0, 92, 209, 0.15)',
-    shadowColor: colors.primary,
+  headingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  trayStack: {
+    gap: 8,
+  },
+  trayCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 12,
+  },
+  trayCardTarget: {
+    borderColor: colors.darkAction,
+    borderWidth: 1.5,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  slotTrayFilled: {
+  trayCardKeep: {
+    backgroundColor: colors.surfaceSubtle,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
   },
-  slotTrayEmpty: {
+  trayCardEmpty: {
+    backgroundColor: colors.surface,
     borderStyle: 'dashed',
     borderColor: colors.border,
-    backgroundColor: 'rgba(241, 245, 249, 0.3)',
   },
-  slotLabelText: {
-    fontFamily: typography.fontMono,
-    fontSize: 8,
-    fontWeight: '900',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
+  trayPressed: {
+    opacity: 0.85,
   },
-  slotCargo: {
-    alignItems: 'center',
-    marginVertical: 4,
-    width: '100%',
-  },
-  boxIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0, 102, 204, 0.1)',
+  trayPositionCol: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    width: 38,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+    paddingRight: 8,
   },
-  cargoBarcode: {
-    fontFamily: typography.fontMono,
+  trayPositionNum: {
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  trayPositionLabel: {
     fontSize: 11,
-    fontWeight: '900',
+  },
+  trayContent: {
+    flex: 1,
+    gap: 4,
+  },
+  trayContentEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  trayCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  trayCodeText: {
+    fontWeight: '700',
+    fontFamily: typography.fontMono,
+    flex: 1,
+  },
+  boldQty: {
+    fontWeight: '700',
     color: colors.textPrimary,
   },
-  cargoBarcodeTarget: {
-    color: colors.primary,
+  trayCodeTextTarget: {
+    color: colors.textPrimary,
   },
-  cargoQty: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: colors.textMuted,
-    marginTop: 1,
-    fontFamily: typography.fontSans,
-  },
-  emptySlotWrap: {
-    marginVertical: 12,
+  targetActionBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.darkAction,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
   },
-  emptySlotText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    color: colors.textMuted,
-  },
-  actionTag: {
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginTop: 'auto',
-  },
-  tagTarget: {
-    backgroundColor: colors.primary,
-  },
-  tagUnload: {
-    backgroundColor: 'rgba(0, 102, 204, 0.15)',
-  },
-  tagPickup: {
-    backgroundColor: '#fef3c7',
-  },
-  tagKeep: {
-    backgroundColor: '#f1f5f9',
-  },
-  tagEmpty: {
-    backgroundColor: 'rgba(241, 245, 249, 0.4)',
-  },
-  actionTagText: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    fontFamily: typography.fontSans,
-  },
-  textTarget: {
+  targetActionBadgeText: {
     color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 11,
   },
-  textUnload: {
-    color: colors.primary,
+  pickupActionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
   },
-  textPickup: {
-    color: '#92400e',
+  keepActionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  textKeep: {
-    color: '#64748b',
-  },
-  textEmpty: {
-    color: '#94a3b8',
+  keepActionText: {
+    fontWeight: '600',
+    fontSize: 11,
   },
 });

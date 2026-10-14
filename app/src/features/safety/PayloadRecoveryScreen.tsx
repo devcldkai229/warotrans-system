@@ -20,8 +20,10 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 type RescuePhase = 'briefing' | 'rendezvous' | 'transfer' | 'resuming' | 'completed';
 
@@ -32,6 +34,7 @@ export function PayloadRecoveryScreen() {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const handleDispatchRescue = () => {
+    triggerHaptic('success');
     setPhase('rendezvous');
     setFeedback('Emergency rescue: AMR-02 dispatched to rendezvous coordinates (X: 12.4m, Y: 8.2m).');
     setTimeout(() => {
@@ -41,11 +44,13 @@ export function PayloadRecoveryScreen() {
   };
 
   const handleScanStrandedTote = () => {
+    triggerHaptic('success');
     setScannedBarcode('BOX-101');
     setFeedback('Barcode BOX-101 matched stranded cargo.');
   };
 
   const handleResumeMission = () => {
+    triggerHaptic('success');
     setPhase('resuming');
     setTimeout(() => {
       setPhase('completed');
@@ -56,13 +61,12 @@ export function PayloadRecoveryScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        /* Prototype ref: SCR-STF-11-RESCUE (routes/index.tsx) */
-        label="PAYLOAD RECOVERY"
-        title="Emergency Payload Recovery"
+        label="Payload recovery"
+        title="Emergency Cargo Rescue"
         onBack={goBack}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {feedback && (
           <View style={styles.feedbackToast}>
             <Text style={styles.feedbackText}>{feedback}</Text>
@@ -72,42 +76,42 @@ export function PayloadRecoveryScreen() {
         {phase === 'completed' ? (
           <View style={styles.completedCard}>
             <View style={styles.completedIconBadge}>
-              <Check size={28} color="#ffffff" />
+              <Check size={24} color="#16a34a" />
             </View>
-            <Text style={styles.completedTitle}>Cargo Rescue Succeeded</Text>
+            <Text style={styles.completedTitle}>Cargo rescue succeeded</Text>
             <Text style={styles.completedSub}>
               AMR-02 has assumed mission execution and is en route to Rack A.
             </Text>
 
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Original Mission</Text>
+                <Text style={styles.receiptLabel}>Original mission</Text>
                 <Text style={styles.receiptVal}>JOB-2026-0812</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Rescued Container</Text>
+                <Text style={styles.receiptLabel}>Rescued container</Text>
                 <Text style={styles.receiptHighlight}>BOX-101 (45 units)</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Active Carrier</Text>
+                <Text style={styles.receiptLabel}>Active carrier</Text>
                 <Text style={styles.receiptSuccess}>AMR-02 (Healthy)</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Target Destination</Text>
+                <Text style={styles.receiptLabel}>Target destination</Text>
                 <Text style={styles.receiptVal}>Rack A · Level 2 · Bin 03</Text>
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                <Text style={styles.receiptLabel}>Faulted Unit</Text>
-                <Text style={styles.receiptDanger}>AMR-01 (Flagged for Towing)</Text>
+                <Text style={styles.receiptLabel}>Faulted unit</Text>
+                <Text style={styles.receiptDanger}>AMR-01 (Flagged for towing)</Text>
               </View>
             </View>
 
             <Button
-              label="Back to Hub"
+              label="Back to hub"
               onPress={goBack}
               variant="primary"
               size="lg"
-              style={{ width: '100%', marginTop: 16 }}
+              style={{ width: '100%', marginTop: 18 }}
             />
           </View>
         ) : (
@@ -115,16 +119,16 @@ export function PayloadRecoveryScreen() {
             {/* Critical Alert Banner */}
             <View style={styles.alertCard}>
               <View style={styles.alertIconBox}>
-                <LifeBuoy size={22} color="#ffffff" />
+                <LifeBuoy size={22} color="#dc2626" />
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.alertBadgeRow}>
                   <View style={styles.alertBadge}>
-                    <Text style={styles.alertBadgeText}>SEV-1 FLEET INCIDENT</Text>
+                    <Text style={styles.alertBadgeText}>Fleet incident</Text>
                   </View>
-                  <Text style={styles.alertRobotText}>AMR-01 FAULTED</Text>
+                  <Text style={styles.alertRobotText}>AMR-01 Stalled</Text>
                 </View>
-                <Text style={styles.alertTitle}>Payload Recovery Protocol Required</Text>
+                <Text style={styles.alertTitle}>Payload recovery protocol required</Text>
               </View>
             </View>
 
@@ -178,7 +182,7 @@ export function PayloadRecoveryScreen() {
                     phase === 'transfer' && styles.stepTextActive,
                   ]}
                 >
-                  Transfer & Scan
+                  Transfer & scan
                 </Text>
               </View>
               <Text style={styles.stepArrow}>➔</Text>
@@ -212,59 +216,59 @@ export function PayloadRecoveryScreen() {
             {/* Diagnostics Cards */}
             <View style={styles.diagRow}>
               <View style={styles.diagFaulted}>
-                <Text style={styles.diagLabelFaulted}>Faulted Robot</Text>
+                <Text style={styles.diagLabel}>Faulted robot</Text>
                 <Text style={styles.diagRobotId}>AMR-01</Text>
-                <Text style={styles.diagDetail}>Error: Drive Motor Stall</Text>
+                <Text style={styles.diagDetail}>Error: Drive motor stall</Text>
                 <View style={styles.diagPillFaulted}>
                   <Text style={styles.diagPillTextFaulted}>Pos: (12.4m, 8.2m)</Text>
                 </View>
               </View>
 
               <View style={styles.diagRescue}>
-                <Text style={styles.diagLabelRescue}>Rescue Robot</Text>
+                <Text style={styles.diagLabel}>Rescue robot</Text>
                 <Text style={styles.diagRobotId}>AMR-02</Text>
-                <Text style={styles.diagDetail}>Battery: 92% · Flatbed Empty</Text>
+                <Text style={styles.diagDetail}>Battery: 92% · Deck empty</Text>
                 <View style={styles.diagPillRescue}>
-                  <Text style={styles.diagPillTextRescue}>Status: Available</Text>
+                  <Text style={styles.diagPillTextRescue}>Status: Ready</Text>
                 </View>
               </View>
             </View>
 
             {/* Stranded Cargo Info */}
             <View style={styles.cargoCard}>
-              <Text style={styles.cargoTitle}>STRANDED CARGO ONBOARD:</Text>
+              <Text style={styles.cargoTitle}>Stranded cargo onboard</Text>
               <View style={styles.cargoRow}>
                 <View style={styles.cargoLeft}>
-                  <Box size={16} color={colors.primary} />
+                  <Box size={18} color={colors.textSecondary} />
                   <View>
                     <Text style={styles.cargoCode}>BOX-101</Text>
-                    <Text style={styles.cargoDesc}>Electronic Components (45 units)</Text>
+                    <Text style={styles.cargoDesc}>
+                      Electronic Components (<Text style={styles.boldUnits}>45 units</Text>)
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.cargoRight}>
-                  <Text style={styles.cargoDestLabel}>Final Destination:</Text>
+                  <Text style={styles.cargoDestLabel}>Final destination</Text>
                   <Text style={styles.cargoDestVal}>Rack A · Level 2 · Bin 03</Text>
                 </View>
               </View>
             </View>
 
-            {/* Phase Actions */}
+            {/* Phase Actions with Warm Dark Gray CTAs */}
             {phase === 'briefing' && (
-              <View style={styles.actionCardPhase1}>
-                <Text style={styles.actionTitlePhase1}>Phase 1: Dispatch Rendezvous</Text>
-                <Text style={styles.actionDescPhase1}>
-                  Command AMR-02 to navigate autonomously to coordinate (X: 12.4m, Y: 8.2m). AMR-02 will park exactly 1.0 meter away from AMR-01 for safe cargo transfer.
+              <View style={styles.actionCard}>
+                <Text style={styles.actionTitle}>Step 1: Dispatch rendezvous</Text>
+                <Text style={styles.actionDesc}>
+                  Command AMR-02 to navigate autonomously to coordinate (X: 12.4m, Y: 8.2m). AMR-02 will park 1.0 meter away from AMR-01 for safe manual tote transfer.
                 </Text>
-                <Pressable
+                <Button
+                  label="Dispatch Rescue"
+                  icon={<Navigation size={18} color="#ffffff" />}
                   onPress={handleDispatchRescue}
-                  style={styles.dispatchRescueBtn}
-                  accessibilityRole="button"
-                >
-                  <Navigation size={16} color="#ffffff" style={{ marginRight: 8 }} />
-                  <Text style={styles.dispatchRescueBtnText}>
-                    Dispatch Rescue AMR-02 to Scene
-                  </Text>
-                </Pressable>
+                  variant="primary"
+                  size="lg"
+                  style={{ marginTop: 12 }}
+                />
               </View>
             )}
 
@@ -272,7 +276,7 @@ export function PayloadRecoveryScreen() {
               <View style={styles.actionCard}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <RefreshCw size={16} color={colors.primary} />
-                  <Text style={styles.actionTitle}>AMR-02 En Route to Scene</Text>
+                  <Text style={styles.actionTitle}>AMR-02 en route to scene</Text>
                 </View>
                 <Text style={styles.actionDesc}>
                   Navigating transit corridor. ETA 15 seconds. Please set up perimeter safety cones.
@@ -282,30 +286,30 @@ export function PayloadRecoveryScreen() {
 
             {phase === 'transfer' && (
               <View style={styles.actionCard}>
-                <Text style={styles.actionTitle}>Step 2: Transfer Stranded Tote & Scan Barcode</Text>
+                <Text style={styles.actionTitle}>Step 2: Transfer stranded tote & scan barcode</Text>
                 <Text style={styles.actionDesc}>
-                  Physically move container BOX-101 from AMR-01 Tray 1 to AMR-02 Tray 1, then scan barcode to verify.
+                  Physically move container BOX-101 from AMR-01 Bay 1 to AMR-02 Bay 1, then scan barcode to verify.
                 </Text>
 
                 {scannedBarcode ? (
                   <View style={styles.verifiedBox}>
-                    <CheckCircle2 size={18} color={colors.success} />
-                    <Text style={styles.verifiedText}>Barcode Verified: {scannedBarcode}</Text>
+                    <CheckCircle2 size={18} color="#16a34a" />
+                    <Text style={styles.verifiedText}>Barcode verified: {scannedBarcode}</Text>
                   </View>
                 ) : (
                   <Button
-                    label="SIMULATE SCAN BARCODE (BOX-101)"
-                    icon={<ScanLine size={16} color={colors.primary} />}
+                    label="Simulate scan barcode (BOX-101)"
+                    icon={<ScanLine size={16} color={colors.textPrimary} />}
                     onPress={handleScanStrandedTote}
                     variant="outline"
                     size="md"
-                    style={{ marginTop: 8 }}
+                    style={{ marginTop: 10 }}
                   />
                 )}
 
                 <Button
-                  label="CONFIRM TRANSFER & RESUME MISSION"
-                  icon={<Check size={16} color="#ffffff" />}
+                  label="Confirm Transfer & Resume Mission"
+                  icon={<Check size={18} color="#ffffff" />}
                   onPress={handleResumeMission}
                   disabled={!scannedBarcode}
                   variant="primary"
@@ -317,7 +321,7 @@ export function PayloadRecoveryScreen() {
 
             {phase === 'resuming' && (
               <View style={styles.actionCard}>
-                <Text style={styles.actionTitle}>Re-assigning Mission to AMR-02...</Text>
+                <Text style={styles.actionTitle}>Re-assigning mission to AMR-02...</Text>
                 <Text style={styles.actionDesc}>
                   Updating Central FMS dispatch records and Nav2 dropoff route.
                 </Text>
@@ -337,37 +341,118 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
   feedbackToast: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: 12,
+    marginBottom: 14,
   },
   feedbackText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
-  alertCard: {
-    backgroundColor: colors.dangerSoft,
+  completedCard: {
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 12,
-    padding: 16,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
+    padding: 18,
+    ...shadows.panel,
+  },
+  completedIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  completedTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  completedSub: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: 16,
+    fontFamily: typography.fontSans,
+  },
+  receiptBox: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
+  },
+  receiptRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  receiptLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  receiptVal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  receiptHighlight: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  receiptSuccess: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: typography.fontMono,
+  },
+  receiptDanger: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#dc2626',
+    fontFamily: typography.fontMono,
+  },
+  receiptBorderTop: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    marginTop: 2,
+  },
+  alertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.25)',
+    borderRadius: radii.lg,
+    padding: 16,
     ...shadows.panel,
   },
   alertIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: colors.danger,
+    width: 42,
+    height: 42,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -377,46 +462,40 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   alertBadge: {
-    backgroundColor: colors.danger,
-    paddingHorizontal: 6,
+    backgroundColor: 'rgba(220, 38, 38, 0.12)',
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   alertBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#ffffff',
-    fontFamily: typography.fontMono,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
+    fontFamily: typography.fontSans,
   },
   alertRobotText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
-    color: colors.danger,
+    color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   alertTitle: {
     fontSize: 14,
-    fontWeight: '900',
-    color: colors.danger,
-    marginTop: 2,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 4,
     fontFamily: typography.fontSans,
-  },
-  alertDesc: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    lineHeight: 14,
-    marginTop: 2,
   },
   stepperBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
-    ...shadows.panel,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   stepItem: {
     flexDirection: 'row',
@@ -424,38 +503,40 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   stepNum: {
-    width: 20,
-    height: 20,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0, 92, 209, 0.2)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepNumActive: {
-    backgroundColor: 'rgba(0, 92, 209, 0.2)',
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
   },
   stepNumText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: colors.textSecondary,
     fontFamily: typography.fontMono,
   },
   stepNumTextActive: {
-    color: colors.primary,
+    color: '#ffffff',
   },
   stepText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textMuted,
     fontFamily: typography.fontSans,
   },
   stepTextActive: {
-    color: colors.primary,
+    color: colors.textPrimary,
     fontWeight: '700',
-    fontFamily: typography.fontSans,
   },
   stepArrow: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.textMuted,
   },
   diagRow: {
@@ -464,283 +545,159 @@ const styles = StyleSheet.create({
   },
   diagFaulted: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    padding: 12,
+    borderColor: 'rgba(220, 38, 38, 0.25)',
+    padding: 14,
     ...shadows.panel,
-  },
-  diagLabelFaulted: {
-    fontSize: 9,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    color: colors.danger,
-    letterSpacing: 0.8,
-    fontFamily: typography.fontSans,
   },
   diagRescue: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.3)',
-    padding: 12,
+    borderColor: 'rgba(22, 163, 74, 0.25)',
+    padding: 14,
     ...shadows.panel,
   },
-  diagLabelRescue: {
-    fontSize: 9,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    color: colors.success,
-    letterSpacing: 0.8,
+  diagLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
     fontFamily: typography.fontSans,
   },
   diagRobotId: {
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 16,
+    fontWeight: '800',
     color: colors.textPrimary,
-    fontFamily: typography.fontMono,
     marginTop: 4,
+    fontFamily: typography.fontMono,
   },
   diagDetail: {
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginVertical: 6,
+    fontFamily: typography.fontSans,
   },
   diagPillFaulted: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 8,
+    backgroundColor: 'rgba(220, 38, 38, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
     alignSelf: 'flex-start',
   },
   diagPillTextFaulted: {
-    fontSize: 10,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
     fontFamily: typography.fontMono,
-    color: colors.danger,
   },
   diagPillRescue: {
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 8,
+    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
     alignSelf: 'flex-start',
   },
   diagPillTextRescue: {
-    fontSize: 10,
-    fontFamily: typography.fontMono,
-    color: colors.success,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: typography.fontSans,
   },
   cargoCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
-    gap: 8,
+    padding: 16,
     ...shadows.panel,
   },
   cargoTitle: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.textMuted,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 10,
     fontFamily: typography.fontSans,
   },
   cargoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   cargoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   cargoCode: {
     fontSize: 14,
-    fontWeight: '900',
-    color: colors.primary,
+    fontWeight: '700',
+    color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   cargoDesc: {
-    fontSize: 11,
-    color: colors.textMuted,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontFamily: typography.fontSans,
+  },
+  boldUnits: {
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   cargoRight: {
     alignItems: 'flex-end',
   },
   cargoDestLabel: {
     fontSize: 11,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.textMuted,
     fontFamily: typography.fontSans,
   },
   cargoDestVal: {
-    fontSize: 10,
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
-  },
-  actionCardPhase1: {
-    backgroundColor: 'rgba(0, 92, 209, 0.05)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.2)',
-    padding: 16,
-    gap: 12,
-    ...shadows.panel,
-  },
-  actionTitlePhase1: {
     fontSize: 12,
-    fontWeight: '900',
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    fontFamily: typography.fontSans,
-  },
-  actionDescPhase1: {
-    fontSize: 12,
-    color: colors.textMuted,
-    lineHeight: 18,
-  },
-  dispatchRescueBtn: {
-    backgroundColor: colors.primary,
-    minHeight: 64,
-    borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 3,
-    borderBottomColor: '#004bb0',
-  },
-  dispatchRescueBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 2,
     fontFamily: typography.fontSans,
   },
   actionCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
-    gap: 8,
+    padding: 16,
     ...shadows.panel,
   },
   actionTitle: {
-    fontSize: 13,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   actionDesc: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textSecondary,
-    lineHeight: 16,
-    marginBottom: 4,
+    lineHeight: 18,
+    marginTop: 4,
+    fontFamily: typography.fontSans,
   },
   verifiedBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.successSoft,
-    borderRadius: 8,
-    padding: 10,
+    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.25)',
+    padding: 12,
+    borderRadius: radii.md,
+    marginTop: 10,
   },
   verifiedText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.success,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#16a34a',
     fontFamily: typography.fontMono,
-  },
-  completedCard: {
-    backgroundColor: colors.successBg,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.successBorder,
-    padding: 18,
-    alignItems: 'center',
-    ...shadows.panel,
-  },
-  completedIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.control,
-  },
-  completedTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    marginTop: 12,
-    fontFamily: typography.fontSans,
-  },
-  completedSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
-    fontFamily: typography.fontSans,
-  },
-  receiptBox: {
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 8,
-  },
-  receiptRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  receiptLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  receiptVal: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  receiptHighlight: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
-  },
-  receiptSuccess: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.success,
-    fontFamily: typography.fontMono,
-  },
-  receiptDanger: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.danger,
-    fontFamily: typography.fontMono,
-  },
-  receiptBorderTop: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 8,
-    marginTop: 4,
   },
 });

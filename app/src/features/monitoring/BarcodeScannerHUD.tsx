@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { useTopInset } from '../../shared/theme/layout';
@@ -38,109 +39,6 @@ export function BarcodeScannerHUD({
 
   if (!visible) return null;
 
-  const hudBody = (
-    <View style={styles.modalBackdrop}>
-      <View style={[styles.overlay, { paddingTop: topInset + 8 }]}>
-        {/* Header Bar */}
-        <View style={styles.header}>
-          <View>
-            <View style={styles.hudBadge}>
-              {/* Prototype ref: SCR-STF-13 (routes/index.tsx) */}
-              <Text style={styles.hudBadgeText}>CAMERA HUD</Text>
-            </View>
-            <Text style={styles.hudTitle}>Scan Container Barcode</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <Pressable
-              onPress={() => setTorchOn(!torchOn)}
-              style={[styles.headerIconBtn, torchOn && styles.headerIconBtnActive]}
-            >
-              <Zap size={18} color={torchOn ? colors.warning : '#ffffff'} />
-            </Pressable>
-            <Pressable onPress={onClose} style={styles.headerIconBtn}>
-              <X size={20} color="#ffffff" />
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Viewfinder Center Reticle */}
-        <View style={styles.reticleContainer}>
-          <View style={styles.reticleBox}>
-            {/* Corner Brackets */}
-            <View style={[styles.corner, styles.cornerTL]} />
-            <View style={[styles.corner, styles.cornerTR]} />
-            <View style={[styles.corner, styles.cornerBL]} />
-            <View style={[styles.corner, styles.cornerBR]} />
-
-            {/* Glowing Scan Laser Line */}
-            <View style={styles.laserLine} />
-
-            <View style={styles.reticleCenterIcon}>
-              <ScanLine size={48} color={colors.primary} />
-            </View>
-          </View>
-
-          <Text style={styles.reticleInstruction}>
-            Align 1D Code128 or 2D QR Code within the scanning reticle
-          </Text>
-          <View style={styles.fpsBadge}>
-            <Text style={styles.fpsText}>⚡ AUTO-FOCUS ACTIVE · 60 FPS</Text>
-          </View>
-        </View>
-
-        {/* Bottom Simulation Buttons */}
-        <View style={styles.actionsBox}>
-          <Pressable
-            onPress={() => {
-              triggerHaptic('success');
-              onScanResult(targetBarcode);
-            }}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              styles.btnMatch,
-              pressed && styles.btnPressed,
-            ]}
-          >
-            <QrCode size={16} color="#ffffff" />
-            <Text style={styles.btnMatchText}>
-              SIMULATE SCAN MATCH ({targetBarcode})
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              triggerHaptic('error');
-              onScanResult('BOX-999');
-            }}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              styles.btnMismatch,
-              pressed && styles.btnPressed,
-            ]}
-          >
-            <Text style={styles.btnMismatchText}>
-              SIMULATE MISMATCH (BOX-999)
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              triggerHaptic('tap');
-              onClose();
-            }}
-            style={({ pressed }) => [
-              styles.cancelBtn,
-              pressed && styles.cancelBtnPressed,
-            ]}
-          >
-            <Keyboard size={16} color="#ffffff" />
-            <Text style={styles.cancelText}>Manual Keyboard Entry</Text>
-          </Pressable>
-        </View>
-      </View>
-    </View>
-  );
-
   return (
     <Modal
       visible={visible}
@@ -148,7 +46,120 @@ export function BarcodeScannerHUD({
       transparent
       onRequestClose={onClose}
     >
-      {hudBody}
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.overlay, { paddingTop: topInset + 12 }]}>
+          {/* Header Bar */}
+          <View style={styles.header}>
+            <View>
+              <View style={styles.hudBadge}>
+                <Text style={styles.hudBadgeText}>Camera HUD</Text>
+              </View>
+              <Text style={styles.hudTitle}>Scan container barcode</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
+                  setTorchOn(!torchOn);
+                }}
+                style={[styles.headerIconBtn, torchOn && styles.headerIconBtnActive]}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle torch light"
+              >
+                <Zap size={18} color={torchOn ? colors.warning : '#ffffff'} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
+                  onClose();
+                }}
+                style={styles.headerIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Close scanner"
+              >
+                <X size={20} color="#ffffff" />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Viewfinder Center Reticle */}
+          <View style={styles.reticleContainer}>
+            <View style={styles.reticleBox}>
+              <View style={[styles.corner, styles.cornerTL]} />
+              <View style={[styles.corner, styles.cornerTR]} />
+              <View style={[styles.corner, styles.cornerBL]} />
+              <View style={[styles.corner, styles.cornerBR]} />
+
+              {/* Glowing Scan Laser Line */}
+              <View style={styles.laserLine} />
+
+              <View style={styles.reticleCenterIcon}>
+                <ScanLine size={48} color="#ffffff" />
+              </View>
+            </View>
+
+            <Text style={styles.reticleInstruction}>
+              Align 1D Code 128 or 2D QR code within frame
+            </Text>
+            <View style={styles.fpsBadge}>
+              <Text style={styles.fpsText}>Auto-focus active · 60 FPS</Text>
+            </View>
+          </View>
+
+          {/* Bottom Simulation Buttons with Calm Operations Warm Dark Gray */}
+          <View style={styles.actionsBox}>
+            <Pressable
+              onPress={() => {
+                triggerHaptic('success');
+                onScanResult(targetBarcode);
+              }}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.btnMatch,
+                pressed && styles.btnPressed,
+              ]}
+              accessibilityRole="button"
+            >
+              <QrCode size={18} color="#ffffff" />
+              <Text style={styles.btnMatchText}>
+                Simulate match ({targetBarcode})
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                triggerHaptic('error');
+                onScanResult('BOX-999');
+              }}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.btnMismatch,
+                pressed && styles.btnPressed,
+              ]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.btnMismatchText}>
+                Simulate mismatch (BOX-999)
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                triggerHaptic('tap');
+                onClose();
+              }}
+              style={({ pressed }) => [
+                styles.cancelBtn,
+                pressed && styles.cancelBtnPressed,
+              ]}
+              accessibilityRole="button"
+            >
+              <Keyboard size={16} color="#cbd5e1" />
+              <Text style={styles.cancelText}>Manual keyboard entry</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -156,7 +167,7 @@ export function BarcodeScannerHUD({
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -164,11 +175,11 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     maxWidth: 480,
-    backgroundColor: '#000000',
+    backgroundColor: '#0f172a',
     justifyContent: 'space-between',
     padding: 18,
     paddingTop: 0,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 18,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
   },
   header: {
     flexDirection: 'row',
@@ -181,35 +192,32 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 999,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerIconBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.28)',
   },
   hudBadge: {
-    backgroundColor: 'rgba(37, 99, 235, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(37, 99, 235, 0.4)',
+    borderRadius: 6,
     alignSelf: 'flex-start',
   },
   hudBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#cbd5e1',
     fontFamily: typography.fontMono,
-    letterSpacing: 0.8,
   },
   hudTitle: {
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#ffffff',
     marginTop: 4,
     fontFamily: typography.fontSans,
@@ -221,9 +229,9 @@ const styles = StyleSheet.create({
   reticleBox: {
     width: 250,
     height: 250,
-    borderRadius: 20,
+    borderRadius: radii.lg,
     borderWidth: 2,
-    borderColor: 'rgba(37, 99, 235, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -232,42 +240,42 @@ const styles = StyleSheet.create({
   },
   corner: {
     position: 'absolute',
-    width: 24,
-    height: 24,
-    borderColor: colors.primary,
+    width: 26,
+    height: 26,
+    borderColor: '#ffffff',
   },
   cornerTL: {
     top: -2,
     left: -2,
     borderTopWidth: 4,
     borderLeftWidth: 4,
-    borderTopLeftRadius: 10,
+    borderTopLeftRadius: 12,
   },
   cornerTR: {
     top: -2,
     right: -2,
     borderTopWidth: 4,
     borderRightWidth: 4,
-    borderTopRightRadius: 10,
+    borderTopRightRadius: 12,
   },
   cornerBL: {
     bottom: -2,
     left: -2,
     borderBottomWidth: 4,
     borderLeftWidth: 4,
-    borderBottomLeftRadius: 10,
+    borderBottomLeftRadius: 12,
   },
   cornerBR: {
     bottom: -2,
     right: -2,
     borderBottomWidth: 4,
     borderRightWidth: 4,
-    borderBottomRightRadius: 10,
+    borderBottomRightRadius: 12,
   },
   laserLine: {
     position: 'absolute',
-    left: 12,
-    right: 12,
+    left: 14,
+    right: 14,
     top: '50%',
     height: 2,
     backgroundColor: '#22c55e',
@@ -278,32 +286,30 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   reticleCenterIcon: {
-    opacity: 0.35,
+    opacity: 0.25,
   },
   reticleInstruction: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#cbd5e1',
     textAlign: 'center',
     marginTop: 18,
     fontFamily: typography.fontSans,
   },
   fpsBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.3)',
     marginTop: 8,
   },
   fpsText: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '600',
     color: '#4ade80',
     fontFamily: typography.fontMono,
   },
   actionsBox: {
-    gap: 8,
+    gap: 10,
     zIndex: 20,
     paddingBottom: 8,
   },
@@ -312,19 +318,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
+    minHeight: 48,
+    borderRadius: radii.md,
   },
   btnPressed: {
     opacity: 0.85,
   },
   btnMatch: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.darkAction,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     ...shadows.control,
   },
   btnMatchText: {
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#ffffff',
     fontFamily: typography.fontSans,
   },
@@ -334,29 +342,29 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239, 68, 68, 0.35)',
   },
   btnMismatchText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#f87171',
-    fontFamily: typography.fontMono,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fca5a5',
+    fontFamily: typography.fontSans,
   },
   cancelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
+    minHeight: 44,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   cancelBtnPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
   cancelText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#cbd5e1',
     fontFamily: typography.fontSans,
   },
 });

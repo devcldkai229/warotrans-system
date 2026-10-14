@@ -1,10 +1,10 @@
-import { Filter, Inbox, Search, SearchX, X } from 'lucide-react-native';
+import { Filter, Inbox, MapPin, Search, SearchX, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { colors } from '../../shared/theme/colors';
-import { dockReservedSpace } from '../../shared/theme/layout';
+import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import {
   EmptyState,
@@ -116,57 +116,33 @@ function tokenize(value: string): string[] {
  * lettered zone (`a`), a rack range (`a01`). The generic warehouse words never
  * qualify — see `ZONE_NOISE_WORDS`.
  */
-function zonePlaceCodes(zone: string): string[] {
-  return tokenize(zone).filter(
-    (token) =>
-      !ZONE_NOISE_WORDS.has(token) && (/[0-9]/.test(token) || /^[a-z]$/.test(token))
-  );
-}
-
-/**
- * Does this job belong to the operator's zone?
- *
- * The rule is deliberately text-based rather than an id join: the mock carries
- * endpoint *codes* (`Dock 01`, `Rack A-02`) and nothing that says which zone
- * code belongs to, so the only honest implementation with the data on hand is
- * "does the job name the same place the zone names".
- *
- *   1. At least one of the zone's place codes appears in the job's own place
- *      text (`Inbound Dock 01` -> `01`; a job routed through `Dock 01` matches).
- *   2. Neither side contradicts the other on *direction*: an inbound zone does
- *      not match a job whose endpoints say `Outbound`, and vice versa. This is
- *      what stops `Dock Out 01` being treated as `Inbound Dock 01`.
- */
 function matchesZone(job: AppJobItem, zone: string): boolean {
-  const zoneCodes = zonePlaceCodes(zone);
-  if (zoneCodes.length === 0) return true; // Unknown zone shape: do not hide work.
+  const zLower = zone.toLowerCase();
+  const text = [
+    job.route,
+    job.routeText,
+    job.target,
+    job.sourceEndpointCode,
+    job.destinationEndpointCode,
+    job.currentStop,
+    ...job.stopsList.map((stop) => `${stop.name} ${stop.description}`),
+  ]
+    .join(' ')
+    .toLowerCase();
 
-  const jobTokens = new Set(
-    tokenize(
-      [
-        job.route,
-        job.routeText,
-        job.target,
-        job.sourceEndpointCode,
-        job.destinationEndpointCode,
-        job.currentStop,
-        ...job.stopsList.map((stop) => `${stop.name} ${stop.description}`),
-        ...job.containers.map((container) => container.location),
-      ].join(' ')
-    )
-  );
-
-  const zoneDirection = tokenize(zone).find(
-    (token) => token === 'inbound' || token === 'outbound'
-  );
-  const jobIsOutbound = jobTokens.has('outbound');
-  const jobIsInbound = jobTokens.has('inbound');
-  if (zoneDirection === 'inbound' && jobIsOutbound && !jobIsInbound) return false;
-  if (zoneDirection === 'outbound' && jobIsInbound && !jobIsOutbound) return false;
-
-  return zoneCodes.some((code) =>
-    Array.from(jobTokens).some((token) => token === code || token.startsWith(code))
-  );
+  if (zLower.includes('inbound') || zLower.includes('dock 01') || zLower.includes('dock 1')) {
+    return text.includes('dock 01') || text.includes('dock-01') || text.includes('inbound');
+  }
+  if (zLower.includes('zone a')) {
+    return text.includes('rack a') || text.includes('zone a');
+  }
+  if (zLower.includes('zone b')) {
+    return text.includes('rack b') || text.includes('zone b');
+  }
+  if (zLower.includes('outbound') || zLower.includes('dock 04') || zLower.includes('shipping')) {
+    return text.includes('dock 04') || text.includes('dock out') || text.includes('outbound') || text.includes('shipping');
+  }
+  return true;
 }
 
 /** No zone selected -> everything is visible. This is the only place that says so. */
@@ -258,8 +234,9 @@ export function JobsScreen() {
   /**
    * The bar's badge counts *my open work*, unfiltered — a badge that changed
    * every keystroke would be noise, and a badge that counted completed history
-   * would be a lie. It is seeded from the same helper, so this only keeps it
-   * honest once the data changes underneath it.
+   * would be a lie. It is seeded once from the same helper the screen counts
+   * with, and pushed again whenever the shell asks, so the badge and the list
+   * cannot drift apart.
    */
   useEffect(() => {
     setActiveJobCount(countMyActiveJobs());
@@ -298,13 +275,16 @@ export function JobsScreen() {
     navigate('job_detail', { jobId: job.id });
   };
 
+  const topInset = useTopInset();
+
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text variant="title">Job Execution Center</Text>
-        <Text variant="caption" color={colors.textSecondary}>
-          {counts.mine} assigned to you · {counts.fleet} in the fleet queue
-        </Text>
+      <View style={[styles.header, { paddingTop: topInset + 12 }]}>
+        <View style={styles.screenHeader}>
+          <Text variant="display" color={colors.textPrimary} style={styles.pageTitle}>
+            Job Execution Center
+          </Text>
+        </View>
 
         <SegmentedControl
           options={options}
@@ -328,34 +308,62 @@ export function JobsScreen() {
         />
 
         {session?.zone ? (
-          <Pressable
-            onPress={toggleZoneFilter}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: isZoneOnly }}
-            accessibilityLabel={`Filter jobs to ${session.zone}`}
-            style={({ pressed }) => [
-              styles.zoneFilter,
-              isZoneOnly && styles.zoneFilterActive,
-              pressed && styles.zoneFilterPressed,
-            ]}
-          >
-            <Filter size={15} color={isZoneOnly ? colors.primaryText : colors.textSecondary} />
-            <Text
-              variant="label"
-              color={isZoneOnly ? colors.primaryText : colors.textSecondary}
-              numberOfLines={1}
-              style={styles.zoneFilterText}
+          <View style={styles.zoneFilterRow}>
+            <Pressable
+              onPress={() => {
+                if (isZoneOnly) {
+                  triggerHaptic('tap');
+                  setIsZoneOnly(false);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Show jobs across all zones"
+              style={[
+                styles.zoneChip,
+                !isZoneOnly && styles.zoneChipActive,
+              ]}
             >
-              {isZoneOnly
-                ? `Filtered by ${session.zone}`
-                : `Filter to my zone · ${session.zone}`}
-            </Text>
-            {isZoneOnly ? (
-              <View style={styles.zoneFilterClear}>
-                <X size={12} color={colors.primaryText} strokeWidth={2.6} />
-              </View>
-            ) : null}
-          </Pressable>
+              <Text
+                variant="caption"
+                style={[
+                  styles.zoneChipText,
+                  !isZoneOnly && styles.zoneChipTextActive,
+                ]}
+              >
+                All Zones
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                if (!isZoneOnly) {
+                  triggerHaptic('tap');
+                  setIsZoneOnly(true);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter jobs to my zone ${session.zone}`}
+              style={[
+                styles.zoneChip,
+                isZoneOnly && styles.zoneChipActive,
+              ]}
+            >
+              <MapPin
+                size={13}
+                color={isZoneOnly ? '#ffffff' : colors.textSecondary}
+                style={{ marginRight: 5 }}
+              />
+              <Text
+                variant="caption"
+                style={[
+                  styles.zoneChipText,
+                  isZoneOnly && styles.zoneChipTextActive,
+                ]}
+              >
+                My Zone: {session.zone}
+              </Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
 
@@ -458,6 +466,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 12,
   },
+  screenHeader: {
+    paddingTop: 2,
+    paddingBottom: 2,
+  },
+  pageTitle: {
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
   scopeControl: {
     marginTop: 2,
   },
@@ -466,37 +482,34 @@ const styles = StyleSheet.create({
    * shorter list as "this is everything there is". The active state therefore
    * carries the full sentence rather than just a tint.
    */
-  zoneFilter: {
+  zoneFilterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: 8,
-    minHeight: 44,
-    maxWidth: '100%',
+    marginTop: 2,
+  },
+  zoneChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
-    borderRadius: radii.pill,
+    paddingVertical: 7,
+    borderRadius: radii.sm,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  zoneFilterActive: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primaryBorder,
+  zoneChipActive: {
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
   },
-  zoneFilterPressed: {
-    backgroundColor: colors.surfaceMuted,
+  zoneChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
-  zoneFilterText: {
-    flexShrink: 1,
-    fontWeight: '600',
-  },
-  zoneFilterClear: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
+  zoneChipTextActive: {
+    fontWeight: '700',
+    color: '#ffffff',
   },
   listContent: {
     paddingHorizontal: 16,

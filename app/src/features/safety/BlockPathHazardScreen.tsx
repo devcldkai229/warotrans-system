@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import {
   AlertOctagon,
+  AlertTriangle,
   Check,
   RotateCcw,
 } from 'lucide-react-native';
@@ -16,8 +17,10 @@ import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 const EDGES = [
   { id: 'EDGE-A01-A02', name: 'Aisle A-01 (Between Rack A01 & A02)', zone: 'Zone A Storage' },
@@ -27,10 +30,10 @@ const EDGES = [
 ];
 
 const HAZARD_CATEGORIES = [
-  { id: 'LIQUID_SPILL', title: 'Liquid Spill', desc: 'Wet / slippery floor' },
-  { id: 'FALLEN_PALLET', title: 'Fallen Pallet', desc: 'Cargo / debris on path' },
-  { id: 'MAINTENANCE', title: 'Maintenance', desc: 'Active floor repairs' },
-  { id: 'COLLISION_RISK', title: 'Machinery Hazard', desc: 'Forklift congestion' },
+  { id: 'LIQUID_SPILL', title: 'Liquid spill', desc: 'Wet / slippery floor surface' },
+  { id: 'FALLEN_PALLET', title: 'Fallen pallet', desc: 'Physical cargo / debris obstruction' },
+  { id: 'MAINTENANCE', title: 'Maintenance', desc: 'Active facility repairs underway' },
+  { id: 'COLLISION_RISK', title: 'Machinery hazard', desc: 'Manual forklift congestion' },
 ];
 
 export function BlockPathHazardScreen() {
@@ -43,39 +46,41 @@ export function BlockPathHazardScreen() {
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = () => {
+    triggerHaptic('success');
     setSubmitted(true);
   };
 
   const handleClear = () => {
+    triggerHaptic('tap');
     setSubmitted(false);
   };
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="SAFETY EXCEPTION"
-        title="Report Block Path Hazard"
+        label="Safety exception"
+        title="Report Corridor Hazard"
         onBack={goBack}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {submitted ? (
           <View style={styles.submittedCard}>
             <View style={styles.submittedIconBadge}>
-              <AlertOctagon size={30} color="#ffffff" />
+              <AlertTriangle size={24} color="#dc2626" />
             </View>
-            <Text style={styles.submittedTitle}>Corridor Blocked & Fleet Rerouted</Text>
+            <Text style={styles.submittedTitle}>Corridor blocked & fleet rerouted</Text>
             <Text style={styles.submittedSub}>
-              Dynamic Edge Cost set to ∞. Central Fleet Management System (FMS) has excluded this aisle from navigation meshes.
+              Dynamic edge cost set to ∞. Central Fleet Management System (FMS) has excluded this aisle from navigation meshes.
             </Text>
 
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Blocked Edge:</Text>
+                <Text style={styles.receiptLabel}>Blocked edge</Text>
                 <Text style={styles.receiptDanger}>{selectedEdge}</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Hazard Type:</Text>
+                <Text style={styles.receiptLabel}>Hazard type</Text>
                 <Text style={styles.receiptVal}>
                   {hazardType === 'LIQUID_SPILL' && 'Liquid Spill / Wet Floor'}
                   {hazardType === 'FALLEN_PALLET' && 'Fallen Pallet / Cargo Obstacle'}
@@ -84,37 +89,35 @@ export function BlockPathHazardScreen() {
                 </Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Routing Impact:</Text>
+                <Text style={styles.receiptLabel}>Routing impact</Text>
                 <Text style={styles.receiptDanger}>
-                  {severity === 'FULL_BLOCK' ? 'Edge Cost = ∞ (100% Detour)' : 'Caution Speed 0.3m/s'}
+                  {severity === 'FULL_BLOCK' ? 'Edge cost = ∞ (100% detour)' : 'Caution speed crawl (0.3m/s)'}
                 </Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Fleet Telemetry:</Text>
+                <Text style={styles.receiptLabel}>Fleet telemetry</Text>
                 <Text style={styles.receiptHighlight}>AMR-01 rerouted via Corridor B</Text>
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                <Text style={styles.receiptLabel}>Est. Duration:</Text>
+                <Text style={styles.receiptLabel}>Estimated duration</Text>
                 <Text style={styles.receiptDuration}>{duration}</Text>
               </View>
             </View>
 
             <View style={styles.submittedActions}>
-              <Pressable
+              <Button
+                label="Reopen corridor"
+                icon={<RotateCcw size={16} color={colors.textPrimary} />}
                 onPress={handleClear}
-                style={styles.reopenBtn}
-                accessibilityRole="button"
-              >
-                <RotateCcw size={16} color={colors.textPrimary} style={{ marginRight: 6 }} />
-                <Text style={styles.reopenBtnText}>Reopen Path</Text>
-              </Pressable>
-              <Pressable
+                variant="outline"
+                size="md"
+              />
+              <Button
+                label="Back to hub"
                 onPress={goBack}
-                style={styles.doneBtn}
-                accessibilityRole="button"
-              >
-                <Text style={styles.doneBtnText}>Back to Hub</Text>
-              </Pressable>
+                variant="primary"
+                size="lg"
+              />
             </View>
           </View>
         ) : (
@@ -122,32 +125,34 @@ export function BlockPathHazardScreen() {
             {/* Top Banner Card */}
             <View style={styles.introCard}>
               <View style={styles.introIconBox}>
-                <AlertOctagon size={22} color="#ffffff" />
+                <AlertOctagon size={22} color="#dc2626" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.introTitle}>Floor Hazard & Temporary Obstacle</Text>
+                <Text style={styles.introTitle}>Floor hazard & temporary obstruction</Text>
                 <Text style={styles.introDesc}>
-                  Report an aisle blockage and the fleet detours around the hazard automatically.
+                  Report an aisle obstruction to instantly reroute the autonomous robot fleet around the incident area.
                 </Text>
               </View>
             </View>
 
             {/* Blocked Corridor / Edge */}
             <View style={{ gap: 8 }}>
-              <Text style={styles.sectionLabel}>
-                BLOCKED CORRIDOR
-              </Text>
+              <Text style={styles.sectionLabel}>Blocked corridor</Text>
               <View style={{ gap: 8 }}>
                 {EDGES.map((e) => {
                   const isSelected = selectedEdge === e.id;
                   return (
                     <Pressable
                       key={e.id}
-                      onPress={() => setSelectedEdge(e.id)}
+                      onPress={() => {
+                        triggerHaptic('tap');
+                        setSelectedEdge(e.id);
+                      }}
                       style={[
                         styles.edgeCard,
-                        isSelected ? styles.edgeCardSelected : styles.edgeCardNormal,
+                        isSelected && styles.edgeCardSelected,
                       ]}
+                      accessibilityRole="button"
                     >
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -158,7 +163,11 @@ export function BlockPathHazardScreen() {
                         </View>
                         <Text style={styles.edgeName}>{e.name}</Text>
                       </View>
-                      {isSelected && <Check size={18} color="#ef4444" />}
+                      {isSelected && (
+                        <View style={styles.checkBadge}>
+                          <Check size={14} color="#ffffff" />
+                        </View>
+                      )}
                     </Pressable>
                   );
                 })}
@@ -167,22 +176,24 @@ export function BlockPathHazardScreen() {
 
             {/* Hazard Category */}
             <View style={{ gap: 8 }}>
-              <Text style={styles.sectionLabel}>
-                HAZARD CATEGORY
-              </Text>
+              <Text style={styles.sectionLabel}>Hazard category</Text>
               <View style={styles.hazardGrid}>
                 {HAZARD_CATEGORIES.map((h) => {
                   const isSelected = hazardType === h.id;
                   return (
                     <Pressable
                       key={h.id}
-                      onPress={() => setHazardType(h.id)}
+                      onPress={() => {
+                        triggerHaptic('tap');
+                        setHazardType(h.id);
+                      }}
                       style={[
                         styles.hazardCard,
-                        isSelected ? styles.hazardCardSelected : styles.hazardCardNormal,
+                        isSelected && styles.hazardCardSelected,
                       ]}
+                      accessibilityRole="button"
                     >
-                      <Text style={styles.hazardTitle}>
+                      <Text style={[styles.hazardTitle, isSelected && styles.hazardTitleSelected]}>
                         {h.title}
                       </Text>
                       <Text style={styles.hazardDesc}>{h.desc}</Text>
@@ -194,62 +205,62 @@ export function BlockPathHazardScreen() {
 
             {/* Severity & Routing Policy */}
             <View style={{ gap: 8 }}>
-              <Text style={styles.sectionLabel}>
-                SEVERITY & ROUTING POLICY
-              </Text>
+              <Text style={styles.sectionLabel}>Severity & routing policy</Text>
               <View style={styles.severityRow}>
                 <Pressable
-                  onPress={() => setSeverity('FULL_BLOCK')}
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    setSeverity('FULL_BLOCK');
+                  }}
                   style={[
                     styles.severityBtn,
-                    severity === 'FULL_BLOCK' ? styles.severityBtnSelectedFull : styles.severityBtnNormal,
+                    severity === 'FULL_BLOCK' && styles.severityBtnSelectedFull,
                   ]}
+                  accessibilityRole="button"
                 >
-                  <Text style={styles.severityBtnFullTitle}>
-                    Full Blockage
-                  </Text>
-                  <Text style={styles.severityBtnSub}>
-                    Edge Cost = ∞ (100% detour)
-                  </Text>
+                  <Text style={styles.severityTitle}>Full blockage</Text>
+                  <Text style={styles.severitySub}>Edge Cost = ∞ (100% detour)</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setSeverity('CAUTION_ZONE')}
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    setSeverity('CAUTION_ZONE');
+                  }}
                   style={[
                     styles.severityBtn,
-                    severity === 'CAUTION_ZONE' ? styles.severityBtnSelectedCaution : styles.severityBtnNormal,
+                    severity === 'CAUTION_ZONE' && styles.severityBtnSelectedCaution,
                   ]}
+                  accessibilityRole="button"
                 >
-                  <Text style={styles.severityBtnCautionTitle}>
-                    Caution Zone
-                  </Text>
-                  <Text style={styles.severityBtnSub}>
-                    Slow crawl speed 0.3m/s
-                  </Text>
+                  <Text style={styles.severityTitle}>Caution zone</Text>
+                  <Text style={styles.severitySub}>Slow crawl speed (0.3m/s)</Text>
                 </Pressable>
               </View>
             </View>
 
             {/* Estimated Duration Until Clear */}
-            <View style={{ gap: 6 }}>
-              <Text style={styles.sectionLabel}>
-                DURATION UNTIL CLEAR
-              </Text>
+            <View style={{ gap: 8 }}>
+              <Text style={styles.sectionLabel}>Estimated duration</Text>
               <View style={styles.durationRow}>
-                {['15m', '30m', '60m', 'Until Clear'].map((dur) => {
+                {['15m', '30m', '60m', 'Until cleared'].map((dur) => {
                   const isSelected = duration === dur;
                   return (
                     <Pressable
                       key={dur}
-                      onPress={() => setDuration(dur)}
+                      onPress={() => {
+                        triggerHaptic('tap');
+                        setDuration(dur);
+                      }}
                       style={[
                         styles.durationBtn,
-                        isSelected ? styles.durationBtnSelected : styles.durationBtnNormal,
+                        isSelected && styles.durationBtnSelected,
                       ]}
+                      accessibilityRole="button"
                     >
                       <Text
                         style={[
                           styles.durationBtnText,
-                          isSelected ? styles.durationBtnTextSelected : styles.durationBtnTextNormal,
+                          isSelected && styles.durationBtnTextSelected,
                         ]}
                       >
                         {dur}
@@ -261,30 +272,25 @@ export function BlockPathHazardScreen() {
             </View>
 
             {/* Field Observation Notes */}
-            <View style={{ gap: 6 }}>
-              <Text style={styles.sectionLabel}>
-                FIELD NOTES
-              </Text>
+            <View style={{ gap: 8 }}>
+              <Text style={styles.sectionLabel}>Field notes</Text>
               <Input
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Describe hazard details..."
                 containerStyle={{ marginBottom: 0 }}
-                inputStyle={{ height: 40, fontSize: 12, fontWeight: '500' }}
               />
             </View>
 
-            {/* Submit Button (size="large" - min-h-16 = 64px) */}
-            <Pressable
+            {/* Submit Button in Warm Dark Gray */}
+            <Button
+              label="Report Hazard"
+              icon={<AlertOctagon size={18} color="#ffffff" />}
               onPress={handleSubmit}
-              style={styles.submitBtn}
-              accessibilityRole="button"
-            >
-              <AlertOctagon size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.submitBtnText}>
-                Report Hazard & Reroute Fleet
-              </Text>
-            </Pressable>
+              variant="primary"
+              size="lg"
+              style={{ marginTop: 8 }}
+            />
           </View>
         )}
       </ScrollView>
@@ -299,93 +305,97 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
   introCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 12,
+    borderColor: 'rgba(220, 38, 38, 0.25)',
+    borderRadius: radii.lg,
     padding: 16,
     ...shadows.panel,
   },
   introIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: colors.danger,
+    width: 42,
+    height: 42,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   introTitle: {
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
-    lineHeight: 20,
   },
   introDesc: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '400',
     color: colors.textSecondary,
-    lineHeight: 16,
+    lineHeight: 18,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colors.textMuted,
-    // DESIGN_SYSTEM 2.2: ALL-CAPS 9-10pt / weight 900 protocol labels are
-    // monospace, same as the other eyebrow slots in the app.
-    fontFamily: typography.fontMono,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
   },
   edgeCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 12,
+    borderRadius: radii.md,
     borderWidth: 1,
-    padding: 12,
-    minHeight: 61,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
+    padding: 14,
+    minHeight: 58,
     ...shadows.panel,
   },
-  edgeCardNormal: {
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
   edgeCardSelected: {
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: colors.darkAction,
+    borderWidth: 1.5,
   },
   edgeId: {
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   edgeZonePill: {
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 6,
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   edgeZoneText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
   },
   edgeName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginTop: 3,
     fontFamily: typography.fontSans,
+  },
+  checkBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.darkAction,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   hazardGrid: {
     flexDirection: 'row',
@@ -393,44 +403,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hazardCard: {
-    // Was a hard `width: 195`, which forced ONE card per 343pt row and left
-    // ~148pt of dead space to the right. `flex: 1` + `minWidth: 140` gives a real
-    // 2-up grid (2 x 140 + 8 gap = 288 <= 343). Note the break point is pinned by
-    // `minWidth`, not by label length: a longer label wraps *inside* the card.
     flex: 1,
     minWidth: 140,
-    minHeight: 57,
-    borderRadius: 12,
+    minHeight: 64,
+    borderRadius: radii.md,
     borderWidth: 1,
-    padding: 10,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
+    padding: 12,
     justifyContent: 'center',
     ...shadows.panel,
   },
-  hazardCardNormal: {
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
   hazardCardSelected: {
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: colors.darkAction,
+    borderWidth: 1.5,
   },
   hazardTitle: {
     fontSize: 13,
-    fontWeight: '900',
+    fontWeight: '700',
     color: colors.textPrimary,
-    lineHeight: 17,
     fontFamily: typography.fontSans,
   },
-  // The sub-label is load-bearing disambiguation in a 2x2 picker (it is what
-  // separates "Liquid Spill" from "Fallen Pallet" at a glance), so it stays.
-  // What it did NOT need was the 10pt/textMuted treatment, which is below the
-  // DESIGN_SYSTEM 2.2 floor for card body copy (11-13pt on textSecondary).
+  hazardTitleSelected: {
+    color: colors.darkAction,
+  },
   hazardDesc: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '400',
     color: colors.textSecondary,
-    lineHeight: 15,
     marginTop: 2,
+    lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   severityRow: {
     flexDirection: 'row',
@@ -438,44 +441,35 @@ const styles = StyleSheet.create({
   },
   severityBtn: {
     flex: 1,
-    minHeight: 57,
-    padding: 10,
-    borderRadius: 12,
+    minHeight: 60,
+    padding: 12,
+    borderRadius: radii.md,
     borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
   },
-  severityBtnNormal: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-  },
   severityBtnSelectedFull: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderColor: '#ef4444',
+    borderColor: '#dc2626',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(220, 38, 38, 0.04)',
   },
   severityBtnSelectedCaution: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderColor: '#f59e0b',
+    borderColor: '#b45309',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(245, 158, 11, 0.04)',
   },
-  severityBtnFullTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#ef4444',
-    lineHeight: 16,
+  severityTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
-  severityBtnCautionTitle: {
+  severitySub: {
     fontSize: 12,
-    fontWeight: '900',
-    color: '#b45309',
-    lineHeight: 16,
-    fontFamily: typography.fontSans,
-  },
-  severityBtnSub: {
-    fontSize: 11,
-    fontWeight: '600',
     color: colors.textSecondary,
-    lineHeight: 15,
     marginTop: 2,
+    fontFamily: typography.fontSans,
   },
   durationRow: {
     flexDirection: 'row',
@@ -483,93 +477,68 @@ const styles = StyleSheet.create({
   },
   durationBtn: {
     flex: 1,
-    height: 36,
-    borderRadius: 8,
+    minHeight: 40,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-  },
-  durationBtnNormal: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    paddingHorizontal: 6,
   },
   durationBtnSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
   },
   durationBtnText: {
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '600',
+    color: colors.textSecondary,
     fontFamily: typography.fontSans,
-  },
-  durationBtnTextNormal: {
-    color: colors.textPrimary,
   },
   durationBtnTextSelected: {
     color: '#ffffff',
-  },
-  submitBtn: {
-    backgroundColor: colors.danger,
-    minHeight: 64,
-    borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 3,
-    borderBottomColor: '#991b1b',
-  },
-  submitBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    fontFamily: typography.fontSans,
+    fontWeight: '700',
   },
   submittedCard: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    padding: 20,
-    alignItems: 'center',
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
+    padding: 18,
     ...shadows.panel,
   },
   submittedIconBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.danger,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.control,
+    marginBottom: 12,
   },
   submittedTitle: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: 12,
     fontFamily: typography.fontSans,
   },
   submittedSub: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
-    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.textSecondary,
+    lineHeight: 18,
     marginTop: 4,
     marginBottom: 16,
-    lineHeight: 16,
     fontFamily: typography.fontSans,
   },
   receiptBox: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.2)',
-    padding: 16,
-    gap: 8,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
   },
   receiptRow: {
     flexDirection: 'row',
@@ -577,76 +546,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   receiptLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textMuted,
+    fontSize: 13,
+    color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
   receiptVal: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
-  receiptHighlight: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
   receiptDanger: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#ef4444',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#dc2626',
     fontFamily: typography.fontMono,
   },
+  receiptHighlight: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
   receiptDuration: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#b45309',
+    color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   receiptBorderTop: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: 8,
-    marginTop: 4,
+    paddingTop: 10,
+    marginTop: 2,
   },
   submittedActions: {
-    width: '100%',
-    marginTop: 20,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  reopenBtn: {
-    flex: 1,
-    minHeight: 64,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reopenBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  doneBtn: {
-    flex: 1,
-    minHeight: 64,
-    borderRadius: 6,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ffffff',
-    fontFamily: typography.fontSans,
+    marginTop: 18,
+    gap: 10,
   },
 });

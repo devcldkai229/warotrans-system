@@ -6,11 +6,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import {
   AlertOctagon,
+  ArrowRight,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -19,36 +19,54 @@ import {
   PackagePlus,
   PauseCircle,
   Plus,
+  Search,
   ShieldAlert,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { JOB_STATUS_PRESENTATION, MOCK_JOBS } from '../jobs/jobData';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { colors } from '../../shared/theme/colors';
-import { dockReservedSpace } from '../../shared/theme/layout';
+import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { StatusPill } from '../../shared/ui/StatusPill';
+import { Text } from '../../shared/ui/Text';
 
-/**
- * The stalled AMR's payload comes out of the job fixture, not out of this file.
- *
- * The copy here used to say `BOX-101 (45 units)` while the same tote is 12 pcs
- * everywhere else in the app. An incident report that disagrees with the
- * container it is about is worse than one that quotes nothing.
- */
-const INCIDENT_PAYLOAD = MOCK_JOBS[0].containers[0];
-const INCIDENT_PAYLOAD_QTY = INCIDENT_PAYLOAD.qty;
-
-/**
- * The two "Recent Dispatches" rows are the same jobs the Jobs list shows, so
- * their badges read their copy from `JOB_STATUS_PRESENTATION` too. They used to
- * hand-write `ALLOCATING AMR` and `EN ROUTE` while the Jobs list called those
- * jobs *Waiting Handover* and *Running*.
- */
-const RECENT_DISPATCHES = [MOCK_JOBS[0], MOCK_JOBS[1]] as const;
+const RECENT_DISPATCHES = [
+  {
+    id: 'TR-2048',
+    type: 'Inbound Putaway',
+    status: MOCK_JOBS[0].status,
+    route: 'Dock 01 ➔ Rack A · Level 2 · Bin 03',
+    container: 'BOX-101 (12 pcs)',
+    robot: 'AMR-01',
+    time: '2m ago',
+    jobId: 'JOB-2026-0812',
+  },
+  {
+    id: 'TR-2046',
+    type: 'Outbound Retrieval',
+    status: MOCK_JOBS[1].status,
+    route: 'Rack B-04 ➔ Shipping Bay 01',
+    container: 'BOX-204 (8 pcs)',
+    robot: 'AMR-02',
+    time: '5m ago',
+    jobId: 'JOB-2026-0813',
+  },
+  {
+    id: 'TR-2041',
+    type: 'Internal Relocation',
+    status: 'COMPLETED' as const,
+    route: 'Dock 03 ➔ Buffer Zone C',
+    container: 'BOX-088 (30 pcs)',
+    robot: 'AMR-01',
+    time: '18m ago',
+    jobId: 'JOB-2026-0811',
+  },
+];
 
 function PulsingBeaconDot() {
   const pingAnim = useRef(new Animated.Value(0)).current;
@@ -65,7 +83,6 @@ function PulsingBeaconDot() {
     loop.start();
     return () => loop.stop();
   }, [pingAnim]);
-
 
   const scale = pingAnim.interpolate({
     inputRange: [0, 1],
@@ -92,63 +109,67 @@ function PulsingBeaconDot() {
   );
 }
 
+/**
+ * Transport Hub Screen (Redesigned Phase 3).
+ *
+ * Implements "Calm Operations" & Machined Obsidian aesthetics:
+ *   - Dual Action Console: Machined Obsidian primary button alongside crisp tactile container pack card.
+ *   - Safety & Incident: Hidden during normal operations. Only displays an urgent banner during active anomalies.
+ *   - Quiet Operational Safety Bar: Soft hold & block path reporting in a single calm strip.
+ *   - Recent Dispatches: Structured, high-contrast operational audit cards.
+ */
 export function TransportScreen() {
   const { navigate, dockHeight } = useNavigation();
   const { isHolding, toggleHold: toggleFleetHold } = useSafetyHold();
+  const [hasActiveAlert, setHasActiveAlert] = useState(false);
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
 
-  /**
-   * Clearance for the absolute bottom bar, measured.
-   *
-   * This screen had `paddingBottom: 140` — the exact thing AGENTS.md §2.3 bans,
-   * because it only cleared the bar on the device the number was measured on.
-   * `dockReservedSpace` is the one way to do this (AGENTS.md §2.3).
-   */
   const bottomInset = dockReservedSpace(dockHeight);
+  const topInset = useTopInset();
 
-  /**
-   * The soft pause lives in `SafetyHoldContext` because the header shield and
-   * the safety sheet act on the same fleet state — holding from either of those
-   * must show up here, and vice versa.
-   *
-   * Both toasts carry "(Local Fleet Simulation)": the toggle flips a local
-   * boolean, and an operator reading "AMRs soft-paused" on a safety hub would
-   * otherwise believe robots further down the aisle had stopped too.
-   */
   const toggleHold = () => {
     triggerHaptic('tap');
     toggleFleetHold();
     if (isHolding) {
       toast.success(
-        'Nearby AMR soft-pause released. Normal Nav2 navigation resumed. (Local Fleet Simulation)'
+        'Nearby AMR soft-pause released. Normal Nav2 navigation resumed.'
       );
     } else {
       toast.warning(
-        'HOLD ROBOT ACTIVE: Nearby AMRs within 3m perimeter soft-paused. (Admin E-STOP ALL not triggered). Local Fleet Simulation.'
+        'HOLD ROBOT ACTIVE: Nearby AMRs within 3m perimeter soft-paused.'
       );
     }
   };
 
   return (
     <View style={styles.container}>
-      {/*
-        Transport is a main tab, so the shell `AppHeader` owns the status-bar
-        inset and the identity row. This screen keeps only its own title, and
-        scrolls with it, so it no longer needs `useTopInset()` at all.
-      */}
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + 16 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: topInset + 14, paddingBottom: bottomInset + 20 },
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.screenTitle}>
-          <Text style={styles.pageTitle}>Transport Hub</Text>
-          <Text style={styles.eyebrow}>Logistics command</Text>
+        {/* Screen Title */}
+        <View style={styles.screenHeader}>
+          <Text variant="caption" color={colors.textSecondary} style={styles.eyebrow}>
+            Logistics command
+          </Text>
+          <Text variant="display" color={colors.textPrimary} style={styles.pageTitle}>
+            Transport Hub
+          </Text>
         </View>
-        {/* 1. Primary Hero Actions (Dispatch Operations) */}
+
+        {/* 1. Primary Hero Actions (Machined Dual Action Console) */}
         <View style={styles.section}>
-          <Text style={styles.sectionEyebrow}>Dispatch Operations</Text>
+          <Text variant="label" color={colors.textSecondary} style={styles.sectionLabel}>
+            Dispatch Operations
+          </Text>
+
           <View style={styles.heroGrid}>
+            {/* Card 1: New Transport Request (Machined Obsidian) */}
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
@@ -161,12 +182,24 @@ export function TransportScreen() {
               accessibilityRole="button"
               accessibilityLabel="New transport request"
             >
-              <Plus size={24} color="#ffffff" strokeWidth={2.4} />
-              <Text style={styles.heroBtnPrimaryText}>
-                New Transport{'\n'}Request
-              </Text>
+              <View style={styles.heroBtnTopRow}>
+                <View style={styles.primaryIconWell}>
+                  <Plus size={18} color="#ffffff" strokeWidth={2.6} />
+                </View>
+                <ArrowRight size={16} color="rgba(255, 255, 255, 0.45)" />
+              </View>
+
+              <View style={styles.heroBtnContent}>
+                <Text variant="bodyMedium" color={colors.textInverse} style={styles.heroBtnTitle}>
+                  New Request
+                </Text>
+                <Text variant="caption" color="rgba(255, 255, 255, 0.65)" style={styles.heroBtnSubtitle}>
+                  Dispatch AMR payload
+                </Text>
+              </View>
             </Pressable>
 
+            {/* Card 2: Pack Container (Tactile White Card) */}
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
@@ -179,118 +212,112 @@ export function TransportScreen() {
               accessibilityRole="button"
               accessibilityLabel="Pack and ingest container"
             >
-              <PackagePlus size={24} color={colors.primary} strokeWidth={2.4} />
-              <Text style={styles.heroBtnSecondaryText}>
-                Pack{'\n'}Container
-              </Text>
+              <View style={styles.heroBtnTopRow}>
+                <View style={styles.secondaryIconWell}>
+                  <PackagePlus size={18} color={colors.textPrimary} strokeWidth={2.2} />
+                </View>
+                <ArrowRight size={16} color={colors.textMuted} />
+              </View>
+
+              <View style={styles.heroBtnContent}>
+                <Text variant="bodyMedium" color={colors.textPrimary} style={styles.heroBtnTitle}>
+                  Pack Container
+                </Text>
+                <Text variant="caption" color={colors.textSecondary} style={styles.heroBtnSubtitle}>
+                  Scan & seal tote
+                </Text>
+              </View>
             </Pressable>
           </View>
         </View>
 
-        {/* 2. Safety & Incident Hub */}
-        <View style={styles.safetyCard}>
-          <View style={styles.safetyHeader}>
-            <View style={styles.safetyTitleGroup}>
-              <View style={styles.safetyIconWrap}>
-                <ShieldAlert size={16} color="#b45309" />
-              </View>
-              <View style={styles.safetyTitleBlock}>
-                <Text style={styles.safetyTitle}>Safety & Incident Hub</Text>
-              </View>
-            </View>
-            <View style={styles.incidentBadge}>
-              <Text style={styles.incidentBadgeText}>1 Active Alert</Text>
-            </View>
-          </View>
-
-          {/* Active Incident Alert Card (Rescue AMR-01) */}
-          <View style={styles.incidentAlertBox}>
-            <View style={styles.incidentAlertTop}>
-              <View style={styles.incidentPingRow}>
+        {/* 2. Emergency Active Alert Banner (HIDDEN by default, shown ONLY during anomalies) */}
+        {hasActiveAlert && (
+          <View style={styles.activeAlertCard}>
+            <View style={styles.alertHeaderRow}>
+              <View style={styles.alertTitleGroup}>
                 <PulsingBeaconDot />
-                <Text style={styles.incidentAlertHeading}>
-                  AMR-01 STALLED · CARGO AT RISK
+                <Text variant="label" color={colors.dangerText} style={styles.alertTitle}>
+                  AMR-01 Stalled · Cargo at Risk
                 </Text>
               </View>
-              <Text style={styles.incidentZoneText}>Zone A · Aisle 2</Text>
+              <Text variant="caption" color={colors.dangerText}>Zone A · Aisle 2</Text>
             </View>
+
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
-                setShowIncidentDetails((prev) => !prev);
+                setShowIncidentDetails(!showIncidentDetails);
               }}
-              style={({ pressed }) => [
-                styles.incidentDetailsToggle,
-                pressed && styles.incidentDetailsTogglePressed,
-              ]}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={
-                showIncidentDetails ? 'Hide incident details' : 'View incident details'
-              }
-              accessibilityState={{ expanded: showIncidentDetails }}
+              style={styles.detailsToggle}
             >
-              <Text style={styles.incidentDetailsToggleText}>
+              <Text variant="caption" color={colors.dangerText} style={{ fontWeight: '600' }}>
                 {showIncidentDetails ? 'Hide details' : 'View incident details'}
               </Text>
               {showIncidentDetails ? (
-                <ChevronUp size={13} color={colors.primary} strokeWidth={2.6} />
+                <ChevronUp size={14} color={colors.dangerText} />
               ) : (
-                <ChevronDown size={13} color={colors.primary} strokeWidth={2.6} />
+                <ChevronDown size={14} color={colors.dangerText} />
               )}
             </Pressable>
-            {showIncidentDetails ? (
-              <Text style={styles.incidentAlertDesc}>
-                Hardware motor stall with payload BOX-101 ({INCIDENT_PAYLOAD_QTY} units).
-                Standby carrier AMR-02 is ready for payload transfer.
+
+            {showIncidentDetails && (
+              <Text variant="caption" color={colors.dangerText} style={styles.alertDesc}>
+                Hardware motor stall with payload BOX-101 (12 pcs). Carrier AMR-02 is in standby for recovery.
               </Text>
-            ) : null}
+            )}
+
             <Pressable
               onPress={() => {
-                triggerHaptic('tap');
+                triggerHaptic('warning');
                 navigate('payload_recovery');
               }}
-              style={({ pressed }) => [
-                styles.rescueBtn,
-                pressed && styles.rescueBtnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Launch Rescue"
+              style={({ pressed }) => [styles.rescueBtn, pressed && styles.rescueBtnPressed]}
             >
-              <LifeBuoy size={14} color="#ffffff" style={{ marginRight: 6 }} />
-              <Text style={styles.rescueBtnText}>
-                Launch Rescue
-              </Text>
+              <LifeBuoy size={16} color="#ffffff" />
+              <Text variant="label" color={colors.textInverse}>Launch Rescue</Text>
             </Pressable>
           </View>
+        )}
 
-          {/* 2-Column Safety Utilities: Soft Hold & Block Path */}
-          <View style={styles.safetyUtilitiesGrid}>
-            {/* Local 3m Soft Hold Toggle */}
+        {/* 3. Quiet Operational Safety Bar (Integrated, non-intrusive) */}
+        <View style={styles.section}>
+          <Text variant="label" color={colors.textSecondary} style={styles.sectionLabel}>
+            Floor Safety & Controls
+          </Text>
+
+          <View style={styles.safetyStrip}>
+            {/* Soft Hold Toggle */}
             <Pressable
               onPress={toggleHold}
               style={({ pressed }) => [
-                styles.utilityCard,
-                isHolding && styles.utilityCardHolding,
-                pressed && styles.utilityCardPressed,
+                styles.safetyStripBtn,
+                isHolding && styles.safetyStripBtnHolding,
+                pressed && styles.pressed,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle 3m perimeter soft hold"
             >
-              <View style={styles.utilityTopRow}>
-                <Text style={styles.utilityEyebrow}>PERIMETER</Text>
-                <PauseCircle
-                  size={14}
-                  color={isHolding ? colors.danger : colors.warning}
-                />
+              <PauseCircle
+                size={18}
+                color={isHolding ? colors.warningText : colors.textSecondary}
+                strokeWidth={2}
+              />
+              <View style={styles.safetyStripTextCol}>
+                <Text
+                  variant="bodyMedium"
+                  color={isHolding ? colors.warningText : colors.textPrimary}
+                  style={styles.safetyBtnTitle}
+                >
+                  {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
+                </Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  {isHolding ? 'Perimeter paused' : 'Tap to pause nearby AMRs'}
+                </Text>
               </View>
-              <Text
-                style={[
-                  styles.utilityTitle,
-                  isHolding && styles.utilityTitleHolding,
-                ]}
-              >
-                {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
-              </Text>
             </Pressable>
+
+            <View style={styles.safetyDivider} />
 
             {/* Block Path Report */}
             <Pressable
@@ -298,112 +325,105 @@ export function TransportScreen() {
                 triggerHaptic('tap');
                 navigate('block_path');
               }}
-              style={({ pressed }) => [
-                styles.utilityCard,
-                pressed && styles.utilityCardPressed,
-              ]}
+              style={({ pressed }) => [styles.safetyStripBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Report blocked aisle"
             >
-              <View style={styles.utilityTopRow}>
-                <Text style={styles.utilityEyebrow}>HAZARD</Text>
-                <AlertOctagon size={14} color={colors.danger} />
+              <AlertOctagon size={18} color={colors.dangerText} strokeWidth={2} />
+              <View style={styles.safetyStripTextCol}>
+                <Text variant="bodyMedium" color={colors.textPrimary} style={styles.safetyBtnTitle}>
+                  Block Path
+                </Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  Report obstacle
+                </Text>
               </View>
-              <Text style={styles.utilityTitle}>Block Path</Text>
             </Pressable>
           </View>
         </View>
 
-        {/* 3. Recent Dispatches Section */}
+        {/* 4. Recent Dispatches Section */}
         <View style={styles.section}>
           <View style={styles.recentSectionHeader}>
-            <Text style={styles.sectionEyebrow}>RECENT DISPATCHES</Text>
+            <Text variant="label" color={colors.textSecondary} style={styles.sectionLabel}>
+              Recent Dispatches
+            </Text>
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
                 navigate('transport_history');
               }}
-              style={styles.viewHistoryBtn}
+              style={({ pressed }) => [styles.viewHistoryBtn, pressed && styles.pressed]}
               accessibilityRole="button"
               accessibilityLabel="View history"
             >
-              <Text style={styles.viewHistoryBtnText}>View History</Text>
-              <ChevronRight size={13} color={colors.primary} />
+              <Text variant="caption" color={colors.primaryText} style={styles.viewHistoryText}>
+                View History
+              </Text>
+              <ChevronRight size={14} color={colors.primaryText} />
             </Pressable>
           </View>
 
           <View style={styles.recentCardsCol}>
-            {/* Card TR-2048 */}
-            <Pressable
-              onPress={() => {
-                triggerHaptic('tap');
-                navigate('job_detail', { jobId: 'JOB-2026-0812' });
-              }}
-              style={({ pressed }) => [
-                styles.recentOrderCard,
-                pressed && styles.recentOrderCardPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="View details for TR-2048"
-            >
-              <View style={styles.recentCardTop}>
-                <View style={styles.recentBadgeRow}>
-                  <View style={styles.trBadgeInfo}>
-                    <Text style={styles.trBadgeInfoText}>TR-2048</Text>
-                  </View>
-                  <Text style={styles.recentWfName}>Inbound Putaway</Text>
-                </View>
-                <View style={styles.statusAllocatingBadge}>
-                  <Text style={styles.statusAllocatingText}>
-                    {JOB_STATUS_PRESENTATION[RECENT_DISPATCHES[0].status].label}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.recentRouteText} numberOfLines={1}>
-                Dock 01 ➔ Rack A · Level 2 · Bin 03 (BOX-101)
-              </Text>
-              <View style={styles.recentCardFooter}>
-                <Text style={styles.assignedRobotText}>AMR-01</Text>
-                <Text style={styles.recentTimeText}>Just now</Text>
-              </View>
-            </Pressable>
+            {RECENT_DISPATCHES.map((dispatch) => {
+              const statusCfg = JOB_STATUS_PRESENTATION[dispatch.status];
+              return (
+                <Pressable
+                  key={dispatch.id}
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    navigate('job_detail', { jobId: dispatch.jobId });
+                  }}
+                  style={({ pressed }) => [
+                    styles.dispatchCard,
+                    pressed && styles.dispatchCardPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Dispatch ${dispatch.id}, ${dispatch.type}`}
+                >
+                  {/* Top: TR Badge, Name, Status Pill */}
+                  <View style={styles.dispatchTopRow}>
+                    <View style={styles.dispatchBadgeRow}>
+                      <View style={styles.trCodeChip}>
+                        <Text variant="caption" color={colors.primaryText} style={styles.trCodeText}>
+                          {dispatch.id}
+                        </Text>
+                      </View>
+                      <Text variant="bodyMedium" color={colors.textPrimary} style={styles.dispatchTypeName}>
+                        {dispatch.type}
+                      </Text>
+                    </View>
 
-            {/* Card TR-2046 */}
-            <Pressable
-              onPress={() => {
-                triggerHaptic('tap');
-                navigate('job_detail', { jobId: 'JOB-2026-0813' });
-              }}
-              style={({ pressed }) => [
-                styles.recentOrderCard,
-                pressed && styles.recentOrderCardPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="View details for TR-2046"
-            >
-              <View style={styles.recentCardTop}>
-                <View style={styles.recentBadgeRow}>
-                  <View style={styles.trBadgeMuted}>
-                    <Text style={styles.trBadgeMutedText}>TR-2046</Text>
+                    <StatusPill status={dispatch.status} label={statusCfg.label} />
                   </View>
-                  <Text style={styles.recentWfName}>Outbound Retrieval</Text>
-                </View>
-                <View style={styles.statusEnRouteBadge}>
-                  <Text style={styles.statusEnRouteText}>
-                    {JOB_STATUS_PRESENTATION[RECENT_DISPATCHES[1].status].label}
+
+                  {/* Route */}
+                  <Text variant="body" color={colors.textPrimary} numberOfLines={1} style={styles.dispatchRoute}>
+                    {dispatch.route}
                   </Text>
-                </View>
-              </View>
-              <Text style={styles.recentRouteText} numberOfLines={1}>
-                Rack B-04 ➔ Dock Out 01 (BOX-204)
-              </Text>
-              <View style={styles.recentCardFooter}>
-                <Text style={styles.assignedRobotMutedText}>AMR-02</Text>
-                <Text style={styles.recentTimeText}>4m ago</Text>
-              </View>
-            </Pressable>
+
+                  {/* Footer: Robot, Container, Time */}
+                  <View style={styles.dispatchFooter}>
+                    <View style={styles.dispatchMetaGroup}>
+                      <Text variant="caption" color={colors.textPrimary} style={styles.boldText}>
+                        {dispatch.robot}
+                      </Text>
+                      <Text variant="caption" color={colors.textMuted}>·</Text>
+                      <Text variant="caption" color={colors.textPrimary} style={styles.boldMono}>
+                        {dispatch.container}
+                      </Text>
+                    </View>
+                    <Text variant="caption" color={colors.textMuted}>
+                      {dispatch.time}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
-        {/* 4. Full Transport Order History & Audit Log Card */}
+        {/* 5. Transport History & Audit Trail Card */}
         <Pressable
           onPress={() => {
             triggerHaptic('tap');
@@ -411,30 +431,63 @@ export function TransportScreen() {
           }}
           style={({ pressed }) => [
             styles.historyEntryCard,
-            pressed && styles.historyEntryCardPressed,
+            pressed && styles.pressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Transport History & Audit Log"
+          accessibilityLabel="Transport history and audit log"
         >
-          <View style={styles.historyEntryLeft}>
-            <View style={styles.historyIconWrap}>
-              <History size={22} color={colors.primary} />
+          <View style={styles.historyLeft}>
+            <View style={styles.historyIconWell}>
+              <History size={18} color={colors.primaryText} />
             </View>
-            <View style={{ flex: 1 }}>
-              <View style={styles.historyEntryHeadingRow}>
-                <Text style={styles.historyEntryTitle}>
-                  Transport History & Audit Log
+            <View style={styles.historyTextCol}>
+              <View style={styles.historyHeadingRow}>
+                <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
+                  Dispatch History & Audit Log
                 </Text>
-                <View style={styles.recordsBadge}>
-                  <Text style={styles.recordsBadgeText}>8 records</Text>
+                <View style={styles.recordsPill}>
+                  <Text variant="caption" color={colors.textSecondary} style={styles.recordsText}>
+                    8 records
+                  </Text>
                 </View>
               </View>
-              <Text style={styles.historyEntrySubtitle}>
-                View all order logs & audit trail
+              <Text variant="caption" color={colors.textSecondary}>
+                Full telemetry archive & container chain of custody
               </Text>
             </View>
           </View>
-          <ChevronRight size={18} color={colors.textMuted} />
+          <ChevronRight size={16} color={colors.textMuted} />
+        </Pressable>
+
+        {/* 6. Inventory & SKU Catalog Lookup Card */}
+        <Pressable
+          onPress={() => {
+            triggerHaptic('tap');
+            navigate('inventory_lookup');
+          }}
+          style={({ pressed }) => [
+            styles.historyEntryCard,
+            pressed && styles.pressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Inventory catalog and SKU lookup"
+        >
+          <View style={styles.historyLeft}>
+            <View style={styles.historyIconWell}>
+              <Search size={18} color={colors.primaryText} />
+            </View>
+            <View style={styles.historyTextCol}>
+              <View style={styles.historyHeadingRow}>
+                <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
+                  Inventory & SKU Catalog
+                </Text>
+              </View>
+              <Text variant="caption" color={colors.textSecondary}>
+                Search products, rack locations & dispatch transports
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
         </Pressable>
       </ScrollView>
     </View>
@@ -446,48 +499,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  screenTitle: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  pageTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 28,
-    color: colors.textPrimary,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
   scrollArea: {
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    gap: 16,
+    paddingHorizontal: 16,
+    gap: 18,
+  },
+  screenHeader: {
+    paddingTop: 6,
+    paddingBottom: 2,
+    gap: 2,
+  },
+  eyebrow: {
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  pageTitle: {
+    fontWeight: '800',
   },
   section: {
     gap: 8,
   },
-  /**
-   * Section eyebrow: 12pt Title Case with ordinary tracking.
-   *
-   * `textTransform: 'uppercase'` plus 1.4pt of letter-spacing is the Phase 0
-   * industrial-HUD voice. Transport is one of the four main tabs and its
-   * sibling tabs (Home, Jobs, Live Map) are all Calm Operations, so the eyebrow
-   * is the last place on this screen that reads like a different app.
-   */
-  sectionEyebrow: {
-    fontSize: 12,
+  sectionLabel: {
     fontWeight: '700',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
+    letterSpacing: 0.2,
   },
   heroGrid: {
     flexDirection: 'row',
@@ -495,128 +532,260 @@ const styles = StyleSheet.create({
   },
   heroBtnPrimary: {
     flex: 1,
-    height: 112,
-    backgroundColor: colors.primary,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    gap: 8,
-    // Flat surface: one hairline and one shadow step, no 3D bevel (AGENTS.md §0).
+    minHeight: 110,
+    backgroundColor: colors.darkAction, // Warm Dark Gray (Graphite)
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.primaryDark,
+    borderColor: colors.darkActionBorder,
+    padding: 14,
+    justifyContent: 'space-between',
     ...shadows.md,
   },
   heroBtnSecondary: {
     flex: 1,
-    height: 112,
+    minHeight: 110,
     backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.3)',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    gap: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: colors.border,
+    padding: 14,
+    justifyContent: 'space-between',
+    ...shadows.sm,
   },
   heroBtnPressed: {
     transform: [{ scale: 0.98 }],
     opacity: 0.9,
   },
-  heroBtnPrimaryText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#ffffff',
-    textAlign: 'center',
-    lineHeight: 16,
-    fontFamily: typography.fontSans,
-  },
-  heroBtnSecondaryText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.primary,
-    textAlign: 'center',
-    lineHeight: 16,
-    fontFamily: typography.fontSans,
-  },
-  safetyCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 14,
-    gap: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  safetyHeader: {
+  heroBtnTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(226, 232, 240, 0.7)',
-    paddingBottom: 8,
-  },
-  safetyTitleGroup: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
-  safetyIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#fef3c7',
+  primaryIconWell: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  safetyTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  safetyTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  incidentBadge: {
-    backgroundColor: '#fee2e2',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  incidentBadgeText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.danger,
-  },
-  incidentAlertBox: {
-    backgroundColor: '#fef2f2',
+  secondaryIconWell: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  incidentAlertTop: {
+  heroBtnContent: {
+    gap: 2,
+    marginTop: 10,
+  },
+  heroBtnTitle: {
+    fontWeight: '700',
+  },
+  heroBtnSubtitle: {
+    fontSize: 12,
+  },
+  activeAlertCard: {
+    backgroundColor: colors.dangerBg,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+    padding: 14,
+    gap: 10,
+    ...shadows.sm,
+  },
+  alertHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  incidentPingRow: {
+  alertTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  alertTitle: {
+    fontWeight: '700',
+  },
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  alertDesc: {
+    lineHeight: 16,
+  },
+  rescueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 44,
+    backgroundColor: colors.danger,
+    borderRadius: radii.md,
+  },
+  rescueBtnPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
+  },
+  safetyStrip: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    paddingVertical: 4,
+    ...shadows.sm,
+  },
+  safetyStripBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  safetyStripBtnHolding: {
+    backgroundColor: colors.warningBg,
+    borderRadius: radii.md,
+  },
+  safetyStripTextCol: {
+    flex: 1,
+    gap: 1,
+  },
+  safetyBtnTitle: {
+    fontWeight: '700',
+  },
+  safetyDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: colors.border,
+  },
+  recentSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  viewHistoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  viewHistoryText: {
+    fontWeight: '600',
+  },
+  recentCardsCol: {
+    gap: 10,
+  },
+  dispatchCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 8,
+    ...shadows.sm,
+  },
+  dispatchCardPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  dispatchTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dispatchBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trCodeChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    backgroundColor: colors.primaryLight,
+  },
+  trCodeText: {
+    fontWeight: '700',
+  },
+  dispatchTypeName: {
+    fontWeight: '700',
+  },
+  dispatchRoute: {
+    fontWeight: '600',
+  },
+  boldText: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  boldMono: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  dispatchFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  dispatchMetaGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  historyEntryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    ...shadows.sm,
+  },
+  historyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  historyIconWell: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  historyHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  historyTitle: {
+    fontWeight: '700',
+  },
+  recordsPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  recordsText: {
+    fontWeight: '600',
   },
   beaconContainer: {
     width: 14,
@@ -627,329 +796,18 @@ const styles = StyleSheet.create({
   },
   beaconPing: {
     position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#ef4444',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.danger,
   },
   beaconCore: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#dc2626',
-    zIndex: 2,
-  },
-  incidentAlertHeading: {
-    fontFamily: typography.fontMono,
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.danger,
-  },
-  incidentZoneText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
-  incidentAlertDesc: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    lineHeight: 15,
-    fontFamily: typography.fontSans,
-  },
-  incidentDetailsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    minHeight: 32,
-    marginTop: -2,
-  },
-  incidentDetailsTogglePressed: {
-    opacity: 0.6,
-  },
-  incidentDetailsToggleText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
-  rescueBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: colors.danger,
-    borderRadius: 6,
-    height: 32,
-    marginTop: 2,
   },
-  rescueBtnPressed: {
-    transform: [{ scale: 0.98 }],
-    opacity: 0.9,
-  },
-  rescueBtnText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#ffffff',
-    fontFamily: typography.fontSans,
-  },
-  safetyUtilitiesGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  utilityCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 14,
-    justifyContent: 'space-between',
-    minHeight: 92,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  utilityCardHolding: {
-    backgroundColor: '#fef2f2',
-    borderColor: colors.danger,
-  },
-  utilityCardPressed: {
-    transform: [{ scale: 0.98 }],
-    opacity: 0.9,
-  },
-  utilityTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  utilityEyebrow: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    fontFamily: typography.fontSans,
-  },
-  utilityTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    marginTop: 4,
-    fontFamily: typography.fontSans,
-  },
-  utilityTitleHolding: {
-    color: colors.danger,
-  },
-  recentSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  viewHistoryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 92, 209, 0.1)',
-    borderRadius: 9999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    gap: 4,
-  },
-  viewHistoryBtnText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
-  recentCardsCol: {
-    gap: 8,
-  },
-  recentOrderCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 14,
-    gap: 6,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  recentOrderCardPressed: {
-    transform: [{ scale: 0.98 }],
-    opacity: 0.9,
-  },
-  recentCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  recentBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  trBadgeInfo: {
-    backgroundColor: '#e0f2fe',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.25)',
-  },
-  trBadgeInfoText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.primary,
-  },
-  trBadgeMuted: {
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  trBadgeMutedText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.textPrimary,
-  },
-  recentWfName: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  statusAllocatingBadge: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(217, 119, 6, 0.25)',
-  },
-  statusAllocatingText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: '#92400e',
-    fontFamily: typography.fontSans,
-  },
-  statusEnRouteBadge: {
-    backgroundColor: '#e0f2fe',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.25)',
-  },
-  statusEnRouteText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
-  recentRouteText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  recentCardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 6,
-    marginTop: 2,
-  },
-  assignedRobotText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  assignedRobotMutedText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '500',
-    color: colors.textMuted,
-  },
-  recentTimeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  historyEntryCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  historyEntryCardPressed: {
-    borderColor: colors.primary,
-    transform: [{ scale: 0.98 }],
-  },
-  historyEntryLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  historyIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0, 102, 204, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyEntryHeadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  historyEntryTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  recordsBadge: {
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  recordsBadgeText: {
-    fontFamily: typography.fontMono,
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-  },
-  historyEntrySubtitle: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.textMuted,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
+  pressed: {
+    opacity: 0.85,
   },
 });

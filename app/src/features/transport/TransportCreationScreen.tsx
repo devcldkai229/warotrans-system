@@ -3,11 +3,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import {
-  Box,
+  ArrowRight,
   Check,
   Layers,
   MapPin,
@@ -20,8 +19,9 @@ import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
-import { typography } from '../../shared/theme/typography';
+import { Text } from '../../shared/ui/Text';
 import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
 import { WorkflowTemplateCard } from './WorkflowTemplateCard';
 
@@ -35,15 +35,14 @@ interface SlotItem {
 }
 
 const PRESET_PRODUCTS = [
-  { name: 'Electronic Components', container: 'BOX-101', defaultQty: '45', source: 'DOCK-IN-01', destination: 'RACK-A-02' },
-  { name: 'Control Module (CM-3100)', container: 'BOX-102', defaultQty: '25', source: 'DOCK-IN-01', destination: 'RACK-B-04' },
-  { name: 'Sensor Array (SA-8820)', container: 'BOX-103', defaultQty: '20', source: 'RACK-D-01', destination: 'RACK-A-01' },
+  { name: 'Electronic Components', container: 'BOX-101', defaultQty: '45', source: 'DOCK-IN-01', destination: 'RACK-A-02 · L2 · Bin 03' },
+  { name: 'Control Module (CM-3100)', container: 'BOX-102', defaultQty: '25', source: 'DOCK-IN-01', destination: 'RACK-B-04 · L1 · Bin 02' },
+  { name: 'Sensor Array (SA-8820)', container: 'BOX-103', defaultQty: '20', source: 'RACK-D-01', destination: 'RACK-A-01 · L3 · Bin 01' },
 ];
 
 export function TransportCreationScreen() {
   const { goBack, navigate, params } = useNavigation();
 
-  // If passed directly from Quick Dispatch or Home
   const initialWorkflowName = params?.workflow || 'Inbound Putaway';
   const initialContainer = params?.container || 'BOX-101';
   const initialProduct = params?.product || 'Electronic Components';
@@ -61,12 +60,11 @@ export function TransportCreationScreen() {
       container: initialContainer,
       product: initialProduct,
       source: initialSource,
-      destination: 'RACK-A-02 · L2 · Bin 03',
+      destination: 'RACK-A-02 · Level 2 · Bin 03',
       qty: params?.qty || '45',
     },
   ]);
   const [activeSlotIdx, setActiveSlotIdx] = useState<number>(0);
-  const [dispatched, setDispatched] = useState<boolean>(false);
 
   const handleSelectWorkflow = (wf: WorkflowItem) => {
     setSelectedWorkflow(wf);
@@ -118,7 +116,6 @@ export function TransportCreationScreen() {
   };
 
   const handleConfirmDispatch = () => {
-    setDispatched(true);
     setStep(3);
   };
 
@@ -129,8 +126,8 @@ export function TransportCreationScreen() {
       <SubScreenHeader
         label={
           step === 1
-            ? 'NEW TRANSPORT ORDER'
-            : selectedWorkflow.name.toUpperCase()
+            ? 'New Transport Request'
+            : selectedWorkflow.name
         }
         title={
           step === 1
@@ -148,22 +145,24 @@ export function TransportCreationScreen() {
         }}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Step 1: Workflow Template Selection Grid */}
         {step === 1 && (
-          <View style={{ gap: 12 }}>
+          <View style={{ gap: 14 }}>
             <View style={styles.workflowIntro}>
-              <Text style={styles.workflowIntroTitle}>
-                Select Workflow Template
-              </Text>
-              <View style={styles.rbacPill}>
-                <Text style={styles.rbacPillText}>5 Templates</Text>
+              <View>
+                <Text variant="headline" style={styles.workflowIntroTitle}>
+                  Available Mission Templates
+                </Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  Choose a predefined orchestration pattern for autonomous AMR movement.
+                </Text>
               </View>
             </View>
 
             <View style={styles.workflowGrid}>
               {WORKFLOWS.map((wf) => (
-                <View key={wf.id} style={{ width: '48%' }}>
+                <View key={wf.id} style={styles.workflowGridItem}>
                   <WorkflowTemplateCard
                     workflow={wf}
                     onSelect={handleSelectWorkflow}
@@ -176,26 +175,38 @@ export function TransportCreationScreen() {
 
         {/* Step 2: Multi-Slot Chassis Dispatch Configuration */}
         {step === 2 && (
-          <View style={{ gap: 14 }}>
+          <View style={{ gap: 16 }}>
             {/* Workflow Banner */}
             <View style={styles.flowBanner}>
               <View style={styles.flowBannerTop}>
                 <View style={styles.flowBadge}>
-                  <Text style={styles.flowBadgeText}>{selectedWorkflow.category}</Text>
+                  <Text variant="caption" color={colors.primaryText} style={styles.flowBadgeText}>
+                    {selectedWorkflow.category}
+                  </Text>
                 </View>
-                <Text style={styles.flowTitle} numberOfLines={1}>{selectedWorkflow.name}</Text>
+                <Text variant="headline" numberOfLines={1} style={styles.flowTitle}>
+                  {selectedWorkflow.name}
+                </Text>
               </View>
-              <Text style={styles.flowCode} numberOfLines={1}>{selectedWorkflow.code}</Text>
+              <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+                Template Code: {selectedWorkflow.code}
+              </Text>
             </View>
 
             {/* Flatbed 3-Slot Selector */}
             <View style={styles.deckCard}>
               <View style={styles.deckHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={styles.deckHeaderLeft}>
                   <Layers size={16} color={colors.primary} />
-                  <Text style={styles.deckTitle}>AMR Flatbed 3-Slot Payload</Text>
+                  <Text variant="bodyMedium" style={styles.deckTitle}>
+                    AMR Flatbed 3-Slot Payload
+                  </Text>
                 </View>
-                <Text style={styles.deckSlotsCount}>{slots.length}/3 Trays Loaded</Text>
+                <View style={styles.deckSlotsBadge}>
+                  <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
+                    {slots.length} / 3 Trays Active
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.slotsSelectorRow}>
@@ -210,10 +221,18 @@ export function TransportCreationScreen() {
                         isActive && styles.slotTabActive,
                       ]}
                     >
-                      <Text style={[styles.slotTabLabel, isActive && styles.slotTabLabelActive]}>
+                      <Text
+                        variant="caption"
+                        color={isActive ? colors.textPrimary : colors.textMuted}
+                        style={[styles.slotTabLabel, isActive && styles.slotTabLabelActive]}
+                      >
                         Slot {s.slotNo}
                       </Text>
-                      <Text style={[styles.slotTabCode, isActive && styles.slotTabCodeActive]}>
+                      <Text
+                        variant="caption"
+                        color={isActive ? colors.textPrimary : colors.textSecondary}
+                        style={[styles.slotTabCode, isActive && styles.slotTabCodeActive]}
+                      >
                         {s.container}
                       </Text>
                     </Pressable>
@@ -222,8 +241,10 @@ export function TransportCreationScreen() {
 
                 {slots.length < 3 && (
                   <Pressable onPress={handleAddSlot} style={styles.addSlotBtn}>
-                    <Plus size={16} color={colors.primary} />
-                    <Text style={styles.addSlotText}>+ Add Tote</Text>
+                    <Plus size={15} color={colors.primary} />
+                    <Text variant="caption" color={colors.primary} style={styles.addSlotText}>
+                      + Add Tote
+                    </Text>
                   </Pressable>
                 )}
               </View>
@@ -232,13 +253,14 @@ export function TransportCreationScreen() {
             {/* Active Slot Configuration Card */}
             <View style={styles.configCard}>
               <View style={styles.slotConfigHeader}>
-                <Text style={styles.slotConfigTitle}>
+                <Text variant="headline" style={styles.slotConfigTitle}>
                   Configuring Tray Slot {currentSlot.slotNo}
                 </Text>
                 {slots.length > 1 && (
                   <Pressable
                     onPress={() => handleRemoveSlot(activeSlotIdx)}
                     style={styles.deleteSlotBtn}
+                    accessibilityLabel={`Remove Slot ${currentSlot.slotNo}`}
                   >
                     <Trash2 size={16} color={colors.danger} />
                   </Pressable>
@@ -274,7 +296,7 @@ export function TransportCreationScreen() {
               />
 
               <Input
-                label="Quantity inside Container"
+                label="Cargo Quantity in Tote"
                 value={currentSlot.qty}
                 onChangeText={(v) => handleUpdateActiveSlot('qty', v)}
                 keyboardType="numeric"
@@ -283,7 +305,7 @@ export function TransportCreationScreen() {
             </View>
 
             <Button
-              label={`Dispatch (AMR-01 · ${slots.length} ${slots.length === 1 ? 'Tote' : 'Totes'})`}
+              label="Dispatch Mission"
               icon={<Rocket size={18} color="#ffffff" />}
               onPress={handleConfirmDispatch}
               variant="primary"
@@ -296,37 +318,48 @@ export function TransportCreationScreen() {
         {step === 3 && (
           <View style={styles.successCard}>
             <View style={styles.successIconBadge}>
-              <Check size={28} color="#ffffff" />
+              <Check size={28} color="#ffffff" strokeWidth={2.8} />
             </View>
-            <Text style={styles.successTitle}>Transport Order Dispatched</Text>
-            <Text style={styles.successSub}>
-              {slots.length} container{slots.length !== 1 ? 's' : ''} allocated to AMR-01 for autonomous transport.
+
+            <Text variant="title" style={styles.successTitle}>
+              Transport Mission Dispatched
+            </Text>
+            <Text variant="caption" color={colors.textSecondary} style={styles.successSub}>
+              {slots.length} container{slots.length !== 1 ? 's' : ''} assigned to AMR-01 for autonomous routing.
             </Text>
 
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Dispatch Order:</Text>
-                <Text style={styles.receiptVal}>TR-2049</Text>
+                <Text variant="caption" color={colors.textSecondary}>Dispatch Order:</Text>
+                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>TR-2049</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Workflow:</Text>
-                <Text style={styles.receiptHighlight}>{selectedWorkflow.name}</Text>
+                <Text variant="caption" color={colors.textSecondary}>Workflow:</Text>
+                <Text variant="caption" color={colors.primary} style={styles.receiptHighlight}>
+                  {selectedWorkflow.name}
+                </Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Assigned Carrier:</Text>
-                <Text style={styles.receiptSuccess}>AMR-01 (Online · 85%)</Text>
+                <Text variant="caption" color={colors.textSecondary}>Assigned Carrier:</Text>
+                <Text variant="caption" color={colors.success} style={styles.receiptSuccess}>
+                  AMR-01 (Online · 85% Battery)
+                </Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Payload Slots:</Text>
-                <Text style={styles.receiptVal}>{slots.length} Containers Loaded</Text>
+                <Text variant="caption" color={colors.textSecondary}>Payload Slots:</Text>
+                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
+                  {slots.length} Containers Loaded
+                </Text>
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                <Text style={styles.receiptLabel}>First Drop Station:</Text>
-                <Text style={styles.receiptVal}>{slots[0].destination}</Text>
+                <Text variant="caption" color={colors.textSecondary}>First Waypoint:</Text>
+                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
+                  {slots[0].destination}
+                </Text>
               </View>
             </View>
 
-            <View style={{ width: '100%', gap: 8, marginTop: 16 }}>
+            <View style={styles.successActions}>
               <Button
                 label="Track on Live Map"
                 icon={<MapPin size={16} color="#ffffff" />}
@@ -335,7 +368,7 @@ export function TransportCreationScreen() {
                 size="lg"
               />
               <Button
-                label="Back to Hub"
+                label="Back to Transport Hub"
                 onPress={goBack}
                 variant="outline"
                 size="md"
@@ -355,103 +388,80 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 130,
+    paddingBottom: 40,
   },
   workflowIntro: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 4,
   },
   workflowIntroTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  rbacPill: {
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  rbacPillText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   workflowGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
+  },
+  workflowGridItem: {
+    width: '48%',
   },
   flowBanner: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
+    padding: 14,
     gap: 6,
-    ...shadows.panel,
+    ...shadows.sm,
   },
   flowBannerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   flowBadge: {
     backgroundColor: colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: radii.pill,
   },
   flowBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
+    fontWeight: '700',
+    fontSize: 11,
   },
   flowTitle: {
+    fontWeight: '700',
     flex: 1,
-    minWidth: 0,
-    fontSize: 15,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  flowCode: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
   },
   deckCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    gap: 10,
-    ...shadows.panel,
+    gap: 12,
+    ...shadows.sm,
   },
   deckHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  deckHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   deckTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
+    fontWeight: '700',
   },
-  deckSlotsCount: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
+  deckSlotsBadge: {
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   slotsSelectorRow: {
     flexDirection: 'row',
@@ -460,154 +470,136 @@ const styles = StyleSheet.create({
   slotTab: {
     flex: 1,
     paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    borderRadius: radii.md,
     backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  slotTabActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  slotTabLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  slotTabLabelActive: {
-    color: colors.primary,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-  },
-  slotTabCode: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-    marginTop: 2,
-  },
-  slotTabCodeActive: {
-    color: colors.primary,
-  },
-  addSlotBtn: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.primaryBorder,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  addSlotText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.primary,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
-  configCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
-    gap: 8,
-    ...shadows.panel,
+    alignItems: 'center',
+    gap: 2,
+  },
+  slotTabActive: {
+    backgroundColor: colors.surface,
+    borderColor: colors.darkAction,
+    borderWidth: 1.5,
+  },
+  slotTabLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  slotTabLabelActive: {
+    fontWeight: '700',
+  },
+  slotTabCode: {
+    fontWeight: '700',
+  },
+  slotTabCodeActive: {
+    fontWeight: '800',
+  },
+  addSlotBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderStyle: 'dashed',
+    backgroundColor: colors.primaryLight,
+  },
+  addSlotText: {
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  configCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    gap: 14,
+    ...shadows.sm,
   },
   slotConfigHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: 10,
   },
   slotConfigTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
+    fontWeight: '700',
   },
   deleteSlotBtn: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: radii.sm,
+    backgroundColor: colors.dangerBg,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   successCard: {
-    backgroundColor: colors.successBg,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: colors.successBorder,
-    padding: 18,
+    borderColor: colors.border,
+    padding: 24,
     alignItems: 'center',
-    ...shadows.panel,
+    gap: 12,
+    ...shadows.md,
   },
   successIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 999,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.control,
+    marginBottom: 4,
   },
   successTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    marginTop: 12,
-    fontFamily: typography.fontSans,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   successSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
-    fontFamily: typography.fontSans,
+    lineHeight: 18,
   },
   receiptBox: {
     width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    gap: 8,
+    gap: 10,
+    marginTop: 8,
   },
   receiptRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
-  receiptLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
   receiptVal: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
+    fontWeight: '700',
   },
   receiptHighlight: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
+    fontWeight: '700',
   },
   receiptSuccess: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.success,
-    fontFamily: typography.fontMono,
+    fontWeight: '700',
   },
   receiptBorderTop: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: 8,
-    marginTop: 4,
+    marginTop: 2,
+  },
+  successActions: {
+    width: '100%',
+    gap: 10,
+    marginTop: 12,
   },
 });

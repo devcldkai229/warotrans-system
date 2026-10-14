@@ -6,18 +6,20 @@ import {
   View,
 } from 'react-native';
 import {
-  ArrowLeft,
   Box,
   CheckCircle2,
   RefreshCw,
+  WifiOff,
   Zap,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
+import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
-import { useTopInset } from '../../shared/theme/layout';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 interface PendingTask {
   id: string;
@@ -49,7 +51,6 @@ const INITIAL_TASKS: PendingTask[] = [
 
 export function OfflineBannerHUD() {
   const { goBack } = useNavigation();
-  const topInset = useTopInset();
   const [tasks, setTasks] = useState<PendingTask[]>(INITIAL_TASKS);
   const [countdown, setCountdown] = useState(5);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -64,13 +65,14 @@ export function OfflineBannerHUD() {
   }, [isSyncing]);
 
   const handleSimulateSync = () => {
+    triggerHaptic('success');
     setIsSyncing(true);
     setFeedback('Wi-Fi link detected! Flushing offline queue to WMS gateway...');
 
     setTimeout(() => {
       setTasks((prev) => prev.map((t) => ({ ...t, status: 'synced' })));
       setIsSyncing(false);
-      setFeedback('All 3 pending transactions successfully reconciled with WMS!');
+      setFeedback('All 3 pending transactions successfully reconciled with WMS.');
       setTimeout(() => setFeedback(null), 3500);
     }, 1500);
   };
@@ -79,21 +81,27 @@ export function OfflineBannerHUD() {
 
   return (
     <View style={styles.container}>
+      <SubScreenHeader
+        label="Network resiliency"
+        title="Offline Operation Mode"
+        onBack={goBack}
+      />
+
       {/* Amber Reconnecting Banner */}
-      <View style={[styles.banner, { paddingTop: topInset, minHeight: topInset + 48 }]}>
+      <View style={styles.banner}>
         <View style={styles.bannerLeft}>
           <View style={styles.bannerIconBox}>
-            <Zap size={16} color="#fbbf24" />
+            <WifiOff size={18} color="#b45309" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.bannerTitle}>WMS NETWORK CONNECTION LOST (OFFLINE)</Text>
+            <Text style={styles.bannerTitle}>Offline mode active</Text>
             <Text style={styles.bannerSubtitle}>
-              3 handover transactions cached in local SQLite store
+              {pendingCount} transactions cached safely in local device storage
             </Text>
           </View>
         </View>
         <View style={styles.retryPill}>
-          <Text style={styles.retryText}>RETRY 0{countdown}s</Text>
+          <Text style={styles.retryText}>Retry in 0{countdown}s</Text>
         </View>
       </View>
 
@@ -104,33 +112,23 @@ export function OfflineBannerHUD() {
           </View>
         )}
 
-        {/* Header Content */}
-        <View style={styles.headerSection}>
-          {/* Prototype ref: SCR-STF-18 (routes/index.tsx) */}
-          <Text style={styles.headerTag}>OFFLINE RECONNECTING MODE</Text>
-          <Text style={styles.headerTitle}>Offline Operation Mode</Text>
-          <Text style={styles.headerDesc}>
-            PDA terminal continues scanning and logging handovers without disrupting warehouse workflow.
-          </Text>
-        </View>
-
         {/* Local Sync Queue Card */}
         <View style={styles.queueCard}>
           <View style={styles.queueHeader}>
-            <Text style={styles.queueTitle}>Local Sync Queue</Text>
+            <Text style={styles.queueTitle}>Local sync queue</Text>
             <Text style={styles.queueCount}>
-              {pendingCount} Pending Sync Task{pendingCount !== 1 ? 's' : ''}
+              {pendingCount} pending task{pendingCount !== 1 ? 's' : ''}
             </Text>
           </View>
 
           <View style={{ gap: 8 }}>
             {tasks.map((t) => (
               <View key={t.id} style={styles.taskRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                   {t.status === 'synced' ? (
-                    <CheckCircle2 size={16} color={colors.success} />
+                    <CheckCircle2 size={16} color="#16a34a" />
                   ) : (
-                    <Box size={16} color={colors.warning} />
+                    <Box size={16} color="#b45309" />
                   )}
                   <Text style={styles.taskLabel} numberOfLines={1}>
                     {t.label}
@@ -142,28 +140,21 @@ export function OfflineBannerHUD() {
           </View>
         </View>
 
-        {/* Manual Sync Trigger */}
+        {/* Manual Sync Trigger in Warm Dark Gray */}
         <Button
-          label={isSyncing ? 'Reconnecting to WMS Gateway...' : 'Simulate Reconnect & Sync'}
+          label={isSyncing ? 'Reconnecting to WMS gateway...' : 'Simulate Reconnect & Flush Queue'}
           icon={
             isSyncing ? (
-              <RefreshCw size={16} color="#ffffff" />
+              <RefreshCw size={18} color="#ffffff" />
             ) : (
-              <RefreshCw size={16} color={colors.primary} />
+              <Zap size={18} color="#ffffff" />
             )
           }
           onPress={handleSimulateSync}
-          variant={isSyncing ? 'primary' : 'outline'}
-          size="md"
-        />
-
-        <Button
-          label="Return to Operational Console"
-          icon={<ArrowLeft size={16} color={colors.textPrimary} />}
-          onPress={goBack}
-          variant="secondary"
+          disabled={isSyncing || pendingCount === 0}
+          variant="primary"
           size="lg"
-          style={{ marginTop: 6 }}
+          style={{ width: '100%', marginTop: 8 }}
         />
       </ScrollView>
     </View>
@@ -179,142 +170,116 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f59e0b',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(245, 158, 11, 0.25)',
     paddingHorizontal: 16,
-    paddingTop: 0,
-    paddingBottom: 12,
-    minHeight: 0,
-    ...shadows.panel,
+    paddingVertical: 12,
   },
   bannerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     flex: 1,
   },
   bannerIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 999,
-    backgroundColor: '#0f172a',
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   bannerTitle: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#0f172a',
-    letterSpacing: 0.5,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#b45309',
     fontFamily: typography.fontSans,
   },
   bannerSubtitle: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: 'rgba(15, 23, 42, 0.85)',
+    fontSize: 12,
+    color: colors.textSecondary,
     marginTop: 1,
     fontFamily: typography.fontSans,
   },
   retryPill: {
-    backgroundColor: 'rgba(15, 23, 42, 0.2)',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    marginLeft: 8,
   },
   retryText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#0f172a',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#b45309',
     fontFamily: typography.fontMono,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
-    gap: 14,
+    paddingBottom: 48,
+    gap: 16,
   },
   feedbackToast: {
-    backgroundColor: colors.successSoft,
-    padding: 12,
-    borderRadius: 10,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: colors.successBorder,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: 12,
   },
   feedbackText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.success,
-    fontFamily: typography.fontSans,
-  },
-  headerSection: {
-    marginTop: 4,
-  },
-  headerTag: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 1.2,
-    fontFamily: typography.fontMono,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textPrimary,
-    marginTop: 4,
     fontFamily: typography.fontSans,
-  },
-  headerDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    lineHeight: 16,
-    marginTop: 4,
   },
   queueCard: {
-    backgroundColor: colors.warningSoft,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.warningBorder,
-    padding: 14,
-    gap: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
     ...shadows.panel,
   },
   queueHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 4,
+    marginBottom: 14,
   },
   queueTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.warning,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   queueCount: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.warning,
-    fontFamily: typography.fontMono,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
   taskRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    padding: 10,
-    borderRadius: 8,
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: colors.border,
   },
   taskLabel: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '500',
     color: colors.textPrimary,
-    flex: 1,
     fontFamily: typography.fontSans,
   },
   taskTime: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.textMuted,
     fontFamily: typography.fontMono,
   },

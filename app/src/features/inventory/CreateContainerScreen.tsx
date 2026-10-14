@@ -8,17 +8,18 @@ import {
 } from 'react-native';
 import {
   Box,
+  Check,
   Layers,
   PackageCheck,
   Printer,
   Rocket,
-  Sparkles,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 
@@ -60,8 +61,6 @@ export function CreateContainerScreen() {
   const packQty = Number(quantity) || 0;
   const numContainers = Number(batchCount) || 0;
   const totalBatchUnits = packQty * numContainers;
-  // Guards the CTA copy: a cleared "Number of Continuous Totes" field used to
-  // render "Generate Batch ( Totes)".
   const batchCountLabel = batchCount.trim() || '0';
 
   const handleGenerate = () => {
@@ -101,7 +100,7 @@ export function CreateContainerScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="CARGO INDUCTION"
+        label="Cargo induction"
         title="Pack & Ingest Container"
         onBack={goBack}
       />
@@ -114,25 +113,25 @@ export function CreateContainerScreen() {
               onPress={() => setMode('single')}
               style={[styles.modeBtn, mode === 'single' && styles.modeBtnActive]}
             >
-              <Box size={14} color={mode === 'single' ? colors.primary : colors.textMuted} />
+              <Box size={16} color={mode === 'single' ? colors.textPrimary : colors.textMuted} />
               <Text style={[styles.modeText, mode === 'single' && styles.modeTextActive]}>
-                Single Tote
+                Single tote
               </Text>
             </Pressable>
             <Pressable
               onPress={() => setMode('batch')}
               style={[styles.modeBtn, mode === 'batch' && styles.modeBtnActive]}
             >
-              <Layers size={14} color={mode === 'batch' ? colors.primary : colors.textMuted} />
+              <Layers size={16} color={mode === 'batch' ? colors.textPrimary : colors.textMuted} />
               <Text style={[styles.modeText, mode === 'batch' && styles.modeTextActive]}>
-                Batch Mode (Multi-Tote)
+                Batch mode (multi-tote)
               </Text>
             </Pressable>
           </View>
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {printFeedback && (
           <View style={styles.printToast}>
             <Printer size={16} color={colors.primary} />
@@ -142,25 +141,32 @@ export function CreateContainerScreen() {
 
         {isSuccess ? (
           <View style={styles.successCard}>
-            <View style={styles.successIconCircle}>
-              <PackageCheck size={28} color="#ffffff" />
+            <View style={styles.successHeader}>
+              <View style={styles.successIconBadge}>
+                <Check size={20} color="#16a34a" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.successTitle}>
+                  {batchGenerated ? `${batchGenerated.count} containers registered` : 'Container registered'}
+                </Text>
+                <Text style={styles.successSub}>
+                  {batchGenerated
+                    ? 'Batch containers registered to Central Registry at Inbound Dock 01.'
+                    : 'Tote container registered to Central Registry at Inbound Dock 01.'}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.successTitle}>
-              {batchGenerated ? `${batchGenerated.count} Containers Ingested` : 'Container Ingested'}
-            </Text>
-            <Text style={styles.successSub}>
-              {batchGenerated
-                ? 'Batch containers registered to Central Registry at Inbound Dock 01.'
-                : 'Tote container registered to Central Registry at Inbound Dock 01.'}
-            </Text>
 
-            {/* Simulated 1D Barcode Graphic Label */}
+            {/* Industrial Simulated Shipping Barcode Label */}
             <View style={styles.barcodeTicket}>
-              <Text style={styles.barcodeTicketLabel}>
-                {batchGenerated
-                  ? `BATCH BARCODE LABELS (${batchGenerated.count} CONTINUOUS STICKERS)`
-                  : 'GENERATED BARCODE LABEL (CODE 128)'}
-              </Text>
+              <View style={styles.ticketTop}>
+                <Text style={styles.ticketMetaTag}>
+                  {batchGenerated
+                    ? `BATCH TOTE LABELS · ${batchGenerated.count} SEQUENTIAL`
+                    : 'CODE 128 SHIPPING LABEL'}
+                </Text>
+                <Text style={styles.ticketDpi}>203 DPI</Text>
+              </View>
 
               <View style={styles.barcodeArt}>
                 {barcodeBars.map((w, idx) => (
@@ -177,19 +183,25 @@ export function CreateContainerScreen() {
                   : generatedBarcode}
               </Text>
               <Text style={styles.barcodeProductText}>
-                {batchGenerated
-                  ? `${batchGenerated.count} Totes × ${packQty} units = ${batchGenerated.totalUnits} Total Units`
-                  : `${quantity} units × ${product}`}
+                {batchGenerated ? (
+                  <>
+                    <Text style={styles.boldQty}>{batchGenerated.count} Totes × {packQty} units</Text> ({batchGenerated.totalUnits} Total Units)
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.boldQty}>{quantity} units</Text> · {product}
+                  </>
+                )}
               </Text>
 
               <View style={styles.ticketFooter}>
                 <View style={styles.stagedLoc}>
-                  <Text style={styles.stagedLocLabel}>Staged Location</Text>
+                  <Text style={styles.stagedLocLabel}>Staged location</Text>
                   <Text style={styles.stagedLocVal}>Inbound Dock 01</Text>
                 </View>
                 <View style={styles.stagedLocRight}>
-                  <Text style={styles.stagedLocLabel}>Print Density</Text>
-                  <Text style={styles.stagedLocVal}>203 DPI</Text>
+                  <Text style={styles.stagedLocLabel}>Induction terminal</Text>
+                  <Text style={styles.stagedLocVal}>Handheld Staff 01</Text>
                 </View>
               </View>
             </View>
@@ -198,22 +210,24 @@ export function CreateContainerScreen() {
             <View style={styles.zebraPrinterCard}>
               <View style={styles.zebraHeader}>
                 <View style={styles.zebraIconWrap}>
-                  <Printer size={16} color={colors.primary} />
+                  <Printer size={18} color={colors.textPrimary} />
                 </View>
-                <View>
-                  <Text style={styles.zebraTitle}>Direct Thermal Mobile Printer</Text>
-                  <Text style={styles.zebraSub}>Model: Zebra ZT411 · Status: READY · ZPL II</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.zebraStatusRow}>
+                    <Text style={styles.zebraTitle}>Direct Thermal Mobile Printer</Text>
+                    <View style={styles.printerStatusPill}>
+                      <View style={styles.printerDotReady} />
+                      <Text style={styles.printerStatusText}>Ready</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.zebraSub}>Zebra ZT411 · Bluetooth Connected · ZPL II</Text>
                 </View>
               </View>
               <Button
-                label={
-                  batchGenerated
-                    ? `Print All ${batchGenerated.count} Labels`
-                    : 'Print Barcode Label'
-                }
-                icon={<Printer size={16} color="#ffffff" />}
+                label={batchGenerated ? `Print Labels (${batchGenerated.count})` : 'Print Label'}
+                icon={<Printer size={16} color={colors.textPrimary} />}
                 onPress={handlePrint}
-                variant="primary"
+                variant="outline"
                 size="md"
               />
             </View>
@@ -221,8 +235,8 @@ export function CreateContainerScreen() {
             {/* Next Steps CTA */}
             <View style={styles.successActions}>
               <Button
-                label="Dispatch Inbound Putaway"
-                icon={<Rocket size={16} color="#ffffff" />}
+                label="Dispatch Putaway"
+                icon={<Rocket size={18} color="#ffffff" />}
                 onPress={handleDispatchInbound}
                 variant="primary"
                 size="lg"
@@ -237,20 +251,8 @@ export function CreateContainerScreen() {
           </View>
         ) : (
           <View style={styles.formCard}>
-            <View style={styles.formIntro}>
-              <View style={styles.formIntroIcon}>
-                <Sparkles size={18} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardHeading}>Inbound Cargo Induction</Text>
-                <Text style={styles.cardSub}>
-                  Pack incoming items into standard totes and generate registration barcodes for AMR transport.
-                </Text>
-              </View>
-            </View>
-
             {/* Step 1: Category Picker */}
-            <Text style={styles.fieldLabel}>1. SELECT PRODUCT CATEGORY</Text>
+            <Text style={styles.fieldLabelFirst}>Product category</Text>
             <View style={styles.categoryChips}>
               {Object.keys(CATEGORIES).map((cat) => {
                 const isSelected = category === cat;
@@ -272,7 +274,7 @@ export function CreateContainerScreen() {
             </View>
 
             {/* Step 2: Product SKU Picker */}
-            <Text style={styles.fieldLabel}>2. TARGET PRODUCT SKU</Text>
+            <Text style={styles.fieldLabel}>Target SKU</Text>
             <View style={styles.productChips}>
               {(CATEGORIES[category] || []).map((p) => {
                 const isSelected = product === p;
@@ -283,21 +285,25 @@ export function CreateContainerScreen() {
                     style={[styles.productItem, isSelected && styles.productItemSelected]}
                   >
                     <View style={styles.productItemLeft}>
-                      <View style={[styles.radioDot, isSelected && styles.radioDotSelected]} />
+                      <View style={[styles.radioDot, isSelected && styles.radioDotSelected]}>
+                        {isSelected && <View style={styles.radioDotInner} />}
+                      </View>
                       <Text style={[styles.productItemText, isSelected && styles.productItemTextSelected]}>
                         {p}
                       </Text>
                     </View>
-                    <Text style={styles.stockNotice}>Standard SKU</Text>
+                    <View style={styles.skuTag}>
+                      <Text style={styles.skuTagText}>Standard SKU</Text>
+                    </View>
                   </Pressable>
                 );
               })}
             </View>
 
             {/* Step 3: Quantity */}
-            <Text style={styles.fieldLabel}>3. PACKING QUANTITY</Text>
+            <Text style={styles.fieldLabel}>Packing quantity</Text>
             <Input
-              label="Units per Container (Pcs)"
+              label="Units per container (pcs)"
               value={quantity}
               onChangeText={setQuantity}
               keyboardType="numeric"
@@ -306,12 +312,11 @@ export function CreateContainerScreen() {
 
             {mode === 'batch' && (
               <Input
-                label="Number of Continuous Totes"
+                label="Number of continuous totes"
                 value={batchCount}
                 onChangeText={setBatchCount}
                 keyboardType="numeric"
                 placeholder="e.g. 10"
-                hint={`Will create continuous codes and print ${batchCount || 0} sequential labels.`}
               />
             )}
 
@@ -325,7 +330,7 @@ export function CreateContainerScreen() {
               onPress={handleGenerate}
               variant="primary"
               size="lg"
-              style={{ marginTop: 12 }}
+              style={{ marginTop: 14 }}
             />
           </View>
         )}
@@ -349,106 +354,118 @@ const styles = StyleSheet.create({
   modeSwitcher: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceSubtle,
-    borderRadius: 10,
+    borderRadius: radii.md,
     padding: 3,
     gap: 4,
   },
   modeBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: 40,
+    borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   modeBtnActive: {
     backgroundColor: '#ffffff',
     ...shadows.panel,
   },
   modeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
   modeTextActive: {
     color: colors.textPrimary,
-    fontWeight: '900',
+    fontWeight: '700',
     fontFamily: typography.fontSans,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
   printToast: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     backgroundColor: colors.primaryLight,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
-    padding: 12,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: radii.md,
     marginBottom: 14,
   },
   printToastText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.primary,
     flex: 1,
     fontFamily: typography.fontSans,
   },
   successCard: {
-    borderRadius: 16,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.successBorder,
-    backgroundColor: colors.successBg,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
     padding: 18,
-    alignItems: 'center',
     ...shadows.panel,
   },
-  successIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: colors.success,
+  successHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+  successIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(22, 163, 74, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.control,
   },
   successTitle: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: 12,
     fontFamily: typography.fontSans,
   },
   successSub: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '400',
     color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
+    lineHeight: 18,
+    marginTop: 2,
     fontFamily: typography.fontSans,
   },
   barcodeTicket: {
     width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
+    backgroundColor: '#fafbfc',
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
+    borderColor: colors.borderDark,
+    padding: 18,
     alignItems: 'center',
-    ...shadows.panel,
   },
-  barcodeTicketLabel: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    color: colors.textMuted,
+  ticketTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
     marginBottom: 12,
+  },
+  ticketMetaTag: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  ticketDpi: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
     fontFamily: typography.fontMono,
   },
   barcodeArt: {
@@ -456,14 +473,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    height: 48,
+    height: 52,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: colors.border,
     width: '100%',
-    maxWidth: 280,
+    maxWidth: 300,
   },
   barcodeBar: {
     height: '100%',
@@ -471,19 +488,23 @@ const styles = StyleSheet.create({
     borderRadius: 0.5,
   },
   barcodeCodeText: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '800',
     letterSpacing: 2,
     color: colors.textPrimary,
-    marginTop: 10,
+    marginTop: 12,
     fontFamily: typography.fontMono,
   },
   barcodeProductText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '400',
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
     fontFamily: typography.fontSans,
+  },
+  boldQty: {
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   ticketFooter: {
     flexDirection: 'row',
@@ -491,8 +512,8 @@ const styles = StyleSheet.create({
     width: '100%',
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    marginTop: 14,
-    paddingTop: 10,
+    marginTop: 16,
+    paddingTop: 12,
   },
   stagedLoc: {
     alignItems: 'flex-start',
@@ -501,107 +522,106 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   stagedLocLabel: {
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '500',
     color: colors.textMuted,
-    textTransform: 'uppercase',
     fontFamily: typography.fontSans,
   },
   stagedLocVal: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
-    marginTop: 1,
+    marginTop: 2,
   },
   zebraPrinterCard: {
     width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
-    marginTop: 12,
+    marginTop: 14,
     gap: 12,
-    ...shadows.panel,
   },
   zebraHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   zebraIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: colors.primaryLight,
+    width: 38,
+    height: 38,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  zebraStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   zebraTitle: {
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  printerStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  printerDotReady: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16a34a',
+  },
+  printerStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#16a34a',
     fontFamily: typography.fontSans,
   },
   zebraSub: {
-    fontSize: 10,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '400',
     color: colors.textMuted,
-    marginTop: 1,
-    fontFamily: typography.fontMono,
-  },
-  successActions: {
-    width: '100%',
-    marginTop: 16,
-    gap: 8,
-  },
-  formCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    ...shadows.panel,
-  },
-  formIntro: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    marginBottom: 14,
-  },
-  formIntroIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardHeading: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  cardSub: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    lineHeight: 16,
     marginTop: 2,
     fontFamily: typography.fontSans,
   },
-  fieldLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.textMuted,
-    letterSpacing: 0.8,
+  successActions: {
+    width: '100%',
+    marginTop: 18,
+    gap: 10,
+  },
+  formCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    ...shadows.panel,
+  },
+  fieldLabelFirst: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
     marginBottom: 8,
-    marginTop: 10,
+    fontFamily: typography.fontSans,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 8,
+    marginTop: 14,
     fontFamily: typography.fontSans,
   },
   categoryChips: {
@@ -612,29 +632,31 @@ const styles = StyleSheet.create({
   },
   chip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
+    minHeight: 38,
+    borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chipSelected: {
     backgroundColor: colors.primaryLight,
     borderColor: colors.primary,
   },
   chipText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
   chipTextSelected: {
     color: colors.primary,
-    fontWeight: '900',
+    fontWeight: '700',
     fontFamily: typography.fontSans,
   },
   productChips: {
-    gap: 6,
+    gap: 8,
     marginBottom: 14,
   },
   productItem: {
@@ -642,46 +664,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 12,
-    borderRadius: 10,
+    minHeight: 48,
+    borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
   },
   productItemSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
+    backgroundColor: '#ffffff',
+    borderColor: colors.darkAction,
+    borderWidth: 1.5,
   },
   productItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    flex: 1,
   },
   radioDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 999,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 1.5,
     borderColor: colors.borderDark,
     backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   radioDotSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
+    borderColor: colors.darkAction,
+  },
+  radioDotInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.darkAction,
   },
   productItemText: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   productItemTextSelected: {
-    color: colors.primary,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-  },
-  stockNotice: {
-    fontSize: 10,
+    color: colors.textPrimary,
     fontWeight: '700',
+  },
+  skuTag: {
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  skuTagText: {
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textMuted,
     fontFamily: typography.fontSans,
   },

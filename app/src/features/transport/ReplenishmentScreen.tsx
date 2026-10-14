@@ -3,21 +3,24 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import {
+  AlertTriangle,
+  ArrowRight,
   Check,
   Layers,
+  Minus,
+  Plus,
   Warehouse,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
-import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
-import { typography } from '../../shared/theme/typography';
+import { ProgressMeter, StatusPill, Text } from '../../shared/ui';
 
 const SHORTAGES = [
   {
@@ -45,7 +48,7 @@ const SHORTAGES = [
 const QUICK_CHIPS = [10, 25, 50];
 
 export function ReplenishmentScreen() {
-  const { goBack } = useNavigation();
+  const { goBack, navigate } = useNavigation();
   const [selectedShortage, setSelectedShortage] = useState('RACK-A-01');
   const [restockQty, setRestockQty] = useState(25);
   const [dispatched, setDispatched] = useState(false);
@@ -53,8 +56,6 @@ export function ReplenishmentScreen() {
   const currentAlert =
     SHORTAGES.find((s) => s.id === selectedShortage) || SHORTAGES[0];
   const projectedStock = currentAlert.current + restockQty;
-  const restockCap = Math.max(1, 80 - currentAlert.current);
-  const maxFillValue = Math.min(80, restockCap);
 
   const handleDispatch = () => {
     setDispatched(true);
@@ -63,141 +64,126 @@ export function ReplenishmentScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="REPLENISHMENT DISPATCH"
-        title="Replenishment Dispatch"
+        label="Internal Transfer"
+        title="Pick-Face Replenishment"
         onBack={goBack}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {dispatched ? (
           <View style={styles.successCard}>
             <View style={styles.successIconBadge}>
-              <Check size={28} color="#ffffff" />
+              <Check size={28} color="#ffffff" strokeWidth={2.8} />
             </View>
-            <Text style={styles.successTitle}>Replenishment Tour Queued</Text>
-            <Text style={styles.successSub}>
+
+            <Text variant="title" style={styles.successTitle}>
+              Replenishment Tour Queued
+            </Text>
+            <Text variant="caption" color={colors.textSecondary} style={styles.successSub}>
               AMR-01 allocated to transport +{restockQty} units from Bulk Zone D to{' '}
               {currentAlert.location}.
             </Text>
 
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Target SKU</Text>
-                <Text style={styles.receiptVal} numberOfLines={1}>{currentAlert.name}</Text>
+                <Text variant="caption" color={colors.textSecondary}>Target SKU:</Text>
+                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>{currentAlert.name}</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Source Buffer</Text>
-                <Text style={styles.receiptVal} numberOfLines={1}>{currentAlert.bulkSource}</Text>
+                <Text variant="caption" color={colors.textSecondary}>Source Buffer:</Text>
+                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>{currentAlert.bulkSource}</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Target Pick Face</Text>
-                <Text style={styles.receiptHighlight} numberOfLines={1}>{currentAlert.location}</Text>
+                <Text variant="caption" color={colors.textSecondary}>Destination:</Text>
+                <Text variant="caption" color={colors.primary} style={styles.receiptHighlight}>{currentAlert.location}</Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Replenishment Load</Text>
-                <Text style={styles.receiptSuccess}>+{restockQty} units</Text>
+                <Text variant="caption" color={colors.textSecondary}>Replenish Load:</Text>
+                <Text variant="caption" color={colors.success} style={styles.receiptSuccess}>+{restockQty} units</Text>
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                <Text style={styles.receiptLabel}>Projected Stock</Text>
-                <Text style={styles.receiptVal} numberOfLines={1}>
-                  {projectedStock} units (Healthy)
+                <Text variant="caption" color={colors.textSecondary}>Projected Level:</Text>
+                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
+                  {projectedStock} units (Stock Restored)
                 </Text>
               </View>
             </View>
 
-            <Button
-              label="Back to Hub"
-              onPress={goBack}
-              variant="primary"
-              size="lg"
-              style={{ width: '100%', marginTop: 16 }}
-            />
+            <View style={styles.successActions}>
+              <Button
+                label="Track on Live Map"
+                variant="primary"
+                size="lg"
+                onPress={() => navigate('live_map', { robotId: 'AMR-01', jobId: 'REPLENISH-01' })}
+              />
+              <Button
+                label="Back to Transport Hub"
+                onPress={goBack}
+                variant="outline"
+                size="md"
+              />
+            </View>
           </View>
         ) : (
           <View style={{ gap: 16 }}>
-            {/* Flow Banner */}
-            <View style={styles.introCard}>
-              <View style={styles.introIconBox}>
-                <Layers size={20} color="#ffffff" />
-              </View>
-              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                <Text style={styles.introTitle} numberOfLines={1}>Pick-Face Replenishment Flow</Text>
-                <Text style={styles.introCategory} numberOfLines={1}>INTERNAL · BUFFER ➔ PICK-FACE</Text>
-              </View>
-            </View>
-
-            {/* Step 1: Active Pick-Face Shortages */}
-            <View style={{ gap: 8 }}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel} numberOfLines={1}>1. ACTIVE PICK-FACE SHORTAGES:</Text>
-                <Text style={styles.sectionSubWarning} numberOfLines={1}>Below Min Safety Stock</Text>
+            {/* Active Shortages List */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text variant="label" style={styles.sectionTitle}>
+                  Active Pick-Face Shortages
+                </Text>
+                <Text variant="caption" color={colors.warning}>
+                  Below Safety Threshold
+                </Text>
               </View>
 
-              <View style={{ gap: 8 }}>
+              <View style={{ gap: 10 }}>
                 {SHORTAGES.map((item) => {
                   const isSelected = selectedShortage === item.id;
                   const isCritical = item.urgency === 'CRITICAL';
-                  const stockPct = Math.min(100, (item.current / item.minThreshold) * 100);
+                  const percent = Math.min(100, (item.current / item.minThreshold) * 100);
+
                   return (
                     <Pressable
                       key={item.id}
                       onPress={() => setSelectedShortage(item.id)}
                       style={[
                         styles.shortageCard,
-                        isSelected ? styles.shortageCardSelected : styles.shortageCardNormal,
+                        isSelected && styles.shortageCardSelected,
                       ]}
                     >
-                      <View style={styles.shortageHeader}>
-                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <Text style={styles.shortageName} numberOfLines={1}>{item.name}</Text>
-                            <Text style={styles.shortageCode} numberOfLines={1}>({item.container})</Text>
-                          </View>
-                          <Text style={styles.shortageLoc} numberOfLines={1}>{item.location}</Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.urgencyPill,
-                            isCritical ? styles.urgencyCritical : styles.urgencyWarning,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.urgencyText,
-                              isCritical ? styles.urgencyCriticalText : styles.urgencyWarningText,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {item.urgency}
+                      <View style={styles.shortageCardTop}>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text variant="bodyMedium" style={{ fontWeight: '700' }}>
+                            {item.name}
+                          </Text>
+                          <Text variant="caption" color={colors.textSecondary}>
+                            {item.location} · Tote {item.container}
                           </Text>
                         </View>
+                        <StatusPill
+                          status={isCritical ? 'FAILED' : 'PAUSED'}
+                          label={isCritical ? 'Critical Stock' : 'Low Stock'}
+                          tone={isCritical ? 'danger' : 'warning'}
+                          size="sm"
+                          dot
+                        />
                       </View>
 
-                      {/* Stock level progress bar comparing current qty to min threshold */}
-                      <View style={styles.stockBarBlock}>
-                        <View style={styles.stockBarHeader}>
-                          <Text style={styles.stockBarLabel} numberOfLines={1}>STOCK LEVEL</Text>
-                          <Text style={styles.stockBarValue} numberOfLines={1}>
-                            {item.current} / {item.minThreshold} units
+                      {/* Stock Level Progress */}
+                      <View style={{ gap: 6, marginTop: 4 }}>
+                        <View style={styles.stockNumbersRow}>
+                          <Text variant="caption" color={colors.textSecondary}>
+                            Current: {item.current} units
+                          </Text>
+                          <Text variant="caption" color={colors.textMuted}>
+                            Min: {item.minThreshold} units
                           </Text>
                         </View>
-                        <View style={styles.stockBarTrack}>
-                          <View
-                            style={[
-                              styles.stockBarFill,
-                              {
-                                width: `${stockPct}%`,
-                                backgroundColor: isCritical ? colors.danger : colors.warning,
-                              },
-                            ]}
-                          />
-                        </View>
-                        <View style={styles.stockBarFooter}>
-                          <Text style={styles.stockBarFootnote} numberOfLines={1}>
-                            Min threshold {item.minThreshold} units
-                          </Text>
-                          <Text style={styles.replenishTap} numberOfLines={1}>Tap to replenish ➔</Text>
-                        </View>
+                        <ProgressMeter
+                          value={percent}
+                          tone={isCritical ? 'danger' : 'warning'}
+                        />
                       </View>
                     </Pressable>
                   );
@@ -205,124 +191,83 @@ export function ReplenishmentScreen() {
               </View>
             </View>
 
-            {/* Step 2: Source Bulk Buffer */}
-            <View style={styles.bulkCard}>
-              <Text style={styles.sectionLabel} numberOfLines={1}>2. SOURCE BULK STORAGE BUFFER:</Text>
-              <View style={styles.bulkRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                  <Warehouse size={15} color={colors.primary} />
-                  <Text style={styles.bulkSourceText} numberOfLines={1}>{currentAlert.bulkSource}</Text>
-                </View>
-                <Text style={styles.bulkStockText} numberOfLines={1}>80 Units in Reserve</Text>
-              </View>
-            </View>
+            {/* Replenish Quantity Adjuster */}
+            <View style={styles.sectionCard}>
+              <Text variant="label" style={styles.sectionTitle}>
+                Replenish Load Size
+              </Text>
 
-            {/* Step 3: Quantity Stepper & Projection */}
-            <View style={styles.qtyCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel} numberOfLines={1}>3. REPLENISHMENT QUANTITY:</Text>
-                <Text style={styles.qtyTotal} numberOfLines={1}>+{restockQty} units</Text>
+              <View style={styles.qtyControlRow}>
+                <Pressable
+                  onPress={() => setRestockQty((q) => Math.max(5, q - 5))}
+                  style={styles.qtyStepBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Decrease quantity by 5"
+                >
+                  <Minus size={18} color={colors.textPrimary} />
+                </Pressable>
+
+                <View style={styles.qtyDisplayCol}>
+                  <Text variant="display" style={styles.qtyNumberText}>
+                    +{restockQty}
+                  </Text>
+                  <Text variant="caption" color={colors.textSecondary}>
+                    units to transfer
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => setRestockQty((q) => Math.min(80, q + 5))}
+                  style={styles.qtyStepBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Increase quantity by 5"
+                >
+                  <Plus size={18} color={colors.textPrimary} />
+                </Pressable>
               </View>
 
-              <View style={styles.qtyControlsRow}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Input
-                    value={String(restockQty)}
-                    onChangeText={(t) => {
-                      const num = Math.max(1, Math.min(80, Number(t) || 0));
-                      setRestockQty(num);
-                    }}
-                    keyboardType="numeric"
-                    placeholder="Enter qty"
-                    rightIcon={<Text style={styles.unitsSuffix}>units</Text>}
-                    containerStyle={{ marginBottom: 0 }}
-                    inputStyle={{ height: 44, fontSize: 14, fontFamily: typography.fontMono, fontWeight: '900' }}
-                  />
-                </View>
-                <View style={styles.presetButtons}>
-                  {QUICK_CHIPS.map((qty) => (
+              {/* Quick Preset Chips */}
+              <View style={styles.chipsRow}>
+                {QUICK_CHIPS.map((chip) => {
+                  const isActive = restockQty === chip;
+                  return (
                     <Pressable
-                      key={qty}
-                      onPress={() => setRestockQty(Math.min(80, qty))}
-                      style={[
-                        styles.presetBtn,
-                        restockQty === qty ? styles.presetBtnActive : styles.presetBtnNormal,
-                      ]}
+                      key={chip}
+                      onPress={() => setRestockQty(chip)}
+                      style={[styles.quickChip, isActive && styles.quickChipActive]}
                     >
                       <Text
-                        style={[
-                          styles.presetBtnText,
-                          restockQty === qty && styles.presetBtnTextActive,
-                        ]}
-                        numberOfLines={1}
+                        variant="caption"
+                        color={isActive ? colors.primaryText : colors.textPrimary}
+                        style={{ fontWeight: isActive ? '700' : '500' }}
                       >
-                        +{qty}
+                        +{chip} units
                       </Text>
                     </Pressable>
-                  ))}
-                  <Pressable
-                    onPress={() => setRestockQty(maxFillValue)}
-                    style={[
-                      styles.presetBtn,
-                      restockQty === maxFillValue ? styles.presetBtnActive : styles.presetBtnNormal,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.presetBtnText,
-                        restockQty === maxFillValue && styles.presetBtnTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      Max Fill
-                    </Text>
-                  </Pressable>
-                </View>
+                  );
+                })}
               </View>
 
-              {/* Projected stock calculation */}
-              <View style={styles.deltaBox}>
-                <View style={styles.deltaHeader}>
-                  <Text style={styles.deltaText} numberOfLines={1}>
-                    Current: <Text style={{ color: colors.danger, fontWeight: '700' }}>{currentAlert.current}</Text>
+              <View style={styles.bufferInfoBox}>
+                <Warehouse size={16} color={colors.textMuted} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="caption" color={colors.textSecondary}>
+                    Source: {currentAlert.bulkSource}
                   </Text>
-                  <Text style={styles.deltaText} numberOfLines={1}>
-                    After Restock:{' '}
-                    <Text style={{ color: colors.success, fontWeight: '700' }}>{projectedStock} units</Text>
+                  <Text variant="caption" color={colors.success} style={{ fontWeight: '600' }}>
+                    Projected after restock: {projectedStock} units
                   </Text>
                 </View>
-
-                <View style={styles.barTrack}>
-                  <View
-                    style={[
-                      styles.barFillCurrent,
-                      { width: `${(currentAlert.current / projectedStock) * 100}%` },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.barFillRestock,
-                      { width: `${(restockQty / projectedStock) * 100}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.deltaFootnote} numberOfLines={2}>
-                  Restock will lift bin well above safety minimum ({currentAlert.minThreshold} units).
-                </Text>
               </View>
             </View>
 
-            {/* Dispatch Button */}
-            <Pressable
+            <Button
+              label="Dispatch Replenishment"
+              icon={<ArrowRight size={18} color="#ffffff" />}
               onPress={handleDispatch}
-              style={styles.dispatchBtn}
-              accessibilityRole="button"
-            >
-              <Layers size={18} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.dispatchBtnText} numberOfLines={1}>
-                Dispatch Tour (+{restockQty} units)
-              </Text>
-            </Pressable>
+              variant="primary"
+              size="lg"
+            />
           </View>
         )}
       </ScrollView>
@@ -337,417 +282,160 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 130,
-    gap: 16,
+    paddingBottom: 40,
   },
-  introCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(0, 92, 209, 0.05)',
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.2)',
-    borderRadius: 12,
-    padding: 12,
-    ...shadows.panel,
+    borderColor: colors.border,
+    padding: 16,
+    gap: 12,
+    ...shadows.sm,
   },
-  introIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  introTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-    lineHeight: 20,
-  },
-  introCategory: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-    color: colors.primary,
-    fontFamily: typography.fontMono,
-  },
-  sectionHeaderRow: {
+  sectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-    flex: 1,
-    minWidth: 0,
-  },
-  sectionSubWarning: {
-    fontSize: 10,
+  sectionTitle: {
     fontWeight: '700',
-    color: colors.danger,
-    fontFamily: typography.fontMono,
   },
   shortageCard: {
-    borderRadius: 12,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
     borderWidth: 1,
-    padding: 12,
-    gap: 10,
-    ...shadows.panel,
-  },
-  shortageCardNormal: {
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    padding: 12,
+    gap: 8,
   },
   shortageCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(0, 92, 209, 0.1)',
+    backgroundColor: colors.surface,
+    borderColor: colors.darkAction,
+    borderWidth: 1.5,
   },
-  shortageHeader: {
+  shortageCardTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
   },
-  shortageName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  shortageCode: {
-    fontSize: 10,
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
-  },
-  shortageLoc: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
-  },
-  urgencyPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  urgencyCritical: {
-    backgroundColor: colors.danger,
-  },
-  urgencyCriticalText: {
-    color: '#ffffff',
-  },
-  urgencyWarning: {
-    backgroundColor: colors.warningSoft,
-    borderWidth: 1,
-    borderColor: colors.warningBorder,
-  },
-  urgencyWarningText: {
-    color: colors.warningText,
-  },
-  urgencyText: {
-    fontSize: 9,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-  },
-  stockBarBlock: {
-    gap: 6,
-  },
-  stockBarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stockBarLabel: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-    flex: 1,
-    minWidth: 0,
-  },
-  stockBarValue: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  stockBarTrack: {
-    height: 8,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: 999,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  stockBarFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  stockBarFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stockBarFootnote: {
-    fontSize: 10,
-    color: colors.textMuted,
-    flex: 1,
-    minWidth: 0,
-  },
-  replenishTap: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
-  bulkCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 8,
-    ...shadows.panel,
-  },
-  bulkRow: {
+  stockNumbersRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(241, 245, 249, 0.6)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 10,
-    gap: 8,
   },
-  bulkSourceText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-    flex: 1,
-    minWidth: 0,
-  },
-  bulkStockText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.success,
-    fontFamily: typography.fontSans,
-  },
-  qtyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 12,
-    ...shadows.panel,
-  },
-  qtyTotal: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
-  },
-  qtyControlsRow: {
+  qtyControlRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 20,
+    paddingVertical: 12,
   },
-  unitsSuffix: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  presetButtons: {
-    flexDirection: 'row',
-    gap: 6,
-    flexShrink: 0,
-  },
-  presetBtn: {
+  qtyStepBtn: {
+    width: 44,
     height: 44,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 52,
   },
-  presetBtnNormal: {
-    backgroundColor: colors.surface,
+  qtyDisplayCol: {
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  qtyNumberText: {
+    fontWeight: '800',
+    fontSize: 32,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  quickChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
     borderColor: colors.border,
   },
-  presetBtnActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+  quickChipActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primaryBorder,
   },
-  presetBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-  },
-  presetBtnTextActive: {
-    color: '#ffffff',
-  },
-  deltaBox: {
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.8)',
-    padding: 10,
-    gap: 6,
-  },
-  deltaHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  deltaText: {
-    fontSize: 11,
-    color: colors.textMuted,
-    flex: 1,
-    minWidth: 0,
-  },
-  barTrack: {
-    height: 8,
-    backgroundColor: colors.border,
-    borderRadius: 999,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  barFillCurrent: {
-    height: '100%',
-    backgroundColor: colors.danger,
-  },
-  barFillRestock: {
-    height: '100%',
-    backgroundColor: colors.success,
-  },
-  deltaFootnote: {
-    fontSize: 10,
-    color: colors.textMuted,
-    lineHeight: 14,
-  },
-  dispatchBtn: {
-    backgroundColor: colors.primary,
-    minHeight: 64,
-    borderRadius: 6,
+  bufferInfoBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 3,
-    borderBottomColor: '#004bb0',
     gap: 8,
-  },
-  dispatchBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-    flexShrink: 1,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.sm,
+    padding: 10,
+    marginTop: 4,
   },
   successCard: {
-    backgroundColor: colors.successBg,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.successBorder,
-    padding: 20,
+    borderColor: colors.border,
+    padding: 24,
     alignItems: 'center',
-    ...shadows.panel,
-    gap: 8,
+    gap: 12,
+    ...shadows.md,
   },
   successIconBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.control,
+    marginBottom: 4,
   },
   successTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    marginTop: 12,
-    fontFamily: typography.fontSans,
+    fontWeight: '800',
     textAlign: 'center',
   },
   successSub: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
-    lineHeight: 16,
-    fontFamily: typography.fontSans,
+    lineHeight: 18,
   },
   receiptBox: {
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.2)',
-    padding: 16,
-    gap: 8,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
+    marginTop: 8,
   },
   receiptRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-  },
-  receiptLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-    flex: 1,
-    minWidth: 0,
+    justifyContent: 'space-between',
   },
   receiptVal: {
-    fontSize: 12,
     fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-    flexShrink: 1,
-    textAlign: 'right',
   },
   receiptHighlight: {
-    fontSize: 12,
     fontWeight: '700',
-    color: colors.primary,
-    fontFamily: typography.fontMono,
-    flexShrink: 1,
-    textAlign: 'right',
   },
   receiptSuccess: {
-    fontSize: 12,
     fontWeight: '700',
-    color: colors.success,
-    fontFamily: typography.fontSans,
-    flexShrink: 1,
-    textAlign: 'right',
   },
   receiptBorderTop: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: 8,
-    marginTop: 4,
+    marginTop: 2,
+  },
+  successActions: {
+    width: '100%',
+    gap: 10,
+    marginTop: 12,
   },
 });

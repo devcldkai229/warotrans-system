@@ -16,6 +16,7 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 
@@ -25,28 +26,26 @@ export function FleetRecallScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        /* Prototype ref: SCR-STF-11-MAINT (routes/index.tsx). Spec IDs must never
-           ship in operator-facing UI — they are design traceability only. */
-        label="FLEET RECALL"
+        label="Fleet recall"
         title="Fleet Status Notice"
         onBack={goBack}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Admin Exclusive Authority Notice Card */}
+        {/* Admin Authority Notice Card */}
         <View style={styles.warningCard}>
           <View style={styles.warningIconWrap}>
-            <Lock size={22} color="#b45309" />
+            <Lock size={20} color="#b45309" />
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.badgeRow}>
               <View style={styles.adminBadge}>
-                <Text style={styles.adminBadgeText}>ADMIN-EXCLUSIVE AUTHORITY</Text>
+                <Text style={styles.adminBadgeText}>Admin authority only</Text>
               </View>
             </View>
-            <Text style={styles.warningTitle}>Scheduled Fleet Maintenance in Progress</Text>
+            <Text style={styles.warningTitle}>Scheduled fleet maintenance in progress</Text>
             <Text style={styles.warningDesc}>
-              Command issued from Admin Web Dashboard: Autonomous fleet is recalled to charging bays for battery equalization and PM inspection. New transport dispatches are temporarily locked.
+              Command issued from Central Web Dashboard: Autonomous robot fleet is recalled to charging bays for battery equalization and preventative maintenance. New transport dispatches are temporarily locked.
             </Text>
           </View>
         </View>
@@ -54,9 +53,9 @@ export function FleetRecallScreen() {
         {/* Fleet Telemetry Matrix (Read-Only) */}
         <View style={styles.matrixSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>ACTIVE FLEET STATUS (2 PHYSICAL AMRS)</Text>
+            <Text style={styles.sectionTitle}>Active fleet status (2 AMRs)</Text>
             <View style={styles.recallModeBadge}>
-              <Text style={styles.recallModeText}>RECALL MODE</Text>
+              <Text style={styles.recallModeText}>Recall mode active</Text>
             </View>
           </View>
 
@@ -66,18 +65,18 @@ export function FleetRecallScreen() {
               <View style={styles.robotIdGroup}>
                 <Text style={styles.robotCode}>AMR-01</Text>
                 <View style={styles.dockingBadge}>
-                  <Text style={styles.dockingText}>DOCKING</Text>
+                  <Text style={styles.dockingText}>Docking</Text>
                 </View>
               </View>
               <Text style={styles.chargerAssigned}>Assigned: Charger-01</Text>
             </View>
             <Text style={styles.robotTaskText}>
-              Finishing last tote dropoff ➔ Staging into Charger Pad 01
+              Finishing last tote dropoff ➔ Navigating into Charger Pad 01
             </Text>
             <View style={styles.telemetryPillWarning}>
-              <Clock3 size={13} color={colors.warning} />
+              <Clock3 size={14} color="#b45309" />
               <Text style={styles.telemetryTextWarning}>
-                ETA to Dock: ~1m 15s · Battery: 78%
+                ETA to Dock: <Text style={styles.boldWarning}>~1m 15s</Text> · Battery: <Text style={styles.boldWarning}>78%</Text>
               </Text>
             </View>
           </View>
@@ -88,7 +87,7 @@ export function FleetRecallScreen() {
               <View style={styles.robotIdGroup}>
                 <Text style={styles.robotCode}>AMR-02</Text>
                 <View style={styles.dockedBadge}>
-                  <Text style={styles.dockedText}>DOCKED</Text>
+                  <Text style={styles.dockedText}>Docked</Text>
                 </View>
               </View>
               <Text style={styles.chargerAssigned}>Assigned: Charger-02</Text>
@@ -97,9 +96,9 @@ export function FleetRecallScreen() {
               Docking verified · High-voltage equalization charging active
             </Text>
             <View style={styles.telemetryPillSuccess}>
-              <CheckCircle2 size={13} color={colors.success} />
+              <CheckCircle2 size={14} color="#16a34a" />
               <Text style={styles.telemetryTextSuccess}>
-                Docked & Equalizing · Battery: 94%
+                Docked & Equalizing · Battery: <Text style={styles.boldSuccess}>94%</Text>
               </Text>
             </View>
           </View>
@@ -108,16 +107,16 @@ export function FleetRecallScreen() {
         {/* Access Control Policy Card */}
         <View style={styles.rbacCard}>
           <View style={styles.rbacHeader}>
-            <ShieldCheck size={18} color={colors.primary} />
-            <Text style={styles.rbacTitle}>Access Control Policy</Text>
+            <ShieldCheck size={18} color={colors.textPrimary} />
+            <Text style={styles.rbacTitle}>Access control policy</Text>
           </View>
           <Text style={styles.rbacDesc}>
-            In accordance with industrial ISO 3691-4 safety protocols, whole-fleet recall (MAINTENANCE_ALL_ROBOTS) is strictly restricted to Administrator and Maintenance Technician web consoles. Floor staff mobile devices operate in operational supervision mode.
+            In accordance with industrial ISO 3691-4 safety protocols, whole-fleet recall is strictly restricted to Administrator web consoles. Floor staff handheld terminals operate in operational supervision mode.
           </Text>
         </View>
 
         <Button
-          label="Return to Home Console"
+          label="Return to Dashboard"
           icon={<Home size={18} color="#ffffff" />}
           onPress={goBack}
           variant="primary"
@@ -136,57 +135,56 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
-    gap: 14,
+    paddingBottom: 48,
+    gap: 16,
   },
   warningCard: {
-    backgroundColor: 'rgba(254, 243, 199, 0.4)',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
-    borderRadius: 14,
+    borderRadius: radii.lg,
     padding: 16,
     flexDirection: 'row',
     gap: 12,
     ...shadows.panel,
   },
   warningIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#fef3c7',
+    width: 40,
+    height: 40,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   adminBadge: {
-    backgroundColor: colors.warning,
-    paddingHorizontal: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   adminBadgeText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: '#ffffff',
-    fontFamily: typography.fontMono,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b45309',
+    fontFamily: typography.fontSans,
   },
   warningTitle: {
-    fontSize: 13,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: 4,
+    marginTop: 6,
     fontFamily: typography.fontSans,
   },
   warningDesc: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textSecondary,
-    lineHeight: 16,
-    marginTop: 2,
+    lineHeight: 18,
+    marginTop: 3,
+    fontFamily: typography.fontSans,
   },
   matrixSection: {
     gap: 10,
@@ -197,30 +195,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionTitle: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   recallModeBadge: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
   recallModeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
     fontFamily: typography.fontMono,
   },
   robotRecallCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
+    padding: 16,
     ...shadows.panel,
   },
   cardTopRow: {
@@ -234,82 +233,92 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   robotCode: {
-    fontSize: 13,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   dockingBadge: {
-    backgroundColor: colors.warningSoft,
-    paddingHorizontal: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   dockingText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.warning,
-    fontFamily: typography.fontMono,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b45309',
+    fontFamily: typography.fontSans,
   },
   dockedBadge: {
-    backgroundColor: colors.successSoft,
-    paddingHorizontal: 6,
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   dockedText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.success,
-    fontFamily: typography.fontMono,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: typography.fontSans,
   },
   chargerAssigned: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.textMuted,
     fontFamily: typography.fontMono,
   },
   robotTaskText: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textSecondary,
-    marginVertical: 8,
+    lineHeight: 18,
+    marginVertical: 10,
+    fontFamily: typography.fontSans,
   },
   telemetryPillWarning: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.warningSoft,
+    gap: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
   },
   telemetryTextWarning: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.warning,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#b45309',
     fontFamily: typography.fontMono,
   },
   telemetryPillSuccess: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.successSoft,
+    gap: 8,
+    backgroundColor: 'rgba(22, 163, 74, 0.08)',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
   },
   telemetryTextSuccess: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.success,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#16a34a',
     fontFamily: typography.fontMono,
+  },
+  boldWarning: {
+    fontWeight: '800',
+    color: '#b45309',
+  },
+  boldSuccess: {
+    fontWeight: '800',
+    color: '#16a34a',
   },
   rbacCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
+    padding: 16,
     ...shadows.panel,
   },
   rbacHeader: {
@@ -319,14 +328,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   rbacTitle: {
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   rbacDesc: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textSecondary,
-    lineHeight: 16,
+    lineHeight: 18,
+    fontFamily: typography.fontSans,
   },
 });

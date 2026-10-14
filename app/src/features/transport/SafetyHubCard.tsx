@@ -17,7 +17,10 @@ import {
   ShieldAlert,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
+import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 function PulsingBeaconDot() {
   const pingAnim = useRef(new Animated.Value(0)).current;
@@ -35,14 +38,13 @@ function PulsingBeaconDot() {
     return () => loop.stop();
   }, [pingAnim]);
 
-
   const scale = pingAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 2.4],
+    outputRange: [1, 2.2],
   });
   const opacity = pingAnim.interpolate({
     inputRange: [0, 0.7, 1],
-    outputRange: [0.85, 0.3, 0],
+    outputRange: [0.8, 0.25, 0],
   });
 
   return (
@@ -76,12 +78,13 @@ export function SafetyHubCard({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const toggleHold = () => {
+    triggerHaptic('tap');
     if (isHolding) {
       setIsHolding(false);
       setToastMessage('Nearby AMR soft-pause released. Normal Nav2 navigation resumed.');
     } else {
       setIsHolding(true);
-      setToastMessage('HOLD ROBOT ACTIVE: AMRs within 3m perimeter paused. (E-STOP not triggered).');
+      setToastMessage('Hold active: AMRs within 3m perimeter paused. (E-STOP not triggered).');
     }
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -91,14 +94,14 @@ export function SafetyHubCard({
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
-          <ShieldAlert size={20} color={colors.primary} />
+          <ShieldAlert size={20} color={colors.textPrimary} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.headerTitle} numberOfLines={1}>SAFETY & INCIDENT HUB</Text>
-            <Text style={styles.headerSubtitle} numberOfLines={1}>Field Safety & AMR Perimeter Controls</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>Field safety & incident hub</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>Perimeter controls & emergency exceptions</Text>
           </View>
         </View>
         <View style={styles.incidentBadge}>
-          <Text style={styles.incidentBadgeText}>1 ACTIVE INCIDENT</Text>
+          <Text style={styles.incidentBadgeText}>1 active incident</Text>
         </View>
       </View>
 
@@ -114,22 +117,26 @@ export function SafetyHubCard({
         <View style={styles.incidentTopRow}>
           <View style={[styles.incidentPingRow, { flex: 1, minWidth: 0 }]}>
             <PulsingBeaconDot />
-            <Text style={styles.incidentTitle} numberOfLines={1}>AMR-01 STALLED · PAYLOAD AT RISK</Text>
+            <Text style={styles.incidentTitle} numberOfLines={1}>AMR-01 stalled · Payload at risk</Text>
           </View>
           <Text style={styles.incidentLocation} numberOfLines={1}>Zone A · Aisle 2</Text>
         </View>
         <Text style={styles.incidentDesc}>
-          Hardware motor fault with cargo BOX-101 (45 units). Rescue AMR-02 is ready for tote transfer.
+          Hardware motor fault with cargo BOX-101 (45 units). Rescue AMR-02 is staged for tote transfer.
         </Text>
         <Pressable
-          onPress={onLaunchRescue}
+          onPress={() => {
+            triggerHaptic('tap');
+            onLaunchRescue();
+          }}
           style={({ pressed }) => [
             styles.rescueBtn,
             pressed && styles.rescueBtnPressed,
           ]}
+          accessibilityRole="button"
         >
           <LifeBuoy size={16} color="#ffffff" style={styles.rescueBtnIcon} />
-          <Text style={styles.rescueBtnText} numberOfLines={1}>Launch Rescue</Text>
+          <Text style={styles.rescueBtnText} numberOfLines={1}>Launch rescue workflow</Text>
         </Pressable>
       </View>
 
@@ -140,15 +147,16 @@ export function SafetyHubCard({
           onPress={toggleHold}
           style={[
             styles.safetyBtn,
-            isHolding ? styles.safetyBtnActive : styles.safetyBtnDefault,
+            isHolding && styles.safetyBtnActive,
           ]}
+          accessibilityRole="button"
         >
           <View style={styles.safetyBtnTop}>
             <Text style={styles.safetyBtnLabel}>Perimeter</Text>
             {isHolding ? (
-              <PlayCircle size={16} color={colors.primary} />
+              <PlayCircle size={16} color={colors.darkAction} />
             ) : (
-              <PauseCircle size={16} color="#64748b" />
+              <PauseCircle size={16} color={colors.textSecondary} />
             )}
           </View>
           <Text
@@ -157,7 +165,7 @@ export function SafetyHubCard({
               isHolding && styles.safetyBtnTitleActive,
             ]}
           >
-            {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
+            {isHolding ? 'Hold active (3m)' : 'Soft hold (3m)'}
           </Text>
           <Text style={styles.safetyBtnDesc}>
             {isHolding ? 'Motion locked' : 'Local pause'}
@@ -166,28 +174,36 @@ export function SafetyHubCard({
 
         {/* Block Path Report */}
         <Pressable
-          onPress={onBlockPath}
-          style={[styles.safetyBtn, styles.safetyBtnDefault]}
+          onPress={() => {
+            triggerHaptic('tap');
+            onBlockPath?.();
+          }}
+          style={styles.safetyBtn}
+          accessibilityRole="button"
         >
           <View style={styles.safetyBtnTop}>
             <Text style={styles.safetyBtnLabel}>Hazard</Text>
-            <AlertTriangle size={16} color="#f59e0b" />
+            <AlertTriangle size={16} color="#b45309" />
           </View>
-          <Text style={styles.safetyBtnTitle}>Block Path (Nav2)</Text>
-          <Text style={styles.safetyBtnDesc}>Flag aisle obstacle</Text>
+          <Text style={styles.safetyBtnTitle}>Block corridor</Text>
+          <Text style={styles.safetyBtnDesc}>Detour Nav2</Text>
         </Pressable>
 
         {/* Fleet Recall Notice */}
         {onFleetRecall && (
           <Pressable
-            onPress={onFleetRecall}
-            style={[styles.safetyBtn, styles.safetyBtnDefault]}
+            onPress={() => {
+              triggerHaptic('tap');
+              onFleetRecall?.();
+            }}
+            style={styles.safetyBtn}
+            accessibilityRole="button"
           >
             <View style={styles.safetyBtnTop}>
               <Text style={styles.safetyBtnLabel}>Recall</Text>
-              <OctagonAlert size={16} color="#ef4444" />
+              <OctagonAlert size={16} color="#dc2626" />
             </View>
-            <Text style={styles.safetyBtnTitle}>Fleet Recall</Text>
+            <Text style={styles.safetyBtnTitle}>Fleet recall</Text>
             <Text style={styles.safetyBtnDesc}>Dock policy</Text>
           </Pressable>
         )}
@@ -199,87 +215,89 @@ export function SafetyHubCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 14,
-    marginBottom: 12,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 14,
+    ...shadows.panel,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    paddingBottom: 8,
+    borderBottomColor: colors.border,
+    paddingBottom: 10,
   },
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   headerSubtitle: {
-    fontSize: 10,
-    color: '#64748b',
+    fontSize: 12,
+    color: colors.textSecondary,
     marginTop: 1,
+    fontFamily: typography.fontSans,
   },
   incidentBadge: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
     borderWidth: 1,
-    borderColor: '#fca5a5',
+    borderColor: 'rgba(220, 38, 38, 0.25)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   incidentBadgeText: {
-    fontSize: 9,
-    fontFamily: typography.fontMono,
-    fontWeight: '900',
+    fontSize: 11,
+    fontFamily: typography.fontSans,
+    fontWeight: '700',
     color: '#dc2626',
   },
   toastBox: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
-    borderRadius: 8,
-    padding: 8,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    padding: 10,
     marginBottom: 10,
   },
   toastText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textPrimary,
     textAlign: 'center',
     fontFamily: typography.fontSans,
   },
   incidentBox: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(220, 38, 38, 0.04)',
     borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
+    borderColor: 'rgba(220, 38, 38, 0.2)',
+    borderRadius: radii.md,
+    padding: 14,
+    marginBottom: 12,
   },
   incidentTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
     gap: 6,
     flexWrap: 'wrap',
   },
   incidentPingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   beaconContainer: {
     width: 14,
@@ -293,7 +311,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#dc2626',
   },
   beaconCore: {
     width: 6,
@@ -303,43 +321,43 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   incidentTitle: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#991b1b',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#dc2626',
     fontFamily: typography.fontSans,
   },
   incidentLocation: {
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: typography.fontMono,
-    fontWeight: '700',
-    color: '#b91c1c',
+    fontWeight: '600',
+    color: '#dc2626',
   },
   incidentDesc: {
-    fontSize: 11,
-    color: '#7f1d1d',
-    lineHeight: 16,
-    marginBottom: 10,
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginBottom: 12,
+    fontFamily: typography.fontSans,
   },
   rescueBtn: {
-    backgroundColor: '#dc2626',
+    backgroundColor: colors.darkAction,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: 8,
+    minHeight: 42,
+    borderRadius: radii.sm,
   },
   rescueBtnPressed: {
-    opacity: 0.85,
+    backgroundColor: colors.darkActionPressed,
   },
   rescueBtnIcon: {
     marginRight: 6,
   },
   rescueBtnText: {
     color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '700',
     fontFamily: typography.fontSans,
-    flexShrink: 1,
   },
   actionsRow: {
     flexDirection: 'row',
@@ -348,42 +366,42 @@ const styles = StyleSheet.create({
   safetyBtn: {
     flex: 1,
     padding: 10,
-    borderRadius: 8,
+    borderRadius: radii.md,
     borderWidth: 1,
-  },
-  safetyBtnDefault: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    minHeight: 68,
+    justifyContent: 'space-between',
   },
   safetyBtnActive: {
-    backgroundColor: '#eff6ff',
-    borderColor: colors.primary,
+    backgroundColor: '#ffffff',
+    borderColor: colors.darkAction,
+    borderWidth: 1.5,
   },
   safetyBtnTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
   },
   safetyBtnLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
     fontFamily: typography.fontSans,
   },
   safetyBtnTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
     fontFamily: typography.fontSans,
+    marginTop: 4,
   },
   safetyBtnTitleActive: {
-    color: colors.primary,
+    color: colors.darkAction,
   },
   safetyBtnDesc: {
-    fontSize: 9,
-    color: '#94a3b8',
-    marginTop: 2,
+    fontSize: 11,
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
   },
 });

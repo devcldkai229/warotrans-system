@@ -17,10 +17,12 @@ import {
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
+import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
-import { useTopInset } from '../../shared/theme/layout';
+import { triggerHaptic } from '../../shared/utils/haptics';
 
 export interface CatalogProductItem {
   id: string;
@@ -98,7 +100,6 @@ const DISPATCH_CATALOG: CatalogProductItem[] = [
 
 export function InventoryLookupScreen() {
   const { goBack, navigate } = useNavigation();
-  const topInset = useTopInset();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
@@ -121,6 +122,7 @@ export function InventoryLookupScreen() {
   });
 
   const handleQuickDispatch = (prod: CatalogProductItem) => {
+    triggerHaptic('tap');
     navigate('transport_create', {
       workflow: 'Inbound Putaway',
       product: prod.name,
@@ -131,17 +133,14 @@ export function InventoryLookupScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header with Search */}
-      <View style={[styles.header, { paddingTop: topInset, minHeight: topInset + 52 }]}>
-        <Pressable
-          onPress={goBack}
-          style={({ pressed }) => [
-            styles.backBtn,
-            pressed && styles.backBtnPressed,
-          ]}
-        >
-          <ArrowLeft size={20} color={colors.textPrimary} />
-        </Pressable>
+      <SubScreenHeader
+        label="Warehouse catalog"
+        title="Inventory Lookup"
+        onBack={goBack}
+      />
+
+      {/* Search Bar */}
+      <View style={styles.searchSection}>
         <View style={styles.searchBox}>
           <Search size={16} color={colors.textMuted} style={styles.searchIcon} />
           <Input
@@ -155,8 +154,10 @@ export function InventoryLookupScreen() {
             <Pressable
               onPress={() => setSearchTerm('')}
               style={styles.clearBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
             >
-              <X size={14} color={colors.textMuted} />
+              <X size={16} color={colors.textMuted} />
             </Pressable>
           ) : null}
         </View>
@@ -170,7 +171,10 @@ export function InventoryLookupScreen() {
             return (
               <Pressable
                 key={cat}
-                onPress={() => setSelectedCategory(cat)}
+                onPress={() => {
+                  triggerHaptic('tap');
+                  setSelectedCategory(cat);
+                }}
                 style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
               >
                 <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextActive]}>
@@ -183,19 +187,19 @@ export function InventoryLookupScreen() {
       </View>
 
       {/* Catalog Product Cards */}
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {filteredProducts.map((prod) => (
           <View key={prod.id} style={styles.productCard}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.productName}>{prod.name}</Text>
                 <Text style={styles.productMeta}>
-                  {prod.category} · SKU: {prod.sku}
+                  {prod.category} · SKU: <Text style={styles.boldText}>{prod.sku}</Text>
                 </Text>
               </View>
               <View style={styles.stockBox}>
                 <Text style={styles.stockCount}>{prod.totalStock}</Text>
-                <Text style={styles.stockLabel}>IN STOCK</Text>
+                <Text style={styles.stockLabel}>Available</Text>
               </View>
             </View>
 
@@ -204,12 +208,14 @@ export function InventoryLookupScreen() {
               {prod.startpoints.map((sp) => (
                 <View key={sp.id} style={styles.startpointRow}>
                   <View style={styles.startpointLeft}>
-                    <MapPin size={14} color={colors.primary} />
+                    <MapPin size={14} color={colors.textSecondary} />
                     <Text style={styles.startpointId}>{sp.id}</Text>
                     <Text style={styles.startpointZone}>({sp.zone})</Text>
                   </View>
                   <View style={styles.startpointRight}>
-                    <Text style={styles.startpointQty}>Qty: {sp.qty}</Text>
+                    <Text style={styles.startpointQty}>
+                      Qty: <Text style={styles.boldText}>{sp.qty}</Text>
+                    </Text>
                     <View style={styles.containerPill}>
                       <Text style={styles.containerPillText}>{sp.container}</Text>
                     </View>
@@ -218,15 +224,14 @@ export function InventoryLookupScreen() {
               ))}
             </View>
 
-            {/* Quick Dispatch Action */}
+            {/* Quick Dispatch Action with Warm Dark Gray */}
             <Button
-              label="Dispatch Transport for this SKU"
-              icon={<Rocket size={14} color={colors.primary} />}
+              label="Dispatch Transport"
+              icon={<Rocket size={16} color="#ffffff" />}
               onPress={() => handleQuickDispatch(prod)}
-              variant="outline"
-              size="sm"
-              style={styles.dispatchBtn}
-              textStyle={styles.dispatchBtnText}
+              variant="primary"
+              size="md"
+              style={{ marginTop: 4 }}
             />
           </View>
         ))}
@@ -250,57 +255,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  searchSection: {
     backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingHorizontal: 12,
-    paddingTop: 0,
-    paddingBottom: 10,
-    minHeight: 0,
-    gap: 8,
-    ...shadows.panel,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backBtnPressed: {
-    backgroundColor: colors.border,
   },
   searchBox: {
-    flex: 1,
     position: 'relative',
     justifyContent: 'center',
   },
   searchIcon: {
     position: 'absolute',
-    left: 10,
+    left: 12,
     zIndex: 10,
   },
   inputContainer: {
     marginBottom: 0,
   },
   searchInput: {
-    paddingLeft: 34,
-    paddingRight: 30,
-    height: 40,
+    paddingLeft: 38,
+    paddingRight: 32,
+    height: 44,
     backgroundColor: colors.surfaceSubtle,
-    borderRadius: 10,
-    fontSize: 12,
-    fontWeight: '700',
-    borderWidth: 0,
+    borderRadius: radii.md,
+    fontSize: 14,
+    fontWeight: '500',
+    borderWidth: 1,
+    borderColor: colors.border,
     fontFamily: typography.fontSans,
   },
   clearBtn: {
     position: 'absolute',
-    right: 10,
+    right: 12,
     zIndex: 10,
     padding: 4,
   },
@@ -311,43 +299,44 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   categoryScroll: {
-    paddingHorizontal: 14,
-    gap: 6,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingHorizontal: 14,
+    minHeight: 34,
+    borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
   },
   categoryChipText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
   categoryChipTextActive: {
     color: '#ffffff',
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
+    fontWeight: '700',
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
-    gap: 12,
+    paddingBottom: 48,
+    gap: 14,
   },
   productCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
+    padding: 16,
     ...shadows.panel,
   },
   cardHeader: {
@@ -356,121 +345,114 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   productName: {
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   productMeta: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 3,
     fontFamily: typography.fontSans,
   },
   stockBox: {
     alignItems: 'flex-end',
   },
   stockCount: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   stockLabel: {
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textMuted,
     fontFamily: typography.fontSans,
+    marginTop: 1,
   },
   startpointsList: {
-    marginVertical: 10,
-    gap: 6,
+    marginVertical: 12,
+    gap: 8,
   },
   startpointRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.surfaceSubtle,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   startpointLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   startpointId: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
   startpointZone: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   startpointRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   startpointQty: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '400',
     color: colors.textSecondary,
     fontFamily: typography.fontMono,
+  },
+  boldText: {
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   containerPill: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 4,
-    paddingHorizontal: 6,
+    borderRadius: 6,
+    paddingHorizontal: 8,
     paddingVertical: 2,
   },
   containerPillText: {
-    fontSize: 9,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
-  },
-  dispatchBtn: {
-    borderColor: colors.primaryBorder,
-    backgroundColor: colors.primaryLight,
-    borderRadius: 10,
-    marginTop: 2,
-  },
-  dispatchBtnText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    fontFamily: typography.fontSans,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 50,
+    paddingVertical: 48,
   },
   emptyTitle: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: 10,
+    marginTop: 12,
     fontFamily: typography.fontSans,
   },
   emptySub: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 13,
     color: colors.textMuted,
     textAlign: 'center',
     marginTop: 4,
-    maxWidth: 240,
+    maxWidth: 260,
     fontFamily: typography.fontSans,
   },
 });

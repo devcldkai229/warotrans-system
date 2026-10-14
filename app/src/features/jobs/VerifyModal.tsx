@@ -5,8 +5,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from 'react-native';
 import {
@@ -17,11 +15,13 @@ import {
   RefreshCw,
   Timer,
   X,
+  ScanLine,
 } from 'lucide-react-native';
-import { Button } from '../../shared/components/Button';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { Button, Card, Text, TextField } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
@@ -116,46 +116,50 @@ export function VerifyModal({
 
   if (!visible) return null;
 
-  const modalBody = (
-    <View style={styles.modalOverlay}>
-      <View style={[styles.sheetContainer, !mismatch && styles.sheetContainerVerify]}>
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+
+        <View style={styles.sheetContainer}>
           {!mismatch ? (
-            /* ================================================================
-               Prototype ref: SCR-STF-14 (routes/index.tsx) — HANDOVER CONFIRMATION HUD
-               ================================================================ */
+            /* Normal Verification Flow */
             <ScrollView
               style={styles.sheetScroll}
               contentContainerStyle={styles.sheetContent}
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
               {/* Header */}
               <View style={styles.headerRow}>
                 <View style={styles.headerTitleCol}>
                   <View style={styles.eyebrowRow}>
-                    <Text style={styles.eyebrow}>
-                      {isBulkMode ? 'DOCK BATCH HANDOVER' : 'HANDOVER VERIFICATION'}
+                    <Text variant="caption" color={colors.primary} style={styles.eyebrow}>
+                      {isBulkMode ? 'Batch Dock Handover' : 'Handover Verification'}
                     </Text>
-                    <View
-                      style={[
-                        styles.timerBadge,
-                        isUrgent && styles.timerBadgeUrgent,
-                      ]}
-                    >
-                      <Timer size={11} color={isUrgent ? colors.danger : '#b45309'} />
+                    <View style={[styles.timerBadge, isUrgent && styles.timerBadgeUrgent]}>
+                      <Timer size={13} color={isUrgent ? colors.danger : colors.warning} />
                       <Text
-                        style={[
-                          styles.timerText,
-                          isUrgent && styles.timerTextUrgent,
-                        ]}
+                        variant="caption"
+                        color={isUrgent ? colors.danger : colors.warning}
+                        style={styles.timerText}
                       >
-                        {timeLeft > 0 ? `${mins}:${secs}` : 'Timed Out!'}
+                        {timeLeft > 0 ? `${mins}:${secs}` : 'Expired'}
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.sheetTitle}>
-                    {isBulkMode ? `Confirm Batch Handover · ${robotCode}` : `Confirm Handover · ${robotCode}`}
+
+                  <Text variant="title" style={styles.sheetTitle}>
+                    {isBulkMode ? `Confirm Batch · ${robotCode}` : `Confirm Handover · ${robotCode}`}
                   </Text>
-                  <Text style={styles.sheetSubtitle}>{location}</Text>
+                  <Text variant="caption" color={colors.textSecondary}>
+                    {location}
+                  </Text>
                 </View>
 
                 <Pressable
@@ -167,239 +171,131 @@ export function VerifyModal({
                 </Pressable>
               </View>
 
-              {/* 3-Slot Physical Flatbed Tray Schematic */}
-              <View style={styles.schematicCard}>
-                <View style={styles.slotsRow}>
-                  {[
-                    { label: 'Slot 1 (Front)', code: targetContainer, isTarget: true },
-                    { label: 'Slot 2 (Mid)', code: otherContainers[0]?.code || 'EMPTY', isTarget: isBulkMode },
-                    { label: 'Slot 3 (Rear)', code: otherContainers[1]?.code || 'EMPTY', isTarget: isBulkMode },
-                  ].map((s) => (
-                    <View
-                      key={s.label}
-                      style={[
-                        styles.slotCard,
-                        s.isTarget ? styles.slotCardTarget : styles.slotCardLocked,
-                      ]}
-                    >
-                      <Text style={styles.slotLabel}>{s.label}</Text>
-                      <Text
-                        style={[
-                          styles.slotCode,
-                          s.isTarget && styles.slotCodeTarget,
-                        ]}
-                      >
-                        {s.code}
-                      </Text>
-                      <View
-                        style={[
-                          styles.slotTag,
-                          s.isTarget ? styles.slotTagTarget : styles.slotTagLocked,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.slotTagText,
-                            s.isTarget && styles.slotTagTextTarget,
-                          ]}
-                        >
-                          {isBulkMode ? 'BATCH' : s.isTarget ? 'TARGET' : 'LOCKED'}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
+              {/* Target Container Card */}
+              <View style={styles.targetCard}>
+                <View style={styles.targetCardHeader}>
+                  <View style={styles.targetBadge}>
+                    <PackageCheck size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                    <Text variant="caption" style={styles.targetBadgeText}>
+                      Target Tote
+                    </Text>
+                  </View>
+                  <Text variant="caption" color={colors.textSecondary} style={styles.shelfText}>
+                    {targetShelf}
+                  </Text>
+                </View>
+
+                <View style={styles.targetCodeRow}>
+                  <Text variant="title" style={styles.targetCode}>
+                    {targetContainer}
+                  </Text>
+                  <Text variant="bodyMedium" color={colors.textSecondary}>
+                    <Text style={styles.boldQty}>{quantity} × </Text>{productName}
+                  </Text>
                 </View>
               </View>
 
-              {isBulkMode ? (
-                /* Bulk Batch Handover Mode (At Dock) */
-                <View style={styles.targetContainerCard}>
-                  <View style={styles.targetCardTop}>
-                    <Text style={styles.targetCardTag}>📦 BATCH LOAD / UNLOAD AT DOCK</Text>
-                    <View style={styles.actionPill}>
-                      <Text style={styles.actionPillText}>{otherContainers.length + 1} CONTAINERS</Text>
-                    </View>
-                  </View>
-                  <View style={styles.targetInfoRow}>
-                    <Text style={styles.targetCodeText}>Batch Handover</Text>
-                    <Text style={styles.targetQtyText}>
-                      Transfer all {otherContainers.length + 1} containers at {location}
-                    </Text>
-                  </View>
-                  <View style={{ marginTop: 14 }}>
-                    <Button
-                      label={`Confirm All (${otherContainers.length + 1} Totes)`}
-                      variant="primary"
-                      icon={<Check size={16} color="#ffffff" />}
-                      onPress={() => {
-                        triggerHaptic('success');
-                        onSuccess(targetContainer);
-                        toast.success(`Batch handover completed for ${otherContainers.length + 1} containers.`);
+              {/* Barcode Scan & Input Console */}
+              <View style={styles.scanSection}>
+                <Text variant="label" style={styles.sectionLabel}>
+                  Scan or Enter Barcode
+                </Text>
+
+                <View style={styles.inputRow}>
+                  <View style={styles.inputWrapper}>
+                    <TextField
+                      value={barcodeInput}
+                      onChangeText={(val) => {
+                        setBarcodeInput(val);
+                        if (mismatch) setMismatch(false);
                       }}
-                      style={{ width: '100%', minHeight: 48, borderRadius: 8 }}
-                      textStyle={{ fontWeight: '900', fontSize: 13 }}
+                      placeholder={`e.g. ${targetContainer}`}
+                      placeholderTextColor={colors.textMuted}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      onSubmitEditing={() => handleVerify()}
+                      containerStyle={styles.inputField}
                     />
                   </View>
+
+                  <Pressable
+                    onPress={() => setIsScannerOpen(true)}
+                    style={({ pressed }) => [
+                      styles.cameraBtn,
+                      pressed && styles.btnPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Scan with Camera"
+                  >
+                    <Camera size={20} color="#ffffff" />
+                  </Pressable>
                 </View>
-              ) : (
-                /* Selective Handover Mode (At Rack Stop) */
-                <>
-                  {/* Container To Unload Highlight Box */}
-                  <View style={styles.targetContainerCard}>
-                    <View style={styles.targetCardTop}>
-                      <Text style={styles.targetCardTag}>📦 TARGET CONTAINER TO UNLOAD</Text>
-                      <View style={styles.actionPill}>
-                        <Text style={styles.actionPillText}>SCAN TO UNLOAD</Text>
-                      </View>
-                    </View>
 
-                    <View style={styles.targetInfoRow}>
-                      <Text style={styles.targetCodeText}>{targetContainer}</Text>
-                      <Text style={styles.targetQtyText}>
-                        {quantity} × {productName}
-                      </Text>
-                    </View>
-
-                    <View style={styles.targetDestBox}>
-                      <Text style={styles.targetDestLabel}>Target Shelf Destination</Text>
-                      <Text style={styles.targetDestValue}>{targetShelf}</Text>
-                    </View>
-                  </View>
-
-                  {/* Keep Onboard Warning */}
-                  {otherContainers.length > 0 && (
-                    <View style={styles.keepOnboardCard}>
-                      <View style={styles.keepOnboardHeader}>
-                        <Text style={styles.keepOnboardTitle}>
-                          🔒 KEEP ONBOARD (DO NOT TOUCH):
-                        </Text>
-                        <Text style={styles.keepOnboardCount}>
-                          {otherContainers.length} Totes for next stops
-                        </Text>
-                      </View>
-                      {otherContainers.map((c) => (
-                        <View key={c.code} style={styles.keepOnboardItem}>
-                          <Text style={styles.keepOnboardCode}>• {c.code} ({c.slot})</Text>
-                          <Text style={styles.keepOnboardNote}>Keep Onboard</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* Hybrid Barcode Input: Text Input + Camera Scan */}
-                  <View style={styles.barcodeSection}>
-                    <Text style={styles.barcodeSectionTitle}>
-                      SCAN OR ENTER CONTAINER BARCODE
-                    </Text>
-
-                    <View style={styles.inputRow}>
-                      <TextInput
-                        value={barcodeInput}
-                        onChangeText={setBarcodeInput}
-                        placeholder={`Scan barcode (${targetContainer})...`}
-                        placeholderTextColor="#94a3b8"
-                        autoCapitalize="characters"
-                        style={styles.barcodeTextInput}
-                      />
-                      <Pressable
-                        onPress={() => setIsScannerOpen(true)}
-                        style={({ pressed }) => [
-                          styles.cameraScanBtn,
-                          pressed && styles.cameraScanBtnPressed,
-                        ]}
-                      >
-                        <Camera size={18} color="#ffffff" />
-                        <Text style={styles.cameraScanText}>SCAN</Text>
-                      </Pressable>
-                    </View>
-
-                    {/* Quick Simulation Chips */}
-                    <View style={styles.simRow}>
-                      <Text style={styles.simLabel}>Demo Sim:</Text>
-                      <View style={styles.simChips}>
-                        <Pressable
-                          onPress={() => {
-                            setBarcodeInput(targetContainer);
-                            handleVerify(targetContainer);
-                          }}
-                          style={styles.simChipSuccess}
-                        >
-                          <Text style={styles.simChipSuccessText}>
-                            Match ({targetContainer})
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => {
-                            setBarcodeInput('BOX-999');
-                            handleVerify('BOX-999');
-                          }}
-                          style={styles.simChipDanger}
-                        >
-                          <Text style={styles.simChipDangerText}>
-                            Mismatch (BOX-999)
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Action Buttons */}
-                  <View style={styles.actionsGrid}>
-                    <Button
-                      label="Report Issue"
-                      variant="outline"
-                      icon={<AlertTriangle size={15} color={colors.danger} />}
-                      onPress={onReportIssue}
-                      style={styles.reportIssueBtn}
-                      textStyle={{ color: colors.danger, fontWeight: '900', fontSize: 12 }}
-                    />
-                    <Button
-                      label="Confirm Handover"
-                      variant="primary"
-                      icon={<Check size={16} color="#ffffff" />}
-                      onPress={() => handleVerify()}
-                      disabled={!barcodeInput.trim()}
-                      style={styles.confirmBtn}
-                      textStyle={{ fontWeight: '900', fontSize: 12 }}
-                    />
-                  </View>
-                </>
-              )}
-
-              {timeLeft <= 0 && (
-                <View style={styles.timeoutAlert}>
-                  <Text style={styles.timeoutAlertText}>
-                    300s Handover timeout exceeded!
+                {/* Quick Test Autocomplete Chip */}
+                <View style={styles.quickChipRow}>
+                  <Text variant="caption" color={colors.textMuted}>
+                    Quick test:
                   </Text>
                   <Pressable
-                    onPress={() => setTimeLeft(60)}
-                    style={({ pressed }) => [styles.timeoutExtendBtn, pressed && styles.timeoutExtendBtnPressed]}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Request 60 second extension"
+                    onPress={() => {
+                      setBarcodeInput(targetContainer);
+                      handleVerify(targetContainer);
+                    }}
+                    style={styles.quickChip}
                   >
-                    <Text style={styles.timeoutExtendText}>
-                      + Request 60s Extension
+                    <Text variant="caption" color={colors.primary} style={styles.quickChipText}>
+                      Match {targetContainer}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setBarcodeInput('BOX-999');
+                      handleVerify('BOX-999');
+                    }}
+                    style={styles.quickChipMismatch}
+                  >
+                    <Text variant="caption" color={colors.danger} style={styles.quickChipText}>
+                      Test Mismatch
                     </Text>
                   </Pressable>
                 </View>
-              )}
+              </View>
+
+              {/* Bottom Actions */}
+              <View style={styles.actionRow}>
+                <Button
+                  title="Report Issue"
+                  variant="outline"
+                  onPress={onReportIssue}
+                  icon={AlertTriangle}
+                  size="lg"
+                  style={styles.issueButton}
+                />
+                <Button
+                  title="Confirm Handover"
+                  variant="primary"
+                  onPress={() => handleVerify()}
+                  disabled={!barcodeInput.trim()}
+                  icon={Check}
+                  size="lg"
+                  style={styles.confirmButton}
+                />
+              </View>
             </ScrollView>
           ) : (
-            /* ================================================================
-               Prototype ref: SCR-STF-15 (routes/index.tsx) — BARCODE MISMATCH ALERT MODAL
-               ================================================================ */
+            /* Barcode Mismatch Alert Screen */
             <View style={styles.mismatchContainer}>
-              <View style={styles.mismatchHeaderRow}>
-                <View style={styles.mismatchIconWrap}>
+              <View style={styles.mismatchHeader}>
+                <View style={styles.mismatchIconWell}>
                   <AlertTriangle size={24} color={colors.danger} />
                 </View>
-                <View style={styles.mismatchTitleCol}>
-                  <Text style={styles.mismatchTitle}>
-                    Barcode Mismatch!
+                <View style={styles.mismatchHeaderText}>
+                  <Text variant="title" color={colors.danger}>
+                    Barcode Mismatch Detected
                   </Text>
-                  <Text style={styles.mismatchSubtitle}>
-                    Scanned barcode does not match expected target {targetContainer} assigned for {location}.
+                  <Text variant="caption" color={colors.textSecondary} style={{ marginTop: 2 }}>
+                    Scanned tote does not match expected payload for this stop.
                   </Text>
                 </View>
               </View>
@@ -407,48 +303,57 @@ export function VerifyModal({
               {/* Comparison Box */}
               <View style={styles.comparisonGrid}>
                 <View style={styles.comparisonCol}>
-                  <Text style={styles.comparisonColLabel}>EXPECTED TARGET</Text>
-                  <Text style={styles.comparisonExpectedVal}>{targetContainer}</Text>
-                  <Text style={styles.comparisonSubtext}>{targetShelf}</Text>
+                  <Text variant="caption" color={colors.textMuted} style={styles.comparisonLabel}>
+                    EXPECTED CONTAINER
+                  </Text>
+                  <Text variant="title" style={styles.comparisonExpected}>
+                    {targetContainer}
+                  </Text>
+                  <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+                    {targetShelf}
+                  </Text>
                 </View>
 
                 <View style={[styles.comparisonCol, styles.comparisonColRight]}>
-                  <Text style={styles.comparisonScannedLabel}>SCANNED BARCODE</Text>
-                  <Text style={styles.comparisonScannedVal}>
+                  <Text variant="caption" color={colors.danger} style={styles.comparisonLabel}>
+                    SCANNED BARCODE
+                  </Text>
+                  <Text variant="title" color={colors.danger} style={styles.comparisonScanned}>
                     {barcodeInput || 'BOX-999'}
                   </Text>
-                  <Text style={styles.comparisonScannedSubtext}>
-                    Wrong Tote / Misplaced
+                  <Text variant="caption" color={colors.danger} numberOfLines={1}>
+                    Incorrect / Misplaced Tote
                   </Text>
                 </View>
               </View>
 
-              {/* Recovery Action Buttons */}
+              {/* Actions */}
               <View style={styles.mismatchActions}>
                 <Button
-                  label="Retry Scan"
+                  title="Retry Barcode Scan"
                   variant="primary"
-                  icon={<RefreshCw size={18} color="#ffffff" />}
                   onPress={() => {
                     setMismatch(false);
                     setBarcodeInput('');
                   }}
-                  style={{ width: '100%', minHeight: 64, borderRadius: 6 }}
+                  icon={RefreshCw}
+                  size="lg"
+                  fullWidth
                 />
                 <Button
-                  label="Report Misplaced"
-                  variant="outline"
-                  icon={<AlertTriangle size={15} color={colors.danger} />}
+                  title="Report Misplaced Container"
+                  variant="danger"
                   onPress={onReportIssue}
-                  style={styles.mismatchReportBtn}
-                  textStyle={{ color: colors.danger, fontWeight: '900', fontSize: 12 }}
+                  icon={AlertTriangle}
+                  size="md"
+                  fullWidth
                 />
               </View>
             </View>
           )}
         </View>
 
-        {/* Live Camera Scanner Overlay */}
+        {/* Embedded Barcode Scanner HUD */}
         <BarcodeScannerHUD
           visible={isScannerOpen}
           targetBarcode={targetContainer}
@@ -456,16 +361,6 @@ export function VerifyModal({
           onScanResult={handleScannerResult}
         />
       </View>
-    );
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      {modalBody}
     </Modal>
   );
 }
@@ -473,573 +368,238 @@ export function VerifyModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
-    padding: 12,
-    paddingBottom: 12,
-    ...(Platform.OS === 'web'
-      ? ({
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-        } as any)
-      : {}),
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFill,
   },
   sheetContainer: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    maxHeight: '92%',
-    width: '100%',
-    maxWidth: '100%',
-    alignSelf: 'center',
-    overflow: 'hidden',
-    ...shadows.sheet,
-  },
-  sheetContainerVerify: {
-    height: 690,
-  },
-  dragHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#cbd5e1',
-    alignSelf: 'center',
-    marginBottom: 4,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    maxHeight: '88%',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 16,
   },
   sheetScroll: {
-    padding: 16,
+    flexGrow: 0,
   },
   sheetContent: {
-    paddingBottom: 0,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    gap: 16,
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 12,
-    marginBottom: 14,
-    minHeight: 92,
+    justifyContent: 'space-between',
   },
   headerTitleCol: {
     flex: 1,
+    gap: 4,
   },
   eyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 4,
-    minHeight: 34,
+    gap: 8,
   },
   eyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-    letterSpacing: 1.2,
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
   timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#fef3c7',
+    backgroundColor: colors.warningBg,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 99,
+    borderRadius: radii.pill,
   },
   timerBadgeUrgent: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: colors.dangerBg,
   },
   timerText: {
-    fontSize: 10,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    color: '#381c00',
-  },
-  timerTextUrgent: {
-    color: colors.danger,
+    fontWeight: '700',
+    fontSize: 11,
   },
   sheetTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-    marginTop: 4,
-  },
-  sheetSubtitle: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
+    fontWeight: '700',
     marginTop: 2,
   },
   closeBtn: {
-    width: 38,
-    height: 44,
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: -8,
-    marginTop: -4,
+    backgroundColor: colors.surfaceSubtle,
   },
-  schematicCard: {
-    backgroundColor: 'rgba(241, 245, 249, 0.6)',
-    borderRadius: 12,
+  targetCard: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 8,
-    height: 83,
-    minHeight: 83,
-    marginBottom: 8,
+    padding: 16,
+    gap: 12,
   },
-  schematicHeader: {
+  targetCardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    minHeight: 15,
-    marginBottom: 8,
+    justifyContent: 'space-between',
   },
-  schematicTitle: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-    letterSpacing: 0.5,
+  targetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.darkAction,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
   },
-  schematicBadge: {
-    fontSize: 9,
+  targetBadgeText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  shelfText: {
+    fontWeight: '600',
+  },
+  targetCodeRow: {
+    gap: 2,
+  },
+  targetCode: {
     fontWeight: '800',
-    color: colors.primary,
+    fontSize: 22,
+    letterSpacing: 0.5,
     fontFamily: typography.fontMono,
   },
-  slotsRow: {
-    flexDirection: 'row',
+  boldQty: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  scanSection: {
     gap: 8,
-    height: 65,
   },
-  slotCard: {
-    flex: 1,
-    padding: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  slotCardTarget: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(37, 99, 235, 0.08)',
-  },
-  slotCardLocked: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    backgroundColor: colors.surface,
-    opacity: 0.7,
-  },
-  slotLabel: {
-    fontSize: 8,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    color: colors.textMuted,
-    marginBottom: 2,
-    fontFamily: typography.fontSans,
-  },
-  slotCode: {
-    fontSize: 11,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    color: colors.textPrimary,
-  },
-  slotCodeTarget: {
-    color: colors.primary,
-  },
-  slotTag: {
-    marginTop: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  slotTagTarget: {
-    backgroundColor: colors.primary,
-  },
-  slotTagLocked: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  slotTagText: {
-    // 9pt floor per AGENTS.md §2.2; was 7pt, illegible at warehouse distance.
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  slotTagTextTarget: {
-    color: '#ffffff',
-  },
-  targetContainerCard: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(0, 92, 209, 0.05)',
-    borderRadius: 12,
-    padding: 14,
-    minHeight: 140,
-    marginBottom: 8,
-  },
-  targetCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  targetIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  targetCardTag: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
-  actionPill: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  actionPillText: {
-    color: '#ffffff',
-    fontSize: 8,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-  },
-  targetInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginTop: 8,
-  },
-  targetCodeText: {
-    fontSize: 17,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    color: colors.textPrimary,
-  },
-  targetQtyText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  targetDestBox: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(37, 99, 235, 0.2)',
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 8,
-  },
-  targetDestLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    fontFamily: typography.fontSans,
-  },
-  targetDestValue: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
-  keepOnboardCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: 'rgba(241, 245, 249, 0.3)',
-    minHeight: 75,
-    marginBottom: 16,
-  },
-  keepOnboardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  keepOnboardTitle: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  keepOnboardCount: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.primary,
-    fontFamily: typography.fontSans,
-  },
-  keepOnboardItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 2,
-  },
-  keepOnboardCode: {
-    fontSize: 11,
-    fontFamily: typography.fontMono,
-    color: colors.textPrimary,
-  },
-  keepOnboardNote: {
-    fontSize: 10,
-    color: colors.textMuted,
-  },
-  barcodeSection: {
-    minHeight: 119,
-    marginBottom: 16,
-  },
-  barcodeSectionTitle: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.textMuted,
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    fontFamily: typography.fontSans,
+  sectionLabel: {
+    fontWeight: '600',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
+    gap: 10,
+  },
+  inputWrapper: {
+    flex: 1,
+  },
+  inputField: {
     backgroundColor: colors.surface,
-    overflow: 'hidden',
-    minHeight: 64,
   },
-  barcodeTextInput: {
-    flex: 1,
-    height: 64,
-    paddingHorizontal: 16,
-    fontSize: 14,
-    fontFamily: typography.fontMono,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  cameraScanBtn: {
-    flexDirection: 'row',
+  cameraBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    backgroundColor: colors.darkAction,
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    height: 64,
-    minWidth: 112,
-    paddingHorizontal: 14,
     justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  cameraScanBtnPressed: {
-    backgroundColor: colors.primaryDark,
+  btnPressed: {
+    opacity: 0.85,
   },
-  cameraScanText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '900',
-    fontFamily: typography.fontSans,
-  },
-  simRow: {
+  quickChipRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
-    minHeight: 22,
-  },
-  simLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  simChips: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  simChipSuccess: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  simChipSuccessText: {
-    fontSize: 9,
-    fontFamily: typography.fontMono,
-    fontWeight: '800',
-    color: colors.success,
-  },
-  simChipDanger: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  simChipDangerText: {
-    fontSize: 9,
-    fontFamily: typography.fontMono,
-    fontWeight: '800',
-    color: colors.danger,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
     gap: 8,
-    marginTop: 0,
-    height: 64,
-  },
-  reportIssueBtn: {
-    flex: 1,
-    minHeight: 64,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 6,
-  },
-  confirmBtn: {
-    flex: 1,
-    minHeight: 64,
-    borderRadius: 6,
-    borderBottomWidth: 3,
-    borderBottomColor: '#004bb0',
-  },
-  timeoutAlert: {
-    marginTop: 12,
-    backgroundColor: '#fee2e2',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  timeoutAlertText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.danger,
-    fontFamily: typography.fontSans,
-  },
-  timeoutExtendText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.primary,
-    textDecorationLine: 'underline',
-    marginTop: 4,
-    fontFamily: typography.fontSans,
-  },
-  timeoutExtendBtn: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 8,
     marginTop: 4,
   },
-  timeoutExtendBtnPressed: {
-    opacity: 0.6,
-    transform: [{ scale: 0.97 }],
+  quickChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+    backgroundColor: colors.primaryLight,
   },
-  mismatchContainer: {
-    padding: 16,
-    paddingTop: 12,
-    borderTopWidth: 4,
-    borderTopColor: colors.danger,
-    marginHorizontal: 16,
-    paddingBottom: 16,
+  quickChipMismatch: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+    backgroundColor: colors.dangerBg,
   },
-  mismatchHeaderRow: {
+  quickChipText: {
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  actionRow: {
     flexDirection: 'row',
     gap: 12,
-    alignItems: 'flex-start',
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: 8,
   },
-  mismatchIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  issueButton: {
+    flex: 1,
+  },
+  confirmButton: {
+    flex: 2,
+  },
+  mismatchContainer: {
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    gap: 20,
+  },
+  mismatchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mismatchIconWell: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    backgroundColor: colors.dangerBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mismatchTitleCol: {
+  mismatchHeaderText: {
     flex: 1,
-  },
-  mismatchTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.danger,
-    fontFamily: typography.fontSans,
-    lineHeight: 28,
-  },
-  mismatchSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-    marginTop: 2,
-    lineHeight: 16,
   },
   comparisonGrid: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceSubtle,
   },
   comparisonCol: {
     flex: 1,
+    padding: 14,
+    gap: 4,
   },
   comparisonColRight: {
     borderLeftWidth: 1,
     borderLeftColor: colors.border,
-    paddingLeft: 12,
+    backgroundColor: '#fff5f5',
   },
-  comparisonColLabel: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    fontFamily: typography.fontSans,
+  comparisonLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  comparisonExpectedVal: {
-    fontSize: 14,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    color: colors.textPrimary,
-    marginTop: 4,
+  comparisonExpected: {
+    fontWeight: '700',
+    fontSize: 18,
   },
-  comparisonSubtext: {
-    fontSize: 9,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  comparisonScannedLabel: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: colors.danger,
-    textTransform: 'uppercase',
-    fontFamily: typography.fontSans,
-  },
-  comparisonScannedVal: {
-    fontSize: 14,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    color: colors.danger,
-    marginTop: 4,
-  },
-  comparisonScannedSubtext: {
-    fontSize: 9,
-    color: colors.danger,
-    marginTop: 2,
+  comparisonScanned: {
+    fontWeight: '700',
+    fontSize: 18,
   },
   mismatchActions: {
-    gap: 8,
-  },
-  mismatchReportBtn: {
-    width: '100%',
-    minHeight: 48,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-    borderRadius: 6,
+    gap: 10,
   },
 });
