@@ -86,18 +86,19 @@ leaves `src/shared/components/*` genuinely frozen.
 
 ### 3.1 `AppHeader` — `src/app/shell/AppHeader.tsx`
 
-Two rows, Google-console framing:
+56px content row + safe-area insets (`paddingTop: topInset + 4`, `paddingBottom: 10`, `minHeight: 56`):
 
 ```
-row 1   [AT] Alex Tran  (Staff)          ● WMS Connected      (shield)
-row 2   (⌖ Inbound Dock 01 ⌄)
+left:   [BrandMark 40px]  [ 📍 Inbound Dock 01 ▾ (40px pill) ]
+right:  [ 🔔 Bell (40px) ]  [ AT Avatar (40px) ]
 ```
 
-- Top padding from `useTopInset()`, never a constant.
-- **The zone picker, the account sheet and the safety sheet are `Modal`s.** The
-  previous header measured its own height with `onLayout` and anchored popovers
-  to it — correct until the inset changed underneath it, which it does on every
-  device between an SE and a Dynamic Island.
+- **Top padding from `useTopInset()`**, never a hardcoded constant.
+- **Left group (Logo + Zone)**: `BrandMark` squircle icon (40px) paired directly with the work zone selector pill (`[ 📍 Inbound Dock 01 ▾ ]`, 40px height, rounded full) without redundant "WaroTrans" text, providing clear horizontal breathing room across 390pt mobile viewports.
+- **Right toolset (Duo)**: Dedicated 40px circular buttons for rapid 1-handed thumb access to notifications (`[ 🔔³ Bell ]`) and shift profile (`[ AT Avatar ]`). The Search button was intentionally removed from the header to maximize negative space and prevent visual crowding; inventory lookup is intuitively accessed via the Transport screen.
+- **Compact Anchored Notification Dropdown (`NotificationSheet`)**: Drops down cleanly right beneath the notification bell (`top: topInset + 54`, `right: 12`, `width: 320px`, `maxHeight: 390px`) with solid `#ffffff` surface, gentle dimming backdrop, and smooth tap-outside dismiss. All operational alert copy is strictly in English (`AMR-01 Arrived at Dock 01`, `Aisle A-02 Obstacle Detected`, `Transfer Order TR-2049 Assigned`, `AMR-02 Returning to Charging Bay`), leaving the rest of the operational map and dock status fully visible.
+- **The zone picker and account sheet are `Modal`s.** Occasional actions do not earn
+  permanently mounted popovers, ensuring robust behavior across all devices.
 - **Layout budget is tight and deliberate.** Row 1 has 358pt to spend on a 44pt
   avatar, a name, a role chip, a 125pt status pill and a 44pt button. Gaps are
   8pt, not 10pt: at 10pt the name truncated to `Alex Tr…` at 390pt wide. Longer
@@ -126,43 +127,64 @@ from the header left the Transport hub still reading "not holding".
 sheet re-renders; no AMR is told anything, because `POST /api/fleet/soft-hold` is
 not wired. The hold row's subtitle carries `(Local Fleet Simulation)` and an
 `info` notice under the list names the missing route. The header repeats it in
-both toasts and in the shield button's `accessibilityHint`, and the Transport hub
-says it too — three surfaces toggle the same switch, so all three have to be
-honest about what it does.
+both toasts and in the shield button's `accessibilityHint`, the Transport hub
+says it too, and `JobDetailScreen` says it — three surfaces toggle the same
+switch, so all of them have to be honest about what it does.
+
+Toggling the hold **closes the sheet**. It used to stay open and flip its own
+state pill, which looks like it works — except the confirmation is a `toast`,
+and a toast lives in the React tree *below* this `Modal`. RN renders a `Modal`
+into its own native window, so `zIndex` cannot lift the toast above it: the tap
+produced a confirmation nobody could see, on the screen where the operator is
+deciding whether to step into traffic.
 
 **"Report Cargo Defect" opens the incident report**, `job_detail` with
 `{ modal: 'issue' }`. It used to route to `payload_recovery`, which is the
 chassis rescue flow: an operator reporting a crushed tote was taken to a screen
 about lifting a stalled AMR off a pallet.
 
+**Four surfaces, one switch.** `SafetyHoldContext` has four readers now — the
+header shield, this sheet, the Transport hub, and `JobDetailScreen`. The detail
+screen kept a private `useState` copy until the review pass, so holding from
+there left every other surface reading "not holding": the same defect the
+context was introduced to end, one surface over.
+
 ### 3.3 `BottomTabBar` — `src/app/navigation/BottomTabBar.tsx`
 
-Flat, edge to edge, four tabs (`Home`, `Jobs`, `Live Map`, `Transport`), 12pt
-Title Case labels. The old floating pill is gone: it was a deliberate Phase 0
-decision that no longer matches the calm surface language, and content scrolling
-under a bar reads better on a handheld than a pill floating over it.
+Flat, edge to edge, **three tabs** (`Home`, `Jobs`, `Transport`), minimalist icon-only
+with touch targets >= 72pt width x 44pt height.
 
 - `position: absolute`, with the bottom inset applied as a **sibling strip** rather
   than a `paddingBottom` on the row: on a device with a home indicator a padding
   would inset the icons too, which is not what "clear the indicator" means.
 - Still publishes its measured height through `NavigationContext`, so
   `dockReservedSpace(dockHeight)` remains the one way to clear it.
-  `dockMetrics.bottomOffset` is now `0` and `gutter` is `16` — the bar sits
-  flush on the physical edge.
+- **Active state**: soft pill highlight (`rgba(21, 87, 208, 0.08)`) with `colors.primaryText`.
+- **Jobs counter badge**: calibrated to **bright warm Amber-400 (`#fbbf24`)** with a
+  crisp **1.5px white border (`#ffffff`)** and **deep amber text (`#78350f`)** (WCAG AAA >= 7:1),
+  eliminating the previous dark/muddy burnt-orange badge appearance.
 - The Jobs badge is seeded from `countMyActiveJobs()` in `features/jobs/jobData`
-  — the same helper the Jobs screen counts with. It used to be a hardcoded `1`
-  sitting next to a list of four, which on a mission-critical handheld is worse
-  than showing nothing.
+  — the same helper the Jobs screen counts with.
 
 ### 3.4 Navigation
 
-`MainTab` is now `'home' | 'jobs' | 'live_map' | 'transport'`, and
-`isMainTabScreen()` is exported from `NavigationContext` so `AppNavigator` has a
-single gate for "render the shell". Live Map is a tab root: it lost its
-`SubScreenHeader` (the shell header owns the top now) and the tracked job moved
-into a floating chip on the viewport. Its telemetry sheet offsets itself by
-`dockReservedSpace(dockHeight)` instead of a constant `bottom: 14`, which is what
-kept it clear of the new bar.
+`MainTab` is `'home' | 'jobs' | 'transport'`, and `isMainTabScreen()` is exported from
+`NavigationContext` so `AppNavigator` has a single gate for "render the shell".
+Dedicated destinations (`JobLiveMapScreen`, `JobDetailScreen`, `TransportScreen`) carry
+their own `SubScreenHeader` with explicit back navigation.
+
+**The dock zone follows the sheet, it is not a second constant.** Moving the
+sheet to the measured bar clearance buried the `LOADING DOCKS` block underneath
+it — that block still sat at its own hardcoded `bottom: 120`, so a 174pt opaque
+panel covered the only label saying where the docks are. The sheet now reports
+its height via `onLayout` and the zone is stacked on top of it. The lesson is the
+one AGENTS.md §2.3 already states: one measurement feeds every dependent
+position, and a second hand-tuned number next to it is a number that will be
+wrong.
+
+`TransportScreen` had the same class of bug in `paddingBottom: 140` — a
+constant standing in for `dockReservedSpace(dockHeight)`, which cleared the bar
+only on the device it was measured on. Both now measure.
 
 ---
 
@@ -191,9 +213,14 @@ rest.
 **The hero reads the job out of `jobData`.** It hardcoded
 `BOX-101 · Electronics · 45 pcs` while the fixture said 12 — a quantity that
 differs between the screen you act from and the screen you verify in. Target,
-cargo, robot and status are now all `MOCK_JOBS[0]`'s, so there is exactly one
-place to change them. The two fleet cards and the hero use `Card`'s new `gap`
-prop instead of per-row `marginTop`, which the outer card style could not carry.
+cargo (code, product, quantity), robot, status and the progress meter are now
+all `MOCK_JOBS[0]`'s, so there is exactly one place to change them. The two
+fleet cards and the hero use `Card`'s new `gap` prop instead of per-row
+`marginTop`, which the outer card style could not carry.
+
+Transport quoted the same wrong number in its incident card (`BOX-101 (45
+units)`); it reads the fixture now too, which is what caught the fact that the
+two screens had been describing one tote differently for a while.
 
 ### 4.2 Jobs — `src/features/jobs/JobsScreen.tsx` + `JobCard.tsx`
 
@@ -232,8 +259,12 @@ prop instead of per-row `marginTop`, which the outer card style could not carry.
 **One lifecycle axis.** `AppJobItem.kind` (`waiting | transit | complete |
 queued`) is gone. It duplicated `JobStatus` on the same fixture, which is how two
 screens could disagree about one job; `JobCard`, `JobsScreen` and
-`JobDetailScreen` now read `status` directly, and `jobData.ts` owns the two
-predicates they share.
+`JobDetailScreen` now read `status` directly. `jobData.ts` owns what the app
+knows about a job's state: `isTerminalJobStatus()` and
+`JOB_STATUS_PRESENTATION` — the single label/tone table every screen names a
+status from. It started life inside `JobCard`, which left the Transport hub
+hand-writing `ALLOCATING AMR` and `EN ROUTE` for jobs the Jobs list called
+*Waiting Handover* and *Running*.
 
 ---
 
@@ -246,12 +277,19 @@ transform at all — `StatusPill` humanises the status (`WAITING_HANDOVER` →
 `Waiting handover`) and the screens pass an explicit `label` where Title Case
 matters (`Waiting Handover`).
 
-The last two main-tab holdouts are now clean: the Live Map telemetry badge reads
-`Live Telemetry` at 11pt (it was 9pt at weight 900 in caps — below the type
-scale *and* shouting), and Transport's section eyebrows read `Dispatch
-Operations` and `Safety & Incident Hub` in Title Case without the 1.4pt tracking.
-All four main tabs now speak the same language; the remaining caps are on the
-un-migrated screens listed below.
+The last two main-tab holdouts are now clean at the *header* level: the Live Map
+telemetry badge reads `Live Telemetry` at the 12pt scale floor (it was 9pt at
+weight 900 in caps — below the type scale *and* shouting), and Transport's
+section eyebrows read `Dispatch Operations` and `Safety & Incident Hub` in Title
+Case without the 1.4pt tracking, with the hero button's 3D bevel replaced by a
+hairline plus one shadow step.
+
+That is the *header* layer only. Both of those screens are still un-migrated
+below the fold and still carry Phase 0 furniture: 8–10pt map and incident labels,
+literal ALL-CAPS state strings (`AMR-01 STALLED · CARGO AT RISK`,
+`PERIMETER`, `RECENT DISPATCHES`), and inline styles throughout. Finishing them
+is the same mechanical pass as the rest of §6 — it was not started here because
+it is a screen migration, not a copy fix.
 
 ---
 
@@ -260,11 +298,13 @@ un-migrated screens listed below.
 Everything not listed above still renders its own header and its own inline
 styles inside the new shell, and is expected to look like itself:
 
-`JobDetailScreen`, `TransportScreen`, `JobMonitoringScreen`, `JobLiveMapScreen`,
+`JobDetailScreen`, `TransportScreen`, `JobMonitoringScreen`,
 `InventoryLookupScreen`, `CreateContainerScreen`, `TransportCreationScreen`,
 `TransportHistoryScreen`, `PointToPointScreen`, `ReplenishmentScreen`,
 `PayloadRecoveryScreen`, `FleetRecallScreen`, `BlockPathHazardScreen`,
 `OfflineBannerHUD`, `BarcodeScannerHUD`, `IssueReportingModal`, `LoginScreen`.
+
+*Note*: `JobLiveMapScreen` has been migrated to Calm Operations (using `SubScreenHeader`, vector SVG Nav2 waypoint trajectories, and collision-free AMR markers).
 
 Migrating them is mechanical — swap `shared/components/*` for the barrel, drop
 inline `fontSize`, delete the now-duplicate page header — and each one deletes

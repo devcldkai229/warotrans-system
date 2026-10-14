@@ -75,14 +75,18 @@ Type scale lives in `src/shared/theme/typography.ts` and bottoms out at **12pt**
   Trước đây cả hai trường hợp dùng chung một hằng số `48`, chỉ đúng ở iPhone 12/13. **Đừng viết lại `Platform.OS === 'ios' ? 48 : 12`** — đó chính là lỗi lệch inset mà `useTopInset` sinh ra để tránh.
 - **SafeAreaProvider**: root trong `App.tsx` đã bọc `<SafeAreaProvider>` (bắt buộc cho `useSafeAreaInsets`), nhưng root vẫn là plain `<View>` — **không** dùng `SafeAreaView`.
 - **Bottom Tab Bar (`src/app/navigation/BottomTabBar.tsx`)**:
-  - The bar is **flat and edge to edge**: white surface, a single 1px top hairline, no pill, no
-    floating shadow. Four tabs — Home, Jobs, Live Map, Transport — with 12pt Title Case labels.
+  - The bar is **flat and edge to edge**: white surface, a single 1px top hairline, no floating pill,
+    no floating shadow. **3 core tabs** — `Home`, `Jobs`, `Transport` — minimalist icon-only for
+    maximum touch focus and elegance (touch targets >= 72pt width x 44pt height).
+  - Active tab: soft rounded-full pill highlight (`rgba(21, 87, 208, 0.08)`) with `colors.primaryText` (`#1a5cd6`) icon. Inactive: `colors.textMuted`.
+  - Tab job count badge sits at `top: -6, right: -13`, filled with **bright warm Amber-400 (`#fbbf24`)**,
+    a crisp **1.5px white border (`#ffffff`)**, and high-contrast **deep amber text (`#78350f`)** (WCAG AAA >= 7:1),
+    ensuring it is light, friendly, and never muddy or burnt-dark.
   - It is `position: 'absolute'` (content scrolls underneath it, the Google-console pattern) and
-    therefore carries **no automatic safe-area handling**. The inset is a sibling strip, not a
-    `paddingBottom`, so the white surface stays unbroken on a device with a home indicator:
+    carries a safe-area sibling strip:
     ```tsx
     const insets = useSafeAreaInsets();
-    const bottomInset = insets.bottom || 8; // 8 is the web phone-frame fallback
+    const bottomInset = insets.bottom || 10;
     <View style={[styles.safeArea, { height: bottomInset }]} pointerEvents="none" />
     ```
   - **Never hardcode a bottom `paddingBottom` to clear the bar.** Use the measured height:
@@ -90,22 +94,24 @@ Type scale lives in `src/shared/theme/typography.ts` and bottoms out at **12pt**
     const { dockHeight } = useNavigation();
     const bottomInset = dockReservedSpace(dockHeight); // height + bottomOffset(0) + gutter(16)
     ```
-    `dockHeight` is measured via `onLayout` on the bar and published through `NavigationContext`.
-    Three hand-tuned constants previously summed to ~2pt of slack, which broke whenever font metrics shifted.
-  - Active tab: `colors.primary` icon + label at weight 600. Inactive: `colors.textMuted` at 500.
-  - Tab job count badge sits at `top: -6, right: -12`, fill `colors.warning` with
-    `colors.textPrimary` text and a `colors.warningText` ring, so the counter reads as a
-    separate chip instead of overlapping the icon glyph.
-  - **Touch target floor is 44pt** (iOS HIG / Material) for every interactive element on the
-    main tabs. Each tab is a 48pt-min row inside the 56pt bar.
+- **App Header (`src/app/shell/AppHeader.tsx`)**:
+  - Content row is **56px** (`minHeight: 56`, `paddingTop: topInset + 4`, `paddingBottom: 10`) for a solid,
+    executive feel with ample vertical breathing room.
+  - **Left**: Monochrome `BrandMark` (40px) paired directly with Work Zone selector pill (`📍 Inbound Dock 01 ▾`, 40px height, rounded full) with NO redundant "WaroTrans" text, providing maximum horizontal breathing room.
+  - **Right**: Notification Bell (`Bell`, 40px with badge count `3` and compact anchored dropdown `NotificationSheet` 320px width in 100% English) + Operator Avatar (`Avatar`, 40px, solid black `#121317`). Search button removed to eliminate header clutter (inventory/lookup accessible via Transport Hub).
+- **Live Map Screen (`src/features/monitoring/JobLiveMapScreen.tsx`)**:
+  - Uses `SubScreenHeader` with safe-area insets, Back button (`goBack`), Title, and Recenter button (`LocateFixed`).
+  - True vector SVG Nav2 waypoints (`<Path>`, `<Circle>`) connecting Dock 01 exit to the central aisle and Rack A,
+    with zero arbitrary rotated CSS cuts through Loading Docks.
+  - Collision-free robot markers (`AMR-01` in aisle at `left: 46%, top: 28%`, `AMR-02` in standby bay at `left: 72%, top: 16%`)
+    with single-line non-wrapping pills (`● AMR-01 1.2 m/s`, `● AMR-02 Standby`) leaving Rack B title 100% visible.
 - **Sonner Toast Banner**:
   - Position below the iOS notch: `top: Platform.OS === 'ios' ? 54 : 14`.
   - Support custom icons (e.g. `MapPin` for "Locate Me"). Tap to dismiss, no close `X` button.
 - **Header overlays & modals**:
-  - `AppHeader` no longer anchors dropdowns to a measured header height. The zone picker, the
+  - `AppHeader` does not anchor dropdowns to a measured header height. The zone picker, the
     account sheet and the safety sheet are all `Modal`s — occasional actions do not earn a
-    permanently mounted popover, and an anchored one drifted by up to 39pt between an SE and a
-    Dynamic Island.
+    permanently mounted popover.
   - A screen that floats its own chrome over scrolling content (the Live Map telemetry sheet)
     must offset itself by `dockReservedSpace(dockHeight)`, not by a constant.
 
@@ -134,6 +140,6 @@ npm run typecheck
 npx expo start
 ```
 
-## 4. Scope & Boundary Rules
-- **FE-Only**: Modify only files within `warotrans-system/app/`. Do not touch backend, database, or API schemas without explicit user consent.
-- **Preserve Documentation**: Keep `app/docs/` up to date when introducing new patterns or major design tokens.
+## 4. Scope, Boundaries & Documentation Maintenance Rule
+- **Consolidated Workspace**: All work focuses strictly inside `warotrans-system/` (`warotrans-system/app/` and `warotrans-system/backend/`). Do NOT consult external directories (e.g. `../WaroTrans-specs/`).
+- **MANDATORY Documentation Updates**: After every code change, feature calibration, or design decision, the agent MUST immediately update the living `.md` documentation in `warotrans-system/app/docs/` (`CALM_OPERATIONS_SHELL_AND_PILOTS.md`, `DESIGN_SYSTEM_AND_RULES.md`, `progress.md`) and `AGENTS.md`. Never let documentation drift behind code changes.
