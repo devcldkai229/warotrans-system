@@ -25,7 +25,7 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
         return await dbContext.Endpoints
             .AsNoTracking()
             .Where(e => endpointIds.Contains(e.Id))
-            .Select(e => new EndpointSnapshot(e.Id, e.MapVersionId, e.Code, e.EndpointType, e.IsEnabled))
+            .Select(e => new EndpointSnapshot(e.Id, e.MapVersionId, e.Code, e.Name, e.EndpointType, e.IsEnabled))
             .ToListAsync(cancellationToken);
     }
 }

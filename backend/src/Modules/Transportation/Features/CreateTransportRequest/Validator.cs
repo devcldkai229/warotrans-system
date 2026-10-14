@@ -38,6 +38,14 @@ public sealed class CreateTransportRequestValidator : AbstractValidator<CreateTr
             detail.RuleFor(d => d.ContainerId).NotEmpty().WithMessage("ContainerId is required.");
             detail.RuleFor(d => d.SourceEndpointId).NotEmpty().WithMessage("SourceEndpointId is required.");
             detail.RuleFor(d => d.DestinationEndpointId).NotEmpty().WithMessage("DestinationEndpointId is required.");
+            detail.RuleFor(d => d.SourceLevelNo)
+                .GreaterThanOrEqualTo((short)1)
+                .When(d => d.SourceLevelNo.HasValue)
+                .WithMessage("SourceLevelNo must be greater than or equal to 1.");
+            detail.RuleFor(d => d.DestinationLevelNo)
+                .GreaterThanOrEqualTo((short)1)
+                .When(d => d.DestinationLevelNo.HasValue)
+                .WithMessage("DestinationLevelNo must be greater than or equal to 1.");
         });
     }
 

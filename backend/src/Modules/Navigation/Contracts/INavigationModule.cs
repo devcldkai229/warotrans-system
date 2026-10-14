@@ -20,5 +20,6 @@ public sealed record EndpointSnapshot(
     Guid Id,
     Guid MapVersionId,
     string Code,
+    string Name,
     EndpointType EndpointType,
     bool IsEnabled);

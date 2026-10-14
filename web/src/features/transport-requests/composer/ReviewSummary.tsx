@@ -1,7 +1,6 @@
 import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { containerById, shortPlace } from './labels'
-import { requestLevelVariables } from './types'
 import type { ComposerData, TransportRequestDraft } from './types'
 
 interface ReviewSummaryProps {
@@ -16,13 +15,13 @@ export function ReviewSummary({ data, draft, submitting, onBack, onCreate }: Rev
   const warehouse = data.warehouses.find((item) => item.id === draft.warehouseId)
   const map = data.maps.find((item) => item.id === draft.mapVersionId)
   const workflow = data.workflows.find((item) => item.id === draft.workflowId)
-  const params = workflow ? requestLevelVariables(workflow.variablesSchema) : []
+  const params = data.staffInputFields
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0 border-b border-outline/60 px-4 py-3">
         <h2 className="text-sm font-medium">Review request</h2>
-        <p className="mt-0.5 text-[11px] text-muted">Confirm movement intent before create (UI mock).</p>
+        <p className="mt-0.5 text-[11px] text-muted">Confirm movement intent before create.</p>
       </header>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-3 text-xs">
@@ -89,10 +88,10 @@ export function ReviewSummary({ data, draft, submitting, onBack, onCreate }: Rev
             <p className="text-muted">No additional request parameters.</p>
           ) : (
             <dl className="space-y-1">
-              {params.map((variable) => (
-                <div key={variable.key} className="flex justify-between gap-3">
-                  <dt className="text-muted">{variable.label}</dt>
-                  <dd>{draft.workflowInputs[variable.key] || '—'}</dd>
+              {params.map((field) => (
+                <div key={field.key} className="flex justify-between gap-3">
+                  <dt className="text-muted">{field.label}</dt>
+                  <dd>{draft.workflowInputs[field.key] || '—'}</dd>
                 </div>
               ))}
             </dl>
@@ -103,10 +102,6 @@ export function ReviewSummary({ data, draft, submitting, onBack, onCreate }: Rev
           <p className="mb-1 text-[10px] font-medium tracking-wide text-muted uppercase">Note</p>
           <p className="text-ink-2">{draft.note?.trim() || '—'}</p>
         </section>
-
-        <p className="rounded-md bg-amber-soft/60 px-3 py-2 text-[11px] text-amber-ink">
-          Create is UI-only. TODO(backend): POST TransportRequest.
-        </p>
       </div>
 
       <footer className="flex shrink-0 items-center gap-2 border-t border-outline/60 px-4 py-3">

@@ -1,0 +1,145 @@
+{
+  "generatedAt": "2026-10-14T07:19:57.706Z",
+  "api": "http://localhost:5090",
+  "warehouseId": "ddffe85c-a07d-43f7-a3f8-1e2babd7ccd1",
+  "warehouseCode": "TR-E2E-WH",
+  "mapVersionId": "8369d1fe-03e6-4dd9-b6f8-f2b4d83a03f2",
+  "mapName": "TR-E2E Map",
+  "endpoints": {
+    "Buffer Bay": {
+      "id": "8a190ff5-9765-4b6b-8770-0fc5f0791af7",
+      "code": "EP-BUFFER-BAY",
+      "endpointType": "TRANSIT",
+      "x": 2,
+      "y": 2
+    },
+    "Inbound Dock": {
+      "id": "b04cce58-135c-4511-bac3-4dc5adec3e5c",
+      "code": "EP-INBOUND-DOCK",
+      "endpointType": "INBOUND",
+      "x": 1,
+      "y": 1
+    },
+    "Outbound Dock": {
+      "id": "54271d36-645e-40cc-94c7-4448eacd89da",
+      "code": "EP-OUTBOUND-DOCK",
+      "endpointType": "OUTBOUND",
+      "x": 6,
+      "y": 1
+    },
+    "Shelf A1": {
+      "id": "d864d864-0a38-4e84-86f5-dc4b1a7a3135",
+      "code": "EP-SHELF-A1",
+      "endpointType": "STORAGE",
+      "x": 3,
+      "y": 1
+    },
+    "Shelf A2": {
+      "id": "18e62a7c-fe47-4d12-9a3d-881ebd670ccc",
+      "code": "EP-SHELF-A2",
+      "endpointType": "STORAGE",
+      "x": 4,
+      "y": 1
+    },
+    "Shelf B1": {
+      "id": "c56f2994-c648-453c-a5e1-3e19fcd97a24",
+      "code": "EP-SHELF-B1",
+      "endpointType": "STORAGE",
+      "x": 3,
+      "y": 2
+    },
+    "Shelf B2": {
+      "id": "4359713f-09f6-4d21-9687-7e9bd8bb4297",
+      "code": "EP-SHELF-B2",
+      "endpointType": "STORAGE",
+      "x": 4,
+      "y": 2
+    },
+    "Shelf C1": {
+      "id": "586ea435-9fe6-42ac-a273-0a34f0c3c22a",
+      "code": "EP-SHELF-C1",
+      "endpointType": "STORAGE",
+      "x": 3,
+      "y": 3
+    },
+    "Shelf C2": {
+      "id": "f3119e38-5e5e-40f4-a5f9-58ac9f67fbf3",
+      "code": "EP-SHELF-C2",
+      "endpointType": "STORAGE",
+      "x": 4,
+      "y": 3
+    }
+  },
+  "workflows": {
+    "plain": {
+      "id": "7bc19dc7-f074-46a8-818c-5cbe45cc268f",
+      "code": "TR-E2E_PLAIN"
+    },
+    "staff": {
+      "id": "9a6d1098-2bd4-4064-9a8e-09cc541fd4a1",
+      "code": "TR-E2E_STAFF"
+    }
+  },
+  "locations": {
+    "LOC-A1": {
+      "id": "9b07db9b-2789-4d7e-91c1-9835db6742f8",
+      "code": "LOC-A1",
+      "endpointId": "d864d864-0a38-4e84-86f5-dc4b1a7a3135"
+    },
+    "LOC-A2": {
+      "id": "1c6957b2-9a2f-4775-a258-d56a34e04a2c",
+      "code": "LOC-A2",
+      "endpointId": "18e62a7c-fe47-4d12-9a3d-881ebd670ccc"
+    },
+    "LOC-B1": {
+      "id": "75a25695-8a0f-4f35-a1c8-b6397fbe2aca",
+      "code": "LOC-B1",
+      "endpointId": "c56f2994-c648-453c-a5e1-3e19fcd97a24"
+    },
+    "LOC-B2": {
+      "id": "efa6a207-4031-4d14-b0fd-bcdf3fd0d779",
+      "code": "LOC-B2",
+      "endpointId": "4359713f-09f6-4d21-9687-7e9bd8bb4297"
+    },
+    "LOC-C1": {
+      "id": "ea0a5517-b0ea-466c-8271-23839fcfe7a6",
+      "code": "LOC-C1",
+      "endpointId": "586ea435-9fe6-42ac-a273-0a34f0c3c22a"
+    },
+    "LOC-C2": {
+      "id": "fed7066b-cf6f-41e8-8e61-79e6caad66bb",
+      "code": "LOC-C2",
+      "endpointId": "f3119e38-5e5e-40f4-a5f9-58ac9f67fbf3"
+    }
+  },
+  "containers": {
+    "CTN-E2E-IN-001": {
+      "id": "f72d2715-2049-4b9b-96af-194293714001",
+      "barcode": "CTN-E2E-IN-001",
+      "status": "CREATED",
+      "currentStorageLocationId": null,
+      "currentLevelNo": null
+    },
+    "CTN-E2E-OUT-001": {
+      "id": "17c090f2-a727-4075-947b-7688fd58f6d3",
+      "barcode": "CTN-E2E-OUT-001",
+      "status": "STORED",
+      "currentStorageLocationId": "9b07db9b-2789-4d7e-91c1-9835db6742f8",
+      "currentLevelNo": 1
+    },
+    "CTN-E2E-REL-001": {
+      "id": "b505397a-b53f-43fa-b260-c60e0692796c",
+      "barcode": "CTN-E2E-REL-001",
+      "status": "STORED",
+      "currentStorageLocationId": "75a25695-8a0f-4f35-a1c8-b6397fbe2aca",
+      "currentLevelNo": 2
+    },
+    "CTN-E2E-REL-002": {
+      "id": "f1be18be-ae8f-4956-93d3-6472d52c3d15",
+      "barcode": "CTN-E2E-REL-002",
+      "status": "PACKED",
+      "currentStorageLocationId": "efa6a207-4031-4d14-b0fd-bcdf3fd0d779",
+      "currentLevelNo": 1
+    }
+  }
+}

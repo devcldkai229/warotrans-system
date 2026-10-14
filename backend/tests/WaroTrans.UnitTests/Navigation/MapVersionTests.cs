@@ -26,6 +26,11 @@ public class MapVersionTests
             IReadOnlyCollection<Guid> containerIds,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ContainerSnapshot>>([]);
+
+        public Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsAsync(
+            IReadOnlyCollection<Guid> storageLocationIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<StorageLocationSnapshot>>([]);
     }
 
     private sealed class FakeCodeGenerator : IBusinessCodeGenerator

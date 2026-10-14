@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError } from '@/shared/api/client'
+import type { Endpoint } from '@/shared/api/contracts'
+import { getMapVersionDetail } from '@/shared/api/navigation'
+import type { MapBounds } from '@/shared/lib/mapView'
+import { boundsFromMapMeta } from '@/shared/map/mapBounds'
 import type { MapCallout, MapMovement } from '@/shared/map/WarehouseMap'
 import { MovementBuilderPanel } from './MovementBuilderPanel'
 import { RequestSetupPanel } from './RequestSetupPanel'
 import { buildComposerMapPreview } from './mapPreview'
 import { submitTransportRequest } from './submitTransportRequest'
-import { mapsForWarehouse, useTransportRequestComposerData } from './useTransportRequestComposerData'
+import { useTransportRequestComposerData } from './useTransportRequestComposerData'
 import {
   draftIsDirty,
   emptyDraft,
@@ -20,11 +26,13 @@ export interface ComposerMapState {
   uiInset: number
   onEndpointClick?: (id: string) => void
   pickHint: string | null
+  endpoints: Endpoint[]
+  bounds: MapBounds | undefined
 }
 
 interface TransportRequestComposerProps {
   onClose: () => void
-  onSubmitted: (requestCode: string) => void
+  onSubmitted: (result: { id: string; requestCode: string }) => void
   onMapState: (state: ComposerMapState) => void
   onBanner?: (message: string | null) => void
 }
@@ -35,17 +43,38 @@ export function TransportRequestComposer({
   onMapState,
   onBanner,
 }: TransportRequestComposerProps) {
-  const data = useTransportRequestComposerData()
-  const [draft, setDraft] = useState<TransportRequestDraft>(() => {
-    const warehouseId = data.warehouses[0]?.id ?? ''
-    const maps = mapsForWarehouse(data, warehouseId)
-    return { ...emptyDraft(), warehouseId, mapVersionId: maps[0]?.id ?? '' }
+  const queryClient = useQueryClient()
+  const [draft, setDraft] = useState<TransportRequestDraft>(() => emptyDraft())
+  const data = useTransportRequestComposerData({
+    warehouseId: draft.warehouseId,
+    mapVersionId: draft.mapVersionId,
+    workflowId: draft.workflowId,
   })
+
   const [activeMovementId, setActiveMovementId] = useState<string | null>(null)
   const [mapPickTarget, setMapPickTarget] = useState<MapPickTarget>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const showPanel2 = Boolean(draft.workflowId)
+
+  const mapMetaQuery = useQuery({
+    queryKey: ['navigation', 'map-detail', draft.mapVersionId],
+    queryFn: () => getMapVersionDetail(draft.mapVersionId),
+    enabled: Boolean(draft.mapVersionId),
+  })
+
+  const composerBounds = useMemo(() => {
+    const version = mapMetaQuery.data
+    if (!version || version.imageWidthPixels <= 0 || version.imageHeightPixels <= 0) return undefined
+    return boundsFromMapMeta({
+      resolution: version.resolution,
+      originX: version.originX,
+      originY: version.originY,
+      originYaw: version.originYaw,
+      imageWidthPixels: version.imageWidthPixels,
+      imageHeightPixels: version.imageHeightPixels,
+    })
+  }, [mapMetaQuery.data])
 
   const preview = useMemo(
     () => buildComposerMapPreview(draft, data.endpoints, activeMovementId),
@@ -73,7 +102,9 @@ export function TransportRequestComposer({
             ...movement,
             destinationEndpointId: endpointId,
             destinationStorageLocationId: location?.id ?? null,
-            destinationLevelNo: location ? movement.destinationLevelNo ?? location.levelOptions[0] ?? 1 : null,
+            destinationLevelNo: location
+              ? movement.destinationLevelNo ?? location.levelOptions[0] ?? 1
+              : null,
           }
         }),
       }))
@@ -93,8 +124,10 @@ export function TransportRequestComposer({
       pickHint: mapPickTarget
         ? `Click an endpoint on the map to set ${mapPickTarget}`
         : null,
+      endpoints: data.endpoints,
+      bounds: composerBounds,
     })
-  }, [preview, showPanel2, mapPickTarget, handleEndpointClick, onMapState])
+  }, [preview, showPanel2, mapPickTarget, handleEndpointClick, onMapState, data.endpoints, composerBounds])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -116,9 +149,21 @@ export function TransportRequestComposer({
   async function handleSubmit() {
     setSubmitting(true)
     try {
-      const result = await submitTransportRequest(draft)
-      onBanner?.(`Mock created ${result.requestCode} (not persisted).`)
-      onSubmitted(result.requestCode)
+      const staffInputTypes = Object.fromEntries(
+        data.staffInputFields.map((field) => [field.key, field.dataType]),
+      )
+      const result = await submitTransportRequest(draft, staffInputTypes)
+      await queryClient.invalidateQueries({ queryKey: ['transport-requests'] })
+      onBanner?.(`Created ${result.requestCode}`)
+      onSubmitted({ id: result.id, requestCode: result.requestCode })
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.errors[0]?.message || error.message || error.code || 'Create failed'
+          : error instanceof Error
+            ? error.message
+            : 'Create failed'
+      onBanner?.(message)
     } finally {
       setSubmitting(false)
     }
@@ -132,12 +177,6 @@ export function TransportRequestComposer({
         onChange={setDraft}
         onBackToList={requestClose}
         onClose={requestClose}
-        onLoadScenario={(next) => {
-          setDraft(next)
-          setActiveMovementId(next.movements[0]?.localId ?? null)
-          setMapPickTarget(null)
-          onBanner?.(`Loaded demo scenario (${next.note ?? 'preset'}).`)
-        }}
       />
       {showPanel2 ? (
         <MovementBuilderPanel

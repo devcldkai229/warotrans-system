@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-10-14T07:20:31.292Z",
+  "accountId": "a0000000-0000-4000-8000-000000000001",
+  "results": [
+    {
+      "name": "B_outbound",
+      "httpStatus": 201,
+      "id": "406f98ce-ec45-4aee-910c-ec4895e24316",
+      "requestCode": "REQ-20261014-000030",
+      "apiStatus": "SUBMITTED",
+      "dbStatus": "SUBMITTED",
+      "requestedBy": "a0000000-0000-4000-8000-000000000001",
+      "detailCount": 1,
+      "detailStatuses": [
+        "PENDING"
+      ],
+      "workflowInputs": {
+        "handlingInstruction": "ship today"
+      },
+      "jobsBefore": 0,
+      "jobsAfter": 0,
+      "noJobSideEffect": true,
+      "pass": true
+    },
+    {
+      "name": "C_relocation",
+      "httpStatus": 201,
+      "id": "7db25066-b790-459c-9813-7338c2285422",
+      "requestCode": "REQ-20261014-000031",
+      "apiStatus": "SUBMITTED",
+      "dbStatus": "SUBMITTED",
+      "requestedBy": "a0000000-0000-4000-8000-000000000001",
+      "detailCount": 2,
+      "detailStatuses": [
+        "PENDING",
+        "PENDING"
+      ],
+      "workflowInputs": {},
+      "jobsBefore": 0,
+      "jobsAfter": 0,
+      "noJobSideEffect": true,
+      "pass": true
+    }
+  ],
+  "listTotal": 2,
+  "allPass": true
+}
