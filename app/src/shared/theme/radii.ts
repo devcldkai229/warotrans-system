@@ -10,11 +10,14 @@ export const radii = {
   md: 12,
   /** Sheets, modals, large containers. */
   lg: 16,
+  /** Extra-large floating hero panels. */
+  xl: 20,
   /** Chips, status pills, inline tags. */
   sm: 8,
-  /** Inputs and compact buttons (44pt tall, so 8 reads as a rectangle). */
+  /** Inputs and compact buttons (44pt tall, so a 10 reads as a control, not a chip). */
   control: 10,
-  /** Pills, circles, avatars. */
+  /** Pills, circles, avatars — as round as the box allows. */
+  full: 999,
   pill: 999,
 } as const;
 

@@ -18,8 +18,10 @@ const SafetyHoldContext = createContext<SafetyHoldContextType | undefined>(undef
  * three surfaces from disagreeing — holding from the header used to leave the
  * Transport hub still reading "not holding".
  *
- * In production this is a WES command (`POST /robots/soft-hold`) that every
- * handheld polls; the optimistic local flag mirrors that contract's shape.
+ * In production this is a WES command (`POST /api/fleet/soft-hold`) that every
+ * handheld polls; the optimistic local flag mirrors that contract's shape. Until
+ * that route is wired it never leaves the device, which is why every surface
+ * that offers the hold says "Local Fleet Simulation" out loud.
  */
 export function SafetyHoldProvider({ children }: { children: ReactNode }) {
   const [isHolding, setIsHolding] = useState(false);

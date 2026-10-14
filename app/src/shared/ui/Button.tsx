@@ -71,7 +71,9 @@ export function Button({
   const iconNode = loading ? (
     <ActivityIndicator size="small" color={tone.text} />
   ) : IconCmp ? (
-    <IconCmp size={iconSize} color={tone.text} strokeWidth={2} />
+    <View style={variant === 'primary' ? styles.primaryIconWell : undefined}>
+      <IconCmp size={variant === 'primary' ? iconSize - 2 : iconSize} color={tone.text} strokeWidth={2.4} />
+    </View>
   ) : null;
 
   return (
@@ -110,7 +112,11 @@ export function Button({
 /** Per-variant container + foreground. Kept in one table so they cannot drift. */
 const TONE: Record<ButtonVariant, { container: ViewStyle; text: TextColor }> = {
   primary: {
-    container: { backgroundColor: colors.primary, borderColor: colors.primary },
+    container: {
+      backgroundColor: colors.darkAction, // Warm Dark Gray (Graphite)
+      borderWidth: 1,
+      borderColor: colors.darkActionBorder,
+    },
     text: colors.textInverse,
   },
   secondary: {
@@ -208,5 +214,13 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.88,
     transform: [{ scale: 0.98 }],
+  },
+  primaryIconWell: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -85,13 +85,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   primary: {
-    backgroundColor: colors.primary,
-    borderBottomWidth: 3,
-    borderBottomColor: '#004bb0',
-    shadowColor: '#00285a',
+    backgroundColor: colors.darkAction, // Warm Dark Gray (Graphite)
+    borderWidth: 1,
+    borderColor: colors.darkActionBorder,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 3,
   },
   secondary: {
@@ -174,10 +174,10 @@ const styles = StyleSheet.create({
  */
 const pressedStyles = StyleSheet.create({
   primary: {
-    backgroundColor: colors.primaryDark,
-    transform: [{ scale: 0.98 }],
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: colors.darkActionPressed,
+    transform: [{ scale: 0.985 }],
+    shadowOpacity: 0.05,
+    elevation: 1,
   },
   secondary: {
     backgroundColor: colors.surfaceMuted,

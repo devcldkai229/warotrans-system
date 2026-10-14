@@ -9,13 +9,12 @@ interface BrandMarkProps {
 }
 
 /**
- * Authentic WaroTrans Tactile BrandMark
- * Matches prototype <BrandMark/> with --shadow-control (3px 3D bottom shelf)
- * and high-contrast pure white Nav2 Route vector icon.
+ * WaroTrans BrandMark (Flat Monochrome Edition).
+ * Minimalist black-and-white icon mark with zero 3D bevels or extruded shelves.
  */
-export function BrandMark({ size = 40, style }: BrandMarkProps) {
+export function BrandMark({ size = 36, style }: BrandMarkProps) {
   const iconSize = Math.round(size * 0.58);
-  const borderRadius = Math.round(size * 0.26);
+  const borderRadius = Math.round(size * 0.28);
 
   return (
     <View
@@ -29,25 +28,15 @@ export function BrandMark({ size = 40, style }: BrandMarkProps) {
         style,
       ]}
     >
-      <Route size={iconSize} color="#ffffff" strokeWidth={2.6} />
+      <Route size={iconSize} color="#ffffff" strokeWidth={2.4} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   badge: {
-    backgroundColor: colors.primary, // Brand cobalt
+    backgroundColor: '#121317', // Solid deep ink / black
     alignItems: 'center',
     justifyContent: 'center',
-    // 3D tactile control shelf under foot and right edge for diagonal extruded depth
-    borderBottomWidth: 3.5,
-    borderRightWidth: 2.5,
-    borderBottomColor: '#003882',
-    borderRightColor: '#003882',
-    shadowColor: '#012147',
-    shadowOffset: { width: 3, height: 3.5 },
-    shadowOpacity: 0.35,
-    shadowRadius: 2,
-    elevation: 5,
   },
 });

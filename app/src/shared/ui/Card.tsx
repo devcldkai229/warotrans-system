@@ -39,7 +39,7 @@ export interface CardProps {
  * The default content container: white surface, 1px hairline, one soft shadow.
  *
  * Flat by construction. There is no bevel and no gradient — cards separate
- * themselves from the `#f8fafc` canvas through the border and `shadows.md`, and
+ * themselves from the `#eef1f6` canvas through the border and `shadows.md`, and
  * the caller keeps control of internal rhythm through `padding` and `gap`.
  */
 export function Card({

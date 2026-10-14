@@ -107,7 +107,12 @@ export function TextField({
              */
             onPress={onClear ?? (() => onChangeText?.(''))}
             accessibilityRole="button"
-            accessibilityLabel={`Clear${label ? ` ${label}` : ''}`}
+            /**
+             * Falls back to the field's own `accessibilityLabel`, so a search box
+             * declared only for the screen reader does not announce a bare
+             * "Clear" with nothing to clear.
+             */
+            accessibilityLabel={`Clear ${label ?? accessibilityLabel ?? 'field'}`.trim()}
             hitSlop={8}
             style={({ pressed }) => [styles.clearBtn, pressed && styles.clearBtnPressed]}
           >

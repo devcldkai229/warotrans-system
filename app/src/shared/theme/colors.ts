@@ -52,27 +52,25 @@ export const colors = {
   /* Brand accent                                                     */
   /* ---------------------------------------------------------------- */
   /**
-   * Filled accent. `#1557d0` = 6.35:1 against `textInverse` (#ffffff), so
-   * white-on-primary clears WCAG AA (4.5:1) with a margin to spare — an accent
-   * at `#3279f9` (3.53:1) is the single most common contrast failure in a
-   * control library, because the fill looks fine in a mock and fails the moment
-   * an operator reads it under aisle lighting.
+   * Primary brand blue, exactly matching Admin Web (`--color-blue: #3279f9`).
    */
-  primary: '#1557d0',
-  /** Pressed / bevel depth. Always darker than `primary`, never used as text on white. */
-  primaryDark: '#0f3f9e',
-  /** Tinted surface for selected chips / active segments. */
-  primaryLight: '#ebf2fe',
+  primary: '#3279f9',
+  /** Pressed / darker tone matching Admin Web (`--color-blue-ink: #1a5cd6`). */
+  primaryDark: '#1a5cd6',
+  /** Tinted surface matching Admin Web (`--color-blue-soft: #e9f1ff`). */
+  primaryLight: '#e9f1ff',
   /** Hairline for accent-bordered controls. */
   primaryBorder: '#b8d5ff',
-  /**
-   * Accent foreground — on `primaryLight`, on `surface`, and as the active
-   * colour in the bottom tab bar (whose white surface the active label has to
-   * clear 4.5:1 on). Same value as `primary` by design: one accent that is
-   * legible as a fill *and* as text, so a screen never has to guess which of
-   * the two it is looking at.
-   */
-  primaryText: '#1557d0',
+  /** Accent foreground on light backgrounds. */
+  primaryText: '#1a5cd6',
+
+  /* ---------------------------------------------------------------- */
+  /* Warm Dark Gray action tokens (Tactile Hardware CTAs)             */
+  /* ---------------------------------------------------------------- */
+  /** Warm Dark Gray for signature buttons — matte graphite / warm slate. */
+  darkAction: '#32353e',
+  darkActionPressed: '#23252c',
+  darkActionBorder: 'rgba(255, 255, 255, 0.18)',
 
   /* ---------------------------------------------------------------- */
   /* Semantics                                                        */
