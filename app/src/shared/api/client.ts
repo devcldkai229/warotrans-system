@@ -50,6 +50,8 @@ export function getAccessToken(): string | null {
   return inMemoryToken;
 }
 
+export const getBearerToken = getAccessToken;
+
 async function parseApiError(response: Response): Promise<ApiError> {
   let code: string | null = null;
   let message = `Request failed with status ${response.status}`;

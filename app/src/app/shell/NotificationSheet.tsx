@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   AlertTriangle,
@@ -15,50 +15,7 @@ import { shadows } from '../../shared/theme/shadows';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { toast } from '../../shared/context/ToastContext';
-
-export interface NotificationItem {
-  id: string;
-  type: 'ROBOT_ARRIVED' | 'HAZARD' | 'JOB_ASSIGNED' | 'BATTERY_LOW';
-  title: string;
-  desc: string;
-  time: string;
-  unread: boolean;
-}
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    type: 'ROBOT_ARRIVED',
-    title: 'AMR-01 Arrived at Dock 01',
-    desc: 'Ready for handover of container BOX-101 for job JOB-2026-0812.',
-    time: '2m ago',
-    unread: true,
-  },
-  {
-    id: 'notif-2',
-    type: 'HAZARD',
-    title: 'Aisle A-02 Obstacle Detected',
-    desc: 'AMR-02 detected pallet obstruction, switched to crawl speed.',
-    time: '8m ago',
-    unread: true,
-  },
-  {
-    id: 'notif-3',
-    type: 'JOB_ASSIGNED',
-    title: 'Transfer Order TR-2049 Assigned',
-    desc: 'Transfer 2 parts bins from Dock 02 to Storage Rack B - Bay 04.',
-    time: '20m ago',
-    unread: true,
-  },
-  {
-    id: 'notif-4',
-    type: 'BATTERY_LOW',
-    title: 'AMR-02 Returning to Charging Bay',
-    desc: 'Battery level dropped below 20%, automatically rerouted to Bay 01.',
-    time: '45m ago',
-    unread: false,
-  },
-];
+import { useRealtime, LiveNotificationEvent } from '../../shared/realtime';
 
 export interface NotificationSheetProps {
   visible: boolean;
@@ -70,7 +27,7 @@ export interface NotificationSheetProps {
  * Compact Anchored Notification Dropdown Sheet.
  *
  * Drops down cleanly right beneath the notification bell in the AppHeader,
- * providing quick access to operational alerts without taking over the screen.
+ * providing quick access to live operational alerts without taking over the screen.
  */
 export function NotificationSheet({
   visible,
@@ -78,29 +35,28 @@ export function NotificationSheet({
   onUnreadCountChange,
 }: NotificationSheetProps) {
   const topInset = useTopInset();
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const {
+    notifications,
+    unreadCount,
+    markAllNotificationsRead,
+    markNotificationRead,
+  } = useRealtime();
 
-  const unreadCount = notifications.filter((n) => n.unread).length;
+  useEffect(() => {
+    onUnreadCountChange?.(unreadCount);
+  }, [unreadCount, onUnreadCountChange]);
 
   const handleMarkAllRead = () => {
-    triggerHaptic('tap');
-    const updated = notifications.map((n) => ({ ...n, unread: false }));
-    setNotifications(updated);
-    onUnreadCountChange?.(0);
+    markAllNotificationsRead();
     toast.info('All notifications marked as read');
   };
 
   const handleItemPress = (id: string) => {
     triggerHaptic('tap');
-    const updated = notifications.map((n) =>
-      n.id === id ? { ...n, unread: false } : n
-    );
-    setNotifications(updated);
-    const newCount = updated.filter((n) => n.unread).length;
-    onUnreadCountChange?.(newCount);
+    markNotificationRead(id);
   };
 
-  const renderIcon = (type: NotificationItem['type']) => {
+  const renderIcon = (type: LiveNotificationEvent['category']) => {
     switch (type) {
       case 'ROBOT_ARRIVED':
         return <Truck size={14} color={colors.primaryText} strokeWidth={2.2} />;
@@ -109,6 +65,7 @@ export function NotificationSheet({
       case 'JOB_ASSIGNED':
         return <PackageCheck size={14} color="#059669" strokeWidth={2.2} />;
       case 'BATTERY_LOW':
+      default:
         return <BatteryMedium size={14} color={colors.textMuted} strokeWidth={2.2} />;
     }
   };
@@ -180,22 +137,22 @@ export function NotificationSheet({
                 key={item.id}
                 onPress={() => handleItemPress(item.id)}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.title}, ${item.time}`}
+                accessibilityLabel={`${item.title}, ${item.timeLabel}`}
                 style={({ pressed }) => [
                   styles.item,
-                  item.unread && styles.itemUnread,
+                  !item.isRead && styles.itemUnread,
                   pressed && styles.itemPressed,
                 ]}
               >
                 <View
                   style={[
                     styles.iconBox,
-                    item.type === 'HAZARD' && styles.iconBoxHazard,
-                    item.type === 'JOB_ASSIGNED' && styles.iconBoxJob,
-                    item.type === 'ROBOT_ARRIVED' && styles.iconBoxRobot,
+                    item.category === 'HAZARD' && styles.iconBoxHazard,
+                    item.category === 'JOB_ASSIGNED' && styles.iconBoxJob,
+                    item.category === 'ROBOT_ARRIVED' && styles.iconBoxRobot,
                   ]}
                 >
-                  {renderIcon(item.type)}
+                  {renderIcon(item.category)}
                 </View>
 
                 <View style={styles.itemContent}>
@@ -204,11 +161,11 @@ export function NotificationSheet({
                       variant="label"
                       color={colors.textPrimary}
                       numberOfLines={1}
-                      style={[styles.itemTitle, item.unread && styles.itemTitleUnread]}
+                      style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
                     >
                       {item.title}
                     </Text>
-                    {item.unread && <View style={styles.unreadDot} />}
+                    {!item.isRead && <View style={styles.unreadDot} />}
                   </View>
 
                   <Text
@@ -217,11 +174,11 @@ export function NotificationSheet({
                     numberOfLines={2}
                     style={styles.itemDesc}
                   >
-                    {item.desc}
+                    {item.message}
                   </Text>
 
                   <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
-                    {item.time}
+                    {item.timeLabel}
                   </Text>
                 </View>
               </Pressable>

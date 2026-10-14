@@ -16,6 +16,7 @@ import { NavigationProvider } from './src/app/navigation/NavigationContext';
 import { AuthProvider } from './src/features/auth/authContext';
 import { SafetyHoldProvider } from './src/shared/context/SafetyHoldContext';
 import { ToastProvider } from './src/shared/context/ToastContext';
+import { RealtimeProvider } from './src/shared/realtime';
 import { colors } from './src/shared/theme/colors';
 import { SIMULATED_STATUS_BAR } from './src/shared/theme/layout';
 import { typography } from './src/shared/theme/typography';
@@ -261,7 +262,9 @@ export default function App() {
               {/* Fleet-wide soft pause: read by the header shield, the safety
                   sheet and the Transport hub, so it has to sit above all three. */}
               <SafetyHoldProvider>
-                <AppNavigator />
+                <RealtimeProvider>
+                  <AppNavigator />
+                </RealtimeProvider>
               </SafetyHoldProvider>
             </ToastProvider>
           </NavigationProvider>

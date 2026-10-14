@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   LayoutAnimation,
   Platform,
@@ -27,6 +27,7 @@ import {
 } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { useRealtime } from '../../shared/realtime';
 import { MOCK_JOBS } from '../jobs/jobData';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 
@@ -78,7 +79,25 @@ export function HomeScreen() {
   const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
-  const [robots] = useState<MapRobot[]>(INITIAL_ROBOTS);
+  const { robotTelemetry } = useRealtime();
+
+  const robots = useMemo(() => {
+    return INITIAL_ROBOTS.map((r) => {
+      const live = robotTelemetry[r.id];
+      if (!live) return r;
+      return {
+        ...r,
+        battery: Math.round(Number(live.batteryPercent) || r.battery),
+        status: (live.navigationStatus === 'NAVIGATING'
+          ? 'EN_ROUTE'
+          : live.navigationStatus === 'STANDBY'
+          ? 'STANDBY'
+          : r.status) as any,
+        speed: live.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
+        headingDeg: live.poseYaw ? Math.round((live.poseYaw * 180) / Math.PI) : r.headingDeg,
+      };
+    });
+  }, [robotTelemetry]);
 
   const activeZone = session?.zone || 'Inbound Dock 01';
 

@@ -71,6 +71,20 @@
     - Integrated `reportTaskProblem` for supervisor alert escalation and AMR safety pause.
   - Zero TypeScript compiler errors (`npm run typecheck` passed).
 
+- [x] **Sprint 2: Task WTCP-62 — Connect Staff Request and Job Tracking to Realtime Backend**
+  - Branch: `feature/WTCP-62-connect-request-job-tracking-realtime`
+  - Integrated SignalR realtime client in `app/src/shared/realtime/`:
+    - `realtimeClient.ts`: Strongly typed connection to `/hubs/notifications` subscribing to `robotConnectivityChanged`, `robotTelemetryUpdated`, `notificationReceived`, and `transportRequestStatusChanged`.
+    - Auto-reconnect with exponential backoff and bearer token injection.
+    - `RealtimeContext.tsx`: App-wide realtime provider tracking live robot telemetry, connectivity status, unread alert counter, and instant notification distribution.
+  - Connected Realtime Data to Handheld UI:
+    - `NotificationSheet.tsx`: Real-time streaming of incoming alerts and instant badge counter synchronization.
+    - `AppHeader.tsx`: Dynamic live notification count on the bell button.
+    - `HomeScreen.tsx` & `MiniFacilityMap.tsx`: Live AMR battery percentage, speed, and heading orientation dynamically driven by backend telemetry.
+    - `JobLiveMapScreen.tsx`: Real-time robot coordinates `(poseX, poseY)`, battery, and navigation state.
+  - Zero TypeScript compiler errors (`npm run typecheck` passed).
+
 ## Workspace & Documentation Maintenance Rules
 1. **Strict Local Boundaries**: Work strictly inside `warotrans-system/` (`app/` and `backend/`). Do not look into or rely on external folders (`WaroTrans-specs`).
 2. **Synchronized Documentation**: Maintain and update `AGENTS.md` and all files in `app/docs/` after every code modification to prevent context drift across conversations.
+

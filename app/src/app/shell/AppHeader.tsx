@@ -12,6 +12,7 @@ import { toast } from '../../shared/context/ToastContext';
 import { AccountSheet } from './AccountSheet';
 import { NotificationSheet } from './NotificationSheet';
 import { ZonePickerModal } from './ZonePickerModal';
+import { useRealtime } from '../../shared/realtime';
 
 interface AppHeaderProps {
   operatorName?: string;
@@ -52,10 +53,10 @@ export function AppHeader({
   initialOpen,
 }: AppHeaderProps) {
   const topInset = useTopInset();
+  const { unreadCount } = useRealtime();
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(initialOpen === 'zone');
   const [isAccountOpen, setIsAccountOpen] = useState(initialOpen === 'account');
   const [isNotificationOpen, setIsNotificationOpen] = useState(initialOpen === 'notifications');
-  const [unreadCount, setUnreadCount] = useState(3);
 
   const avatarInitials = initials ?? initialsOf(operatorName);
 
@@ -145,7 +146,6 @@ export function AppHeader({
       <NotificationSheet
         visible={isNotificationOpen}
         onClose={() => setIsNotificationOpen(false)}
-        onUnreadCountChange={setUnreadCount}
       />
     </View>
   );

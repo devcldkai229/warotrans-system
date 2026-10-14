@@ -20,12 +20,15 @@ import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
+import { useRealtime } from '../../shared/realtime';
+
 const SHEET_GAP = 8;
 const DOCK_ZONE_GAP = 12;
 const SHEET_FALLBACK_HEIGHT = 174;
 
 export function JobLiveMapScreen() {
   const { params, dockHeight, goBack } = useNavigation();
+  const { robotTelemetry } = useRealtime();
   const dockInset = dockReservedSpace(dockHeight);
   const [sheetHeight, setSheetHeight] = useState(0);
   const sheetBottom = dockInset + SHEET_GAP;
@@ -40,10 +43,12 @@ export function JobLiveMapScreen() {
   const route = params?.route || 'Dock 01 ➔ Rack A · Level 2 · Bin 03';
 
   const isAmr2 = selectedRobot === 'AMR-02';
+  const telemetry = robotTelemetry[selectedRobot];
 
   const handleCenter = () => {
     triggerHaptic('tap');
-    setToastFeedback(`Centered view on ${selectedRobot} coordinates`);
+    const coords = telemetry ? `(X: ${telemetry.poseX.toFixed(1)}m, Y: ${telemetry.poseY.toFixed(1)}m)` : '';
+    setToastFeedback(`Centered view on ${selectedRobot} ${coords}`);
     setTimeout(() => setToastFeedback(null), 3000);
   };
 
@@ -265,18 +270,22 @@ export function JobLiveMapScreen() {
           {/* Metric Columns */}
           <View style={styles.metricRow}>
             <View style={styles.metricCol}>
-              <Text style={styles.metricVal}>{isAmr2 ? '92%' : '85%'}</Text>
+              <Text style={styles.metricVal}>
+                {telemetry ? `${Math.round(Number(telemetry.batteryPercent))}%` : isAmr2 ? '92%' : '85%'}
+              </Text>
               <Text style={styles.metricLabel}>Battery</Text>
             </View>
             <View style={styles.metricCol}>
-              <Text style={styles.metricVal}>{isAmr2 ? '0m' : '8m'}</Text>
-              <Text style={styles.metricLabel}>To target</Text>
+              <Text style={styles.metricVal}>
+                {telemetry ? `${telemetry.poseX.toFixed(1)}m, ${telemetry.poseY.toFixed(1)}m` : isAmr2 ? '0m' : '8m'}
+              </Text>
+              <Text style={styles.metricLabel}>{telemetry ? 'Live Pose' : 'To target'}</Text>
             </View>
             <View style={[styles.metricCol, { borderRightWidth: 0 }]}>
               <Text style={[styles.metricVal, { color: colors.darkAction }]}>
-                {isAmr2 ? 'Standby' : '45s'}
+                {telemetry?.navigationStatus || (isAmr2 ? 'Standby' : '45s')}
               </Text>
-              <Text style={styles.metricLabel}>Est. arrival</Text>
+              <Text style={styles.metricLabel}>{telemetry ? 'Nav State' : 'Est. arrival'}</Text>
             </View>
           </View>
 
