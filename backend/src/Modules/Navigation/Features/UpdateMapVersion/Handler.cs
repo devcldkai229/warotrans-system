@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Enums;
+using WaroTrans.Navigation.Features.Shared;
 using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Features.UpdateMapVersion;
@@ -10,7 +11,7 @@ public sealed class UpdateMapVersionHandler(
     NavigationDbContext dbContext,
     IValidator<UpdateMapVersionRequest> validator)
 {
-    public async Task<UpdateMapVersionResponse> HandleAsync(
+    public async Task<MapVersionResponse> HandleAsync(
         Guid id,
         UpdateMapVersionRequest request,
         CancellationToken cancellationToken = default)
@@ -38,25 +39,22 @@ public sealed class UpdateMapVersionHandler(
 
         mapVersion.Name = request.Name.Trim();
         mapVersion.MapUri = request.MapUri.Trim();
+        if (request.MapYamlUri is not null) mapVersion.MapYamlUri = request.MapYamlUri.Trim();
+        if (request.PreviewImageUri is not null) mapVersion.PreviewImageUri = request.PreviewImageUri.Trim();
+        if (!string.IsNullOrWhiteSpace(request.FrameId)) mapVersion.FrameId = request.FrameId.Trim();
+        if (request.ImageWidthPixels is { } w) mapVersion.ImageWidthPixels = w;
+        if (request.ImageHeightPixels is { } h) mapVersion.ImageHeightPixels = h;
         mapVersion.Resolution = request.Resolution;
         mapVersion.OriginX = request.OriginX;
         mapVersion.OriginY = request.OriginY;
         mapVersion.OriginYaw = request.OriginYaw;
+        if (request.Negate is { } negate) mapVersion.Negate = negate;
+        if (request.OccupiedThreshold is { } occupied) mapVersion.OccupiedThreshold = occupied;
+        if (request.FreeThreshold is { } free) mapVersion.FreeThreshold = free;
+        if (request.ContentHash is not null) mapVersion.ContentHash = request.ContentHash;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new UpdateMapVersionResponse(
-            mapVersion.Id,
-            mapVersion.WarehouseId,
-            mapVersion.VersionNo,
-            mapVersion.Name,
-            mapVersion.Status.ToString(),
-            mapVersion.MapUri,
-            mapVersion.Resolution,
-            mapVersion.OriginX,
-            mapVersion.OriginY,
-            mapVersion.OriginYaw,
-            mapVersion.CreatedAt,
-            mapVersion.PublishedAt);
+        return MapVersionResponse.From(mapVersion);
     }
 }

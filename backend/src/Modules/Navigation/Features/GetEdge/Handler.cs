@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
-using WaroTrans.Navigation.Entities;
+using WaroTrans.Navigation.Features.Shared;
 using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Features.GetEdge;
@@ -20,14 +20,13 @@ public sealed class GetEdgeHandler(NavigationDbContext dbContext)
             throw new NotFoundException($"MapVersion with ID '{mapVersionId}' was not found.", "map_version_not_found");
         }
 
-        // Geometry is jsonb, so it is mapped in memory after loading.
         var edges = await dbContext.Edges
             .AsNoTracking()
             .Where(e => e.MapVersionId == mapVersionId)
             .OrderBy(e => e.Code)
             .ToListAsync(cancellationToken);
 
-        return edges.Select(ToResponse).ToList();
+        return edges.Select(EdgeResponse.From).ToList();
     }
 
     public async Task<EdgeResponse> GetByIdAsync(
@@ -43,21 +42,6 @@ public sealed class GetEdgeHandler(NavigationDbContext dbContext)
             throw new NotFoundException($"Edge with ID '{id}' was not found.", "edge_not_found");
         }
 
-        return ToResponse(edge);
+        return EdgeResponse.From(edge);
     }
-
-    private static EdgeResponse ToResponse(Edge edge) =>
-        new(
-            edge.Id,
-            edge.MapVersionId,
-            edge.Code,
-            new EdgeGeometryResponse(edge.Geometry.RootElement
-                .GetProperty("points")
-                .EnumerateArray()
-                .Select(p => new EdgePointResponse(p.GetProperty("x").GetDouble(), p.GetProperty("y").GetDouble()))
-                .ToList()),
-            edge.Direction.ToString(),
-            edge.Capacity,
-            edge.MaxSpeed,
-            edge.IsActive);
 }

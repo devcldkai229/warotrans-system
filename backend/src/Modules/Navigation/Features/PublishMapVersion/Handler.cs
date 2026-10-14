@@ -1,13 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Enums;
+using WaroTrans.Navigation.Features.Shared;
 using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Features.PublishMapVersion;
 
 public sealed class PublishMapVersionHandler(NavigationDbContext dbContext)
 {
-    public async Task<PublishMapVersionResponse> HandleAsync(
+    public async Task<MapVersionResponse> HandleAsync(
         Guid id,
         CancellationToken cancellationToken = default)
     {
@@ -33,7 +34,6 @@ public sealed class PublishMapVersionHandler(NavigationDbContext dbContext)
                 "cannot_publish_archived_map");
         }
 
-        // Archive any currently PUBLISHED map version for this warehouse to guarantee single active map invariant
         var currentlyPublishedMaps = await dbContext.MapVersions
             .Where(m => m.WarehouseId == mapVersion.WarehouseId && m.Status == MapStatus.PUBLISHED && m.Id != id)
             .ToListAsync(cancellationToken);
@@ -49,18 +49,6 @@ public sealed class PublishMapVersionHandler(NavigationDbContext dbContext)
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new PublishMapVersionResponse(
-            mapVersion.Id,
-            mapVersion.WarehouseId,
-            mapVersion.VersionNo,
-            mapVersion.Name,
-            mapVersion.Status.ToString(),
-            mapVersion.MapUri,
-            mapVersion.Resolution,
-            mapVersion.OriginX,
-            mapVersion.OriginY,
-            mapVersion.OriginYaw,
-            mapVersion.CreatedAt,
-            mapVersion.PublishedAt);
+        return MapVersionResponse.From(mapVersion);
     }
 }

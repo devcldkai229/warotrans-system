@@ -9,22 +9,11 @@ using WaroTrans.Navigation.Features.DeleteEdge;
 using WaroTrans.Navigation.Features.GetEdge;
 using WaroTrans.Navigation.Features.UpdateEdge;
 using WaroTrans.Navigation.Persistence;
-using CreateGeometry = WaroTrans.Navigation.Features.CreateEdge.EdgeGeometryRequest;
-using CreatePoint = WaroTrans.Navigation.Features.CreateEdge.EdgePointRequest;
-using UpdateGeometry = WaroTrans.Navigation.Features.UpdateEdge.EdgeGeometryRequest;
-using UpdatePoint = WaroTrans.Navigation.Features.UpdateEdge.EdgePointRequest;
-using CreatePointResponse = WaroTrans.Navigation.Features.CreateEdge.EdgePointResponse;
-using GetPointResponse = WaroTrans.Navigation.Features.GetEdge.EdgePointResponse;
-using UpdatePointResponse = WaroTrans.Navigation.Features.UpdateEdge.EdgePointResponse;
 
 namespace WaroTrans.UnitTests.Navigation;
 
 public class EdgeTests
 {
-    /// <summary>
-    /// The real generator needs PostgreSQL (SELECT ... FOR UPDATE); it is covered by integration tests.
-    /// This fake hands out EDGE-001, EDGE-002, ... and counts calls.
-    /// </summary>
     private sealed class FakeCodeGenerator : IBusinessCodeGenerator
     {
         public int EdgeCalls { get; private set; }
@@ -34,6 +23,9 @@ public class EdgeTests
             EdgeCalls++;
             return Task.FromResult($"EDGE-{EdgeCalls:000}");
         }
+
+        public Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
+            Task.FromResult($"ZONE-{suffix}");
 
         public Task<string> NextWarehouseCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextCategoryCodeAsync(string suffix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -61,10 +53,12 @@ public class EdgeTests
         {
             Id = Guid.NewGuid(),
             WarehouseId = Guid.NewGuid(),
+            Code = $"MAP-{Guid.NewGuid():N}"[..20],
             VersionNo = 1,
             Name = "Map",
             Status = status,
-            MapUri = "http://storage/map.yaml",
+            MapUri = "/map-assets/map.pgm",
+            FrameId = "map",
             Resolution = 0.05,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -79,7 +73,8 @@ public class EdgeTests
             Id = Guid.NewGuid(),
             MapVersionId = mapVersionId,
             Code = code,
-            Geometry = JsonDocument.Parse("""{"points":[{"x":0,"y":0},{"x":5,"y":0}]}"""),
+            Geometry = JsonDocument.Parse("""{"type":"LineString","coordinates":[[0,0],[5,0]]}"""),
+            WidthMeters = 1.0,
             Direction = EdgeDirection.BIDIRECTIONAL,
             Capacity = 1,
             MaxSpeed = null,
@@ -87,6 +82,12 @@ public class EdgeTests
         };
         dbContext.Edges.Add(edge);
         return edge;
+    }
+
+    private static JsonElement LineString(params (double X, double Y)[] points)
+    {
+        var coords = points.Select(p => new[] { p.X, p.Y }).ToArray();
+        return JsonSerializer.SerializeToElement(new { type = "LineString", coordinates = coords });
     }
 
     private static CreateEdgeHandler CreateHandler(NavigationDbContext dbContext, FakeCodeGenerator? generator = null) =>
@@ -97,7 +98,8 @@ public class EdgeTests
 
     private static CreateEdgeRequest ValidCreateRequest(string direction = "ONE_WAY", bool? isActive = null) =>
         new(
-            new CreateGeometry([new CreatePoint(1.0, 2.0), new CreatePoint(2.5, 2.2), new CreatePoint(4.0, 3.0)]),
+            LineString((1.0, 2.0), (2.5, 2.2), (4.0, 3.0)),
+            1.2,
             direction,
             2,
             0.8,
@@ -105,16 +107,15 @@ public class EdgeTests
 
     private static UpdateEdgeRequest ValidUpdateRequest(string direction = "BIDIRECTIONAL") =>
         new(
-            new UpdateGeometry([new UpdatePoint(10.0, 10.0), new UpdatePoint(20.0, 10.0)]),
+            LineString((10.0, 10.0), (20.0, 10.0)),
+            2.0,
             direction,
             3,
             null,
             false);
 
-    /* ------------------------------------------------------------ CreateEdge */
-
     [Fact]
-    public async Task CreateEdge_PersistsEdge_WithGeneratedCodeAndGeometry()
+    public async Task CreateEdge_PersistsEdge_WithGeneratedCodeAndGeoJson()
     {
         using var dbContext = CreateDbContext();
         var map = AddMap(dbContext);
@@ -125,23 +126,18 @@ public class EdgeTests
         Assert.Equal("EDGE-001", response.Code);
         Assert.Equal(map.Id, response.MapVersionId);
         Assert.Equal("ONE_WAY", response.Direction);
+        Assert.Equal(1.2, response.WidthMeters);
         Assert.Equal(2, response.Capacity);
         Assert.Equal(0.8, response.MaxSpeed);
         Assert.True(response.IsActive);
-        Assert.Equal(
-            [new CreatePointResponse(1.0, 2.0),
-             new CreatePointResponse(2.5, 2.2),
-             new CreatePointResponse(4.0, 3.0)],
-            response.Geometry.Points);
+        Assert.Equal("LineString", response.Geometry.GetProperty("type").GetString());
+        Assert.Equal(2.5, response.Geometry.GetProperty("coordinates")[1][0].GetDouble());
 
         var saved = await dbContext.Edges.SingleAsync();
-        Assert.Equal(response.Id, saved.Id);
         Assert.Equal("EDGE-001", saved.Code);
         Assert.Equal(EdgeDirection.ONE_WAY, saved.Direction);
-        var points = saved.Geometry.RootElement.GetProperty("points");
-        Assert.Equal(3, points.GetArrayLength());
-        Assert.Equal(2.5, points[1].GetProperty("x").GetDouble());
-        Assert.Equal(2.2, points[1].GetProperty("y").GetDouble());
+        Assert.Equal(1.2, saved.WidthMeters);
+        Assert.Equal("LineString", saved.Geometry.RootElement.GetProperty("type").GetString());
     }
 
     [Fact]
@@ -234,17 +230,13 @@ public class EdgeTests
         Assert.Equal(0, generator.EdgeCalls);
     }
 
-    /* ------------------------------------------------------------ Validators */
-
     public static TheoryData<CreateEdgeRequest> InvalidCreateRequests => new()
     {
-        ValidCreateRequest() with { Geometry = null! },
-        ValidCreateRequest() with { Geometry = new CreateGeometry(null!) },
-        ValidCreateRequest() with { Geometry = new CreateGeometry([]) },
-        ValidCreateRequest() with { Geometry = new CreateGeometry([new CreatePoint(1, 1)]) },
-        ValidCreateRequest() with { Geometry = new CreateGeometry([new CreatePoint(1, 1), null!]) },
-        ValidCreateRequest() with { Geometry = new CreateGeometry([new CreatePoint(1, 1), new CreatePoint(double.NaN, 2)]) },
-        ValidCreateRequest() with { Geometry = new CreateGeometry([new CreatePoint(1, double.PositiveInfinity), new CreatePoint(2, 2)]) },
+        ValidCreateRequest() with { Geometry = JsonDocument.Parse("""{"type":"Point","coordinates":[1,2]}""").RootElement.Clone() },
+        ValidCreateRequest() with { Geometry = JsonDocument.Parse("""{"type":"LineString","coordinates":[[1,1]]}""").RootElement.Clone() },
+        ValidCreateRequest() with { Geometry = JsonDocument.Parse("""{"type":"LineString","coordinates":[[1,1],[NaN,2]]}""".Replace("NaN", "null")).RootElement.Clone() },
+        ValidCreateRequest() with { WidthMeters = 0 },
+        ValidCreateRequest() with { WidthMeters = -1 },
         ValidCreateRequest() with { Direction = "" },
         ValidCreateRequest() with { Direction = "TWO_WAY" },
         ValidCreateRequest() with { Capacity = 0 },
@@ -266,7 +258,7 @@ public class EdgeTests
     {
         var request = ValidCreateRequest() with
         {
-            Geometry = new CreateGeometry([new CreatePoint(-1, 0), new CreatePoint(0, -1)]),
+            Geometry = LineString((-1, 0), (0, -1)),
             Capacity = 1,
             MaxSpeed = null
         };
@@ -289,15 +281,15 @@ public class EdgeTests
         var validator = new UpdateEdgeValidator();
 
         Assert.True(validator.Validate(ValidUpdateRequest()).IsValid);
-        Assert.False(validator.Validate(ValidUpdateRequest() with { Geometry = null! }).IsValid);
-        Assert.False(validator.Validate(ValidUpdateRequest() with { Geometry = new UpdateGeometry([new UpdatePoint(1, 1)]) }).IsValid);
-        Assert.False(validator.Validate(ValidUpdateRequest() with { Geometry = new UpdateGeometry([new UpdatePoint(1, 1), new UpdatePoint(double.NaN, 1)]) }).IsValid);
+        Assert.False(validator.Validate(ValidUpdateRequest() with
+        {
+            Geometry = JsonDocument.Parse("""{"type":"LineString","coordinates":[[1,1]]}""").RootElement.Clone()
+        }).IsValid);
+        Assert.False(validator.Validate(ValidUpdateRequest() with { WidthMeters = 0 }).IsValid);
         Assert.False(validator.Validate(ValidUpdateRequest("UNKNOWN")).IsValid);
         Assert.False(validator.Validate(ValidUpdateRequest() with { Capacity = 0 }).IsValid);
         Assert.False(validator.Validate(ValidUpdateRequest() with { MaxSpeed = 0 }).IsValid);
     }
-
-    /* ------------------------------------------------------------ GetEdge */
 
     [Fact]
     public async Task GetEdges_ReturnsOnlyEdgesOfMap_OrderedByCode_WithGeometry()
@@ -314,9 +306,8 @@ public class EdgeTests
 
         Assert.Equal(["EDGE-001", "EDGE-002"], response.Select(e => e.Code));
         Assert.All(response, e => Assert.Equal(map.Id, e.MapVersionId));
-        Assert.Equal(
-            [new GetPointResponse(0, 0), new GetPointResponse(5, 0)],
-            response[0].Geometry.Points);
+        Assert.Equal("LineString", response[0].Geometry.GetProperty("type").GetString());
+        Assert.Equal(5, response[0].Geometry.GetProperty("coordinates")[1][0].GetDouble());
     }
 
     [Fact]
@@ -355,7 +346,8 @@ public class EdgeTests
         Assert.Equal(edge.Id, response.Id);
         Assert.Equal("EDGE-007", response.Code);
         Assert.Equal("BIDIRECTIONAL", response.Direction);
-        Assert.Equal(2, response.Geometry.Points.Count);
+        Assert.Equal(2, response.Geometry.GetProperty("coordinates").GetArrayLength());
+        Assert.Equal(1.0, response.WidthMeters);
     }
 
     [Fact]
@@ -369,8 +361,6 @@ public class EdgeTests
         Assert.Equal("edge_not_found", ex.Code);
     }
 
-    /* ------------------------------------------------------------ UpdateEdge */
-
     [Fact]
     public async Task UpdateEdge_UpdatesFields_AndKeepsCode()
     {
@@ -383,19 +373,18 @@ public class EdgeTests
 
         Assert.Equal("EDGE-001", response.Code);
         Assert.Equal("ONE_WAY", response.Direction);
+        Assert.Equal(2.0, response.WidthMeters);
         Assert.Equal(3, response.Capacity);
         Assert.Null(response.MaxSpeed);
         Assert.False(response.IsActive);
-        Assert.Equal(
-            [new UpdatePointResponse(10, 10), new UpdatePointResponse(20, 10)],
-            response.Geometry.Points);
+        Assert.Equal(20, response.Geometry.GetProperty("coordinates")[1][0].GetDouble());
 
         var saved = await dbContext.Edges.SingleAsync();
         Assert.Equal("EDGE-001", saved.Code);
         Assert.Equal(EdgeDirection.ONE_WAY, saved.Direction);
         Assert.Equal(3, saved.Capacity);
         Assert.False(saved.IsActive);
-        Assert.Equal(20, saved.Geometry.RootElement.GetProperty("points")[1].GetProperty("x").GetDouble());
+        Assert.Equal(20, saved.Geometry.RootElement.GetProperty("coordinates")[1][0].GetDouble());
     }
 
     [Fact]
@@ -452,8 +441,6 @@ public class EdgeTests
         await Assert.ThrowsAsync<FluentValidation.ValidationException>(() =>
             UpdateHandler(dbContext).HandleAsync(edge.Id, ValidUpdateRequest() with { Capacity = 0 }));
     }
-
-    /* ------------------------------------------------------------ DeleteEdge */
 
     [Fact]
     public async Task DeleteEdge_RemovesOnlyThatEdge()

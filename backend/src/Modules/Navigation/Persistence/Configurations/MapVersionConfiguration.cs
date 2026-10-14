@@ -11,10 +11,16 @@ public sealed class MapVersionConfiguration : IEntityTypeConfiguration<MapVersio
         builder.ToTable("map_versions");
         builder.HasKey(x => x.Id);
 
+        builder.Property(x => x.Code).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(500).IsRequired();
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.MapUri).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.MapYamlUri).HasMaxLength(500);
+        builder.Property(x => x.PreviewImageUri).HasMaxLength(500);
+        builder.Property(x => x.FrameId).HasMaxLength(50).IsRequired();
+        builder.Property(x => x.ContentHash).HasMaxLength(128);
 
         builder.HasIndex(x => new { x.WarehouseId, x.VersionNo }).IsUnique();
+        builder.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
     }
 }

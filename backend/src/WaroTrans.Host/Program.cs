@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using WaroTrans.BuildingBlocks;
@@ -127,6 +129,19 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+var mapAssetsRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "data", "maps"));
+Directory.CreateDirectory(mapAssetsRoot);
+var mapContentTypes = new FileExtensionContentTypeProvider();
+mapContentTypes.Mappings[".pgm"] = "image/x-portable-graymap";
+mapContentTypes.Mappings[".yaml"] = "text/yaml";
+mapContentTypes.Mappings[".yml"] = "text/yaml";
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(mapAssetsRoot),
+    RequestPath = "/map-assets",
+    ContentTypeProvider = mapContentTypes
+});
 
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapHub<NotificationsHub>("/hubs/notifications");

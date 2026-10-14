@@ -3,35 +3,29 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.IntegrationTests.Navigation.Edges;
 
 /// <summary>
 /// HTTP → EF → PostgreSQL coverage for Edge (Lane) configuration on a MapVersion.
-/// Validation edge cases live in UnitTests; this class covers routing, JSON binding, jsonb geometry,
-/// EDGE-NNN generation via IBusinessCodeGenerator and ProblemDetails mapping.
+/// Geometry contract is GeoJSON LineString; WidthMeters is required.
 /// </summary>
-/// <remarks>
-/// code_sequences is not truncated between tests, so the EDGE sequence keeps growing:
-/// assertions check the format and that consecutive creates increment, not absolute numbers.
-/// </remarks>
 [Collection(IntegrationCollection.Name)]
 public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory factory)
     : IntegrationTestBase(factory)
 {
     private sealed record MapDto(Guid Id, string Status);
 
-    private sealed record PointDto(double X, double Y);
-
-    private sealed record GeometryDto(List<PointDto> Points);
-
     private sealed record EdgeDto(
         Guid Id,
         Guid MapVersionId,
         string Code,
-        GeometryDto Geometry,
+        JsonElement Geometry,
+        double WidthMeters,
         string Direction,
         int Capacity,
         double? MaxSpeed,
@@ -49,18 +43,39 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
 
     private static object EdgeBody(string direction = "ONE_WAY", int capacity = 2, double? maxSpeed = 0.8, bool? isActive = null) => new
     {
-        geometry = new { points = new[] { new { x = 1.0, y = 2.0 }, new { x = 2.5, y = 2.2 }, new { x = 4.0, y = 3.0 } } },
+        geometry = new { type = "LineString", coordinates = new[] { new[] { 1.0, 2.0 }, new[] { 2.5, 2.2 }, new[] { 4.0, 3.0 } } },
+        widthMeters = 1.2,
         direction,
         capacity,
         maxSpeed,
         isActive
     };
 
+    private async Task<Guid> SeedWarehouseAsync()
+    {
+        var warehouseId = Guid.NewGuid();
+        var suffix = warehouseId.ToString("N")[..8].ToUpperInvariant();
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+        db.Warehouses.Add(new WaroTrans.Warehouse.Entities.Warehouse
+        {
+            Id = warehouseId,
+            Code = $"WH-{suffix}",
+            Name = $"Warehouse {suffix}",
+            Timezone = "Asia/Ho_Chi_Minh",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        return warehouseId;
+    }
+
     private async Task<Guid> CreateDraftMapAsync()
     {
+        var warehouseId = await SeedWarehouseAsync();
         var response = await Client.PostAsJsonAsync(
-            $"/api/navigation/warehouses/{Guid.NewGuid()}/maps",
-            new { name = "Map", mapUri = "http://storage/map.yaml", resolution = 0.05, originX = 0, originY = 0, originYaw = 0 });
+            $"/api/navigation/warehouses/{warehouseId}/maps",
+            new { name = "Map", mapUri = "/map-assets/map.pgm", resolution = 0.05, originX = 0, originY = 0, originYaw = 0 });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<MapDto>())!.Id;
     }
@@ -81,10 +96,8 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         return json.RootElement.TryGetProperty("code", out var code) ? code.GetString() : null;
     }
 
-    /* ------------------------------------------------------------ Create */
-
     [Fact]
-    public async Task Post_edge_persists_row_with_generated_code_and_jsonb_geometry()
+    public async Task Post_edge_persists_row_with_generated_code_and_geojson_geometry()
     {
         var mapId = await CreateDraftMapAsync();
 
@@ -95,17 +108,19 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         Assert.Equal($"/api/navigation/edges/{created.Id}", response.Headers.Location?.ToString());
         Assert.Matches(EdgeCodeRegex(), created.Code);
         Assert.Equal("ONE_WAY", created.Direction);
+        Assert.Equal(1.2, created.WidthMeters);
         Assert.Equal(2, created.Capacity);
         Assert.Equal(0.8, created.MaxSpeed);
         Assert.True(created.IsActive);
-        Assert.Equal([new PointDto(1.0, 2.0), new PointDto(2.5, 2.2), new PointDto(4.0, 3.0)], created.Geometry.Points);
+        Assert.Equal("LineString", created.Geometry.GetProperty("type").GetString());
+        Assert.Equal(2.5, created.Geometry.GetProperty("coordinates")[1][0].GetDouble());
 
         await using var connection = new NpgsqlConnection(PostgreSql.ConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
             """
-            SELECT map_version_id, code, direction, capacity, max_speed, is_active,
-                   jsonb_array_length(geometry->'points'), (geometry->'points'->1->>'x')::float8
+            SELECT map_version_id, code, direction, capacity, max_speed, is_active, width_meters,
+                   geometry->>'type', (geometry->'coordinates'->1->>0)::float8
             FROM navigation.edges WHERE id = @id
             """,
             connection);
@@ -119,8 +134,9 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         Assert.Equal(2, reader.GetInt32(3));
         Assert.Equal(0.8, reader.GetDouble(4));
         Assert.True(reader.GetBoolean(5));
-        Assert.Equal(3, reader.GetInt32(6));
-        Assert.Equal(2.5, reader.GetDouble(7));
+        Assert.Equal(1.2, reader.GetDouble(6));
+        Assert.Equal("LineString", reader.GetString(7));
+        Assert.Equal(2.5, reader.GetDouble(8));
     }
 
     [Fact]
@@ -181,12 +197,13 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
 
         var onePoint = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", new
         {
-            geometry = new { points = new[] { new { x = 1.0, y = 1.0 } } },
+            geometry = new { type = "LineString", coordinates = new[] { new[] { 1.0, 1.0 } } },
+            widthMeters = 1.0,
             direction = "ONE_WAY",
             capacity = 1
         });
         var badDirection = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", EdgeBody(direction: "TWO_WAY"));
-        var noGeometry = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", new { direction = "ONE_WAY", capacity = 1 });
+        var noGeometry = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", new { direction = "ONE_WAY", capacity = 1, widthMeters = 1.0 });
 
         foreach (var response in new[] { onePoint, badDirection, noGeometry })
         {
@@ -194,8 +211,6 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
             Assert.Equal("validation_failed", await ProblemCodeAsync(response));
         }
     }
-
-    /* ------------------------------------------------------------ Get */
 
     [Fact]
     public async Task Get_edges_returns_only_edges_of_map_ordered_by_code()
@@ -209,8 +224,8 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         var list = (await Client.GetFromJsonAsync<List<EdgeDto>>($"/api/navigation/maps/{mapId}/edges"))!;
 
         Assert.Equal([first.Code, second.Code], list.Select(e => e.Code));
-        Assert.Equal(first, list[0] with { Geometry = first.Geometry });
-        Assert.Equal(first.Geometry.Points, list[0].Geometry.Points);
+        Assert.Equal(first.Id, list[0].Id);
+        Assert.Equal("LineString", list[0].Geometry.GetProperty("type").GetString());
     }
 
     [Fact]
@@ -232,12 +247,10 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         var missing = await Client.GetAsync($"/api/navigation/edges/{Guid.NewGuid()}");
 
         Assert.Equal(created.Code, found.Code);
-        Assert.Equal(created.Geometry.Points, found.Geometry.Points);
+        Assert.Equal(created.WidthMeters, found.WidthMeters);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Equal("edge_not_found", await ProblemCodeAsync(missing));
     }
-
-    /* ------------------------------------------------------------ Update */
 
     [Fact]
     public async Task Put_edge_updates_fields_and_keeps_code()
@@ -247,7 +260,8 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
 
         var response = await Client.PutAsJsonAsync($"/api/navigation/edges/{edge.Id}", new
         {
-            geometry = new { points = new[] { new { x = 10.0, y = 10.0 }, new { x = 20.0, y = 10.0 } } },
+            geometry = new { type = "LineString", coordinates = new[] { new[] { 10.0, 10.0 }, new[] { 20.0, 10.0 } } },
+            widthMeters = 2.5,
             direction = "BIDIRECTIONAL",
             capacity = 3,
             maxSpeed = (double?)null,
@@ -258,13 +272,13 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         var updated = (await response.Content.ReadFromJsonAsync<EdgeDto>())!;
         Assert.Equal(edge.Code, updated.Code);
         Assert.Equal("BIDIRECTIONAL", updated.Direction);
+        Assert.Equal(2.5, updated.WidthMeters);
         Assert.Equal(3, updated.Capacity);
         Assert.Null(updated.MaxSpeed);
         Assert.False(updated.IsActive);
 
         var reloaded = (await Client.GetFromJsonAsync<EdgeDto>($"/api/navigation/edges/{edge.Id}"))!;
-        Assert.Equal(edge.Code, reloaded.Code);
-        Assert.Equal([new PointDto(10, 10), new PointDto(20, 10)], reloaded.Geometry.Points);
+        Assert.Equal(20.0, reloaded.Geometry.GetProperty("coordinates")[1][0].GetDouble());
         Assert.Equal(3, reloaded.Capacity);
         Assert.False(reloaded.IsActive);
     }
@@ -278,7 +292,8 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
 
         var response = await Client.PutAsJsonAsync($"/api/navigation/edges/{edge.Id}", new
         {
-            geometry = new { points = new[] { new { x = 0.0, y = 0.0 }, new { x = 1.0, y = 0.0 } } },
+            geometry = new { type = "LineString", coordinates = new[] { new[] { 0.0, 0.0 }, new[] { 1.0, 0.0 } } },
+            widthMeters = 1.0,
             direction = "ONE_WAY",
             capacity = 1,
             isActive = true
@@ -287,8 +302,6 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("map_version_not_draft", await ProblemCodeAsync(response));
     }
-
-    /* ------------------------------------------------------------ Delete */
 
     [Fact]
     public async Task Delete_edge_removes_it_from_the_map()

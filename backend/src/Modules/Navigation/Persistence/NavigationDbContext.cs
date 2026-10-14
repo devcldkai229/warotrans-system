@@ -28,6 +28,12 @@ public sealed class NavigationDbContext(DbContextOptions<NavigationDbContext> op
                     v => v.RootElement.GetRawText(),
                     v => JsonDocument.Parse(v, default));
 
+            modelBuilder.Entity<Zone>()
+                .Property(x => x.Policy)
+                .HasConversion(
+                    v => v == null ? null : v.RootElement.GetRawText(),
+                    v => v == null ? null : JsonDocument.Parse(v, default));
+
             modelBuilder.Entity<Edge>()
                 .Property(x => x.Geometry)
                 .HasConversion(

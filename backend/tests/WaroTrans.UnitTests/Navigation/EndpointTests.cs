@@ -31,6 +31,8 @@ public class EndpointTests
         public Task<string> NextSkuCodeAsync(string prefix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextMapVersionCodeAsync(string warehouseCode, int versionNo, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
+            Task.FromResult($"ZONE-{suffix}");
         public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -55,7 +57,9 @@ public class EndpointTests
             VersionNo = 1,
             Name = "Map",
             Status = status,
-            MapUri = "http://storage/map.yaml",
+            Code = $"MAP-{Guid.NewGuid():N}"[..20],
+            MapUri = "/map-assets/map.pgm",
+            FrameId = "map",
             Resolution = 0.05,
             CreatedAt = DateTimeOffset.UtcNow
         };

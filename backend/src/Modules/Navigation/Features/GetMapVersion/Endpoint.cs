@@ -31,5 +31,17 @@ public static class GetMapVersionEndpoint
         .WithName("GetMapVersionById")
         .WithSummary("Get map version by ID")
         .WithDescription("Retrieves details of a specific map version by its ID.");
+
+        endpoints.MapGet("/maps/{id:guid}/detail", async (
+            Guid id,
+            GetMapVersionHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await handler.GetDetailByIdAsync(id, cancellationToken);
+            return Results.Ok(response);
+        })
+        .WithName("GetMapVersionDetail")
+        .WithSummary("Get map version detail with endpoints, edges, and zones")
+        .WithDescription("Returns MapVersion ROS metadata plus child geometry for the Admin Map Editor.");
     }
 }

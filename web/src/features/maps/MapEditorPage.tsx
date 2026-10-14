@@ -1,30 +1,86 @@
-import { useQuery } from '@tanstack/react-query'
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type {
   Edge,
   EdgeDirection,
   Endpoint,
   EndpointType,
+  MapStatus,
   Point,
   Zone,
   ZoneType,
 } from '@/shared/api/contracts'
+import {
+  createEdge,
+  createEndpoint,
+  createZone,
+  deleteEdge,
+  deleteZone,
+  getMapVersionDetail,
+  publishMapVersion,
+  resolveMapAssetUrl,
+  updateEdge,
+  updateEndpoint,
+  updateZone,
+  type MapVersionDetailDto,
+} from '@/shared/api/navigation'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
+import { DEFAULT_MAP_BOUNDS } from '@/shared/lib/mapView'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Field, FieldRow, SearchInput } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { MAP_STATUS_TONE } from '@/shared/ui/statusTones'
 import { WarehouseMap } from '@/shared/map/WarehouseMap'
+import { lineStringToPoints, pointsToLineString, pointsToPolygon, polygonToPoints } from '@/shared/map/geoJson'
+import { boundsFromMapMeta } from '@/shared/map/mapBounds'
 import { toPercent } from '@/shared/map/mapStyle'
-import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES } from '@/shared/map/scene'
 import { WorkflowEditor } from '@/features/workflows/workflow-editor-page'
 import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
-import { EDITOR_DEFAULTS, MAP_VERSIONS } from './mock'
 import { normalizeYaw } from './yaw'
+
+function detailToLocal(detail: MapVersionDetailDto) {
+  const endpoints: Endpoint[] = detail.endpoints.map((e) => ({
+    id: e.id,
+    mapVersionId: e.mapVersionId,
+    code: e.code,
+    name: e.name,
+    endpointType: e.endpointType as EndpointType,
+    x: e.x,
+    y: e.y,
+    yaw: e.yaw,
+    positionTolerance: e.positionTolerance,
+    yawTolerance: e.yawTolerance,
+    isEnabled: e.isEnabled,
+  }))
+  const edges: Edge[] = detail.edges.map((e) => ({
+    id: e.id,
+    mapVersionId: e.mapVersionId,
+    code: e.code,
+    geometry: { points: lineStringToPoints(e.geometry) },
+    widthMeters: e.widthMeters,
+    direction: e.direction as EdgeDirection,
+    capacity: e.capacity,
+    maxSpeed: e.maxSpeed,
+    isActive: e.isActive,
+  }))
+  const zones: Zone[] = detail.zones.map((z) => ({
+    id: z.id,
+    mapVersionId: z.mapVersionId,
+    code: z.code,
+    name: z.name,
+    zoneType: z.zoneType as ZoneType,
+    geometry: { points: polygonToPoints(z.geometry) },
+    capacity: z.capacity,
+    maxSpeed: z.maxSpeed,
+    isActive: z.isActive,
+  }))
+  return { endpoints, edges, zones }
+}
 
 const WORKFLOW_PANEL = { min: 320, default: 460, key: 'warotrans.workflowPanelWidth' }
 
@@ -95,28 +151,138 @@ function Backdrop({ onClick }: { onClick: () => void }) {
 export function MapEditorPage() {
   const { mapId } = useParams()
   const navigate = useNavigate()
-  const version = MAP_VERSIONS.find((item) => item.id === mapId) ?? MAP_VERSIONS[0]
+  const queryClient = useQueryClient()
+
+  const detailQuery = useQuery({
+    queryKey: ['navigation', 'map-detail', mapId],
+    queryFn: () => getMapVersionDetail(mapId!),
+    enabled: Boolean(mapId),
+  })
+
+  const version = detailQuery.data
+  const isDraft = version?.status === 'DRAFT'
 
   const [searchParams] = useSearchParams()
   const [mode, setMode] = useState<Mode>(() => initialMode(searchParams.get('state')))
-  // Every screen draws the same scene; the editor works on a copy stamped with this MapVersion.
-  const [endpoints, setEndpoints] = useState<Endpoint[]>(() =>
-    SCENE_ENDPOINTS.map((item) => ({ ...item, mapVersionId: version.id })),
-  )
-  const [zones, setZones] = useState<Zone[]>(() =>
-    SCENE_ZONES.map((item) => ({ ...item, mapVersionId: version.id, geometry: { points: [...item.geometry.points] } })),
-  )
-  const [edges, setEdges] = useState<Edge[]>(() =>
-    SCENE_EDGES.map((item) => ({ ...item, mapVersionId: version.id, geometry: { points: [...item.geometry.points] } })),
-  )
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([])
+  const [zones, setZones] = useState<Zone[]>([])
+  const [edges, setEdges] = useState<Edge[]>([])
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [panelWidth, setPanelWidth] = useState(readPanelWidth)
   const latestWidth = useRef(panelWidth)
+  const hydrated = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!detailQuery.data || hydrated.current === detailQuery.data.id) return
+    const local = detailToLocal(detailQuery.data)
+    setEndpoints(local.endpoints)
+    setEdges(local.edges)
+    setZones(local.zones)
+    hydrated.current = detailQuery.data.id
+  }, [detailQuery.data])
+
+  const mapBounds = useMemo(() => {
+    if (!version || version.imageWidthPixels <= 0 || version.imageHeightPixels <= 0) return DEFAULT_MAP_BOUNDS
+    return boundsFromMapMeta({
+      resolution: version.resolution,
+      originX: version.originX,
+      originY: version.originY,
+      originYaw: version.originYaw,
+      imageWidthPixels: version.imageWidthPixels,
+      imageHeightPixels: version.imageHeightPixels,
+    })
+  }, [version])
+
+  const occupancyUrl = resolveMapAssetUrl(version?.previewImageUri)
 
   const workflowsQuery = useQuery({
     queryKey: ['workflows'],
     queryFn: () => listWorkflows(),
     enabled: mode.kind === 'picker' && mode.tool === 'workflows',
+  })
+
+  const publishMutation = useMutation({
+    mutationFn: () => publishMapVersion(mapId!),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['navigation', 'map-detail', mapId] })
+      navigate('/configure/facility')
+    },
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!version || !isDraft) throw new Error('Only DRAFT maps can be edited.')
+      const existing = detailToLocal(version)
+
+      for (const endpoint of endpoints) {
+        const body = {
+          name: endpoint.name,
+          endpointType: endpoint.endpointType,
+          x: endpoint.x,
+          y: endpoint.y,
+          yaw: endpoint.yaw,
+          positionTolerance: endpoint.positionTolerance,
+          yawTolerance: endpoint.yawTolerance,
+          isEnabled: endpoint.isEnabled,
+        }
+        if (endpoint.id.startsWith('draft-')) {
+          await createEndpoint(version.id, body)
+        } else {
+          await updateEndpoint(endpoint.id, body)
+        }
+      }
+
+      const edgeIds = new Set(edges.map((e) => e.id))
+      for (const edge of existing.edges) {
+        if (!edgeIds.has(edge.id)) await deleteEdge(edge.id)
+      }
+      for (const edge of edges) {
+        const body = {
+          geometry: pointsToLineString(edge.geometry.points),
+          widthMeters: edge.widthMeters ?? 1,
+          direction: edge.direction,
+          capacity: edge.capacity,
+          maxSpeed: edge.maxSpeed,
+          isActive: edge.isActive,
+        }
+        if (edge.id.startsWith('draft-')) {
+          await createEdge(version.id, body)
+        } else {
+          await updateEdge(edge.id, body)
+        }
+      }
+
+      const zoneIds = new Set(zones.map((z) => z.id))
+      for (const zone of existing.zones) {
+        if (!zoneIds.has(zone.id)) await deleteZone(zone.id)
+      }
+      for (const zone of zones) {
+        const body = {
+          name: zone.name,
+          zoneType: zone.zoneType,
+          geometry: pointsToPolygon(zone.geometry.points),
+          capacity: Math.max(1, zone.capacity),
+          maxSpeed: zone.maxSpeed,
+          isActive: zone.isActive,
+        }
+        if (zone.id.startsWith('draft-')) {
+          await createZone(version.id, body)
+        } else {
+          await updateZone(zone.id, body)
+        }
+      }
+    },
+    onSuccess: async () => {
+      hydrated.current = null
+      setSaveError(null)
+      setSaveMessage(`Saved ${new Date().toLocaleTimeString()}`)
+      await queryClient.invalidateQueries({ queryKey: ['navigation', 'map-detail', mapId] })
+    },
+    onError: (err) => {
+      setSaveError(err instanceof Error ? err.message : 'Save failed')
+    },
   })
 
   /** Drag the left edge of the workflow panel: dragging left widens it. */
@@ -179,6 +345,7 @@ export function MapEditorPage() {
   }
 
   function confirmEndpoint(endpointType: EndpointType, at: { x: number; y: number }, yaw: number) {
+    if (!version || !isDraft) return
     const count = endpoints.length + 1
     const endpoint: Endpoint = {
       id: `draft-endpoint-${count}`,
@@ -210,9 +377,10 @@ export function MapEditorPage() {
   }
 
   function addZone(zoneType: ZoneType, title: string) {
+    if (!version || !isDraft) return
     const count = zones.length + 1
-    const left = 14 + (count % 5) * 2
-    const top = 8 + (count % 5) * 2
+    const left = mapBounds.minX + 4 + (count % 5) * 2
+    const top = mapBounds.minY + 4 + (count % 5) * 2
     const zone: Zone = {
       id: `draft-zone-${count}`,
       mapVersionId: version.id,
@@ -220,7 +388,7 @@ export function MapEditorPage() {
       code: `ZN-${String(count).padStart(2, '0')}`,
       name: `${title} - ${count}`,
       zoneType,
-      capacity: zoneType === 'RESTRICTED_AREA' ? 0 : 2,
+      capacity: zoneType === 'NARROW_AREA' ? 1 : 2,
       maxSpeed: null,
       isActive: true,
       geometry: {
@@ -241,7 +409,7 @@ export function MapEditorPage() {
   }
 
   function finishEdge() {
-    if (mode.kind !== 'drawingEdge' || mode.points.length < 2) return
+    if (!version || !isDraft || mode.kind !== 'drawingEdge' || mode.points.length < 2) return
     const count = edges.length + 1
     const edge: Edge = {
       id: `draft-edge-${count}`,
@@ -249,6 +417,7 @@ export function MapEditorPage() {
       // Temporary client code: the backend generates the real one on save; the Admin never types it.
       code: `EG-${String(count).padStart(2, '0')}`,
       geometry: { points: mode.points },
+      widthMeters: 1,
       direction: mode.direction,
       capacity: 1,
       maxSpeed: null,
@@ -278,8 +447,10 @@ export function MapEditorPage() {
 
   const picking = mode.kind === 'placing' || mode.kind === 'drawingEdge'
 
-  /** A click on empty map: move the Endpoint being placed, or add a point to the Edge being drawn. */
+  /** A click on empty map: move the Endpoint being placed, or add a point to the Edge being drawn.
+   * Coordinates from WarehouseMap are already world meters (pan/zoom do not alter domain coords). */
   function handleMapClick(point: Point) {
+    if (!isDraft) return
     const at = { x: snap(point.x), y: snap(point.y) }
     if (mode.kind === 'placing') setMode({ ...mode, at })
     else if (mode.kind === 'drawingEdge') setMode({ ...mode, points: [...mode.points, at] })
@@ -287,22 +458,63 @@ export function MapEditorPage() {
 
   const lowered = query.toLowerCase()
 
+  if (detailQuery.isLoading) {
+    return (
+      <div className="fixed inset-0 z-40 grid place-items-center bg-surface text-sm text-muted">
+        Loading map…
+      </div>
+    )
+  }
+
+  if (!version) {
+    return (
+      <div className="fixed inset-0 z-40 grid place-items-center bg-surface">
+        <div className="text-center">
+          <p className="text-sm text-ink-2">Map version not found.</p>
+          <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>
+            Back to Facility
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex min-w-[1100px] flex-col bg-surface">
       <header className="flex h-14 flex-none items-center gap-3 pr-6 pl-3">
         <IconButton aria-label="Back to Facility" onClick={() => navigate('/configure/facility')}>
           <Icon name="arrowLeft" size={18} />
         </IconButton>
-        <h1 className="text-base font-medium">Map version {version.versionNo}</h1>
-        <StatusBadge tone="amber">Unpublished draft</StatusBadge>
+        <h1 className="text-base font-medium">
+          {version.code} · v{version.versionNo}
+        </h1>
+        <StatusBadge tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}>
+          {version.status}
+        </StatusBadge>
         <span className="ml-2 flex items-center gap-2 text-xs text-muted">
-          <span className="size-1.5 rounded-full bg-green" /> Saved automatically at {EDITOR_DEFAULTS.autosavedAt}
+          {saveError ? (
+            <span className="text-red">{saveError}</span>
+          ) : saveMessage ? (
+            <>
+              <span className="size-1.5 rounded-full bg-green" /> {saveMessage}
+            </>
+          ) : isDraft ? (
+            'World coordinates (meters). Pan/zoom do not change saved geometry.'
+          ) : (
+            'Read-only: only DRAFT maps can be edited.'
+          )}
         </span>
         <div className="ml-auto flex gap-2">
           <Button variant="ghost" onClick={() => navigate('/configure/facility')}>
-            Discard changes
+            Close
           </Button>
-          <Button variant="primary">Publish</Button>
+          <Button
+            variant="primary"
+            disabled={!isDraft || publishMutation.isPending || saveMutation.isPending}
+            onClick={() => publishMutation.mutate()}
+          >
+            Publish
+          </Button>
         </div>
       </header>
 
@@ -325,8 +537,13 @@ export function MapEditorPage() {
             </>
           ) : (
             <>
-              <Button variant="ghost" size="sm">
-                <Icon name="save" size={14} /> Save
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!isDraft || saveMutation.isPending}
+                onClick={() => saveMutation.mutate()}
+              >
+                <Icon name="save" size={14} /> {saveMutation.isPending ? 'Saving…' : 'Save'}
               </Button>
               <Button variant="ghost" size="sm">
                 <Icon name="more" size={14} /> More
@@ -363,14 +580,22 @@ export function MapEditorPage() {
             zones={zones}
             edges={edges}
             endpoints={endpoints}
+            bounds={mapBounds}
+            occupancyImageUrl={occupancyUrl}
             layers={{ robots: false, occupancy: false, legendOpen: true }}
             labels={activeTool === 'endpoints' ? 'all' : 'focus'}
             emphasis={activeTool === 'endpoints' ? ['endpoints'] : activeTool === 'traffic' ? ['zones', 'edges'] : []}
             selected={{ zoneId: selectedZone?.id, edgeId: selectedEdge?.id, endpointId: selectedEndpoint?.id }}
-            onZoneClick={!picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'zone', zoneId: id }) : undefined}
-            onEdgeClick={!picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'edge', edgeId: id }) : undefined}
+            onZoneClick={
+              isDraft && !picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'zone', zoneId: id }) : undefined
+            }
+            onEdgeClick={
+              isDraft && !picking && activeTool === 'traffic' ? (id) => setMode({ kind: 'edge', edgeId: id }) : undefined
+            }
             onEndpointClick={
-              !picking && activeTool === 'endpoints' ? (id) => setMode({ kind: 'endpoint', endpointId: id }) : undefined
+              isDraft && !picking && activeTool === 'endpoints'
+                ? (id) => setMode({ kind: 'endpoint', endpointId: id })
+                : undefined
             }
             onBackgroundClick={handleMapClick}
             drawing={mode.kind === 'drawingEdge' ? { points: mode.points, direction: mode.direction } : undefined}
