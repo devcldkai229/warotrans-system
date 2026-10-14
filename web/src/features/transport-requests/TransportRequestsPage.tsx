@@ -1,13 +1,13 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import type { Endpoint, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
+import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
-import { getMapVersionDetail } from '@/shared/api/navigation'
 import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
-import { boundsFromMapMeta } from '@/shared/map/mapBounds'
+import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
+import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
@@ -131,23 +131,30 @@ export function TransportRequestsPage() {
 
   const selectedJob = selected?.jobs.find((job) => job.jobNo === selectedJobNo) ?? null
 
-  const mapVersionId = selected
-    ? detailQuery.data?.mapVersionId
-    : requests[0]
+  const preferredWarehouseId =
+    selected?.warehouseId ??
+    (requests[0] ? listQuery.data?.items.find((item) => item.id === requests[0]?.id)?.warehouseId : null) ??
+    null
+  const preferredMapVersionId =
+    (selected && detailQuery.data?.id === selected.id
+      ? detailQuery.data.mapVersionId
+      : null) ??
+    (requests[0]
       ? listQuery.data?.items.find((item) => item.id === requests[0]?.id)?.mapVersionId
-      : undefined
+      : null) ??
+    null
 
-  const mapDetailQuery = useQuery({
-    queryKey: ['navigation', 'map-detail', mapVersionId],
-    queryFn: () => getMapVersionDetail(mapVersionId!),
-    enabled: Boolean(mapVersionId) && !composing,
+  const monitorMap = useMonitorMapVersion({
+    preferredWarehouseId,
+    preferredMapVersionId,
+    enabled: !composing,
   })
 
   const robotsQuery = useQuery({
-    queryKey: ['fleet', 'robots', selected?.warehouseId],
+    queryKey: ['fleet', 'robots', monitorMap.warehouseId || selected?.warehouseId],
     queryFn: () =>
       listRobots({
-        warehouseId: selected?.warehouseId,
+        warehouseId: monitorMap.warehouseId || selected?.warehouseId,
         take: 100,
       }),
     enabled: !composing,
@@ -166,35 +173,8 @@ export function TransportRequestsPage() {
     return map
   }, [requests])
 
-  const mapEndpoints: Endpoint[] = useMemo(() => {
-    const items = mapDetailQuery.data?.endpoints ?? []
-    return items.map((item) => ({
-      id: item.id,
-      mapVersionId: item.mapVersionId,
-      code: item.code,
-      name: item.name,
-      endpointType: item.endpointType as Endpoint['endpointType'],
-      x: item.x,
-      y: item.y,
-      yaw: item.yaw,
-      positionTolerance: item.positionTolerance,
-      yawTolerance: item.yawTolerance,
-      isEnabled: item.isEnabled,
-    }))
-  }, [mapDetailQuery.data])
-
-  const mapBounds = useMemo(() => {
-    const version = mapDetailQuery.data
-    if (!version || version.imageWidthPixels <= 0 || version.imageHeightPixels <= 0) return undefined
-    return boundsFromMapMeta({
-      resolution: version.resolution,
-      originX: version.originX,
-      originY: version.originY,
-      originYaw: version.originYaw,
-      imageWidthPixels: version.imageWidthPixels,
-      imageHeightPixels: version.imageHeightPixels,
-    })
-  }, [mapDetailQuery.data])
+  const mapEndpoints = monitorMap.geometry.endpoints
+  const mapBounds = monitorMap.geometry.bounds
 
   const endpointById = useMemo(
     () => new Map(mapEndpoints.map((endpoint) => [endpoint.id, endpoint])),
@@ -367,8 +347,13 @@ export function TransportRequestsPage() {
 
       <section className="relative min-w-0 overflow-hidden rounded-lg bg-container">
         <WarehouseMap
+          zones={composing ? composerMap?.zones ?? [] : monitorMap.geometry.zones}
+          edges={composing ? composerMap?.edges ?? [] : monitorMap.geometry.edges}
           endpoints={composing ? composerMap?.endpoints ?? [] : mapEndpoints}
           bounds={composing ? composerMap?.bounds : mapBounds}
+          occupancyImageUrl={
+            composing ? composerMap?.occupancyImageUrl ?? null : monitorMap.geometry.occupancyImageUrl
+          }
           robots={composing ? [] : mapRobots}
           layers={{ occupancy: true }}
           labels="focus"
@@ -379,6 +364,18 @@ export function TransportRequestsPage() {
           uiInset={composing ? composerMap?.uiInset : undefined}
           onEndpointClick={composing ? composerMap?.onEndpointClick : undefined}
         />
+
+        {!composing ? (
+          <MapVersionToolbar
+            warehouses={monitorMap.warehouses}
+            warehouseId={monitorMap.warehouseId}
+            onWarehouseChange={monitorMap.setWarehouseId}
+            maps={monitorMap.maps}
+            mapVersionId={monitorMap.mapVersionId}
+            onMapVersionChange={monitorMap.setMapVersionId}
+            activeMapId={monitorMap.activeMapId}
+          />
+        ) : null}
 
         {composing ? (
           <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-float">

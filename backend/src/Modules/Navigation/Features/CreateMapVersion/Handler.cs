@@ -6,6 +6,7 @@ using WaroTrans.Navigation.Entities;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Features.Shared;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 using WaroTrans.Warehouse.Contracts;
 
 namespace WaroTrans.Navigation.Features.CreateMapVersion;
@@ -51,9 +52,15 @@ public sealed class CreateMapVersionHandler(
             VersionNo = nextVersionNo,
             Name = request.Name.Trim(),
             Status = MapStatus.DRAFT,
-            MapUri = request.MapUri.Trim(),
-            MapYamlUri = request.MapYamlUri?.Trim(),
-            PreviewImageUri = request.PreviewImageUri?.Trim(),
+            MapUri = string.IsNullOrWhiteSpace(request.MapUri)
+                ? PendingMapAssetUris.MapUri
+                : request.MapUri.Trim(),
+            MapYamlUri = string.IsNullOrWhiteSpace(request.MapYamlUri)
+                ? PendingMapAssetUris.MapYamlUri
+                : request.MapYamlUri.Trim(),
+            PreviewImageUri = string.IsNullOrWhiteSpace(request.PreviewImageUri)
+                ? PendingMapAssetUris.PreviewImageUri
+                : request.PreviewImageUri.Trim(),
             FrameId = string.IsNullOrWhiteSpace(request.FrameId) ? "map" : request.FrameId.Trim(),
             ImageWidthPixels = request.ImageWidthPixels ?? 0,
             ImageHeightPixels = request.ImageHeightPixels ?? 0,

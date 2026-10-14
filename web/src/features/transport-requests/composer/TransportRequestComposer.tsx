@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/shared/api/client'
-import type { Endpoint } from '@/shared/api/contracts'
+import type { Edge, Endpoint, Zone } from '@/shared/api/contracts'
 import { getMapVersionDetail } from '@/shared/api/navigation'
 import type { MapBounds } from '@/shared/lib/mapView'
-import { boundsFromMapMeta } from '@/shared/map/mapBounds'
+import { mapDetailToGeometry } from '@/shared/map/mapVersionGeometry'
 import type { MapCallout, MapMovement } from '@/shared/map/WarehouseMap'
 import { MovementBuilderPanel } from './MovementBuilderPanel'
 import { RequestSetupPanel } from './RequestSetupPanel'
@@ -27,7 +27,10 @@ export interface ComposerMapState {
   onEndpointClick?: (id: string) => void
   pickHint: string | null
   endpoints: Endpoint[]
+  edges: Edge[]
+  zones: Zone[]
   bounds: MapBounds | undefined
+  occupancyImageUrl: string | null
 }
 
 interface TransportRequestComposerProps {
@@ -63,18 +66,7 @@ export function TransportRequestComposer({
     enabled: Boolean(draft.mapVersionId),
   })
 
-  const composerBounds = useMemo(() => {
-    const version = mapMetaQuery.data
-    if (!version || version.imageWidthPixels <= 0 || version.imageHeightPixels <= 0) return undefined
-    return boundsFromMapMeta({
-      resolution: version.resolution,
-      originX: version.originX,
-      originY: version.originY,
-      originYaw: version.originYaw,
-      imageWidthPixels: version.imageWidthPixels,
-      imageHeightPixels: version.imageHeightPixels,
-    })
-  }, [mapMetaQuery.data])
+  const composerGeometry = useMemo(() => mapDetailToGeometry(mapMetaQuery.data), [mapMetaQuery.data])
 
   const preview = useMemo(
     () => buildComposerMapPreview(draft, data.endpoints, activeMovementId),
@@ -124,10 +116,21 @@ export function TransportRequestComposer({
       pickHint: mapPickTarget
         ? `Click an endpoint on the map to set ${mapPickTarget}`
         : null,
-      endpoints: data.endpoints,
-      bounds: composerBounds,
+      endpoints: data.endpoints.length ? data.endpoints : composerGeometry.endpoints,
+      edges: composerGeometry.edges,
+      zones: composerGeometry.zones,
+      bounds: composerGeometry.bounds,
+      occupancyImageUrl: composerGeometry.occupancyImageUrl,
     })
-  }, [preview, showPanel2, mapPickTarget, handleEndpointClick, onMapState, data.endpoints, composerBounds])
+  }, [
+    preview,
+    showPanel2,
+    mapPickTarget,
+    handleEndpointClick,
+    onMapState,
+    data.endpoints,
+    composerGeometry,
+  ])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

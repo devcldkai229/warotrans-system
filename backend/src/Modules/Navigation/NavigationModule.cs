@@ -37,6 +37,9 @@ public static class NavigationModule
         services.AddDbContext<NavigationDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("PostgreSQL")));
 
+        services.Configure<MapAssetStorageOptions>(
+            configuration.GetSection(MapAssetStorageOptions.SectionName));
+
         services.AddValidatorsFromAssembly(typeof(NavigationModule).Assembly);
 
         services.AddScoped<CreateMapVersionHandler>();
@@ -58,11 +61,26 @@ public static class NavigationModule
         services.AddScoped<UpdateZoneHandler>();
         services.AddScoped<DeleteZoneHandler>();
         services.AddScoped<ImportMapVersionHandler>();
-        services.AddSingleton<IMapAssetStore, LocalMapAssetStore>();
+        RegisterMapAssetStore(services, configuration);
 
         services.AddScoped<INavigationModule, NavigationModuleApi>();
 
         return services;
+    }
+
+    private static void RegisterMapAssetStore(IServiceCollection services, IConfiguration configuration)
+    {
+        var provider = configuration.GetSection(MapAssetStorageOptions.SectionName).GetValue<string>("Provider")
+            ?? "Local";
+
+        if (string.Equals(provider, "S3", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<IMapAssetStore, S3MapAssetStore>();
+        }
+        else
+        {
+            services.AddSingleton<IMapAssetStore, LocalMapAssetStore>();
+        }
     }
 
     public static IEndpointRouteBuilder MapNavigationEndpoints(this IEndpointRouteBuilder endpoints)
