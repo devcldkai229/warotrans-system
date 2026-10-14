@@ -161,6 +161,10 @@ export interface ListAccountsResponse {
 
 /* --------------------------------------------------------------------- Fleet */
 
+export type NavigationStatus = 'IDLE' | 'NAVIGATING' | 'PAUSED' | 'SUCCEEDED' | 'FAILED' | 'CANCELED'
+export type LocalizationStatus = 'LOCALIZED' | 'LOST' | 'UNKNOWN'
+
+/** Mirrors Fleet `RobotResponse` from GET /api/fleet/robots. */
 export interface Robot {
   id: string
   warehouseId: string
@@ -168,13 +172,24 @@ export interface Robot {
   code: string
   name: string
   status: RobotStatus
+  isOnline: boolean
   batteryPercent: number
   /** Map coordinates in metres (same frame as Endpoint.x / Endpoint.y). */
   poseX: number
   poseY: number
   poseYaw: number
   lastHeartbeatAt: string | null
+  lastTelemetryAt?: string | null
+  navigationStatus?: NavigationStatus | null
+  localizationStatus?: LocalizationStatus | null
+  linearVelocity?: number | null
+  angularVelocity?: number | null
+  errorCode?: string | null
+  mapVersionCode?: string | null
+  currentCommandId?: string | null
   isEnabled: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 /** The Job a Robot is working on, joined from JobAssignment. TODO(backend): needs a fleet read endpoint. */

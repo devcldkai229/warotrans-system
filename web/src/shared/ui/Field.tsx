@@ -52,9 +52,9 @@ export function SearchInput({ value, onChange, placeholder, tone = 'tonal', auto
         className,
       )}
     >
-      <Icon name="search" size={15} />
+      <Icon name="search" size={15} className="shrink-0" />
       <input
-        className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+        className="m-0 h-full min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-sm leading-none text-ink shadow-none outline-none placeholder:text-muted"
         placeholder={placeholder}
         aria-label={placeholder ?? 'Search'}
         value={value}
