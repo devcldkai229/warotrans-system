@@ -105,6 +105,9 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       const job = sp.get('job');
       if (job) initialParams.jobId = job;
 
+      const workflow = sp.get('workflow');
+      if (workflow) initialParams.workflow = workflow;
+
       if (mapped) {
         let activeTab: MainTab = 'home';
         if (isMainTabScreen(mapped)) {
