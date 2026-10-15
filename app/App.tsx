@@ -13,6 +13,7 @@ import { Wifi } from 'lucide-react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/app/navigation/AppNavigator';
 import { NavigationProvider } from './src/app/navigation/NavigationContext';
+import { QueryProvider } from './src/app/providers/QueryProvider';
 import { AuthProvider } from './src/features/auth/authContext';
 import { SafetyHoldProvider } from './src/shared/context/SafetyHoldContext';
 import { ToastProvider } from './src/shared/context/ToastContext';
@@ -254,22 +255,24 @@ export default function App() {
   // letterboxes; each screen opts into the inset it needs.
   const content = (
     <SafeAreaProvider>
-      <View style={styles.appContainer}>
-        <StatusBar style="dark" />
-        <AuthProvider>
-          <NavigationProvider>
-            <ToastProvider>
-              {/* Fleet-wide soft pause: read by the header shield, the safety
-                  sheet and the Transport hub, so it has to sit above all three. */}
-              <SafetyHoldProvider>
-                <RealtimeProvider>
-                  <AppNavigator />
-                </RealtimeProvider>
-              </SafetyHoldProvider>
-            </ToastProvider>
-          </NavigationProvider>
-        </AuthProvider>
-      </View>
+      <QueryProvider>
+        <View style={styles.appContainer}>
+          <StatusBar style="dark" />
+          <AuthProvider>
+            <NavigationProvider>
+              <ToastProvider>
+                {/* Fleet-wide soft pause: read by the header shield, the safety
+                    sheet and the Transport hub, so it has to sit above all three. */}
+                <SafetyHoldProvider>
+                  <RealtimeProvider>
+                    <AppNavigator />
+                  </RealtimeProvider>
+                </SafetyHoldProvider>
+              </ToastProvider>
+            </NavigationProvider>
+          </AuthProvider>
+        </View>
+      </QueryProvider>
     </SafeAreaProvider>
   );
 
