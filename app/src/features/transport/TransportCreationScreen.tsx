@@ -43,7 +43,7 @@ import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
 import { WorkflowTemplateCard } from './WorkflowTemplateCard';
 
 interface SlotItem {
-  slotNo: 1 | 2 | 3;
+  slotNo: number;
   container: string;
   product: string;
   source: string;
@@ -162,14 +162,17 @@ export function TransportCreationScreen() {
   };
 
   const handleAddSlot = () => {
-    if (slots.length >= 3) return;
-    const nextSlotNo = (slots.length + 1) as 1 | 2 | 3;
+    if (slots.length >= 10) {
+      toast.warning('Maximum 10 containers allowed per dispatch mission.');
+      return;
+    }
+    const nextSlotNo = slots.length + 1;
     const preset = PRESET_PRODUCTS[(nextSlotNo - 1) % PRESET_PRODUCTS.length];
     setSlots([
       ...slots,
       {
         slotNo: nextSlotNo,
-        container: `BOX-10${nextSlotNo}`,
+        container: `BOX-${100 + nextSlotNo}`,
         product: preset.name,
         source: selectedWorkflow.id === 'inbound' ? 'DOCK-IN-01' : preset.source,
         destination: preset.destination,
@@ -183,7 +186,7 @@ export function TransportCreationScreen() {
     if (slots.length <= 1) return;
     const filtered = slots
       .filter((_, i) => i !== index)
-      .map((s, idx) => ({ ...s, slotNo: (idx + 1) as 1 | 2 | 3 }));
+      .map((s, idx) => ({ ...s, slotNo: idx + 1 }));
     setSlots(filtered);
     setActiveSlotIdx(Math.max(0, index - 1));
   };
@@ -380,23 +383,32 @@ export function TransportCreationScreen() {
               </Text>
             </View>
 
-            {/* Flatbed 3-Slot Selector */}
+            {/* Dynamic Mission Manifest & Capacity Indicator */}
             <View style={styles.deckCard}>
               <View style={styles.deckHeader}>
                 <View style={styles.deckHeaderLeft}>
                   <Layers size={16} color={colors.primary} />
-                  <Text variant="bodyMedium" style={styles.deckTitle}>
-                    AMR Flatbed 3-Slot Payload
-                  </Text>
+                  <View>
+                    <Text variant="bodyMedium" style={styles.deckTitle}>
+                      Mission Manifest ({slots.length} {slots.length === 1 ? 'Tote' : 'Totes'})
+                    </Text>
+                    <Text variant="caption" color={colors.textSecondary}>
+                      Estimated: {Math.ceil(slots.length / 2)} AMR {Math.ceil(slots.length / 2) === 1 ? 'Mission' : 'Missions'} (Carrier Cap: 2 Totes/Mission)
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.deckSlotsBadge}>
                   <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                    {slots.length} / 3 Trays Active
+                    {slots.length} Totes
                   </Text>
                 </View>
               </View>
 
-              <View style={styles.slotsSelectorRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.slotsSelectorRow}
+              >
                 {slots.map((s, idx) => {
                   const isActive = activeSlotIdx === idx;
                   return (
@@ -413,7 +425,7 @@ export function TransportCreationScreen() {
                         color={isActive ? colors.textPrimary : colors.textMuted}
                         style={[styles.slotTabLabel, isActive && styles.slotTabLabelActive]}
                       >
-                        Slot {s.slotNo}
+                        Tote #{s.slotNo}
                       </Text>
                       <Text
                         variant="caption"
@@ -426,7 +438,7 @@ export function TransportCreationScreen() {
                   );
                 })}
 
-                {slots.length < 3 && (
+                {slots.length < 10 && (
                   <Pressable onPress={handleAddSlot} style={styles.addSlotBtn}>
                     <Plus size={15} color={colors.primary} />
                     <Text variant="caption" color={colors.primary} style={styles.addSlotText}>
@@ -434,20 +446,20 @@ export function TransportCreationScreen() {
                     </Text>
                   </Pressable>
                 )}
-              </View>
+              </ScrollView>
             </View>
 
             {/* Active Slot Configuration Card */}
             <View style={styles.configCard}>
               <View style={styles.slotConfigHeader}>
                 <Text variant="headline" style={styles.slotConfigTitle}>
-                  Configuring Tray Slot {currentSlot.slotNo}
+                  Configuring Tote #{currentSlot.slotNo}
                 </Text>
                 {slots.length > 1 && (
                   <Pressable
                     onPress={() => handleRemoveSlot(activeSlotIdx)}
                     style={styles.deleteSlotBtn}
-                    accessibilityLabel={`Remove Slot ${currentSlot.slotNo}`}
+                    accessibilityLabel={`Remove Tote #${currentSlot.slotNo}`}
                   >
                     <Trash2 size={16} color={colors.danger} />
                   </Pressable>

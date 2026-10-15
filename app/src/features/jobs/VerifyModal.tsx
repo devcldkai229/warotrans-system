@@ -211,9 +211,15 @@ export function VerifyModal({
                   <Text variant="title" style={styles.targetCode}>
                     {targetContainer}
                   </Text>
-                  <Text variant="bodyMedium" color={colors.textSecondary}>
-                    <Text style={styles.boldQty}>{quantity} × </Text>{productName}
-                  </Text>
+                  {productName ? (
+                    <Text variant="bodyMedium" color={colors.textSecondary}>
+                      {quantity ? <Text style={styles.boldQty}>{quantity} × </Text> : null}{productName}
+                    </Text>
+                  ) : (
+                    <Text variant="caption" color={colors.textSecondary}>
+                      Container Barcode
+                    </Text>
+                  )}
                 </View>
               </View>
 

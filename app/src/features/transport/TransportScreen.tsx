@@ -352,7 +352,7 @@ export function TransportScreen() {
 
             <View style={styles.safetyDivider} />
 
-            {/* Block Path Report */}
+            {/* Corridor Hazard Report */}
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
@@ -360,12 +360,12 @@ export function TransportScreen() {
               }}
               style={({ pressed }) => [styles.safetyStripBtn, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel="Report blocked aisle"
+              accessibilityLabel="Report corridor hazard"
             >
               <AlertOctagon size={18} color={colors.dangerText} strokeWidth={2} />
               <View style={styles.safetyStripTextCol}>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={styles.safetyBtnTitle}>
-                  Block Path
+                  Report Hazard
                 </Text>
               </View>
             </Pressable>

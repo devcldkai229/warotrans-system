@@ -62,16 +62,6 @@ export const WORKFLOWS: WorkflowItem[] = [
     tone: colors.primaryLight,
     badgeTone: colors.primary,
   },
-  {
-    id: 'block-path',
-    code: 'BLOCK_PATH_HAZARD',
-    name: 'Block Path Hazard',
-    category: 'SAFETY',
-    note: 'Report Blocked Aisle / Temporary Obstacle',
-    icon: 'octagon',
-    tone: colors.dangerBg,
-    badgeTone: colors.danger,
-  },
 ];
 
 export const WORKFLOW_TEMPLATES = WORKFLOWS;

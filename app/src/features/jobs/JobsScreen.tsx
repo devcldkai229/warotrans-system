@@ -1,6 +1,6 @@
 import { Filter, Inbox, MapPin, Search, SearchX, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { colors } from '../../shared/theme/colors';
@@ -14,9 +14,9 @@ import {
 } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { acceptHumanTask } from '../../shared/api';
+import { acceptHumanTask, listJobs } from '../../shared/api';
 import { JobCard } from './JobCard';
-import { AppJobItem, countMyActiveJobs, isTerminalJobStatus, MOCK_JOBS } from './jobData';
+import { AppJobItem, countMyActiveJobs, isTerminalJobStatus, mapJobDetailToAppJobItem, MOCK_JOBS } from './jobData';
 
 type JobScope = 'mine' | 'fleet' | 'history';
 
@@ -192,6 +192,34 @@ export function JobsScreen() {
   const [query, setQuery] = useState('');
   const [isZoneOnly, setIsZoneOnly] = useState(false);
   const [jobsList, setJobsList] = useState<AppJobItem[]>(MOCK_JOBS);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadJobs = React.useCallback(async () => {
+    try {
+      const res = await listJobs();
+      if (res && res.length > 0) {
+        const mapped = res.map(mapJobDetailToAppJobItem);
+        setJobsList((prev) => {
+          const liveIds = new Set(mapped.map((m) => m.id));
+          const existingRemaining = prev.filter((p) => !liveIds.has(p.id));
+          return [...mapped, ...existingRemaining];
+        });
+      }
+    } catch (err) {
+      console.warn('JobsScreen loadJobs error:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadJobs();
+  }, [loadJobs]);
+
+  const onRefresh = async () => {
+    triggerHaptic('tap');
+    setIsRefreshing(true);
+    await loadJobs();
+    setIsRefreshing(false);
+  };
 
   useEffect(() => {
     if (deepLinkedScope) setScope(deepLinkedScope);
@@ -377,6 +405,13 @@ export function JobsScreen() {
         contentContainerStyle={[styles.listContent, { paddingBottom: bottomInset }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
         ListEmptyComponent={
           <ListEmpty
             scope={scope}

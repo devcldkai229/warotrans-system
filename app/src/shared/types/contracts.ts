@@ -429,6 +429,118 @@ export interface WorkflowRequestInputSchemaDto {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Job Runtime Graph Contracts (PostgreSQL schema `workflow_execution`)        */
+/* Matching: Job, JobContainer, JobTask, JobStep, HandoverConfirmation        */
+/* -------------------------------------------------------------------------- */
+
+export interface JobContainerResponse {
+  id: string;
+  jobId?: string;
+  transportRequestId: string;
+  containerId: string;
+  sequenceNo: number;
+  status: JobContainerStatus;
+  loadedAt?: UtcDateTime | null;
+  deliveredAt?: UtcDateTime | null;
+  createdAt?: UtcDateTime;
+  updatedAt?: UtcDateTime;
+}
+
+export interface HandoverConfirmationResponse {
+  id: string;
+  jobStepId: string;
+  containerId: string;
+  confirmedBy: string;
+  handoverType: HandoverType;
+  confirmedAt: UtcDateTime;
+  note?: string | null;
+  evidence?: Record<string, unknown> | null;
+}
+
+export interface HandoverConfirmationBody {
+  containerId: string;
+  confirmedBy: string;
+  handoverType: HandoverType;
+  note?: string;
+  evidence?: Record<string, unknown>;
+}
+
+export interface JobStepResponse {
+  id: string;
+  jobTaskId: string;
+  workflowStepId: string;
+  workflowStepKey: string;
+  operationCode: string;
+  stepType: StepType;
+  sequenceNo: number;
+  status: JobStepStatus;
+  resolvedInputs?: Record<string, unknown>;
+  outputValues?: Record<string, unknown>;
+  targetEndpointId?: string | null;
+  startedAt?: UtcDateTime | null;
+  completedAt?: UtcDateTime | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  handoverConfirmation?: HandoverConfirmationResponse | null;
+}
+
+export interface JobTaskContextValues {
+  executionScope?: 'ONCE_PER_JOB' | 'ONCE_PER_STOP' | 'PER_CONTAINER_AT_STOP';
+  stopAction?: 'PICKUP' | 'DROPOFF';
+  stopEndpointId?: string;
+  stopSequenceNo?: number;
+  containerIds?: string[];
+  containerId?: string;
+  jobContainerId?: string;
+  transportRequestDetailId?: string;
+  [key: string]: unknown;
+}
+
+export interface JobTaskResponse {
+  id: string;
+  jobId: string;
+  workflowTaskId: string;
+  sequenceNo: number;
+  status: JobTaskStatus;
+  contextValues?: JobTaskContextValues;
+  startedAt?: UtcDateTime | null;
+  completedAt?: UtcDateTime | null;
+  failureCode?: string | null;
+  steps: JobStepResponse[];
+}
+
+export interface JobDetailResponse {
+  id: string;
+  jobNo: string;
+  workflowId: string;
+  mapVersionId: string;
+  provisioningKey: string;
+  status: JobStatus;
+  contextValues?: Record<string, unknown>;
+  createdAt: UtcDateTime;
+  queuedAt?: UtcDateTime | null;
+  startedAt?: UtcDateTime | null;
+  completedAt?: UtcDateTime | null;
+  failureCode?: string | null;
+  failureMessage?: string | null;
+  containers: JobContainerResponse[];
+  tasks: JobTaskResponse[];
+}
+
+export interface ReportTaskProblemBody {
+  reason: string;
+  note?: string;
+  evidence?: Record<string, unknown>;
+}
+
+export interface ReportTaskProblemResponse {
+  reportId: string;
+  jobTaskId: string;
+  status: string;
+  reportedAt: UtcDateTime;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Transportation                                                              */
 /* -------------------------------------------------------------------------- */
 
@@ -572,6 +684,9 @@ export interface RobotSummary {
   assignedJobNo?: string;
 }
 
+/**
+ * @deprecated Phase 0 rigid 3-slot model. Use `JobContainerResponse` or dynamic `AmrCargoBayVisualizer`.
+ */
 export interface ContainerSlot {
   slotNo: 1 | 2 | 3;
   slotLabel: 'Slot 1 (Front)' | 'Slot 2 (Mid)' | 'Slot 3 (Rear)';

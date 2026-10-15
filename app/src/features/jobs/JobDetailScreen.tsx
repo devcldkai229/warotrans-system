@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -36,12 +36,12 @@ import { toast } from '../../shared/context/ToastContext';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { Button, Card, ProgressMeter, StatusPill, Text } from '../../shared/ui';
-import { AmrChassisDeckVisualizer } from './AmrChassisDeckVisualizer';
+import { AmrCargoBayVisualizer } from './AmrCargoBayVisualizer';
 import { JobStepper } from './JobStepper';
-import { AppJobItem, JOB_STATUS_PRESENTATION, MOCK_JOBS } from './jobData';
+import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, MOCK_JOBS } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
-import { reportTaskProblem } from '../../shared/api';
+import { getJobDetail, reportTaskProblem } from '../../shared/api';
 
 export function JobDetailScreen() {
   const { navigate, goBack, params } = useNavigation();
@@ -64,7 +64,25 @@ export function JobDetailScreen() {
   const { isHolding, toggleHold } = useSafetyHold();
 
   const jobId = params?.jobId || 'JOB-2026-0812';
-  const job = MOCK_JOBS.find((j) => j.id === jobId) || MOCK_JOBS[0];
+  const [job, setJob] = useState<AppJobItem>(() => {
+    return MOCK_JOBS.find((j) => j.id === jobId) || MOCK_JOBS[0];
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    getJobDetail(jobId)
+      .then((res) => {
+        if (isMounted && res) {
+          setJob(mapJobDetailToAppJobItem(res));
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch job detail:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [jobId]);
 
   const targetContainers =
     job.containers?.filter((c) => c.action === 'UNLOAD' || c.action === 'PICKUP') || [];
@@ -429,14 +447,20 @@ export function JobDetailScreen() {
           </Card>
         )}
 
-        {/* Chassis Deck Visualizer (3 Trays) */}
-        <AmrChassisDeckVisualizer
-          containers={job.containers}
-          slots={job.slots}
+        {/* Dynamic AMR Cargo Bay Visualizer */}
+        <AmrCargoBayVisualizer
+          containers={job.containers?.map((c, idx) => ({
+            code: c.code,
+            sequenceNo: idx + 1,
+            status: c.action === 'DELIVERED' ? 'DELIVERED' : 'ONBOARD',
+            action: c.action,
+            location: c.location,
+            isTarget: c.code === primaryTarget?.code,
+          }))}
           targetCode={primaryTarget?.code}
           isWaiting={isWaiting}
-          robotId={job.robot}
-          onSelectSlot={(code) => handleOpenVerify(code)}
+          robotCode={job.assignedRobotCode || job.robot}
+          onSelectContainer={(code) => handleOpenVerify(code)}
         />
 
         {/* Stepper Itinerary */}

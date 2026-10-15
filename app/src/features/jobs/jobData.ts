@@ -1,4 +1,4 @@
-import { ContainerSlot, JobStatus, JobStepSummary, JobSummary, WorkflowCode } from '../../shared/types/contracts';
+import { ContainerSlot, JobDetailResponse, JobStatus, JobStepSummary, JobSummary, WorkflowCode } from '../../shared/types/contracts';
 import { SemanticTone } from '../../shared/theme/colors';
 
 export interface JobStopStep {
@@ -111,6 +111,65 @@ export const JOB_STATUS_PRESENTATION: Record<JobStatus, JobStatusPresentation> =
  */
 export function countMyActiveJobs(): number {
   return MOCK_JOBS.filter((job) => job.isMine && !isTerminalJobStatus(job.status)).length;
+}
+
+/**
+ * Transforms a Backend JobDetailResponse into an AppJobItem presentation model.
+ */
+export function mapJobDetailToAppJobItem(detail: JobDetailResponse): AppJobItem {
+  const robotCode = (detail.contextValues?.assignedRobotCode as string) || 'AMR-01';
+  const sourceCode = (detail.contextValues?.sourceEndpointCode as string) || 'Dock 01';
+  const destCode = (detail.contextValues?.destinationEndpointCode as string) || 'Storage Rack A-02';
+
+  const containers: JobContainerItem[] = detail.containers.map((c, idx) => ({
+    code: c.containerId,
+    slot: `Bay ${c.sequenceNo || idx + 1}`,
+    action: c.status === 'DELIVERED' ? 'DELIVERED' : c.status === 'ONBOARD' ? 'KEEP ONBOARD' : 'PICKUP',
+    location: destCode,
+    product: 'Warehouse Tote',
+    qty: 1,
+  }));
+
+  const steps: JobStepSummary[] = detail.tasks.flatMap((t) =>
+    t.steps.map((s) => ({
+      sequenceNo: s.sequenceNo,
+      type: s.stepType,
+      title: s.workflowStepKey || s.operationCode,
+      description: s.operationCode,
+      status: s.status,
+      targetEndpointCode: s.targetEndpointId || undefined,
+    }))
+  );
+
+  return {
+    id: detail.id,
+    jobNo: detail.jobNo,
+    workflowCode: 'INBOUND_PUTAWAY',
+    workflowName: 'Inbound Putaway',
+    status: detail.status,
+    assignedRobotCode: robotCode,
+    sourceEndpointCode: sourceCode,
+    destinationEndpointCode: destCode,
+    containerCount: detail.containers.length,
+    slots: [],
+    steps,
+    createdAtUtc: detail.createdAt,
+    target: destCode,
+    route: `${sourceCode} ➔ ${destCode}`,
+    robot: robotCode,
+    isMine: detail.status === 'ASSIGNED' || detail.status === 'RUNNING',
+    battery: '85%',
+    speed: detail.status === 'RUNNING' ? '0.8 m/s' : '0.0 m/s',
+    currentStop: sourceCode,
+    stopsCount: 2,
+    routeText: `${sourceCode} ➔ ${destCode}`,
+    payloadSummary: `${detail.containers.length} Totes (${detail.containers.map((c) => c.containerId).join(', ')})`,
+    containers,
+    stopsList: [
+      { id: 1, name: sourceCode, description: 'Pickup Container', state: 'done' },
+      { id: 2, name: destCode, description: 'Dropoff Container', state: 'active' },
+    ],
+  };
 }
 
 export const MOCK_JOBS: AppJobItem[] = [

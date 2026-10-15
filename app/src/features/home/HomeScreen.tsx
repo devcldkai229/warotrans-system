@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   LayoutAnimation,
   Platform,
@@ -28,7 +28,8 @@ import {
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime } from '../../shared/realtime';
-import { MOCK_JOBS } from '../jobs/jobData';
+import { listJobs } from '../../shared/api';
+import { AppJobItem, mapJobDetailToAppJobItem, MOCK_JOBS } from '../jobs/jobData';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -56,13 +57,7 @@ const INITIAL_ROBOTS: MapRobot[] = [
   },
 ];
 
-const NEXT_JOB_ID = 'JOB-2026-0812';
-const NEXT_JOB = MOCK_JOBS.find((job) => job.id === NEXT_JOB_ID) ?? MOCK_JOBS[0];
-const NEXT_JOB_CONTAINER = NEXT_JOB.containers[0] ?? {
-  code: 'BOX-101',
-  product: 'Electronics',
-  qty: 12,
-};
+const INITIAL_JOB = MOCK_JOBS.find((job) => job.id === 'JOB-2026-0812') ?? MOCK_JOBS[0];
 
 /**
  * Modern "Command Center" HomeScreen.
@@ -79,7 +74,22 @@ export function HomeScreen() {
   const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
+  const [activeJob, setActiveJob] = useState<AppJobItem>(INITIAL_JOB);
   const { robotTelemetry } = useRealtime();
+
+  useEffect(() => {
+    let isMounted = true;
+    listJobs({ status: 'ASSIGNED' })
+      .then((jobs) => {
+        if (isMounted && jobs && jobs.length > 0) {
+          setActiveJob(mapJobDetailToAppJobItem(jobs[0]));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const robots = useMemo(() => {
     return INITIAL_ROBOTS.map((r) => {
@@ -119,7 +129,7 @@ export function HomeScreen() {
 
   const handleStartHandover = () => {
     triggerHaptic('tap');
-    navigate('job_detail', { jobId: NEXT_JOB.id });
+    navigate('job_detail', { jobId: activeJob.id });
   };
 
   const handleLocateUser = () => {
@@ -174,18 +184,18 @@ export function HomeScreen() {
               onPress={toggleSheetExpand}
               style={styles.collapsedInfo}
               accessibilityRole="button"
-              accessibilityLabel={`Job ${NEXT_JOB.id}, waiting handover. Tap to view details.`}
+              accessibilityLabel={`Job ${activeJob.id}, waiting handover. Tap to view details.`}
             >
               <View style={styles.collapsedTopLine}>
-                <StatusPill status="ASSIGNED" label="Waiting Handover" size="sm" dot />
+                <StatusPill status={activeJob.status} label="Waiting Handover" size="sm" dot />
               </View>
               <View style={styles.collapsedBottomRow}>
                 <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.jobCode}>
-                  {NEXT_JOB.id}
+                  {activeJob.jobNo || activeJob.id}
                 </Text>
                 <Text variant="caption" color={colors.textMuted}>·</Text>
                 <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={styles.collapsedTarget}>
-                  <Text style={styles.boldText}>{NEXT_JOB.target || 'Rack A · Level 2'}</Text> · <Text style={styles.boldMono}>{NEXT_JOB.robot || 'AMR-01'}</Text>
+                  <Text style={styles.boldText}>{activeJob.target || 'Rack A · Level 2'}</Text> · <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text>
                 </Text>
               </View>
             </Pressable>
@@ -215,7 +225,7 @@ export function HomeScreen() {
           <>
             {/* Top row: Status pill + Action controls */}
             <View style={styles.expandedTopBar}>
-              <StatusPill status="ASSIGNED" label="Waiting Handover" size="sm" dot />
+              <StatusPill status={activeJob.status} label="Waiting Handover" size="sm" dot />
 
               <View style={styles.expandedHeaderActions}>
                 <Pressable
@@ -247,7 +257,7 @@ export function HomeScreen() {
 
             {/* Second row: Job ID with full breathing room */}
             <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.jobCode}>
-              {NEXT_JOB.id}
+              {activeJob.jobNo || activeJob.id}
             </Text>
 
             {/* Task Details Inset Box */}
@@ -255,26 +265,27 @@ export function HomeScreen() {
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Target</Text>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={[styles.detailValue, styles.targetValue]}>
-                  {NEXT_JOB.target || 'Rack A · Level 2 · Bin 03'}
+                  {activeJob.target || 'Rack A · Level 2 · Bin 03'}
                 </Text>
               </View>
 
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Cargo</Text>
                 <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
-                  <Text style={styles.boldMono}>{NEXT_JOB_CONTAINER.code}</Text> · {NEXT_JOB_CONTAINER.product || 'Electronics'} · <Text style={styles.boldText}>{NEXT_JOB_CONTAINER.qty} pcs</Text>
+                  <Text style={styles.boldMono}>{activeJob.containers[0]?.code || 'BOX-101'}</Text>
+                  {activeJob.containers.length > 1 ? ` (+${activeJob.containers.length - 1} more totes)` : ''}
                 </Text>
               </View>
 
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Assigned</Text>
                 <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
-                  <Text style={styles.boldMono}>{NEXT_JOB.robot || 'AMR-01'}</Text> · At Station (0m)
+                  <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text> · At Station (0m)
                 </Text>
               </View>
 
               <ProgressMeter
-                value={NEXT_JOB.progressPercent ?? 68}
+                value={activeJob.progressPercent ?? 68}
                 tone="warning"
                 style={styles.meter}
                 accessibilityLabel="Handover progress 68 percent"
