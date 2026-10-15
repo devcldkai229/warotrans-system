@@ -33,6 +33,53 @@ public sealed class TransportRequest
     public ICollection<TransportRequestDetail> Details { get; set; } = [];
 
     /// <summary>
+    /// Re-aggregates the Request status from its Detail lines (rules/02):
+    /// all COMPLETED → COMPLETED; all FAILED → FAILED; some COMPLETED (or FAILED) with others still open or
+    /// FAILED → PARTIALLY_COMPLETED; any IN_PROGRESS → IN_PROGRESS. CANCELLED / REJECTED requests are not touched.
+    /// </summary>
+    public void ApplyDetailProgress(DateTimeOffset now)
+    {
+        if (Status is TransportRequestStatus.CANCELLED or TransportRequestStatus.REJECTED || Details.Count == 0)
+        {
+            return;
+        }
+
+        var statuses = Details.Select(d => d.Status).ToList();
+        bool All(TransportRequestDetailStatus s) => statuses.All(x => x == s);
+        bool Any(TransportRequestDetailStatus s) => statuses.Contains(s);
+
+        var next = Status;
+        if (All(TransportRequestDetailStatus.COMPLETED))
+        {
+            next = TransportRequestStatus.COMPLETED;
+        }
+        else if (All(TransportRequestDetailStatus.FAILED))
+        {
+            next = TransportRequestStatus.FAILED;
+        }
+        else if (Any(TransportRequestDetailStatus.COMPLETED) || Any(TransportRequestDetailStatus.FAILED))
+        {
+            next = TransportRequestStatus.PARTIALLY_COMPLETED;
+        }
+        else if (Any(TransportRequestDetailStatus.IN_PROGRESS))
+        {
+            next = TransportRequestStatus.IN_PROGRESS;
+        }
+
+        if (next == Status)
+        {
+            return;
+        }
+
+        Status = next;
+        UpdatedAt = now;
+        if (next is TransportRequestStatus.COMPLETED or TransportRequestStatus.FAILED)
+        {
+            CompletedAt = now;
+        }
+    }
+
+    /// <summary>
     /// Creates a SUBMITTED request with PENDING Details. Ids are generated here so the
     /// execution snapshot carries the same ids that will be persisted.
     /// </summary>

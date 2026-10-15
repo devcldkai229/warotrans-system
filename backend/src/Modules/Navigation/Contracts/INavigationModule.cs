@@ -12,7 +12,19 @@ public interface INavigationModule
     Task<IReadOnlyList<EndpointSnapshot>> GetEndpointsAsync(
         IReadOnlyCollection<Guid> endpointIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Map-frame pose of an endpoint (where a robot must stop), or null when unknown.</summary>
+    Task<EndpointPoseSnapshot?> GetEndpointPoseAsync(Guid endpointId, CancellationToken cancellationToken = default);
 }
+
+public sealed record EndpointPoseSnapshot(
+    Guid Id,
+    Guid MapVersionId,
+    string Code,
+    double X,
+    double Y,
+    double Yaw,
+    bool IsEnabled);
 
 public sealed record MapVersionSnapshot(Guid Id, Guid WarehouseId, int VersionNo, MapStatus Status);
 

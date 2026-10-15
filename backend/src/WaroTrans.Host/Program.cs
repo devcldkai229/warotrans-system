@@ -8,6 +8,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using WaroTrans.BuildingBlocks;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Fleet;
@@ -21,6 +22,7 @@ using WaroTrans.Operations;
 using WaroTrans.Transportation;
 using WaroTrans.Warehouse;
 using WaroTrans.WorkflowExecution;
+using WaroTrans.WorkflowExecution.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -107,6 +109,8 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRobotRealtimeNotifier, SignalRRobotRealtimeNotifier>();
+builder.Services.AddScoped<IIntegrationEventHandler<JobStatusChanged>, SignalRJobRealtimeForwarder>();
+builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, SignalRJobRealtimeForwarder>();
 builder.Services.AddOpenApi();
 
 var postgresConnection = builder.Configuration.GetConnectionString("PostgreSQL")
