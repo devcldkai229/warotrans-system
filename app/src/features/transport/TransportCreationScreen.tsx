@@ -342,14 +342,9 @@ export function TransportCreationScreen() {
         {step === 1 && (
           <View style={{ gap: 14 }}>
             <View style={styles.workflowIntro}>
-              <View>
-                <Text variant="headline" style={styles.workflowIntroTitle}>
-                  Available Mission Templates
-                </Text>
-                <Text variant="caption" color={colors.textSecondary}>
-                  Choose a predefined orchestration pattern for autonomous AMR movement.
-                </Text>
-              </View>
+              <Text variant="headline" style={styles.workflowIntroTitle}>
+                Available Mission Templates
+              </Text>
             </View>
 
             <View style={styles.workflowGrid}>

@@ -84,9 +84,6 @@ export function WorkflowTemplateCard({
       <Text variant="bodyMedium" numberOfLines={1} style={styles.name}>
         {workflow.name}
       </Text>
-      <Text variant="caption" color={colors.textSecondary} numberOfLines={2} style={styles.note}>
-        {workflow.note}
-      </Text>
     </Pressable>
   );
 }
@@ -98,7 +95,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.lg,
     padding: 14,
-    minHeight: 124,
+    minHeight: 92,
     justifyContent: 'space-between',
     gap: 8,
     ...shadows.sm,
@@ -150,8 +147,5 @@ const styles = StyleSheet.create({
   },
   name: {
     fontWeight: '700',
-  },
-  note: {
-    lineHeight: 16,
   },
 });

@@ -468,7 +468,7 @@ export function TransportScreen() {
           </View>
         </View>
 
-        {/* 5. Transport History & Audit Trail Card */}
+        {/* 5. Dispatch History & Audit Log Card */}
         <Pressable
           onPress={() => {
             triggerHaptic('tap');
@@ -485,19 +485,12 @@ export function TransportScreen() {
             <View style={styles.historyIconWell}>
               <History size={18} color={colors.primaryText} />
             </View>
-            <View style={styles.historyTextCol}>
-              <View style={styles.historyHeadingRow}>
-                <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
-                  Dispatch History & Audit Log
-                </Text>
-                <View style={styles.recordsPill}>
-                  <Text variant="caption" color={colors.textSecondary} style={styles.recordsText}>
-                    8 records
-                  </Text>
-                </View>
-              </View>
-              <Text variant="caption" color={colors.textSecondary}>
-                Full telemetry archive & container chain of custody
+            <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
+              Dispatch History & Audit Log
+            </Text>
+            <View style={styles.recordsPill}>
+              <Text variant="caption" color={colors.textSecondary} style={styles.recordsText}>
+                8 records
               </Text>
             </View>
           </View>
@@ -521,16 +514,9 @@ export function TransportScreen() {
             <View style={styles.historyIconWell}>
               <Search size={18} color={colors.primaryText} />
             </View>
-            <View style={styles.historyTextCol}>
-              <View style={styles.historyHeadingRow}>
-                <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
-                  Inventory & SKU Catalog
-                </Text>
-              </View>
-              <Text variant="caption" color={colors.textSecondary}>
-                Search products, rack locations & dispatch transports
-              </Text>
-            </View>
+            <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
+              Inventory & SKU Catalog
+            </Text>
           </View>
           <ChevronRight size={16} color={colors.textMuted} />
         </Pressable>

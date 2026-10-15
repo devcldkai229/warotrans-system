@@ -82,6 +82,11 @@
     - `AppHeader.tsx`: Dynamic live notification count on the bell button.
     - `HomeScreen.tsx` & `MiniFacilityMap.tsx`: Live AMR battery percentage, speed, and heading orientation dynamically driven by backend telemetry.
     - `JobLiveMapScreen.tsx`: Real-time robot coordinates `(poseX, poseY)`, battery, and navigation state.
+- [x] **Phase 6: UI Streamlining & Calm Ergonomics (Removing Verbose Filler)**
+  - `TransportScreen.tsx`: Trimmed descriptive annotations from "Dispatch History & Audit Log" and "Inventory & SKU Catalog", converting them into streamlined, high-contrast navigation rows.
+  - `TransportCreationScreen.tsx`: Removed header subtitle under "Available Mission Templates" (*"Choose a predefined orchestration pattern for autonomous AMR movement."*).
+  - `WorkflowTemplateCard.tsx`: Removed individual workflow description notes (`workflow.note`) and compressed card height to a uniform 92px, transforming the 6 mission templates into punchy, modern action tiles without awkward text wrapping.
+  - System-wide UI Audit: Identified remaining verbose subtitles/filler copy across other screens (Hero buttons, Floor safety controls, Hazard categories, and Incident modals) to present for operator approval.
   - Zero TypeScript compiler errors (`npm run typecheck` passed).
 
 ## Workspace & Documentation Maintenance Rules
