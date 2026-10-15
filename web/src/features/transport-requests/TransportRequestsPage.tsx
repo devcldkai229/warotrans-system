@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
+import { listJobs, startJob, type JobSummaryDto } from '@/shared/api/jobs'
 import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
@@ -25,6 +26,7 @@ import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
 import { detailToView, listItemToView } from './mapTransportRequest'
 import { RequestDetailPanel } from './RequestDetailPanel'
+import { queueAndStart, runAgain } from './runOnRobot'
 
 function RequestCard({
   request,
@@ -81,6 +83,93 @@ function RequestCard({
   )
 }
 
+const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED']
+
+/**
+ * Run a request on a robot: SUBMITTED → queue (plan Jobs) → start the Job (backend picks the best free
+ * robot on the request's map) → open the live view, where the robot moves in step with Gazebo / the
+ * real robot and staff confirm each pickup / drop-off.
+ */
+function RunControls({ request, jobs }: { request: TransportRequestView; jobs: JobSummaryDto[] }) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['transport-requests'] }),
+      queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    ])
+
+  const run = useMutation({
+    mutationFn: () => queueAndStart(request.id),
+    onSuccess: async (jobId) => {
+      setError(null)
+      await refresh()
+      navigate(`/monitor/live/${jobId}`)
+    },
+    onError: async (err: Error) => {
+      setError(err.message)
+      await refresh()
+    },
+  })
+
+  const again = useMutation({
+    mutationFn: () => runAgain(request.id),
+    onSuccess: async ({ jobId }) => {
+      setError(null)
+      await refresh()
+      navigate(`/monitor/live/${jobId}`)
+    },
+    onError: async (err: Error) => {
+      setError(err.message)
+      await refresh()
+    },
+  })
+
+  const start = useMutation({
+    mutationFn: (jobId: string) => startJob(jobId).then(() => jobId),
+    onSuccess: async (jobId) => {
+      setError(null)
+      await refresh()
+      navigate(`/monitor/live/${jobId}`)
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
+  const busy = run.isPending || start.isPending || again.isPending
+  const finished = TERMINAL_REQUEST_STATUSES.includes(request.status) && request.status !== 'CANCELLED'
+  return (
+    <>
+      {finished ? (
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => again.mutate()}>
+          <Icon name="refresh" size={14} /> {again.isPending ? 'Starting…' : 'Run again on robot'}
+        </Button>
+      ) : null}
+      {request.status === 'SUBMITTED' && jobs.length === 0 ? (
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => run.mutate()}>
+          <Icon name="bolt" size={14} /> {run.isPending ? 'Starting…' : 'Run on robot'}
+        </Button>
+      ) : null}
+      {jobs.map((job) =>
+        job.status === 'CREATED' ? (
+          <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => start.mutate(job.id)}>
+            <Icon name="bolt" size={14} /> {start.isPending ? 'Starting…' : `Start ${job.jobNo} on robot`}
+          </Button>
+        ) : (
+          <Button key={job.id} variant="outline" size="sm" onClick={() => navigate(`/monitor/live/${job.id}`)}>
+            <Icon name="target" size={14} /> Watch {job.jobNo} live
+          </Button>
+        ),
+      )}
+      {request.status === 'SUBMITTED' && jobs.length === 0 ? (
+        <p className="text-xs text-muted">Plans the route, starts the best free robot on this map and opens the live view.</p>
+      ) : null}
+      {error ? <p className="text-xs text-red-ink">{error}</p> : null}
+    </>
+  )
+}
+
 export function TransportRequestsPage() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
@@ -119,9 +208,20 @@ export function TransportRequestsPage() {
     queryKey: ['transport-requests', 'detail', selectedId],
     queryFn: () => getTransportRequest(selectedId!),
     enabled: Boolean(selectedId) && !composing,
+    // Keep progress moving while the robot runs; stop polling once the request is finished.
+    refetchInterval: (q) =>
+      q.state.data && TERMINAL_REQUEST_STATUSES.includes(q.state.data.status as TransportRequestStatus) ? false : 3000,
   })
 
-  const selected = useMemo(() => {
+  const jobsQuery = useQuery({
+    queryKey: ['jobs', 'by-request', selectedId],
+    queryFn: () => listJobs({ transportRequestId: selectedId!, take: 20 }),
+    enabled: Boolean(selectedId) && !composing,
+    refetchInterval: 3000,
+  })
+  const requestJobs = useMemo(() => jobsQuery.data?.items ?? [], [jobsQuery.data])
+
+  const selectedBase = useMemo(() => {
     if (!selectedId) return null
     if (detailQuery.data?.id === selectedId) {
       return detailToView(detailQuery.data, workflowNameById)
@@ -129,14 +229,12 @@ export function TransportRequestsPage() {
     return requests.find((request) => request.id === selectedId) ?? null
   }, [selectedId, detailQuery.data, requests, workflowNameById])
 
-  const selectedJob = selected?.jobs.find((job) => job.jobNo === selectedJobNo) ?? null
-
   const preferredWarehouseId =
-    selected?.warehouseId ??
+    selectedBase?.warehouseId ??
     (requests[0] ? listQuery.data?.items.find((item) => item.id === requests[0]?.id)?.warehouseId : null) ??
     null
   const preferredMapVersionId =
-    (selected && detailQuery.data?.id === selected.id
+    (selectedBase && detailQuery.data?.id === selectedBase.id
       ? detailQuery.data.mapVersionId
       : null) ??
     (requests[0]
@@ -151,14 +249,30 @@ export function TransportRequestsPage() {
   })
 
   const robotsQuery = useQuery({
-    queryKey: ['fleet', 'robots', monitorMap.warehouseId || selected?.warehouseId],
+    queryKey: ['fleet', 'robots', monitorMap.warehouseId || selectedBase?.warehouseId],
     queryFn: () =>
       listRobots({
-        warehouseId: monitorMap.warehouseId || selected?.warehouseId,
+        warehouseId: monitorMap.warehouseId || selectedBase?.warehouseId,
         take: 100,
       }),
     enabled: !composing,
   })
+
+  // The selected request with its real Jobs (robot code resolved from the fleet list).
+  const selected = useMemo(() => {
+    if (!selectedBase) return null
+    const robotCodeById = new Map((robotsQuery.data?.items ?? []).map((robot) => [robot.id, robot.code]))
+    return {
+      ...selectedBase,
+      jobs: requestJobs.map((job) => ({
+        jobNo: job.jobNo,
+        status: job.status,
+        robotCode: job.assignedRobotId ? robotCodeById.get(job.assignedRobotId) ?? null : null,
+      })),
+    }
+  }, [selectedBase, requestJobs, robotsQuery.data])
+
+  const selectedJob = selected?.jobs.find((job) => job.jobNo === selectedJobNo) ?? null
 
   function selectRequest(id: string) {
     setSelectedId(selectedId === id ? null : id)
@@ -347,6 +461,7 @@ export function TransportRequestsPage() {
 
       <section className="relative min-w-0 overflow-hidden rounded-lg bg-container">
         <WarehouseMap
+          yawUnit="rad"
           zones={composing ? composerMap?.zones ?? [] : monitorMap.geometry.zones}
           edges={composing ? composerMap?.edges ?? [] : monitorMap.geometry.edges}
           endpoints={composing ? composerMap?.endpoints ?? [] : mapEndpoints}
@@ -395,6 +510,7 @@ export function TransportRequestsPage() {
                   selectedJobNo={selectedJobNo}
                   onSelectJob={(jobNo) => setSelectedJobNo(jobNo === selectedJobNo ? null : jobNo)}
                   onClose={() => selectRequest(selected.id)}
+                  actions={<RunControls request={selected} jobs={requestJobs} />}
                 />
                 {selectedJob ? (
                   <JobSummaryPanel
