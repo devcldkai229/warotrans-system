@@ -531,7 +531,24 @@ export function JobDetailScreen() {
 
         {/* Tier 2 Commanding Action Button (Machined Obsidian #121317) */}
         <View style={styles.consoleCtaRow}>
-          {isWaiting ? (
+          {job.status === 'RECOVERY_REQUIRED' ? (
+            <Button
+              title="Initiate Cargo Rescue"
+              variant="danger"
+              size="lg"
+              fullWidth
+              icon={AlertTriangle}
+              iconPosition="right"
+              onPress={() =>
+                navigate('payload_recovery', {
+                  jobId: job.id,
+                  robot: job.robot,
+                  container: targetContainer,
+                })
+              }
+              accessibilityLabel="Initiate emergency cargo rescue"
+            />
+          ) : isWaiting ? (
             <Button
               title="Verify Handover"
               variant="primary"

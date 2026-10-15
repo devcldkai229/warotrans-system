@@ -152,6 +152,74 @@ const DEFAULT_STAGED_CONTAINERS: StagedContainer[] = [
   },
 ];
 
+const WORKFLOW_PRESETS: Record<string, {
+  originLabel: string;
+  originDetail: string;
+  destinationLabel: string;
+  destinationDetail: string;
+  poolTitle: string;
+  containers: StagedContainer[];
+}> = {
+  inbound: {
+    originLabel: 'Pickup Origin',
+    originDetail: 'Inbound Dock 01 (Receiving Bay)',
+    destinationLabel: 'Target Destination',
+    destinationDetail: 'Storage Zone A (Standard Pallet Racks)',
+    poolTitle: 'Staged at Inbound Dock 01',
+    containers: DEFAULT_STAGED_CONTAINERS,
+  },
+  outbound: {
+    originLabel: 'Retrieval Zone',
+    originDetail: 'Storage Zone A (Racks A01-A12)',
+    destinationLabel: 'Dispatch Bay',
+    destinationDetail: 'Outbound Dock 04 (Shipping & Staging)',
+    poolTitle: 'Stored Totes in Zone A',
+    containers: [
+      { id: 'c-201', barcode: 'BOX-201', productName: 'Bearing Kits (BK-5520)', sku: 'BK-5520', qty: 20, sourceEndpoint: 'RACK-A-02', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 1', destinationLevel: 1 },
+      { id: 'c-202', barcode: 'BOX-202', productName: 'Drive Motors (DM-9910)', sku: 'DM-9910', qty: 14, sourceEndpoint: 'RACK-A-03', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 2', destinationLevel: 1 },
+      { id: 'c-203', barcode: 'BOX-203', productName: 'Control Boards (CB-4100)', sku: 'CB-4100', qty: 32, sourceEndpoint: 'RACK-A-04', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 1', destinationLevel: 1 },
+      { id: 'c-204', barcode: 'BOX-204', productName: 'Wiring Harnesses (WH-1200)', sku: 'WH-1200', qty: 50, sourceEndpoint: 'RACK-A-05', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 3', destinationLevel: 1 },
+      { id: 'c-205', barcode: 'BOX-205', productName: 'Safety Sensors (SS-8800)', sku: 'SS-8800', qty: 18, sourceEndpoint: 'RACK-A-01', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 2', destinationLevel: 1 },
+    ],
+  },
+  relocation: {
+    originLabel: 'Source Racks',
+    originDetail: 'Storage Zone A (Rack A-08)',
+    destinationLabel: 'Consolidation Target',
+    destinationDetail: 'Storage Zone B (Heavy Reserve B-04)',
+    poolTitle: 'Containers for Reallocation',
+    containers: [
+      { id: 'c-301', barcode: 'BOX-301', productName: 'Excess Buffer Stock (EB-101)', sku: 'EB-101', qty: 40, sourceEndpoint: 'RACK-A-08', destinationEndpoint: 'RACK-B-04', destinationDisplay: 'Rack B · Level 2 · Bin 02', destinationLevel: 2 },
+      { id: 'c-302', barcode: 'BOX-302', productName: 'Seasonal Spares (SS-302)', sku: 'SS-302', qty: 25, sourceEndpoint: 'RACK-A-08', destinationEndpoint: 'RACK-B-05', destinationDisplay: 'Rack B · Level 1 · Bin 04', destinationLevel: 1 },
+      { id: 'c-303', barcode: 'BOX-303', productName: 'Bulk Fasteners (BF-900)', sku: 'BF-900', qty: 100, sourceEndpoint: 'RACK-A-08', destinationEndpoint: 'RACK-B-01', destinationDisplay: 'Rack B · Level 3 · Bin 01', destinationLevel: 3 },
+    ],
+  },
+  'point-to-point': {
+    originLabel: 'Direct Origin',
+    originDetail: 'QA Station 02 (Inspection Bay)',
+    destinationLabel: 'Direct Destination',
+    destinationDetail: 'Assembly Bench 01 (Production Line)',
+    poolTitle: 'Totes at QA Station 02',
+    containers: [
+      { id: 'c-p01', barcode: 'TOTE-QA-01', productName: 'Inspected Assemblies', sku: 'IA-901', qty: 15, sourceEndpoint: 'QA-02', destinationEndpoint: 'ASSEMBLY-01', destinationDisplay: 'Assembly Bench 01', destinationLevel: 1 },
+      { id: 'c-p02', barcode: 'TOTE-QA-02', productName: 'Passed Sub-modules', sku: 'PS-882', qty: 22, sourceEndpoint: 'QA-02', destinationEndpoint: 'ASSEMBLY-01', destinationDisplay: 'Assembly Bench 01', destinationLevel: 1 },
+      { id: 'c-p03', barcode: 'TOTE-QA-03', productName: 'Tested PCB Stacks', sku: 'PCB-40', qty: 30, sourceEndpoint: 'QA-02', destinationEndpoint: 'PACKING-01', destinationDisplay: 'Packing Bench 01', destinationLevel: 1 },
+    ],
+  },
+  replenishment: {
+    originLabel: 'Bulk Reserve Buffer',
+    originDetail: 'Bulk Yard D (Heavy Storage RACK-D-01)',
+    destinationLabel: 'Active Pick Face',
+    destinationDetail: 'Storage Zone A (Pick Face Rack A-01)',
+    poolTitle: 'Bulk Reserve Totes in Yard D',
+    containers: [
+      { id: 'c-r01', barcode: 'BOX-401', productName: 'Sensor Array (SA-8820)', sku: 'SA-8820', qty: 50, sourceEndpoint: 'RACK-D-01', destinationEndpoint: 'RACK-A-01', destinationDisplay: 'Rack A · Level 1 · Bin 04', destinationLevel: 1 },
+      { id: 'c-r02', barcode: 'BOX-402', productName: 'Control Module (CM-3100)', sku: 'CM-3100', qty: 30, sourceEndpoint: 'RACK-D-01', destinationEndpoint: 'RACK-B-04', destinationDisplay: 'Rack B · Level 3 · Bin 02', destinationLevel: 3 },
+      { id: 'c-r03', barcode: 'BOX-403', productName: 'Fastener Restock (FA-2011)', sku: 'FA-2011', qty: 200, sourceEndpoint: 'RACK-D-01', destinationEndpoint: 'RACK-A-03', destinationDisplay: 'Rack A · Level 1 · Bin 01', destinationLevel: 1 },
+    ],
+  },
+};
+
 export function TransportCreationScreen() {
   const { goBack, navigate, params } = useNavigation();
   const { session } = useAuth();
@@ -167,8 +235,10 @@ export function TransportCreationScreen() {
     WORKFLOWS.find((w) => w.name === initialWorkflowName) || WORKFLOWS[0]
   );
 
+  const initialPreset = WORKFLOW_PRESETS[selectedWorkflow.id] || WORKFLOW_PRESETS.inbound;
+
   // Staged containers pool
-  const [stagedContainers, setStagedContainers] = useState<StagedContainer[]>(DEFAULT_STAGED_CONTAINERS);
+  const [stagedContainers, setStagedContainers] = useState<StagedContainer[]>(initialPreset.containers);
   const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>([initialContainer]);
   const [searchQuery, setSearchQuery] = useState('');
   const [customBarcode, setCustomBarcode] = useState('');
@@ -190,6 +260,10 @@ export function TransportCreationScreen() {
     containerList: string[];
     estimatedMissions: number;
   } | null>(null);
+
+  const currentPreset = useMemo(() => {
+    return WORKFLOW_PRESETS[selectedWorkflow.id] || WORKFLOW_PRESETS.inbound;
+  }, [selectedWorkflow.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -257,13 +331,10 @@ export function TransportCreationScreen() {
 
   const handleSelectWorkflow = (wf: WorkflowItem) => {
     setSelectedWorkflow(wf);
-    if (wf.id === 'replenishment') {
-      navigate('replenishment');
-    } else if (wf.id === 'point-to-point') {
-      navigate('point_to_point');
-    } else {
-      setStep(2);
-    }
+    const preset = WORKFLOW_PRESETS[wf.id] || WORKFLOW_PRESETS.inbound;
+    setStagedContainers(preset.containers);
+    setSelectedBarcodes([preset.containers[0]?.barcode || 'BOX-101']);
+    setStep(2);
   };
 
   // Toggle single container selection
@@ -509,16 +580,18 @@ export function TransportCreationScreen() {
                   <View style={{ flex: 1 }}>
                     <View style={styles.routeLabelRow}>
                       <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                        Pickup Origin
+                        {currentPreset.originLabel}
                       </Text>
-                      <View style={styles.stationBadge}>
-                        <Text variant="caption" color={colors.textPrimary} style={styles.stationBadgeText}>
-                          Your Station
-                        </Text>
-                      </View>
+                      {selectedWorkflow.id === 'inbound' && (
+                        <View style={styles.stationBadge}>
+                          <Text variant="caption" color={colors.textPrimary} style={styles.stationBadgeText}>
+                            Your Station
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <Text variant="bodyMedium" color={colors.textPrimary} style={styles.stationName}>
-                      {userStation}
+                      {currentPreset.originDetail}
                     </Text>
                   </View>
                 </View>
@@ -529,10 +602,10 @@ export function TransportCreationScreen() {
                   <View style={[styles.routeDot, { backgroundColor: colors.success }]} />
                   <View style={{ flex: 1 }}>
                     <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                      Target Destination
+                      {currentPreset.destinationLabel}
                     </Text>
                     <Text variant="bodyMedium" color={colors.textPrimary} style={styles.stationName}>
-                      Storage Zone A (Standard Pallet Racks)
+                      {currentPreset.destinationDetail}
                     </Text>
                   </View>
                 </View>
@@ -545,7 +618,7 @@ export function TransportCreationScreen() {
                 <View style={styles.manifestHeaderTitle}>
                   <Package size={18} color="#121317" />
                   <Text variant="bodyMedium" style={styles.manifestTitle}>
-                    Staged at {userStation}
+                    {currentPreset.poolTitle}
                   </Text>
                   <View style={styles.countBadge}>
                     <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>

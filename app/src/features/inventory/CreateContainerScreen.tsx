@@ -22,6 +22,8 @@ import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
+import { createContainer } from '../../shared/api';
 
 const CATEGORIES: Record<string, string[]> = {
   Electronics: [
@@ -48,6 +50,7 @@ export function CreateContainerScreen() {
   const [product, setProduct] = useState<string>('Electronic Components');
   const [quantity, setQuantity] = useState<string>('45');
   const [batchCount, setBatchCount] = useState<string>('10');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [generatedBarcode, setGeneratedBarcode] = useState<string>('BOX-482');
   const [batchGenerated, setBatchGenerated] = useState<{
@@ -63,35 +66,58 @@ export function CreateContainerScreen() {
   const totalBatchUnits = packQty * numContainers;
   const batchCountLabel = batchCount.trim() || '0';
 
-  const handleGenerate = () => {
-    if (mode === 'single') {
-      const code = `BOX-${Math.floor(100 + Math.random() * 900)}`;
-      setGeneratedBarcode(code);
-      setBatchGenerated(null);
-    } else {
-      const startId = 201;
-      const endId = startId + numContainers - 1;
-      setBatchGenerated({
-        start: `BOX-${startId}`,
-        end: `BOX-${endId}`,
-        count: numContainers,
-        totalUnits: totalBatchUnits,
-      });
+  const handleGenerate = async () => {
+    setIsSubmitting(true);
+    try {
+      if (mode === 'single') {
+        const res = await createContainer({
+          productId: '00000000-0000-0000-0001-000000000001',
+          productName: product,
+          productSku: category.slice(0, 3).toUpperCase() + '-9042',
+          qty: packQty,
+        });
+        setGeneratedBarcode(res.barcode);
+        setBatchGenerated(null);
+      } else {
+        const count = Math.min(numContainers, 10);
+        const created: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const res = await createContainer({
+            productId: '00000000-0000-0000-0001-000000000001',
+            productName: product,
+            productSku: category.slice(0, 3).toUpperCase() + '-9042',
+            qty: packQty,
+          });
+          created.push(res.barcode);
+        }
+        setBatchGenerated({
+          start: created[0] || 'BOX-201',
+          end: created[created.length - 1] || 'BOX-210',
+          count: created.length,
+          totalUnits: packQty * created.length,
+        });
+      }
+      setIsSuccess(true);
+      triggerHaptic('success');
+    } catch (err: any) {
+      console.warn('Failed to create container:', err);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSuccess(true);
   };
 
   const handlePrint = () => {
+    triggerHaptic('tap');
     setPrintFeedback('Dispatched print job to Zebra ZT411 Direct Thermal Mobile Printer (ZPL II · 203 DPI).');
     setTimeout(() => setPrintFeedback(null), 4000);
   };
 
   const handleDispatchInbound = () => {
+    triggerHaptic('tap');
+    const targetBarcode = mode === 'single' ? generatedBarcode : batchGenerated?.start || 'BOX-101';
     navigate('transport_create', {
       workflow: 'Inbound Putaway',
-      container: mode === 'single' ? generatedBarcode : batchGenerated?.start || 'BOX-201',
-      product,
-      qty: quantity,
+      container: targetBarcode,
     });
   };
 
@@ -327,6 +353,8 @@ export function CreateContainerScreen() {
                   : `Generate Batch (${batchCountLabel} Totes)`
               }
               icon={<PackageCheck size={18} color="#ffffff" />}
+              loading={isSubmitting}
+              disabled={isSubmitting}
               onPress={handleGenerate}
               variant="primary"
               size="lg"

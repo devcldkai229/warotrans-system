@@ -28,34 +28,38 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 type RescuePhase = 'briefing' | 'rendezvous' | 'transfer' | 'resuming' | 'completed';
 
 export function PayloadRecoveryScreen() {
-  const { goBack } = useNavigation();
+  const { goBack, navigate, params } = useNavigation();
   const [phase, setPhase] = useState<RescuePhase>('briefing');
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  const jobId = params?.jobId || 'JOB-20261012-000022';
+  const faultedRobot = params?.robot || 'AMR-01';
+  const rescueRobot = faultedRobot === 'AMR-01' ? 'AMR-02' : 'AMR-01';
+  const targetContainer = params?.container || 'BOX-101';
+
   const handleDispatchRescue = () => {
     triggerHaptic('success');
     setPhase('rendezvous');
-    setFeedback('Emergency rescue: AMR-02 dispatched to rendezvous coordinates (X: 12.4m, Y: 8.2m).');
-    setTimeout(() => {
-      setPhase('transfer');
-      setFeedback('AMR-02 arrived at scene. Parked 1.0m from stalled AMR-01.');
-    }, 2000);
+    setFeedback(`Emergency rescue: ${rescueRobot} dispatched to rendezvous coordinates (X: 12.4m, Y: 8.2m).`);
+  };
+
+  const handleConfirmArrival = () => {
+    triggerHaptic('tap');
+    setPhase('transfer');
+    setFeedback(`${rescueRobot} arrived at scene. Parked 1.0m from stalled ${faultedRobot}.`);
   };
 
   const handleScanStrandedTote = () => {
     triggerHaptic('success');
-    setScannedBarcode('BOX-101');
-    setFeedback('Barcode BOX-101 matched stranded cargo.');
+    setScannedBarcode(targetContainer);
+    setFeedback(`Barcode ${targetContainer} verified against stranded cargo manifest.`);
   };
 
   const handleResumeMission = () => {
     triggerHaptic('success');
-    setPhase('resuming');
-    setTimeout(() => {
-      setPhase('completed');
-      setFeedback('Job JOB-2026-0812 successfully transferred to AMR-02. Resuming dropoff.');
-    }, 1500);
+    setPhase('completed');
+    setFeedback(`Job ${jobId} successfully transferred to ${rescueRobot}. Resuming dropoff.`);
   };
 
   return (
@@ -80,21 +84,21 @@ export function PayloadRecoveryScreen() {
             </View>
             <Text style={styles.completedTitle}>Cargo rescue succeeded</Text>
             <Text style={styles.completedSub}>
-              AMR-02 has assumed mission execution and is en route to Rack A.
+              {rescueRobot} has assumed mission execution and is en route to target shelf.
             </Text>
 
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Original mission</Text>
-                <Text style={styles.receiptVal}>JOB-2026-0812</Text>
+                <Text style={styles.receiptVal}>{jobId}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Rescued container</Text>
-                <Text style={styles.receiptHighlight}>BOX-101 (45 units)</Text>
+                <Text style={styles.receiptHighlight}>{targetContainer} (45 units)</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Active carrier</Text>
-                <Text style={styles.receiptSuccess}>AMR-02 (Healthy)</Text>
+                <Text style={styles.receiptSuccess}>{rescueRobot} (Healthy)</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Target destination</Text>
@@ -102,17 +106,26 @@ export function PayloadRecoveryScreen() {
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
                 <Text style={styles.receiptLabel}>Faulted unit</Text>
-                <Text style={styles.receiptDanger}>AMR-01 (Flagged for towing)</Text>
+                <Text style={styles.receiptDanger}>{faultedRobot} (Flagged for towing)</Text>
               </View>
             </View>
 
-            <Button
-              label="Back to hub"
-              onPress={goBack}
-              variant="primary"
-              size="lg"
-              style={{ width: '100%', marginTop: 18 }}
-            />
+            <View style={{ gap: 10, marginTop: 18 }}>
+              <Button
+                label="Track Resumed Mission on Map"
+                onPress={() => navigate('live_map', { jobId, robotId: rescueRobot })}
+                variant="primary"
+                size="lg"
+                style={{ width: '100%' }}
+              />
+              <Button
+                label="Back to Fleet Jobs"
+                onPress={() => navigate('jobs')}
+                variant="outline"
+                size="md"
+                style={{ width: '100%' }}
+              />
+            </View>
           </View>
         ) : (
           <View style={{ gap: 16 }}>
@@ -126,7 +139,7 @@ export function PayloadRecoveryScreen() {
                   <View style={styles.alertBadge}>
                     <Text style={styles.alertBadgeText}>Fleet incident</Text>
                   </View>
-                  <Text style={styles.alertRobotText}>AMR-01 Stalled</Text>
+                  <Text style={styles.alertRobotText}>{faultedRobot} Stalled</Text>
                 </View>
               </View>
             </View>
@@ -216,7 +229,7 @@ export function PayloadRecoveryScreen() {
             <View style={styles.diagRow}>
               <View style={styles.diagFaulted}>
                 <Text style={styles.diagLabel}>Faulted robot</Text>
-                <Text style={styles.diagRobotId}>AMR-01</Text>
+                <Text style={styles.diagRobotId}>{faultedRobot}</Text>
                 <Text style={styles.diagDetail}>Error: Drive motor stall</Text>
                 <View style={styles.diagPillFaulted}>
                   <Text style={styles.diagPillTextFaulted}>Pos: (12.4m, 8.2m)</Text>
@@ -225,7 +238,7 @@ export function PayloadRecoveryScreen() {
 
               <View style={styles.diagRescue}>
                 <Text style={styles.diagLabel}>Rescue robot</Text>
-                <Text style={styles.diagRobotId}>AMR-02</Text>
+                <Text style={styles.diagRobotId}>{rescueRobot}</Text>
                 <Text style={styles.diagDetail}>Battery: 92% · Deck empty</Text>
                 <View style={styles.diagPillRescue}>
                   <Text style={styles.diagPillTextRescue}>Status: Ready</Text>
@@ -239,7 +252,7 @@ export function PayloadRecoveryScreen() {
               <View style={styles.cargoStack}>
                 <View style={styles.cargoTopLine}>
                   <Box size={16} color={colors.textSecondary} />
-                  <Text style={styles.cargoCode}>BOX-101</Text>
+                  <Text style={styles.cargoCode}>{targetContainer}</Text>
                   <Text style={styles.cargoDesc}>
                     Electronic Components · <Text style={styles.boldUnits}>45 units</Text>
                   </Text>
@@ -256,10 +269,10 @@ export function PayloadRecoveryScreen() {
               <View style={styles.actionCard}>
                 <Text style={styles.actionTitle}>Step 1: Dispatch rendezvous</Text>
                 <Text style={styles.actionDesc}>
-                  Dispatch AMR-02 to stage 1.0m from AMR-01 for tote transfer.
+                  Dispatch {rescueRobot} to stage 1.0m from {faultedRobot} for tote transfer.
                 </Text>
                 <Button
-                  label="Dispatch Rescue"
+                  label={`Dispatch Rescue (${rescueRobot})`}
                   icon={<Navigation size={18} color="#ffffff" />}
                   onPress={handleDispatchRescue}
                   variant="primary"
@@ -273,11 +286,19 @@ export function PayloadRecoveryScreen() {
               <View style={styles.actionCard}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <RefreshCw size={16} color={colors.primary} />
-                  <Text style={styles.actionTitle}>AMR-02 en route to scene</Text>
+                  <Text style={styles.actionTitle}>{rescueRobot} en route to scene</Text>
                 </View>
                 <Text style={styles.actionDesc}>
                   Navigating transit corridor. ETA 15 seconds. Please set up perimeter safety cones.
                 </Text>
+                <Button
+                  label={`Confirm ${rescueRobot} Arrived & Parked`}
+                  icon={<Check size={18} color="#ffffff" />}
+                  onPress={handleConfirmArrival}
+                  variant="primary"
+                  size="lg"
+                  style={{ marginTop: 12 }}
+                />
               </View>
             )}
 
@@ -285,7 +306,7 @@ export function PayloadRecoveryScreen() {
               <View style={styles.actionCard}>
                 <Text style={styles.actionTitle}>Step 2: Transfer stranded tote & scan barcode</Text>
                 <Text style={styles.actionDesc}>
-                  Physically move container BOX-101 from AMR-01 Bay 1 to AMR-02 Bay 1, then scan barcode to verify.
+                  Physically move container {targetContainer} from {faultedRobot} Bay 1 to {rescueRobot} Bay 1, then scan barcode to verify.
                 </Text>
 
                 {scannedBarcode ? (
@@ -295,7 +316,7 @@ export function PayloadRecoveryScreen() {
                   </View>
                 ) : (
                   <Button
-                    label="Simulate scan barcode (BOX-101)"
+                    label={`Simulate scan barcode (${targetContainer})`}
                     icon={<ScanLine size={16} color={colors.textPrimary} />}
                     onPress={handleScanStrandedTote}
                     variant="outline"
@@ -318,7 +339,7 @@ export function PayloadRecoveryScreen() {
 
             {phase === 'resuming' && (
               <View style={styles.actionCard}>
-                <Text style={styles.actionTitle}>Re-assigning mission to AMR-02...</Text>
+                <Text style={styles.actionTitle}>Re-assigning mission to {rescueRobot}...</Text>
                 <Text style={styles.actionDesc}>
                   Updating Central FMS dispatch records and Nav2 dropoff route.
                 </Text>
