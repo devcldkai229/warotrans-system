@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import {
   AlertOctagon,
+  ArrowUpRight,
   Layers,
   LifeBuoy,
   Navigation,
@@ -36,21 +37,21 @@ export function WorkflowTemplateCard({
 
     switch (workflow.icon) {
       case 'package-check':
-        return <PackageCheck size={iconSize} color={iconColor} />;
+        return <PackageCheck size={iconSize} color={iconColor} strokeWidth={2.2} />;
       case 'truck':
-        return <Truck size={iconSize} color={iconColor} />;
+        return <Truck size={iconSize} color={iconColor} strokeWidth={2.2} />;
       case 'rotate-cw':
-        return <RotateCw size={iconSize} color={iconColor} />;
+        return <RotateCw size={iconSize} color={iconColor} strokeWidth={2.2} />;
       case 'navigation':
-        return <Navigation size={iconSize} color={iconColor} />;
+        return <Navigation size={iconSize} color={iconColor} strokeWidth={2.2} />;
       case 'layers':
-        return <Layers size={iconSize} color={iconColor} />;
+        return <Layers size={iconSize} color={iconColor} strokeWidth={2.2} />;
       case 'octagon':
-        return <AlertOctagon size={iconSize} color={iconColor} />;
+        return <AlertOctagon size={iconSize} color={iconColor} strokeWidth={2.2} />;
       case 'life-buoy':
-        return <LifeBuoy size={iconSize} color={iconColor} />;
+        return <LifeBuoy size={iconSize} color={iconColor} strokeWidth={2.2} />;
       default:
-        return <PackageCheck size={iconSize} color={iconColor} />;
+        return <PackageCheck size={iconSize} color={iconColor} strokeWidth={2.2} />;
     }
   };
 
@@ -60,7 +61,7 @@ export function WorkflowTemplateCard({
       style={({ pressed }) => [
         styles.card,
         isSafety && styles.cardSafety,
-        pressed && styles.cardPressed,
+        pressed && (isSafety ? styles.cardSafetyPressed : styles.cardPressed),
       ]}
       accessibilityRole="button"
       accessibilityLabel={`Select workflow ${workflow.name}`}
@@ -69,19 +70,16 @@ export function WorkflowTemplateCard({
         <View style={[styles.iconBox, isSafety && styles.iconBoxSafety]}>
           {renderIcon()}
         </View>
-        <View style={[styles.badge, isSafety ? styles.badgeSafety : styles.badgeDefault]}>
-          <Text
-            variant="caption"
-            color={isSafety ? colors.danger : colors.primaryText}
-            style={styles.badgeText}
-            numberOfLines={1}
-          >
-            {workflow.category}
-          </Text>
+        <View style={[styles.arrowCircle, isSafety && styles.arrowCircleSafety]}>
+          <ArrowUpRight
+            size={15}
+            color={isSafety ? colors.danger : colors.textMuted}
+            strokeWidth={2.2}
+          />
         </View>
       </View>
 
-      <Text variant="bodyMedium" numberOfLines={1} style={styles.name}>
+      <Text variant="bodyMedium" numberOfLines={2} style={styles.name}>
         {workflow.name}
       </Text>
     </Pressable>
@@ -95,9 +93,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.lg,
     padding: 14,
-    minHeight: 92,
+    minHeight: 96,
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 12,
     ...shadows.sm,
   },
   cardSafety: {
@@ -106,18 +104,23 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.surfaceSubtle,
+    transform: [{ scale: 0.985 }],
+  },
+  cardSafetyPressed: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerBg,
+    transform: [{ scale: 0.985 }],
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
   },
   iconBox: {
     width: 38,
     height: 38,
-    borderRadius: radii.sm,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primaryLight,
@@ -126,26 +129,20 @@ const styles = StyleSheet.create({
   iconBoxSafety: {
     backgroundColor: colors.dangerBg,
   },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    flexShrink: 1,
-  },
-  badgeDefault: {
+  arrowCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: colors.surfaceSubtle,
-    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  badgeSafety: {
+  arrowCircleSafety: {
     backgroundColor: colors.dangerBg,
-    borderColor: colors.dangerBorder,
-  },
-  badgeText: {
-    fontWeight: '700',
-    fontSize: 11,
   },
   name: {
     fontWeight: '700',
+    color: colors.textPrimary,
+    lineHeight: 19,
   },
 });

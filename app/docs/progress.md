@@ -85,7 +85,7 @@
 - [x] **Phase 6: UI Streamlining & Calm Ergonomics (Removing Verbose Filler)**
   - `TransportScreen.tsx`: Trimmed descriptive annotations from "Dispatch History & Audit Log" and "Inventory & SKU Catalog"; removed subtitles from Hero buttons ("New Request", "Pack Container") and Floor Safety strip ("Soft Hold", "Block Path") to deliver a clean industrial cockpit.
   - `TransportCreationScreen.tsx`: Removed header subtitle under "Available Mission Templates" (*"Choose a predefined orchestration pattern for autonomous AMR movement."*).
-  - `WorkflowTemplateCard.tsx`: Removed individual workflow description notes (`workflow.note`) and compressed card height to a uniform 92px, transforming the 6 mission templates into punchy, modern action tiles without awkward text wrapping.
+  - `WorkflowTemplateCard.tsx`: Redesigned into tactile action tiles (Option A) — removed redundant capsule badges (`INBOUND`, `OUTBOUND`, etc.) and replaced them with an elegant `ArrowUpRight` (↗) affordance circle, balancing card proportions and eliminating the hollow gap.
   - `SafetyHubCard.tsx`: Streamlined header and removed verbose action descriptions, aligning standalone safety controls with calm minimal tokens.
   - `BlockPathHazardScreen.tsx`: Removed 3-line boilerplate banner and hazard category subtitles (`desc`), bringing all corridor selection and hazard tiles above the fold.
   - `PointToPointScreen.tsx`: Streamlined "Quick Preset · Return Empty Totes" into a sleek single-row 1-tap trigger.
