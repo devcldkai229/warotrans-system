@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Features.ProcessRobotCommandAck;
+using WaroTrans.Fleet.Features.ProcessRobotCommandResult;
 using WaroTrans.Fleet.Features.ProcessRobotHeartbeat;
 using WaroTrans.IntegrationTests.Infrastructure;
 using WaroTrans.Warehouse.Persistence;
@@ -44,8 +45,8 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
         Assert.Equal(RobotStatus.EXECUTING, executing.Status);
         Assert.Equal(issued.CommandId, executing.CurrentCommandId);
 
-        // Also verify MQTT ingress path for result.
-        await MqttTestPublisher.PublishCommandResultAsync(robot.Code, issued.CommandId, "SUCCEEDED");
+        // In-process command_result (Develop/Main CI has no Mosquitto service).
+        await ApplyResultAsync(robot.Code, issued.CommandId, "SUCCEEDED");
         var done = await WaitForRobotAsync(
             robot.Id,
             r => r.Status == RobotStatus.AVAILABLE && r.CurrentCommandId == null,
@@ -54,7 +55,7 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
     }
 
     [Fact]
-    public async Task Navigate_reject_ack_via_mqtt_returns_available()
+    public async Task Navigate_reject_ack_returns_available()
     {
         var robot = await RegisterAsync("Reject Bot");
         var boot = Guid.NewGuid();
@@ -67,11 +68,7 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
         issue.EnsureSuccessStatusCode();
         var issued = (await issue.Content.ReadFromJsonAsync<IssueDto>(JsonOptions))!;
 
-        await MqttTestPublisher.PublishCommandAckAsync(
-            robot.Code,
-            issued.CommandId,
-            accepted: false,
-            reasonCode: "NOT_LOCALIZED");
+        await ApplyAckAsync(robot.Code, issued.CommandId, accepted: false, reason: "NOT_LOCALIZED");
 
         var after = await WaitForRobotAsync(
             robot.Id,
@@ -110,6 +107,24 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
                 RobotCode = robotCode,
                 Accepted = accepted,
                 ReasonCode = reason,
+                SentAt = DateTimeOffset.UtcNow
+            },
+            CancellationToken.None);
+    }
+
+    private async Task ApplyResultAsync(string robotCode, Guid commandId, string outcome, string? errorCode = null)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var handler = scope.ServiceProvider.GetRequiredService<ProcessRobotCommandResultHandler>();
+        await handler.HandleAsync(
+            new RobotCommandResultMessage
+            {
+                SchemaVersion = 1,
+                MessageId = Guid.NewGuid(),
+                CommandId = commandId,
+                RobotCode = robotCode,
+                Outcome = outcome,
+                ErrorCode = errorCode,
                 SentAt = DateTimeOffset.UtcNow
             },
             CancellationToken.None);
