@@ -93,6 +93,13 @@
   - `IssueReportingModal.tsx`: Removed multi-line category descriptions and helper text, reducing modal height by ~40% for frictionless one-tap exception submission.
   - Zero TypeScript compiler errors (`npm run typecheck` passed).
 
+- [x] **Phase 7: Comprehensive System Reality & Business Logic Audit (360° Review)**
+  - Fully verified all 25+ remote branches; confirmed `develop` is 100% synchronized with `origin/develop`.
+  - Conducted deep-dive code inspection across .NET 10 backend modules (`Transportation`, `WorkflowExecution`, `Fleet`, `Warehouse`, `Navigation`, `Operations`, `Host`).
+  - Identified critical execution gap: BE has end-to-end `TransportRequest` creation and `Queue` runtime provisioning, but lacks exposed HTTP controller endpoints for `Job` listing, `Job` detail, and `HandoverConfirmation`.
+  - Exposed frontend disconnects: Mobile app is still anchored in `MOCK_JOBS` fixture data with a rigid 3-tray deck assumption (`Slot 1/2/3`), while backend uses an unconstrained `JobContainer` batching model.
+  - Documented complete architectural findings and 3-step remediation roadmap in `brain/2f0972cb-bb0f-4c2a-932a-8f75ca884da6/system_architecture_deep_dive_report.md`.
+
 ## Workspace & Documentation Maintenance Rules
 1. **Strict Local Boundaries**: Work strictly inside `warotrans-system/` (`app/` and `backend/`). Do not look into or rely on external folders (`WaroTrans-specs`).
 2. **Synchronized Documentation**: Maintain and update `AGENTS.md` and all files in `app/docs/` after every code modification to prevent context drift across conversations.
