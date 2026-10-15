@@ -97,7 +97,6 @@ export function SafetyHubCard({
           <ShieldAlert size={20} color={colors.textPrimary} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.headerTitle} numberOfLines={1}>Field safety & incident hub</Text>
-            <Text style={styles.headerSubtitle} numberOfLines={1}>Perimeter controls & emergency exceptions</Text>
           </View>
         </View>
         <View style={styles.incidentBadge}>
@@ -167,9 +166,6 @@ export function SafetyHubCard({
           >
             {isHolding ? 'Hold active (3m)' : 'Soft hold (3m)'}
           </Text>
-          <Text style={styles.safetyBtnDesc}>
-            {isHolding ? 'Motion locked' : 'Local pause'}
-          </Text>
         </Pressable>
 
         {/* Block Path Report */}
@@ -186,7 +182,6 @@ export function SafetyHubCard({
             <AlertTriangle size={16} color="#b45309" />
           </View>
           <Text style={styles.safetyBtnTitle}>Block corridor</Text>
-          <Text style={styles.safetyBtnDesc}>Detour Nav2</Text>
         </Pressable>
 
         {/* Fleet Recall Notice */}
@@ -204,7 +199,6 @@ export function SafetyHubCard({
               <OctagonAlert size={16} color="#dc2626" />
             </View>
             <Text style={styles.safetyBtnTitle}>Fleet recall</Text>
-            <Text style={styles.safetyBtnDesc}>Dock policy</Text>
           </Pressable>
         )}
       </View>
@@ -370,7 +364,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceSubtle,
-    minHeight: 68,
+    minHeight: 54,
     justifyContent: 'space-between',
   },
   safetyBtnActive: {
@@ -398,10 +392,5 @@ const styles = StyleSheet.create({
   },
   safetyBtnTitleActive: {
     color: colors.darkAction,
-  },
-  safetyBtnDesc: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
   },
 });

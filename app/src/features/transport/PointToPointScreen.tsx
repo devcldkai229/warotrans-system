@@ -132,12 +132,9 @@ export function PointToPointScreen() {
                 <View style={styles.presetIconWell}>
                   <RotateCw size={18} color={colors.primary} />
                 </View>
-                <View style={{ flex: 1, gap: 2 }}>
+                <View style={{ flex: 1 }}>
                   <Text variant="bodyMedium" style={{ fontWeight: '700' }}>
                     Quick Preset · Return Empty Totes
-                  </Text>
-                  <Text variant="caption" color={colors.textSecondary}>
-                    Route empty pallets from Outbound Shipping back to Inbound Receiving.
                   </Text>
                 </View>
               </View>

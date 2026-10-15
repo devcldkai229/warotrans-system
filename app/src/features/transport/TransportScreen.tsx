@@ -235,9 +235,6 @@ export function TransportScreen() {
                 <Text variant="bodyMedium" color={colors.textInverse} style={styles.heroBtnTitle}>
                   New Request
                 </Text>
-                <Text variant="caption" color="rgba(255, 255, 255, 0.65)" style={styles.heroBtnSubtitle}>
-                  Dispatch AMR payload
-                </Text>
               </View>
             </Pressable>
 
@@ -264,9 +261,6 @@ export function TransportScreen() {
               <View style={styles.heroBtnContent}>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={styles.heroBtnTitle}>
                   Pack Container
-                </Text>
-                <Text variant="caption" color={colors.textSecondary} style={styles.heroBtnSubtitle}>
-                  Scan & seal tote
                 </Text>
               </View>
             </Pressable>
@@ -353,9 +347,6 @@ export function TransportScreen() {
                 >
                   {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
                 </Text>
-                <Text variant="caption" color={colors.textSecondary}>
-                  {isHolding ? 'Perimeter paused' : 'Tap to pause nearby AMRs'}
-                </Text>
               </View>
             </Pressable>
 
@@ -375,9 +366,6 @@ export function TransportScreen() {
               <View style={styles.safetyStripTextCol}>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={styles.safetyBtnTitle}>
                   Block Path
-                </Text>
-                <Text variant="caption" color={colors.textSecondary}>
-                  Report obstacle
                 </Text>
               </View>
             </Pressable>
@@ -563,7 +551,7 @@ const styles = StyleSheet.create({
   },
   heroBtnPrimary: {
     flex: 1,
-    minHeight: 110,
+    minHeight: 90,
     backgroundColor: colors.darkAction, // Warm Dark Gray (Graphite)
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -574,7 +562,7 @@ const styles = StyleSheet.create({
   },
   heroBtnSecondary: {
     flex: 1,
-    minHeight: 110,
+    minHeight: 90,
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -616,9 +604,6 @@ const styles = StyleSheet.create({
   },
   heroBtnTitle: {
     fontWeight: '700',
-  },
-  heroBtnSubtitle: {
-    fontSize: 12,
   },
   activeAlertCard: {
     backgroundColor: colors.dangerBg,

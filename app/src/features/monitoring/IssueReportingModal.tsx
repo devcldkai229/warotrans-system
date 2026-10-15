@@ -183,7 +183,6 @@ export function IssueReportingModal({
                       >
                         {c.title}
                       </Text>
-                      <Text style={styles.catDesc}>{c.desc}</Text>
                     </View>
                     {isSelected && (
                       <View style={styles.checkBadge}>
@@ -199,10 +198,7 @@ export function IssueReportingModal({
           {/* Photo Evidence */}
           <View style={styles.evidenceCard}>
             <View style={styles.evidenceHeader}>
-              <View>
-                <Text style={styles.sectionLabel}>Photo evidence</Text>
-                <Text style={styles.evidenceSub}>Attach proof for shift supervisor review</Text>
-              </View>
+              <Text style={styles.sectionLabel}>Photo evidence</Text>
               <View style={[styles.evidenceBadge, photoAttached && styles.evidenceBadgeAttached]}>
                 <Text style={[styles.evidenceBadgeText, photoAttached && styles.evidenceBadgeTextAttached]}>
                   {photoAttached ? 'Attached' : 'Optional'}
@@ -355,8 +351,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
-    minHeight: 64,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 48,
     ...shadows.panel,
   },
   catCardSelected: {
@@ -364,8 +361,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   catIconWrap: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
@@ -384,17 +381,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.darkAction,
   },
-  catDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-    lineHeight: 16,
-    fontFamily: typography.fontSans,
-  },
   checkBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: colors.darkAction,
     alignItems: 'center',
     justifyContent: 'center',
@@ -411,13 +401,7 @@ const styles = StyleSheet.create({
   evidenceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  evidenceSub: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
+    alignItems: 'center',
   },
   evidenceBadge: {
     backgroundColor: colors.surfaceSubtle,

@@ -83,10 +83,14 @@
     - `HomeScreen.tsx` & `MiniFacilityMap.tsx`: Live AMR battery percentage, speed, and heading orientation dynamically driven by backend telemetry.
     - `JobLiveMapScreen.tsx`: Real-time robot coordinates `(poseX, poseY)`, battery, and navigation state.
 - [x] **Phase 6: UI Streamlining & Calm Ergonomics (Removing Verbose Filler)**
-  - `TransportScreen.tsx`: Trimmed descriptive annotations from "Dispatch History & Audit Log" and "Inventory & SKU Catalog", converting them into streamlined, high-contrast navigation rows.
+  - `TransportScreen.tsx`: Trimmed descriptive annotations from "Dispatch History & Audit Log" and "Inventory & SKU Catalog"; removed subtitles from Hero buttons ("New Request", "Pack Container") and Floor Safety strip ("Soft Hold", "Block Path") to deliver a clean industrial cockpit.
   - `TransportCreationScreen.tsx`: Removed header subtitle under "Available Mission Templates" (*"Choose a predefined orchestration pattern for autonomous AMR movement."*).
   - `WorkflowTemplateCard.tsx`: Removed individual workflow description notes (`workflow.note`) and compressed card height to a uniform 92px, transforming the 6 mission templates into punchy, modern action tiles without awkward text wrapping.
-  - System-wide UI Audit: Identified remaining verbose subtitles/filler copy across other screens (Hero buttons, Floor safety controls, Hazard categories, and Incident modals) to present for operator approval.
+  - `SafetyHubCard.tsx`: Streamlined header and removed verbose action descriptions, aligning standalone safety controls with calm minimal tokens.
+  - `BlockPathHazardScreen.tsx`: Removed 3-line boilerplate banner and hazard category subtitles (`desc`), bringing all corridor selection and hazard tiles above the fold.
+  - `PointToPointScreen.tsx`: Streamlined "Quick Preset · Return Empty Totes" into a sleek single-row 1-tap trigger.
+  - `PayloadRecoveryScreen.tsx`: Removed redundant subtitle from incident alert, shortened Step 1 dispatch instruction, and resolved text collision layout bug in stranded cargo card with a clean stacked layout.
+  - `IssueReportingModal.tsx`: Removed multi-line category descriptions and helper text, reducing modal height by ~40% for frictionless one-tap exception submission.
   - Zero TypeScript compiler errors (`npm run typecheck` passed).
 
 ## Workspace & Documentation Maintenance Rules

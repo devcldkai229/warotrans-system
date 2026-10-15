@@ -128,7 +128,6 @@ export function PayloadRecoveryScreen() {
                   </View>
                   <Text style={styles.alertRobotText}>AMR-01 Stalled</Text>
                 </View>
-                <Text style={styles.alertTitle}>Payload recovery protocol required</Text>
               </View>
             </View>
 
@@ -237,18 +236,16 @@ export function PayloadRecoveryScreen() {
             {/* Stranded Cargo Info */}
             <View style={styles.cargoCard}>
               <Text style={styles.cargoTitle}>Stranded cargo onboard</Text>
-              <View style={styles.cargoRow}>
-                <View style={styles.cargoLeft}>
-                  <Box size={18} color={colors.textSecondary} />
-                  <View>
-                    <Text style={styles.cargoCode}>BOX-101</Text>
-                    <Text style={styles.cargoDesc}>
-                      Electronic Components (<Text style={styles.boldUnits}>45 units</Text>)
-                    </Text>
-                  </View>
+              <View style={styles.cargoStack}>
+                <View style={styles.cargoTopLine}>
+                  <Box size={16} color={colors.textSecondary} />
+                  <Text style={styles.cargoCode}>BOX-101</Text>
+                  <Text style={styles.cargoDesc}>
+                    Electronic Components · <Text style={styles.boldUnits}>45 units</Text>
+                  </Text>
                 </View>
-                <View style={styles.cargoRight}>
-                  <Text style={styles.cargoDestLabel}>Final destination</Text>
+                <View style={styles.cargoDestLine}>
+                  <Text style={styles.cargoDestLabel}>Destination:</Text>
                   <Text style={styles.cargoDestVal}>Rack A · Level 2 · Bin 03</Text>
                 </View>
               </View>
@@ -259,7 +256,7 @@ export function PayloadRecoveryScreen() {
               <View style={styles.actionCard}>
                 <Text style={styles.actionTitle}>Step 1: Dispatch rendezvous</Text>
                 <Text style={styles.actionDesc}>
-                  Command AMR-02 to navigate autonomously to coordinate (X: 12.4m, Y: 8.2m). AMR-02 will park 1.0 meter away from AMR-01 for safe manual tote transfer.
+                  Dispatch AMR-02 to stage 1.0m from AMR-01 for tote transfer.
                 </Text>
                 <Button
                   label="Dispatch Rescue"
@@ -621,15 +618,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontFamily: typography.fontSans,
   },
-  cargoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  cargoStack: {
+    gap: 8,
   },
-  cargoLeft: {
+  cargoTopLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   cargoCode: {
     fontSize: 14,
@@ -640,18 +636,22 @@ const styles = StyleSheet.create({
   cargoDesc: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
     fontFamily: typography.fontSans,
   },
   boldUnits: {
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  cargoRight: {
-    alignItems: 'flex-end',
+  cargoDestLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   cargoDestLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textMuted,
     fontFamily: typography.fontSans,
   },
@@ -659,7 +659,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: 2,
     fontFamily: typography.fontSans,
   },
   actionCard: {

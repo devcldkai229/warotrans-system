@@ -122,19 +122,6 @@ export function BlockPathHazardScreen() {
           </View>
         ) : (
           <View style={{ gap: 16 }}>
-            {/* Top Banner Card */}
-            <View style={styles.introCard}>
-              <View style={styles.introIconBox}>
-                <AlertOctagon size={22} color="#dc2626" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.introTitle}>Floor hazard & temporary obstruction</Text>
-                <Text style={styles.introDesc}>
-                  Report an aisle obstruction to instantly reroute the autonomous robot fleet around the incident area.
-                </Text>
-              </View>
-            </View>
-
             {/* Blocked Corridor / Edge */}
             <View style={{ gap: 8 }}>
               <Text style={styles.sectionLabel}>Blocked corridor</Text>
@@ -196,7 +183,6 @@ export function BlockPathHazardScreen() {
                       <Text style={[styles.hazardTitle, isSelected && styles.hazardTitleSelected]}>
                         {h.title}
                       </Text>
-                      <Text style={styles.hazardDesc}>{h.desc}</Text>
                     </Pressable>
                   );
                 })}
@@ -307,39 +293,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 48,
   },
-  introCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.25)',
-    borderRadius: radii.lg,
-    padding: 16,
-    ...shadows.panel,
-  },
-  introIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.sm,
-    backgroundColor: 'rgba(220, 38, 38, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  introTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  introDesc: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: colors.textSecondary,
-    lineHeight: 18,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
+
   sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
@@ -405,12 +359,14 @@ const styles = StyleSheet.create({
   hazardCard: {
     flex: 1,
     minWidth: 140,
-    minHeight: 64,
+    minHeight: 46,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: '#ffffff',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
     justifyContent: 'center',
     ...shadows.panel,
   },
@@ -426,14 +382,6 @@ const styles = StyleSheet.create({
   },
   hazardTitleSelected: {
     color: colors.darkAction,
-  },
-  hazardDesc: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: colors.textSecondary,
-    marginTop: 2,
-    lineHeight: 16,
-    fontFamily: typography.fontSans,
   },
   severityRow: {
     flexDirection: 'row',
