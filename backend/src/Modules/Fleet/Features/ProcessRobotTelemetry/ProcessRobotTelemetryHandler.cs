@@ -81,6 +81,8 @@ public sealed class ProcessRobotTelemetryHandler(
             robot.NavigationStatus,
             robot.LocalizationStatus,
             robot.LastTelemetryAt,
-            cancellationToken);
+            cancellationToken,
+            robot.LinearVelocity,
+            robot.AngularVelocity);
     }
 }

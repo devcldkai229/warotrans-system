@@ -35,6 +35,10 @@ public static class RobotMqttTopics
     public static string CommandResult(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/command_result";
 
+    /// <summary>Backend → robot only (manual drive); the backend never subscribes to it.</summary>
+    public static string Teleop(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/teleop";
+
     public static bool TryParse(string topic, string topicPrefix, out string robotCode, out string kind)
     {
         robotCode = string.Empty;

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Mqtt;
+using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Features.DisableRobot;
 using WaroTrans.Fleet.Features.EnableRobot;
 using WaroTrans.Fleet.Features.GetRobot;
@@ -17,6 +18,7 @@ using WaroTrans.Fleet.Features.ProcessRobotCommandResult;
 using WaroTrans.Fleet.Features.ProcessRobotHeartbeat;
 using WaroTrans.Fleet.Features.ProcessRobotTelemetry;
 using WaroTrans.Fleet.Features.RegisterRobot;
+using WaroTrans.Fleet.Features.TeleopRobot;
 using WaroTrans.Fleet.Mqtt;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Services;
@@ -42,7 +44,9 @@ public static class FleetModule
         services.AddScoped<ProcessRobotCommandAckHandler>();
         services.AddScoped<ProcessRobotCommandResultHandler>();
         services.AddScoped<IssueNavigateCommandHandler>();
+        services.AddScoped<IFleetModule, WaroTrans.Fleet.Services.FleetModuleApi>();
         services.AddScoped<IssueCancelCommandHandler>();
+        services.AddScoped<TeleopRobotHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
@@ -61,6 +65,7 @@ public static class FleetModule
         group.MapDisableRobot();
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();
+        group.MapTeleopRobot();
         return endpoints;
     }
 }
