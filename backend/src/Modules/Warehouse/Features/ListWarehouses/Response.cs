@@ -4,6 +4,8 @@ public sealed record WarehouseListItemResponse(
     Guid Id,
     string Code,
     string Name,
+    string? Address,
+    string Timezone,
     bool IsActive,
     DateTimeOffset CreatedAt);
 

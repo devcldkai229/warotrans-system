@@ -129,6 +129,9 @@ public sealed class RobotConnectivityMonitorHostedService(
                 robot.ClearCurrentCommand(utcNow);
             }
 
+            // Persist before fan-out so API polls and SignalR subscribers see the same offline snapshot.
+            await db.SaveChangesAsync(cancellationToken);
+
             await notifier.NotifyConnectivityChangedAsync(
                 robot.Id,
                 robot.Code,
@@ -146,7 +149,5 @@ public sealed class RobotConnectivityMonitorHostedService(
                     robot.LastHeartbeatAt),
                 cancellationToken);
         }
-
-        await db.SaveChangesAsync(cancellationToken);
     }
 }
