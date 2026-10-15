@@ -1,179 +1,162 @@
 import React from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  Home,
-  PackageCheck,
-  Rocket,
-} from 'lucide-react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ClipboardList, Home, Navigation } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
-import { dockMetrics } from '../../shared/theme/layout';
-import { typography } from '../../shared/theme/typography';
+import { radii } from '../../shared/theme/radii';
+import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { MainTab, useNavigation } from './NavigationContext';
 
+/** Height of the tab row itself, excluding the bottom safe-area inset. */
+const TAB_ROW_HEIGHT = 54;
+
+/** Fallback bottom padding when the platform reports no inset. */
+const FALLBACK_BOTTOM_INSET = 10;
+
+/**
+ * Minimalist, Icon-Only Bottom Navigation.
+ *
+ * 3 Core Tabs for Warehouse Operators:
+ *   1. Home      — Live Telemetry Facility Map & Next Handover Task
+ *   2. Jobs      — Task Execution Center (My Tasks, Fleet Queue, History)
+ *   3. Transport — Dispatch & Transport Requests
+ *
+ * Designed with Google Workspace / Calm Operations precision:
+ *   - Icon-only: no text labels underneath for maximum elegance and touch focus.
+ *   - Active state: soft rounded-full pill highlight (`primaryLight`).
+ *   - Touch targets: >= 64pt width x 48pt height.
+ */
 export function BottomTabBar() {
   const { activeTab, switchTab, activeJobCount, setDockHeight } = useNavigation();
+  const insets = useSafeAreaInsets();
+  const bottomInset = insets.bottom || FALLBACK_BOTTOM_INSET;
 
   const handleTabPress = (tab: MainTab) => {
     triggerHaptic('tap');
     switchTab(tab);
   };
 
-  const isHome = activeTab === 'home';
-  const isJobs = activeTab === 'jobs';
-  const isTransport = activeTab === 'transport';
-
   return (
-    <View style={styles.dockWrapper} pointerEvents="box-none">
-      <View style={styles.dockPill} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}>
-        {/* 1. HOME TAB */}
-        <Pressable
-          onPress={() => handleTabPress('home')}
-          style={({ pressed }) => [
-            styles.tabBtn,
-            pressed && styles.tabBtnPressed,
-            isHome && styles.tabBtnActive,
-          ]}
-          accessibilityRole="tab"
-          accessibilityLabel="Home"
-          accessibilityState={{ selected: isHome }}
-        >
-          <Home
-            size={23}
-            color={isHome ? colors.primary : colors.textSecondary}
-            strokeWidth={isHome ? 2.8 : 2.2}
-          />
-        </Pressable>
+    <View
+      accessibilityRole="tablist"
+      style={styles.bar}
+      onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
+    >
+      <View style={[styles.row, { height: TAB_ROW_HEIGHT }]}>
+        {TABS.map((tab) => {
+          const isActive = tab.value === activeTab;
+          const IconCmp = tab.icon;
 
-        {/* 2. JOB TAB */}
-        <Pressable
-          onPress={() => handleTabPress('jobs')}
-          style={({ pressed }) => [
-            styles.tabBtn,
-            pressed && styles.tabBtnPressed,
-            isJobs && styles.tabBtnActive,
-          ]}
-          accessibilityRole="tab"
-          accessibilityLabel="Jobs"
-          accessibilityState={{ selected: isJobs }}
-        >
-          <View style={styles.iconContainer}>
-            <PackageCheck
-              size={23}
-              color={isJobs ? colors.primary : colors.textSecondary}
-              strokeWidth={isJobs ? 2.8 : 2.2}
-            />
-            {activeJobCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{activeJobCount}</Text>
+          return (
+            <Pressable
+              key={tab.value}
+              onPress={() => handleTabPress(tab.value)}
+              accessibilityRole="tab"
+              accessibilityLabel={tab.label}
+              accessibilityState={{ selected: isActive }}
+              style={({ pressed }) => [
+                styles.tabBtn,
+                isActive && styles.tabBtnActive,
+                pressed && styles.tabBtnPressed,
+              ]}
+            >
+              <View style={styles.iconSlot}>
+                <IconCmp
+                  size={24}
+                  color={isActive ? colors.primaryText : colors.textMuted}
+                  strokeWidth={isActive ? 2.4 : 2.0}
+                />
+                {tab.value === 'jobs' && activeJobCount > 0 ? (
+                  <View style={styles.badge}>
+                    <Text variant="caption" color="#78350f" style={styles.badgeText}>
+                      {activeJobCount}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-            )}
-          </View>
-        </Pressable>
-
-        {/* 3. TRANSPORT TAB */}
-        <Pressable
-          onPress={() => handleTabPress('transport')}
-          style={({ pressed }) => [
-            styles.tabBtn,
-            pressed && styles.tabBtnPressed,
-            isTransport && styles.tabBtnActive,
-          ]}
-          accessibilityRole="tab"
-          accessibilityLabel="Transport"
-          accessibilityState={{ selected: isTransport }}
-        >
-          <Rocket
-            size={23}
-            color={isTransport ? colors.primary : colors.textSecondary}
-            strokeWidth={isTransport ? 2.8 : 2.2}
-          />
-        </Pressable>
+            </Pressable>
+          );
+        })}
       </View>
+
+      {/* Safe-area bottom inset padding */}
+      <View style={[styles.safeArea, { height: bottomInset }]} pointerEvents="none" />
     </View>
   );
 }
 
+const TABS: ReadonlyArray<{
+  label: string;
+  value: MainTab;
+  icon: LucideIcon;
+}> = [
+  { label: 'Home', value: 'home', icon: Home },
+  { label: 'Jobs', value: 'jobs', icon: ClipboardList },
+  { label: 'Transport', value: 'transport', icon: Navigation },
+];
+
 const styles = StyleSheet.create({
-  dockWrapper: {
+  bar: {
     position: 'absolute',
-    bottom: dockMetrics.bottomOffset,
     left: 0,
     right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+    bottom: 0,
     zIndex: 90,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    ...(Platform.OS === 'android' ? { elevation: 8 } : null),
   },
-  dockPill: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    shadowColor: '#071523',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    elevation: 10,
-    gap: 10,
+    justifyContent: 'space-around',
+    paddingHorizontal: 24,
   },
   tabBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 84,
-    paddingHorizontal: 26,
-    // 23pt icon + 22pt padding = 45pt tall, clearing the 44pt minimum target
-    // (iOS HIG / Material) for the app's primary navigation.
-    paddingVertical: 11,
-    borderRadius: 999,
+    minWidth: 72,
+    height: 44,
+    borderRadius: radii.full,
+    paddingHorizontal: 18,
   },
   tabBtnActive: {
-    backgroundColor: 'rgba(0, 92, 209, 0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 92, 209, 0.22)',
+    backgroundColor: 'rgba(21, 87, 208, 0.08)',
   },
   tabBtnPressed: {
-    transform: [{ scale: 0.92 }],
-    opacity: 0.85,
+    opacity: 0.7,
+    transform: [{ scale: 0.94 }],
   },
-  iconContainer: {
+  iconSlot: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  /** Lighter warm amber badge chip with crisp white border */
   badge: {
     position: 'absolute',
-    // Nudged up and out so the counter reads as a separate chip instead of
-    // sitting on top of the PackageCheck glyph. Overlap with the icon's top
-    // corner drops from ~9x13pt to ~4x9pt.
-    top: -8,
+    top: -6,
     right: -13,
-    backgroundColor: colors.warning,
-    borderRadius: 99,
-    minWidth: 17,
-    height: 17,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    // Deep amber ring rather than white: a white ring disappears against the
-    // white dock pill, and this matches the amberDot treatment on Home.
+    borderRadius: radii.full,
+    backgroundColor: '#fbbf24', // Amber 400: bright, light, warm golden
     borderWidth: 1.5,
-    borderColor: colors.warningText,
-    paddingHorizontal: 3,
+    borderColor: '#ffffff',
   },
   badgeText: {
-    color: colors.textPrimary,
-    fontSize: 9,
-    fontWeight: '900',
-    fontFamily: typography.fontMono,
-    lineHeight: 11,
+    fontWeight: '800',
+    fontSize: 11,
+    lineHeight: 13,
+    color: '#78350f',
+  },
+  safeArea: {
+    backgroundColor: colors.surface,
   },
 });

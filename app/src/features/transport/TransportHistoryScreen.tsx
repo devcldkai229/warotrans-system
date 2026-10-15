@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,10 +10,10 @@ import {
 } from 'react-native';
 import {
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Box,
   CheckCircle2,
+  Clock,
   Filter,
   MapPin,
   Navigation,
@@ -25,10 +26,13 @@ import {
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
+import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { listTransportRequests, TransportRequestListItem } from '../../shared/api';
 
 export interface TransportOrder {
   id: string;
@@ -54,7 +58,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Inbound Putaway',
     category: 'INBOUND',
     status: 'IN_PROGRESS',
-    statusText: 'ALLOCATING AMR',
+    statusText: 'Allocating AMR',
     source: 'Dock 01',
     destination: 'Rack A · Level 2 · Bin 03',
     container: 'BOX-101',
@@ -69,7 +73,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Line Replenishment',
     category: 'INTERNAL',
     status: 'IN_PROGRESS',
-    statusText: 'EN ROUTE',
+    statusText: 'En Route',
     source: 'Rack B-02',
     destination: 'Assembly Line 03',
     container: 'BOX-109',
@@ -84,7 +88,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Outbound Retrieval',
     category: 'OUTBOUND',
     status: 'COMPLETED',
-    statusText: 'DELIVERED & VERIFIED',
+    statusText: 'Delivered & Verified',
     source: 'Rack B-04',
     destination: 'Dock Out 01',
     container: 'BOX-204',
@@ -100,7 +104,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Storage Reallocation',
     category: 'INTERNAL',
     status: 'COMPLETED',
-    statusText: 'TRANSFER COMPLETE',
+    statusText: 'Transfer Complete',
     source: 'Rack A-01',
     destination: 'Rack B-05',
     container: 'BOX-310',
@@ -116,7 +120,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Direct Point-to-Point',
     category: 'INTERNAL',
     status: 'COMPLETED',
-    statusText: 'HANDOVER COMPLETE',
+    statusText: 'Handover Complete',
     source: 'Inbound Staging',
     destination: 'QA Inspection Bay',
     container: 'BOX-112',
@@ -132,7 +136,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Payload Recovery (Rescue)',
     category: 'EXCEPTION',
     status: 'COMPLETED',
-    statusText: 'RESCUE RESOLVED',
+    statusText: 'Rescue Resolved',
     source: 'Aisle 2 (Stalled Point)',
     destination: 'Buffer Staging Bay',
     container: 'BOX-99',
@@ -148,7 +152,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Outbound Retrieval',
     category: 'OUTBOUND',
     status: 'CANCELLED',
-    statusText: 'CANCELLED',
+    statusText: 'Cancelled',
     source: 'Rack A-08',
     destination: 'Dock Out 02',
     container: 'BOX-215',
@@ -164,7 +168,7 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
     workflowName: 'Inbound Putaway',
     category: 'INBOUND',
     status: 'CANCELLED',
-    statusText: 'CANCELLED',
+    statusText: 'Cancelled',
     source: 'Dock 02',
     destination: 'Rack B-01',
     container: 'BOX-104',
@@ -177,6 +181,48 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
   },
 ];
 
+function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
+  const detail = item.details?.[0];
+  const isCompleted = item.status === 'COMPLETED';
+  const isCancelled =
+    item.status === 'CANCELLED' || item.status === 'REJECTED' || item.status === 'FAILED';
+  const isInProgress = !isCompleted && !isCancelled;
+
+  let category: TransportOrder['category'] = 'INTERNAL';
+  const wf = (item.workflowCode || '').toUpperCase();
+  if (wf.includes('INBOUND')) category = 'INBOUND';
+  else if (wf.includes('OUTBOUND')) category = 'OUTBOUND';
+  else if (wf.includes('RESCUE') || wf.includes('BLOCK') || wf.includes('SAFETY'))
+    category = 'EXCEPTION';
+
+  let statusText = 'Processing';
+  if (item.status === 'SUBMITTED') statusText = 'Submitted';
+  else if (item.status === 'QUEUED') statusText = 'Queued for fleet';
+  else if (item.status === 'PLANNING') statusText = 'Planning route';
+  else if (item.status === 'EXECUTING' || item.status === 'IN_PROGRESS') statusText = 'En Route';
+  else if (item.status === 'COMPLETED') statusText = 'Delivered & Verified';
+  else if (item.status === 'CANCELLED') statusText = 'Cancelled';
+  else if (item.status === 'REJECTED') statusText = 'Rejected by scheduler';
+
+  return {
+    id: item.requestCode,
+    workflowName: item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Request',
+    category,
+    status: isInProgress ? 'IN_PROGRESS' : isCompleted ? 'COMPLETED' : 'CANCELLED',
+    statusText,
+    source: detail?.sourceEndpointCode || 'Pickup Station',
+    destination: detail?.destinationEndpointCode || 'Dropoff Location',
+    container: detail?.containerBarcode || 'Container Tote',
+    product: item.note || 'Standard Cargo',
+    qty: 1,
+    robot: 'AMR Fleet',
+    timeLabel: item.submittedAt
+      ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : 'Just now',
+    operator: 'Staff Operator',
+  };
+}
+
 type CategoryFilter = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | 'EXCEPTION';
 
 export function TransportHistoryScreen() {
@@ -185,12 +231,33 @@ export function TransportHistoryScreen() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
   const [showCategoryChips, setShowCategoryChips] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orders, setOrders] = useState<TransportOrder[]>(TRANSPORT_ORDERS);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const inProgressCount = TRANSPORT_ORDERS.filter((o) => o.status === 'IN_PROGRESS').length;
-  const completedCount = TRANSPORT_ORDERS.filter((o) => o.status === 'COMPLETED').length;
-  const cancelledCount = TRANSPORT_ORDERS.filter((o) => o.status === 'CANCELLED').length;
+  const fetchHistory = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await listTransportRequests({ take: 50 });
+      if (res?.items && res.items.length > 0) {
+        const liveOrders = res.items.map(mapRequestToOrder);
+        setOrders(liveOrders);
+      }
+    } catch (err) {
+      console.warn('Backend history fetch error, using cached records:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
-  const filteredOrders = TRANSPORT_ORDERS.filter((order) => {
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const inProgressCount = orders.filter((o) => o.status === 'IN_PROGRESS').length;
+  const completedCount = orders.filter((o) => o.status === 'COMPLETED').length;
+  const cancelledCount = orders.filter((o) => o.status === 'CANCELLED').length;
+
+  const filteredOrders = orders.filter((order) => {
     if (filter !== 'ALL' && order.status !== filter) return false;
     if (categoryFilter !== 'ALL' && order.category !== categoryFilter) return false;
     if (!searchQuery.trim()) return true;
@@ -208,9 +275,8 @@ export function TransportHistoryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header matching prototype AppHeader */}
       <SubScreenHeader
-        label="Fleet Audit Trail"
+        label="Fleet audit trail"
         title="Transport History"
         onBack={goBack}
       />
@@ -219,8 +285,16 @@ export function TransportHistoryScreen() {
         style={styles.scrollArea}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={fetchHistory}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
-        {/* Metric Summary Filter Cards */}
+        {/* Metric Summary Tabs */}
         <View style={styles.metricsGrid}>
           <Pressable
             onPress={() => {
@@ -228,15 +302,19 @@ export function TransportHistoryScreen() {
               setFilter('ALL');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter all ${TRANSPORT_ORDERS.length} transport orders`}
+            accessibilityLabel={`Filter all ${orders.length} orders`}
             accessibilityState={{ selected: filter === 'ALL' }}
             style={[
               styles.metricCard,
-              filter === 'ALL' && styles.metricCardAllActive,
+              filter === 'ALL' && styles.metricCardActive,
             ]}
           >
-            <Text style={styles.metricNumber}>{TRANSPORT_ORDERS.length}</Text>
-            <Text style={styles.metricLabel}>TOTAL</Text>
+            <Text style={[styles.metricNumber, filter === 'ALL' && styles.metricNumberActive]}>
+              {orders.length}
+            </Text>
+            <Text style={[styles.metricLabel, filter === 'ALL' && styles.metricLabelActive]}>
+              All orders
+            </Text>
           </Pressable>
 
           <Pressable
@@ -245,15 +323,19 @@ export function TransportHistoryScreen() {
               setFilter('IN_PROGRESS');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter ${inProgressCount} active transport orders`}
+            accessibilityLabel={`Filter ${inProgressCount} active orders`}
             accessibilityState={{ selected: filter === 'IN_PROGRESS' }}
             style={[
               styles.metricCard,
-              filter === 'IN_PROGRESS' && styles.metricCardWarningActive,
+              filter === 'IN_PROGRESS' && styles.metricCardActive,
             ]}
           >
-            <Text style={[styles.metricNumber, { color: '#b45309' }]}>{inProgressCount}</Text>
-            <Text style={styles.metricLabel}>ACTIVE</Text>
+            <Text style={[styles.metricNumber, filter === 'IN_PROGRESS' && styles.metricNumberActive]}>
+              {inProgressCount}
+            </Text>
+            <Text style={[styles.metricLabel, filter === 'IN_PROGRESS' && styles.metricLabelActive]}>
+              Active
+            </Text>
           </Pressable>
 
           <Pressable
@@ -262,15 +344,19 @@ export function TransportHistoryScreen() {
               setFilter('COMPLETED');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter ${completedCount} done transport orders`}
+            accessibilityLabel={`Filter ${completedCount} completed orders`}
             accessibilityState={{ selected: filter === 'COMPLETED' }}
             style={[
               styles.metricCard,
-              filter === 'COMPLETED' && styles.metricCardSuccessActive,
+              filter === 'COMPLETED' && styles.metricCardActive,
             ]}
           >
-            <Text style={[styles.metricNumber, { color: '#16a34a' }]}>{completedCount}</Text>
-            <Text style={styles.metricLabel}>DONE</Text>
+            <Text style={[styles.metricNumber, filter === 'COMPLETED' && styles.metricNumberActive]}>
+              {completedCount}
+            </Text>
+            <Text style={[styles.metricLabel, filter === 'COMPLETED' && styles.metricLabelActive]}>
+              Delivered
+            </Text>
           </Pressable>
 
           <Pressable
@@ -279,28 +365,32 @@ export function TransportHistoryScreen() {
               setFilter('CANCELLED');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter ${cancelledCount} void transport orders`}
+            accessibilityLabel={`Filter ${cancelledCount} cancelled orders`}
             accessibilityState={{ selected: filter === 'CANCELLED' }}
             style={[
               styles.metricCard,
-              filter === 'CANCELLED' && styles.metricCardDangerActive,
+              filter === 'CANCELLED' && styles.metricCardActive,
             ]}
           >
-            <Text style={[styles.metricNumber, { color: '#dc2626' }]}>{cancelledCount}</Text>
-            <Text style={styles.metricLabel}>VOID</Text>
+            <Text style={[styles.metricNumber, filter === 'CANCELLED' && styles.metricNumberActive]}>
+              {cancelledCount}
+            </Text>
+            <Text style={[styles.metricLabel, filter === 'CANCELLED' && styles.metricLabelActive]}>
+              Cancelled
+            </Text>
           </Pressable>
         </View>
 
-        {/* Search & Filter Bar */}
+        {/* Search & Category Filter Bar */}
         <View style={styles.searchSection}>
           <View style={styles.searchRow}>
             <View style={styles.searchBox}>
-              <Search size={16} color="#94a3b8" style={styles.searchIcon} />
+              <Search size={16} color={colors.textMuted} style={styles.searchIcon} />
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search TR, location, container, robot..."
-                placeholderTextColor="#94a3b8"
+                placeholder="Search TR, route, container, robot..."
+                placeholderTextColor={colors.textMuted}
                 style={styles.searchInput}
               />
               {searchQuery ? (
@@ -310,7 +400,7 @@ export function TransportHistoryScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Clear search"
                 >
-                  <X size={15} color="#94a3b8" />
+                  <X size={16} color={colors.textMuted} />
                 </Pressable>
               ) : null}
             </View>
@@ -329,13 +419,13 @@ export function TransportHistoryScreen() {
             >
               <SlidersHorizontal
                 size={16}
-                color={categoryFilter !== 'ALL' || showCategoryChips ? colors.primary : '#64748b'}
+                color={categoryFilter !== 'ALL' || showCategoryChips ? colors.textPrimary : colors.textMuted}
               />
               {categoryFilter !== 'ALL' && <View style={styles.filterDotBadge} />}
             </Pressable>
           </View>
 
-          {/* Quick Category Chips */}
+          {/* Category Filter Chips */}
           {showCategoryChips && (
             <ScrollView
               horizontal
@@ -343,11 +433,11 @@ export function TransportHistoryScreen() {
               contentContainerStyle={styles.filterChipsRow}
             >
               {[
-                { key: 'ALL', label: 'All Categories' },
+                { key: 'ALL', label: 'All categories' },
                 { key: 'INBOUND', label: 'Inbound' },
                 { key: 'OUTBOUND', label: 'Outbound' },
-                { key: 'INTERNAL', label: 'Internal Move' },
-                { key: 'EXCEPTION', label: 'Safety / Rescue' },
+                { key: 'INTERNAL', label: 'Internal move' },
+                { key: 'EXCEPTION', label: 'Rescue / Safety' },
               ].map((chip) => {
                 const isActive = categoryFilter === chip.key;
                 return (
@@ -379,12 +469,11 @@ export function TransportHistoryScreen() {
           )}
         </View>
 
-
         {/* Order Cards List */}
         <View style={styles.ordersList}>
           {filteredOrders.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Search size={28} color="#94a3b8" style={{ marginBottom: 8 }} />
+              <Search size={28} color={colors.textMuted} style={{ marginBottom: 8 }} />
               <Text style={styles.emptyTitle}>No transport records found</Text>
               <Text style={styles.emptySubtitle}>Try adjusting your filter or search query.</Text>
               {(searchQuery || filter !== 'ALL' || categoryFilter !== 'ALL') && (
@@ -396,7 +485,7 @@ export function TransportHistoryScreen() {
                   }}
                   style={styles.resetBtn}
                 >
-                  <Text style={styles.resetBtnText}>Reset Filters</Text>
+                  <Text style={styles.resetBtnText}>Reset filters</Text>
                 </Pressable>
               )}
             </View>
@@ -413,7 +502,7 @@ export function TransportHistoryScreen() {
                     <View style={styles.idGroup}>
                       <Text style={styles.orderId}>{order.id}</Text>
                       <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryBadgeText}>{order.category}</Text>
+                        <Text style={styles.categoryBadgeText}>{order.category.toLowerCase()}</Text>
                       </View>
                     </View>
 
@@ -426,8 +515,8 @@ export function TransportHistoryScreen() {
                       ]}
                     >
                       {isInProgress && <View style={styles.pulsingDot} />}
-                      {isCompleted && <CheckCircle2 size={11} color="#16a34a" style={{ marginRight: 4 }} />}
-                      {isCancelled && <AlertTriangle size={11} color="#dc2626" style={{ marginRight: 4 }} />}
+                      {isCompleted && <CheckCircle2 size={13} color="#16a34a" style={{ marginRight: 4 }} />}
+                      {isCancelled && <AlertTriangle size={13} color="#dc2626" style={{ marginRight: 4 }} />}
                       <Text
                         style={[
                           styles.statusBadgeText,
@@ -446,47 +535,51 @@ export function TransportHistoryScreen() {
 
                   {/* Route Visualizer */}
                   <View style={styles.routeBox}>
-                    <MapPin size={13} color={colors.primary} style={{ marginRight: 6, flexShrink: 0 }} />
+                    <MapPin size={14} color={colors.textSecondary} style={{ marginRight: 6, flexShrink: 0 }} />
                     <Text style={styles.routeSource} numberOfLines={1}>{order.source}</Text>
-                    <ArrowRight size={12} color="#94a3b8" style={{ marginHorizontal: 6, flexShrink: 0 }} />
+                    <ArrowRight size={13} color={colors.textMuted} style={{ marginHorizontal: 6, flexShrink: 0 }} />
                     <Text style={styles.routeDestination} numberOfLines={1}>{order.destination}</Text>
                   </View>
 
                   {/* Cargo Information */}
                   <View style={styles.cargoRow}>
-                    <Box size={13} color="#64748b" style={{ marginRight: 6 }} />
+                    <Box size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
                     <Text style={styles.cargoContainer}>{order.container}</Text>
                     <Text style={styles.cargoDot}>·</Text>
                     <Text style={styles.cargoDetails}>
-                      {order.qty} × {order.product}
+                      <Text style={styles.cargoQty}>{order.qty} × </Text>
+                      {order.product}
                     </Text>
                   </View>
 
                   {/* Metadata Row */}
                   <View style={styles.metaRow}>
                     <View style={styles.assignedCol}>
-                      <Truck size={12} color={colors.primary} style={{ marginRight: 4 }} />
+                      <Truck size={13} color={colors.textSecondary} style={{ marginRight: 5 }} />
                       <Text style={styles.assignedLabel}>
-                        Assigned: <Text style={styles.assignedRobot}>{order.robot}</Text>
+                        AMR: <Text style={styles.assignedRobot}>{order.robot}</Text>
                       </Text>
                     </View>
-                    <Text style={styles.timeLabel}>
-                      {order.timeLabel}{order.duration ? ` · (${order.duration})` : ''}
-                    </Text>
+                    <View style={styles.timeCol}>
+                      <Clock size={12} color={colors.textMuted} style={{ marginRight: 4 }} />
+                      <Text style={styles.timeLabel}>
+                        {order.timeLabel}{order.duration ? ` (${order.duration})` : ''}
+                      </Text>
+                    </View>
                   </View>
 
                   {/* Cancellation Reason Alert if Cancelled */}
                   {isCancelled && order.cancelReason && (
                     <View style={styles.cancelAlert}>
-                      <AlertTriangle size={13} color="#dc2626" style={{ marginRight: 6, marginTop: 1, flexShrink: 0 }} />
+                      <AlertTriangle size={14} color="#dc2626" style={{ marginRight: 8, marginTop: 1, flexShrink: 0 }} />
                       <Text style={styles.cancelAlertText}>
-                        <Text style={{ fontWeight: 'bold' }}>Cancellation Reason: </Text>
+                        <Text style={{ fontWeight: '700' }}>Reason: </Text>
                         {order.cancelReason}
                       </Text>
                     </View>
                   )}
 
-                  {/* Action Buttons */}
+                  {/* Action Buttons with Warm Dark Gray CTAs */}
                   <View style={styles.actionsRow}>
                     {isInProgress && (
                       <>
@@ -498,8 +591,8 @@ export function TransportHistoryScreen() {
                           style={styles.actionBtnPrimary}
                           accessibilityRole="button"
                         >
-                          <Navigation size={13} color="#ffffff" style={{ marginRight: 6 }} />
-                          <Text style={styles.actionBtnPrimaryText}>Live Map</Text>
+                          <Navigation size={14} color="#ffffff" style={{ marginRight: 6 }} />
+                          <Text style={styles.actionBtnPrimaryText}>Track on live map</Text>
                         </Pressable>
 
                         <Pressable
@@ -510,7 +603,7 @@ export function TransportHistoryScreen() {
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
                         >
-                          <Text style={styles.actionBtnOutlineText}>View Job</Text>
+                          <Text style={styles.actionBtnOutlineText}>View job</Text>
                         </Pressable>
                       </>
                     )}
@@ -525,8 +618,8 @@ export function TransportHistoryScreen() {
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
                         >
-                          <Printer size={13} color="#64748b" style={{ marginRight: 6 }} />
-                          <Text style={[styles.actionBtnOutlineText, { color: '#64748b' }]}>Print Slip</Text>
+                          <Printer size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
+                          <Text style={styles.actionBtnOutlineText}>Print slip</Text>
                         </Pressable>
 
                         <Pressable
@@ -543,8 +636,8 @@ export function TransportHistoryScreen() {
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
                         >
-                          <RefreshCw size={13} color={colors.primary} style={{ marginRight: 6 }} />
-                          <Text style={[styles.actionBtnOutlineText, { color: colors.primary }]}>Retry</Text>
+                          <RefreshCw size={13} color={colors.textSecondary} style={{ marginRight: 6 }} />
+                          <Text style={styles.actionBtnOutlineText}>Repeat</Text>
                         </Pressable>
                       </>
                     )}
@@ -561,12 +654,12 @@ export function TransportHistoryScreen() {
                             qty: String(order.qty),
                           });
                         }}
-                        style={[styles.actionBtnOutline, { flex: 1 }]}
+                        style={[styles.actionBtnPrimary, { flex: 1 }]}
                         accessibilityRole="button"
                       >
-                        <RefreshCw size={13} color={colors.primary} style={{ marginRight: 6 }} />
-                        <Text style={[styles.actionBtnOutlineText, { color: colors.primary }]}>
-                          Re-dispatch Order
+                        <RefreshCw size={14} color="#ffffff" style={{ marginRight: 6 }} />
+                        <Text style={styles.actionBtnPrimaryText}>
+                          Re-dispatch order
                         </Text>
                       </Pressable>
                     )}
@@ -591,7 +684,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
   metricsGrid: {
     flexDirection: 'row',
@@ -600,49 +693,42 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    height: 60,
-    borderRadius: 12,
+    minHeight: 56,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  metricCardAllActive: {
-    borderColor: colors.primary,
+  metricCardActive: {
+    borderColor: colors.darkAction,
     borderWidth: 1.5,
-    backgroundColor: 'rgba(0, 92, 209, 0.10)',
-  },
-  metricCardWarningActive: {
-    borderColor: '#f59e0b',
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  },
-  metricCardSuccessActive: {
-    borderColor: '#10b981',
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  metricCardDangerActive: {
-    borderColor: '#ef4444',
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: '#ffffff',
+    ...shadows.panel,
   },
   metricNumber: {
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: '700',
+    color: colors.textSecondary,
+    fontFamily: typography.fontMono,
+  },
+  metricNumberActive: {
     color: colors.textPrimary,
-    fontFamily: typography.fontSans,
+    fontWeight: '800',
   },
   metricLabel: {
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.textMuted,
     marginTop: 2,
-    textTransform: 'uppercase',
     fontFamily: typography.fontSans,
+  },
+  metricLabelActive: {
+    color: colors.textPrimary,
+    fontWeight: '600',
   },
   searchSection: {
     marginBottom: 16,
@@ -656,135 +742,132 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
+    borderRadius: radii.md,
     paddingHorizontal: 12,
-    height: 42,
-  },
-  filterBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  filterBtnActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(0, 92, 209, 0.08)',
-  },
-  filterDotBadge: {
-    position: 'absolute',
-    top: 7,
-    right: 7,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primary,
-  },
-  filterChipsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingTop: 10,
-    paddingBottom: 2,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  filterChipTextActive: {
-    color: '#ffffff',
-    fontWeight: '900',
+    minHeight: 44,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 14,
     color: colors.textPrimary,
-    paddingVertical: 0,
     fontFamily: typography.fontSans,
+    height: 44,
   },
   clearBtn: {
-    padding: 4,
+    padding: 6,
+  },
+  filterBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  filterBtnActive: {
+    borderColor: colors.darkAction,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  filterDotBadge: {
+    position: 'absolute',
+    top: 9,
+    right: 9,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.darkAction,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    minHeight: 34,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterChipActive: {
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
   ordersList: {
     gap: 12,
   },
   emptyCard: {
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderStyle: 'dashed',
     borderColor: colors.border,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
     padding: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   emptySubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textMuted,
     marginTop: 4,
+    textAlign: 'center',
+    fontFamily: typography.fontSans,
   },
   resetBtn: {
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
   },
   resetBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textPrimary,
-    fontFamily: typography.fontSans,
   },
   orderCard: {
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
     padding: 16,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    ...shadows.panel,
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 18,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   idGroup: {
     flexDirection: 'row',
@@ -792,83 +875,80 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   orderId: {
-    fontFamily: typography.fontMono,
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
     color: colors.textPrimary,
+    fontFamily: typography.fontMono,
   },
   categoryBadge: {
-    borderRadius: 4,
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 6,
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: 8,
     paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   categoryBadgeText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: '#64748b',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'capitalize',
     fontFamily: typography.fontSans,
   },
   statusBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minHeight: 18,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   statusBadgeWarning: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
   },
   statusBadgeSuccess: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
   },
   statusBadgeDanger: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
   },
   pulsingDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#b45309',
     marginRight: 5,
   },
   statusBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontSize: 12,
+    fontWeight: '700',
     fontFamily: typography.fontSans,
   },
   workflowTitle: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.textPrimary,
+    marginBottom: 8,
     fontFamily: typography.fontSans,
   },
   routeBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(241, 245, 249, 0.4)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.6)',
+    backgroundColor: colors.surfaceSubtle,
     paddingHorizontal: 10,
-    paddingVertical: 10,
-    minHeight: 39,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+    marginBottom: 10,
   },
   routeSource: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
-    color: colors.textMuted,
+    color: colors.textPrimary,
     flexShrink: 1,
     fontFamily: typography.fontSans,
   },
   routeDestination: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textPrimary,
     flexShrink: 1,
     fontFamily: typography.fontSans,
@@ -876,110 +956,113 @@ const styles = StyleSheet.create({
   cargoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 17,
-    flexWrap: 'wrap',
-    gap: 2,
+    marginBottom: 10,
   },
   cargoContainer: {
-    fontFamily: typography.fontMono,
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
+    fontFamily: typography.fontMono,
   },
   cargoDot: {
     marginHorizontal: 6,
-    color: '#94a3b8',
-    fontWeight: 'bold',
-    fontFamily: typography.fontSans,
+    color: colors.textMuted,
   },
   cargoDetails: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.textSecondary,
     fontFamily: typography.fontSans,
+    flex: 1,
+  },
+  cargoQty: {
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   metaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(226, 232, 240, 0.6)',
+    alignItems: 'center',
     paddingTop: 8,
-    minHeight: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginBottom: 12,
   },
   assignedCol: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   assignedLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.textMuted,
+    fontSize: 12,
+    color: colors.textSecondary,
     fontFamily: typography.fontSans,
   },
   assignedRobot: {
-    fontWeight: '900',
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
   },
+  timeCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   timeLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textMuted,
-    fontWeight: '500',
     fontFamily: typography.fontSans,
   },
   cancelAlert: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(220, 38, 38, 0.06)',
     borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: 8,
+    borderColor: 'rgba(220, 38, 38, 0.2)',
+    borderRadius: radii.sm,
     padding: 10,
+    marginBottom: 12,
   },
   cancelAlertText: {
-    flex: 1,
-    fontSize: 10,
+    fontSize: 12,
     color: '#dc2626',
-    lineHeight: 14,
+    flex: 1,
+    lineHeight: 16,
+    fontFamily: typography.fontSans,
   },
   actionsRow: {
     flexDirection: 'row',
     gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(226, 232, 240, 0.4)',
-    paddingTop: 4,
-    minHeight: 37,
   },
   actionBtnPrimary: {
     flex: 1,
-    height: 32,
-    backgroundColor: colors.primary,
-    borderRadius: 6,
+    minHeight: 44,
+    borderRadius: radii.sm,
+    backgroundColor: colors.darkAction,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   actionBtnPrimaryText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#ffffff',
     fontFamily: typography.fontSans,
   },
   actionBtnOutline: {
     flex: 1,
-    height: 32,
+    minHeight: 44,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: 6,
+    backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   actionBtnOutlineText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },

@@ -31,27 +31,29 @@ export function useTopInset(): number {
 }
 
 /**
- * Floating navigation dock metrics.
+ * Bottom navigation bar metrics.
  *
- * The dock is `position: absolute` over the screen, so it carries no automatic
- * safe-area handling. Screens that dock content to the bottom of the viewport
- * must clear it via `dockReservedSpace()` instead of a hand-tuned padding.
+ * The bar is `position: absolute` over the screen so content scrolls edge to
+ * edge underneath it (the Google console pattern), which means it carries no
+ * automatic safe-area handling — the component applies `insets.bottom` itself.
+ * Screens that dock content to the bottom of the viewport must clear it via
+ * `dockReservedSpace()` instead of a hand-tuned padding.
  *
  * Previously the clearance was three independent magic numbers
- * (`map.minHeight`, `sheet.paddingBottom` of 78/70, and `dockWrapper.bottom`),
- * which summed to roughly 2pt of slack on iPhone 12 — one font-metric change
- * away from the dock clipping the content above it.
+ * (`map.minHeight`, `sheet.paddingBottom` of 78/70, and the pill's
+ * `bottomOffset`), which summed to roughly 2pt of slack on iPhone 12 — one
+ * font-metric change away from the bar clipping the content above it.
  */
 export const dockMetrics = {
-  /** Distance from the physical bottom edge of the screen to the dock pill. */
-  bottomOffset: Platform.select({ android: 16, default: 24 }),
-  /** Breathing room between the dock and the content it floats over. */
-  gutter: 8,
+  /** The bar sits flush on the physical bottom edge, so this is 0. */
+  bottomOffset: 0,
+  /** Breathing room between the bar and the content it floats over. */
+  gutter: 16,
 } as const;
 
 /**
- * Bottom padding a screen needs so its content clears the floating dock.
- * @param dockHeight Measured pill height reported by BottomTabBar via onLayout.
+ * Bottom padding a screen needs so its content clears the bottom bar.
+ * @param dockHeight Measured bar height reported by BottomTabBar via onLayout.
  */
 export function dockReservedSpace(dockHeight: number): number {
   return dockHeight + dockMetrics.bottomOffset + dockMetrics.gutter;

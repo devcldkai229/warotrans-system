@@ -19,21 +19,25 @@ import { ReplenishmentScreen } from '../../features/transport/ReplenishmentScree
 import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
 import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
-import { AppHeader } from '../../shared/components/AppHeader';
+import { AppHeader } from '../shell/AppHeader';
 import { colors } from '../../shared/theme/colors';
 import { BottomTabBar } from './BottomTabBar';
-import { useNavigation } from './NavigationContext';
+import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
   const { session, isAuthenticated, logout, updateZone } = useAuth();
-  const { currentScreen, goBack } = useNavigation();
+  const { currentScreen, goBack, params, navigate } = useNavigation();
 
   if (!isAuthenticated || !session) {
     return <LoginScreen />;
   }
 
-  const isMainTab =
-    currentScreen === 'home' || currentScreen === 'jobs' || currentScreen === 'transport';
+  /**
+   * Tab roots share one shell: `AppHeader` above, `BottomTabBar` below. Every
+   * other route is a full-screen destination and brings its own header, which
+   * is why `isMainTabScreen` is the single gate for both.
+   */
+  const isMainTab = isMainTabScreen(currentScreen);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -87,9 +91,20 @@ export function AppNavigator() {
       {currentScreen === 'home' && (
         <AppHeader
           operatorName={session.fullName}
+          operatorRole={session.role === 'ADMIN' ? 'Admin' : 'Staff'}
+          initials={session.avatarInitials}
           zone={session.zone}
           onLogout={logout}
-          onZoneChange={(newZone) => updateZone(newZone)}
+          onZoneChange={updateZone}
+          initialOpen={
+            params?.modal === 'zone'
+              ? 'zone'
+              : params?.modal === 'account'
+                ? 'account'
+                : params?.modal === 'notifications'
+                  ? 'notifications'
+                  : undefined
+          }
         />
       )}
 
@@ -111,5 +126,6 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
+    zIndex: 1,
   },
 });

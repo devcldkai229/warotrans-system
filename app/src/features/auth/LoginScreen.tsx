@@ -152,7 +152,7 @@ export function LoginScreen() {
                   setPassword(text);
                   if (passwordError) setPasswordError(null);
                 }}
-                placeholder="Enter shift password"
+                placeholder="Enter password"
                 secureTextEntry={!showPassword}
                 returnKeyType="done"
                 leftIcon={<Lock size={18} color={colors.textSecondary} />}
@@ -222,7 +222,7 @@ export function LoginScreen() {
           {/* Action Button */}
           <View style={styles.actionSection}>
             <Button
-              label="SIGN IN TO SHIFT"
+              label="Sign In"
               icon={<LogIn size={18} color="#ffffff" strokeWidth={2.4} />}
               onPress={handleLogin}
               size="lg"

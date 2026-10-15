@@ -1,6 +1,5 @@
-import { ContainerSlot, JobStepSummary, JobSummary, WorkflowCode } from '../../shared/types/contracts';
-
-export type JobKind = 'waiting' | 'transit' | 'complete' | 'queued';
+import { ContainerSlot, JobStatus, JobStepSummary, JobSummary, WorkflowCode } from '../../shared/types/contracts';
+import { SemanticTone } from '../../shared/theme/colors';
 
 export interface JobStopStep {
   type: string;
@@ -28,7 +27,6 @@ export interface JobContainerItem {
 }
 
 export interface AppJobItem extends JobSummary {
-  kind: JobKind;
   target: string;
   route: string;
   robot: string;
@@ -48,6 +46,73 @@ export interface AppJobItem extends JobSummary {
   stopsList: JobStopItem[];
 }
 
+/**
+ * Lifecycle predicates, derived from the backend's `JobStatus`.
+ *
+ * There used to be a second, parallel lifecycle axis on this fixture — a
+ * `kind` of `waiting | transit | complete | queued` — and every screen switched
+ * on it. Two axes describing the same state is one too many: the Home screen
+ * read `45 pcs` off one job while the Jobs screen read `12` off another, and
+ * nothing in the type system noticed. The domain enum is now the only one.
+ */
+const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set<JobStatus>([
+  'COMPLETED',
+  'FAILED',
+  'CANCELLED',
+]);
+
+/** The job is over: it will not change state again, so it belongs in History. */
+export function isTerminalJobStatus(status: JobStatus): boolean {
+  return TERMINAL_STATUSES.has(status);
+}
+
+export interface JobStatusPresentation {
+  /** What the operator reads on the chip. */
+  label: string;
+  /**
+   * Passed explicitly rather than derived, because "does this need me?" is an
+   * operator decision, not a property of the enum. An `ASSIGNED` job maps to
+   * `info` in the shared `StatusPill` table — correct for a robot picking up
+   * work on its own, wrong for a card where a human is the next actor.
+   */
+  tone: SemanticTone;
+}
+
+/**
+ * How every `JobStatus` is presented, in one table, for every screen.
+ *
+ * This used to live inside `JobCard`, which meant the Transport hub kept its own
+ * hand-written badge copy — "ALLOCATING AMR" on a job the Jobs list calls
+ * *Waiting Handover*, "EN ROUTE" on one it calls *Running*. Two screens, one
+ * state, two vocabularies: exactly the defect the `kind` removal existed to
+ * kill. One table, imported by whoever has to name a status.
+ */
+export const JOB_STATUS_PRESENTATION: Record<JobStatus, JobStatusPresentation> = {
+  CREATED: { label: 'Created', tone: 'neutral' },
+  QUEUED: { label: 'Queued', tone: 'neutral' },
+  // Robot parked, human next. Warning, not info: this card is waiting on *you*.
+  ASSIGNED: { label: 'Waiting Handover', tone: 'warning' },
+  RUNNING: { label: 'Running', tone: 'info' },
+  PAUSED: { label: 'Paused', tone: 'warning' },
+  REASSIGNING: { label: 'Reassigning', tone: 'warning' },
+  RECOVERY_REQUIRED: { label: 'Needs Recovery', tone: 'danger' },
+  COMPLETED: { label: 'Completed', tone: 'success' },
+  FAILED: { label: 'Failed', tone: 'danger' },
+  CANCELLED: { label: 'Cancelled', tone: 'neutral' },
+};
+
+/**
+ * Open jobs assigned to the signed-in operator.
+ *
+ * Exported so the bottom bar's count badge and the Jobs screen's "My Tasks (n)"
+ * read the *same* definition. They used to disagree — the badge was hardcoded
+ * to `1` while the screen counted four — which on a mission-critical handheld
+ * is worse than showing nothing at all.
+ */
+export function countMyActiveJobs(): number {
+  return MOCK_JOBS.filter((job) => job.isMine && !isTerminalJobStatus(job.status)).length;
+}
+
 export const MOCK_JOBS: AppJobItem[] = [
   {
     id: 'JOB-2026-0812',
@@ -55,7 +120,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'INBOUND_PUTAWAY',
     workflowName: 'Inbound Putaway (Multi-Drop)',
     status: 'ASSIGNED',
-    kind: 'waiting',
     target: 'Rack A · Level 2 · Bin 03',
     route: 'Dock 01 ➔ Rack A-02 ➔ Rack B-04',
     robot: 'AMR-01',
@@ -206,7 +270,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'OUTBOUND_RETRIEVAL',
     workflowName: 'Outbound Retrieval Tour',
     status: 'RUNNING',
-    kind: 'transit',
     target: 'Outbound Dock Out 01',
     route: 'Rack B-04 ➔ Dock Out 01',
     robot: 'AMR-02',
@@ -310,7 +373,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'INBOUND_PUTAWAY',
     workflowName: 'Inbound Putaway',
     status: 'COMPLETED',
-    kind: 'complete',
     target: 'Rack C · Level 1 · Bin 01',
     route: 'Dock 01 ➔ Rack C-05 ➔ Rack D-02',
     robot: 'AMR-01',
@@ -402,7 +464,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'INTERNAL_RELOCATION',
     workflowName: 'Internal Reallocation',
     status: 'QUEUED',
-    kind: 'queued',
     target: 'Rack A · Level 1 · Bin 04',
     route: 'Dock 01 ➔ Rack A-01',
     robot: 'Pending Auto-assign',
@@ -474,7 +535,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'INBOUND_PUTAWAY',
     workflowName: 'Inbound Dock Bulk Induction',
     status: 'ASSIGNED',
-    kind: 'waiting',
     target: 'Dock 01 (Receiving Staging)',
     route: 'Dock 01 ➔ Rack C-02 ➔ Rack D-04',
     robot: 'AMR-03',
@@ -585,7 +645,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'OUTBOUND_RETRIEVAL',
     workflowName: 'Outbound Bulk Staging & Dispatch',
     status: 'ASSIGNED',
-    kind: 'waiting',
     target: 'Outbound Dock Out 02',
     route: 'Rack B-02 ➔ Dock Out 02',
     robot: 'AMR-01',
@@ -690,7 +749,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'INTERNAL_RELOCATION',
     workflowName: 'Rack-to-Rack Replenishment',
     status: 'RUNNING',
-    kind: 'transit',
     target: 'Pick-Face Rack A-03',
     route: 'Reserve Rack D-01 ➔ Pick-Face Rack A-03',
     robot: 'AMR-02',
@@ -784,7 +842,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'INTERNAL_RELOCATION',
     workflowName: 'Cross-Docking Fast Transfer',
     status: 'ASSIGNED',
-    kind: 'waiting',
     target: 'Dock Out 01',
     route: 'Dock In 02 ➔ Dock Out 01',
     robot: 'AMR-03',
@@ -857,7 +914,6 @@ export const MOCK_JOBS: AppJobItem[] = [
     workflowCode: 'INTERNAL_RELOCATION',
     workflowName: 'Replenishment Run 04',
     status: 'COMPLETED',
-    kind: 'complete',
     target: 'Rack B-01 · Level 2',
     route: 'Rack D-05 ➔ Rack B-01',
     robot: 'AMR-02',
