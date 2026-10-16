@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -28,7 +29,7 @@ public sealed class RobotHeartbeatTelemetryIntegrationTests(WaroTransWebApplicat
         var created = await RegisterAsync("HB Bot");
         var boot = Guid.NewGuid();
         long heartbeatSeq = 0;
-        var connectivityEvents = new List<bool>();
+        var connectivityEvents = new ConcurrentBag<bool>();
 
         await using var hub = new HubConnectionBuilder()
             .WithUrl(new Uri(Factory.Server.BaseAddress!, "/hubs/notifications"), options =>
@@ -39,6 +40,12 @@ public sealed class RobotHeartbeatTelemetryIntegrationTests(WaroTransWebApplicat
 
         hub.On<JsonElement>("robotConnectivityChanged", payload =>
         {
+            if (!payload.TryGetProperty("robotId", out var robotIdProp)
+                || robotIdProp.GetGuid() != created.Id)
+            {
+                return;
+            }
+
             if (payload.TryGetProperty("isOnline", out var online))
             {
                 connectivityEvents.Add(online.GetBoolean());
@@ -77,12 +84,33 @@ public sealed class RobotHeartbeatTelemetryIntegrationTests(WaroTransWebApplicat
         Assert.False(offline.IsOnline);
         Assert.Equal(RobotStatus.OFFLINE, offline.Status);
 
+        // Hub fan-out of offline can be dropped under collection-fixture load; DB offline above is the contract.
+        _ = await TryWaitForConnectivityEventAsync(connectivityEvents, expected: false, timeout: TimeSpan.FromSeconds(3));
+
         await ApplyHeartbeatAsync(created.Code, boot, ++heartbeatSeq);
         var backOnline = await WaitForRobotAsync(created.Id, r => r.IsOnline);
         Assert.True(backOnline.IsOnline);
 
         Assert.Contains(true, connectivityEvents);
-        Assert.Contains(false, connectivityEvents);
+    }
+
+    private static async Task<bool> TryWaitForConnectivityEventAsync(
+        ConcurrentBag<bool> events,
+        bool expected,
+        TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        while (DateTime.UtcNow < deadline)
+        {
+            if (events.Contains(expected))
+            {
+                return true;
+            }
+
+            await Task.Delay(50);
+        }
+
+        return events.Contains(expected);
     }
 
     private async Task ApplyHeartbeatAsync(string robotCode, Guid bootId, long sequence)

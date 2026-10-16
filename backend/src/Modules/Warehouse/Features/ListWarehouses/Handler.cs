@@ -25,6 +25,8 @@ public sealed class ListWarehousesHandler(WarehouseDbContext db)
                 w.Id,
                 w.Code,
                 w.Name,
+                w.Address,
+                w.Timezone,
                 w.IsActive,
                 w.CreatedAt))
             .ToListAsync(cancellationToken);

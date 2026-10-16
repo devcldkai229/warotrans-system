@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Features.CreateContainer;
+using WaroTrans.Warehouse.Features.CreateWarehouse;
 using WaroTrans.Warehouse.Features.GetContainer;
 using WaroTrans.Warehouse.Features.GetProductInventoryContext;
 using WaroTrans.Warehouse.Features.ListContainers;
@@ -30,6 +31,7 @@ public static class WarehouseModule
 
         services.AddScoped<ResolveProductHandler>();
         services.AddScoped<CreateContainerHandler>();
+        services.AddScoped<CreateWarehouseHandler>();
         services.AddScoped<GetContainerHandler>();
         services.AddScoped<GetProductInventoryContextHandler>();
         services.AddScoped<ListWarehousesHandler>();
@@ -46,6 +48,7 @@ public static class WarehouseModule
         var group = endpoints.MapGroup("/api/warehouse");
         group.MapGet("/ping", () => Results.Ok(new { module = "warehouse" })).AllowAnonymous();
         group.MapListWarehouses();
+        group.MapCreateWarehouse();
         group.MapListContainers();
         group.MapListStorageLocations();
         GetContainerEndpoint.Map(group);
