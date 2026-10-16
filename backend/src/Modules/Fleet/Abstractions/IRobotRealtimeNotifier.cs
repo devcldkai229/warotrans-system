@@ -22,5 +22,7 @@ public interface IRobotRealtimeNotifier
         NavigationStatus? navigationStatus,
         LocalizationStatus? localizationStatus,
         DateTimeOffset? lastTelemetryAt,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        double? linearVelocity = null,
+        double? angularVelocity = null);
 }

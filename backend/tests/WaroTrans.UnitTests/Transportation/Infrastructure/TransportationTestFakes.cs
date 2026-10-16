@@ -44,6 +44,10 @@ public sealed class FakeNavigationModule : INavigationModule
 {
     public Dictionary<Guid, MapVersionSnapshot> MapVersions { get; } = [];
     public Dictionary<Guid, EndpointSnapshot> Endpoints { get; } = [];
+    public Dictionary<Guid, EndpointPoseSnapshot> Poses { get; } = [];
+
+    public Task<EndpointPoseSnapshot?> GetEndpointPoseAsync(Guid endpointId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Poses.GetValueOrDefault(endpointId));
 
     public Task<MapVersionSnapshot?> GetMapVersionAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
         Task.FromResult(MapVersions.GetValueOrDefault(mapVersionId));

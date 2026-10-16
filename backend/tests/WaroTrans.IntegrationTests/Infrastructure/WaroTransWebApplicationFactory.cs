@@ -45,7 +45,11 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
                     });
 
             // Avoid real outbound MQTT connect stalls during IssueNavigate; inbound ack/result still use broker.
-            services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotCommandPublisher, CapturingMqttRobotCommandPublisher>();
+            services.AddSingleton<CapturingMqttRobotCommandPublisher>();
+            services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotCommandPublisher>(
+                sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
+            services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotTeleopPublisher>(
+                sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
         });
     }
 }

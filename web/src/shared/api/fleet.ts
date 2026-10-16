@@ -52,3 +52,37 @@ export function enableRobot(id: string) {
 export function disableRobot(id: string) {
   return apiFetch<Robot>(`/api/fleet/robots/${id}/disable`, { method: 'POST' })
 }
+
+export interface RobotCommandIssued {
+  commandId: string
+  robotId: string
+  robotCode: string
+  status: string
+}
+
+/** Nav2 goal to any pose on the robot's map (metres, yaw in radians). Nav2 plans the path. */
+export function navigateRobot(id: string, pose: { x: number; y: number; yaw: number }) {
+  return apiFetch<RobotCommandIssued>(`/api/fleet/robots/${id}/commands/navigate`, {
+    method: 'POST',
+    body: JSON.stringify({ ...pose, frameId: 'map' }),
+  })
+}
+
+/** Cancels the robot's in-flight navigate command (or `targetCommandId`). */
+export function cancelRobotCommand(id: string, targetCommandId?: string) {
+  return apiFetch<RobotCommandIssued>(`/api/fleet/robots/${id}/commands/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ targetCommandId: targetCommandId ?? null }),
+  })
+}
+
+/**
+ * Manual drive setpoint: linear m/s (+ forward), angular rad/s (+ left). `{0, 0}` stops.
+ * Repeat while a direction is held; the robot stops by itself ~0.5 s after the last one.
+ */
+export function teleopRobot(id: string, linear: number, angular: number, assist = true) {
+  return apiFetch<{ robotId: string; robotCode: string; linear: number; angular: number }>(
+    `/api/fleet/robots/${id}/teleop`,
+    { method: 'POST', body: JSON.stringify({ linear, angular, assist }) },
+  )
+}

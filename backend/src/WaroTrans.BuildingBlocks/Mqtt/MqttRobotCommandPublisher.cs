@@ -10,9 +10,9 @@ using WaroTrans.BuildingBlocks.Options;
 namespace WaroTrans.BuildingBlocks.Mqtt;
 
 /// <summary>
-/// Publishes robot commands over MQTT (QoS1). Maintains a reconnecting client.
+/// Publishes robot commands over MQTT (QoS1) and manual drive setpoints (QoS0) on one reconnecting client.
 /// </summary>
-public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IAsyncDisposable
+public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -56,6 +56,35 @@ public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IAsy
                 message.Type,
                 message.CommandId,
                 message.RobotCode);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task PublishAsync(RobotTeleopMessage message, CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.Teleop(_options.Value.TopicPrefix, message.RobotCode);
+        var json = JsonSerializer.Serialize(message, JsonOptions);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            // QoS 0: a lost setpoint is replaced by the next one (~200 ms); the robot deadman covers gaps.
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
+                .Build();
+
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+            _logger.LogDebug(
+                "Published MQTT teleop robot={RobotCode} linear={Linear} angular={Angular}",
+                message.RobotCode,
+                message.Linear,
+                message.Angular);
         }
         finally
         {

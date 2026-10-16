@@ -37,7 +37,10 @@ public static class BuildingBlocksServiceCollectionExtensions
         services.AddProblemDetails();
 
         services.AddValidatorsFromAssembly(typeof(BuildingBlocksServiceCollectionExtensions).Assembly);
-        services.AddSingleton<IMqttRobotCommandPublisher, MqttRobotCommandPublisher>();
+        // One MQTT client for commands (QoS1) and manual drive (QoS0).
+        services.AddSingleton<MqttRobotCommandPublisher>();
+        services.AddSingleton<IMqttRobotCommandPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
+        services.AddSingleton<IMqttRobotTeleopPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
         services.AddHostedService<MqttSubscriberHostedService>();
 
         return services;
