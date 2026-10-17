@@ -6,6 +6,7 @@
     "@microsoft/signalr": "^10.0.11",
     "@tanstack/react-query": "^5.104.3",
     "expo": "~57.0.25",
+    "expo-constants": "~57.0.22",
     "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
     "lucide-react-native": "^1.53.0",
@@ -21,10 +22,10 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "start": "expo start --port 8080",
+    "android": "expo start --android --port 8080",
+    "ios": "expo start --ios --port 8080",
+    "web": "expo start --web --port 8080",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },

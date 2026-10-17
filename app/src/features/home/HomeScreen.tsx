@@ -12,6 +12,7 @@ import {
   BatteryMedium,
   ChevronDown,
   ChevronUp,
+  ShieldAlert,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
@@ -28,7 +29,7 @@ import {
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime } from '../../shared/realtime';
-import { listJobs } from '../../shared/api';
+import { listJobs, listRobots } from '../../shared/api';
 import { AppJobItem, mapJobDetailToAppJobItem, MOCK_JOBS } from '../jobs/jobData';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 
@@ -75,6 +76,7 @@ export function HomeScreen() {
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
   const [activeJob, setActiveJob] = useState<AppJobItem>(INITIAL_JOB);
+  const [fleetRobots, setFleetRobots] = useState<MapRobot[]>(INITIAL_ROBOTS);
   const { robotTelemetry } = useRealtime();
 
   useEffect(() => {
@@ -86,13 +88,43 @@ export function HomeScreen() {
         }
       })
       .catch(() => {});
+
+    // Fetch initial fleet status from backend so battery/status/pose reflects database on mount
+    listRobots()
+      .then((res) => {
+        if (isMounted && res?.items && res.items.length > 0) {
+          const mapped: MapRobot[] = res.items.map((r, idx) => {
+            const fallback =
+              INITIAL_ROBOTS.find((init) => init.id === r.code) ||
+              INITIAL_ROBOTS[idx % INITIAL_ROBOTS.length];
+            return {
+              id: r.code,
+              xPercent: fallback ? fallback.xPercent : 50,
+              yPercent: fallback ? fallback.yPercent : 50,
+              headingDeg: r.poseYaw
+                ? Math.round((r.poseYaw * 180) / Math.PI)
+                : fallback?.headingDeg || 0,
+              status: (r.navigationStatus === 'NAVIGATING'
+                ? 'EN_ROUTE'
+                : r.navigationStatus === 'PAUSED'
+                  ? 'PAUSED'
+                  : 'STANDBY') as any,
+              battery: Math.round(r.batteryPercent || 85),
+              speed: r.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
+            };
+          });
+          setFleetRobots(mapped);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       isMounted = false;
     };
   }, []);
 
   const robots = useMemo(() => {
-    return INITIAL_ROBOTS.map((r) => {
+    return fleetRobots.map((r) => {
       const live = robotTelemetry[r.id];
       if (!live) return r;
       return {
@@ -107,7 +139,7 @@ export function HomeScreen() {
         headingDeg: live.poseYaw ? Math.round((live.poseYaw * 180) / Math.PI) : r.headingDeg,
       };
     });
-  }, [robotTelemetry]);
+  }, [fleetRobots, robotTelemetry]);
 
   const activeZone = session?.zone || 'Inbound Dock 01';
 
@@ -306,40 +338,47 @@ export function HomeScreen() {
             {/* Optional Expanded Fleet Details */}
             {isFleetExpanded && (
               <View style={styles.expandedFleetSection}>
-                <Text variant="label" color={colors.textSecondary} style={styles.fleetSectionTitle}>
-                  Active Fleet Status
-                </Text>
+                <View style={styles.fleetHeaderWithAction}>
+                  <Text variant="label" color={colors.textSecondary} style={styles.fleetSectionTitle}>
+                    Active Fleet Status
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      navigate('fleet_recall');
+                    }}
+                    style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Emergency Recall console"
+                  >
+                    <ShieldAlert size={13} color="#dc2626" />
+                    <Text variant="caption" style={styles.fleetRecallLinkText}>
+                      Recall & E-Stop
+                    </Text>
+                  </Pressable>
+                </View>
 
                 <View style={styles.fleetRow}>
-                  {/* AMR-01 */}
-                  <View style={styles.fleetItemCard}>
-                    <View style={styles.fleetItemHeader}>
-                      <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName}>
-                        AMR-01
-                      </Text>
-                      <StatusPill status="RUNNING" label="In Transit" />
+                  {robots.map((r) => (
+                    <View key={r.id} style={styles.fleetItemCard}>
+                      <View style={styles.fleetItemHeader}>
+                        <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName}>
+                          {r.id}
+                        </Text>
+                        <StatusPill
+                          status={r.status === 'EN_ROUTE' ? 'RUNNING' : r.status === 'PAUSED' ? 'WARNING' : 'COMPLETED'}
+                          label={r.status === 'EN_ROUTE' ? 'In Transit' : r.status === 'PAUSED' ? 'Paused' : 'Standby'}
+                          tone={r.status === 'PAUSED' ? 'warning' : undefined}
+                          size="sm"
+                        />
+                      </View>
+                      <Text variant="caption" color={colors.textSecondary}>Speed: {r.speed}</Text>
+                      <View style={styles.batteryRow}>
+                        <BatteryMedium size={14} color={r.battery < 20 ? '#dc2626' : colors.successText} />
+                        <Text variant="caption" color={colors.textSecondary}>{r.battery}%</Text>
+                      </View>
                     </View>
-                    <Text variant="caption" color={colors.textSecondary}>To Rack A-02</Text>
-                    <View style={styles.batteryRow}>
-                      <BatteryMedium size={14} color={colors.successText} />
-                      <Text variant="caption" color={colors.textSecondary}>85%</Text>
-                    </View>
-                  </View>
-
-                  {/* AMR-02 */}
-                  <View style={styles.fleetItemCard}>
-                    <View style={styles.fleetItemHeader}>
-                      <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName}>
-                        AMR-02
-                      </Text>
-                      <StatusPill status="COMPLETED" label="Standby" tone="success" />
-                    </View>
-                    <Text variant="caption" color={colors.textSecondary}>Docking Bay 02</Text>
-                    <View style={styles.batteryRow}>
-                      <BatteryMedium size={14} color={colors.successText} />
-                      <Text variant="caption" color={colors.textSecondary}>94%</Text>
-                    </View>
-                  </View>
+                  ))}
                 </View>
               </View>
             )}
@@ -522,6 +561,27 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     gap: 8,
+  },
+  fleetHeaderWithAction: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  fleetRecallLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#fef2f2',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  fleetRecallLinkText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#b91c1c',
   },
   fleetSectionTitle: {
     fontWeight: '600',

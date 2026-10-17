@@ -66,8 +66,7 @@ export function VerifyModal({
   initialMismatch = false,
   initialBarcodeInput = '',
   otherContainers = [
-    { code: 'BOX-102', slot: 'Slot 2 (Mid)' },
-    { code: 'BOX-103', slot: 'Slot 3 (Rear)' },
+    { code: 'BOX-102', slot: 'Bay 2 (Rear)' },
   ],
   isBulkMode = false,
   onClose,
@@ -107,10 +106,13 @@ export function VerifyModal({
     if (code.toUpperCase() === targetContainer.toUpperCase()) {
       setIsSubmitting(true);
       try {
-        await confirmHandover(jobStepId || 'step-handover-01', {
+        await confirmHandover({
+          jobStepId: jobStepId || 'step-handover-01',
+          scannedContainerBarcode: targetContainerId || code,
           containerId: targetContainerId || code,
           confirmedBy: operatorId || 'staff-01',
           handoverType: 'DROPOFF',
+          notes: `Handover confirmed for ${code} on ${robotCode}`,
           note: `Handover confirmed for ${code} on ${robotCode}`,
         });
         triggerHaptic('success');

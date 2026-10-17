@@ -2,10 +2,17 @@ import { apiFetch } from './client';
 import type {
   HandoverConfirmationBody,
   HandoverConfirmationResponse,
+  HandoverType,
+  JobContainerResponse,
   JobDetailResponse,
   JobStatus,
+  JobStepResponse,
+  JobStepStatus,
+  JobTaskResponse,
+  JobTaskStatus,
   ReportTaskProblemBody,
   ReportTaskProblemResponse,
+  StepType,
 } from '../types/contracts';
 
 export interface AcceptTaskResponse {
@@ -19,15 +26,27 @@ export interface AcceptTaskResponse {
 export type ConfirmHandoverBody = HandoverConfirmationBody;
 export type ConfirmHandoverResponse = HandoverConfirmationResponse;
 
+export interface HandoverConfirmRequest {
+  jobStepId: string;
+  scannedContainerBarcode?: string | null;
+  notes?: string | null;
+  /** Backward-compatible aliases */
+  containerId?: string | null;
+  note?: string | null;
+  confirmedBy?: string;
+  handoverType?: HandoverType;
+  evidence?: Record<string, unknown>;
+}
+
 /**
  * High-fidelity fallback runtime seed data mirroring Backend .NET 10 Postgres schemas:
  * `Job` -> `JobContainer` -> `JobTask` -> `JobStep` -> `HandoverConfirmation`
- * Matches samples/job-runtime-demo/persisted-runtime/10-job.runtime.graph.json
+ * Strictly enforces 2-AMR (`AMR-01`, `AMR-02`) and 2-Bay (`Bay 1 (Front)`, `Bay 2 (Rear)`) hardware limits.
  */
 let SEED_JOBS: JobDetailResponse[] = [
   {
-    id: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
-    jobNo: 'JOB-20261012-000022',
+    id: 'JOB-2026-0812',
+    jobNo: 'JOB-2026-0812',
     workflowId: 'ad360f97-02ff-4136-86ea-57412bf0c252',
     mapVersionId: '22222222-2222-2222-2222-222222222222',
     provisioningKey: '7439150f379644049f9db894b72dc3f1:BATCH-001',
@@ -37,19 +56,41 @@ let SEED_JOBS: JobDetailResponse[] = [
       warehouseId: '11111111-1111-1111-1111-111111111111',
       batchSequenceNo: 1,
       minBatteryPercent: 25,
-      transportRequestId: '7439150f-3796-4404-9f9d-b894b72dc3f1',
+      transportRequestId: 'TR-2048',
+      workflowCode: 'INBOUND_PUTAWAY',
+      workflowName: 'Inbound Putaway (2-Bay Batch)',
       assignedRobotCode: 'AMR-01',
-      sourceEndpointCode: 'Dock 01',
-      destinationEndpointCode: 'Rack A-02',
+      sourceEndpointCode: 'DOCK-IN-01',
+      destinationEndpointCode: 'RACK-A-02 · Level 1',
+      routeText: 'DOCK-IN-01 ➔ RACK-A-02 (L1) ➔ RACK-A-02 (L3)',
+      currentStop: 'Stop 2/3: RACK-A-02',
+      containerMeta: [
+        {
+          code: 'BOX-101',
+          slot: 'Bay 1 (Front)',
+          action: 'UNLOAD',
+          location: 'RACK-A-02 · Level 1',
+          product: 'Electronic Components',
+          qty: 45,
+        },
+        {
+          code: 'BOX-102',
+          slot: 'Bay 2 (Rear)',
+          action: 'KEEP ONBOARD',
+          location: 'RACK-A-02 · Level 3 (Stop 3)',
+          product: 'Control Modules (CM-3100)',
+          qty: 25,
+        },
+      ],
     },
-    createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
-    queuedAt: new Date(Date.now() - 14 * 60000).toISOString(),
-    startedAt: new Date(Date.now() - 10 * 60000).toISOString(),
+    createdAt: new Date(Date.now() - 12 * 60000).toISOString(),
+    queuedAt: new Date(Date.now() - 11 * 60000).toISOString(),
+    startedAt: new Date(Date.now() - 8 * 60000).toISOString(),
     containers: [
       {
         id: '632907a7-a0a6-4201-adea-c8ce8e468e75',
-        jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
-        transportRequestId: '7439150f-3796-4404-9f9d-b894b72dc3f1',
+        jobId: 'JOB-2026-0812',
+        transportRequestId: 'TR-2048',
         containerId: 'BOX-101',
         sequenceNo: 1,
         status: 'ONBOARD',
@@ -57,8 +98,8 @@ let SEED_JOBS: JobDetailResponse[] = [
       },
       {
         id: 'a454b0a6-d731-4dc0-aed3-7c53e40c63a8',
-        jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
-        transportRequestId: '7439150f-3796-4404-9f9d-b894b72dc3f1',
+        jobId: 'JOB-2026-0812',
+        transportRequestId: 'TR-2048',
         containerId: 'BOX-102',
         sequenceNo: 2,
         status: 'ONBOARD',
@@ -68,7 +109,7 @@ let SEED_JOBS: JobDetailResponse[] = [
     tasks: [
       {
         id: 'ebc2fcc0-cbb0-4fc8-8d19-3042d380be0e',
-        jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
+        jobId: 'JOB-2026-0812',
         workflowTaskId: '73fb5b11-53c8-4ba7-a02a-23656845a1c1',
         sequenceNo: 1,
         status: 'COMPLETED',
@@ -86,106 +127,13 @@ let SEED_JOBS: JobDetailResponse[] = [
             sequenceNo: 1,
             status: 'COMPLETED',
           },
-          {
-            id: 'd7300a1d-cf2c-4594-adf3-1f9b9c0a15a9',
-            jobTaskId: 'ebc2fcc0-cbb0-4fc8-8d19-3042d380be0e',
-            workflowStepId: 'e3818a56-2de9-459b-a35c-13a7b487b9f7',
-            workflowStepKey: 'CHECK_BATTERY',
-            operationCode: 'BATTERY_MIN',
-            stepType: 'CHECK',
-            sequenceNo: 2,
-            status: 'COMPLETED',
-          },
-        ],
-      },
-      {
-        id: 'ed8ae3d3-0ef0-4c19-9a22-282c97ca5299',
-        jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
-        workflowTaskId: '73fb5b11-53c8-4ba7-a02a-23656845a1c1',
-        sequenceNo: 2,
-        status: 'COMPLETED',
-        contextValues: {
-          executionScope: 'ONCE_PER_STOP',
-          stopAction: 'PICKUP',
-          stopEndpointId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-          stopSequenceNo: 1,
-        },
-        steps: [
-          {
-            id: '128cdb50-e234-44da-b7f8-3334d78ea4a7',
-            jobTaskId: 'ed8ae3d3-0ef0-4c19-9a22-282c97ca5299',
-            workflowStepId: '8a791129-04aa-4c1b-9b9c-7ee725513c88',
-            workflowStepKey: 'MOVE_PICKUP',
-            operationCode: 'PICKUP',
-            stepType: 'MOVE',
-            sequenceNo: 1,
-            status: 'COMPLETED',
-          },
-        ],
-      },
-      {
-        id: '2535209a-cb3d-49e2-9ba6-f4d42c87430e',
-        jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
-        workflowTaskId: '73fb5b11-53c8-4ba7-a02a-23656845a1c1',
-        sequenceNo: 3,
-        status: 'COMPLETED',
-        contextValues: {
-          executionScope: 'PER_CONTAINER_AT_STOP',
-          stopAction: 'PICKUP',
-          containerId: 'BOX-101',
-          stopSequenceNo: 1,
-        },
-        steps: [
-          {
-            id: '59731f81-24aa-42d7-8447-abd88195269e',
-            jobTaskId: '2535209a-cb3d-49e2-9ba6-f4d42c87430e',
-            workflowStepId: '2dabc6d6-839e-47f2-ba1a-d9d3003dc6ca',
-            workflowStepKey: 'PICKUP_CONFIRM',
-            operationCode: 'PICKUP_CONFIRM',
-            stepType: 'HUMAN_INTERACTION',
-            sequenceNo: 1,
-            status: 'COMPLETED',
-            handoverConfirmation: {
-              id: 'hc-001',
-              jobStepId: '59731f81-24aa-42d7-8447-abd88195269e',
-              containerId: 'BOX-101',
-              confirmedBy: 'staff-operator-1',
-              handoverType: 'PICKUP',
-              confirmedAt: new Date(Date.now() - 8 * 60000).toISOString(),
-            },
-          },
-        ],
-      },
-      {
-        id: 'fafe2239-4078-4331-bd3a-8db708b4e4ca',
-        jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
-        workflowTaskId: '73fb5b11-53c8-4ba7-a02a-23656845a1c1',
-        sequenceNo: 4,
-        status: 'RUNNING',
-        contextValues: {
-          executionScope: 'ONCE_PER_STOP',
-          stopAction: 'DROPOFF',
-          stopEndpointId: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
-          stopSequenceNo: 2,
-        },
-        steps: [
-          {
-            id: 'a12cdb50-e234-44da-b7f8-3334d78ea4a7',
-            jobTaskId: 'fafe2239-4078-4331-bd3a-8db708b4e4ca',
-            workflowStepId: '8a791129-04aa-4c1b-9b9c-7ee725513c88',
-            workflowStepKey: 'MOVE_DROPOFF',
-            operationCode: 'DROPOFF',
-            stepType: 'MOVE',
-            sequenceNo: 1,
-            status: 'COMPLETED',
-          },
         ],
       },
       {
         id: 'bb35209a-cb3d-49e2-9ba6-f4d42c87430e',
-        jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
+        jobId: 'JOB-2026-0812',
         workflowTaskId: '73fb5b11-53c8-4ba7-a02a-23656845a1c1',
-        sequenceNo: 5,
+        sequenceNo: 2,
         status: 'READY',
         contextValues: {
           executionScope: 'PER_CONTAINER_AT_STOP',
@@ -208,7 +156,324 @@ let SEED_JOBS: JobDetailResponse[] = [
       },
     ],
   },
+  {
+    id: 'JOB-2026-0819',
+    jobNo: 'JOB-2026-0819',
+    workflowId: 'ad360f97-02ff-4136-86ea-57412bf0c252',
+    mapVersionId: '22222222-2222-2222-2222-222222222222',
+    provisioningKey: '7439150f379644049f9db894b72dc3f1:BATCH-RESCUE',
+    status: 'RECOVERY_REQUIRED',
+    failureCode: 'NAV_MOTOR_STALL',
+    failureMessage: 'Drive motor torque fault in Corridor B2. Manual payload recovery required.',
+    contextValues: {
+      batchKey: 'BATCH-RESCUE',
+      warehouseId: '11111111-1111-1111-1111-111111111111',
+      batchSequenceNo: 1,
+      transportRequestId: 'TR-2047',
+      workflowCode: 'REPLENISHMENT',
+      workflowName: 'Replenishment (Zone D ➔ Zone A)',
+      assignedRobotCode: 'AMR-02',
+      sourceEndpointCode: 'RACK-D-01',
+      destinationEndpointCode: 'RACK-A-01 · Level 1',
+      routeText: 'RACK-D-01 ➔ Corridor B2 (Stalled) ➔ RACK-A-01',
+      currentStop: 'Stalled at Corridor B2 · Node 14',
+      containerMeta: [
+        {
+          code: 'BOX-401',
+          slot: 'Bay 1 (Front)',
+          action: 'UNLOAD',
+          location: 'RACK-A-01 · Level 1',
+          product: 'Sensor Array (SA-8820)',
+          qty: 50,
+        },
+        {
+          code: 'BOX-402',
+          slot: 'Bay 2 (Rear)',
+          action: 'KEEP ONBOARD',
+          location: 'RACK-A-03 · Level 2',
+          product: 'Control Module (CM-3100)',
+          qty: 30,
+        },
+      ],
+    },
+    createdAt: new Date(Date.now() - 18 * 60000).toISOString(),
+    queuedAt: new Date(Date.now() - 17 * 60000).toISOString(),
+    startedAt: new Date(Date.now() - 14 * 60000).toISOString(),
+    containers: [
+      {
+        id: 'c-r01-jc',
+        jobId: 'JOB-2026-0819',
+        transportRequestId: 'TR-2047',
+        containerId: 'BOX-401',
+        sequenceNo: 1,
+        status: 'ONBOARD',
+        loadedAt: new Date(Date.now() - 12 * 60000).toISOString(),
+      },
+      {
+        id: 'c-r02-jc',
+        jobId: 'JOB-2026-0819',
+        transportRequestId: 'TR-2047',
+        containerId: 'BOX-402',
+        sequenceNo: 2,
+        status: 'ONBOARD',
+        loadedAt: new Date(Date.now() - 11 * 60000).toISOString(),
+      },
+    ],
+    tasks: [
+      {
+        id: 'task-recovery-01',
+        jobId: 'JOB-2026-0819',
+        workflowTaskId: '73fb5b11-53c8-4ba7-a02a-23656845a1c1',
+        sequenceNo: 1,
+        status: 'FAILED',
+        failureCode: 'NAV_MOTOR_STALL',
+        steps: [
+          {
+            id: 'step-recovery-01',
+            jobTaskId: 'task-recovery-01',
+            workflowStepId: '8a791129-04aa-4c1b-9b9c-7ee725513c88',
+            workflowStepKey: 'PAYLOAD_TRANSFER',
+            operationCode: 'PAYLOAD_TRANSFER',
+            stepType: 'HUMAN_INTERACTION',
+            sequenceNo: 1,
+            status: 'PAUSED',
+            errorMessage: 'AMR-02 drive stall. Transfer BOX-401 & BOX-402 to rescue carrier AMR-01.',
+          },
+        ],
+      },
+    ],
+  },
 ];
+
+/**
+ * Registers newly provisioned AMR jobs (max 2 containers per job) created when a Transport Request is queued.
+ */
+export function registerProvisionedJobs(newJobs: JobDetailResponse[]) {
+  const incomingIds = new Set(newJobs.map((j) => j.id));
+  SEED_JOBS = [...newJobs, ...SEED_JOBS.filter((j) => !incomingIds.has(j.id))];
+}
+
+/**
+ * Marks a recovery job as resolved and transfers it to the rescue robot in-memory.
+ */
+export function completePayloadRecoveryJob(jobId: string, rescueRobotCode: string) {
+  SEED_JOBS = SEED_JOBS.map((job) => {
+    if (job.id !== jobId && job.jobNo !== jobId) return job;
+    return {
+      ...job,
+      status: 'RUNNING',
+      failureCode: null,
+      failureMessage: null,
+      contextValues: {
+        ...job.contextValues,
+        assignedRobotCode: rescueRobotCode,
+        currentStop: `Resumed on ${rescueRobotCode}`,
+      },
+    };
+  });
+}
+
+/**
+ * Normalizes backend JobSummaryDto or JobDetailDto into rich JobDetailResponse.
+ * Ensures `task.workflowStepKey ?? step.stepKey`, `task.contextValues`
+ * (with executionScope, stopAction, containerId, stopEndpointId),
+ * and `job.contextValues` are fully populated.
+ */
+function normalizeJobDetail(raw: any): JobDetailResponse {
+  if (!raw) return raw;
+
+  const existingSeed = SEED_JOBS.find((j) => j.id === raw.id || j.jobNo === raw.jobNo);
+
+  // Normalize containers
+  const rawContainers =
+    Array.isArray(raw.containers) && raw.containers.length > 0
+      ? raw.containers
+      : existingSeed?.containers || [];
+
+  const containers: JobContainerResponse[] = rawContainers.map((c: any, idx: number) => ({
+    id: c.id || `jc-${idx + 1}`,
+    jobId: c.jobId || raw.id,
+    transportRequestId: c.transportRequestId || (raw.transportRequestIds?.[0] ?? ''),
+    containerId: c.containerId || `BOX-${101 + idx}`,
+    sequenceNo: c.sequenceNo ?? idx + 1,
+    status: c.status || 'ASSIGNED',
+    loadedAt: c.loadedAt ?? null,
+    deliveredAt: c.deliveredAt ?? null,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  }));
+
+  // Normalize tasks & steps
+  const rawTasks =
+    Array.isArray(raw.tasks) && raw.tasks.length > 0
+      ? raw.tasks
+      : existingSeed?.tasks || [];
+
+  const tasks: JobTaskResponse[] = rawTasks.map((task: any, tIdx: number) => {
+    const rawSteps = Array.isArray(task.steps) ? task.steps : [];
+    const steps: JobStepResponse[] = rawSteps.map((step: any, sIdx: number) => {
+      const stepKey = step.stepKey ?? step.workflowStepKey ?? step.name ?? `STEP-${sIdx + 1}`;
+      return {
+        id: step.id || `step-${tIdx + 1}-${sIdx + 1}`,
+        jobTaskId: step.jobTaskId || task.id,
+        workflowStepId: step.workflowStepId || step.id || `wf-step-${sIdx + 1}`,
+        workflowStepKey: step.workflowStepKey ?? step.stepKey ?? step.name ?? stepKey,
+        operationCode: step.operationCode || step.name || stepKey,
+        stepType: (step.stepType as StepType) || 'CHECK',
+        sequenceNo: step.sequenceNo ?? sIdx + 1,
+        status: (step.status as JobStepStatus) || 'PENDING',
+        resolvedInputs: step.resolvedInputs || {},
+        outputValues: step.outputValues || {},
+        targetEndpointId: step.targetEndpointId ? String(step.targetEndpointId) : null,
+        startedAt: step.startedAt ?? null,
+        completedAt: step.completedAt ?? null,
+        errorCode: step.errorCode ?? null,
+        errorMessage: step.errorMessage ?? null,
+        handoverConfirmation: step.handoverConfirmation ?? null,
+      };
+    });
+
+    const executionScope = task.executionScope ?? task.contextValues?.executionScope;
+    const stopAction = task.stopAction ?? task.contextValues?.stopAction;
+    const stopEndpointId = task.stopEndpointId ? String(task.stopEndpointId) : task.contextValues?.stopEndpointId;
+    const containerId = task.containerId ? String(task.containerId) : task.contextValues?.containerId;
+
+    return {
+      id: task.id || `task-${tIdx + 1}`,
+      jobId: task.jobId || raw.id,
+      workflowTaskId: task.workflowTaskId || task.taskKey || task.id,
+      sequenceNo: task.sequenceNo ?? tIdx + 1,
+      status: (task.status as JobTaskStatus) || 'PENDING',
+      contextValues: {
+        ...task.contextValues,
+        ...(executionScope ? { executionScope } : {}),
+        ...(stopAction ? { stopAction } : {}),
+        ...(stopEndpointId ? { stopEndpointId } : {}),
+        ...(containerId ? { containerId } : {}),
+      },
+      startedAt: task.startedAt ?? null,
+      completedAt: task.completedAt ?? null,
+      failureCode: task.failureCode ?? null,
+      steps,
+    };
+  });
+
+  // Determine robot code
+  const assignedRobotCode =
+    raw.contextValues?.assignedRobotCode ||
+    raw.assignedRobotCode ||
+    (raw.assignedRobotId
+      ? typeof raw.assignedRobotId === 'string' &&
+        (raw.assignedRobotId.includes('02') || raw.assignedRobotId.endsWith('2'))
+        ? 'AMR-02'
+        : 'AMR-01'
+      : existingSeed?.contextValues?.assignedRobotCode || 'AMR-01');
+
+  // Extract endpoints from tasks/steps or contextValues
+  const pickupTask = tasks.find((t) => t.contextValues?.stopAction === 'PICKUP');
+  const dropoffTask = tasks.find((t) => t.contextValues?.stopAction === 'DROPOFF');
+
+  const sourceEndpointCode =
+    raw.contextValues?.sourceEndpointCode ||
+    pickupTask?.contextValues?.stopEndpointId ||
+    existingSeed?.contextValues?.sourceEndpointCode ||
+    'DOCK-IN-01';
+
+  const destinationEndpointCode =
+    raw.contextValues?.destinationEndpointCode ||
+    dropoffTask?.contextValues?.stopEndpointId ||
+    existingSeed?.contextValues?.destinationEndpointCode ||
+    'RACK-A-02 · Level 1';
+
+  const routeText =
+    raw.contextValues?.routeText ||
+    existingSeed?.contextValues?.routeText ||
+    `${sourceEndpointCode} ➔ ${destinationEndpointCode}`;
+
+  const currentStop =
+    raw.contextValues?.currentStop ||
+    existingSeed?.contextValues?.currentStop ||
+    `Stop 1/2: ${sourceEndpointCode}`;
+
+  // Enrich containerMeta if not present
+  const containerMeta =
+    raw.contextValues?.containerMeta ||
+    existingSeed?.contextValues?.containerMeta ||
+    (containers.length > 0
+      ? containers.map((c, idx) => ({
+          code: c.containerId,
+          slot: idx === 0 ? 'Bay 1 (Front)' : 'Bay 2 (Rear)',
+          action:
+            c.status === 'DELIVERED'
+              ? 'DELIVERED'
+              : c.status === 'ONBOARD' && idx === 0
+              ? 'UNLOAD'
+              : c.status === 'ONBOARD'
+              ? 'KEEP ONBOARD'
+              : 'PICKUP',
+          location: destinationEndpointCode,
+          product: 'Warehouse Tote',
+          qty: 20,
+        }))
+      : [
+          {
+            code: 'BOX-101',
+            slot: 'Bay 1 (Front)',
+            action: 'UNLOAD',
+            location: destinationEndpointCode,
+            product: 'Electronic Components',
+            qty: 45,
+          },
+        ]);
+
+  const enrichedContextValues = {
+    batchKey: raw.contextValues?.batchKey || existingSeed?.contextValues?.batchKey || 'BATCH-001',
+    warehouseId:
+      raw.contextValues?.warehouseId ||
+      existingSeed?.contextValues?.warehouseId ||
+      '11111111-1111-1111-1111-111111111111',
+    transportRequestId:
+      raw.contextValues?.transportRequestId ||
+      raw.transportRequestIds?.[0] ||
+      existingSeed?.contextValues?.transportRequestId ||
+      'TR-2048',
+    workflowCode:
+      raw.contextValues?.workflowCode ||
+      existingSeed?.contextValues?.workflowCode ||
+      'INBOUND_PUTAWAY',
+    workflowName:
+      raw.contextValues?.workflowName ||
+      existingSeed?.contextValues?.workflowName ||
+      'Inbound Putaway',
+    assignedRobotCode,
+    sourceEndpointCode,
+    destinationEndpointCode,
+    routeText,
+    currentStop,
+    containerMeta,
+    ...raw.contextValues,
+  };
+
+  return {
+    id: raw.id,
+    jobNo: raw.jobNo || raw.id,
+    workflowId: raw.workflowId || existingSeed?.workflowId || 'ad360f97-02ff-4136-86ea-57412bf0c252',
+    mapVersionId:
+      raw.mapVersionId || existingSeed?.mapVersionId || '22222222-2222-2222-2222-222222222222',
+    provisioningKey:
+      raw.provisioningKey || existingSeed?.provisioningKey || `${raw.id}:BATCH-001`,
+    status: (raw.status as JobStatus) || existingSeed?.status || 'CREATED',
+    contextValues: enrichedContextValues,
+    createdAt: raw.createdAt || existingSeed?.createdAt || new Date().toISOString(),
+    queuedAt: raw.queuedAt ?? existingSeed?.queuedAt ?? null,
+    startedAt: raw.startedAt ?? existingSeed?.startedAt ?? null,
+    completedAt: raw.completedAt ?? existingSeed?.completedAt ?? null,
+    failureCode: raw.failureCode ?? existingSeed?.failureCode ?? null,
+    failureMessage: raw.failureMessage ?? existingSeed?.failureMessage ?? null,
+    containers,
+    tasks,
+  };
+}
 
 /**
  * List active or historical jobs.
@@ -218,25 +483,34 @@ export async function listJobs(filter?: {
   status?: JobStatus;
   zone?: string;
   warehouseId?: string;
+  transportRequestId?: string;
+  take?: number;
 }): Promise<JobDetailResponse[]> {
   try {
     const params = new URLSearchParams();
     if (filter?.status) params.set('status', filter.status);
     if (filter?.zone) params.set('zone', filter.zone);
     if (filter?.warehouseId) params.set('warehouseId', filter.warehouseId);
+    if (filter?.transportRequestId) params.set('transportRequestId', filter.transportRequestId);
+    if (filter?.take) params.set('take', String(filter.take));
 
     const query = params.toString() ? `?${params.toString()}` : '';
-    return await apiFetch<JobDetailResponse[]>(`/api/workflow-execution/jobs${query}`);
+    const apiRes = await apiFetch<any>(`/api/workflow-execution/jobs${query}`);
+    const rawList: any[] = Array.isArray(apiRes) ? apiRes : apiRes?.items;
+    if (rawList && rawList.length > 0) {
+      return rawList.map(normalizeJobDetail);
+    }
   } catch (err) {
     if (__DEV__) {
       console.info('[ExecutionApi] Operating in Seed/Demo mode (Backend execution loop pending):', err);
     }
-    let result = [...SEED_JOBS];
-    if (filter?.status) {
-      result = result.filter((j) => j.status === filter.status);
-    }
-    return result;
   }
+
+  let result = [...SEED_JOBS];
+  if (filter?.status) {
+    result = result.filter((j) => j.status === filter.status);
+  }
+  return result;
 }
 
 /**
@@ -244,79 +518,192 @@ export async function listJobs(filter?: {
  */
 export async function getJobDetail(jobId: string): Promise<JobDetailResponse> {
   try {
-    return await apiFetch<JobDetailResponse>(`/api/workflow-execution/jobs/${jobId}`);
+    const raw = await apiFetch<any>(`/api/workflow-execution/jobs/${jobId}`);
+    if (raw) {
+      const normalized = normalizeJobDetail(raw);
+      const index = SEED_JOBS.findIndex((j) => j.id === normalized.id || j.jobNo === normalized.jobNo);
+      if (index >= 0) {
+        SEED_JOBS[index] = normalized;
+      } else {
+        SEED_JOBS.unshift(normalized);
+      }
+      return normalized;
+    }
   } catch (err) {
     if (__DEV__) {
       console.info(`[ExecutionApi] Job '${jobId}' fallback to seed runtime graph:`, err);
     }
-    const match = SEED_JOBS.find((j) => j.id === jobId || j.jobNo === jobId);
-    if (match) return match;
-    // Default fallback to first seed job
-    return SEED_JOBS[0];
   }
+
+  const match = SEED_JOBS.find((j) => j.id === jobId || j.jobNo === jobId);
+  if (match) return match;
+  return SEED_JOBS[0];
+}
+
+/**
+ * Assigns a robot (or the best AVAILABLE robot) and starts executing the job runtime graph.
+ */
+export async function startJob(
+  jobId: string,
+  robotId?: string | null,
+): Promise<JobDetailResponse | null> {
+  try {
+    const res = await apiFetch<any>(`/api/workflow-execution/jobs/${jobId}/start`, {
+      method: 'POST',
+      body: JSON.stringify({ robotId: robotId ?? null }),
+    });
+    if (res) {
+      const normalized = normalizeJobDetail(res);
+      SEED_JOBS = SEED_JOBS.map((j) => (j.id === normalized.id || j.jobNo === normalized.jobNo ? normalized : j));
+      return normalized;
+    }
+  } catch (err) {
+    if (__DEV__) {
+      console.info(`[ExecutionApi] startJob fallback to local transition for '${jobId}':`, err);
+    }
+  }
+
+  // Graceful local fallback: transitions local job from QUEUED/CREATED to ASSIGNED
+  let updatedJob: JobDetailResponse | null = null;
+  SEED_JOBS = SEED_JOBS.map((job) => {
+    if (job.id !== jobId && job.jobNo !== jobId) return job;
+    const nextStatus: JobStatus =
+      job.status === 'CREATED' || job.status === 'QUEUED' ? 'ASSIGNED' : job.status;
+    const robotCode = robotId
+      ? robotId.includes('02')
+        ? 'AMR-02'
+        : 'AMR-01'
+      : (job.contextValues?.assignedRobotCode as string) || 'AMR-01';
+    updatedJob = {
+      ...job,
+      status: nextStatus,
+      startedAt: job.startedAt || new Date().toISOString(),
+      contextValues: {
+        ...job.contextValues,
+        assignedRobotCode: robotCode,
+      },
+    };
+    return updatedJob;
+  });
+
+  return updatedJob;
 }
 
 /**
  * Confirm physical container handover at station.
+ * Calls backend POST /api/workflow-execution/job-steps/${req.jobStepId}/confirm
+ * with local fallback when running against develop.
  */
 export async function confirmHandover(
+  req: HandoverConfirmRequest,
+): Promise<HandoverConfirmationResponse | JobDetailResponse | null>;
+export async function confirmHandover(
   jobStepId: string,
-  body: HandoverConfirmationBody,
-): Promise<HandoverConfirmationResponse> {
+  body?: HandoverConfirmationBody,
+): Promise<HandoverConfirmationResponse | JobDetailResponse | null>;
+export async function confirmHandover(
+  reqOrStepId: HandoverConfirmRequest | string,
+  maybeBody?: HandoverConfirmationBody,
+): Promise<HandoverConfirmationResponse | JobDetailResponse | null> {
+  const req: HandoverConfirmRequest =
+    typeof reqOrStepId === 'string'
+      ? {
+          jobStepId: reqOrStepId,
+          scannedContainerBarcode: maybeBody?.containerId ?? null,
+          containerId: maybeBody?.containerId ?? null,
+          notes: maybeBody?.note ?? null,
+          note: maybeBody?.note ?? null,
+          confirmedBy: maybeBody?.confirmedBy,
+          handoverType: maybeBody?.handoverType,
+          evidence: maybeBody?.evidence,
+        }
+      : reqOrStepId;
+
+  const containerBarcode = req.scannedContainerBarcode ?? req.containerId ?? null;
+  const note = req.notes ?? req.note ?? null;
+
   try {
-    return await apiFetch<HandoverConfirmationResponse>(
-      `/api/workflow-execution/steps/${jobStepId}/handover`,
+    const apiRes = await apiFetch<any>(
+      `/api/workflow-execution/job-steps/${req.jobStepId}/confirm`,
       {
         method: 'POST',
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          containerId: containerBarcode,
+          note: note,
+        }),
       },
     );
+    if (apiRes) {
+      const normalized = normalizeJobDetail(apiRes);
+      const index = SEED_JOBS.findIndex((j) => j.id === normalized.id || j.jobNo === normalized.jobNo);
+      if (index >= 0) {
+        SEED_JOBS[index] = normalized;
+      }
+      return normalized;
+    }
   } catch (err) {
     if (__DEV__) {
-      console.info('[ExecutionApi] confirmHandover recorded in seed mode:', err);
+      console.info('[ExecutionApi] confirmHandover fallback to local in-memory state:', err);
     }
-    const response: HandoverConfirmationResponse = {
-      id: `hc-${Date.now()}`,
-      jobStepId,
-      containerId: body.containerId,
-      confirmedBy: body.confirmedBy,
-      handoverType: body.handoverType,
-      confirmedAt: new Date().toISOString(),
-      note: body.note,
-      evidence: body.evidence,
-    };
+  }
 
-    // Update in-memory seed job step to COMPLETED
-    SEED_JOBS = SEED_JOBS.map((job) => ({
-      ...job,
-      tasks: job.tasks.map((task) => ({
-        ...task,
-        steps: task.steps.map((step) => {
-          if (step.id === jobStepId) {
-            return {
-              ...step,
-              status: 'COMPLETED',
-              completedAt: new Date().toISOString(),
-              handoverConfirmation: response,
-            };
-          }
-          return step;
-        }),
-      })),
-      containers: job.containers.map((c) => {
-        if (c.containerId === body.containerId) {
+  const response: HandoverConfirmationResponse = {
+    id: `hc-${Date.now()}`,
+    jobStepId: req.jobStepId,
+    containerId: containerBarcode || 'BOX-101',
+    confirmedBy: req.confirmedBy || 'staff-01',
+    handoverType: req.handoverType || 'DROPOFF',
+    confirmedAt: new Date().toISOString(),
+    note: note,
+    evidence: req.evidence,
+  };
+
+  SEED_JOBS = SEED_JOBS.map((job) => ({
+    ...job,
+    tasks: job.tasks.map((task) => ({
+      ...task,
+      steps: task.steps.map((step) => {
+        if (step.id === req.jobStepId) {
           return {
-            ...c,
-            status: body.handoverType === 'PICKUP' ? 'ONBOARD' : 'DELIVERED',
-            deliveredAt: body.handoverType === 'DROPOFF' ? new Date().toISOString() : c.deliveredAt,
+            ...step,
+            status: 'COMPLETED',
+            completedAt: new Date().toISOString(),
+            handoverConfirmation: response,
           };
         }
-        return c;
+        return step;
       }),
-    }));
+    })),
+    containers: job.containers.map((c) => {
+      if (c.containerId === containerBarcode || !containerBarcode) {
+        return {
+          ...c,
+          status: (req.handoverType || 'DROPOFF') === 'PICKUP' ? 'ONBOARD' : 'DELIVERED',
+          deliveredAt:
+            (req.handoverType || 'DROPOFF') === 'DROPOFF' ? new Date().toISOString() : c.deliveredAt,
+        };
+      }
+      return c;
+    }),
+  }));
 
-    return response;
-  }
+  return response;
+}
+
+/**
+ * Staff confirms a waiting PICKUP_CONFIRM / DROPOFF_CONFIRM step with the scanned container.
+ */
+export async function confirmJobStep(
+  stepId: string,
+  containerId: string | null,
+  note?: string | null,
+): Promise<JobDetailResponse | null> {
+  const result = await confirmHandover({
+    jobStepId: stepId,
+    scannedContainerBarcode: containerId,
+    notes: note ?? null,
+  });
+  return result as JobDetailResponse | null;
 }
 
 /**

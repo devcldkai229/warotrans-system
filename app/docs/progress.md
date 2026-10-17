@@ -100,6 +100,23 @@
   - Exposed frontend disconnects: Mobile app is still anchored in `MOCK_JOBS` fixture data with a rigid 3-tray deck assumption (`Slot 1/2/3`), while backend uses an unconstrained `JobContainer` batching model.
   - Documented complete architectural findings and 3-step remediation roadmap in `brain/2f0972cb-bb0f-4c2a-932a-8f75ca884da6/system_architecture_deep_dive_report.md`.
 
+- [x] **Phase 8: Login Screen Hardening & Realtime Web Fix**
+  - `LoginScreen.tsx`: Removed the "DEMO CREDENTIALS" chip cluster (`staff / Staff@123`, `admin / Admin@123`) together with its now-dead `fillQuickCredentials` handler, the `KeyRound` icon import, and the 8 orphaned `quickChips*` / `chip*` style entries. Credential hints are no longer part of the shipping UI.
+  - Cleared the seeded form defaults (`useState('staff')` / `useState('Staff@123')`) so both fields now start empty and the operator types their own account.
+  - Backend `appsettings.Development.json`: added `http://localhost:8080` + `http://127.0.0.1:8080` to `Cors:AllowedOrigins`. Expo web was the only frontend origin missing from the allowlist, which made SignalR fail at `/hubs/notifications/negotiate` with `TypeError: Failed to fetch` (the browser blocks the response when no `Access-Control-Allow-Origin` is returned).
+  - Moved the Expo dev server from the default 8081 to **8080** for the whole script family (`start`, `android`, `ios`, `web` all pass `--port 8080`), so one port covers native and web and the CORS allowlist only needs a single entry.
+  - Replaced the Expo placeholder tab icon with the real brandmark: `assets/favicon.png` is now a 512×512 full-bleed rendering of `BrandMark` (ink `#121317` rounded square at `size * 0.28` radius, white lucide `route` mark at `size * 0.58`, `strokeWidth 2.4`), and `assets/favicon.svg` was rewritten to the same geometry. The old assets were the stock Expo "A" chevron, which broke brand consistency with the app header.
+  - Expo derives the served `/favicon.ico` from `web.favicon`: it downsizes to 48×48 with `resizeMode: 'contain'` on a transparent background, then packs 16/32/48. The source therefore has to be square and edge-to-edge — the previous 512 KB `logo_wrt.png` lockup would have shrunk to an unreadable smudge because of its wordmark and whitespace. Cache keys are a SHA-256 of the file contents (`@expo/image-utils/build/Cache.js`), so swapping the file invalidates the stale entry automatically; the orphaned `.expo/web/cache/.../favicon` folder was removed anyway.
+
+- [x] **Phase 9: Device-Reachable API Resolution**
+  - `client.ts` — `getApiBaseUrl()` now derives the dev machine's LAN host from `Constants.expoConfig.hostUri` (falling back to `expoGoConfig.debuggerHost`) on native, so a handset no longer aims at its own loopback. Scheme, port and path are preserved; only a loopback host is ever rewritten, so an explicitly configured deployment host such as `https://api.warotrans.io` passes through untouched.
+  - This replaced editing `app/.env` on every network change. `EXPO_PUBLIC_API_URL` stays at `http://localhost:5090` and web keeps using it verbatim.
+  - Added `expo-constants@~57.0.22` as a direct dependency (it was only present transitively under `expo/`, so it was not resolvable from the app root).
+  - Backend `Properties/launchSettings.json`: the `http` profile now binds `http://0.0.0.0:5090`. It previously bound loopback only, so even with a correct URL the API was unreachable from the LAN. `launchSettings.json` is dev-only tooling config and is not used by published builds.
+  - Verified the URL rewrite against a 9-case matrix (web passthrough, loopback substitution, trailing slash, `0.0.0.0`, null/loopback Metro host, and two real-deployment URLs that must not be rewritten) plus `npm run typecheck`.
+  - Not fixed (needs a password, and does not block anything): React Native DevTools aborts because `~/.cache/dotslash/.../chrome-sandbox` is not root-owned mode 4755. Web builds are unaffected.
+  - Zero TypeScript compiler errors (`npm run typecheck` passed).
+
 ## Workspace & Documentation Maintenance Rules
 1. **Strict Local Boundaries**: Work strictly inside `warotrans-system/` (`app/` and `backend/`). Do not look into or rely on external folders (`WaroTrans-specs`).
 2. **Synchronized Documentation**: Maintain and update `AGENTS.md` and all files in `app/docs/` after every code modification to prevent context drift across conversations.

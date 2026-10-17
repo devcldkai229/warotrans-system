@@ -5,8 +5,12 @@ import {
   RobotTelemetryEvent,
   LiveNotificationEvent,
   TransportStatusEvent,
+  JobUpdatedRealtimeEvent,
 } from './realtimeClient';
 import { triggerHaptic } from '../utils/haptics';
+import { onAccessTokenChange } from '../api/client';
+
+export type { JobUpdatedRealtimeEvent };
 
 interface RealtimeContextValue {
   isConnected: boolean;
@@ -17,6 +21,7 @@ interface RealtimeContextValue {
   markAllNotificationsRead: () => void;
   markNotificationRead: (id: string) => void;
   lastTransportStatus: TransportStatusEvent | null;
+  lastJobUpdate: JobUpdatedRealtimeEvent | null;
 }
 
 const INITIAL_NOTIFICATIONS: LiveNotificationEvent[] = [
@@ -33,10 +38,11 @@ const INITIAL_NOTIFICATIONS: LiveNotificationEvent[] = [
   {
     id: 'notif-2',
     category: 'HAZARD',
-    title: 'Obstacle Cleared in Aisle 2',
-    message: 'Dynamic rerouting restored. AMR-02 resumed planned speed.',
+    title: 'AMR-02 Stalled in Corridor B2',
+    message: 'Drive motor torque fault. 2 totes (BOX-401, BOX-402) require payload rescue.',
     timeLabel: '14m ago',
     robotId: 'AMR-02',
+    jobId: 'JOB-2026-0819',
     isRead: false,
   },
   {
@@ -44,17 +50,19 @@ const INITIAL_NOTIFICATIONS: LiveNotificationEvent[] = [
     category: 'JOB_ASSIGNED',
     title: 'New Handover Task Assigned',
     message: 'Outbound Retrieval TR-2046 allocated to your shift zone.',
-    timeLabel: '28m ago',
-    jobId: 'TR-2046',
+    timeLabel: '25m ago',
+    robotId: 'AMR-02',
+    jobId: 'JOB-2026-0813',
     isRead: false,
   },
   {
     id: 'notif-4',
     category: 'BATTERY_LOW',
-    title: 'AMR-03 Scheduled for Recharging',
-    message: 'Battery level reached 18%. Autonomous dock return initiated.',
+    title: 'AMR-01 Scheduled for Fast Top-Up',
+    message: 'Battery level at 85%. Scheduled for auto-charge after current putaway batch.',
     timeLabel: '1h ago',
-    robotId: 'AMR-03',
+    robotId: 'AMR-01',
+    jobId: 'JOB-2026-0812',
     isRead: true,
   },
 ];
@@ -68,6 +76,7 @@ const RealtimeContext = createContext<RealtimeContextValue>({
   markAllNotificationsRead: () => {},
   markNotificationRead: () => {},
   lastTransportStatus: null,
+  lastJobUpdate: null,
 });
 
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
@@ -116,9 +125,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
   const [notifications, setNotifications] = useState<LiveNotificationEvent[]>(INITIAL_NOTIFICATIONS);
   const [lastTransportStatus, setLastTransportStatus] = useState<TransportStatusEvent | null>(null);
+  const [lastJobUpdate, setLastJobUpdate] = useState<JobUpdatedRealtimeEvent | null>(null);
 
   useEffect(() => {
-    realtimeClient.start();
+    realtimeClient.start().catch(() => {});
 
     const unsubConnState = realtimeClient.onConnectionStateChange((connected) => {
       setIsConnected(connected);
@@ -147,12 +157,23 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setLastTransportStatus(event);
     });
 
+    const unsubJobUpdate = realtimeClient.onJobUpdated((event) => {
+      setLastJobUpdate(event);
+    });
+
+    const unsubToken = onAccessTokenChange((token) => {
+      // When token becomes available or changes on login/logout, reconnect with Bearer token
+      realtimeClient.restart().catch(() => {});
+    });
+
     return () => {
       unsubConnState();
       unsubTelemetry();
       unsubConnectivity();
       unsubNotification();
       unsubTransport();
+      unsubJobUpdate();
+      unsubToken();
       realtimeClient.stop();
     };
   }, []);
@@ -181,6 +202,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         markAllNotificationsRead,
         markNotificationRead,
         lastTransportStatus,
+        lastJobUpdate,
       }}
     >
       {children}

@@ -19,6 +19,7 @@ import {
   Navigation,
   Printer,
   RefreshCw,
+  Rocket,
   Search,
   SlidersHorizontal,
   Truck,
@@ -32,12 +33,19 @@ import { typography } from '../../shared/theme/typography';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { listTransportRequests, TransportRequestListItem } from '../../shared/api';
+import {
+  listTransportRequests,
+  queueTransportRequest,
+  TransportRequestListItem,
+} from '../../shared/api';
 
 export interface TransportOrder {
   id: string;
+  rawId: string;
+  requestCode: string;
+  rawStatus: string;
   workflowName: string;
-  category: 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | 'EXCEPTION';
+  category: 'INBOUND' | 'OUTBOUND' | 'INTERNAL';
   status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   statusText: string;
   source: string;
@@ -46,6 +54,7 @@ export interface TransportOrder {
   product: string;
   qty: number;
   robot: string;
+  linkedJobId?: string;
   timeLabel: string;
   duration?: string;
   cancelReason?: string;
@@ -55,106 +64,112 @@ export interface TransportOrder {
 export const TRANSPORT_ORDERS: TransportOrder[] = [
   {
     id: 'TR-2048',
+    rawId: '7439150f-3796-4404-9f9d-b894b72dc3f1',
+    requestCode: 'TR-2048',
+    rawStatus: 'IN_PROGRESS',
     workflowName: 'Inbound Putaway',
     category: 'INBOUND',
     status: 'IN_PROGRESS',
-    statusText: 'Allocating AMR',
-    source: 'Dock 01',
-    destination: 'Rack A · Level 2 · Bin 03',
-    container: 'BOX-101',
-    product: 'Control Module',
-    qty: 25,
+    statusText: 'Waiting Handover',
+    source: 'DOCK-IN-01',
+    destination: 'RACK-A-02 · Level 1 & 3',
+    container: 'BOX-101, BOX-102 (2 Totes)',
+    product: 'Electronic Components & Control Modules',
+    qty: 70,
     robot: 'AMR-01',
+    linkedJobId: 'JOB-2026-0812',
     timeLabel: 'Requested 2m ago',
     operator: 'Alex Tran',
   },
   {
     id: 'TR-2047',
-    workflowName: 'Line Replenishment',
+    rawId: 'tr-seed-2047',
+    requestCode: 'TR-2047',
+    rawStatus: 'IN_PROGRESS',
+    workflowName: 'Replenishment',
     category: 'INTERNAL',
     status: 'IN_PROGRESS',
-    statusText: 'En Route',
-    source: 'Rack B-02',
-    destination: 'Assembly Line 03',
-    container: 'BOX-109',
-    product: 'Fastener Set',
-    qty: 40,
+    statusText: 'Needs Recovery',
+    source: 'RACK-D-01 · Level 1',
+    destination: 'RACK-A-01 · Level 1',
+    container: 'BOX-401, BOX-402 (2 Totes)',
+    product: 'Sensor Array & Control Module',
+    qty: 80,
     robot: 'AMR-02',
-    timeLabel: 'Dispatched 5m ago',
+    linkedJobId: 'JOB-2026-0819',
+    timeLabel: 'Dispatched 14m ago',
     operator: 'Alex Tran',
   },
   {
     id: 'TR-2046',
+    rawId: 'tr-seed-2046',
+    requestCode: 'TR-2046',
+    rawStatus: 'IN_PROGRESS',
     workflowName: 'Outbound Retrieval',
     category: 'OUTBOUND',
-    status: 'COMPLETED',
-    statusText: 'Delivered & Verified',
-    source: 'Rack B-04',
-    destination: 'Dock Out 01',
+    status: 'IN_PROGRESS',
+    statusText: 'En Route',
+    source: 'RACK-B-04 · Level 2',
+    destination: 'DOCK-OUT-04',
     container: 'BOX-204',
-    product: 'Bearing Kit',
-    qty: 12,
-    robot: 'AMR-01',
-    timeLabel: 'Completed at 10:24 AM',
-    duration: '8m 15s',
+    product: 'Hydraulic Valves',
+    qty: 16,
+    robot: 'AMR-02',
+    linkedJobId: 'JOB-2026-0813',
+    timeLabel: 'Dispatched 25m ago',
     operator: 'Alex Tran',
   },
   {
     id: 'TR-2045',
-    workflowName: 'Storage Reallocation',
+    rawId: 'tr-seed-2045',
+    requestCode: 'TR-2045',
+    rawStatus: 'COMPLETED',
+    workflowName: 'Reallocation',
     category: 'INTERNAL',
     status: 'COMPLETED',
-    statusText: 'Transfer Complete',
-    source: 'Rack A-01',
-    destination: 'Rack B-05',
-    container: 'BOX-310',
-    product: 'Shipping Carton',
-    qty: 50,
-    robot: 'AMR-02',
+    statusText: 'Delivered & Verified',
+    source: 'RACK-A-01 · Level 1',
+    destination: 'RACK-B-01 · Level 2',
+    container: 'BOX-105',
+    product: 'Control Relays',
+    qty: 30,
+    robot: 'AMR-01',
+    linkedJobId: 'JOB-2026-0808',
     timeLabel: 'Completed at 09:50 AM',
     duration: '6m 40s',
     operator: 'David Nguyen',
   },
   {
     id: 'TR-2044',
-    workflowName: 'Direct Point-to-Point',
+    rawId: 'tr-seed-2044',
+    requestCode: 'TR-2044',
+    rawStatus: 'COMPLETED',
+    workflowName: 'Point-to-Point',
     category: 'INTERNAL',
     status: 'COMPLETED',
     statusText: 'Handover Complete',
-    source: 'Inbound Staging',
-    destination: 'QA Inspection Bay',
-    container: 'BOX-112',
-    product: 'Sensor Array',
-    qty: 10,
+    source: 'QA-02',
+    destination: 'ASSEMBLY-01',
+    container: 'TOTE-QA-01',
+    product: 'Drive Assembly Kit',
+    qty: 15,
     robot: 'AMR-01',
+    linkedJobId: 'JOB-2026-0808',
     timeLabel: 'Completed at 09:12 AM',
     duration: '4m 10s',
     operator: 'Alex Tran',
   },
   {
-    id: 'TR-2043',
-    workflowName: 'Payload Recovery (Rescue)',
-    category: 'EXCEPTION',
-    status: 'COMPLETED',
-    statusText: 'Rescue Resolved',
-    source: 'Aisle 2 (Stalled Point)',
-    destination: 'Buffer Staging Bay',
-    container: 'BOX-99',
-    product: 'Electronic Components',
-    qty: 15,
-    robot: 'AMR-02',
-    timeLabel: 'Resolved at 08:35 AM',
-    duration: '11m 20s',
-    operator: 'Sarah Jenkins',
-  },
-  {
     id: 'TR-2042',
+    rawId: 'tr-seed-2042',
+    requestCode: 'TR-2042',
+    rawStatus: 'CANCELLED',
     workflowName: 'Outbound Retrieval',
     category: 'OUTBOUND',
     status: 'CANCELLED',
     statusText: 'Cancelled',
-    source: 'Rack A-08',
-    destination: 'Dock Out 02',
+    source: 'RACK-A-08 · Level 1',
+    destination: 'DOCK-OUT-04',
     container: 'BOX-215',
     product: 'Drive Assembly',
     qty: 8,
@@ -165,12 +180,15 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
   },
   {
     id: 'TR-2041',
+    rawId: 'tr-seed-2041',
+    requestCode: 'TR-2041',
+    rawStatus: 'CANCELLED',
     workflowName: 'Inbound Putaway',
     category: 'INBOUND',
     status: 'CANCELLED',
     statusText: 'Cancelled',
-    source: 'Dock 02',
-    destination: 'Rack B-01',
+    source: 'DOCK-IN-01',
+    destination: 'RACK-B-01 · Level 1',
     container: 'BOX-104',
     product: 'Protective Insert',
     qty: 30,
@@ -182,7 +200,8 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
 ];
 
 function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
-  const detail = item.details?.[0];
+  const details = item.details || [];
+  const first = details[0];
   const isCompleted = item.status === 'COMPLETED';
   const isCancelled =
     item.status === 'CANCELLED' || item.status === 'REJECTED' || item.status === 'FAILED';
@@ -192,30 +211,46 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
   const wf = (item.workflowCode || '').toUpperCase();
   if (wf.includes('INBOUND')) category = 'INBOUND';
   else if (wf.includes('OUTBOUND')) category = 'OUTBOUND';
-  else if (wf.includes('RESCUE') || wf.includes('BLOCK') || wf.includes('SAFETY'))
-    category = 'EXCEPTION';
 
   let statusText = 'Processing';
-  if (item.status === 'SUBMITTED') statusText = 'Submitted';
+  if (item.requestCode === 'TR-2047') statusText = 'Needs Recovery';
+  else if (item.status === 'SUBMITTED') statusText = 'Submitted';
   else if (item.status === 'QUEUED') statusText = 'Queued for fleet';
-  else if (item.status === 'PLANNING') statusText = 'Planning route';
-  else if (item.status === 'EXECUTING' || item.status === 'IN_PROGRESS') statusText = 'En Route';
+  else if (item.status === 'IN_PROGRESS') statusText = 'En Route';
   else if (item.status === 'COMPLETED') statusText = 'Delivered & Verified';
   else if (item.status === 'CANCELLED') statusText = 'Cancelled';
   else if (item.status === 'REJECTED') statusText = 'Rejected by scheduler';
+  else if (item.status === 'FAILED') statusText = 'Failed';
+
+  const barcodes = details.map((d) => d.containerBarcode || 'TOTE').join(', ');
+  const containerLabel =
+    details.length > 1
+      ? `${barcodes} (${details.length} Totes)`
+      : barcodes || 'Container Tote';
+
+  const totalQty = details.reduce((acc, d) => acc + (d.qty || 1), 0);
+  const destinations = Array.from(
+    new Set(details.map((d) => d.destinationEndpointCode).filter(Boolean))
+  );
 
   return {
     id: item.requestCode,
-    workflowName: item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Request',
+    rawId: item.id,
+    requestCode: item.requestCode,
+    rawStatus: item.status,
+    workflowName:
+      item.workflowName ||
+      (item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Request'),
     category,
     status: isInProgress ? 'IN_PROGRESS' : isCompleted ? 'COMPLETED' : 'CANCELLED',
     statusText,
-    source: detail?.sourceEndpointCode || 'Pickup Station',
-    destination: detail?.destinationEndpointCode || 'Dropoff Location',
-    container: detail?.containerBarcode || 'Container Tote',
-    product: item.note || 'Standard Cargo',
-    qty: 1,
-    robot: 'AMR Fleet',
+    source: first?.sourceEndpointCode || 'DOCK-IN-01',
+    destination: destinations.join(' · ') || 'Storage Rack',
+    container: containerLabel,
+    product: first?.productName || item.note || 'Standard Cargo',
+    qty: totalQty || 1,
+    robot: item.assignedRobotCode || 'AMR-01',
+    linkedJobId: item.linkedJobId || 'JOB-2026-0812',
     timeLabel: item.submittedAt
       ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : 'Just now',
@@ -223,16 +258,18 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
   };
 }
 
-type CategoryFilter = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | 'EXCEPTION';
+type CategoryFilter = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'INTERNAL';
+export type TabFilter = 'TOTAL' | 'ACTIVE' | 'DONE' | 'VOID';
 
 export function TransportHistoryScreen() {
   const { navigate, goBack } = useNavigation();
-  const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [filter, setFilter] = useState<TabFilter>('TOTAL');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
   const [showCategoryChips, setShowCategoryChips] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [orders, setOrders] = useState<TransportOrder[]>(TRANSPORT_ORDERS);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [queueingId, setQueueingId] = useState<string | null>(null);
 
   const fetchHistory = useCallback(async () => {
     setIsRefreshing(true);
@@ -249,21 +286,65 @@ export function TransportHistoryScreen() {
     }
   }, []);
 
+  const handleQueueNow = async (order: TransportOrder) => {
+    triggerHaptic('tap');
+    setQueueingId(order.rawId);
+    try {
+      const res = await queueTransportRequest(order.rawId);
+      toast.success(
+        `Request ${order.requestCode} queued! Job: ${res?.jobs?.[0]?.jobNo || 'Assigned'}`
+      );
+      await fetchHistory();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to queue transport request');
+    } finally {
+      setQueueingId(null);
+    }
+  };
+
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
 
-  const inProgressCount = orders.filter((o) => o.status === 'IN_PROGRESS').length;
-  const completedCount = orders.filter((o) => o.status === 'COMPLETED').length;
-  const cancelledCount = orders.filter((o) => o.status === 'CANCELLED').length;
+  const totalCount = orders.length;
+  const activeCount = orders.filter(
+    (o) =>
+      ['SUBMITTED', 'QUEUED', 'IN_PROGRESS'].includes(o.rawStatus) ||
+      o.status === 'IN_PROGRESS'
+  ).length;
+  const doneCount = orders.filter(
+    (o) => o.rawStatus === 'COMPLETED' || o.status === 'COMPLETED'
+  ).length;
+  const voidCount = orders.filter(
+    (o) =>
+      ['CANCELLED', 'REJECTED', 'FAILED'].includes(o.rawStatus) ||
+      o.status === 'CANCELLED'
+  ).length;
 
   const filteredOrders = orders.filter((order) => {
-    if (filter !== 'ALL' && order.status !== filter) return false;
+    if (filter === 'ACTIVE') {
+      const isActive =
+        ['SUBMITTED', 'QUEUED', 'IN_PROGRESS'].includes(order.rawStatus) ||
+        order.status === 'IN_PROGRESS';
+      if (!isActive) return false;
+    } else if (filter === 'DONE') {
+      const isDone =
+        order.rawStatus === 'COMPLETED' || order.status === 'COMPLETED';
+      if (!isDone) return false;
+    } else if (filter === 'VOID') {
+      const isVoid =
+        ['CANCELLED', 'REJECTED', 'FAILED'].includes(order.rawStatus) ||
+        order.status === 'CANCELLED';
+      if (!isVoid) return false;
+    }
+
     if (categoryFilter !== 'ALL' && order.category !== categoryFilter) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
       order.id.toLowerCase().includes(q) ||
+      order.requestCode.toLowerCase().includes(q) ||
+      order.rawStatus.toLowerCase().includes(q) ||
       order.workflowName.toLowerCase().includes(q) ||
       order.source.toLowerCase().includes(q) ||
       order.destination.toLowerCase().includes(q) ||
@@ -299,20 +380,20 @@ export function TransportHistoryScreen() {
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
-              setFilter('ALL');
+              setFilter('TOTAL');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter all ${orders.length} orders`}
-            accessibilityState={{ selected: filter === 'ALL' }}
+            accessibilityLabel={`Filter all ${totalCount} orders`}
+            accessibilityState={{ selected: filter === 'TOTAL' }}
             style={[
               styles.metricCard,
-              filter === 'ALL' && styles.metricCardActive,
+              filter === 'TOTAL' && styles.metricCardActive,
             ]}
           >
-            <Text style={[styles.metricNumber, filter === 'ALL' && styles.metricNumberActive]}>
-              {orders.length}
+            <Text style={[styles.metricNumber, filter === 'TOTAL' && styles.metricNumberActive]}>
+              {totalCount}
             </Text>
-            <Text style={[styles.metricLabel, filter === 'ALL' && styles.metricLabelActive]}>
+            <Text style={[styles.metricLabel, filter === 'TOTAL' && styles.metricLabelActive]}>
               All orders
             </Text>
           </Pressable>
@@ -320,20 +401,20 @@ export function TransportHistoryScreen() {
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
-              setFilter('IN_PROGRESS');
+              setFilter('ACTIVE');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter ${inProgressCount} active orders`}
-            accessibilityState={{ selected: filter === 'IN_PROGRESS' }}
+            accessibilityLabel={`Filter ${activeCount} active orders`}
+            accessibilityState={{ selected: filter === 'ACTIVE' }}
             style={[
               styles.metricCard,
-              filter === 'IN_PROGRESS' && styles.metricCardActive,
+              filter === 'ACTIVE' && styles.metricCardActive,
             ]}
           >
-            <Text style={[styles.metricNumber, filter === 'IN_PROGRESS' && styles.metricNumberActive]}>
-              {inProgressCount}
+            <Text style={[styles.metricNumber, filter === 'ACTIVE' && styles.metricNumberActive]}>
+              {activeCount}
             </Text>
-            <Text style={[styles.metricLabel, filter === 'IN_PROGRESS' && styles.metricLabelActive]}>
+            <Text style={[styles.metricLabel, filter === 'ACTIVE' && styles.metricLabelActive]}>
               Active
             </Text>
           </Pressable>
@@ -341,42 +422,42 @@ export function TransportHistoryScreen() {
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
-              setFilter('COMPLETED');
+              setFilter('DONE');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter ${completedCount} completed orders`}
-            accessibilityState={{ selected: filter === 'COMPLETED' }}
+            accessibilityLabel={`Filter ${doneCount} completed orders`}
+            accessibilityState={{ selected: filter === 'DONE' }}
             style={[
               styles.metricCard,
-              filter === 'COMPLETED' && styles.metricCardActive,
+              filter === 'DONE' && styles.metricCardActive,
             ]}
           >
-            <Text style={[styles.metricNumber, filter === 'COMPLETED' && styles.metricNumberActive]}>
-              {completedCount}
+            <Text style={[styles.metricNumber, filter === 'DONE' && styles.metricNumberActive]}>
+              {doneCount}
             </Text>
-            <Text style={[styles.metricLabel, filter === 'COMPLETED' && styles.metricLabelActive]}>
-              Delivered
+            <Text style={[styles.metricLabel, filter === 'DONE' && styles.metricLabelActive]}>
+              Done
             </Text>
           </Pressable>
 
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
-              setFilter('CANCELLED');
+              setFilter('VOID');
             }}
             accessibilityRole="tab"
-            accessibilityLabel={`Filter ${cancelledCount} cancelled orders`}
-            accessibilityState={{ selected: filter === 'CANCELLED' }}
+            accessibilityLabel={`Filter ${voidCount} void or cancelled orders`}
+            accessibilityState={{ selected: filter === 'VOID' }}
             style={[
               styles.metricCard,
-              filter === 'CANCELLED' && styles.metricCardActive,
+              filter === 'VOID' && styles.metricCardActive,
             ]}
           >
-            <Text style={[styles.metricNumber, filter === 'CANCELLED' && styles.metricNumberActive]}>
-              {cancelledCount}
+            <Text style={[styles.metricNumber, filter === 'VOID' && styles.metricNumberActive]}>
+              {voidCount}
             </Text>
-            <Text style={[styles.metricLabel, filter === 'CANCELLED' && styles.metricLabelActive]}>
-              Cancelled
+            <Text style={[styles.metricLabel, filter === 'VOID' && styles.metricLabelActive]}>
+              Void
             </Text>
           </Pressable>
         </View>
@@ -437,7 +518,6 @@ export function TransportHistoryScreen() {
                 { key: 'INBOUND', label: 'Inbound' },
                 { key: 'OUTBOUND', label: 'Outbound' },
                 { key: 'INTERNAL', label: 'Internal move' },
-                { key: 'EXCEPTION', label: 'Rescue / Safety' },
               ].map((chip) => {
                 const isActive = categoryFilter === chip.key;
                 return (
@@ -476,11 +556,11 @@ export function TransportHistoryScreen() {
               <Search size={28} color={colors.textMuted} style={{ marginBottom: 8 }} />
               <Text style={styles.emptyTitle}>No transport records found</Text>
               <Text style={styles.emptySubtitle}>Try adjusting your filter or search query.</Text>
-              {(searchQuery || filter !== 'ALL' || categoryFilter !== 'ALL') && (
+              {(searchQuery || filter !== 'TOTAL' || categoryFilter !== 'ALL') && (
                 <Pressable
                   onPress={() => {
                     setSearchQuery('');
-                    setFilter('ALL');
+                    setFilter('TOTAL');
                     setCategoryFilter('ALL');
                   }}
                   style={styles.resetBtn}
@@ -491,9 +571,18 @@ export function TransportHistoryScreen() {
             </View>
           ) : (
             filteredOrders.map((order) => {
-              const isInProgress = order.status === 'IN_PROGRESS';
-              const isCompleted = order.status === 'COMPLETED';
-              const isCancelled = order.status === 'CANCELLED';
+              const isSubmitted = order.rawStatus === 'SUBMITTED';
+              const isQueued = order.rawStatus === 'QUEUED';
+              const isInProgress =
+                (order.status === 'IN_PROGRESS' || order.rawStatus === 'IN_PROGRESS') &&
+                !isSubmitted &&
+                !isQueued;
+              const isCompleted = order.status === 'COMPLETED' || order.rawStatus === 'COMPLETED';
+              const isCancelled =
+                order.status === 'CANCELLED' ||
+                order.rawStatus === 'CANCELLED' ||
+                order.rawStatus === 'REJECTED' ||
+                order.rawStatus === 'FAILED';
 
               return (
                 <View key={order.id} style={styles.orderCard}>
@@ -509,23 +598,29 @@ export function TransportHistoryScreen() {
                     <View
                       style={[
                         styles.statusBadge,
+                        isSubmitted && styles.statusBadgeSubmitted,
+                        isQueued && styles.statusBadgeQueued,
                         isInProgress && styles.statusBadgeWarning,
                         isCompleted && styles.statusBadgeSuccess,
                         isCancelled && styles.statusBadgeDanger,
                       ]}
                     >
+                      {isSubmitted && <Clock size={13} color="#2563eb" style={{ marginRight: 4 }} />}
+                      {isQueued && <View style={[styles.pulsingDot, { backgroundColor: '#7c3aed' }]} />}
                       {isInProgress && <View style={styles.pulsingDot} />}
                       {isCompleted && <CheckCircle2 size={13} color="#16a34a" style={{ marginRight: 4 }} />}
                       {isCancelled && <AlertTriangle size={13} color="#dc2626" style={{ marginRight: 4 }} />}
                       <Text
                         style={[
                           styles.statusBadgeText,
+                          isSubmitted && { color: '#2563eb' },
+                          isQueued && { color: '#7c3aed' },
                           isInProgress && { color: '#b45309' },
                           isCompleted && { color: '#16a34a' },
                           isCancelled && { color: '#dc2626' },
                         ]}
                       >
-                        {order.statusText}
+                        {order.rawStatus || order.statusText}
                       </Text>
                     </View>
                   </View>
@@ -581,12 +676,32 @@ export function TransportHistoryScreen() {
 
                   {/* Action Buttons with Warm Dark Gray CTAs */}
                   <View style={styles.actionsRow}>
-                    {isInProgress && (
+                    {order.rawStatus === 'SUBMITTED' ? (
+                      <Pressable
+                        onPress={() => handleQueueNow(order)}
+                        disabled={queueingId === order.rawId}
+                        style={[
+                          styles.actionBtnPrimary,
+                          { flex: 1, backgroundColor: colors.primary || '#0f172a' },
+                          queueingId === order.rawId && { opacity: 0.6 },
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Queue transport request ${order.requestCode}`}
+                      >
+                        <Rocket size={14} color="#ffffff" style={{ marginRight: 6 }} />
+                        <Text style={styles.actionBtnPrimaryText}>
+                          {queueingId === order.rawId ? 'Queueing...' : 'Queue Now'}
+                        </Text>
+                      </Pressable>
+                    ) : (isInProgress || isQueued) ? (
                       <>
                         <Pressable
                           onPress={() => {
                             triggerHaptic('tap');
-                            navigate('live_map', { jobId: 'JOB-2026-0812', robotId: order.robot });
+                            navigate('live_map', {
+                              jobId: order.linkedJobId || 'JOB-2026-0812',
+                              robotId: order.robot.includes('AMR-02') ? 'AMR-02' : 'AMR-01',
+                            });
                           }}
                           style={styles.actionBtnPrimary}
                           accessibilityRole="button"
@@ -598,7 +713,9 @@ export function TransportHistoryScreen() {
                         <Pressable
                           onPress={() => {
                             triggerHaptic('tap');
-                            navigate('job_detail', { jobId: 'JOB-2026-0812' });
+                            navigate('job_detail', {
+                              jobId: order.linkedJobId || 'JOB-2026-0812',
+                            });
                           }}
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
@@ -606,9 +723,7 @@ export function TransportHistoryScreen() {
                           <Text style={styles.actionBtnOutlineText}>View job</Text>
                         </Pressable>
                       </>
-                    )}
-
-                    {isCompleted && (
+                    ) : isCompleted ? (
                       <>
                         <Pressable
                           onPress={() => {
@@ -640,9 +755,7 @@ export function TransportHistoryScreen() {
                           <Text style={styles.actionBtnOutlineText}>Repeat</Text>
                         </Pressable>
                       </>
-                    )}
-
-                    {isCancelled && (
+                    ) : isCancelled ? (
                       <Pressable
                         onPress={() => {
                           triggerHaptic('tap');
@@ -662,7 +775,7 @@ export function TransportHistoryScreen() {
                           Re-dispatch order
                         </Text>
                       </Pressable>
-                    )}
+                    ) : null}
                   </View>
                 </View>
               );
@@ -901,6 +1014,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+  },
+  statusBadgeSubmitted: {
+    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+  },
+  statusBadgeQueued: {
+    backgroundColor: 'rgba(124, 58, 237, 0.1)',
   },
   statusBadgeWarning: {
     backgroundColor: 'rgba(245, 158, 11, 0.1)',

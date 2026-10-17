@@ -1,14 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <!-- 3D Tactile Diagonal Shelf (bottom & right bevel) -->
-  <rect x="3" y="4" width="61" height="60" rx="14" fill="#003882"/>
-  
-  <!-- Industrial Rounded Brandmark Base -->
-  <rect width="61" height="60" rx="14" fill="#005CD1"/>
-  
-  <!-- WaroTrans Route & Waypoint Icon -->
-  <g transform="translate(10, 8) scale(1.833)" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <circle cx="6" cy="19" r="3" fill="#FFFFFF"/>
-    <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" stroke="#FFFFFF" stroke-width="2.6"/>
-    <circle cx="18" cy="5" r="3" fill="#FFFFFF"/>
+  <!-- Mirrors src/shared/components/BrandMark.tsx: ink badge, white lucide `route` mark.
+       Icon box is 58% of the badge (size * 0.58) and centred; the icon keeps its own
+       24-unit coordinate space so stroke-width 2.4 scales with the group. -->
+  <rect width="64" height="64" rx="17.92" fill="#121317"/>
+  <g transform="translate(13.44, 13.44) scale(1.54667)" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="6" cy="19" r="3"/>
+    <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>
+    <circle cx="18" cy="5" r="3"/>
   </g>
 </svg>

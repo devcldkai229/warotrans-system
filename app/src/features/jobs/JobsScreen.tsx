@@ -15,6 +15,7 @@ import {
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { acceptHumanTask, listJobs } from '../../shared/api';
+import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { JobCard } from './JobCard';
 import { AppJobItem, countMyActiveJobs, isTerminalJobStatus, mapJobDetailToAppJobItem, MOCK_JOBS } from './jobData';
 
@@ -187,6 +188,7 @@ const EMPTY_COPY: Record<JobScope, { title: string; message: string }> = {
 export function JobsScreen() {
   const { navigate, params, dockHeight, setActiveJobCount } = useNavigation();
   const { session } = useAuth();
+  const { lastJobUpdate } = useRealtime();
   const deepLinkedScope = scopeFromParams(params?.view);
   const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'mine');
   const [query, setQuery] = useState('');
@@ -213,6 +215,12 @@ export function JobsScreen() {
   useEffect(() => {
     loadJobs();
   }, [loadJobs]);
+
+  useEffect(() => {
+    if (lastJobUpdate) {
+      loadJobs();
+    }
+  }, [lastJobUpdate, loadJobs]);
 
   const onRefresh = async () => {
     triggerHaptic('tap');

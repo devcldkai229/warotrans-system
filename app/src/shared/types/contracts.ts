@@ -684,12 +684,20 @@ export interface RobotSummary {
   assignedJobNo?: string;
 }
 
+export interface ShelfSlotOccupancy {
+  levelNo: number;
+  status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
+  occupiedByBarcode?: string | null;
+  occupiedBySku?: string | null;
+  occupiedByProductName?: string | null;
+}
+
 /**
- * @deprecated Phase 0 rigid 3-slot model. Use `JobContainerResponse` or dynamic `AmrCargoBayVisualizer`.
+ * 2-Bay AMR Chassis Deck Model (`Bay 1 (Front)`, `Bay 2 (Rear)`).
  */
 export interface ContainerSlot {
-  slotNo: 1 | 2 | 3;
-  slotLabel: 'Slot 1 (Front)' | 'Slot 2 (Mid)' | 'Slot 3 (Rear)';
+  slotNo: 1 | 2;
+  slotLabel: 'Bay 1 (Front)' | 'Bay 2 (Rear)' | 'Slot 1 (Front)' | 'Slot 2 (Rear)' | 'Slot 2 (Mid)';
   containerBarcode?: string;
   productName?: string;
   quantity?: number;

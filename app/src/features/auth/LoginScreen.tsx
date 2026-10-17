@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -8,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   Eye,
@@ -16,6 +18,7 @@ import {
   LogIn,
   MapPin,
   User,
+  X,
 } from 'lucide-react-native';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
@@ -57,34 +60,24 @@ export const WORK_ZONES = [
 ];
 
 export function LoginScreen() {
-  const { login } = useAuth();
+  const { loginAsync } = useAuth();
   const { success: showToastSuccess } = useToast();
-  const zoneSelectorRef = useRef<View>(null);
   const topInset = useTopInset();
-  const [username, setUsername] = useState('alex.tran');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedZone, setSelectedZone] = useState('Inbound Dock 01');
   const [isZoneDropdownOpen, setIsZoneDropdownOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  // Measured window rect of the zone selector so the popover anchors to it
-  // instead of relying on a hardcoded offset that breaks when text wraps.
-  const [zoneRect, setZoneRect] = useState({ top: 0, left: 0, width: 0 });
 
   const handleToggleZoneDropdown = () => {
     triggerHaptic('tap');
-    if (isZoneDropdownOpen) {
-      setIsZoneDropdownOpen(false);
-      return;
-    }
-    zoneSelectorRef.current?.measureInWindow((x, y, width, height) => {
-      setZoneRect({ top: y + height, left: x, width });
-    });
-    setIsZoneDropdownOpen(true);
+    setIsZoneDropdownOpen((prev) => !prev);
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!username.trim()) {
       triggerHaptic('error');
       setPasswordError(null);
@@ -97,11 +90,22 @@ export function LoginScreen() {
       setPasswordError('Access Password is required.');
       return;
     }
-    triggerHaptic('success');
+
+    setIsSubmitting(true);
     setError(null);
     setPasswordError(null);
-    login(username, selectedZone);
-    showToastSuccess(`Signed in as ${username} (${selectedZone})`);
+
+    try {
+      const session = await loginAsync(username, password, selectedZone);
+      triggerHaptic('success');
+      showToastSuccess(`Signed in as ${session.fullName} (${selectedZone})`);
+    } catch (err: any) {
+      triggerHaptic('error');
+      const msg = err?.message || 'Authentication failed. Please verify credentials.';
+      setError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const activeZoneObj =
@@ -131,6 +135,7 @@ export function LoginScreen() {
               <Input
                 label="Staff Username"
                 value={username}
+                onFocus={() => setIsZoneDropdownOpen(false)}
                 onChangeText={(text) => {
                   setUsername(text);
                   if (error) setError(null);
@@ -148,6 +153,7 @@ export function LoginScreen() {
               <Input
                 label="Access Password"
                 value={password}
+                onFocus={() => setIsZoneDropdownOpen(false)}
                 onChangeText={(text) => {
                   setPassword(text);
                   if (passwordError) setPasswordError(null);
@@ -183,7 +189,6 @@ export function LoginScreen() {
               <View style={styles.zoneField}>
                 <Text style={styles.inputLabel}>Assigned Work Zone</Text>
                 <Pressable
-                  ref={zoneSelectorRef}
                   onPress={handleToggleZoneDropdown}
                   style={({ pressed }) => [
                     styles.zoneSelector,
@@ -215,86 +220,84 @@ export function LoginScreen() {
                     ]}
                   />
                 </Pressable>
+
+                {/* Compact Dropdown Menu directly anchored under the selector */}
+                {isZoneDropdownOpen && (
+                  <View style={styles.floatingDropdownCard}>
+                    <ScrollView
+                      style={styles.dropdownScroll}
+                      showsVerticalScrollIndicator={false}
+                      nestedScrollEnabled
+                    >
+                      {WORK_ZONES.map((zone, index) => {
+                        const isSelected =
+                          selectedZone === zone.value || selectedZone === zone.label;
+                        const isLast = index === WORK_ZONES.length - 1;
+                        return (
+                          <Pressable
+                            key={zone.value}
+                            onPress={() => {
+                              triggerHaptic('tick');
+                              setSelectedZone(zone.value);
+                              setIsZoneDropdownOpen(false);
+                            }}
+                            style={({ pressed }) => [
+                              styles.dropdownItem,
+                              isSelected && styles.dropdownItemSelected,
+                              pressed && styles.dropdownItemPressed,
+                              !isLast && styles.dropdownItemDivider,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Select ${zone.label}`}
+                            accessibilityState={{ selected: isSelected }}
+                          >
+                            <View style={styles.dropdownItemContent}>
+                              <Text
+                                style={[
+                                  styles.dropdownItemTitle,
+                                  isSelected && styles.dropdownItemTitleSelected,
+                                ]}
+                              >
+                                {zone.label}
+                              </Text>
+                              <Text style={styles.dropdownItemDesc}>{zone.detail}</Text>
+                            </View>
+                            {isSelected && (
+                              <Check size={16} color={colors.primary} strokeWidth={2.6} />
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
             </View>
           </View>
 
-          {/* Action Button */}
+          {/* Action Section */}
           <View style={styles.actionSection}>
+            {/* Error Banner */}
+            {error && (
+              <View style={styles.errorAlert}>
+                <AlertCircle size={16} color="#dc2626" style={styles.errorAlertIcon} />
+                <Text style={styles.errorAlertText}>{error}</Text>
+              </View>
+            )}
+
             <Button
-              label="Sign In"
+              label={isSubmitting ? 'Signing In...' : 'Sign In'}
               icon={<LogIn size={18} color="#ffffff" strokeWidth={2.4} />}
               onPress={handleLogin}
               size="lg"
               variant="primary"
+              loading={isSubmitting}
+              disabled={isSubmitting}
               style={styles.submitButton}
             />
           </View>
         </View>
       </ScrollView>
-
-      {/* Popover layer sits outside the ScrollView so it can cover the whole
-          screen without being clipped by the scroll container. Anchored to the
-          measured window rect of the zone selector. */}
-      {isZoneDropdownOpen && zoneRect.width > 0 && (
-        <>
-          <Pressable
-            style={styles.dropdownDismissLayer}
-            onPress={() => setIsZoneDropdownOpen(false)}
-            accessibilityLabel="Close work zone list"
-          />
-          <View
-            style={[
-              styles.floatingDropdownCard,
-              {
-                top: zoneRect.top,
-                left: zoneRect.left,
-                width: zoneRect.width,
-              },
-            ]}
-          >
-            {WORK_ZONES.map((zone, index) => {
-              const isSelected =
-                selectedZone === zone.value || selectedZone === zone.label;
-              const isLast = index === WORK_ZONES.length - 1;
-              return (
-                <Pressable
-                  key={zone.value}
-                  onPress={() => {
-                    triggerHaptic('tick');
-                    setSelectedZone(zone.value);
-                    setIsZoneDropdownOpen(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.dropdownItem,
-                    isSelected && styles.dropdownItemSelected,
-                    pressed && styles.dropdownItemPressed,
-                    !isLast && styles.dropdownItemDivider,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select ${zone.label}`}
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <View style={styles.dropdownItemContent}>
-                    <Text
-                      style={[
-                        styles.dropdownItemTitle,
-                        isSelected && styles.dropdownItemTitleSelected,
-                      ]}
-                    >
-                      {zone.label}
-                    </Text>
-                    <Text style={styles.dropdownItemDesc}>{zone.detail}</Text>
-                  </View>
-                  {isSelected && (
-                    <Check size={16} color={colors.primary} strokeWidth={2.6} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      )}
     </View>
   );
 }
@@ -445,16 +448,12 @@ const styles = StyleSheet.create({
   chevronRotated: {
     transform: [{ rotate: '180deg' }],
   },
-  dropdownDismissLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9998,
-  },
   floatingDropdownCard: {
     position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 6,
     zIndex: 9999,
     elevation: 30,
     backgroundColor: colors.surface,
@@ -463,9 +462,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+  },
+  dropdownScroll: {
+    maxHeight: 280,
   },
   dropdownItem: {
     flexDirection: 'row',
@@ -509,6 +511,28 @@ const styles = StyleSheet.create({
   actionSection: {
     position: 'relative',
     zIndex: 1,
+  },
+  errorAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  errorAlertIcon: {
+    marginRight: 8,
+    flexShrink: 0,
+  },
+  errorAlertText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#b91c1c',
+    fontFamily: typography.fontSans,
   },
   submitButton: {
     width: '100%',

@@ -42,10 +42,12 @@ import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, MOCK_JOB
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
 import { getJobDetail, reportTaskProblem } from '../../shared/api';
+import { useRealtime } from '../../shared/realtime/RealtimeContext';
 
 export function JobDetailScreen() {
   const { navigate, goBack, params } = useNavigation();
   const topInset = useTopInset();
+  const { lastJobUpdate } = useRealtime();
 
   const initialModal = params?.modal;
   const isInitialVerify =
@@ -83,6 +85,30 @@ export function JobDetailScreen() {
       isMounted = false;
     };
   }, [jobId]);
+
+  useEffect(() => {
+    if (
+      lastJobUpdate &&
+      (lastJobUpdate.jobId === jobId ||
+        lastJobUpdate.jobNo === jobId ||
+        lastJobUpdate.jobId === job.id ||
+        lastJobUpdate.jobNo === job.jobNo)
+    ) {
+      let isMounted = true;
+      getJobDetail(jobId)
+        .then((res) => {
+          if (isMounted && res) {
+            setJob(mapJobDetailToAppJobItem(res));
+          }
+        })
+        .catch((err) => {
+          console.warn('Failed to refetch job detail on realtime jobUpdated:', err);
+        });
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [lastJobUpdate, jobId, job.id, job.jobNo]);
 
   const targetContainers =
     job.containers?.filter((c) => c.action === 'UNLOAD' || c.action === 'PICKUP') || [];
@@ -305,14 +331,26 @@ export function JobDetailScreen() {
 
             <View style={styles.telemetryItem}>
               <Text variant="caption" color={colors.textSecondary} style={styles.telemetryLabel}>
-                {isWaiting ? 'Timing' : 'ETA'}
+                {job.status === 'RECOVERY_REQUIRED' ? 'Status' : isWaiting ? 'Timing' : 'ETA'}
               </Text>
               <Text
                 variant="caption"
-                color={isWaiting ? colors.warning : colors.primary}
+                color={
+                  job.status === 'RECOVERY_REQUIRED'
+                    ? colors.danger
+                    : isWaiting
+                    ? colors.warning
+                    : colors.primary
+                }
                 style={styles.telemetryValueBold}
               >
-                {isWaiting ? 'At Station' : job.etaSeconds ? `${Math.floor(job.etaSeconds / 60)}m` : '01m 24s'}
+                {job.status === 'RECOVERY_REQUIRED'
+                  ? 'Stalled'
+                  : isWaiting
+                  ? 'At Station'
+                  : job.etaSeconds
+                  ? `${Math.floor(job.etaSeconds / 60)}m`
+                  : '01m 24s'}
               </Text>
             </View>
           </View>

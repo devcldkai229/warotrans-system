@@ -16,6 +16,7 @@ import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { toast } from '../../shared/context/ToastContext';
 import { useRealtime, LiveNotificationEvent } from '../../shared/realtime';
+import { useNavigation } from '../navigation/NavigationContext';
 
 export interface NotificationSheetProps {
   visible: boolean;
@@ -35,6 +36,7 @@ export function NotificationSheet({
   onUnreadCountChange,
 }: NotificationSheetProps) {
   const topInset = useTopInset();
+  const { navigate } = useNavigation();
   const {
     notifications,
     unreadCount,
@@ -51,9 +53,13 @@ export function NotificationSheet({
     toast.info('All notifications marked as read');
   };
 
-  const handleItemPress = (id: string) => {
+  const handleItemPress = (item: LiveNotificationEvent) => {
     triggerHaptic('tap');
-    markNotificationRead(id);
+    markNotificationRead(item.id);
+    if (item.jobId) {
+      onClose();
+      navigate('job_detail', { jobId: item.jobId });
+    }
   };
 
   const renderIcon = (type: LiveNotificationEvent['category']) => {
@@ -135,7 +141,7 @@ export function NotificationSheet({
             {notifications.map((item) => (
               <Pressable
                 key={item.id}
-                onPress={() => handleItemPress(item.id)}
+                onPress={() => handleItemPress(item)}
                 accessibilityRole="button"
                 accessibilityLabel={`${item.title}, ${item.timeLabel}`}
                 style={({ pressed }) => [

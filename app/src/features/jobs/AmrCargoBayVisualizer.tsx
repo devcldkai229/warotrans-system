@@ -48,19 +48,19 @@ export function AmrCargoBayVisualizer({
           <View style={styles.iconWell}>
             <Layers size={16} color={colors.primary} />
           </View>
-          <View>
+          <View style={styles.titleTextBlock}>
             <Text variant="headline" style={styles.titleText}>
               {activeRobot} Cargo Bay
             </Text>
-            <Text variant="caption" color={colors.textSecondary}>
-              Dynamic payload manifest · Container tracking
+            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              Payload manifest · Max 2 bays
             </Text>
           </View>
         </View>
 
         <View style={styles.capacityBadge}>
           <Text variant="caption" style={styles.capacityText}>
-            {totalCount} {totalCount === 1 ? 'Tote' : 'Totes'}
+            {totalCount}/2 {totalCount === 1 ? 'Bay' : 'Bays'}
           </Text>
         </View>
       </View>
@@ -184,11 +184,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14,
+    gap: 8,
   },
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flex: 1,
+  },
+  titleTextBlock: {
+    flex: 1,
   },
   iconWell: {
     width: 32,
@@ -208,10 +213,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radii.sm,
     backgroundColor: '#F3F4F6',
+    flexShrink: 0,
   },
   capacityText: {
     color: '#4B5563',
-    fontWeight: '500',
+    fontWeight: '600',
     fontSize: 12,
   },
   containersList: {

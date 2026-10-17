@@ -36,36 +36,51 @@ import { StatusPill } from '../../shared/ui/StatusPill';
 import { Text } from '../../shared/ui/Text';
 import { listTransportRequests } from '../../shared/api';
 
-const RECENT_DISPATCHES = [
+export interface RecentDispatchItem {
+  id: string;
+  type: string;
+  status: string;
+  statusLabel?: string;
+  route: string;
+  container: string;
+  robot: string;
+  time: string;
+  jobId: string;
+}
+
+const RECENT_DISPATCHES: RecentDispatchItem[] = [
   {
     id: 'TR-2048',
     type: 'Inbound Putaway',
-    status: MOCK_JOBS[0].status,
-    route: 'Dock 01 ➔ Rack A · Level 2 · Bin 03',
-    container: 'BOX-101 (12 pcs)',
+    status: 'ASSIGNED',
+    statusLabel: 'Waiting Handover',
+    route: 'DOCK-IN-01 ➔ RACK-A-02 · Level 1',
+    container: 'BOX-101, BOX-102 (2 Totes)',
     robot: 'AMR-01',
     time: '2m ago',
     jobId: 'JOB-2026-0812',
   },
   {
-    id: 'TR-2046',
-    type: 'Outbound Retrieval',
-    status: MOCK_JOBS[1].status,
-    route: 'Rack B-04 ➔ Shipping Bay 01',
-    container: 'BOX-204 (8 pcs)',
+    id: 'TR-2047',
+    type: 'Replenishment',
+    status: 'RECOVERY_REQUIRED',
+    statusLabel: 'Needs Recovery',
+    route: 'RACK-D-01 ➔ RACK-A-01 · Level 1',
+    container: 'BOX-401, BOX-402 (2 Totes)',
     robot: 'AMR-02',
-    time: '5m ago',
-    jobId: 'JOB-2026-0813',
+    time: '14m ago',
+    jobId: 'JOB-2026-0819',
   },
   {
-    id: 'TR-2041',
-    type: 'Internal Relocation',
-    status: 'COMPLETED' as const,
-    route: 'Dock 03 ➔ Buffer Zone C',
-    container: 'BOX-088 (30 pcs)',
-    robot: 'AMR-01',
-    time: '18m ago',
-    jobId: 'JOB-2026-0811',
+    id: 'TR-2046',
+    type: 'Outbound Retrieval',
+    status: 'RUNNING',
+    statusLabel: 'En Route',
+    route: 'RACK-B-04 · Level 2 ➔ DOCK-OUT-04',
+    container: 'BOX-204 (16 pcs)',
+    robot: 'AMR-02',
+    time: '25m ago',
+    jobId: 'JOB-2026-0813',
   },
 ];
 
@@ -124,7 +139,7 @@ export function TransportScreen() {
   const { isHolding, toggleHold: toggleFleetHold } = useSafetyHold();
   const [hasActiveAlert, setHasActiveAlert] = useState(false);
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
-  const [dispatches, setDispatches] = useState(RECENT_DISPATCHES);
+  const [dispatches, setDispatches] = useState<RecentDispatchItem[]>(RECENT_DISPATCHES);
   const [isLoadingDispatches, setIsLoadingDispatches] = useState(false);
 
   useEffect(() => {
@@ -135,21 +150,60 @@ export function TransportScreen() {
         const res = await listTransportRequests({ take: 5 });
         if (isMounted && res?.items && res.items.length > 0) {
           const mapped = res.items.map((item) => {
-            const detail = item.details?.[0];
-            const route = detail
-              ? `${detail.sourceEndpointCode || 'Inbound Dock'} ➔ ${detail.destinationEndpointCode || 'Storage Rack'}`
+            const details = item.details || [];
+            const first = details[0];
+            const route = first
+              ? `${first.sourceEndpointCode || 'DOCK-IN-01'} ➔ ${first.destinationEndpointCode || 'RACK-A-01'}`
               : 'Multi-stop movement';
+            const barcodes = details.map((d) => d.containerBarcode || 'TOTE').join(', ');
+            const containerSummary =
+              details.length > 1
+                ? `${barcodes} (${details.length} Totes)`
+                : barcodes || 'Payload Item';
+
+            let mappedStatus: any = item.status;
+            let statusLabel: string = item.status;
+
+            if (item.status === 'SUBMITTED') {
+              mappedStatus = 'SUBMITTED';
+              statusLabel = 'Submitted';
+            } else if (item.status === 'QUEUED') {
+              mappedStatus = 'QUEUED';
+              statusLabel = 'Queued';
+            } else if (item.requestCode === 'TR-2047') {
+              mappedStatus = 'RECOVERY_REQUIRED';
+              statusLabel = 'Needs Recovery';
+            } else if (item.status === 'IN_PROGRESS') {
+              mappedStatus = 'ASSIGNED';
+              statusLabel = 'Waiting Handover';
+            } else if (item.status === 'COMPLETED') {
+              mappedStatus = 'COMPLETED';
+              statusLabel = 'Completed';
+            } else if (item.status === 'CANCELLED' || item.status === 'REJECTED') {
+              mappedStatus = 'CANCELLED';
+              statusLabel = 'Cancelled';
+            } else if (item.status === 'FAILED') {
+              mappedStatus = 'FAILED';
+              statusLabel = 'Failed';
+            }
+
             return {
               id: item.requestCode,
-              type: item.workflowCode || 'Transport Movement',
-              status: (item.status === 'QUEUED' || item.status === 'SUBMITTED' ? 'EN_ROUTE' : item.status) as any,
+              type:
+                item.workflowName ||
+                (item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Movement'),
+              status: mappedStatus,
+              statusLabel,
               route,
-              container: detail?.containerBarcode || 'Payload Item',
-              robot: 'AMR Fleet',
+              container: containerSummary,
+              robot: item.assignedRobotCode || 'AMR-01',
               time: item.submittedAt
-                ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : 'Recently',
-              jobId: item.id,
+                ? new Date(item.submittedAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'Just now',
+              jobId: item.linkedJobId || 'JOB-2026-0812',
             };
           });
           setDispatches(mapped);
@@ -396,16 +450,20 @@ export function TransportScreen() {
 
           <View style={styles.recentCardsCol}>
             {dispatches.map((dispatch) => {
-              const statusCfg = JOB_STATUS_PRESENTATION[dispatch.status] || {
-                label: String(dispatch.status),
-                tone: 'neutral',
-              };
+              const label =
+                (dispatch as any).statusLabel ||
+                JOB_STATUS_PRESENTATION[dispatch.status as keyof typeof JOB_STATUS_PRESENTATION]?.label ||
+                String(dispatch.status);
               return (
                 <Pressable
                   key={dispatch.id}
                   onPress={() => {
                     triggerHaptic('tap');
-                    navigate('job_detail', { jobId: dispatch.jobId });
+                    if (dispatch.status === 'SUBMITTED') {
+                      navigate('transport_history');
+                    } else {
+                      navigate('job_detail', { jobId: dispatch.jobId });
+                    }
                   }}
                   style={({ pressed }) => [
                     styles.dispatchCard,
@@ -427,7 +485,7 @@ export function TransportScreen() {
                       </Text>
                     </View>
 
-                    <StatusPill status={dispatch.status} label={statusCfg.label} />
+                    <StatusPill status={dispatch.status} label={label} />
                   </View>
 
                   {/* Route */}

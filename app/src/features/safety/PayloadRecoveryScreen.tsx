@@ -24,6 +24,7 @@ import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { completePayloadRecoveryJob } from '../../shared/api';
 
 type RescuePhase = 'briefing' | 'rendezvous' | 'transfer' | 'resuming' | 'completed';
 
@@ -33,10 +34,10 @@ export function PayloadRecoveryScreen() {
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const jobId = params?.jobId || 'JOB-20261012-000022';
-  const faultedRobot = params?.robot || 'AMR-01';
+  const jobId = params?.jobId || 'JOB-2026-0819';
+  const faultedRobot = params?.robot || 'AMR-02';
   const rescueRobot = faultedRobot === 'AMR-01' ? 'AMR-02' : 'AMR-01';
-  const targetContainer = params?.container || 'BOX-101';
+  const targetContainer = params?.container || 'BOX-401';
 
   const handleDispatchRescue = () => {
     triggerHaptic('success');
@@ -58,6 +59,7 @@ export function PayloadRecoveryScreen() {
 
   const handleResumeMission = () => {
     triggerHaptic('success');
+    completePayloadRecoveryJob(jobId, rescueRobot);
     setPhase('completed');
     setFeedback(`Job ${jobId} successfully transferred to ${rescueRobot}. Resuming dropoff.`);
   };

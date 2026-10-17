@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,15 +9,13 @@ import {
   ArrowRight,
   Barcode,
   Check,
-  CheckCircle2,
   ChevronDown,
   Layers,
   MapPin,
   Package,
-  Plus,
   Rocket,
   Search,
-  Trash2,
+  Sparkles,
   X,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
@@ -28,242 +25,413 @@ import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
 import { Text } from '../../shared/ui/Text';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import {
+  AllocatedStorageSlot,
+  ContainerListItem,
+  EndpointDto,
+  QueuedJobResponse,
+  StorageLocationListItem,
+  WarehouseListItem,
+  WarehouseZoneCode,
+  WorkflowListItem,
   createTransportRequest,
-  queueTransportRequest,
-  listPublishedWorkflows,
-  listWarehouses,
   getActiveMapVersion,
   getMapVersionDetail,
+  getSeedContainersSnapshot,
+  getStorageLocationsSnapshot,
   listContainers,
-  WarehouseListItem,
-  EndpointDto,
-  ContainerListItem,
-  WorkflowListItem,
-  QueuedJobResponse,
+  listPublishedWorkflows,
+  listStorageLocations,
+  listWarehouses,
+  queueTransportRequest,
 } from '../../shared/api';
 import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
 import { WorkflowTemplateCard } from './WorkflowTemplateCard';
+import { TargetSlotPickerModal } from './TargetSlotPickerModal';
 
 export interface StagedContainer {
   id: string;
   barcode: string;
+  status?: string;
   productName: string;
   sku: string;
   qty: number;
-  sourceEndpoint: string;
-  destinationEndpoint: string;
-  destinationDisplay: string;
-  destinationLevel: number;
+  sourceStorageLocationId: string | null;
+  sourceStorageLocationCode: string | null;
+  sourceEndpointId: string;
+  sourceEndpointCode: string;
+  sourceLevelNo: number | null;
+  originDisplayLabel: string;
 }
 
-const DEFAULT_STAGED_CONTAINERS: StagedContainer[] = [
-  {
-    id: '632907a7-a0a6-4201-adea-c8ce8e468e75',
-    barcode: 'BOX-101',
-    productName: 'Electronic Components',
-    sku: 'EC-9042',
-    qty: 45,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-A-02',
-    destinationDisplay: 'Rack A · Level 2 · Bin 03',
-    destinationLevel: 2,
-  },
-  {
-    id: 'a454b0a6-d731-4dc0-aed3-7c53e40c63a8',
-    barcode: 'BOX-102',
-    productName: 'Control Modules (CM-3100)',
-    sku: 'CM-3100',
-    qty: 25,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-B-04',
-    destinationDisplay: 'Rack B · Level 1 · Bin 02',
-    destinationLevel: 1,
-  },
-  {
-    id: 'b565c0b7-e842-5ed1-bfe4-8d64f51d74b9',
-    barcode: 'BOX-103',
-    productName: 'Power Supply Modules',
-    sku: 'PS-4402',
-    qty: 18,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-A-02',
-    destinationDisplay: 'Rack A · Level 3 · Bin 01',
-    destinationLevel: 3,
-  },
-  {
-    id: 'c676d1c8-f953-6fe2-c0f5-9e75a62e85ca',
-    barcode: 'BOX-104',
-    productName: 'Hydraulic Valves',
-    sku: 'HV-7710',
-    qty: 12,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-A-05',
-    destinationDisplay: 'Rack A · Level 2 · Bin 04',
-    destinationLevel: 2,
-  },
-  {
-    id: 'd787e2d9-0a64-70f3-d106-af86b73f96db',
-    barcode: 'BOX-105',
-    productName: 'Sensor Arrays (SA-8820)',
-    sku: 'SA-8820',
-    qty: 60,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-A-04',
-    destinationDisplay: 'Rack A · Level 2 · Bin 02',
-    destinationLevel: 2,
-  },
-  {
-    id: 'e898f3ea-1b75-8104-e217-b097c84007ec',
-    barcode: 'BOX-106',
-    productName: 'Industrial Relays (IR-1105)',
-    sku: 'IR-1105',
-    qty: 35,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-A-01',
-    destinationDisplay: 'Rack A · Level 1 · Bin 01',
-    destinationLevel: 1,
-  },
-  {
-    id: 'f90904fb-2c86-9215-f328-c108d95118fd',
-    barcode: 'BOX-107',
-    productName: 'Motor Controllers (MC-3301)',
-    sku: 'MC-3301',
-    qty: 8,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-A-03',
-    destinationDisplay: 'Rack A · Level 2 · Bin 05',
-    destinationLevel: 2,
-  },
-  {
-    id: '0a1a150c-3d97-0326-0439-d219ea62290e',
-    barcode: 'BOX-108',
-    productName: 'Optical Cable Spools',
-    sku: 'OC-6600',
-    qty: 24,
-    sourceEndpoint: 'DOCK-IN-01',
-    destinationEndpoint: 'RACK-A-04',
-    destinationDisplay: 'Rack A · Level 1 · Bin 03',
-    destinationLevel: 1,
-  },
-];
+interface EndpointTargetOption {
+  endpointId: string;
+  endpointCode: string;
+  label: string;
+}
 
-const WORKFLOW_PRESETS: Record<string, {
+interface WorkflowRoutePreset {
   originLabel: string;
   originDetail: string;
   destinationLabel: string;
-  destinationDetail: string;
   poolTitle: string;
-  containers: StagedContainer[];
-}> = {
+  requiresRackSlot: boolean;
+  defaultTargetZone: WarehouseZoneCode;
+  endpointOptions?: EndpointTargetOption[];
+}
+
+const TARGET_ZONE_OPTIONS: Array<{
+  code: WarehouseZoneCode;
+  shortLabel: string;
+  detailLabel: string;
+}> = [
+  {
+    code: 'ZONE_A',
+    shortLabel: 'Zone A (Pick Racks)',
+    detailLabel: 'Storage Zone A · Racks A-01..A-08',
+  },
+  {
+    code: 'ZONE_B',
+    shortLabel: 'Zone B (Heavy Reserve)',
+    detailLabel: 'Storage Zone B · Racks B-01..B-04',
+  },
+  {
+    code: 'ZONE_D',
+    shortLabel: 'Zone D (Bulk Yard)',
+    detailLabel: 'Bulk Yard Zone D · Racks D-01..D-02',
+  },
+];
+
+const WORKFLOW_ROUTE_PRESETS: Record<string, WorkflowRoutePreset> = {
   inbound: {
     originLabel: 'Pickup Origin',
-    originDetail: 'Inbound Dock 01 (Receiving Bay)',
-    destinationLabel: 'Target Destination',
-    destinationDetail: 'Storage Zone A (Standard Pallet Racks)',
+    originDetail: 'Inbound Dock 01 (Receiving Staging Lane)',
+    destinationLabel: 'Target Storage Zone (Auto-Slotting + Override)',
     poolTitle: 'Staged at Inbound Dock 01',
-    containers: DEFAULT_STAGED_CONTAINERS,
+    requiresRackSlot: true,
+    defaultTargetZone: 'ZONE_A',
   },
   outbound: {
-    originLabel: 'Retrieval Zone',
-    originDetail: 'Storage Zone A (Racks A01-A12)',
-    destinationLabel: 'Dispatch Bay',
-    destinationDetail: 'Outbound Dock 04 (Shipping & Staging)',
-    poolTitle: 'Stored Totes in Zone A',
-    containers: [
-      { id: 'c-201', barcode: 'BOX-201', productName: 'Bearing Kits (BK-5520)', sku: 'BK-5520', qty: 20, sourceEndpoint: 'RACK-A-02', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 1', destinationLevel: 1 },
-      { id: 'c-202', barcode: 'BOX-202', productName: 'Drive Motors (DM-9910)', sku: 'DM-9910', qty: 14, sourceEndpoint: 'RACK-A-03', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 2', destinationLevel: 1 },
-      { id: 'c-203', barcode: 'BOX-203', productName: 'Control Boards (CB-4100)', sku: 'CB-4100', qty: 32, sourceEndpoint: 'RACK-A-04', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 1', destinationLevel: 1 },
-      { id: 'c-204', barcode: 'BOX-204', productName: 'Wiring Harnesses (WH-1200)', sku: 'WH-1200', qty: 50, sourceEndpoint: 'RACK-A-05', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 3', destinationLevel: 1 },
-      { id: 'c-205', barcode: 'BOX-205', productName: 'Safety Sensors (SS-8800)', sku: 'SS-8800', qty: 18, sourceEndpoint: 'RACK-A-01', destinationEndpoint: 'DOCK-OUT-04', destinationDisplay: 'Dock Out 04 · Bay 2', destinationLevel: 1 },
+    originLabel: 'Retrieval Origin',
+    originDetail: 'Storage Racks (Zone A & Zone B)',
+    destinationLabel: 'Target Dispatch Endpoint',
+    poolTitle: 'Stored Containers Available for Retrieval',
+    requiresRackSlot: false,
+    defaultTargetZone: 'DOCK',
+    endpointOptions: [
+      {
+        endpointId: '00000000-0000-0000-0004-000000000004',
+        endpointCode: 'DOCK-OUT-04',
+        label: 'Outbound Dock 04 (Shipping Bay)',
+      },
+      {
+        endpointId: '00000000-0000-0000-0004-000000000005',
+        endpointCode: 'DOCK-OUT-01',
+        label: 'Outbound Dock 01 (Express Courier)',
+      },
+      {
+        endpointId: '00000000-0000-0000-0004-000000000033',
+        endpointCode: 'PACKING-01',
+        label: 'Packing Station 01 (Consolidation)',
+      },
     ],
   },
-  relocation: {
-    originLabel: 'Source Racks',
-    originDetail: 'Storage Zone A (Rack A-08)',
-    destinationLabel: 'Consolidation Target',
-    destinationDetail: 'Storage Zone B (Heavy Reserve B-04)',
-    poolTitle: 'Containers for Reallocation',
-    containers: [
-      { id: 'c-301', barcode: 'BOX-301', productName: 'Excess Buffer Stock (EB-101)', sku: 'EB-101', qty: 40, sourceEndpoint: 'RACK-A-08', destinationEndpoint: 'RACK-B-04', destinationDisplay: 'Rack B · Level 2 · Bin 02', destinationLevel: 2 },
-      { id: 'c-302', barcode: 'BOX-302', productName: 'Seasonal Spares (SS-302)', sku: 'SS-302', qty: 25, sourceEndpoint: 'RACK-A-08', destinationEndpoint: 'RACK-B-05', destinationDisplay: 'Rack B · Level 1 · Bin 04', destinationLevel: 1 },
-      { id: 'c-303', barcode: 'BOX-303', productName: 'Bulk Fasteners (BF-900)', sku: 'BF-900', qty: 100, sourceEndpoint: 'RACK-A-08', destinationEndpoint: 'RACK-B-01', destinationDisplay: 'Rack B · Level 3 · Bin 01', destinationLevel: 3 },
-    ],
+  reallocation: {
+    originLabel: 'Source Storage Racks',
+    originDetail: 'Storage Zone A (Consolidation Candidates)',
+    destinationLabel: 'Target Consolidation Zone (Auto-Slotting + Override)',
+    poolTitle: 'Stored Containers for Reallocation',
+    requiresRackSlot: true,
+    defaultTargetZone: 'ZONE_B',
   },
   'point-to-point': {
-    originLabel: 'Direct Origin',
+    originLabel: 'Direct Station Origin',
     originDetail: 'QA Station 02 (Inspection Bay)',
-    destinationLabel: 'Direct Destination',
-    destinationDetail: 'Assembly Bench 01 (Production Line)',
-    poolTitle: 'Totes at QA Station 02',
-    containers: [
-      { id: 'c-p01', barcode: 'TOTE-QA-01', productName: 'Inspected Assemblies', sku: 'IA-901', qty: 15, sourceEndpoint: 'QA-02', destinationEndpoint: 'ASSEMBLY-01', destinationDisplay: 'Assembly Bench 01', destinationLevel: 1 },
-      { id: 'c-p02', barcode: 'TOTE-QA-02', productName: 'Passed Sub-modules', sku: 'PS-882', qty: 22, sourceEndpoint: 'QA-02', destinationEndpoint: 'ASSEMBLY-01', destinationDisplay: 'Assembly Bench 01', destinationLevel: 1 },
-      { id: 'c-p03', barcode: 'TOTE-QA-03', productName: 'Tested PCB Stacks', sku: 'PCB-40', qty: 30, sourceEndpoint: 'QA-02', destinationEndpoint: 'PACKING-01', destinationDisplay: 'Packing Bench 01', destinationLevel: 1 },
+    destinationLabel: 'Target Work Station Endpoint',
+    poolTitle: 'Totes Ready at QA Station 02',
+    requiresRackSlot: false,
+    defaultTargetZone: 'STATION',
+    endpointOptions: [
+      {
+        endpointId: '00000000-0000-0000-0004-000000000032',
+        endpointCode: 'ASSEMBLY-01',
+        label: 'Assembly Bench 01 (Production Line)',
+      },
+      {
+        endpointId: '00000000-0000-0000-0004-000000000033',
+        endpointCode: 'PACKING-01',
+        label: 'Packing Bench 01 (Fulfillment)',
+      },
+      {
+        endpointId: '00000000-0000-0000-0004-000000000004',
+        endpointCode: 'DOCK-OUT-04',
+        label: 'Outbound Dock 04 (Direct Cross-Dock)',
+      },
     ],
   },
   replenishment: {
-    originLabel: 'Bulk Reserve Buffer',
-    originDetail: 'Bulk Yard D (Heavy Storage RACK-D-01)',
-    destinationLabel: 'Active Pick Face',
-    destinationDetail: 'Storage Zone A (Pick Face Rack A-01)',
+    originLabel: 'Bulk Reserve Origin',
+    originDetail: 'Bulk Yard Zone D (Rack D-01 Reserve)',
+    destinationLabel: 'Active Pick-Face Zone (Auto-Slotting + Override)',
     poolTitle: 'Bulk Reserve Totes in Yard D',
-    containers: [
-      { id: 'c-r01', barcode: 'BOX-401', productName: 'Sensor Array (SA-8820)', sku: 'SA-8820', qty: 50, sourceEndpoint: 'RACK-D-01', destinationEndpoint: 'RACK-A-01', destinationDisplay: 'Rack A · Level 1 · Bin 04', destinationLevel: 1 },
-      { id: 'c-r02', barcode: 'BOX-402', productName: 'Control Module (CM-3100)', sku: 'CM-3100', qty: 30, sourceEndpoint: 'RACK-D-01', destinationEndpoint: 'RACK-B-04', destinationDisplay: 'Rack B · Level 3 · Bin 02', destinationLevel: 3 },
-      { id: 'c-r03', barcode: 'BOX-403', productName: 'Fastener Restock (FA-2011)', sku: 'FA-2011', qty: 200, sourceEndpoint: 'RACK-D-01', destinationEndpoint: 'RACK-A-03', destinationDisplay: 'Rack A · Level 1 · Bin 01', destinationLevel: 1 },
-    ],
+    requiresRackSlot: true,
+    defaultTargetZone: 'ZONE_A',
   },
 };
+
+function mapContainerToStagedItem(c: ContainerListItem): StagedContainer {
+  const endpointCode = c.currentEndpointCode || c.currentStorageLocationCode || 'EP-A';
+  const originDisplayLabel = c.currentStorageLocationCode
+    ? `${c.currentStorageLocationCode}${c.currentLevelNo ? ` · Level ${c.currentLevelNo}` : ''}`
+    : c.currentEndpointCode
+    ? `${c.currentEndpointCode}`
+    : 'Origin Bay (EP-A)';
+
+  return {
+    id: c.id,
+    barcode: c.barcode,
+    status: c.status,
+    productName: c.productName || 'Warehouse Item',
+    sku: c.productSku || 'SKU-GEN',
+    qty: c.qty || 20,
+    sourceStorageLocationId: c.currentStorageLocationId || null,
+    sourceStorageLocationCode: c.currentStorageLocationCode || null,
+    sourceEndpointId: c.currentEndpointId || '00000000-0000-0000-0004-000000000001',
+    sourceEndpointCode: endpointCode,
+    sourceLevelNo: c.currentLevelNo ?? null,
+    originDisplayLabel,
+  };
+}
+
+function buildWorkflowPool(
+  workflowId: string,
+  allContainers: ContainerListItem[],
+  forceIncludeBarcode?: string
+): StagedContainer[] {
+  const mappedAll = allContainers.map(mapContainerToStagedItem);
+  let filtered: StagedContainer[] = [];
+  const wf = (workflowId || '').toLowerCase();
+  const isRelocation = wf === 'reallocation' || wf.includes('reloc');
+
+  if (wf === 'inbound') {
+    filtered = mappedAll.filter(
+      (c) =>
+        (!c.sourceStorageLocationCode && c.sourceEndpointCode.startsWith('DOCK-IN')) ||
+        (c.status || '').toUpperCase() === 'CREATED' ||
+        (c.status || '').toUpperCase() === 'STAGED'
+    );
+  } else if (wf === 'outbound') {
+    filtered = mappedAll.filter(
+      (c) =>
+        Boolean(c.sourceStorageLocationCode) &&
+        (c.sourceStorageLocationCode?.startsWith('RACK-A') ||
+          c.sourceStorageLocationCode?.startsWith('RACK-B'))
+    );
+  } else if (isRelocation) {
+    // For INTERNAL_RELOCATION / reallocation:
+    // Containers returned by real backend (C1..C8, CTN-DEMO-000001..000008, BOX-101..403 with status STORED or CREATED)
+    // are always visible and selectable!
+    filtered = mappedAll.filter((c) => {
+      const st = (c.status || '').toUpperCase();
+      return (
+        st === 'STORED' ||
+        st === 'CREATED' ||
+        st === 'STAGED' ||
+        !st ||
+        c.barcode.startsWith('CTN-') ||
+        c.barcode.startsWith('C') ||
+        c.barcode.startsWith('BOX-')
+      );
+    });
+  } else if (wf === 'replenishment') {
+    filtered = mappedAll.filter(
+      (c) =>
+        c.sourceStorageLocationCode?.startsWith('RACK-D') ||
+        (c.sourceStorageLocationCode?.includes('D') ?? false)
+    );
+  } else if (wf === 'point-to-point') {
+    filtered = mappedAll.filter(
+      (c) =>
+        c.sourceEndpointCode.includes('QA') ||
+        c.sourceEndpointCode.includes('ASSEMBLY') ||
+        c.sourceEndpointCode.includes('STATION')
+    );
+  }
+
+  if (filtered.length === 0) {
+    const eligible = mappedAll.filter((c) => {
+      const st = (c.status || '').toUpperCase();
+      return st === 'STORED' || st === 'CREATED' || st === 'STAGED' || !st;
+    });
+    filtered = eligible.length > 0 ? eligible : mappedAll.slice(0, 10);
+  }
+
+  if (forceIncludeBarcode) {
+    const clean = forceIncludeBarcode.trim().toUpperCase();
+    const alreadyIn = filtered.some((c) => c.barcode.toUpperCase() === clean);
+    if (!alreadyIn) {
+      const fromAll = mappedAll.find((c) => c.barcode.toUpperCase() === clean);
+      if (fromAll) {
+        filtered = [fromAll, ...filtered];
+      }
+    }
+  }
+
+  return filtered;
+}
 
 export function TransportCreationScreen() {
   const { goBack, navigate, params } = useNavigation();
   const { session } = useAuth();
 
-  const userStation = session?.zone || 'Inbound Dock 01';
+  // Resolve initial workflow by id, code, or name
+  const resolvedInitialWf = useMemo(() => {
+    const raw = (params?.workflow || '').trim().toLowerCase();
+    if (!raw) return WORKFLOWS[0];
+    return (
+      WORKFLOWS.find(
+        (w) =>
+          w.id.toLowerCase() === raw ||
+          w.code.toLowerCase() === raw ||
+          w.name.toLowerCase() === raw ||
+          (raw.includes('realloc') && w.id === 'reallocation') ||
+          (raw.includes('reloc') && w.id === 'reallocation') ||
+          (raw.includes('replenish') && w.id === 'replenishment') ||
+          (raw.includes('outbound') && w.id === 'outbound') ||
+          (raw.includes('point') && w.id === 'point-to-point')
+      ) || WORKFLOWS[0]
+    );
+  }, [params?.workflow]);
 
-  const initialWorkflowName = params?.workflow || 'Inbound Putaway';
-  const initialContainer = params?.container || 'BOX-101';
-
-  // Step 1: Workflow Pick, Step 2: Configure Payload, Step 3: Success
+  // Step 1: Workflow Pick, Step 2: Configure Route & Payload, Step 3: Receipt
   const [step, setStep] = useState<number>(params?.workflow ? 2 : 1);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowItem>(
-    WORKFLOWS.find((w) => w.name === initialWorkflowName) || WORKFLOWS[0]
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowItem>(resolvedInitialWf);
+
+  const currentPreset = useMemo(() => {
+    return WORKFLOW_ROUTE_PRESETS[selectedWorkflow.id] || WORKFLOW_ROUTE_PRESETS.inbound;
+  }, [selectedWorkflow.id]);
+
+  // Live warehouse containers & storage locations
+  const [allContainers, setAllContainers] = useState<ContainerListItem[]>(() =>
+    getSeedContainersSnapshot()
+  );
+  const [storageLocations, setStorageLocations] = useState<StorageLocationListItem[]>(() =>
+    getStorageLocationsSnapshot()
   );
 
-  const initialPreset = WORKFLOW_PRESETS[selectedWorkflow.id] || WORKFLOW_PRESETS.inbound;
+  // Tier 1: Target Zone (for Rack workflows) or Target Endpoint (for Station/Dock workflows)
+  const [targetZone, setTargetZone] = useState<WarehouseZoneCode>(currentPreset.defaultTargetZone);
+  const [selectedEndpointOption, setSelectedEndpointOption] = useState<EndpointTargetOption>(
+    () =>
+      currentPreset.endpointOptions?.[0] || {
+        endpointId: '00000000-0000-0000-0004-000000000004',
+        endpointCode: 'EP-D',
+        label: 'Endpoint D (Dropoff Bay D)',
+      }
+  );
 
-  // Staged containers pool
-  const [stagedContainers, setStagedContainers] = useState<StagedContainer[]>(initialPreset.containers);
-  const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>([initialContainer]);
+  // Staged containers pool for current workflow
+  const [stagedContainers, setStagedContainers] = useState<StagedContainer[]>(() =>
+    buildWorkflowPool(resolvedInitialWf.id, getSeedContainersSnapshot(), params?.container)
+  );
+  const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>(() => {
+    const initialPool = buildWorkflowPool(
+      resolvedInitialWf.id,
+      getSeedContainersSnapshot(),
+      params?.container
+    );
+    if (params?.container) {
+      return [params.container];
+    }
+    return initialPool[0] ? [initialPool[0].barcode] : [];
+  });
+
+  // Tier 2: Custom per-container slot overrides (`barcode -> AllocatedStorageSlot`)
+  const [customSlotOverrides, setCustomSlotOverrides] = useState<
+    Record<string, AllocatedStorageSlot>
+  >({});
+  const [slotPickerTargetBarcode, setSlotPickerTargetBarcode] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [customBarcode, setCustomBarcode] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
 
-  // Real backend context
-  const [warehouses, setWarehouses] = useState<WarehouseListItem[]>([]);
-  const [activeWarehouseId, setActiveWarehouseId] = useState<string>('');
-  const [activeMapVersionId, setActiveMapVersionId] = useState<string>('');
+  // Backend metadata - default to demo warehouse ID
+  const [activeWarehouseId, setActiveWarehouseId] = useState<string>(
+    '11111111-1111-1111-1111-111111111111'
+  );
+  const [activeMapVersionId, setActiveMapVersionId] = useState<string>(
+    '00000000-0000-0000-0001-000000000001'
+  );
   const [endpoints, setEndpoints] = useState<EndpointDto[]>([]);
-  const [backendContainers, setBackendContainers] = useState<ContainerListItem[]>([]);
   const [publishedWorkflows, setPublishedWorkflows] = useState<WorkflowListItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isQueueing, setIsQueueing] = useState(false);
+
+  // Target Destination Mode: 'ENDPOINT' vs 'SLOT'
+  const isInitialReloc =
+    resolvedInitialWf.id === 'reallocation' || resolvedInitialWf.code === 'INTERNAL_RELOCATION';
+  const [destinationType, setDestinationType] = useState<'ENDPOINT' | 'SLOT'>(
+    isInitialReloc ? 'ENDPOINT' : currentPreset.requiresRackSlot ? 'SLOT' : 'ENDPOINT'
+  );
+  const [perContainerEndpointOverrides, setPerContainerEndpointOverrides] = useState<
+    Record<string, EndpointTargetOption>
+  >({});
+
   const [dispatchedOrder, setDispatchedOrder] = useState<{
+    id: string;
     requestCode: string;
+    status: 'SUBMITTED' | 'QUEUED';
     jobs: QueuedJobResponse[];
     carrier: string;
     containerCount: number;
-    containerList: string[];
+    containerAssignments: Array<{ barcode: string; targetLabel: string }>;
     estimatedMissions: number;
   } | null>(null);
 
-  const currentPreset = useMemo(() => {
-    return WORKFLOW_PRESETS[selectedWorkflow.id] || WORKFLOW_PRESETS.inbound;
-  }, [selectedWorkflow.id]);
+  // Dynamically resolve target endpoint choices from backend map endpoints
+  const availableEndpointOptions: EndpointTargetOption[] = useMemo(() => {
+    if (endpoints && endpoints.length > 0) {
+      return endpoints.map((ep) => ({
+        endpointId: ep.id,
+        endpointCode: ep.code,
+        label: ep.name ? `${ep.code} (${ep.name})` : ep.code,
+      }));
+    }
+    return (
+      currentPreset.endpointOptions || [
+        {
+          endpointId: '00000000-0000-0000-0004-000000000004',
+          endpointCode: 'EP-D',
+          label: 'Endpoint D (Dropoff Bay D)',
+        },
+        {
+          endpointId: '00000000-0000-0000-0004-000000000005',
+          endpointCode: 'EP-E',
+          label: 'Endpoint E (Dropoff Bay E)',
+        },
+        {
+          endpointId: '00000000-0000-0000-0004-000000000006',
+          endpointCode: 'EP-F',
+          label: 'Endpoint F (Dropoff Bay F)',
+        },
+      ]
+    );
+  }, [endpoints, currentPreset.endpointOptions]);
+
+  useEffect(() => {
+    if (availableEndpointOptions.length > 0) {
+      const preferred =
+        availableEndpointOptions.find(
+          (ep) => ep.endpointCode.includes('D') || ep.endpointCode.includes('OUT')
+        ) || availableEndpointOptions[0];
+      setSelectedEndpointOption(preferred);
+    }
+  }, [availableEndpointOptions]);
 
   useEffect(() => {
     let isMounted = true;
@@ -279,47 +447,40 @@ export function TransportCreationScreen() {
           setPublishedWorkflows(wfRes.value.items);
         }
 
-        let whId = '';
+        let whId = '11111111-1111-1111-1111-111111111111';
         if (whRes.status === 'fulfilled' && whRes.value?.items?.length) {
-          setWarehouses(whRes.value.items);
-          whId = whRes.value.items[0].id;
+          const matched =
+            whRes.value.items.find((w) => w.id === '11111111-1111-1111-1111-111111111111') ||
+            whRes.value.items[0];
+          whId = matched.id;
           setActiveWarehouseId(whId);
         }
 
-        if (whId) {
-          const [activeMap, contRes] = await Promise.allSettled([
-            getActiveMapVersion(whId),
-            listContainers({ warehouseId: whId, take: 50 }),
-          ]);
+        const [activeMap, contRes, locRes] = await Promise.allSettled([
+          getActiveMapVersion(whId),
+          listContainers({ warehouseId: whId, take: 100 }),
+          listStorageLocations({ warehouseId: whId, activeOnly: true }),
+        ]);
 
-          if (!isMounted) return;
-          if (contRes.status === 'fulfilled' && contRes.value?.items?.length) {
-            setBackendContainers(contRes.value.items);
-            // Map live backend containers into staged list if available
-            const mapped = contRes.value.items.map((c, idx) => ({
-              id: c.id,
-              barcode: c.barcode,
-              productName: c.productName || 'Warehouse Item',
-              sku: c.productSku || 'SKU-GEN',
-              qty: 20 + idx * 5,
-              sourceEndpoint: 'DOCK-IN-01',
-              destinationEndpoint: c.currentStorageLocationCode || 'RACK-A-02',
-              destinationDisplay: c.currentStorageLocationCode ? `Rack ${c.currentStorageLocationCode}` : 'Rack A-02 · Level 2',
-              destinationLevel: c.currentLevelNo || 2,
-            }));
-            setStagedContainers(mapped);
-          }
-
-          if (activeMap.status === 'fulfilled' && activeMap.value?.id) {
-            setActiveMapVersionId(activeMap.value.id);
-            const mapDetail = await getMapVersionDetail(activeMap.value.id).catch(() => null);
-            if (isMounted && mapDetail?.endpoints) {
-              setEndpoints(mapDetail.endpoints);
-            }
+        if (!isMounted) return;
+        if (locRes.status === 'fulfilled' && locRes.value?.items?.length) {
+          setStorageLocations(locRes.value.items);
+        }
+        if (contRes.status === 'fulfilled' && contRes.value?.items?.length) {
+          setAllContainers(contRes.value.items);
+          setStagedContainers(
+            buildWorkflowPool(selectedWorkflow.id, contRes.value.items, params?.container)
+          );
+        }
+        if (activeMap.status === 'fulfilled' && activeMap.value?.id) {
+          setActiveMapVersionId(activeMap.value.id);
+          const mapDetail = await getMapVersionDetail(activeMap.value.id).catch(() => null);
+          if (isMounted && mapDetail?.endpoints) {
+            setEndpoints(mapDetail.endpoints);
           }
         }
       } catch (err) {
-        console.warn('Backend context loading encountered error, using fallback presets:', err);
+        console.warn('Backend context loading encountered error, using local store:', err);
       }
     }
 
@@ -327,14 +488,142 @@ export function TransportCreationScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedWorkflow.id, params?.container]);
+
+  // Available slot count in the currently selected Target Zone
+  const availableSlotsInTargetZone = useMemo(() => {
+    const slots: AllocatedStorageSlot[] = [];
+    storageLocations
+      .filter((loc) => loc.isActive && loc.zone === targetZone)
+      .forEach((rack) => {
+        rack.shelfSlots.forEach((s) => {
+          if (s.status === 'AVAILABLE') {
+            slots.push({
+              storageLocationId: rack.id,
+              storageLocationCode: rack.code,
+              storageLocationName: rack.name,
+              endpointId: rack.endpointId,
+              endpointCode: rack.endpointCode,
+              levelNo: s.levelNo,
+              zone: rack.zone,
+              zoneLabel: rack.zoneLabel,
+              displayLabel: `${rack.code} · Level ${s.levelNo}`,
+            });
+          }
+        });
+      });
+    return slots;
+  }, [storageLocations, targetZone]);
+
+  // Tier 1 + Tier 2 Resolved Slot Assignments for every currently selected container
+  const resolvedBatchAssignments = useMemo(() => {
+    const result: Record<string, AllocatedStorageSlot & { isCustom?: boolean }> = {};
+    if (!currentPreset.requiresRackSlot) return result;
+
+    const usedKeys = new Set<string>();
+
+    // First, respect any custom Tier-2 overrides for currently selected containers
+    selectedBarcodes.forEach((barcode) => {
+      const custom = customSlotOverrides[barcode];
+      if (custom) {
+        const key = `${custom.storageLocationId}:${custom.levelNo}`;
+        usedKeys.add(key);
+        result[barcode] = { ...custom, isCustom: true };
+      }
+    });
+
+    // Second, auto-allocate remaining selected containers from `availableSlotsInTargetZone`
+    selectedBarcodes.forEach((barcode) => {
+      if (result[barcode]) return;
+      const nextFree = availableSlotsInTargetZone.find(
+        (s) => !usedKeys.has(`${s.storageLocationId}:${s.levelNo}`)
+      );
+      if (nextFree) {
+        usedKeys.add(`${nextFree.storageLocationId}:${nextFree.levelNo}`);
+        result[barcode] = { ...nextFree, isCustom: false };
+      } else {
+        // Fallback if all slots in zone are filled
+        const fallbackRack =
+          storageLocations.find((l) => l.zone === targetZone) || storageLocations[0];
+        result[barcode] = {
+          storageLocationId: fallbackRack?.id || 'a0000000-0000-0000-0005-000000000001',
+          storageLocationCode: fallbackRack?.code || 'RACK-A-01',
+          storageLocationName: fallbackRack?.name || 'Rack A-01',
+          endpointId: fallbackRack?.endpointId || '00000000-0000-0000-0004-000000000011',
+          endpointCode: fallbackRack?.endpointCode || 'RACK-A-01',
+          levelNo: 1,
+          zone: targetZone,
+          zoneLabel: fallbackRack?.zoneLabel || 'Storage Zone A',
+          displayLabel: `${fallbackRack?.code || 'RACK-A-01'} · Level 1`,
+          isCustom: false,
+        };
+      }
+    });
+
+    return result;
+  }, [
+    currentPreset.requiresRackSlot,
+    selectedBarcodes,
+    customSlotOverrides,
+    availableSlotsInTargetZone,
+    storageLocations,
+    targetZone,
+  ]);
 
   const handleSelectWorkflow = (wf: WorkflowItem) => {
+    triggerHaptic('tap');
     setSelectedWorkflow(wf);
-    const preset = WORKFLOW_PRESETS[wf.id] || WORKFLOW_PRESETS.inbound;
-    setStagedContainers(preset.containers);
-    setSelectedBarcodes([preset.containers[0]?.barcode || 'BOX-101']);
+    const preset = WORKFLOW_ROUTE_PRESETS[wf.id] || WORKFLOW_ROUTE_PRESETS.inbound;
+    setTargetZone(preset.defaultTargetZone);
+    const isReloc = wf.id === 'reallocation' || wf.code === 'INTERNAL_RELOCATION';
+    setDestinationType(isReloc ? 'ENDPOINT' : preset.requiresRackSlot ? 'SLOT' : 'ENDPOINT');
+    if (preset.endpointOptions?.[0]) {
+      setSelectedEndpointOption(preset.endpointOptions[0]);
+    }
+    setCustomSlotOverrides({});
+    setPerContainerEndpointOverrides({});
+    const pool = buildWorkflowPool(wf.id, allContainers);
+    setStagedContainers(pool);
+    setSelectedBarcodes(pool[0] ? [pool[0].barcode] : []);
     setStep(2);
+  };
+
+  const handleChangeTargetZone = (zone: WarehouseZoneCode) => {
+    triggerHaptic('tap');
+    setTargetZone(zone);
+    // Clear only auto-allocations; keep custom overrides if they belong to the new zone, or reset for clean batch slotting
+    setCustomSlotOverrides({});
+  };
+
+  const handleOverrideContainerSlot = (barcode: string, newSlot: AllocatedStorageSlot) => {
+    setCustomSlotOverrides((prev) => {
+      const next = { ...prev };
+      // If another selected container currently holds `newSlot`, swap its slot with `barcode`'s previous slot
+      const targetKey = `${newSlot.storageLocationId}:${newSlot.levelNo}`;
+      const previousOwner = Object.keys(resolvedBatchAssignments).find(
+        (b) =>
+          b !== barcode &&
+          `${resolvedBatchAssignments[b].storageLocationId}:${resolvedBatchAssignments[b].levelNo}` ===
+            targetKey
+      );
+      const currentSlotOfTarget = resolvedBatchAssignments[barcode];
+      if (previousOwner && currentSlotOfTarget) {
+        next[previousOwner] = {
+          storageLocationId: currentSlotOfTarget.storageLocationId,
+          storageLocationCode: currentSlotOfTarget.storageLocationCode,
+          storageLocationName: currentSlotOfTarget.storageLocationName,
+          endpointId: currentSlotOfTarget.endpointId,
+          endpointCode: currentSlotOfTarget.endpointCode,
+          levelNo: currentSlotOfTarget.levelNo,
+          zone: currentSlotOfTarget.zone,
+          zoneLabel: currentSlotOfTarget.zoneLabel,
+          displayLabel: currentSlotOfTarget.displayLabel,
+        };
+      }
+      next[barcode] = newSlot;
+      return next;
+    });
+    toast.success(`Assigned ${barcode} ➔ ${newSlot.displayLabel}`);
   };
 
   // Toggle single container selection
@@ -357,7 +646,6 @@ export function TransportCreationScreen() {
     if (selectedBarcodes.length === stagedContainers.length) {
       setSelectedBarcodes([]);
     } else {
-      // Select up to 10
       const allBarcodes = stagedContainers.slice(0, 10).map((c) => c.barcode);
       setSelectedBarcodes(allBarcodes);
     }
@@ -386,13 +674,15 @@ export function TransportCreationScreen() {
       const newContainer: StagedContainer = {
         id: `custom-${Date.now()}`,
         barcode: clean,
-        productName: 'Scanned Container',
-        sku: 'MANUAL-INPUT',
-        qty: 1,
-        sourceEndpoint: 'DOCK-IN-01',
-        destinationEndpoint: 'RACK-A-02',
-        destinationDisplay: 'Rack A · Level 2 · Bin 01',
-        destinationLevel: 2,
+        productName: 'Scanned Tote Payload',
+        sku: 'SCAN-INDUCT',
+        qty: 12,
+        sourceStorageLocationId: null,
+        sourceStorageLocationCode: null,
+        sourceEndpointId: '00000000-0000-0000-0004-000000000001',
+        sourceEndpointCode: 'DOCK-IN-01',
+        sourceLevelNo: null,
+        originDisplayLabel: 'Inbound Dock 01 · Scanned',
       };
       setStagedContainers([newContainer, ...stagedContainers]);
       setSelectedBarcodes([...selectedBarcodes, clean]);
@@ -400,7 +690,7 @@ export function TransportCreationScreen() {
 
     setCustomBarcode('');
     setIsAddingCustom(false);
-    toast.success(`Container ${clean} added to dispatch manifest.`);
+    toast.success(`Container ${clean} selected and auto-slotted.`);
   };
 
   const selectedContainers = useMemo(() => {
@@ -420,7 +710,7 @@ export function TransportCreationScreen() {
 
   const estimatedMissions = Math.max(1, Math.ceil(selectedContainers.length / 2));
 
-  const handleConfirmDispatch = async () => {
+  const handleConfirmDispatch = async (autoQueue: boolean = false) => {
     if (selectedContainers.length === 0) {
       toast.warning('Please select at least 1 container to dispatch.');
       return;
@@ -429,91 +719,201 @@ export function TransportCreationScreen() {
     setIsSubmitting(true);
     try {
       const matchedWf = publishedWorkflows.find(
-        (w) => w.code.toUpperCase() === selectedWorkflow.code.toUpperCase()
+        (w) =>
+          w.code.toUpperCase() === selectedWorkflow.code.toUpperCase() ||
+          w.name.toLowerCase() === selectedWorkflow.name.toLowerCase()
       );
-      const workflowId = matchedWf?.id || '00000000-0000-0000-0002-000000000001';
-      const whId = activeWarehouseId || '00000000-0000-0000-0000-000000000001';
+      const workflowId = matchedWf?.id || '15a7f3f5-cdfb-4fc3-a896-37dc1d9d5ccf';
+      const whId = activeWarehouseId || '11111111-1111-1111-1111-111111111111';
       const mvId = activeMapVersionId || '00000000-0000-0000-0001-000000000001';
 
+      const containerAssignmentsSummary: Array<{ barcode: string; targetLabel: string }> = [];
+      const isSlotMode = destinationType === 'SLOT';
+
       const details = selectedContainers.map((s, idx) => {
-        const foundContainer = backendContainers.find(
-          (c) => c.barcode.trim().toUpperCase() === s.barcode.trim().toUpperCase()
-        );
-        const containerId =
-          foundContainer?.id || s.id.startsWith('custom-') ? `00000000-0000-0000-0003-00000000000${idx + 1}` : s.id;
-
-        const foundSrc = endpoints.find(
-          (e) => e.code.trim().toUpperCase() === s.sourceEndpoint.trim().toUpperCase()
-        );
-        const sourceEndpointId =
-          foundSrc?.id || '00000000-0000-0000-0004-000000000001';
-
-        const foundDst = endpoints.find(
+        // Resolve valid source endpoint from backend endpoints
+        let sourceEndpoint = endpoints.find(
           (e) =>
-            e.code.trim().toUpperCase() === s.destinationEndpoint.trim().toUpperCase() ||
-            s.destinationEndpoint.toUpperCase().includes(e.code.toUpperCase())
-        );
-        const destinationEndpointId =
-          foundDst?.id || '00000000-0000-0000-0004-000000000002';
+            e.id === s.sourceEndpointId ||
+            e.code.toUpperCase() === s.sourceEndpointCode.toUpperCase() ||
+            e.code.toUpperCase().includes('A') ||
+            e.name.toUpperCase().includes('A')
+        ) || endpoints[0];
 
-        return {
-          sequenceNo: idx + 1,
-          containerId,
-          sourceStorageLocationId: null,
-          sourceEndpointId,
-          sourceLevelNo: null,
-          destinationStorageLocationId: null,
-          destinationEndpointId,
-          destinationLevelNo: s.destinationLevel as any,
-        };
+        const sourceEndpointId =
+          sourceEndpoint?.id || s.sourceEndpointId || '00000000-0000-0000-0004-000000000001';
+
+        // Check if sourceStorageLocation exists in real backend storageLocations and matches endpoint
+        const validSourceLoc = s.sourceStorageLocationId
+          ? storageLocations.find(
+              (l) => l.id === s.sourceStorageLocationId && l.warehouseId === whId
+            )
+          : null;
+        const isSourceLocValidAndMatched =
+          validSourceLoc && validSourceLoc.endpointId === sourceEndpointId;
+
+        const finalSourceStorageLocationId = isSourceLocValidAndMatched
+          ? validSourceLoc.id
+          : null;
+        const finalSourceLevelNo = isSourceLocValidAndMatched ? s.sourceLevelNo : null;
+
+        if (isSlotMode) {
+          const slot = resolvedBatchAssignments[s.barcode];
+          // Check if slot's storage location exists in real backend storageLocations
+          const validDestLoc = slot?.storageLocationId
+            ? storageLocations.find(
+                (l) => l.id === slot.storageLocationId && l.warehouseId === whId
+              )
+            : null;
+
+          if (validDestLoc) {
+            // Storage location exists in DB! Its endpointId MUST equal destinationEndpointId
+            const destinationEndpointId = validDestLoc.endpointId;
+            const targetLabel = `${validDestLoc.code} · Level ${slot?.levelNo ?? 1}`;
+            containerAssignmentsSummary.push({ barcode: s.barcode, targetLabel });
+
+            return {
+              sequenceNo: idx + 1,
+              containerId: s.id,
+              sourceStorageLocationId: finalSourceStorageLocationId,
+              sourceEndpointId,
+              sourceLevelNo: finalSourceLevelNo,
+              destinationStorageLocationId: validDestLoc.id,
+              destinationEndpointId,
+              destinationLevelNo: slot?.levelNo ?? 1,
+              containerBarcode: s.barcode,
+              productName: s.productName,
+              productSku: s.sku,
+              qty: s.qty,
+              sourceEndpointCode: sourceEndpoint?.code || s.originDisplayLabel,
+              destinationEndpointCode: targetLabel,
+              destinationStorageLocationCode: validDestLoc.code,
+            };
+          } else {
+            // Storage location is NOT in backend DB; fallback to endpoint movement
+            const foundDst =
+              endpoints.find(
+                (e) =>
+                  e.code.toUpperCase() === (slot?.endpointCode || '').toUpperCase() ||
+                  e.code.toUpperCase().includes('D') ||
+                  e.name.toUpperCase().includes('D')
+              ) ||
+              endpoints[1] ||
+              endpoints[0];
+
+            const destinationEndpointId =
+              foundDst?.id || slot?.endpointId || '00000000-0000-0000-0004-000000000011';
+            const targetLabel = foundDst?.code || slot?.displayLabel || 'EP-D';
+            containerAssignmentsSummary.push({ barcode: s.barcode, targetLabel });
+
+            return {
+              sequenceNo: idx + 1,
+              containerId: s.id,
+              sourceStorageLocationId: null,
+              sourceEndpointId,
+              sourceLevelNo: null,
+              destinationStorageLocationId: null,
+              destinationEndpointId,
+              destinationLevelNo: null,
+              containerBarcode: s.barcode,
+              productName: s.productName,
+              productSku: s.sku,
+              qty: s.qty,
+              sourceEndpointCode: sourceEndpoint?.code || s.originDisplayLabel,
+              destinationEndpointCode: targetLabel,
+              destinationStorageLocationCode: null,
+            };
+          }
+        } else {
+          // Endpoint-only target mode (e.g. EP-D, EP-E, EP-F)
+          const epOption = perContainerEndpointOverrides[s.barcode] || selectedEndpointOption;
+          const foundDst =
+            endpoints.find(
+              (e) =>
+                e.id === epOption.endpointId ||
+                e.code.toUpperCase() === epOption.endpointCode.toUpperCase()
+            ) ||
+            endpoints.find((e) => e.code.includes('D')) ||
+            endpoints[0];
+
+          const destinationEndpointId = foundDst?.id || epOption.endpointId;
+          const targetLabel = foundDst?.code || epOption.endpointCode;
+          containerAssignmentsSummary.push({ barcode: s.barcode, targetLabel });
+
+          return {
+            sequenceNo: idx + 1,
+            containerId: s.id,
+            sourceStorageLocationId: null,
+            sourceEndpointId,
+            sourceLevelNo: null,
+            destinationStorageLocationId: null,
+            destinationEndpointId,
+            destinationLevelNo: null,
+            containerBarcode: s.barcode,
+            productName: s.productName,
+            productSku: s.sku,
+            qty: s.qty,
+            sourceEndpointCode: sourceEndpoint?.code || s.originDisplayLabel,
+            destinationEndpointCode: targetLabel,
+            destinationStorageLocationCode: null,
+          };
+        }
       });
 
       const createPayload = {
         warehouseId: whId,
         mapVersionId: mvId,
         workflowId,
+        workflowCode: selectedWorkflow.code,
+        workflowName: selectedWorkflow.name,
         workflowInputs: {
           operator: session?.username || 'Staff Operator',
           priority: 'NORMAL',
         },
-        note: `Staff app dispatch: ${selectedWorkflow.name} (${selectedContainers.length} totes)`,
+        note: `${selectedWorkflow.name}: ${selectedContainers.length} tote(s) (${containerAssignmentsSummary
+          .map((a) => `${a.barcode} ➔ ${a.targetLabel}`)
+          .join(', ')})`,
         details,
       };
 
-      let requestCode = `TR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      let jobs: QueuedJobResponse[] = [];
+      const created = await createTransportRequest(createPayload);
 
-      try {
-        const created = await createTransportRequest(createPayload);
-        requestCode = created.requestCode || requestCode;
+      // Refresh local storage locations snapshot after reservation
+      setStorageLocations([...getStorageLocationsSnapshot()]);
 
-        if (created?.id) {
-          const queued = await queueTransportRequest(created.id);
-          jobs = queued.jobs || [];
-        }
-      } catch (beErr) {
-        console.warn('Backend call failed, using graceful client receipt:', beErr);
-        jobs = [
-          {
-            jobId: '4ec700e7-b42c-48a3-85e4-b31dc0299952',
-            jobNo: 'JOB-20261012-000022',
-            batchKey: 'BATCH-001',
-            jobContainerCount: selectedContainers.length,
-            jobTaskCount: 5,
-            jobStepCount: 8,
-          },
-        ];
+      if (autoQueue) {
+        // One-tap Submit & Auto-Queue execution
+        const queued = await queueTransportRequest(created.id);
+        triggerHaptic('success');
+        setDispatchedOrder({
+          id: created.id,
+          requestCode: created.requestCode,
+          status: 'QUEUED',
+          jobs: queued.jobs || [],
+          carrier:
+            (queued.jobs?.length || 1) > 1
+              ? 'AMR-01 & AMR-02 (Dual-Carrier Split)'
+              : `${queued.jobs?.[0]?.assignedRobotCode || 'AMR-01'} (Online · 2-Bay Deck)`,
+          containerCount: selectedContainers.length,
+          containerAssignments: containerAssignmentsSummary,
+          estimatedMissions: queued.jobs?.length || estimatedMissions,
+        });
+        toast.success(`Request ${created.requestCode} created & queued successfully!`);
+      } else {
+        // 2-Step Execution: Transition to Step 3 with status SUBMITTED
+        triggerHaptic('success');
+        setDispatchedOrder({
+          id: created.id,
+          requestCode: created.requestCode,
+          status: 'SUBMITTED',
+          jobs: [],
+          carrier: 'Fleet Scheduler (Pending Queueing)',
+          containerCount: selectedContainers.length,
+          containerAssignments: containerAssignmentsSummary,
+          estimatedMissions,
+        });
+        toast.success(`Transport Request ${created.requestCode} submitted!`);
       }
-
-      triggerHaptic('success');
-      setDispatchedOrder({
-        requestCode,
-        jobs,
-        carrier: 'AMR-01 (Online · 85% Battery)',
-        containerCount: selectedContainers.length,
-        containerList: selectedContainers.map((c) => c.barcode),
-        estimatedMissions,
-      });
       setStep(3);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to dispatch mission');
@@ -522,19 +922,52 @@ export function TransportCreationScreen() {
     }
   };
 
+  const handleQueueSubmittedRequest = async () => {
+    if (!dispatchedOrder?.id) return;
+    setIsQueueing(true);
+    try {
+      const queued = await queueTransportRequest(dispatchedOrder.id);
+      triggerHaptic('success');
+      setDispatchedOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'QUEUED',
+              jobs: queued.jobs || [],
+              carrier:
+                (queued.jobs?.length || 1) > 1
+                  ? 'AMR-01 & AMR-02 (Dual-Carrier Split)'
+                  : `${queued.jobs?.[0]?.assignedRobotCode || 'AMR-01'} (Online · 2-Bay Deck)`,
+              estimatedMissions: queued.jobs?.length || prev.estimatedMissions,
+            }
+          : null
+      );
+      toast.success(
+        `Request ${dispatchedOrder.requestCode} queued! Job: ${
+          queued.jobs?.[0]?.jobNo || 'Assigned'
+        }`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to queue request');
+    } finally {
+      setIsQueueing(false);
+    }
+  };
+
+  const activePickerContainer = useMemo(() => {
+    if (!slotPickerTargetBarcode) return null;
+    return stagedContainers.find((c) => c.barcode === slotPickerTargetBarcode) || null;
+  }, [slotPickerTargetBarcode, stagedContainers]);
+
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label={
-          step === 1
-            ? 'New Transport Request'
-            : selectedWorkflow.name
-        }
+        label={step === 1 ? 'New Transport Request' : selectedWorkflow.name}
         title={
           step === 1
             ? 'Select Workflow'
             : step === 2
-            ? 'Select Containers to Move'
+            ? 'Select Containers & Target Slots'
             : 'Dispatch Confirmed'
         }
         onBack={() => {
@@ -559,38 +992,48 @@ export function TransportCreationScreen() {
             <View style={styles.workflowGrid}>
               {WORKFLOWS.map((wf) => (
                 <View key={wf.id} style={styles.workflowGridItem}>
-                  <WorkflowTemplateCard
-                    workflow={wf}
-                    onSelect={handleSelectWorkflow}
-                  />
+                  <WorkflowTemplateCard workflow={wf} onSelect={handleSelectWorkflow} />
                 </View>
               ))}
             </View>
           </View>
         )}
 
-        {/* Step 2: Inbound Dock Staged Containers Multi-Select */}
+        {/* Step 2: Origin Container Selection + Two-Tier Hybrid Slotting */}
         {step === 2 && (
           <View style={{ gap: 16 }}>
-            {/* Route Context Banner (Configured once for whole request) */}
+            {/* Route & Tier-1 Batch Destination Configurator Card */}
             <View style={styles.routeContextCard}>
               <View style={styles.routeRow}>
+                {/* Origin Point */}
                 <View style={styles.routePoint}>
                   <View style={[styles.routeDot, { backgroundColor: '#121317' }]} />
                   <View style={{ flex: 1 }}>
                     <View style={styles.routeLabelRow}>
-                      <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
+                      <Text
+                        variant="caption"
+                        color={colors.textSecondary}
+                        style={{ fontWeight: '600' }}
+                      >
                         {currentPreset.originLabel}
                       </Text>
                       {selectedWorkflow.id === 'inbound' && (
                         <View style={styles.stationBadge}>
-                          <Text variant="caption" color={colors.textPrimary} style={styles.stationBadgeText}>
+                          <Text
+                            variant="caption"
+                            color={colors.textPrimary}
+                            style={styles.stationBadgeText}
+                          >
                             Your Station
                           </Text>
                         </View>
                       )}
                     </View>
-                    <Text variant="bodyMedium" color={colors.textPrimary} style={styles.stationName}>
+                    <Text
+                      variant="bodyMedium"
+                      color={colors.textPrimary}
+                      style={styles.stationName}
+                    >
                       {currentPreset.originDetail}
                     </Text>
                   </View>
@@ -598,15 +1041,140 @@ export function TransportCreationScreen() {
 
                 <View style={styles.routeDivider} />
 
+                {/* Tier 1: Interactive Destination Zone / Endpoint Selector */}
                 <View style={styles.routePoint}>
                   <View style={[styles.routeDot, { backgroundColor: colors.success }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                      {currentPreset.destinationLabel}
-                    </Text>
-                    <Text variant="bodyMedium" color={colors.textPrimary} style={styles.stationName}>
-                      {currentPreset.destinationDetail}
-                    </Text>
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <View style={styles.routeLabelRow}>
+                      <Text
+                        variant="caption"
+                        color={colors.textSecondary}
+                        style={{ fontWeight: '600' }}
+                      >
+                        {destinationType === 'SLOT' ? currentPreset.destinationLabel : 'Target Endpoint / Dropoff Bay'}
+                      </Text>
+                      {destinationType === 'SLOT' ? (
+                        <View style={styles.autoSlotBadge}>
+                          <Sparkles size={11} color="#059669" />
+                          <Text variant="caption" style={styles.autoSlotBadgeText}>
+                            {availableSlotsInTargetZone.length} Empty Slots
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.autoSlotBadge}>
+                          <MapPin size={11} color="#059669" />
+                          <Text variant="caption" style={styles.autoSlotBadgeText}>
+                            {availableEndpointOptions.length} Endpoints Available
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Clean Target Mode Switcher: Endpoints vs Storage Slots */}
+                    <View style={styles.modeTabsRow}>
+                      <Pressable
+                        onPress={() => {
+                          triggerHaptic('tap');
+                          setDestinationType('ENDPOINT');
+                        }}
+                        style={[
+                          styles.modeTabBtn,
+                          destinationType === 'ENDPOINT' && styles.modeTabBtnActive,
+                        ]}
+                      >
+                        <Text
+                          variant="caption"
+                          style={[
+                            styles.modeTabText,
+                            destinationType === 'ENDPOINT' && styles.modeTabTextActive,
+                          ]}
+                        >
+                          Target Endpoints ({availableEndpointOptions.length})
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          triggerHaptic('tap');
+                          setDestinationType('SLOT');
+                        }}
+                        style={[
+                          styles.modeTabBtn,
+                          destinationType === 'SLOT' && styles.modeTabBtnActive,
+                        ]}
+                      >
+                        <Text
+                          variant="caption"
+                          style={[
+                            styles.modeTabText,
+                            destinationType === 'SLOT' && styles.modeTabTextActive,
+                          ]}
+                        >
+                          Rack Slots ({availableSlotsInTargetZone.length})
+                        </Text>
+                      </Pressable>
+                    </View>
+
+                    {destinationType === 'SLOT' ? (
+                      <View style={styles.zoneSelectorRow}>
+                        {TARGET_ZONE_OPTIONS.map((zOpt) => {
+                          const isSelected = targetZone === zOpt.code;
+                          return (
+                            <Pressable
+                              key={zOpt.code}
+                              onPress={() => handleChangeTargetZone(zOpt.code)}
+                              style={[
+                                styles.zoneChip,
+                                isSelected && styles.zoneChipActive,
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: isSelected }}
+                            >
+                              <Text
+                                variant="caption"
+                                style={[
+                                  styles.zoneChipText,
+                                  isSelected && styles.zoneChipTextActive,
+                                ]}
+                              >
+                                {zOpt.shortLabel}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      <View style={styles.zoneSelectorRow}>
+                        {availableEndpointOptions.map((epOpt) => {
+                          const isSelected =
+                            selectedEndpointOption.endpointCode === epOpt.endpointCode;
+                          return (
+                            <Pressable
+                              key={epOpt.endpointCode}
+                              onPress={() => {
+                                triggerHaptic('tap');
+                                setSelectedEndpointOption(epOpt);
+                              }}
+                              style={[
+                                styles.zoneChip,
+                                isSelected && styles.zoneChipActive,
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: isSelected }}
+                            >
+                              <Text
+                                variant="caption"
+                                style={[
+                                  styles.zoneChipText,
+                                  isSelected && styles.zoneChipTextActive,
+                                ]}
+                              >
+                                {epOpt.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -621,7 +1189,11 @@ export function TransportCreationScreen() {
                     {currentPreset.poolTitle}
                   </Text>
                   <View style={styles.countBadge}>
-                    <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
+                    <Text
+                      variant="caption"
+                      color={colors.textSecondary}
+                      style={{ fontWeight: '600' }}
+                    >
                       {stagedContainers.length} Available
                     </Text>
                   </View>
@@ -633,7 +1205,9 @@ export function TransportCreationScreen() {
                   accessibilityRole="button"
                 >
                   <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '600' }}>
-                    {selectedBarcodes.length === stagedContainers.length ? 'Deselect All' : 'Select All'}
+                    {selectedBarcodes.length === stagedContainers.length
+                      ? 'Deselect All'
+                      : 'Select All'}
                   </Text>
                 </Pressable>
               </View>
@@ -659,55 +1233,170 @@ export function TransportCreationScreen() {
               <View style={styles.containersList}>
                 {filteredStagedContainers.map((container) => {
                   const isSelected = selectedBarcodes.includes(container.barcode);
+                  const assignedSlot = resolvedBatchAssignments[container.barcode];
+
                   return (
-                    <Pressable
+                    <View
                       key={container.id}
-                      onPress={() => handleToggleContainer(container.barcode)}
                       style={[
                         styles.containerSelectCard,
                         isSelected && styles.containerSelectCardActive,
                       ]}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: isSelected }}
                     >
-                      {/* Checkbox */}
-                      <View
-                        style={[
-                          styles.checkbox,
-                          isSelected && styles.checkboxChecked,
-                        ]}
+                      <Pressable
+                        onPress={() => handleToggleContainer(container.barcode)}
+                        style={styles.containerMainTapArea}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isSelected }}
                       >
-                        {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
-                      </View>
-
-                      {/* Info Body */}
-                      <View style={styles.containerInfoBody}>
-                        <View style={styles.containerTopLine}>
-                          <Text variant="bodyMedium" style={styles.containerBarcode}>
-                            {container.barcode}
-                          </Text>
-                          <View style={styles.destinationChip}>
-                            <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                              ➔ {container.destinationEndpoint}
-                            </Text>
-                          </View>
+                        {/* Checkbox */}
+                        <View
+                          style={[
+                            styles.checkbox,
+                            isSelected && styles.checkboxChecked,
+                          ]}
+                        >
+                          {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
                         </View>
 
-                        <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-                          {container.productName} · <Text style={{ fontWeight: '600', color: colors.textPrimary }}>{container.qty} pcs</Text>
-                        </Text>
-                        <Text variant="caption" color={colors.textMuted} numberOfLines={1}>
-                          Target: {container.destinationDisplay}
-                        </Text>
-                      </View>
-                    </Pressable>
+                        {/* Info Body */}
+                        <View style={styles.containerInfoBody}>
+                          <View style={styles.containerTopLine}>
+                            <Text variant="bodyMedium" style={styles.containerBarcode}>
+                              {container.barcode}
+                            </Text>
+                            <View style={styles.originBadge}>
+                              <MapPin size={11} color={colors.textSecondary} />
+                              <Text
+                                variant="caption"
+                                color={colors.textSecondary}
+                                style={{ fontWeight: '600', fontSize: 11 }}
+                              >
+                                At: {container.originDisplayLabel}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text
+                            variant="caption"
+                            color={colors.textSecondary}
+                            numberOfLines={1}
+                          >
+                            {container.productName.includes(container.sku)
+                              ? container.productName
+                              : `${container.productName} (${container.sku})`}{' '}
+                            ·{' '}
+                            <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
+                              {container.qty} pcs
+                            </Text>
+                          </Text>
+                        </View>
+                      </Pressable>
+
+                      {/* Tier 2: Target Slot / Endpoint Bar (Only shown when container is selected!) */}
+                      {isSelected && (
+                        <View style={styles.targetAssignmentBar}>
+                          {destinationType === 'SLOT' && assignedSlot ? (
+                            <>
+                              <View style={styles.targetSlotLeft}>
+                                <Layers size={13} color="#059669" />
+                                <Text
+                                  variant="caption"
+                                  style={styles.targetSlotLabel}
+                                  numberOfLines={1}
+                                >
+                                  <Text style={styles.targetSlotValue}>
+                                    {assignedSlot.storageLocationCode} · L{assignedSlot.levelNo}
+                                  </Text>
+                                </Text>
+                                <View
+                                  style={[
+                                    styles.slotModeTag,
+                                    assignedSlot.isCustom && styles.slotModeTagCustom,
+                                  ]}
+                                >
+                                  <Text
+                                    variant="caption"
+                                    style={[
+                                      styles.slotModeTagText,
+                                      assignedSlot.isCustom && styles.slotModeTagTextCustom,
+                                    ]}
+                                  >
+                                    {assignedSlot.isCustom ? 'Custom' : 'Auto'}
+                                  </Text>
+                                </View>
+                              </View>
+
+                              <Pressable
+                                onPress={() => {
+                                  triggerHaptic('tap');
+                                  setSlotPickerTargetBarcode(container.barcode);
+                                }}
+                                style={({ pressed }) => [
+                                  styles.changeSlotBtn,
+                                  pressed && styles.pressed,
+                                ]}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Change target rack slot for ${container.barcode}`}
+                              >
+                                <Text variant="caption" style={styles.changeSlotBtnText}>
+                                  Change Slot
+                                </Text>
+                                <ChevronDown size={13} color="#121317" />
+                              </Pressable>
+                            </>
+                          ) : (
+                            <View style={{ flex: 1, gap: 6 }}>
+                              <View style={styles.targetSlotLeft}>
+                                <ArrowRight size={13} color="#059669" />
+                                <Text variant="caption" style={styles.targetSlotLabel}>
+                                  Destination:{' '}
+                                  <Text style={styles.targetSlotValue}>
+                                    {(perContainerEndpointOverrides[container.barcode] || selectedEndpointOption).label}
+                                  </Text>
+                                </Text>
+                              </View>
+                              {availableEndpointOptions.length > 1 && (
+                                <View style={styles.endpointQuickPickRow}>
+                                  {availableEndpointOptions.slice(0, 4).map((ep) => {
+                                    const isCur =
+                                      (perContainerEndpointOverrides[container.barcode] || selectedEndpointOption)
+                                        .endpointCode === ep.endpointCode;
+                                    return (
+                                      <Pressable
+                                        key={ep.endpointCode}
+                                        onPress={() => {
+                                          triggerHaptic('tap');
+                                          setPerContainerEndpointOverrides((prev) => ({
+                                            ...prev,
+                                            [container.barcode]: ep,
+                                          }));
+                                        }}
+                                        style={[styles.smallEpChip, isCur && styles.smallEpChipActive]}
+                                      >
+                                        <Text
+                                          variant="caption"
+                                          style={[styles.smallEpChipText, isCur && styles.smallEpChipTextActive]}
+                                        >
+                                          {ep.endpointCode}
+                                        </Text>
+                                      </Pressable>
+                                    );
+                                  })}
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
                   );
                 })}
 
                 {filteredStagedContainers.length === 0 && (
                   <View style={styles.emptySearch}>
                     <Text variant="caption" color={colors.textSecondary}>
-                      No staged containers matching "{searchQuery}"
+                      No containers matching "{searchQuery}"
                     </Text>
                   </View>
                 )}
@@ -757,120 +1446,268 @@ export function TransportCreationScreen() {
             {/* Mission Capacity & Dispatch Summary Card */}
             <View style={styles.dispatchSummaryCard}>
               <View style={styles.summaryTop}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text variant="bodyMedium" style={styles.summaryTitle}>
                     {selectedContainers.length === 0
                       ? 'No Containers Selected'
-                      : `${selectedContainers.length} ${selectedContainers.length === 1 ? 'Tote' : 'Totes'} Selected`}
+                      : `${selectedContainers.length} ${
+                          selectedContainers.length === 1 ? 'Tote' : 'Totes'
+                        } Selected for Dispatch`}
                   </Text>
                   <Text variant="caption" color={colors.textSecondary}>
                     {selectedContainers.length === 0
-                      ? 'Tap checkboxes above to choose containers for dispatch.'
-                      : `Estimated: ${estimatedMissions} AMR ${estimatedMissions === 1 ? 'Mission' : 'Missions'} (Carrier Cap: 2 Totes/Mission)`}
+                      ? 'Tap checkboxes above to select containers and auto-assign slots.'
+                      : `Fleet Split: ${estimatedMissions} AMR ${
+                          estimatedMissions === 1 ? 'Mission' : 'Missions'
+                        } (Max 2 Totes/AMR across AMR-01 & AMR-02)`}
                   </Text>
                 </View>
                 {selectedContainers.length > 2 && (
                   <View style={styles.multiMissionBadge}>
-                    <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '700', fontSize: 11 }}>
-                      Multi-AMR
+                    <Text
+                      variant="caption"
+                      color={colors.textPrimary}
+                      style={{ fontWeight: '700', fontSize: 11 }}
+                    >
+                      Dual-AMR Split
                     </Text>
                   </View>
                 )}
               </View>
 
-              <Button
-                label={
-                  selectedContainers.length === 0
-                    ? 'Select Containers to Dispatch'
-                    : `Dispatch ${selectedContainers.length} ${selectedContainers.length === 1 ? 'Tote' : 'Totes'} (${estimatedMissions} AMR ${estimatedMissions === 1 ? 'Mission' : 'Missions'})`
-                }
-                disabled={selectedContainers.length === 0 || isSubmitting}
-                loading={isSubmitting}
-                rightIcon={<Rocket size={18} color="#ffffff" />}
-                variant="primary"
-                size="lg"
-                onPress={handleConfirmDispatch}
-                style={{ width: '100%', marginTop: 8 }}
-              />
+              <View style={{ gap: 8, marginTop: 8 }}>
+                <Button
+                  label={
+                    selectedContainers.length === 0
+                      ? 'Select Containers to Submit'
+                      : `Submit Transport Request (${selectedContainers.length} ${
+                          selectedContainers.length === 1 ? 'Tote' : 'Totes'
+                        })`
+                  }
+                  disabled={selectedContainers.length === 0 || isSubmitting}
+                  loading={isSubmitting}
+                  rightIcon={<ArrowRight size={18} color="#ffffff" />}
+                  variant="primary"
+                  size="lg"
+                  onPress={() => handleConfirmDispatch(false)}
+                  style={{ width: '100%' }}
+                />
+                <Button
+                  label="Submit & Auto-Queue (One-Tap Dispatch)"
+                  disabled={selectedContainers.length === 0 || isSubmitting}
+                  rightIcon={<Rocket size={16} color={colors.textPrimary} />}
+                  variant="outline"
+                  size="md"
+                  onPress={() => handleConfirmDispatch(true)}
+                  style={{ width: '100%' }}
+                />
+              </View>
             </View>
           </View>
         )}
 
-        {/* Step 3: Success Confirmation Screen */}
+        {/* Step 3: Success / Receipt Screen with Two-Stage Lifecycle */}
         {step === 3 && (
           <View style={styles.successCard}>
-            <View style={styles.successIconBadge}>
+            <View
+              style={[
+                styles.successIconBadge,
+                dispatchedOrder?.status === 'SUBMITTED' && { backgroundColor: '#D97706' },
+              ]}
+            >
               <Check size={28} color="#ffffff" strokeWidth={2.8} />
             </View>
 
             <Text variant="title" style={styles.successTitle}>
-              Transport Mission Dispatched
+              {dispatchedOrder?.status === 'SUBMITTED'
+                ? 'Transport Request Submitted'
+                : 'Transport Mission Queued'}
             </Text>
             <Text variant="caption" color={colors.textSecondary} style={styles.successSub}>
-              {dispatchedOrder?.containerCount || 0} container(s) assigned to autonomous fleet routing.
+              {dispatchedOrder?.status === 'SUBMITTED'
+                ? `${dispatchedOrder?.containerCount || 0} container(s) registered with request ${
+                    dispatchedOrder?.requestCode
+                  }. Ready to queue for autonomous AMR fleet execution.`
+                : `${dispatchedOrder?.containerCount || 0} container(s) queued and split into ${
+                    dispatchedOrder?.jobs?.length || dispatchedOrder?.estimatedMissions || 1
+                  } autonomous AMR job(s).`}
             </Text>
+
+            {/* If SUBMITTED: Prominent CTA to Queue */}
+            {dispatchedOrder?.status === 'SUBMITTED' && (
+              <View style={styles.queueCtaSection}>
+                <Button
+                  label="Queue Request for Execution (POST .../queue)"
+                  icon={<Rocket size={18} color="#ffffff" />}
+                  onPress={handleQueueSubmittedRequest}
+                  loading={isQueueing}
+                  variant="primary"
+                  size="lg"
+                  style={{ width: '100%' }}
+                />
+              </View>
+            )}
 
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Dispatch Order:</Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  Request Code:
+                </Text>
                 <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
-                  {dispatchedOrder?.requestCode || 'TR-2049'}
+                  {dispatchedOrder?.requestCode || 'REQ-20261016-000001'}
                 </Text>
               </View>
+
               <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Workflow:</Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  Lifecycle Status:
+                </Text>
+                <View
+                  style={[
+                    styles.statusBadgePill,
+                    dispatchedOrder?.status === 'SUBMITTED'
+                      ? styles.statusBadgeSubmitted
+                      : styles.statusBadgeQueued,
+                  ]}
+                >
+                  <Text
+                    variant="caption"
+                    style={[
+                      styles.statusBadgeText,
+                      dispatchedOrder?.status === 'SUBMITTED'
+                        ? styles.statusBadgeTextSubmitted
+                        : styles.statusBadgeTextQueued,
+                    ]}
+                  >
+                    {dispatchedOrder?.status || 'SUBMITTED'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.receiptRow}>
+                <Text variant="caption" color={colors.textSecondary}>
+                  Workflow:
+                </Text>
                 <Text variant="caption" color={colors.textPrimary} style={styles.receiptHighlight}>
-                  {selectedWorkflow.name}
+                  {selectedWorkflow.name} ({selectedWorkflow.code})
                 </Text>
               </View>
+
               <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Assigned Carrier:</Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  Assigned Carrier:
+                </Text>
                 <Text variant="caption" color={colors.success} style={styles.receiptSuccess}>
-                  {dispatchedOrder?.carrier || 'AMR Fleet (Online)'}
+                  {dispatchedOrder?.carrier || 'AMR-01 (Online)'}
                 </Text>
               </View>
-              <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Dispatched Totes:</Text>
-                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
-                  {dispatchedOrder?.containerList?.join(', ') || 'BOX-101'}
+
+              <View style={[styles.receiptBorderTop, { gap: 6 }]}>
+                <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
+                  Slotted Movements ({dispatchedOrder?.containerAssignments.length || 0}):
                 </Text>
+                {(dispatchedOrder?.containerAssignments || []).map((item) => (
+                  <View key={item.barcode} style={styles.receiptRow}>
+                    <Text
+                      variant="caption"
+                      color={colors.textPrimary}
+                      style={{ fontFamily: typography.fontMono, fontWeight: '700' }}
+                    >
+                      {item.barcode}
+                    </Text>
+                    <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
+                      ➔ {item.targetLabel}
+                    </Text>
+                  </View>
+                ))}
               </View>
-              <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                <Text variant="caption" color={colors.textSecondary}>Autonomous Missions:</Text>
-                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
-                  {dispatchedOrder?.estimatedMissions || 1} AMR Trips (Cap: 2 Totes/Mission)
-                </Text>
-              </View>
+
+              {dispatchedOrder?.status === 'QUEUED' && (
+                <View style={[styles.receiptRow, styles.receiptBorderTop]}>
+                  <Text variant="caption" color={colors.textSecondary}>
+                    Provisioned Jobs:
+                  </Text>
+                  <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
+                    {dispatchedOrder?.jobs?.map((j) => j.jobNo).join(', ') || '1 AMR Mission'}
+                  </Text>
+                </View>
+              )}
             </View>
 
+            {/* JobBatchPlan Execution Graph Details Card (When QUEUED) */}
+            {dispatchedOrder?.status === 'QUEUED' && dispatchedOrder?.jobs && dispatchedOrder.jobs.length > 0 && (
+              <View style={styles.planCard}>
+                <View style={styles.planTitleRow}>
+                  <Sparkles size={16} color="#059669" />
+                  <Text variant="bodyMedium" style={{ fontWeight: '700', color: colors.textPrimary }}>
+                    JobBatchPlan Execution Graph
+                  </Text>
+                </View>
+
+                {dispatchedOrder.jobs.map((j) => (
+                  <View key={j.jobId} style={styles.jobDetailBlock}>
+                    <View style={styles.receiptRow}>
+                      <Text variant="caption" color={colors.textSecondary}>Job No:</Text>
+                      <Text variant="caption" style={styles.receiptVal}>{j.jobNo}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text variant="caption" color={colors.textSecondary}>Batch Key:</Text>
+                      <Text variant="caption" style={styles.receiptVal}>{j.batchKey}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text variant="caption" color={colors.textSecondary}>Plan Metrics:</Text>
+                      <Text variant="caption" style={styles.receiptVal}>
+                        {j.jobContainerCount} container(s) · {j.jobTaskCount} task(s) · {j.jobStepCount} step(s)
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+
+                <View style={styles.movementChainSection}>
+                  <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600', marginBottom: 6 }}>
+                    Movement Plan Chain:
+                  </Text>
+                  <View style={styles.movementChainRow}>
+                    {['MOVE_PICKUP', 'PICKUP_CONFIRM', 'MOVE_DROPOFF', 'DROPOFF_CONFIRM'].map((stepName, sIdx) => (
+                      <React.Fragment key={stepName}>
+                        {sIdx > 0 && <ArrowRight size={10} color="#9CA3AF" />}
+                        <View style={styles.chainPill}>
+                          <Text variant="caption" style={styles.chainPillText}>{stepName}</Text>
+                        </View>
+                      </React.Fragment>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
+
             <View style={styles.successActions}>
-              <Button
-                label="Track on Live Map"
-                icon={<MapPin size={16} color="#ffffff" />}
-                onPress={() =>
-                  navigate('live_map', {
-                    robotId: 'AMR-01',
-                    jobId:
-                      dispatchedOrder?.jobs?.[0]?.jobId ||
-                      dispatchedOrder?.requestCode ||
-                      'TR-2049',
-                  })
-                }
-                variant="primary"
-                size="lg"
-                style={{ width: '100%' }}
-              />
+              {dispatchedOrder?.status === 'QUEUED' && (
+                <Button
+                  label="View Provisioned Job"
+                  icon={<MapPin size={16} color="#ffffff" />}
+                  onPress={() =>
+                    navigate('job_detail', {
+                      jobId: dispatchedOrder?.jobs?.[0]?.jobId || 'JOB-2026-0812',
+                    })
+                  }
+                  variant="primary"
+                  size="lg"
+                  style={{ width: '100%' }}
+                />
+              )}
               <Button
                 label="View in Transport History"
                 onPress={() => navigate('transport_history')}
-                variant="outline"
+                variant={dispatchedOrder?.status === 'QUEUED' ? 'outline' : 'primary'}
                 size="md"
                 style={{ width: '100%' }}
               />
               <Button
                 label="Create Another Request"
                 onPress={() => {
-                  setSelectedBarcodes(['BOX-101']);
+                  setCustomSlotOverrides({});
+                  setPerContainerEndpointOverrides({});
                   setStep(1);
                 }}
                 variant="secondary"
@@ -881,6 +1718,25 @@ export function TransportCreationScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Tier 2 Granular Rack & Shelf Level Matrix Modal */}
+      <TargetSlotPickerModal
+        visible={Boolean(slotPickerTargetBarcode)}
+        containerBarcode={slotPickerTargetBarcode || ''}
+        containerProduct={activePickerContainer?.productName || ''}
+        activeZone={targetZone}
+        storageLocations={storageLocations}
+        currentAssignment={
+          slotPickerTargetBarcode ? resolvedBatchAssignments[slotPickerTargetBarcode] : null
+        }
+        batchAssignments={resolvedBatchAssignments}
+        onSelectSlot={(slot) => {
+          if (slotPickerTargetBarcode) {
+            handleOverrideContainerSlot(slotPickerTargetBarcode, slot);
+          }
+        }}
+        onClose={() => setSlotPickerTargetBarcode(null)}
+      />
     </View>
   );
 }
@@ -934,6 +1790,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   stationBadge: {
     backgroundColor: '#F3F4F6',
@@ -946,9 +1803,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#4B5563',
   },
+  autoSlotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  autoSlotBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#059669',
+  },
   stationName: {
     fontWeight: '700',
     marginTop: 2,
+  },
+  zoneSelectorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  zoneChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  zoneChipActive: {
+    backgroundColor: '#121317',
+    borderColor: '#121317',
+  },
+  zoneChipText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  zoneChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   routeDivider: {
     height: 1,
@@ -972,6 +1872,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
   },
   manifestTitle: {
     fontWeight: '700',
@@ -999,29 +1900,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 2,
   },
-  searchInput: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    paddingHorizontal: 0,
-    fontSize: 13,
-  },
   containersList: {
     gap: 8,
   },
   containerSelectCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
     borderRadius: radii.md,
     backgroundColor: '#F9FAFB',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    overflow: 'hidden',
   },
   containerSelectCardActive: {
     backgroundColor: '#FFFFFF',
     borderColor: '#121317',
     borderWidth: 1.5,
+  },
+  containerMainTapArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
   },
   checkbox: {
     width: 22,
@@ -1039,23 +1937,88 @@ const styles = StyleSheet.create({
   },
   containerInfoBody: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   containerTopLine: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   containerBarcode: {
     fontWeight: '700',
     color: '#121317',
     letterSpacing: 0.5,
+    fontFamily: typography.fontMono,
   },
-  destinationChip: {
+  originBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: '#F3F4F6',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  targetAssignmentBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0FDF4',
+    borderTopWidth: 1,
+    borderTopColor: '#DCFCE7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  targetSlotLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  targetSlotLabel: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '500',
+  },
+  targetSlotValue: {
+    fontWeight: '800',
+    color: '#064E3B',
+    fontFamily: typography.fontMono,
+  },
+  slotModeTag: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  slotModeTagCustom: {
+    backgroundColor: '#121317',
+  },
+  slotModeTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  slotModeTagTextCustom: {
+    color: '#FFFFFF',
+  },
+  changeSlotBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+  },
+  changeSlotBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#121317',
   },
   emptySearch: {
     paddingVertical: 16,
@@ -1097,6 +2060,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   summaryTitle: {
     fontWeight: '700',
@@ -1148,15 +2112,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   receiptVal: {
     fontWeight: '700',
+    textAlign: 'right',
+    flexShrink: 1,
   },
   receiptHighlight: {
     fontWeight: '700',
+    textAlign: 'right',
+    flexShrink: 1,
   },
   receiptSuccess: {
     fontWeight: '700',
+    textAlign: 'right',
+    flexShrink: 1,
   },
   receiptBorderTop: {
     borderTopWidth: 1,
@@ -1168,6 +2139,138 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 10,
     marginTop: 12,
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  modeTabBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: radii.sm,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  modeTabBtnActive: {
+    backgroundColor: '#121317',
+    borderColor: '#121317',
+  },
+  modeTabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  modeTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  endpointQuickPickRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 2,
+  },
+  smallEpChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  smallEpChipActive: {
+    backgroundColor: '#121317',
+    borderColor: '#121317',
+  },
+  smallEpChipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  smallEpChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  queueCtaSection: {
+    width: '100%',
+    marginVertical: 4,
+  },
+  statusBadgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+  },
+  statusBadgeSubmitted: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  statusBadgeQueued: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  statusBadgeTextSubmitted: {
+    color: '#B45309',
+  },
+  statusBadgeTextQueued: {
+    color: '#059669',
+  },
+  planCard: {
+    width: '100%',
+    backgroundColor: '#F0FDF4',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    padding: 12,
+    gap: 8,
+    marginTop: 8,
+  },
+  planTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  jobDetailBlock: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    padding: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+  },
+  movementChainSection: {
+    marginTop: 4,
+    gap: 4,
+  },
+  movementChainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  chainPill: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  chainPillText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#166534',
+    fontFamily: typography.fontMono,
   },
   pressed: {
     opacity: 0.7,

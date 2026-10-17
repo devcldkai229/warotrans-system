@@ -5,7 +5,20 @@ import {
   LogLevel,
   HttpTransportType,
 } from '@microsoft/signalr';
-import { getApiBaseUrl, getBearerToken } from '../api/client';
+import { getApiBaseUrl, getAccessToken, getBearerToken } from '../api/client';
+
+export interface JobUpdatedRealtimeEvent {
+  jobId: string;
+  kind: 'job' | 'step';
+  status: string;
+  jobStepId?: string;
+  stepKey?: string;
+  jobNo?: string;
+  robotId?: string | null;
+  failureCode?: string | null;
+  errorCode?: string | null;
+  occurredAt?: string;
+}
 
 export interface RobotConnectivityEvent {
   robotId: string;
@@ -55,6 +68,7 @@ class RealtimeClient {
   private telemetryListeners = new Set<RealtimeEventHandler<RobotTelemetryEvent>>();
   private notificationListeners = new Set<RealtimeEventHandler<LiveNotificationEvent>>();
   private transportStatusListeners = new Set<RealtimeEventHandler<TransportStatusEvent>>();
+  private jobUpdatedListeners = new Set<RealtimeEventHandler<JobUpdatedRealtimeEvent>>();
   private connectionStateListeners = new Set<(connected: boolean) => void>();
 
   public get isConnected(): boolean {
@@ -67,13 +81,19 @@ class RealtimeClient {
     }
 
     this.isConnecting = true;
+    const token = getAccessToken();
+    if (!token) {
+      this.isConnecting = false;
+      return;
+    }
+
     const baseUrl = getApiBaseUrl();
     const hubUrl = `${baseUrl.replace(/\/$/, '')}/hubs/notifications`;
 
     try {
       this.connection = new HubConnectionBuilder()
         .withUrl(hubUrl, {
-          accessTokenFactory: () => getBearerToken() || '',
+          accessTokenFactory: () => getAccessToken() ?? '',
           transport: HttpTransportType.WebSockets | HttpTransportType.LongPolling,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -96,6 +116,10 @@ class RealtimeClient {
         this.transportStatusListeners.forEach((fn) => fn(data));
       });
 
+      this.connection.on('jobUpdated', (data: JobUpdatedRealtimeEvent) => {
+        this.jobUpdatedListeners.forEach((fn) => fn(data));
+      });
+
       this.connection.onreconnecting(() => {
         this.notifyConnectionState(false);
       });
@@ -113,6 +137,7 @@ class RealtimeClient {
     } catch (err) {
       // In local dev/demo without backend running, log quietly without halting runtime
       console.warn('Realtime Hub connection offline or unreachable:', hubUrl);
+      this.connection = null;
       this.notifyConnectionState(false);
     } finally {
       this.isConnecting = false;
@@ -129,6 +154,11 @@ class RealtimeClient {
       this.connection = null;
       this.notifyConnectionState(false);
     }
+  }
+
+  public async restart(): Promise<void> {
+    await this.stop();
+    await this.start();
   }
 
   public onConnectivityChanged(fn: RealtimeEventHandler<RobotConnectivityEvent>): () => void {
@@ -149,6 +179,11 @@ class RealtimeClient {
   public onTransportStatusChanged(fn: RealtimeEventHandler<TransportStatusEvent>): () => void {
     this.transportStatusListeners.add(fn);
     return () => this.transportStatusListeners.delete(fn);
+  }
+
+  public onJobUpdated(fn: RealtimeEventHandler<JobUpdatedRealtimeEvent>): () => void {
+    this.jobUpdatedListeners.add(fn);
+    return () => this.jobUpdatedListeners.delete(fn);
   }
 
   public onConnectionStateChange(fn: (connected: boolean) => void): () => void {

@@ -1,4 +1,6 @@
 export * from './client';
+export * from './identityApi';
+export * from './fleetApi';
 export * from './transportApi';
 export * from './warehouseApi';
 export * from './workflowApi';
