@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import type { ContainerStatus, ContainerView } from '@/shared/api/contracts'
+import type { ContainerStatus } from '@/shared/api/contracts'
 import { formatIsoDateTime, humanize } from '@/shared/lib/format'
 import { SearchInput } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
+import type { ContainerListing } from './api'
 import { SectionHead } from './SectionHead'
 
 const STATUSES: ContainerStatus[] = ['CREATED', 'PACKED', 'RESERVED', 'IN_TRANSIT', 'STORED', 'HOLD', 'EMPTY', 'OUT_OF_SERVICE']
@@ -14,7 +15,8 @@ const STATUSES: ContainerStatus[] = ['CREATED', 'PACKED', 'RESERVED', 'IN_TRANSI
  * warehouse.containers, read-only: Containers are created by the receiving flow and their status changes only through
  * the Container lifecycle (CREATED -> PACKED -> RESERVED -> IN_TRANSIT -> STORED, rules/02).
  */
-export function ContainersSection({ containers }: { containers: ContainerView[] }) {
+export function ContainersSection({ listing, loadState }: { listing: ContainerListing; loadState: 'loading' | 'ready' | 'error' }) {
+  const containers = listing.items
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<ContainerStatus | ''>('')
 
@@ -32,7 +34,11 @@ export function ContainersSection({ containers }: { containers: ContainerView[] 
 
   return (
     <>
-      <SectionHead title="Containers" hint="The physical units the robots carry. One Container holds one product type.">
+      <SectionHead title="Containers" hint={
+          listing.warehouseName
+            ? `The physical units the robots carry in ${listing.warehouseName}. One Container holds one product type.`
+            : 'The physical units the robots carry. One Container holds one product type.'
+        }>
         <SearchInput className="w-72" placeholder="Search barcode, SKU or product" value={query} onChange={setQuery} />
         <select
           className={controlClass('pill')}
@@ -82,9 +88,26 @@ export function ContainersSection({ containers }: { containers: ContainerView[] 
               </Td>
             </Tr>
           ))}
-          {visible.length === 0 ? <EmptyRow colSpan={7}>No containers match this filter.</EmptyRow> : null}
+          {visible.length === 0 ? (
+            <EmptyRow colSpan={7}>
+              {loadState === 'loading'
+                ? 'Loading containers…'
+                : loadState === 'error'
+                  ? 'Could not load containers. Check that the API is running, then reload.'
+                  : listing.warehouseName === null
+                    ? 'No active warehouse yet, so there are no containers to show.'
+                    : containers.length === 0
+                      ? 'No containers in this warehouse yet.'
+                      : 'No containers match this filter.'}
+            </EmptyRow>
+          ) : null}
         </tbody>
       </Table>
+      {listing.total > containers.length ? (
+        <p className="mt-3 text-xs text-muted">
+          Showing the first {containers.length} of {listing.total} containers. Search to find the others.
+        </p>
+      ) : null}
     </>
   )
 }

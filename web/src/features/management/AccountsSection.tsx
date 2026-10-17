@@ -2,12 +2,15 @@ import { useMemo, useState } from 'react'
 import type { Account, AccountRole, AccountStatus } from '@/shared/api/contracts'
 import { formatIsoDateTime } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
-import { SearchInput } from '@/shared/ui/Field'
+import { SearchInput, FormError } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
-import { AccountFormDialog } from '@/features/accounts/AccountFormDialog'
+import { createAccount, setAccountStatus, updateAccount } from '@/features/accounts/api'
+import { AccountFormDialog, type AccountFormValues } from '@/features/accounts/AccountFormDialog'
+import { TemporaryPasswordDialog } from '@/features/accounts/TemporaryPasswordDialog'
+import { useAuth } from '@/features/auth/authContext'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AddButton, SectionHead } from './SectionHead'
 
@@ -24,6 +27,10 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<AccountRole | ''>('')
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [issued, setIssued] = useState<{ username: string; password: string } | null>(null)
+  const { account: me } = useAuth()
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -37,21 +44,32 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
     )
   }, [accounts, query, roleFilter])
 
-  // TODO(backend): the Identity API only lists accounts so far. Create, edit and status changes stay in local state.
-  function setStatus(id: string, status: AccountStatus) {
-    setAccounts((current) => current.map((account) => (account.id === id ? { ...account, status } : account)))
+  function replace(updated: Account) {
+    setAccounts((current) => current.map((account) => (account.id === updated.id ? updated : account)))
   }
 
-  function save(values: Pick<Account, 'username' | 'email' | 'fullName' | 'role'>) {
-    if (editing && editing !== 'new') {
-      const target = editing
-      setAccounts((current) => current.map((account) => (account.id === target.id ? { ...account, ...values } : account)))
-    } else {
-      setAccounts((current) => [
-        ...current,
-        { id: `draft-account-${current.length + 1}`, ...values, status: 'ACTIVE', lastLoginAt: null },
-      ])
+  async function changeStatus(account: Account, status: 'ACTIVE' | 'INACTIVE') {
+    setBusyId(account.id)
+    setNotice(null)
+    try {
+      replace(await setAccountStatus(account, status))
+    } catch (failure) {
+      setNotice(failure instanceof Error ? failure.message : 'The status could not be changed.')
+    } finally {
+      setBusyId(null)
     }
+  }
+
+  // Rejects when the API refuses (e.g. the username is taken): the dialog shows the message and stays open.
+  async function save(values: AccountFormValues) {
+    if (editing && editing !== 'new') {
+      replace(await updateAccount(editing, { email: values.email, fullName: values.fullName, role: values.role }))
+    } else {
+      const created = await createAccount(values)
+      setAccounts((current) => [...current, created.account].sort((a, b) => a.username.localeCompare(b.username)))
+      setIssued({ username: created.account.username, password: created.temporaryPassword })
+    }
+    setNotice(null)
     setEditing(null)
   }
 
@@ -74,6 +92,12 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
         </select>
         <AddButton onClick={() => setEditing('new')}>Add account</AddButton>
       </SectionHead>
+
+      {notice ? (
+        <div className="mb-3">
+          <FormError>{notice}</FormError>
+        </div>
+      ) : null}
 
       <Table>
         <thead>
@@ -110,11 +134,17 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
                     Edit
                   </Button>
                   {account.status === 'ACTIVE' ? (
-                    <Button size="sm" variant="ghost" onClick={() => setStatus(account.id, 'INACTIVE')}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busyId === account.id || account.id === me?.id}
+                      title={account.id === me?.id ? 'You cannot deactivate your own account.' : undefined}
+                      onClick={() => changeStatus(account, 'INACTIVE')}
+                    >
                       Deactivate
                     </Button>
                   ) : (
-                    <Button size="sm" variant="tonal" onClick={() => setStatus(account.id, 'ACTIVE')}>
+                    <Button size="sm" variant="tonal" disabled={busyId === account.id} onClick={() => changeStatus(account, 'ACTIVE')}>
                       Activate
                     </Button>
                   )}
@@ -138,10 +168,13 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
         <AccountFormDialog
           account={editing === 'new' ? null : editing}
           existingUsernames={accounts.map((account) => account.username)}
+          currentAccountId={me?.id ?? null}
           onClose={() => setEditing(null)}
           onSave={save}
         />
       ) : null}
+
+      {issued ? <TemporaryPasswordDialog username={issued.username} password={issued.password} onClose={() => setIssued(null)} /> : null}
     </>
   )
 }
