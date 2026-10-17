@@ -1,0 +1,3 @@
+D EP-KE-D: command b79b82fd-3a41-4363-bf6d-534c68e8915b status=COMPLETED outcome=SUCCEEDED error= in 35s, final pose=(10.17, 6.37)
+A EP-KE-A: command 280643e9-715c-4cab-8340-20370907e996 status=COMPLETED outcome=SUCCEEDED error= in 35s, final pose=(1.88, 6.34)
+PARK EP-BAI-DO: command 06d43eae-bc82-477d-a96a-8049ab78a04b status=COMPLETED outcome=SUCCEEDED error= in 28s, final pose=(5.88, 0.84)

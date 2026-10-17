@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Robot, RobotStatus, RobotView } from '@/shared/api/contracts'
@@ -8,6 +8,7 @@ import { humanize } from '@/shared/lib/format'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
+import { useNotificationsHub, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
@@ -40,9 +41,18 @@ export function FleetPage() {
   const debouncedQuery = useDebouncedValue(query.trim(), 250)
   const search = debouncedQuery || undefined
 
+  // Live poses over SignalR (5 Hz telemetry); the REST list refreshes status/command every few seconds.
+  const [livePoses, setLivePoses] = useState<Record<string, RobotTelemetryMessage>>({})
+  const onTelemetry = useCallback(
+    (message: RobotTelemetryMessage) => setLivePoses((current) => ({ ...current, [message.robotId]: message })),
+    [],
+  )
+  useNotificationsHub({ robotTelemetryUpdated: onTelemetry })
+
   const countsQuery = useQuery({
     queryKey: ['fleet-robots', 'counts', search ?? ''],
     queryFn: () => listRobots({ search, take: 100 }),
+    refetchInterval: 5000,
   })
 
   const listQuery = useQuery({
@@ -56,8 +66,23 @@ export function FleetPage() {
   })
 
   const robotsForCounts = useMemo(
-    () => (countsQuery.data?.items ?? []).map(toRobotView),
-    [countsQuery.data],
+    () =>
+      (countsQuery.data?.items ?? []).map((robot) => {
+        const live = livePoses[robot.id]
+        const fresher = live && (!robot.lastTelemetryAt || (live.lastTelemetryAt ?? '') >= robot.lastTelemetryAt)
+        return toRobotView(
+          fresher
+            ? {
+                ...robot,
+                poseX: live.poseX,
+                poseY: live.poseY,
+                poseYaw: live.poseYaw,
+                navigationStatus: (live.navigationStatus as Robot['navigationStatus']) ?? robot.navigationStatus,
+              }
+            : robot,
+        )
+      }),
+    [countsQuery.data, livePoses],
   )
   const robots = useMemo(
     () => (listQuery.data?.items ?? []).map(toRobotView),
@@ -110,7 +135,11 @@ export function FleetPage() {
     <div className={cx('grid h-full gap-3 px-3 pb-3', selected ? 'grid-cols-[400px_minmax(0,1fr)]' : 'grid-cols-[360px_minmax(0,1fr)]')}>
       <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">
         {selected ? (
-          <RobotDetailPanel robot={selected} onBack={() => navigate('/monitor/fleet')} />
+          <RobotDetailPanel
+            robot={selected}
+            onBack={() => navigate('/monitor/fleet')}
+            onManual={() => navigate(`/monitor/fleet/${selected.code}/manual`)}
+          />
         ) : (
           <>
             <header className="flex items-center gap-3 px-4 pt-5">

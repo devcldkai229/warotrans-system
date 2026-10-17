@@ -146,3 +146,19 @@ export function listTransportRequests(params?: {
 export function getTransportRequest(id: string) {
   return apiRequest<TransportRequestDetailDto>(`/api/transportation/transport-requests/${id}`)
 }
+
+/** POST /api/transportation/transport-requests/{id}/queue result: the Jobs planned for the request. */
+export interface QueueTransportRequestResponse {
+  transportRequestId: string
+  requestCode: string
+  status: string
+  queuedAt: string | null
+  jobs: { jobId: string; jobNo: string; batchKey: string; jobContainerCount: number; jobTaskCount: number; jobStepCount: number }[]
+}
+
+/** Plans the request into Job(s) (status QUEUED). The Jobs stay CREATED until started. */
+export function queueTransportRequest(id: string) {
+  return apiRequest<QueueTransportRequestResponse>(`/api/transportation/transport-requests/${id}/queue`, {
+    method: 'POST',
+  })
+}

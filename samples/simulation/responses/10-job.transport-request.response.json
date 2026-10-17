@@ -1,0 +1,51 @@
+{
+  "id": "11898b71-c6f8-43f0-991d-ec8f094e740c",
+  "requestCode": "REQ-20261015-000016",
+  "status": "SUBMITTED",
+  "warehouseId": "33333333-3333-3333-3333-333333333333",
+  "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+  "workflowId": "917d7425-ad43-4b87-930f-6360754f690d",
+  "planSchemaVersion": 1,
+  "requestedBy": "a0000000-0000-4000-8000-000000000002",
+  "note": "Simulation demo (inbound): Gazebo robot runs the full workflow",
+  "workflowInputs": {},
+  "submittedAt": "2026-10-15T14:46:20.5488296+00:00",
+  "details": [
+    {
+      "id": "3d851ac2-52a7-4ffa-ba10-d04d7e1aad4a",
+      "sequenceNo": 1,
+      "containerId": "e4000000-0000-4000-8000-000000000004",
+      "sourceStorageLocationId": null,
+      "sourceEndpointId": "13982982-7250-49a5-a126-506cb7b004f5",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": null,
+      "destinationEndpointId": "ef799401-db31-4b0d-95e2-00f47e6ad124",
+      "destinationLevelNo": null,
+      "status": "PENDING"
+    },
+    {
+      "id": "2380dce5-1083-4152-8f91-b1874f05850c",
+      "sequenceNo": 2,
+      "containerId": "e5000000-0000-4000-8000-000000000005",
+      "sourceStorageLocationId": null,
+      "sourceEndpointId": "13982982-7250-49a5-a126-506cb7b004f5",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": null,
+      "destinationEndpointId": "39866c77-920a-4856-a013-a65d4ac8acda",
+      "destinationLevelNo": null,
+      "status": "PENDING"
+    },
+    {
+      "id": "a1c46732-24ee-40c3-a91a-8d3d8bc3f4f0",
+      "sequenceNo": 3,
+      "containerId": "e6000000-0000-4000-8000-000000000006",
+      "sourceStorageLocationId": null,
+      "sourceEndpointId": "e211f809-0286-439c-b9fd-90f823869d0f",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": null,
+      "destinationEndpointId": "63ea01f3-41ac-40f2-ae2e-fa9b2dace47f",
+      "destinationLevelNo": null,
+      "status": "PENDING"
+    }
+  ]
+}

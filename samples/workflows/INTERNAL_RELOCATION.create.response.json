@@ -2,8 +2,8 @@
   "id": "65a3bd87-02e2-46a1-845c-bac6b16431d6",
   "code": "INTERNAL_RELOCATION",
   "versionNo": 1,
-  "name": "Vận chuyển giữa các kệ",
-  "description": "Robot lấy container từ kệ nguồn, nhân viên xác nhận pickup, di chuyển tới kệ đích, xác nhận dropoff. Dùng cho REALLOCATION / chuyển vị trí trong kho. Movement fields bind qua CURRENT_MOVEMENT (không STAFF_INPUT).",
+  "name": "Internal relocation between racks",
+  "description": "The robot collects a container at the source rack, staff confirm the pickup, the robot moves to the destination rack and staff confirm the dropoff. Used for REALLOCATION inside the warehouse. Movement fields bind through CURRENT_MOVEMENT (no STAFF_INPUT).",
   "status": "DRAFT",
   "createdBy": "00000000-0000-0000-0000-000000000000",
   "createdAt": "2026-10-08T03:10:21.604769+00:00",
@@ -11,24 +11,24 @@
   "variables": [
     {
       "key": "minBatteryPercent",
-      "name": "Pin tối thiểu (%)",
+      "name": "Minimum battery (%)",
       "dataType": "DECIMAL",
       "source": "ADMIN_INPUT",
       "isRequired": true,
       "defaultValue": null,
       "configuredValue": 25,
-      "description": "Admin cấu hình sẵn lúc tạo template. Runtime chỉ đọc lại giá trị này.",
+      "description": "Configured by the admin when the template is created. The runtime only reads this value.",
       "sequenceNo": 0
     },
     {
       "key": "assignedRobotId",
-      "name": "Robot được gán",
+      "name": "Assigned robot",
       "dataType": "UUID",
       "source": "SYSTEM_VALUE",
       "isRequired": true,
       "defaultValue": null,
       "configuredValue": null,
-      "description": "Runtime resolve từ JobAssignment — Admin/Staff không nhập.",
+      "description": "Resolved at runtime from the job assignment. Not entered by admin or staff.",
       "sequenceNo": 1
     },
     {
@@ -39,7 +39,7 @@
       "isRequired": true,
       "defaultValue": null,
       "configuredValue": null,
-      "description": "Id request nghiệp vụ đang chạy.",
+      "description": "Id of the running transport request.",
       "sequenceNo": 2
     },
     {
@@ -50,7 +50,7 @@
       "isRequired": true,
       "defaultValue": null,
       "configuredValue": null,
-      "description": "Id Job runtime khởi tạo từ template.",
+      "description": "Id of the runtime job created from this template.",
       "sequenceNo": 3
     }
   ],
@@ -58,13 +58,13 @@
     {
       "id": "6eb3bbeb-4f88-4c6e-8d87-aa6d9e743d20",
       "taskKey": "PICKUP",
-      "name": "Lấy hàng tại kệ nguồn",
+      "name": "Pick up at source rack",
       "sequenceNo": 1,
       "steps": [
         {
           "id": "a156deff-4aee-4f2d-9a1c-b7738c4a8799",
           "stepKey": "CHECK_READY",
-          "name": "Kiểm tra robot sẵn sàng",
+          "name": "Check robot is ready",
           "stepType": "CHECK",
           "sequenceNo": 1,
           "operationCode": "ROBOT_READY",
@@ -85,7 +85,7 @@
         {
           "id": "bc4139d4-9297-4f3b-a8fd-a42571266eab",
           "stepKey": "CHECK_BATTERY",
-          "name": "Kiểm tra pin tối thiểu",
+          "name": "Check minimum battery",
           "stepType": "CHECK",
           "sequenceNo": 2,
           "operationCode": "BATTERY_MIN",
@@ -112,7 +112,7 @@
         {
           "id": "6800ebcb-bbae-45fa-b56b-7aca19ff46c5",
           "stepKey": "CHECK_REQUEST",
-          "name": "Kiểm tra request còn hiệu lực",
+          "name": "Check request is still active",
           "stepType": "CHECK",
           "sequenceNo": 3,
           "operationCode": "REQUEST_ACTIVE",
@@ -133,7 +133,7 @@
         {
           "id": "a53f5837-467e-42b0-8696-85f9d93b9e37",
           "stepKey": "CHECK_SOURCE_ENDPOINT",
-          "name": "Kiểm tra kệ nguồn khả dụng",
+          "name": "Check source rack is available",
           "stepType": "CHECK",
           "sequenceNo": 4,
           "operationCode": "ENDPOINT_AVAILABLE",
@@ -154,7 +154,7 @@
         {
           "id": "29a0aa62-d8f0-4885-ba87-5fa6ff6f1ec4",
           "stepKey": "MOVE_PICKUP",
-          "name": "Di chuyển tới kệ nguồn",
+          "name": "Move to source rack",
           "stepType": "MOVE",
           "sequenceNo": 5,
           "operationCode": "PICKUP",
@@ -187,11 +187,11 @@
         {
           "id": "2fb509d6-ce62-4fec-8a28-e94fbe0b888a",
           "stepKey": "PICKUP_CONFIRM",
-          "name": "Staff xác nhận đã đặt container lên robot",
+          "name": "Staff confirm container loaded onto robot",
           "stepType": "HUMAN_INTERACTION",
           "sequenceNo": 6,
           "operationCode": "PICKUP_CONFIRM",
-          "instructionText": "Đặt container lên robot tại kệ nguồn rồi xác nhận.",
+          "instructionText": "Place the container on the robot at the source rack, then confirm.",
           "inputBindings": {
             "robotId": {
               "sourceType": "WORKFLOW_VAR",
@@ -222,13 +222,13 @@
     {
       "id": "823475b2-7b5e-4224-82ae-5d85e97a54f7",
       "taskKey": "DELIVERY",
-      "name": "Giao hàng tại kệ đích",
+      "name": "Deliver at destination rack",
       "sequenceNo": 2,
       "steps": [
         {
           "id": "a0a81ffd-6ffa-4c25-8bd4-300a7570d5dd",
           "stepKey": "CHECK_DEST_ENDPOINT",
-          "name": "Kiểm tra kệ đích khả dụng",
+          "name": "Check destination rack is available",
           "stepType": "CHECK",
           "sequenceNo": 1,
           "operationCode": "ENDPOINT_AVAILABLE",
@@ -249,7 +249,7 @@
         {
           "id": "e0f8d1c4-e7d1-437d-8db7-fc913248f111",
           "stepKey": "MOVE_DROPOFF",
-          "name": "Di chuyển tới kệ đích",
+          "name": "Move to destination rack",
           "stepType": "MOVE",
           "sequenceNo": 2,
           "operationCode": "DROPOFF",
@@ -282,11 +282,11 @@
         {
           "id": "ba102b83-3956-493c-9392-c6b6a08644dc",
           "stepKey": "DROPOFF_CONFIRM",
-          "name": "Staff xác nhận đã lấy container khỏi robot",
+          "name": "Staff confirm container unloaded from robot",
           "stepType": "HUMAN_INTERACTION",
           "sequenceNo": 3,
           "operationCode": "DROPOFF_CONFIRM",
-          "instructionText": "Lấy container khỏi robot tại kệ đích rồi xác nhận.",
+          "instructionText": "Take the container off the robot at the destination rack, then confirm.",
           "inputBindings": {
             "robotId": {
               "sourceType": "WORKFLOW_VAR",

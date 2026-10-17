@@ -38,7 +38,9 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
         NavigationStatus? navigationStatus,
         LocalizationStatus? localizationStatus,
         DateTimeOffset? lastTelemetryAt,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        double? linearVelocity = null,
+        double? angularVelocity = null)
     {
         return hub.Clients.All.SendAsync(
             "robotTelemetryUpdated",
@@ -52,7 +54,10 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
                 batteryPercent,
                 navigationStatus = navigationStatus?.ToString(),
                 localizationStatus = localizationStatus?.ToString(),
-                lastTelemetryAt
+                lastTelemetryAt,
+                // Manual control speedometer (m/s, rad/s) — from the robot's odometry.
+                linearVelocity,
+                angularVelocity
             },
             cancellationToken);
     }
