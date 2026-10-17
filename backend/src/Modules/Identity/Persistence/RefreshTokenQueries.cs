@@ -14,6 +14,16 @@ internal static class RefreshTokenQueries
             .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
 
+    /// <summary>Ends every signed-in device of an account, e.g. when it is deactivated or its role changes.</summary>
+    public static Task<int> RevokeAllForAccountAsync(
+        this IdentityDbContext dbContext,
+        Guid accountId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        dbContext.RefreshTokens
+            .Where(t => t.AccountId == accountId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
+
     /// <summary>
     /// Revoked tokens are kept until they expire so a replayed one can still be recognised; expired ones are useless.
     /// </summary>
