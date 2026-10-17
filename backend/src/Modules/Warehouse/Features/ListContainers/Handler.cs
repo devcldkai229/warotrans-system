@@ -56,7 +56,9 @@ public sealed class ListContainersHandler(WarehouseDbContext db)
                 c.CurrentStorageLocationId,
                 c.CurrentStorageLocation != null ? c.CurrentStorageLocation.Code : null,
                 c.CurrentStorageLocation != null ? c.CurrentStorageLocation.EndpointId : (Guid?)null,
-                c.CurrentLevelNo))
+                c.CurrentLevelNo,
+                c.SupplierPackageBarcode,
+                c.UpdatedAt))
             .ToListAsync(cancellationToken);
 
         return new ListContainersResponse(items, total);

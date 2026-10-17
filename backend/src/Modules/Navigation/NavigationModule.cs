@@ -64,6 +64,7 @@ public static class NavigationModule
         RegisterMapAssetStore(services, configuration);
 
         services.AddScoped<INavigationModule, NavigationModuleApi>();
+        services.AddScoped<WaroTrans.Warehouse.Contracts.IMapEndpointCatalog, MapEndpointCatalog>();
 
         return services;
     }

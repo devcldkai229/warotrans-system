@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.Warehouse.Features.ListStorageLocations;
 
-public sealed class ListStorageLocationsHandler(WarehouseDbContext db)
+public sealed class ListStorageLocationsHandler(WarehouseDbContext db, IMapEndpointCatalog endpointCatalog)
 {
     public async Task<ListStorageLocationsResponse> HandleAsync(
         ListStorageLocationsRequest request,
@@ -18,18 +19,25 @@ public sealed class ListStorageLocationsHandler(WarehouseDbContext db)
             query = query.Where(s => s.IsActive);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var locations = await query
             .OrderBy(s => s.Code)
-            .Select(s => new StorageLocationListItemResponse(
-                s.Id,
-                s.WarehouseId,
-                s.EndpointId,
-                s.Code,
-                s.Name,
-                s.IsActive))
             .ToListAsync(cancellationToken);
 
-        return new ListStorageLocationsResponse(items, total);
+        var warehouseName = await db.Warehouses
+            .AsNoTracking()
+            .Where(w => w.Id == request.WarehouseId)
+            .Select(w => w.Name)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
+        // Code and name of the Endpoint come from Navigation, which owns them.
+        var endpoints = (await endpointCatalog.GetEndpointsAsync(
+                locations.Select(l => l.EndpointId).Distinct().ToList(), cancellationToken))
+            .ToDictionary(e => e.Id);
+
+        var items = locations
+            .Select(l => StorageLocationListItemResponse.From(l, warehouseName, endpoints.GetValueOrDefault(l.EndpointId)))
+            .ToList();
+
+        return new ListStorageLocationsResponse(items, items.Count);
     }
 }
