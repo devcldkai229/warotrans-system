@@ -44,10 +44,10 @@ function initialsOf(name: string): string {
  *   - Right: Quick Search (40px) + Notification Bell with Badge (40px) + Operator Avatar (40px).
  */
 export function AppHeader({
-  operatorName = 'Alex Tran',
+  operatorName = 'Operator',
   operatorRole = 'Staff',
   initials,
-  zone = 'Inbound Dock 01',
+  zone = '',
   onLogout,
   onZoneChange,
   initialOpen,
@@ -64,7 +64,7 @@ export function AppHeader({
     triggerHaptic('tap');
     onZoneChange?.(nextZone);
     setIsZoneModalOpen(false);
-    toast.info(`Switched zone to ${nextZone}`);
+    toast.info(`Local Display Preference: ${nextZone}`);
   };
 
   return (
@@ -80,12 +80,12 @@ export function AppHeader({
               setIsZoneModalOpen(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel={`Work zone: ${zone}. Tap to change.`}
+            accessibilityLabel={`Local zone display preference: ${zone || 'None'}. Tap to change.`}
             style={({ pressed }) => [styles.zonePill, pressed && styles.zonePillPressed]}
           >
             <MapPin size={13} color={colors.primaryText} strokeWidth={2.4} />
             <Text variant="label" color={colors.textPrimary} numberOfLines={1} style={styles.zoneName}>
-              {zone}
+              {zone || 'Local Zone Preference'}
             </Text>
             <ChevronDown size={13} color={colors.textMuted} strokeWidth={2.2} />
           </Pressable>
@@ -105,7 +105,7 @@ export function AppHeader({
             <Bell size={18} color={colors.textPrimary} strokeWidth={2.2} />
             {unreadCount > 0 && (
               <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{unreadCount}</Text>
+                <Text variant="caption" style={styles.notifBadgeText}>{unreadCount}</Text>
               </View>
             )}
           </Pressable>
@@ -190,8 +190,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   zoneName: {
-    fontSize: 12,
-    fontWeight: '600',
+        fontWeight: '600',
     color: colors.textPrimary,
   },
   rightGroup: {
@@ -231,8 +230,7 @@ const styles = StyleSheet.create({
   },
   notifBadgeText: {
     color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '800',
+        fontWeight: '800',
     lineHeight: 12,
   },
   avatar: {
@@ -249,6 +247,5 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontWeight: '700',
-    fontSize: 14,
-  },
+      },
 });

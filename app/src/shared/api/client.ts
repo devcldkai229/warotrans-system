@@ -9,6 +9,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import {
+  clearAllStoredAuth,
+  saveStoredUserSession,
   getStoredRefreshToken,
   saveStoredAccessToken,
   saveStoredRefreshToken,
@@ -126,67 +128,81 @@ export function getAccessToken(): string | null {
 
 export const getBearerToken = getAccessToken;
 
-async function parseApiError(response: Response): Promise<ApiError> {
+export async function parseApiError(response: Response): Promise<ApiError> {
   let code: string | null = null;
   let message = `Request failed with status ${response.status}`;
   let errors: ProblemError[] = [];
-
   try {
     const data = await response.json();
-    if (data && typeof data === 'object') {
-      code = data.code ?? null;
-      message = data.detail || data.title || data.message || message;
-      if (Array.isArray(data.errors)) {
-        errors = data.errors;
-      }
+    code = data.code ?? null;
+    message = data.detail || data.message || data.title || message;
+    if (Array.isArray(data.errors)) {
+      errors = data.errors.map((error: { path?: string; property?: string; code?: string; message?: string }) => ({
+        property: error.property ?? error.path ?? '', code: error.code ?? '', message: error.message ?? '',
+      }));
+    } else if (data.errors && typeof data.errors === 'object') {
+      errors = Object.entries(data.errors).flatMap(([property, messages]) =>
+        (Array.isArray(messages) ? messages : [messages]).map(message => ({ property, code: '', message: String(message) })),
+      );
     }
-  } catch {
-    // Empty or non-JSON body (e.g. 401 Unauthorized gateway error)
-  }
-
+    if (errors.length) message = errors.map(e => `${e.property ? `${e.property}: ` : ''}${e.message}`).join('\n');
+  } catch { /* Some gateways return an empty error body. */ }
   return new ApiError(response.status, code, message, errors);
 }
 
-let refreshPromise: Promise<string | null> | null = null;
+let sessionGeneration = 0;
+let storageQueue: Promise<unknown> = Promise.resolve();
+export const getSessionGeneration = () => sessionGeneration;
+export function beginAuthSession(): number { return ++sessionGeneration; }
 
-async function performTokenRefresh(): Promise<string | null> {
+function queueStorage(action: () => Promise<void>): Promise<void> {
+  const next = storageQueue.then(action, action);
+  storageQueue = next.catch(() => {});
+  return next;
+}
+
+export function invalidateAuthSession(): Promise<void> {
+  ++sessionGeneration;
+  setAccessToken(null);
+  return queueStorage(clearAllStoredAuth);
+}
+
+export function persistLocalSession(session: unknown, generation: number): Promise<void> {
+  return queueStorage(async () => {
+    if (generation === sessionGeneration) await saveStoredUserSession(session);
+  });
+}
+
+export async function persistAuthSession(
+  accessToken: string, refreshToken: string | null, generation: number, session?: unknown,
+): Promise<boolean> {
+  await queueStorage(async () => {
+    if (generation !== sessionGeneration) return;
+    await saveStoredAccessToken(accessToken);
+    if (refreshToken) await saveStoredRefreshToken(refreshToken);
+    if (session) await saveStoredUserSession(session);
+  });
+  if (generation !== sessionGeneration) return false;
+  setAccessToken(accessToken);
+  return true;
+}
+
+let refreshPromise: { generation: number; promise: Promise<string | null> } | null = null;
+async function performTokenRefresh(generation: number): Promise<string | null> {
   try {
     const refreshToken = await getStoredRefreshToken();
-    if (!refreshToken) {
-      return null;
-    }
-
-    const baseUrl = getApiBaseUrl();
-    const refreshUrl = `${baseUrl}/api/identity/refresh`;
-
-    const res = await fetch(refreshUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        refreshToken,
-        useCookie: false,
-      }),
+    if (generation !== sessionGeneration) return null;
+    if (!refreshToken) throw new Error('No refresh token');
+    const res = await fetch(`${getApiBaseUrl()}/api/identity/refresh`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ refreshToken, useCookie: false }),
     });
-
-    if (!res.ok) {
-      return null;
-    }
-
+    if (!res.ok) throw await parseApiError(res);
     const data = await res.json();
-    if (data && data.accessToken) {
-      setAccessToken(data.accessToken);
-      await saveStoredAccessToken(data.accessToken);
-      if (data.refreshToken) {
-        await saveStoredRefreshToken(data.refreshToken);
-      }
-      return data.accessToken;
-    }
-    return null;
-  } catch (err) {
-    console.warn('Silent token refresh failed:', err);
+    if (!data.accessToken) throw new Error('Invalid refresh response');
+    return await persistAuthSession(data.accessToken, data.refreshToken, generation) ? data.accessToken : null;
+  } catch {
+    if (generation === sessionGeneration) await invalidateAuthSession();
     return null;
   }
 }
@@ -196,6 +212,7 @@ export async function apiFetch<T>(
   init: RequestInit = {},
   overrideToken?: string | null,
 ): Promise<T> {
+  const requestGeneration = sessionGeneration;
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 
@@ -228,14 +245,14 @@ export async function apiFetch<T>(
       path.includes('/api/identity/logout');
 
     if (response.status === 401 && !isAuthEndpoint && overrideToken === undefined) {
-      if (!refreshPromise) {
-        refreshPromise = performTokenRefresh().finally(() => {
-          refreshPromise = null;
-        });
+      if (requestGeneration !== sessionGeneration) throw await parseApiError(response);
+      if (!refreshPromise || refreshPromise.generation !== requestGeneration) {
+        const pending = { generation: requestGeneration, promise: performTokenRefresh(requestGeneration) };
+        refreshPromise = pending;
+        void pending.promise.finally(() => { if (refreshPromise === pending) refreshPromise = null; });
       }
-
-      const freshToken = await refreshPromise;
-      if (freshToken) {
+      const freshToken = await refreshPromise.promise;
+      if (freshToken && requestGeneration === sessionGeneration) {
         // Retry the request once with fresh access token
         const retryHeaders = new Headers(init.headers);
         retryHeaders.set('Accept', 'application/json');
@@ -261,6 +278,9 @@ export async function apiFetch<T>(
           return (await retryResponse.json()) as T;
         }
 
+        if ((retryResponse.status === 401 || retryResponse.status === 403) && requestGeneration === sessionGeneration) {
+          await invalidateAuthSession();
+        }
         throw await parseApiError(retryResponse);
       }
     }

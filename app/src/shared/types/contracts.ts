@@ -15,10 +15,8 @@
  *  - WorkflowExecution  -> WorkflowExecution/Features/Shared/WorkflowDtos.cs, WorkflowExecution/Enums/*
  *  - Transportation     -> Transportation/Features/{CreateTransportRequest,QueueTransportRequest}
  *
- * The view models at the bottom of the file (`UserSession`, `RobotSummary`,
- * `JobSummary`, ...) are the Phase 0 prototype projections still consumed by the
- * existing screens. They are kept until each screen is migrated onto the DTOs
- * below, so removing them is a follow-up change, never an inline one.
+ * Runtime Job DTOs mirror the PR #41 API read models, not persistence entities.
+ * UserSession at the bottom is a local projection of a verified server account.
  */
 
 /** ISO-8601 timestamp exactly as the backend emits it (`DateTimeOffset`). */
@@ -433,112 +431,65 @@ export interface WorkflowRequestInputSchemaDto {
 /* Matching: Job, JobContainer, JobTask, JobStep, HandoverConfirmation        */
 /* -------------------------------------------------------------------------- */
 
+export interface JobSummaryDto {
+  id: string;
+  jobNo: string;
+  status: JobStatus;
+  workflowId: string;
+  mapVersionId: string;
+  assignedRobotId: string | null;
+  transportRequestIds: string[];
+  containerCount: number;
+  completedSteps: number;
+  totalSteps: number;
+  createdAt: UtcDateTime;
+  startedAt: UtcDateTime | null;
+  completedAt: UtcDateTime | null;
+  failureCode: string | null;
+}
 export interface JobContainerResponse {
   id: string;
-  jobId?: string;
   transportRequestId: string;
   containerId: string;
   sequenceNo: number;
   status: JobContainerStatus;
-  loadedAt?: UtcDateTime | null;
-  deliveredAt?: UtcDateTime | null;
-  createdAt?: UtcDateTime;
-  updatedAt?: UtcDateTime;
+  loadedAt: UtcDateTime | null;
+  deliveredAt: UtcDateTime | null;
 }
-
-export interface HandoverConfirmationResponse {
-  id: string;
-  jobStepId: string;
-  containerId: string;
-  confirmedBy: string;
-  handoverType: HandoverType;
-  confirmedAt: UtcDateTime;
-  note?: string | null;
-  evidence?: Record<string, unknown> | null;
-}
-
-export interface HandoverConfirmationBody {
-  containerId: string;
-  confirmedBy: string;
-  handoverType: HandoverType;
-  note?: string;
-  evidence?: Record<string, unknown>;
-}
-
 export interface JobStepResponse {
   id: string;
-  jobTaskId: string;
-  workflowStepId: string;
-  workflowStepKey: string;
-  operationCode: string;
-  stepType: StepType;
   sequenceNo: number;
+  stepKey: string;
+  name: string;
+  stepType: StepType;
+  operationCode: string;
   status: JobStepStatus;
-  resolvedInputs?: Record<string, unknown>;
-  outputValues?: Record<string, unknown>;
-  targetEndpointId?: string | null;
-  startedAt?: UtcDateTime | null;
-  completedAt?: UtcDateTime | null;
-  errorCode?: string | null;
-  errorMessage?: string | null;
-  handoverConfirmation?: HandoverConfirmationResponse | null;
+  targetEndpointId: string | null;
+  resolvedInputs: Record<string, unknown>;
+  outputValues: Record<string, unknown>;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: UtcDateTime | null;
+  completedAt: UtcDateTime | null;
 }
-
-export interface JobTaskContextValues {
-  executionScope?: 'ONCE_PER_JOB' | 'ONCE_PER_STOP' | 'PER_CONTAINER_AT_STOP';
-  stopAction?: 'PICKUP' | 'DROPOFF';
-  stopEndpointId?: string;
-  stopSequenceNo?: number;
-  containerIds?: string[];
-  containerId?: string;
-  jobContainerId?: string;
-  transportRequestDetailId?: string;
-  [key: string]: unknown;
-}
-
 export interface JobTaskResponse {
   id: string;
-  jobId: string;
-  workflowTaskId: string;
   sequenceNo: number;
+  taskKey: string;
   status: JobTaskStatus;
-  contextValues?: JobTaskContextValues;
-  startedAt?: UtcDateTime | null;
-  completedAt?: UtcDateTime | null;
-  failureCode?: string | null;
+  executionScope: string | null;
+  stopAction: 'PICKUP' | 'DROPOFF' | null;
+  stopEndpointId: string | null;
+  containerId: string | null;
   steps: JobStepResponse[];
 }
-
-export interface JobDetailResponse {
-  id: string;
-  jobNo: string;
-  workflowId: string;
-  mapVersionId: string;
-  provisioningKey: string;
-  status: JobStatus;
-  contextValues?: Record<string, unknown>;
-  createdAt: UtcDateTime;
-  queuedAt?: UtcDateTime | null;
-  startedAt?: UtcDateTime | null;
-  completedAt?: UtcDateTime | null;
-  failureCode?: string | null;
-  failureMessage?: string | null;
+export interface JobDetailResponse extends Omit<JobSummaryDto, 'containerCount'> {
+  currentStepId: string | null;
+  failureMessage: string | null;
   containers: JobContainerResponse[];
   tasks: JobTaskResponse[];
 }
-
-export interface ReportTaskProblemBody {
-  reason: string;
-  note?: string;
-  evidence?: Record<string, unknown>;
-}
-
-export interface ReportTaskProblemResponse {
-  reportId: string;
-  jobTaskId: string;
-  status: string;
-  reportedAt: UtcDateTime;
-}
+export type JobDetailDto = JobDetailResponse;
 
 /* -------------------------------------------------------------------------- */
 /* Transportation                                                              */
@@ -646,24 +597,7 @@ export interface QueueTransportRequestResponse {
   jobs: QueuedJobResponse[];
 }
 
-/* -------------------------------------------------------------------------- */
-/* View models — Phase 0 prototype projections                                   */
-/*                                                                             */
-/* Still consumed by the existing screens (jobs, transport, auth). Kept so the  */
-/* migration onto the DTOs above can land screen by screen instead of in one   */
-/* breaking sweep. See docs/CALM_OPERATIONS_FOUNDATION.md.                      */
-/* -------------------------------------------------------------------------- */
-
-/** Prototype workflow catalogue. Distinct from `WorkflowListItemDto`, which is server-owned. */
-export type WorkflowCode =
-  | 'INBOUND_PUTAWAY'
-  | 'OUTBOUND_RETRIEVAL'
-  | 'INTERNAL_RELOCATION'
-  | 'POINT_TO_POINT_TRANSPORT'
-  | 'REPLENISHMENT'
-  | 'PAYLOAD_RECOVERY'
-  | 'MAINTENANCE_ALL_ROBOTS';
-
+/* Local projection: identity fields are verified; zone is a device preference. */
 export interface UserSession {
   id: string;
   username: string;
@@ -671,72 +605,4 @@ export interface UserSession {
   role: AccountRole;
   zone: string;
   avatarInitials: string;
-}
-
-export interface RobotSummary {
-  id: string;
-  code: string;
-  status: RobotStatus;
-  batteryPercent: number;
-  currentEndpointCode: string;
-  isEnabled: boolean;
-  isVirtual: boolean;
-  assignedJobNo?: string;
-}
-
-export interface ShelfSlotOccupancy {
-  levelNo: number;
-  status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
-  occupiedByBarcode?: string | null;
-  occupiedBySku?: string | null;
-  occupiedByProductName?: string | null;
-}
-
-/**
- * 2-Bay AMR Chassis Deck Model (`Bay 1 (Front)`, `Bay 2 (Rear)`).
- */
-export interface ContainerSlot {
-  slotNo: 1 | 2;
-  slotLabel: 'Bay 1 (Front)' | 'Bay 2 (Rear)' | 'Slot 1 (Front)' | 'Slot 2 (Rear)' | 'Slot 2 (Mid)';
-  containerBarcode?: string;
-  productName?: string;
-  quantity?: number;
-  action: 'UNLOAD' | 'KEEP_ONBOARD' | 'PICKUP' | 'EMPTY';
-}
-
-export interface JobStepSummary {
-  sequenceNo: number;
-  type: StepType;
-  title: string;
-  description: string;
-  status: JobStepStatus;
-  targetEndpointCode?: string;
-  timeRemainingSeconds?: number;
-}
-
-export interface JobSummary {
-  id: string;
-  jobNo: string;
-  workflowCode: WorkflowCode;
-  workflowName: string;
-  status: JobStatus;
-  assignedRobotCode?: string;
-  etaSeconds?: number;
-  sourceEndpointCode: string;
-  destinationEndpointCode: string;
-  activeStepTitle?: string;
-  containerCount: number;
-  slots: ContainerSlot[];
-  steps: JobStepSummary[];
-  createdAtUtc: string;
-}
-
-export interface WorkflowTemplate {
-  code: WorkflowCode;
-  title: string;
-  tagline: string;
-  iconName: string;
-  category: 'routine' | 'safety' | 'maintenance';
-  estimatedDuration: string;
-  requiresContainer: boolean;
 }
