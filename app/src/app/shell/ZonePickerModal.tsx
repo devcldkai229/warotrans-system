@@ -8,7 +8,7 @@ import { shadows } from '../../shared/theme/shadows';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
-/** The zones an operator can be assigned to for the current shift. */
+/** Local display preferences; these are not server assignments. */
 export const WORK_ZONE_OPTIONS = [
   'Inbound Dock 01',
   'Storage Zone A (Racks A01-A12)',
@@ -63,7 +63,7 @@ export function ZonePickerModal({
           <View style={styles.cardHeader}>
             <MapPin size={14} color={colors.primary} />
             <Text variant="caption" color={colors.textSecondary} style={styles.headerLabel}>
-              Select Work Zone
+              Local Display Preference
             </Text>
           </View>
 

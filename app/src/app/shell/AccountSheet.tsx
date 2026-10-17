@@ -74,7 +74,7 @@ export function AccountSheet({
                 {operatorName}
               </Text>
               <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-                {operatorRole} · {zone}
+                {operatorRole}
               </Text>
             </View>
           </View>
@@ -82,10 +82,10 @@ export function AccountSheet({
           {/* Shift Details */}
           <View style={styles.shiftBox}>
             <Text variant="caption" color={colors.textSecondary}>
-              Current shift
+              Local Display Preference
             </Text>
             <Text variant="label" color={colors.textPrimary}>
-              Morning (06:00 – 14:00)
+              {zone || 'No Zone Selected'}
             </Text>
           </View>
 
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 38,
+    minHeight: 44,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.dangerBorder,

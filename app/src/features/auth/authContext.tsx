@@ -1,132 +1,78 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Platform } from 'react-native';
-import { UserSession } from '../../shared/types/contracts';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import type { UserSession } from '../../shared/types/contracts';
+import { getCurrentAccount, loginWithCredentials, logoutSession, AccountDto } from '../../shared/api/identityApi';
+import { ApiError, beginAuthSession, getAccessToken, getSessionGeneration, invalidateAuthSession, onAccessTokenChange, persistAuthSession, persistLocalSession, setAccessToken } from '../../shared/api/client';
+import { getStoredAccessToken, getStoredRefreshToken, getStoredUserSession } from '../../shared/api/secureStore';
 
 interface AuthContextType {
   session: UserSession | null;
   isAuthenticated: boolean;
-  login: (staffId: string, zone?: string) => boolean;
+  isLoading: boolean;
+  login: (username: string, zone?: string, password?: string) => Promise<boolean>;
+  loginAsync: (username: string, password?: string, zone?: string) => Promise<UserSession>;
   logout: () => void;
   updateZone: (zone: string) => void;
 }
-
-export const PRESET_OPERATORS: { id: string; username: string; name: string; zone: string; role: 'STAFF' | 'ADMIN' }[] = [
-  {
-    id: 'STF-2026-088',
-    username: 'alex.tran',
-    name: 'Alex Tran',
-    zone: 'Inbound Dock 01',
-    role: 'STAFF',
-  },
-  {
-    id: 'STF-2026-042',
-    username: 'sarah.connor',
-    name: 'Sarah Connor',
-    zone: 'Inbound Dock 01',
-    role: 'STAFF',
-  },
-  {
-    id: 'STF-2026-015',
-    username: 'david.miller',
-    name: 'David Miller',
-    zone: 'Outbound Dock 04',
-    role: 'STAFF',
-  },
-];
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<UserSession | null>(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.search) {
-      try {
-        const sp = new URLSearchParams(window.location.search);
-        const scr = sp.get('screen');
-        if (scr === 'login') return null;
-        if (scr || sp.get('auth') === '1') {
-          const matched = PRESET_OPERATORS[0];
-          return {
-            id: matched.id,
-            username: matched.username,
-            fullName: matched.name,
-            role: matched.role,
-            zone: matched.zone,
-            avatarInitials: 'AT',
-          };
-        }
-      } catch {
-        // Fallback
-      }
-    }
-    return null;
-  });
-
-  const login = (identifier: string, zone?: string): boolean => {
-    const trimmed = identifier.trim().toLowerCase();
-    const matched = PRESET_OPERATORS.find(
-      (op) => op.username.toLowerCase() === trimmed || op.id.toLowerCase() === trimmed
-    );
-    const fullName = matched
-      ? matched.name
-      : trimmed.includes('.')
-        ? trimmed
-            .split('.')
-            .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-            .join(' ')
-        : `Operator (${identifier})`;
-    const activeZone = zone || (matched ? matched.zone : 'Inbound Dock 01');
-    const initials = fullName
-      .split(' ')
-      .map((part) => part[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
-
-    const newSession: UserSession = {
-      id: matched ? matched.id : 'STF-2026-088',
-      username: matched ? matched.username : trimmed,
-      fullName,
-      role: matched ? matched.role : 'STAFF',
-      zone: activeZone,
-      avatarInitials: initials || 'OP',
-    };
-
-    setSession(newSession);
-    return true;
-  };
-
-  const logout = () => {
-    setSession(null);
-  };
-
-  const updateZone = (zone: string) => {
-    if (session) {
-      setSession({
-        ...session,
-        zone,
-      });
-    }
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        session,
-        isAuthenticated: !!session,
-        login,
-        logout,
-        updateZone,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+function toSession(account: AccountDto, zone = ''): UserSession {
+  const fullName = account.fullName || account.username;
+  return { id: account.id, username: account.username, fullName,
+    role: account.role === 'ADMIN' ? 'ADMIN' : 'STAFF', zone,
+    avatarInitials: fullName.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() };
 }
-
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<UserSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => {
+    let mounted = true;
+    const generation = getSessionGeneration();
+    const unsubscribe = onAccessTokenChange(token => { if (!token && mounted) setSession(null); });
+    void (async () => {
+      try {
+        const [token, stored] = await Promise.all([getStoredAccessToken(), getStoredUserSession<UserSession>()]);
+        if (!mounted || generation !== getSessionGeneration()) return;
+        if (!token) { await invalidateAuthSession(); return; }
+        setAccessToken(token);
+        const account = await getCurrentAccount();
+        if (!mounted || generation !== getSessionGeneration() || !getAccessToken()) return;
+        const verified = toSession(account, stored?.zone);
+        setSession(verified);
+      } catch {
+        if (generation === getSessionGeneration()) await invalidateAuthSession();
+      } finally { if (mounted) setIsLoading(false); }
+    })();
+    return () => { mounted = false; unsubscribe(); };
+  }, []);
+  const loginAsync = async (username: string, password = '', zone = ''): Promise<UserSession> => {
+    await invalidateAuthSession();
+    const generation = beginAuthSession();
+    const response = await loginWithCredentials(username.trim(), password);
+    const verified = toSession(response.account, zone);
+    if (!await persistAuthSession(response.accessToken, response.refreshToken, generation, verified)) {
+      throw new ApiError(401, 'SESSION_CHANGED', 'The session changed. Please sign in again.');
+    }
+    setSession(verified);
+    return verified;
+  };
+  const logout = () => {
+    const token = getAccessToken();
+    const refresh = getStoredRefreshToken();
+    void invalidateAuthSession();
+    setSession(null);
+    void refresh.then(rt => logoutSession(rt, token)).catch(() => {});
+  };
+  const updateZone = (zone: string) => {
+    if (!session) return;
+    const updated = { ...session, zone };
+    setSession(updated);
+    // This value is a local display preference, never an assignment from the server.
+    void persistLocalSession(updated, getSessionGeneration());
+  };
+  return <AuthContext.Provider value={{ session, isAuthenticated: !!session, isLoading, loginAsync,
+    login: async (username, zone, password) => { await loginAsync(username, password, zone); return true; }, logout, updateZone }}>{children}</AuthContext.Provider>;
+}
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }

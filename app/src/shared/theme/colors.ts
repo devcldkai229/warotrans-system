@@ -52,11 +52,11 @@ export const colors = {
   /* Brand accent                                                     */
   /* ---------------------------------------------------------------- */
   /**
-   * Primary brand blue, exactly matching Admin Web (`--color-blue: #3279f9`).
+   * Accessible primary action fill for Calm Operations. White text clears 4.5:1.
    */
-  primary: '#3279f9',
-  /** Pressed / darker tone matching Admin Web (`--color-blue-ink: #1a5cd6`). */
-  primaryDark: '#1a5cd6',
+  primary: '#1557d0',
+  /** Pressed primary action fill. */
+  primaryDark: '#0f3f9e',
   /** Tinted surface matching Admin Web (`--color-blue-soft: #e9f1ff`). */
   primaryLight: '#e9f1ff',
   /** Hairline for accent-bordered controls. */
