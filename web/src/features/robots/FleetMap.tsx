@@ -94,6 +94,7 @@ export function FleetMap({
   return (
     <>
       <WarehouseMap
+        yawUnit="rad"
         zones={zones}
         edges={edges}
         endpoints={endpoints}

@@ -77,6 +77,46 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
         Assert.Equal(RobotStatus.AVAILABLE, after.Status);
     }
 
+    [Fact]
+    public async Task Teleop_publishes_setpoint_on_teleop_topic_for_free_robot()
+    {
+        var robot = await RegisterAsync("Teleop Bot");
+        long seq = 0;
+        await ForceOnlineAsync(robot.Code, Guid.NewGuid(), () => ++seq);
+        var mqtt = Factory.Services.GetRequiredService<CapturingMqttRobotCommandPublisher>();
+
+        var response = await Client.PostAsJsonAsync(
+            $"/api/fleet/robots/{robot.Id}/teleop",
+            new { linear = 0.2, angular = -0.4 });
+
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
+        var sent = Assert.Single(mqtt.PublishedTeleop, m => m.RobotCode == robot.Code);
+        Assert.Equal(0.2, sent.Linear);
+        Assert.Equal(-0.4, sent.Angular);
+        Assert.DoesNotContain(mqtt.Published, m => m.RobotCode == robot.Code); // not a robot command
+    }
+
+    [Fact]
+    public async Task Teleop_refused_while_navigating_but_stop_goes_through()
+    {
+        var robot = await RegisterAsync("Teleop Busy Bot");
+        long seq = 0;
+        await ForceOnlineAsync(robot.Code, Guid.NewGuid(), () => ++seq);
+        (await Client.PostAsJsonAsync(
+            $"/api/fleet/robots/{robot.Id}/commands/navigate",
+            new { x = 1.0, y = 1.0, yaw = 0.0 })).EnsureSuccessStatusCode();
+        var mqtt = Factory.Services.GetRequiredService<CapturingMqttRobotCommandPublisher>();
+
+        var drive = await Client.PostAsJsonAsync($"/api/fleet/robots/{robot.Id}/teleop", new { linear = 0.2, angular = 0.0 });
+        Assert.False(drive.IsSuccessStatusCode);
+        Assert.Contains("robot_busy", await drive.Content.ReadAsStringAsync());
+
+        var stop = await Client.PostAsJsonAsync($"/api/fleet/robots/{robot.Id}/teleop", new { linear = 0.0, angular = 0.0 });
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, stop.StatusCode);
+        var sent = Assert.Single(mqtt.PublishedTeleop, m => m.RobotCode == robot.Code);
+        Assert.Equal(0.0, sent.Linear);
+    }
+
     private async Task ForceOnlineAsync(string robotCode, Guid bootId, Func<long> nextSeq)
     {
         await using var scope = Factory.Services.CreateAsyncScope();

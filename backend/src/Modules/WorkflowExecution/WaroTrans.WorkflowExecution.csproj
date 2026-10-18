@@ -12,6 +12,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\WaroTrans.BuildingBlocks\WaroTrans.BuildingBlocks.csproj" />
+    <!-- Public Contracts only (IFleetModule / INavigationModule) for the Job execution engine. -->
+    <ProjectReference Include="..\Fleet\WaroTrans.Fleet.csproj" />
+    <ProjectReference Include="..\Navigation\WaroTrans.Navigation.csproj" />
   </ItemGroup>
 
   <ItemGroup>

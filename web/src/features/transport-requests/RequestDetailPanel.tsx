@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { TransportRequestView } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
 import { formatDateTimeWithYear, formatDuration, secondsBetween } from '@/shared/lib/format'
@@ -13,10 +14,12 @@ interface RequestDetailPanelProps {
   selectedJobNo: string | null
   onSelectJob: (jobNo: string) => void
   onClose: () => void
+  /** Run controls (queue, start on a robot, open the live view), shown under the summary. */
+  actions?: ReactNode
 }
 
 /** Second column: everything about one Request. Its Jobs open a third column. */
-export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClose }: RequestDetailPanelProps) {
+export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClose, actions }: RequestDetailPanelProps) {
   const progress = detailProgress(request)
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
 
@@ -48,6 +51,8 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
       </MetaList>
 
       {request.failureMessage ? <FailureNote>{request.failureMessage}</FailureNote> : null}
+
+      {actions ? <div className="mt-4 flex flex-col gap-2">{actions}</div> : null}
 
       <DrawerHeading>Movement plan</DrawerHeading>
       <ol>

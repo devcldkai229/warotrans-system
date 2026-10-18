@@ -69,6 +69,7 @@ function MapCard({ version, warehouseName, when, active, children }: MapCardProp
       <div className="relative h-64 bg-container/60">
         <div className="absolute inset-x-0 top-4 bottom-0">
           <WarehouseMap
+            yawUnit="rad"
             zones={[]}
             edges={[]}
             endpoints={[]}

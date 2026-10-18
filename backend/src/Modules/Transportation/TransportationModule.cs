@@ -27,6 +27,12 @@ public static class TransportationModule
         services.AddScoped<GetTransportRequestHandler>();
         services.AddScoped<QueueTransportRequestHandler>();
 
+        // Job execution feedback (WorkflowExecution → Transportation)
+        services.AddScoped<WaroTrans.WorkflowExecution.Contracts.ITransportRequestActivityQuery, Services.TransportRequestActivityQuery>();
+        services.AddScoped<
+            WaroTrans.BuildingBlocks.Abstractions.IIntegrationEventHandler<WaroTrans.WorkflowExecution.Contracts.JobContainerStatusChanged>,
+            IntegrationEventHandlers.JobContainerStatusChangedHandler>();
+
         return services;
     }
 

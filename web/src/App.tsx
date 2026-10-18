@@ -5,10 +5,12 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { JobDetailPage } from '@/features/jobs/JobDetailPage'
+import { JobLivePage } from '@/features/jobs/JobLivePage'
 import { ManagementPage } from '@/features/management/ManagementPage'
 import { FacilityPage } from '@/features/maps/FacilityPage'
 import { MapEditorPage } from '@/features/maps/MapEditorPage'
 import { FleetPage } from '@/features/robots/FleetPage'
+import { RobotManualPage } from '@/features/robots/manual/RobotManualPage'
 import { TransportRequestsPage } from '@/features/transport-requests/TransportRequestsPage'
 import { WorkflowEditorPage } from '@/features/workflows/workflow-editor-page'
 import { WorkflowsListPage } from '@/features/workflows/workflows-list-page'
@@ -35,6 +37,8 @@ function App() {
             <Route path="/monitor/requests" element={<TransportRequestsPage />} />
             <Route path="/monitor/jobs" element={<Navigate to="/monitor/requests" replace />} />
             <Route path="/monitor/jobs/:jobNo" element={<JobDetailPage />} />
+            <Route path="/monitor/live" element={<JobLivePage />} />
+            <Route path="/monitor/live/:jobId" element={<JobLivePage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/configure/facility" element={<FacilityPage />} />
             <Route path="/configure/workflows" element={<WorkflowsListPage />} />
@@ -45,6 +49,8 @@ function App() {
 
           {/* Full-screen editor: has its own header instead of the app shell. */}
           <Route path="/configure/facility/maps/:mapId/edit" element={<MapEditorPage />} />
+          {/* Full-screen manual control of one robot (map + joystick console). */}
+          <Route path="/monitor/fleet/:robotCode/manual" element={<RobotManualPage />} />
         </Route>
 
         <Route path="/admin" element={<Navigate to="/management?tab=accounts" replace />} />

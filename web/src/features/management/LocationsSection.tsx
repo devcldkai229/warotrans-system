@@ -5,78 +5,112 @@ import { Dialog } from '@/shared/ui/Dialog'
 import { Field, FieldRow, FormError } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
-import { Table, Td, Th, Tr } from '@/shared/ui/Table'
-import { ENDPOINT_OPTIONS, WAREHOUSES } from './mock'
+import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
+import { createLocation, listFreeEndpoints, setLocationStatus, type FreeEndpoint, type LocationListing } from './api'
 import { AddButton, SectionHead } from './SectionHead'
 
 interface LocationDraft {
   code: string
   name: string
-  warehouseId: string
   endpointId: string
 }
 
+type EndpointOptions = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; items: FreeEndpoint[] }
+
 interface LocationsSectionProps {
-  locations: StorageLocationView[]
-  setLocations: (update: (current: StorageLocationView[]) => StorageLocationView[]) => void
+  listing: LocationListing
+  setItems: (update: (current: StorageLocationView[]) => StorageLocationView[]) => void
+  loadState: 'loading' | 'ready' | 'error'
 }
 
 /**
  * warehouse.storage_locations: a simple logical place such as "Shelf A" that points at exactly one Navigation Endpoint.
  * Aisle/Bay/Level/Bin are not modelled (rules/00). Code is unique per warehouse, an Endpoint serves one location only.
  */
-export function LocationsSection({ locations, setLocations }: LocationsSectionProps) {
+export function LocationsSection({ listing, setItems, loadState }: LocationsSectionProps) {
+  const locations = listing.items
+  const warehouse = listing.warehouse
   const [draft, setDraft] = useState<LocationDraft | null>(null)
+  const [options, setOptions] = useState<EndpointOptions>({ state: 'loading' })
   const [error, setError] = useState<string | null>(null)
-
-  const used = new Set(locations.map((location) => location.endpointId))
-  const freeEndpoints = ENDPOINT_OPTIONS.filter((endpoint) => !used.has(endpoint.id))
+  const [busy, setBusy] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   function open() {
-    setDraft({ code: '', name: '', warehouseId: WAREHOUSES[0].id, endpointId: freeEndpoints[0]?.id ?? '' })
+    if (!warehouse) return
+    setDraft({ code: '', name: '', endpointId: '' })
     setError(null)
+    setOptions({ state: 'loading' })
+    listFreeEndpoints(warehouse.id, new Set(locations.map((location) => location.endpointId)))
+      .then((items) => {
+        setOptions({ state: 'ready', items })
+        setDraft((current) => (current ? { ...current, endpointId: items[0]?.id ?? '' } : current))
+      })
+      .catch((failure: unknown) =>
+        setOptions({ state: 'error', message: failure instanceof Error ? failure.message : 'The endpoints could not be loaded.' }),
+      )
   }
 
-  function save() {
-    if (!draft) return
+  async function save() {
+    if (!draft || !warehouse) return
     const code = draft.code.trim().toUpperCase()
-    if (!code || !draft.name.trim() || !draft.endpointId) {
+    const endpoint = options.state === 'ready' ? options.items.find((item) => item.id === draft.endpointId) : undefined
+    if (!code || !draft.name.trim() || !endpoint) {
       setError('Code, name and endpoint are required.')
       return
     }
-    if (locations.some((location) => location.warehouseId === draft.warehouseId && location.code === code)) {
-      setError('This code already exists in the selected warehouse.')
+    if (locations.some((location) => location.code === code)) {
+      setError('This code already exists in this warehouse.')
       return
     }
-    const warehouse = WAREHOUSES.find((item) => item.id === draft.warehouseId)
-    const endpoint = ENDPOINT_OPTIONS.find((item) => item.id === draft.endpointId)
-    setLocations((current) => [
-      ...current,
-      {
-        id: `draft-location-${current.length + 1}`,
-        warehouseId: draft.warehouseId,
-        warehouseName: warehouse?.name ?? '—',
-        endpointId: draft.endpointId,
-        endpointCode: endpoint?.code ?? '—',
-        endpointName: endpoint?.name ?? '—',
-        code,
-        name: draft.name.trim(),
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      },
-    ])
-    setDraft(null)
+
+    setBusy(true)
+    setError(null)
+    try {
+      const created = await createLocation(warehouse, endpoint, { code, name: draft.name.trim() })
+      setItems((current) => [...current, created].sort((a, b) => a.code.localeCompare(b.code)))
+      setNotice(null)
+      setDraft(null)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'The location could not be saved.')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function toggle(id: string) {
-    setLocations((current) => current.map((location) => (location.id === id ? { ...location, isActive: !location.isActive } : location)))
+  async function toggle(location: StorageLocationView) {
+    setBusyId(location.id)
+    setNotice(null)
+    try {
+      const updated = await setLocationStatus(location, !location.isActive)
+      setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+    } catch (failure) {
+      // e.g. "still holds 3 container(s)": the server says why the location cannot be switched off.
+      setNotice(failure instanceof Error ? failure.message : 'The status could not be changed.')
+    } finally {
+      setBusyId(null)
+    }
   }
 
   return (
     <>
-      <SectionHead title="Storage locations" hint="Places where Containers are stored. Each one points at one map Endpoint.">
-        <AddButton onClick={open}>Add location</AddButton>
+      <SectionHead
+        title="Storage locations"
+        hint={
+          warehouse
+            ? `Places where Containers are stored in ${warehouse.name}. Each one points at one map Endpoint.`
+            : 'Places where Containers are stored. Each one points at one map Endpoint.'
+        }
+      >
+        {warehouse ? <AddButton onClick={open}>Add location</AddButton> : null}
       </SectionHead>
+
+      {notice ? (
+        <div className="mb-3">
+          <FormError>{notice}</FormError>
+        </div>
+      ) : null}
 
       <Table>
         <thead>
@@ -105,18 +139,34 @@ export function LocationsSection({ locations, setLocations }: LocationsSectionPr
               </Td>
               <Td>
                 <div className="flex justify-end">
-                  <Button size="sm" variant={location.isActive ? 'ghost' : 'tonal'} onClick={() => toggle(location.id)}>
+                  <Button
+                    size="sm"
+                    variant={location.isActive ? 'ghost' : 'tonal'}
+                    disabled={busyId === location.id}
+                    onClick={() => toggle(location)}
+                  >
                     {location.isActive ? 'Deactivate' : 'Activate'}
                   </Button>
                 </div>
               </Td>
             </Tr>
           ))}
+          {locations.length === 0 ? (
+            <EmptyRow colSpan={6}>
+              {loadState === 'loading'
+                ? 'Loading storage locations…'
+                : loadState === 'error'
+                  ? 'Could not load storage locations. Check that the API is running, then reload.'
+                  : warehouse === null
+                    ? 'No active warehouse yet, so there are no storage locations.'
+                    : 'No storage locations yet. Add the first one.'}
+            </EmptyRow>
+          ) : null}
         </tbody>
       </Table>
 
-      {draft ? (
-        <Dialog title="Add storage location" submitLabel="Create location" onClose={() => setDraft(null)} onSubmit={save}>
+      {draft && warehouse ? (
+        <Dialog title="Add storage location" submitLabel="Create location" busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
           <FieldRow>
             <Field label="Code">
               <input
@@ -137,32 +187,35 @@ export function LocationsSection({ locations, setLocations }: LocationsSectionPr
             </Field>
           </FieldRow>
           <Field label="Warehouse">
-            <select
-              className={controlClass()}
-              value={draft.warehouseId}
-              onChange={(event) => setDraft({ ...draft, warehouseId: event.target.value })}
-            >
-              {WAREHOUSES.map((warehouse) => (
-                <option key={warehouse.id} value={warehouse.id}>
-                  {warehouse.name}
-                </option>
-              ))}
-            </select>
+            <input className={controlClass()} value={warehouse.name} disabled readOnly />
           </Field>
-          <Field label="Map endpoint" hint="Each location uses one Endpoint, and an Endpoint can serve only one location.">
+          <Field
+            label="Map endpoint"
+            hint={
+              options.state === 'ready' && options.items.length === 0
+                ? 'No free endpoint: every storage endpoint of the published map is used, or no map is published yet.'
+                : 'Each location uses one Endpoint of the published map, and an Endpoint can serve only one location.'
+            }
+          >
             <select
               className={controlClass()}
               value={draft.endpointId}
+              disabled={options.state !== 'ready'}
               onChange={(event) => setDraft({ ...draft, endpointId: event.target.value })}
             >
-              {freeEndpoints.length === 0 ? <option value="">No free endpoint</option> : null}
-              {freeEndpoints.map((endpoint) => (
-                <option key={endpoint.id} value={endpoint.id}>
-                  {endpoint.name} ({endpoint.code})
-                </option>
-              ))}
+              {options.state === 'loading' ? <option value="">Loading endpoints…</option> : null}
+              {options.state === 'error' ? <option value="">Could not load endpoints</option> : null}
+              {options.state === 'ready' && options.items.length === 0 ? <option value="">No free endpoint</option> : null}
+              {options.state === 'ready'
+                ? options.items.map((endpoint) => (
+                    <option key={endpoint.id} value={endpoint.id}>
+                      {endpoint.name} ({endpoint.code})
+                    </option>
+                  ))
+                : null}
             </select>
           </Field>
+          {options.state === 'error' ? <FormError>{options.message}</FormError> : null}
           {error ? <FormError>{error}</FormError> : null}
         </Dialog>
       ) : null}

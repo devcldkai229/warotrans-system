@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { Edge, EdgeDirection, Endpoint, Point, RobotStatus, Zone } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
 import { DEFAULT_MAP_BOUNDS, type MapBounds } from '@/shared/lib/mapView'
@@ -93,6 +93,18 @@ export interface WarehouseMapProps {
   onEndpointClick?: (id: string) => void
   /** Click on empty map, in metres. */
   onBackgroundClick?: (point: Point) => void
+  /**
+   * Unit of Endpoint and Robot `yaw`. Backend data (Navigation endpoints, Fleet pose) is radians (REP-103);
+   * the mock scenes are degrees. Defaults to degrees.
+   */
+  yawUnit?: 'deg' | 'rad'
+  /** Controlled zoom (1–4). Omit to let the map keep its own zoom. */
+  zoom?: number
+  onZoomChange?: (zoom: number) => void
+  /** Keep this point (e.g. a Robot) in the centre of the frame while it moves. */
+  follow?: Point | null
+  /** The user dragged the map (e.g. to stop following). */
+  onUserPan?: () => void
   /** Edge being drawn in the editor. */
   drawing?: { points: Point[]; direction: EdgeDirection }
   /** Occupancy preview PNG (MapVersion.previewImageUri), stretched to map bounds. */
@@ -103,6 +115,9 @@ export interface WarehouseMapProps {
 }
 
 const CALLOUT_TONE = { dark: 'bg-ink', warn: 'bg-amber-ink', danger: 'bg-red-ink' }
+
+/** Map size (metres) the mark sizes below were designed for (see MAP_BOUNDS in scene.ts). */
+const MARK_REFERENCE_METRES = 50
 
 // Map chrome (Guide, zoom, coordinates): floating white cards, the same as panels elsewhere in the console.
 const CHROME = 'absolute z-4 bg-surface/95 shadow-float'
@@ -130,6 +145,11 @@ export function WarehouseMap({
   onEdgeClick,
   onEndpointClick,
   onBackgroundClick,
+  yawUnit = 'deg',
+  zoom: controlledZoom,
+  onZoomChange,
+  follow,
+  onUserPan,
   drawing,
   occupancyImageUrl,
   className,
@@ -141,10 +161,32 @@ export function WarehouseMap({
   const X = (x: number) => x - bounds.minX
   const Y = (y: number) => bounds.maxY - y
   const stagePoints = (points: Point[]) => points.map((point) => `${X(point.x)},${Y(point.y)}`).join(' ')
+  // Marks (robots, endpoints, labels, lanes) are drawn in metres for a ~50 m warehouse. Smaller maps scale
+  // them down so they keep the same size on screen instead of covering a 5 m room.
+  const mark = Math.min(1, Math.max(width, height) / MARK_REFERENCE_METRES)
+  // SVG rotate() takes degrees, clockwise on screen: map yaw is counter-clockwise, hence the minus at use.
+  const yawDeg = (yaw: number) => (yawUnit === 'rad' ? (yaw * 180) / Math.PI : yaw)
 
   const svgRef = useRef<SVGSVGElement>(null)
-  const [zoom, setZoom] = useState(1)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const [ownZoom, setOwnZoom] = useState(1)
+  const zoom = controlledZoom ?? ownZoom
+  const setZoom = (next: number) => (onZoomChange ? onZoomChange(next) : setOwnZoom(next))
   const [pan, setPan] = useState({ x: 0, y: 0 })
+
+  // Follow: pan so `follow` sits in the frame centre. The stage is a square of side S (untransformed layout
+  // size); the SVG fits the map into it ("meet"), and the stage is scaled about its centre by `zoom`.
+  const followX = follow?.x
+  const followY = follow?.y
+  useEffect(() => {
+    if (followX === undefined || followY === undefined) return
+    const side = stageRef.current?.offsetWidth ?? 0
+    if (side === 0 || width <= 0 || height <= 0) return
+    const k = side / Math.max(width, height)
+    const localX = (side - width * k) / 2 + (followX - bounds.minX) * k
+    const localY = (side - height * k) / 2 + (bounds.maxY - followY) * k
+    setPan({ x: -(localX - side / 2) * zoom, y: -(localY - side / 2) * zoom })
+  }, [followX, followY, zoom, width, height, bounds.minX, bounds.maxY])
   const [cursor, setCursor] = useState<Point | null>(null)
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
   const [hoveredEndpointId, setHoveredEndpointId] = useState<string | null>(null)
@@ -168,7 +210,10 @@ export function WarehouseMap({
     const startX = event.clientX
     const startY = event.clientY
     const move = (moveEvent: PointerEvent) => {
-      if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > 4) dragged.current = true
+      if (!dragged.current && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > 4) {
+        dragged.current = true
+        onUserPan?.()
+      }
       if (dragged.current) setPan({ x: moveEvent.clientX - start.x, y: moveEvent.clientY - start.y })
     }
     const stop = () => {
@@ -182,8 +227,13 @@ export function WarehouseMap({
   function changeZoom(next: number) {
     const clamped = Math.min(4, Math.max(1, next))
     setZoom(clamped)
-    if (clamped === 1) setPan({ x: 0, y: 0 })
+    if (clamped === 1 && !follow) setPan({ x: 0, y: 0 })
   }
+
+  // A controlled zoom back to 1 recentres the map too (unless following).
+  useEffect(() => {
+    if (zoom === 1 && !follow) setPan({ x: 0, y: 0 })
+  }, [zoom, follow])
 
   // Occupancy against capacity, from the Robots currently drawn (rules/05: Zone and Edge occupancy).
   const zoneLoad = useMemo(
@@ -237,6 +287,7 @@ export function WarehouseMap({
       }}
     >
       <div
+        ref={stageRef}
         className="absolute top-1/2 left-1/2 size-[min(100cqw,100cqh)] origin-center"
         style={{ transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, ['--z' as string]: zoom }}
       >
@@ -259,10 +310,10 @@ export function WarehouseMap({
             <pattern id="wmap-dots" width="5" height="5" patternUnits="userSpaceOnUse">
               <circle cx="0" cy="0" r="0.09" fill={MAP_LINE} />
             </pattern>
-            <marker id="wmap-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth="0.75" markerHeight="0.75" orient="auto-start-reverse">
+            <marker id="wmap-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth={0.75 * mark} markerHeight={0.75 * mark} orient="auto-start-reverse">
               <path d="M1 1.2 8.6 5 1 8.8Z" fill="context-stroke" />
             </marker>
-            <marker id="wmap-move" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="0.9" markerHeight="0.9" orient="auto">
+            <marker id="wmap-move" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth={0.9 * mark} markerHeight={0.9 * mark} orient="auto">
               <path d="M1 1 9 5 1 9Z" fill={MAP_INK} />
             </marker>
           </defs>
@@ -295,17 +346,17 @@ export function WarehouseMap({
                 const anchor = zoneCentroid(points)
                 // Later states win: switched off, then full, then over capacity; a selection only thickens the edge.
                 const paint = over
-                  ? { fill: MAP_RED, fillOpacity: 0.18, stroke: MAP_RED, strokeOpacity: 1, strokeWidth: 0.22 }
+                  ? { fill: MAP_RED, fillOpacity: 0.18, stroke: MAP_RED, strokeOpacity: 1, strokeWidth: 0.22 * mark }
                   : full
-                    ? { fill: MAP_AMBER, fillOpacity: 0.2, stroke: MAP_AMBER, strokeOpacity: 1, strokeWidth: 0.1 }
+                    ? { fill: MAP_AMBER, fillOpacity: 0.2, stroke: MAP_AMBER, strokeOpacity: 1, strokeWidth: 0.1 * mark }
                     : !zone.isActive
-                      ? { fill: MAP_OFF, fillOpacity: 0.08, stroke: MAP_OFF, strokeOpacity: 1, strokeWidth: 0.1 }
+                      ? { fill: MAP_OFF, fillOpacity: 0.08, stroke: MAP_OFF, strokeOpacity: 1, strokeWidth: 0.1 * mark }
                       : {
                           fill: 'currentColor',
                           fillOpacity: zone.zoneType === 'INTERSECTION' ? 0.11 : 0.07,
                           stroke: 'currentColor',
                           strokeOpacity: 0.55,
-                          strokeWidth: 0.1,
+                          strokeWidth: 0.1 * mark,
                         }
                 return (
                   <g
@@ -326,12 +377,19 @@ export function WarehouseMap({
                     <polygon
                       points={stagePoints(points)}
                       strokeLinejoin="round"
-                      strokeDasharray={zone.isActive ? undefined : '0.5 0.4'}
+                      strokeDasharray={zone.isActive ? undefined : `${0.5 * mark} ${0.4 * mark}`}
                       {...paint}
-                      {...(isSelected ? { stroke: 'currentColor', strokeOpacity: 1, strokeWidth: 0.32 } : null)}
+                      {...(isSelected ? { stroke: 'currentColor', strokeOpacity: 1, strokeWidth: 0.32 * mark } : null)}
                     />
                     {zone.zoneType === 'RESTRICTED_AREA' ? <polygon points={stagePoints(points)} fill="url(#wmap-hatch)" stroke="none" /> : null}
-                    <circle cx={X(anchor.x)} cy={Y(anchor.y)} r={0.28} fill="currentColor" stroke="#fff" strokeWidth={0.1} />
+                    <circle
+                      cx={X(anchor.x)}
+                      cy={Y(anchor.y)}
+                      r={0.28 * mark}
+                      fill="currentColor"
+                      stroke="#fff"
+                      strokeWidth={0.1 * mark}
+                    />
                   </g>
                 )
               })}
@@ -358,7 +416,7 @@ export function WarehouseMap({
                       fill="none"
                       stroke={isSelected ? 'currentColor' : MAP_LANE}
                       strokeOpacity={isSelected ? 0.22 : 1}
-                      strokeWidth={1.2}
+                      strokeWidth={1.2 * mark}
                       strokeLinejoin="round"
                       strokeLinecap="round"
                     />
@@ -366,8 +424,8 @@ export function WarehouseMap({
                       points={lane}
                       fill="none"
                       stroke={edge.isActive ? 'currentColor' : MAP_OFF}
-                      strokeWidth={isSelected ? 0.3 : 0.15}
-                      strokeDasharray={edge.isActive ? undefined : '0.6 0.5'}
+                      strokeWidth={(isSelected ? 0.3 : 0.15) * mark}
+                      strokeDasharray={edge.isActive ? undefined : `${0.6 * mark} ${0.5 * mark}`}
                       strokeLinejoin="round"
                       strokeLinecap="round"
                       opacity={isSelected ? 1 : 0.8}
@@ -378,7 +436,7 @@ export function WarehouseMap({
                       ? points.slice(0, -1).map((a, index) => {
                           const b = points[index + 1]
                           const length = Math.hypot(b.x - a.x, b.y - a.y)
-                          if (length < 4) return null
+                          if (length < 4 * mark) return null
                           const angle = (Math.atan2(Y(b.y) - Y(a.y), X(b.x) - X(a.x)) * 180) / Math.PI
                           return (
                             <path
@@ -389,7 +447,7 @@ export function WarehouseMap({
                               strokeWidth={0.14}
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              transform={`translate(${(X(a.x) + X(b.x)) / 2} ${(Y(a.y) + Y(b.y)) / 2}) rotate(${angle})`}
+                              transform={`translate(${(X(a.x) + X(b.x)) / 2} ${(Y(a.y) + Y(b.y)) / 2}) rotate(${angle}) scale(${mark})`}
                             />
                           )
                         })
@@ -400,7 +458,7 @@ export function WarehouseMap({
                       points={lane}
                       fill="none"
                       stroke="transparent"
-                      strokeWidth={2}
+                      strokeWidth={2 * mark}
                       pointerEvents="stroke"
                       onClick={
                         onEdgeClick
@@ -413,17 +471,17 @@ export function WarehouseMap({
                     />
                     {isSelected
                       ? points.map((point, index) => (
-                          <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38} fill="#fff" stroke="currentColor" strokeWidth={0.16} />
+                          <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill="#fff" stroke="currentColor" strokeWidth={0.16 * mark} />
                         ))
                       : null}
                     {labels !== 'none' && hoveredEdgeId === edge.id ? (
                       <circle
                         cx={X(mid.x)}
                         cy={Y(mid.y)}
-                        r={0.32}
+                        r={0.32 * mark}
                         fill="currentColor"
                         stroke="#fff"
-                        strokeWidth={0.1}
+                        strokeWidth={0.1 * mark}
                         pointerEvents="none"
                       />
                     ) : null}
@@ -440,14 +498,14 @@ export function WarehouseMap({
                   points={stagePoints(drawing.points)}
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth={0.22}
-                  strokeDasharray="0.5 0.6"
+                  strokeWidth={0.22 * mark}
+                  strokeDasharray={`${0.5 * mark} ${0.6 * mark}`}
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
               ) : null}
               {drawing.points.map((point, index) => (
-                <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38} fill="#fff" stroke="currentColor" strokeWidth={0.16} />
+                <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill="#fff" stroke="currentColor" strokeWidth={0.16 * mark} />
               ))}
             </g>
           ) : null}
@@ -467,13 +525,13 @@ export function WarehouseMap({
                       y2={Y(movement.to.y)}
                       fill="none"
                       stroke={MAP_INK}
-                      strokeWidth={0.2}
-                      strokeDasharray="0.7 0.55"
+                      strokeWidth={0.2 * mark}
+                      strokeDasharray={`${0.7 * mark} ${0.55 * mark}`}
                       strokeLinecap="round"
                       markerEnd="url(#wmap-move)"
                     />
                     {movement.sequence != null ? (
-                      <g transform={`translate(${X(movement.from.x)} ${Y(movement.from.y) - 1.7})`}>
+                      <g transform={`translate(${X(movement.from.x)} ${Y(movement.from.y) - 1.7 * mark}) scale(${mark})`}>
                         <circle r={0.72} fill={MAP_INK} />
                         <text textAnchor="middle" y={0.27} fontSize={0.66} fontWeight={600} fill="#fff">
                           {movement.sequence}
@@ -481,7 +539,7 @@ export function WarehouseMap({
                       </g>
                     ) : null}
                     {movement.label ? (
-                      <g transform={`translate(${midX} ${midY - 0.4})`}>
+                      <g transform={`translate(${midX} ${midY - 0.4 * mark}) scale(${mark})`}>
                         <rect
                           x={-chipWidth(movement.label, 0.75) / 2}
                           y={-0.62}
@@ -515,7 +573,7 @@ export function WarehouseMap({
                     color={ENDPOINT_COLOR[endpoint.endpointType]}
                     opacity={endpoint.isEnabled ? undefined : 0.4}
                     className="cursor-pointer"
-                    transform={`translate(${X(endpoint.x)} ${Y(endpoint.y)})`}
+                    transform={`translate(${X(endpoint.x)} ${Y(endpoint.y)}) scale(${mark})`}
                     onPointerEnter={() => setHoveredEndpointId(endpoint.id)}
                     onPointerLeave={() => setHoveredEndpointId((id) => (id === endpoint.id ? null : id))}
                     onClick={
@@ -530,7 +588,7 @@ export function WarehouseMap({
                     {isFocus || isSelected || hoveredEndpointId === endpoint.id ? (
                       <circle r={1.7} fill="currentColor" fillOpacity={0.16} />
                     ) : null}
-                    <path d="M1.6 0 1.0 -0.32 1.0 0.32Z" fill="currentColor" opacity={0.85} transform={`rotate(${-endpoint.yaw})`} />
+                    <path d="M1.6 0 1.0 -0.32 1.0 0.32Z" fill="currentColor" opacity={0.85} transform={`rotate(${-yawDeg(endpoint.yaw)})`} />
                     <g transform={isFocus ? 'scale(1.2)' : undefined}>
                       <rect
                         x={-0.7}
@@ -561,7 +619,7 @@ export function WarehouseMap({
                   color={ROBOT_COLOR[robot.status]}
                   opacity={robotFaded(robot.code) ? 0.25 : undefined}
                   className={onRobotClick ? 'cursor-pointer' : undefined}
-                  transform={`translate(${X(robot.x)} ${Y(robot.y)})`}
+                  transform={`translate(${X(robot.x)} ${Y(robot.y)}) scale(${mark})`}
                   onClick={
                     onRobotClick
                       ? (event) => {
@@ -590,7 +648,7 @@ export function WarehouseMap({
                     stroke="#fff"
                     strokeWidth={0.12}
                     strokeLinejoin="round"
-                    transform={`rotate(${-robot.yaw})`}
+                    transform={`rotate(${-yawDeg(robot.yaw)})`}
                   />
                   <circle r={1.1} fill="currentColor" stroke="#fff" strokeWidth={0.2} />
                   <g color="#fff" pointerEvents="none">

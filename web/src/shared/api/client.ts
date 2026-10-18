@@ -43,6 +43,16 @@ export function setAccessToken(token: string | null) {
   accessToken = token
 }
 
+/** Current in-memory access token (SignalR sends it as `access_token`). */
+export function getAccessToken(): string | null {
+  return accessToken
+}
+
+/** Backend base URL, e.g. for the SignalR hub. */
+export function getApiUrl(): string {
+  return API_URL
+}
+
 /** Called when a request fails with 401 and the session cannot be refreshed any more. */
 export function setSessionExpiredHandler(handler: (() => void) | null) {
   onSessionExpired = handler

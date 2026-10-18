@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   StyleSheet,
-  Text,
   TextInput,
   TextInputProps,
   TextStyle,
@@ -9,8 +8,9 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors } from '../theme/colors';
-import { shadows } from '../theme/shadows';
+import { radii } from '../theme/radii';
 import { typography } from '../theme/typography';
+import { Text } from '../ui/Text';
 
 interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -37,7 +37,11 @@ export function Input({
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && (
+        <Text variant="caption" color={colors.textSecondary} style={styles.label}>
+          {label}
+        </Text>
+      )}
       <View
         style={[
           styles.inputContainer,
@@ -57,9 +61,13 @@ export function Input({
         {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
       </View>
       {error ? (
-        <Text style={styles.errorText}>{error}</Text>
+        <Text variant="caption" color={colors.danger} style={styles.errorText}>
+          {error}
+        </Text>
       ) : hint ? (
-        <Text style={styles.hintText}>{hint}</Text>
+        <Text variant="caption" color={colors.textMuted} style={styles.hintText}>
+          {hint}
+        </Text>
       ) : null}
     </View>
   );
@@ -67,16 +75,10 @@ export function Input({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 12,
+    gap: 6,
   },
   label: {
-    fontSize: 10,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: colors.textSecondary,
-    marginBottom: 6,
-    fontFamily: typography.fontSans,
+    fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -84,10 +86,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: radii.md,
     minHeight: 48,
-    paddingHorizontal: 12,
-    ...shadows.input,
+    paddingHorizontal: 14,
   },
   inputFocused: {
     borderColor: colors.primary,
@@ -99,28 +100,23 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '500',
     fontFamily: typography.fontSans,
     color: colors.textPrimary,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   iconLeft: {
-    marginRight: 8,
+    marginRight: 10,
   },
   iconRight: {
-    marginLeft: 8,
+    marginLeft: 10,
   },
   errorText: {
-    fontSize: 11,
-    color: colors.danger,
-    marginTop: 4,
-    fontWeight: '700',
-    fontFamily: typography.fontSans,
+    marginTop: 2,
+    fontWeight: '600',
   },
   hintText: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 4,
+    marginTop: 2,
   },
 });

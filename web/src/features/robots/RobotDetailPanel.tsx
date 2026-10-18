@@ -14,6 +14,8 @@ import { ROBOT_JOB_HISTORY, ROBOT_STATE_EVENTS } from './mock'
 interface RobotDetailPanelProps {
   robot: RobotView
   onBack: () => void
+  /** Opens manual control (go to a point on the map, or drive with buttons). */
+  onManual?: () => void
 }
 
 const ACTIONS: { label: string; icon: IconName }[] = [
@@ -123,7 +125,7 @@ function buildSections(robot: RobotView): Section[] {
           </Field>
           <Field label="Pose X">{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
           <Field label="Pose Y">{hasTelemetry ? `${robot.poseY.toFixed(2)} m` : '—'}</Field>
-          <Field label="Pose yaw">{hasTelemetry ? `${robot.poseYaw}°` : '—'}</Field>
+          <Field label="Pose yaw">{hasTelemetry ? `${Math.round((robot.poseYaw * 180) / Math.PI)}°` : '—'}</Field>
           <Field label="Linear velocity">{dash(robot.linearVelocity)}</Field>
           <Field label="Angular velocity">{dash(robot.angularVelocity)}</Field>
           <Field label="Last telemetry">{formatDateTimeWithYear(robot.lastTelemetryAt)}</Field>
@@ -263,7 +265,7 @@ function buildSections(robot: RobotView): Section[] {
   ]
 }
 
-export function RobotDetailPanel({ robot, onBack }: RobotDetailPanelProps) {
+export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelProps) {
   const queryClient = useQueryClient()
   const sections = buildSections(robot)
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
@@ -349,7 +351,12 @@ export function RobotDetailPanel({ robot, onBack }: RobotDetailPanelProps) {
 
         <div className="my-6 grid grid-cols-4 gap-2">
           {ACTIONS.map((action) => (
-            <button key={action.label} type="button" className="group flex flex-col items-center gap-2 text-xs text-ink-2">
+            <button
+              key={action.label}
+              type="button"
+              className="group flex flex-col items-center gap-2 text-xs text-ink-2"
+              onClick={action.label === 'Manual' ? onManual : undefined}
+            >
               <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-hover:bg-container-higher">
                 <Icon name={action.icon} size={18} />
               </span>

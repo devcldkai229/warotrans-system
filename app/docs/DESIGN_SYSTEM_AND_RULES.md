@@ -1,225 +1,71 @@
-# WaroTrans Mobile Staff App — Master Design System, Architecture & UX Guidelines
+# WaroTrans Mobile Staff App — Design And Operational Rules
 
-> **Target Codebase**: `/mnt/Data/Capstone Project - WaroTrans/warotrans-system/app`  
-> **Source of Truth Prototype**: `/mnt/Data/Capstone Project - WaroTrans/ui-design-prototype/prototype-staff-web/src/routes/index.tsx`  
-> **Target Devices**: Physical Smartphones (iPhone 12/13/14/15, Xiaomi, Samsung 19.5:9 / 19:9 ratio) and Rugged Warehouse PDAs (Zebra/Honeywell).
+Updated 2026-10-17. This is the current Calm Operations reference. Former Industrial prototype rules, simulated map coordinates and demo operational state are superseded. See [MOBILE_BACKEND_REALIGNMENT.md](./MOBILE_BACKEND_REALIGNMENT.md) for backend behavior and [CALM_OPERATIONS_SHELL_AND_PILOTS.md](./CALM_OPERATIONS_SHELL_AND_PILOTS.md) for screen structure.
 
----
+## Design Tokens
 
-## 1. Triết lý Thiết kế & Ngôn ngữ Thẩm mỹ (Silicon Valley Industrial UX)
+Read the implementation in `src/shared/theme` before using a token. Do not duplicate colors or type sizes inside screens.
 
-WaroTrans là hệ thống điều hành kho vận công nghiệp kết hợp robot tự hành (AMR) và hệ thống thực thi kho (WES). Ứng dụng dành cho nhân viên kho vận (Staff App) đòi hỏi:
-1. **Tương phản cao tuyệt đối (High Contrast Slate)**: Môi trường kho bãi có ánh sáng mạnh hoặc vùng tối; nhân viên di chuyển liên tục. Không được dùng màu xám nhạt mờ (`#94a3b8`) cho chữ đọc hoặc đường viền thẻ card.
-2. **Phân cấp thị giác rõ ràng (Hierarchy & Bold Text)**:
-   - **Dữ liệu quan trọng, mã số, trạng thái**: Bắt buộc in đậm (`fontWeight: '900'`), cỡ chữ rõ ràng.
-   - **Mã hệ thống, tọa độ, mã AMR/Job**: Dùng font monospace (`typography.fontMono`), viết hoa (uppercase), giãn cách chữ (`letterSpacing: 1.2 - 1.6`).
-3. **Cảm giác xúc giác 3D (Tactile Micro-interactions)**:
-   - Nút bấm chính có viền đáy (`borderBottomWidth: 2, borderBottomColor: '#004bb0'`), bóng đổ nhẹ.
-   - Trạng thái nhấn (`pressed`): thụt xuống nhẹ (`transform: [{ scale: 0.98 }]`, `opacity: 0.88`).
-
----
-
-## 2. Bảng Token Màu & Kiểu Chữ Chuẩn (Design Tokens)
-
-### 2.1 Bảng màu cốt lõi (`src/shared/theme/colors.ts`)
-| Token | Mã màu | Ứng dụng |
+| Token | Current Value | Use |
 | :--- | :--- | :--- |
-| `primary` | `#005cd1` | WaroTrans Cobalt Blue — Nút chính, viền active, icon điểm nhấn |
-| `primaryDark` | `#004bb0` | Viền đáy 3D của nút primary |
-| `primaryLight` | `rgba(0, 92, 209, 0.08)` | Nền chip được chọn, highlight hàng active |
-| `background` | `#f8fafc` | Nền slate-50 toàn ứng dụng |
-| `surface` | `#ffffff` | Nền thẻ Card, Modal, Bottom Sheet, Header |
-| `surfaceMuted`| `#e2e8f0` | Nền thanh phân đoạn Segmented Filter Bar, nút phụ |
-| `surfaceSubtle`| `#f1f5f9` | Nền icon tròn, hover/press background |
-| `border` | `#cbd5e1` | Viền thẻ card (slate-300 đậm, rõ ranh giới, không dùng border mờ) |
-| `textPrimary` | `#071523` | Chữ chính, tiêu đề (slate-950, đen đậm) |
-| `textSecondary`| `#475569` | Chữ phụ, nhãn mô tả, subtitle (slate-600, đậm nét, dễ đọc) |
-| `textMuted` | `#64748b` | Chữ ghi chú phụ (slate-500, không được dùng màu sáng hơn) |
-| `success` | `#007a38` | Hoàn thành, pin tốt, robot trực tuyến |
-| `warning` | `#f0b21b` | Chờ handover, ETA sắp tới, cảnh báo |
-| `warningText` | `#854d0e` | Chữ / viền amber đặt trực tiếp trên `background` hoặc `surface` |
-| `danger` | `#c8272b` | Dừng khẩn cấp, sự cố hàng hóa, deadlock |
+| background | `#eef1f6` | Screen canvas |
+| surface | `#ffffff` | Cards, sheets, headers |
+| surfaceSubtle | `#f4f6fa` | Inset blocks |
+| surfaceMuted | `#e5e9f0` | Quiet tracks |
+| border | `rgba(33, 34, 38, 0.08)` | Hairlines |
+| borderStrong | `#c4c8d0` | Stronger boundaries |
+| textPrimary | `#121317` | Readable primary content |
+| textSecondary | `#45474d` | Readable supporting content |
+| primary / primaryDark | `#1557d0` / `#0f3f9e` | Accessible primary action fills |
+| primaryText | `#1a5cd6` | Accent foreground |
+| primaryLight / primaryBorder | `#e9f1ff` / `#b8d5ff` | Accent wells and borders |
+| success / warning / danger / info | `#059669` / `#d97706` / `#dc2626` / `#0284c7` | Semantic graphics |
 
-> **Lưu ý:** ba giá trị trên là giá trị **thật** trong `src/shared/theme/colors.ts:28,34,40`.
-> Mỗi tone còn có các token đi kèm `*Bg`, `*Soft`, `*Border` (ví dụ `successBg: '#eefaf2'`).
-> Luôn đọc token thật từ `colors.ts` thay vì dùng giá trị ghi nhớ.
+Status text uses StatusPill and its derived tone. Semantic foreground uses the companion `*Text` token. `textMuted` is reserved for placeholders or incidental notes.
 
-> **Về `warning`:** `#f0b21b` chỉ đạt **1.81:1** trên `#f8fafc`, thấp hơn mức 3:1 mà WCAG 1.4.11
-> yêu cầu cho graphic mang ý nghĩa. Vì vậy `warning` chỉ dùng làm **nền/fill**; mọi chữ hoặc
-> viền đặt trực tiếp lên nền sáng phải dùng `warningText` (`#854d0e`, ~6.5:1).
-> Khi cần một graphic nhỏ mang tín hiệu (ví dụ chấm trạng thái), hãy dùng fill `warning`
-> kèm viền `warningText` thay vì để fill trần.
+## Typography And Controls
 
-### 2.2 Quy chuẩn Typography (`src/shared/theme/typography.ts`)
-* **Hệ Font Chuẩn (Native Retina & Modern Web)**:
-  * **iOS Native (iPhone)**: San Francisco (`SF Pro`) bản địa Apple — tối ưu hoàn hảo kerning, tracking và độ nét cho màn hình Super Retina XDR.
-  * **Web Simulator & Android**: `Inter` (đầy đủ các biến thể weight `400, 500, 600, 700, 800, 900`).
-  * **Monospace Codes**: `Menlo` (iOS) / `JetBrains Mono` (Web).
-  * **Khử răng cưa Web**: Bắt buộc bật `-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;` trong CSS toàn cục để triệt tiêu hiện tượng chữ bị mỏng và nhạt màu trên trình duyệt desktop.
-* **Eyebrows / Badges / Protocol Codes**: `fontMono`, size `9-10`, `fontWeight: '900'`, `textTransform: 'uppercase'`, `letterSpacing: 1.2 - 1.6`.
-* **Tiêu đề màn hình & Thẻ chính**: `fontSans`, size `16-24`, `fontWeight: '900'`, `color: colors.textPrimary` (`#071523`).
-* **Nội dung thẻ & Mô tả**: `fontSans`, size `11-13`, `fontWeight: '600' - '700'`, `color: colors.textSecondary` (`#475569`). Tuyệt đối không dùng xám nhạt mờ (`#94a3b8`) cho nội dung đọc hay đường viền.
-* **Chỉ số Telemetry**: `fontMono` hoặc `fontSans`, `fontWeight: '900'`, `tabularNums`.
+Import primitives from `src/shared/ui`. Text is the only text element for new/migrated UI; font sizes come from the shared scale: display 24, title 20, headline 16, body 14, label 13, caption/code 12. No font-size overrides below the scale floor. Codes and UUIDs use `variant="code"`; do not uppercase ordinary labels.
 
----
+Surfaces are flat with a hairline, token radius and one shadow level. No bevels. Buttons use 44pt small, 48pt primary and 52pt large targets. ChoiceField provides a searchable expanded list for longer catalogs. ErrorBanner displays server messages within the action's screen or modal.
 
-## 3. Quy chuẩn Công thái học & Thiết bị Di động (Mobile Ergonomics)
+## Insets And Navigation
 
-### 3.1 Edge-to-Edge & Safe Area Insets (iOS Tai Thỏ & Home Indicator)
-* **KHÔNG bao bọc toàn bộ ứng dụng bằng `<SafeAreaView>`**:
-  * Root tại `App.tsx` phải là `<View style={{ flex: 1, backgroundColor: colors.background }}>`.
-  * Tránh tạo khoảng trống (letterbox) hụt đầu và đáy trên iPhone 12/13/14/15.
-* **Quy chuẩn Header đỉnh máy**:
-  * Mọi thanh header phải giữ đúng inset dùng chung để che kín tai thỏ:
-    ```tsx
-    paddingTop: Platform.OS === 'ios' ? 48 : 12, // Che kín tai thỏ bằng nền header
-    paddingBottom: 12,
-    ```
-  * `minHeight` phía iOS luôn là `104`, nhưng **phía non-iOS KHÔNG phải hằng số duy nhất**. Phải lấy đúng giá trị
-    của file đang sửa — không được mặc định `72`:
-    | File | `minHeight` |
-    | --- | --- |
-    | `src/shared/components/SubScreenHeader.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
-    | `src/features/monitoring/IssueReportingModal.tsx` | `Platform.OS === 'ios' ? 104 : 72` |
-    | `src/features/jobs/JobsScreen.tsx` | `Platform.OS === 'ios' ? 104 : 75` |
-    | `src/features/transport/TransportScreen.tsx` | `Platform.OS === 'ios' ? 104 : 76` |
-    | `src/features/jobs/JobDetailScreen.tsx` | `Platform.OS === 'ios' ? 104 : 68` |
-    | `src/shared/components/AppHeader.tsx` | không dùng — chỉ `paddingTop` + `paddingBottom: 12` |
-  * Dropdown menus bên trong header phải đặt: `top: Platform.OS === 'ios' ? 92 : 56`.
-* **Quy chuẩn Floating Navigation Dock (Silicon Valley Modern Industrial)**:
-  * Thanh điều hướng dạng viên thuốc nổi (`borderRadius: 999`), tách biệt khỏi đáy tạo cảm giác thoáng đãng, sang trọng:
-    ```tsx
-    // Container bao bọc (cho phép click/scroll xuyên qua hai bên mép)
-    dockWrapper: {
-      position: 'absolute',
-      bottom: dockMetrics.bottomOffset,
-      left: 0,
-      right: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 90,
-    },
-    * **Dock là lớp phủ `position: absolute`, không tự nhận safe-area**:
-    * Mọi màn hình muốn ghim nội dung sát đáy phải chừa chỗ bằng **`dockReservedSpace(dockHeight)`**
-      (`src/shared/theme/layout.ts`) chứ **không** hardcode `paddingBottom`.
-    * `dockHeight` được đo thật qua `onLayout` trên `dockPill` (`BottomTabBar.tsx`) và phát ra
-      qua `NavigationContext`. Nhờ vậy khi metric của pill thay đổi (đổi icon, đổi padding),
-      khoảng hở tự động theo — thay vì 3 magic number cộng lại vừa khít như trước đây
-      (~2pt trên iPhone 12, dễ vỡ chỉ vì metrics chữ).
-    * ```tsx
-      const { dockHeight } = useNavigation();
-      const dockInset = dockReservedSpace(dockHeight);
-      // collapsed peek sheet
-      <View style={[styles.bottomSheet, { paddingBottom: dockInset }]} />
-      // expanded scroll content
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: dockInset }]}
-      ```
-  * **Viên thuốc nổi (kích thước vàng ~296px, chiếm ~76% chiều rộng màn hình 390px)**
-    dockPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(255, 255, 255, 0.96)',
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      borderWidth: 1.5,
-      borderColor: colors.border,
-      shadowColor: '#071523',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.14,
-      shadowRadius: 18,
-      elevation: 10,
-      gap: 10,
-    },
-    ```
-  * Badge đếm Job: đặt tại `top: -4, right: -8`, nền `colors.danger`, viền trắng `1.5px`, chữ mono 9px đậm 900.
-* **Khu vực ngón cái (Thumb Zone) & Bệ Đỡ Đáy (Solid Surface Foundation)**:
-  * Nửa dưới màn hình (40–50% từ dưới lên) là nơi ngón tay cái thao tác thuận tiện nhất khi cầm máy 1 tay.
-  * **Bệ đỡ đáy (Solid Bottom Surface)**: Bề mặt của Bottom Sheet kéo dài chạm sát mép đáy vật lý của màn hình (`bottom: 0`), triệt tiêu hoàn toàn khe hở lọt map phía dưới. Thanh Floating Dock nổi trôi đè lên trên bệ đỡ này tạo hiệu ứng chiều sâu 3D sang trọng.
-  * **Khoảng đệm cuộn an toàn (Safe Scroll Insets)**: Mọi màn hình cuộn (`HomeScreen`, `JobsScreen`, `TransportScreen`) đều khai báo `paddingBottom: Platform.select({ ios: 104, default: 96 })` để nội dung cuối cùng không bao giờ bị thanh dock che khuất.
+The app root remains a plain View within SafeAreaProvider. `useTopInset()` supplies real native or simulated web inset. No hardcoded native notch heights. Content clears the absolute BottomTabBar with measured `dockReservedSpace(dockHeight)`.
 
-### 3.2 Cử chỉ Cảm ứng (Touch Gestures)
-* **Bottom Sheet kéo vuốt (PanResponder)**:
-  * Tích hợp `PanResponder` trên thanh handle và đầu thẻ:
-    * `dy < -25`: Vuốt lên $\rightarrow$ bung mở (*Expand Fleet View & Pulse*).
-    * `dy > 25`: Vuốt xuống $\rightarrow$ thu gọn (*Collapse*).
-  * Kèm hiệu ứng chuyển động mượt: `LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)`.
-* **Kích thước vùng bấm (Touch Targets)**:
-  * Mọi icon tròn bấm được (Back, Bell, Logout) phải có kích thước tối thiểu `36x36px` với `hitSlop` hoặc đệm $\ge 44\times 44\text{px}$ (chuẩn WCAG 2.2 Level AA).
+Navigation-aware shell components live in `src/app/shell`; shared UI never imports `src/app`. OperationalScreen composes screen header, scrolling, loading, retry and error state. Account/zone preferences are local device UI, never backend work assignments or shift schedules.
 
-### 3.3. Ngân sách nhãn CTA — chữ KHÔNG được tràn ra ngoài viên nút
+Guard browser globals with `Platform.OS === 'web'` and an availability check. Set pointerEvents as a JSX prop, never a StyleSheet entry.
 
-* **Hiện tượng (đã xảy ra)**: `Button` render `<View style={contentRow}><Text>{label}</Text></View>` mà
-  **không khai báo `flexShrink`**. Yoga mặc định `flexShrink: 0`, nên một nhãn quá dài giữ nguyên bề rộng
-  nội tại của nó (~340pt cho 35 ký tự @ 15pt/900/ls 0.8) trong khung ~237pt; `justifyContent: 'center'`
-  chia đều phần dư ra **cả hai bên**, tạo ra đúng triệu chứng "chữ tràn ra ngoài viên pill ở cả trái lẫn phải".
-* **Luật bắt buộc**: nhãn dài **phải xuống dòng bên trong** viên nút, tuyệt đối không tràn và không bị cắt
-  bằng ellipsis (một CTA bị cắt `GENERATE & INGEST BAR…` còn tệ hơn hẳn một CTA hai dòng — nó che mất chính
-  hành động mà nút thực hiện). `Button.tsx` đã xử lý ở tầng component: `contentRow` có `flexShrink: 1` +
-  `minWidth: 0`, nhãn có `flexShrink: 1`, icon có `flexShrink: 0` (để icon không bị bóp méo khi nhãn xuống dòng).
-  **Không** đặt `numberOfLines` cho nhãn nút. Mọi nút trong app tự giãn theo `minHeight`/`paddingVertical`
-  (không nào dùng `height` cố định), nên nhãn xuống dòng làm viên nút cao thêm mà không vỡ layout.
-* **Ngân sách thực tế** trên iPhone 375pt (khung card nội): `375 − 32 − 32 = 311`; trừ padding `lg` 48 và icon 26
-  → chỉ còn **~237pt cho chữ**. Ở `size="lg"` (15pt / weight 900 / letterSpacing 0.8) ứng với **~24 ký tự**.
-* **Quy tắc copy cho CTA**: verb + object, tối đa 3 từ, bỏ tiền tố ALL-CAPS dài, bỏ thông tin đã hiện ở nơi khác
-  (ví dụ card máy in đã ghi `Model: Zebra ZT411` thì nút không cần `(ZEBRA ZT411)`).
-* **Hàng lọc ngang (filter tabs)**: khi số tab ≤ 4 và nhãn ngắn, dùng **cột đều `flex: 1` trong một `View` thường**,
-  **không** dùng `ScrollView` ngang. Nguyên nhân: nằm trong ScrollView ngang, chip cuối luôn bị viewport cắt cụt
-  và trông như layout hỏng chứ không phải "kéo đi xem thêm". `paddingRight` **không sửa được** hiện tượng cắt —
-  nó chỉ thêm khoảng trắng *sau* chip cuối khi đã cuộn hết. Thêm `numberOfLines={1}` + `flexShrink: 1` vào nhãn tab
-  để phòng thủ nếu nhãn sau này dài hơn.
+## Truthful State And Actions
 
-### 3.4. Mã đặc tả prototype (`SCR-STF-xx`) KHÔNG được xuất hiện trong UI
+Only successful server responses establish authentication or operational outcomes. Empty lists stay empty. Network/HTTP failures show the real error. Unknown counts display Awaiting Server Data. Do not replace failures with seeds, fake IDs, receipts, container metadata, telemetry or notifications.
 
-* `SCR-STF-xx` là **mã định danh màn hình trong prototype** (`ui-design-prototype/.../routes/index.tsx`), chỉ có
-  giá trị truy vết thiết kế. Chúng **không được** nằm trong bất kỳ chuỗi nào người dùng đọc được — eyebrow,
-  badge, tiêu đề section, header tag. Operator không cần biết mã màn hình prototype, và chúng làm nhiễu
-  nhịp thị giác của label nghiệp vụ.
-* Khi gỡ khỏi UI, **giữ lại mã trong code comment** dạng `Prototype ref: SCR-STF-xx (routes/index.tsx)`
-  để không mất khả năng đối chiếu với prototype.
-* Quy tắc này áp dụng cho **mọi** chuỗi dạng mã đặc tả giả: `SCR-STF-xx`, `SCREEN W-xx`, `Section 8.x Rule y`.
-  Văn bản nghiệp vụ có giá trị thật (ví dụ "AMRs automatically detour around the hazard") thì **giữ lại**,
-  chỉ gỡ tiền tố trích dẫn giả.
+Server job summaries are distinct from detail graphs. Current step UUID and status control handover availability. Render every returned container and every step type. Use UUID keys. Do not infer task acceptance, staff ownership, bay capacity or progress from prototype constants.
 
----
+Transport Create → Queue → Start is explicit. Preserve prior successful receipts during retries. Use published workflow input schema and actual current container sources. Endpoint/location/level selection does not imply slot availability or reservation.
 
-## 4. Quy chuẩn Thông báo Toast & Phản hồi Rung (Haptics)
+Receiving uses product resolution and real inventory context. Unmapped server receiving routes show an honest capability error. No local container creation.
 
-### 4.1 Floating Sonner-Style Toast
-* **Vị trí**: `top: Platform.OS === 'ios' ? 54 : 14` (nằm ngay dưới tai thỏ, tuyệt đối không bị che khuất).
-* **Biểu tượng**: Hỗ trợ icon động theo ngữ cảnh (ví dụ: `MapPin` / `'📍'` khi bấm *"Locate Me"*).
-* **Tương tác**: Không dùng nút `X` rườm rà; hỗ trợ chạm/vuốt để ẩn, tự động biến mất sau 3.2s.
+Realtime starts empty, derives notifications from actual events and resyncs REST state after reconnect. Preserve newer events during snapshot merging and discard prior-session callbacks. Display actual event/receipt time and last telemetry time; do not claim stale data is live.
 
-### 4.2 Tiết chế Rung Tactile Motor (`src/shared/utils/haptics.ts`)
-* **Chống spam motor rung**:
-  * Các thao tác thông thường (`tap`, `tick`, chuyển tab, mở modal): **Hoàn toàn tắt rung** (`break`).
-  * Tuyệt đối không rung khi người dùng chỉ mới mở popup xác nhận (như mở modal Logout).
-* **Cường độ vi xung (Micro-pulses)**:
-  * `'success'`: Xung cực nhẹ `10ms` (cảm giác click thanh thoát như Apple Watch).
-  * `'warning'`: Xung nhẹ `15ms`.
-  * `'error'`: 2 vi xung `[0, 20, 30, 20]` (không dùng chuỗi 80ms gây rung bần bật máy).
+## Map Coordinates
 
----
+MiniFacilityMap renders server map assets and full endpoints/edges/zones. `worldToImagePixel` matches Web Admin's continuous ROS transform, including origin rotation and `imageHeightPixels - localY / resolution`. Do not introduce a half-cell shift, fixed warehouse layout or fixed robot count. Missing images/telemetry are explicitly unavailable.
 
-## 5. Quy tắc Lập trình Tránh Lỗi Hermes Native
+## Safety Capability Boundaries
 
-Khi phát triển ứng dụng React Native / Expo:
-1. **Cô lập Web vs Native**:
-   * Tuyệt đối KHÔNG truy cập `window.location`, `window.history`, `document` trên Native.
-   * Bắt buộc bọc điều kiện: `if (Platform.OS === 'web' && typeof window !== 'undefined') { try { ... } catch {} }`.
-2. **Không dùng thuộc tính Web CSS trong `StyleSheet.create`**:
-   * Tránh `pointerEvents: 'none'` trong `StyleSheet` $\rightarrow$ Dùng JSX prop: `<View pointerEvents="none">`.
-   * Tránh `outline`, `backdropFilter`, `cursor` trong `StyleSheet.create`.
+Navigation cancellation is a request against a real active command. HTTP 202 means Cancel Requested (Awaiting Robot ACK). It does not establish emergency stop, recall, task release or safe aisle access.
 
----
+Operations hazard reporting, issue submission, payload transfer, nearby hold and offline mutation queuing are unavailable on the current server. Controls are disabled and explanatory. Never fabricate success toasts or pending synchronization counters. Camera capture is not implemented; barcode input must come from actual manual/scanner input.
 
-## 6. Phạm vi Triển khai & An toàn Hệ thống
+Routine taps/ticks remain silent. Success uses a 10ms micro-pulse, warning 15ms, error `[0, 20, 30, 20]` as implemented in `haptics.ts`.
 
-1. **Phạm vi Front-End thuần túy (FE-Only)**:
-   * Mọi can thiệp chỉ thực hiện trong thư mục `warotrans-system/app`.
-   * Không chạm vào Backend hoặc Database khi chưa có yêu cầu cụ thể.
-2. **Kiểm tra biên dịch trước khi hoàn tất**:
-   * Luôn chạy `npm run typecheck` (`tsc --noEmit`) trong `warotrans-system/app` để đảm bảo **0 lỗi compilation**.
-3. **Truy vết thiết kế không được lọt sang UI**:
-   * Mọi mã đặc tả prototype (`SCR-STF-xx`, `SCREEN W-xx`, `Section 8.x`) chỉ tồn tại trong **code comment**
-     (`Prototype ref: ...`) — xem [§3.4](#34-mã-đặc-tả-prototype-scr-stf-xx-không-được-xuất-hiện-trong-ui).
+## Validation And Scope
+
+All edits for this realignment stay within `app/`. Backend and Web Admin are read-only references. Update this document, shell documentation, progress and AGENTS.md with behavioral changes.
+
+Run `npm run typecheck`, `npm run test:realignment`, an Expo web export and an Expo startup check. Report verification limits; a mocked regression suite is not a live robot or backend end-to-end test.
+
+
+Transport movement derivation is covered independently: actual container location takes precedence over manual source input; absent sources require explicit endpoints; destination storage must match its endpoint; required dotted schema paths are validated.

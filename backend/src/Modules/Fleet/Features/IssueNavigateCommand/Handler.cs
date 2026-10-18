@@ -22,7 +22,29 @@ public sealed class IssueNavigateCommandHandler(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    private const int MaxSaveAttempts = 3;
+
     public async Task<IssueNavigateCommandResponse> HandleAsync(
+        Guid robotId,
+        IssueNavigateCommandRequest request,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await IssueAsync(robotId, request, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxSaveAttempts)
+            {
+                // Telemetry (several per second) updated the robot row between read and save. Nothing was
+                // published yet: drop the stale entities and issue again from a fresh read.
+                db.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private async Task<IssueNavigateCommandResponse> IssueAsync(
         Guid robotId,
         IssueNavigateCommandRequest request,
         CancellationToken cancellationToken)

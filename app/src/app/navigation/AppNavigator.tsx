@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAuth } from '../../features/auth/authContext';
 import { LoginScreen } from '../../features/auth/LoginScreen';
 import { HomeScreen } from '../../features/home/HomeScreen';
@@ -9,31 +9,34 @@ import { JobDetailScreen } from '../../features/jobs/JobDetailScreen';
 import { JobsScreen } from '../../features/jobs/JobsScreen';
 import { BarcodeScannerHUD } from '../../features/monitoring/BarcodeScannerHUD';
 import { JobLiveMapScreen } from '../../features/monitoring/JobLiveMapScreen';
-import { JobMonitoringScreen } from '../../features/monitoring/JobMonitoringScreen';
 import { OfflineBannerHUD } from '../../features/monitoring/OfflineBannerHUD';
 import { BlockPathHazardScreen } from '../../features/safety/BlockPathHazardScreen';
 import { FleetRecallScreen } from '../../features/safety/FleetRecallScreen';
 import { PayloadRecoveryScreen } from '../../features/safety/PayloadRecoveryScreen';
-import { PointToPointScreen } from '../../features/transport/PointToPointScreen';
-import { ReplenishmentScreen } from '../../features/transport/ReplenishmentScreen';
 import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
 import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
-import { AppHeader } from '../../shared/components/AppHeader';
+import { AppHeader } from '../shell/AppHeader';
 import { colors } from '../../shared/theme/colors';
 import { BottomTabBar } from './BottomTabBar';
-import { useNavigation } from './NavigationContext';
+import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
-  const { session, isAuthenticated, logout, updateZone } = useAuth();
-  const { currentScreen, goBack } = useNavigation();
+  const { session, isAuthenticated, isLoading, logout, updateZone } = useAuth();
+  const { currentScreen, goBack, params, navigate } = useNavigation();
+
+  if (isLoading) return <View style={styles.root}><ActivityIndicator accessibilityLabel="Verifying Session" /></View>;
 
   if (!isAuthenticated || !session) {
     return <LoginScreen />;
   }
 
-  const isMainTab =
-    currentScreen === 'home' || currentScreen === 'jobs' || currentScreen === 'transport';
+  /**
+   * Tab roots share one shell: `AppHeader` above, `BottomTabBar` below. Every
+   * other route is a full-screen destination and brings its own header, which
+   * is why `isMainTabScreen` is the single gate for both.
+   */
+  const isMainTab = isMainTabScreen(currentScreen);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -44,10 +47,11 @@ export function AppNavigator() {
       case 'transport':
         return <TransportScreen />;
       case 'job_detail':
-        return <JobDetailScreen />;
       case 'job_monitoring':
-        return <JobMonitoringScreen />;
+        return <JobDetailScreen />;
       case 'transport_create':
+      case 'replenishment':
+      case 'point_to_point':
         return <TransportCreationScreen />;
       case 'create_container':
         return <CreateContainerScreen />;
@@ -59,10 +63,6 @@ export function AppNavigator() {
         return <PayloadRecoveryScreen />;
       case 'fleet_recall':
         return <FleetRecallScreen />;
-      case 'replenishment':
-        return <ReplenishmentScreen />;
-      case 'point_to_point':
-        return <PointToPointScreen />;
       case 'block_path':
         return <BlockPathHazardScreen />;
       case 'transport_history':
@@ -87,9 +87,20 @@ export function AppNavigator() {
       {currentScreen === 'home' && (
         <AppHeader
           operatorName={session.fullName}
+          operatorRole={session.role === 'ADMIN' ? 'Admin' : 'Staff'}
+          initials={session.avatarInitials}
           zone={session.zone}
           onLogout={logout}
-          onZoneChange={(newZone) => updateZone(newZone)}
+          onZoneChange={updateZone}
+          initialOpen={
+            params?.modal === 'zone'
+              ? 'zone'
+              : params?.modal === 'account'
+                ? 'account'
+                : params?.modal === 'notifications'
+                  ? 'notifications'
+                  : undefined
+          }
         />
       )}
 
@@ -111,5 +122,6 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
+    zIndex: 1,
   },
 });

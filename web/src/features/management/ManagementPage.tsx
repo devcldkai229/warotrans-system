@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import type { Account, Product, ProductCategory, StorageLocationView } from '@/shared/api/contracts'
+import type { Account, Product, ProductCategory } from '@/shared/api/contracts'
 import { listWarehouses } from '@/shared/api/warehouses'
 import { cx } from '@/shared/lib/cx'
 import { listAccounts } from '@/features/accounts/api'
@@ -14,7 +14,16 @@ import { LocationsSection } from './LocationsSection'
 import { ProductsSection } from './ProductsSection'
 import { RolesSection } from './RolesSection'
 import { WarehousesSection } from './WarehousesSection'
-import { CATEGORIES, CONTAINERS, INVENTORY, PRODUCTS, STORAGE_LOCATIONS } from './mock'
+import {
+  listCategories,
+  listManagedContainers,
+  listManagedInventory,
+  listManagedLocations,
+  listProducts,
+  type ContainerListing,
+  type InventoryListing,
+  type LocationListing,
+} from './api'
 
 type TabId =
   | 'accounts'
@@ -69,9 +78,20 @@ export function ManagementPage() {
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [products, setProducts] = useState<Product[]>(PRODUCTS)
-  const [categories, setCategories] = useState<ProductCategory[]>(CATEGORIES)
-  const [locations, setLocations] = useState<StorageLocationView[]>(STORAGE_LOCATIONS)
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<ProductCategory[]>([])
+  const [catalogState, setCatalogState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [containers, setContainers] = useState<ContainerListing>({ warehouseName: null, items: [], total: 0 })
+  const [containerState, setContainerState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [inventory, setInventory] = useState<InventoryListing>({ warehouseName: null, items: [], total: 0 })
+  const [inventoryState, setInventoryState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [locationListing, setLocationListing] = useState<LocationListing>({ warehouse: null, items: [] })
+  const [locationState, setLocationState] = useState<'loading' | 'ready' | 'error'>('loading')
+
+  const warehousesQuery = useQuery({
+    queryKey: ['warehouses', 'all'],
+    queryFn: () => listWarehouses({ take: 100 }),
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -89,10 +109,70 @@ export function ManagementPage() {
     }
   }, [])
 
-  const warehousesQuery = useQuery({
-    queryKey: ['warehouses', 'all'],
-    queryFn: () => listWarehouses({ take: 100 }),
-  })
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([listCategories(), listProducts()])
+      .then(([loadedCategories, loadedProducts]) => {
+        if (cancelled) return
+        setCategories(loadedCategories)
+        setProducts(loadedProducts)
+        setCatalogState('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    listManagedContainers()
+      .then((listing) => {
+        if (cancelled) return
+        setContainers(listing)
+        setContainerState('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setContainerState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    listManagedInventory()
+      .then((listing) => {
+        if (cancelled) return
+        setInventory(listing)
+        setInventoryState('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setInventoryState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    listManagedLocations()
+      .then((listing) => {
+        if (cancelled) return
+        setLocationListing(listing)
+        setLocationState('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setLocationState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // What the left menu shows next to each entry.
   const counts = useMemo<Record<TabId, number>>(
@@ -102,11 +182,11 @@ export function ManagementPage() {
       warehouses: warehousesQuery.data?.total ?? warehousesQuery.data?.items.length ?? 0,
       products: products.length,
       categories: categories.length,
-      containers: CONTAINERS.length,
-      inventory: INVENTORY.reduce((sum, row) => sum + row.containerCount, 0),
-      locations: locations.length,
+      containers: containers.total,
+      inventory: inventory.items.reduce((sum, row) => sum + row.containerCount, 0),
+      locations: locationListing.items.length,
     }),
-    [accounts, products, categories, locations, warehousesQuery.data],
+    [accounts, products, categories, locationListing, containers, inventory, warehousesQuery.data],
   )
 
   return (
@@ -145,13 +225,21 @@ export function ManagementPage() {
             {tab === 'accounts' ? <AccountsSection accounts={accounts} setAccounts={setAccounts} loadState={loadState} /> : null}
             {tab === 'roles' ? <RolesSection accounts={accounts} /> : null}
             {tab === 'warehouses' ? <WarehousesSection /> : null}
-            {tab === 'products' ? <ProductsSection products={products} setProducts={setProducts} categories={categories} /> : null}
-            {tab === 'categories' ? (
-              <CategoriesSection categories={categories} setCategories={setCategories} products={products} />
+            {tab === 'products' ? (
+              <ProductsSection products={products} setProducts={setProducts} categories={categories} loadState={catalogState} />
             ) : null}
-            {tab === 'containers' ? <ContainersSection containers={CONTAINERS} /> : null}
-            {tab === 'inventory' ? <InventorySection inventory={INVENTORY} /> : null}
-            {tab === 'locations' ? <LocationsSection locations={locations} setLocations={setLocations} /> : null}
+            {tab === 'categories' ? (
+              <CategoriesSection categories={categories} setCategories={setCategories} products={products} loadState={catalogState} />
+            ) : null}
+            {tab === 'containers' ? <ContainersSection listing={containers} loadState={containerState} /> : null}
+            {tab === 'inventory' ? <InventorySection listing={inventory} loadState={inventoryState} /> : null}
+            {tab === 'locations' ? (
+              <LocationsSection
+                listing={locationListing}
+                setItems={(update) => setLocationListing((current) => ({ ...current, items: update(current.items) }))}
+                loadState={locationState}
+              />
+            ) : null}
           </section>
         </div>
       </div>

@@ -4,6 +4,34 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 
 ---
 
+## 0. Current Design Language — "Calm Operations"
+
+The app follows **"Calm Operations"** (Apple / Linear / Google Workspace clean minimal).
+Phase 1 landed the foundation (tokens, contracts, the `src/shared/ui` primitive
+library). The shell and operational screens now follow the backend realignment described in
+[`docs/MOBILE_BACKEND_REALIGNMENT.md`](./docs/MOBILE_BACKEND_REALIGNMENT.md).
+
+- **Foundation doc**: [`docs/CALM_OPERATIONS_FOUNDATION.md`](./docs/CALM_OPERATIONS_FOUNDATION.md).
+- **Shell + pilot doc**: [`docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md`](./docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md).
+- The shell lives in **`src/app/shell/`** (`AppHeader`, `SafetyActionSheet`), not `src/shared/components/*`:
+  it navigates, so it sits above the feature layer and may import `NavigationContext`. `src/shared/**`
+  stays a leaf layer that never imports from `src/app/**`.
+- **New screens and migrated screens import primitives from the barrel**, never from `shared/components/*`:
+  ```tsx
+  import { Button, Card, Text, StatusPill, SegmentedControl, TextField, ProgressMeter, EmptyState } from '../../shared/ui';
+  ```
+- **Overriding rules for anything that uses `src/shared/ui`:**
+  - `Text` is the only text element. No inline `fontSize`; the scale bottoms out at **12pt** (never below 11pt anywhere).
+  - Flat surfaces: 1px hairline + one of `shadows.sm | md | lg`. **No 3D bevels** (`borderBottomWidth` keys) in new UI.
+  - Touch floor is 44pt (`sm`), 48pt (`md`, every primary action) and 52pt (`lg`).
+  - Status colour is derived, never hand-picked: pass the status to `StatusPill` (`RECOVERY_REQUIRED` -> danger).
+  - **Copy is Title Case.** Never `textTransform: 'uppercase'` in new UI — it reads as shouting on a screen an operator glances at while walking.
+  - Header insets still come from `useTopInset()` — see §2.3, which is unchanged.
+- **Contracts**: `src/shared/types/contracts.ts` mirrors the C# backend 1:1 (camelCase, string enums). Job summaries and runtime detail graphs mirror the PR #41 read models. Only `UserSession` remains as a local projection of a verified server account; its zone is a device display preference.
+- The legacy rules in §2 below still govern **un-migrated** screens. When the two conflict for a migrated screen, this section wins.
+
+---
+
 ## 1. Source of Truth & Design Philosophy
 
 - **Prototype Source of Truth**: `/mnt/Data/Capstone Project - WaroTrans/ui-design-prototype/prototype-staff-web/src/routes/index.tsx`
@@ -15,19 +43,21 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 ## 2. Mandatory Design & Ergonomic Rules
 
 ### 2.1 Palette & Contrast (Never use faded gray)
-- **Background**: `#f8fafc` (Slate-50).
-- **Surface**: `#ffffff` (Card, Sheet, Modal).
-- **Borders**: `#cbd5e1` (Slate-300 — high-contrast boundary, never faint borders).
-- **Text Primary**: `#071523` (Slate-950 — bold, high legibility).
-- **Text Secondary**: `#475569` (Slate-600 — crisp subtext, never `#94a3b8` for readable content).
-- **Primary Accent**: `#005cd1` (WaroTrans Cobalt Blue) with 3D bottom border `#004bb0`.
-- **Status Tones** (from `src/shared/theme/colors.ts`): Success `#007a38`, Warning `#f0b21b`, Danger `#c8272b`.
-  Each also has `*Bg`, `*Soft` and `*Border` companions. Read the real token from `colors.ts` before using one.
+- **Background**: `#eef1f6` (`colors.background`).
+- **Surface**: `#ffffff` (`colors.surface`) — Card, Sheet, Modal, Header.
+- **Inset**: `#f4f6fa` (`colors.surfaceSubtle`) — route rows and detail blocks inside a card.
+- **Borders**: `rgba(33, 34, 38, 0.08)` (`colors.border`), heavier `colors.borderStrong` `#c4c8d0`.
+- **Text Primary**: `#121317` (`colors.textPrimary`).
+- **Text Secondary**: `#45474d` (`colors.textSecondary`) — never `#6a6a71` (`textMuted`) for readable content.
+- **Primary Accent**: `#1557d0` (`colors.primary`, and `colors.primaryText` for accent text); white on that fill is 6.35:1. Pressed/darker tone is `primaryDark` (`#0f3f9e`); `danger`/`warning` text comes from the `*Text` companions.
+- **Status Tones** (from `src/shared/theme/colors.ts`): Success `#059669`, Warning `#d97706`, Danger `#dc2626`, Info `#0284c7`.
+  Each also has `*Bg`, `*Border` and `*Text` companions. Read the real token from `colors.ts` before using one.
 
 ### 2.2 Typography Hierarchy
-- **Protocol Codes, IDs, Telemetry**: Monospace (`typography.fontMono`), font size 9-10pt, `fontWeight: '900'`, uppercase, tracking `0.12-0.16em`.
-- **Card Headings & Titles**: `fontSans`, font size 13-16pt, `fontWeight: '900'`. Important info must be bold.
-- **Labels & Subtext**: `fontSans`, font size 10-12pt, `fontWeight: '600' - '700'`, `#475569`.
+Type scale lives in `src/shared/theme/typography.ts` and bottoms out at **12pt**: Display 24 · Title 20 · Headline 16 · Body 14 · Label 13 · Caption 12 · Code 12 (mono).
+- **Protocol Codes, IDs, Telemetry**: `variant="code"` (JetBrains Mono / Menlo, 12pt, weight 500-700). No ALL-CAPS transform — the uppercase was the Phase 0 look and it is gone from new UI.
+- **Card Headings & Titles**: `variant="headline"` (16pt, weight 600). Important info must not be skimmed past.
+- **Labels & Subtext**: `variant="label"` (13pt) and `variant="caption"` (12pt), `colors.textSecondary`.
 
 ### 2.3 Edge-to-Edge Layout & Mobile Safe Insets (iPhone 12 / Modern Smartphones)
 - **NO root `<SafeAreaView>`**:
@@ -44,42 +74,46 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 
   Trước đây cả hai trường hợp dùng chung một hằng số `48`, chỉ đúng ở iPhone 12/13. **Đừng viết lại `Platform.OS === 'ios' ? 48 : 12`** — đó chính là lỗi lệch inset mà `useTopInset` sinh ra để tránh.
 - **SafeAreaProvider**: root trong `App.tsx` đã bọc `<SafeAreaProvider>` (bắt buộc cho `useSafeAreaInsets`), nhưng root vẫn là plain `<View>` — **không** dùng `SafeAreaView`.
-- **Dropdown neo theo chiều cao header thật** — `AppHeader` đo bằng `onLayout` và truyền `anchorStyle = { top: headerHeight }`. Đừng hardcode `top: 92`: header cao cỡ 99–105pt tùy thiết bị, nên 92 sẽ chồm vào trong header.
-  - **Migration đang dở** — các file sau vẫn còn `paddingTop: Platform.select(...)` và **phải** chuyển sang `useTopInset()`:
-    `SubScreenHeader.tsx`, `JobsScreen.tsx`, `JobDetailScreen.tsx`, `TransportScreen.tsx`,
-    `IssueReportingModal.tsx`, `InventoryLookupScreen.tsx`, `OfflineBannerHUD.tsx`, `BarcodeScannerHUD.tsx`.
-    Đừng copy pattern cũ từ các file này.
 - **Bottom Tab Bar (`src/app/navigation/BottomTabBar.tsx`)**:
-  - The dock is a **floating pill**, not an edge-to-edge bar. This is deliberate: it keeps the
-    tablet's thumb free to reach the bottom of the screen one-handed on a PDA. The full spec
-    lives in [`docs/DESIGN_SYSTEM_AND_RULES.md`](./docs/DESIGN_SYSTEM_AND_RULES.md) §3.1.
-  - It is `position: 'absolute'` and therefore carries **no automatic safe-area handling**:
+  - The bar is **flat and edge to edge**: white surface, a single 1px top hairline, no floating pill,
+    no floating shadow. **3 core tabs** — `Home`, `Jobs`, `Transport` — minimalist icon-only for
+    maximum touch focus and elegance (touch targets >= 72pt width x 44pt height).
+  - Active tab: soft rounded-full pill highlight (`rgba(21, 87, 208, 0.08)`) with `colors.primaryText` (`#1a5cd6`) icon. Inactive: `colors.textMuted`.
+  - Tab job count badge sits at `top: -6, right: -13`, filled with **bright warm Amber-400 (`#fbbf24`)**,
+    a crisp **1.5px white border (`#ffffff`)**, and high-contrast **deep amber text (`#78350f`)** (WCAG AAA >= 7:1),
+    ensuring it is light, friendly, and never muddy or burnt-dark.
+  - It is `position: 'absolute'` (content scrolls underneath it, the Google-console pattern) and
+    carries a safe-area sibling strip:
     ```tsx
-    bottom: dockMetrics.bottomOffset, // iOS 24, Android 16
+    const insets = useSafeAreaInsets();
+    const bottomInset = insets.bottom || 10;
+    <View style={[styles.safeArea, { height: bottomInset }]} pointerEvents="none" />
     ```
-  - **Never hardcode a bottom `paddingBottom` to clear the dock.** Use the measured inset:
+  - **Never hardcode a bottom `paddingBottom` to clear the bar.** Use the measured height:
     ```tsx
     const { dockHeight } = useNavigation();
-    const dockInset = dockReservedSpace(dockHeight); // height + bottomOffset + gutter
+    const bottomInset = dockReservedSpace(dockHeight); // height + bottomOffset(0) + gutter(16)
     ```
-    `dockHeight` is measured via `onLayout` on `dockPill` and published through
-    `NavigationContext`. Three hand-tuned constants previously summed to ~2pt of slack, which
-    broke whenever font metrics shifted.
-  - Tab job count badge sits at `top: -8, right: -13`, fill `colors.warning` with
-    `colors.textPrimary` text and a `colors.warningText` ring, so the counter reads as a
-    separate chip instead of overlapping the icon glyph.
-  - **Touch target floor is 44pt** (iOS HIG / Material) for every interactive element on the
-    main tabs. `tabBtn` uses `paddingVertical: 11` around a 23pt icon = 45pt.
+- **App Header (`src/app/shell/AppHeader.tsx`)**:
+  - Content row is **56px** (`minHeight: 56`, `paddingTop: topInset + 4`, `paddingBottom: 10`) for a solid,
+    executive feel with ample vertical breathing room.
+  - **Left**: Monochrome `BrandMark` (40px) paired directly with Work Zone selector pill (`📍 Inbound Dock 01 ▾`, 40px height, rounded full) with NO redundant "WaroTrans" text, providing maximum horizontal breathing room.
+  - **Right**: Notification Bell (`Bell`, 40px with the actual unread event count and compact anchored dropdown `NotificationSheet` 320px width in 100% English) + Operator Avatar (`Avatar`, 40px, solid black `#121317`). Search button removed to eliminate header clutter (inventory/lookup accessible via Transport Hub).
+- **Live Map Screen (`src/features/monitoring/JobLiveMapScreen.tsx`)**:
+  - Uses `ScreenHeader` through `OperationalScreen`, safe-area insets and measured dock clearance.
+  - Renders full map geometry from `MapVersionDetailDto`; endpoints, edges, zones and reported robot poses use
+    `worldToImagePixel` from `src/shared/map/mapCoordinateTransform.ts`.
+  - Transform includes resolution, origin X/Y/yaw, image height inversion (`H - v`) and no half-cell shift.
+  - Never hardcode robot count, coordinates, routes, velocity, ETA or rack names. Unreported telemetry is unavailable.
 - **Sonner Toast Banner**:
   - Position below the iOS notch: `top: Platform.OS === 'ios' ? 54 : 14`.
   - Support custom icons (e.g. `MapPin` for "Locate Me"). Tap to dismiss, no close `X` button.
-- **Thumb Zone & Bottom Sheet Docking**:
-  - The `NEXT HANDOVER TASK` card must dock flush above the Floating Dock without empty voids,
-    using the `dockInset` value above — never a fixed padding.
-  - `ScrollView` must stay **scrollable in both sheet states**. Locking scroll while collapsed
-    clips the sheet handle on short devices (iPhone SE at 667pt, and 640dp warehouse PDAs),
-    making the fleet view impossible to expand.
-  - Implement `PanResponder` vertical swipe gestures: swipe UP (`dy < -25`) expands fleet view; swipe DOWN (`dy > 25`) collapses it.
+- **Header overlays & modals**:
+  - `AppHeader` does not anchor dropdowns to a measured header height. The zone picker, the
+    account sheet and the safety sheet are all `Modal`s — occasional actions do not earn a
+    permanently mounted popover.
+  - A screen that floats its own chrome over scrolling content (the Live Map telemetry sheet)
+    must offset itself by `dockReservedSpace(dockHeight)`, not by a constant.
 
 ### 2.4 Haptic Vibration Policy (`src/shared/utils/haptics.ts`)
 - **Zero Motor Spam**: Routine taps (`'tap'`), ticks (`'tick'`), tab switching, and opening standard dialogs MUST be silenced.
@@ -102,10 +136,31 @@ Always run validation before concluding any task:
 # Typecheck (MANDATORY — must be 0 errors)
 npm run typecheck
 
-# Check Expo status
+# Operational regression checks
+npm run test:realignment
+
+# Web bundle and Expo status
+npx expo export --platform web
 npx expo start
 ```
 
-## 4. Scope & Boundary Rules
-- **FE-Only**: Modify only files within `warotrans-system/app/`. Do not touch backend, database, or API schemas without explicit user consent.
-- **Preserve Documentation**: Keep `app/docs/` up to date when introducing new patterns or major design tokens.
+## 4. Scope, Boundaries & Documentation Maintenance Rule
+- **Scope**: This realignment edits only `warotrans-system/app/`. Backend and Web Admin code are read-only references. Do not edit `backend/`, `web/` or other directories. Do NOT consult external specification/prototype directories for this task.
+- **MANDATORY Documentation Updates**: After every code change, feature calibration, or design decision, the agent MUST immediately update the living `.md` documentation in `warotrans-system/app/docs/` (`CALM_OPERATIONS_SHELL_AND_PILOTS.md`, `DESIGN_SYSTEM_AND_RULES.md`, `progress.md`) and `AGENTS.md`. Never let documentation drift behind code changes.
+
+
+## 5. Backend Truthfulness Rules (2026-10-17)
+
+- Authenticate only after successful login or verified `/api/identity/me`. Failed refresh clears tokens/session and notifies auth listeners. All auth persistence uses the session generation and serialized storage queue.
+- Preserve empty server envelopes and propagate HTTP/network `ApiError`. Never seed operational lists, fabricate IDs/receipts or simulate mutation success.
+- `CREATED`/`QUEUED` jobs start with a real robot UUID. Only a `RUNNING` job's current `WAITING` `HUMAN_INTERACTION` `PICKUP_CONFIRM`/`DROPOFF_CONFIRM` step offers handover confirmation.
+- Resolve barcode → container UUID, match expected `resolvedInputs.containerId`, then confirm the real step UUID with `{ containerId, note }`. Apply only the returned `JobDetailDto`.
+- Transport uses published workflow schemas, typed `STAFF_INPUT`, actual container sources and real destination endpoint/location/level. No local occupancy or reservations. Retain Create → Queue → Start receipts on partial failure; start one job per available robot at a time.
+- Receiving is Resolve Product → Inventory Context → Create Container. Explain unmapped 404/405 receiving routes; never create locally.
+- Realtime starts empty. Derive local notifications from job/connectivity events, serialize connection lifecycle, retry initial failures and resync REST snapshots after reconnect. Reject prior-session callbacks and stale snapshots.
+- Cancel only an active command. HTTP 202 means **Cancel Requested (Awaiting Robot ACK)**. Never label navigation cancellation as E-Stop or Recall.
+- Hazard/issue reporting, payload recovery, nearby hold and offline sync have no server capability. Keep controls disabled and explain availability. No simulated scan results, pending counters or fake shift hours.
+- Run `npm run typecheck`, `npm run test:realignment`, and an Expo web build; report live backend/browser limitations honestly.
+
+
+Transport movement derivation is covered independently: actual container location takes precedence over manual source input; absent sources require explicit endpoints; destination storage must match its endpoint; required dotted schema paths are validated.

@@ -28,6 +28,8 @@ public sealed record SessionDto(
 
 public sealed record ListAccountsDto(IReadOnlyList<AccountDto> Items);
 
+public sealed record CreateAccountResultDto(AccountDto Account, string TemporaryPassword);
+
 public static class IdentityTestSupport
 {
     public const string Password = "Correct-Horse-1";
@@ -71,6 +73,35 @@ public static class IdentityTestSupport
         await dbContext.Accounts
             .Where(a => a.Id == accountId)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, status));
+    }
+
+    public static async Task SetAccountRoleAsync(
+        this WaroTransWebApplicationFactory factory,
+        Guid accountId,
+        AccountRole role)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        await dbContext.Accounts
+            .Where(a => a.Id == accountId)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.Role, role));
+    }
+
+    public static async Task<HttpResponseMessage> SendWithTokenAsync(
+        this HttpClient client,
+        HttpMethod method,
+        string url,
+        string accessToken,
+        object? body = null)
+    {
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        return await client.SendAsync(request);
     }
 
     public static Task<HttpResponseMessage> PostLoginAsync(

@@ -123,6 +123,10 @@ export function MapEditorCanvas({
     else onWorldClick?.(world, image)
   }
 
+  // Zones and edges are only selectable with the Select or Pan tool. With a creation tool (Endpoint, Edge, Zone) the
+  // click belongs to the map, so a point can be placed inside a zone or on a lane instead of opening that shape.
+  const shapesSelectable = tool === 'select' || tool === 'pan'
+
   // Image Y down; world yaw CCW from +X. Arrow angle in SVG: -(yaw + originYaw).
   const headingDeg = (yawRad: number) => (-(yawRad + originYaw) * 180) / Math.PI
 
@@ -171,10 +175,14 @@ export function MapEditorCanvas({
                 stroke={isSel ? '#2563eb' : '#ca8a04'}
                 strokeWidth={isSel ? 2 / zoom : 1 / zoom}
                 vectorEffect="non-scaling-stroke"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onZoneClick?.(zone.id)
-                }}
+                onClick={
+                  shapesSelectable
+                    ? (e) => {
+                        e.stopPropagation()
+                        onZoneClick?.(zone.id)
+                      }
+                    : undefined
+                }
               />
             )
           })}
@@ -186,10 +194,14 @@ export function MapEditorCanvas({
             return (
               <g
                 key={edge.id}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onEdgeClick?.(edge.id)
-                }}
+                onClick={
+                  shapesSelectable
+                    ? (e) => {
+                        e.stopPropagation()
+                        onEdgeClick?.(edge.id)
+                      }
+                    : undefined
+                }
               >
                 <polyline
                   points={polyline(pts)}

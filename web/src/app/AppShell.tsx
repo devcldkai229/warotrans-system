@@ -20,6 +20,7 @@ const NAV: NavGroup[] = [
     items: [
       { label: 'Fleet', to: '/monitor/fleet' },
       { label: 'Transport requests', to: '/monitor/requests' },
+      { label: 'Live job', to: '/monitor/live' },
     ],
   },
   {

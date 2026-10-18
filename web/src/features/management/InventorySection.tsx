@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
-import type { InventoryStockView } from '@/shared/api/contracts'
 import { formatIsoDateTime } from '@/shared/lib/format'
 import { SearchInput } from '@/shared/ui/Field'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
+import type { InventoryListing } from './api'
 import { SectionHead } from './SectionHead'
 
 /**
  * warehouse.inventory_stocks, read-only: stock changes only through the Container lifecycle (putaway, retrieval,
  * relocation), so there is no manual adjustment. Counts are Containers, not product units (rules/00).
  */
-export function InventorySection({ inventory }: { inventory: InventoryStockView[] }) {
+export function InventorySection({ listing, loadState }: { listing: InventoryListing; loadState: 'loading' | 'ready' | 'error' }) {
+  const inventory = listing.items
   const [query, setQuery] = useState('')
 
   const visible = useMemo(() => {
@@ -55,9 +56,26 @@ export function InventorySection({ inventory }: { inventory: InventoryStockView[
               </Td>
             </Tr>
           ))}
-          {visible.length === 0 ? <EmptyRow colSpan={6}>No stock records match this filter.</EmptyRow> : null}
+          {visible.length === 0 ? (
+            <EmptyRow colSpan={6}>
+              {loadState === 'loading'
+                ? 'Loading inventory…'
+                : loadState === 'error'
+                  ? 'Could not load inventory. Check that the API is running, then reload.'
+                  : listing.warehouseName === null
+                    ? 'No active warehouse yet, so there is no stock to show.'
+                    : inventory.length === 0
+                      ? 'No stock yet. Stock appears here once containers are put away on shelves.'
+                      : 'No stock records match this filter.'}
+            </EmptyRow>
+          ) : null}
         </tbody>
       </Table>
+      {listing.total > inventory.length ? (
+        <p className="mt-3 text-xs text-muted">
+          Showing the first {inventory.length} of {listing.total} stock rows. Search to find the others.
+        </p>
+      ) : null}
     </>
   )
 }
