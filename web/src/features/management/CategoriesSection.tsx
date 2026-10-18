@@ -3,7 +3,8 @@ import type { Product, ProductCategory } from '@/shared/api/contracts'
 import { Dialog } from '@/shared/ui/Dialog'
 import { Field, FieldRow, FormError } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
-import { Table, Td, Th, Tr } from '@/shared/ui/Table'
+import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
+import { createCategory } from './api'
 import { AddButton, SectionHead } from './SectionHead'
 
 interface CategoryDraft {
@@ -16,12 +17,14 @@ interface CategoriesSectionProps {
   categories: ProductCategory[]
   setCategories: (update: (current: ProductCategory[]) => ProductCategory[]) => void
   products: Product[]
+  loadState: 'loading' | 'ready' | 'error'
 }
 
 /** warehouse.product_categories: the code is unique. */
-export function CategoriesSection({ categories, setCategories, products }: CategoriesSectionProps) {
+export function CategoriesSection({ categories, setCategories, products, loadState }: CategoriesSectionProps) {
   const [draft, setDraft] = useState<CategoryDraft | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const productCount = (categoryId: string) => products.filter((product) => product.categoryId === categoryId).length
 
@@ -30,7 +33,7 @@ export function CategoriesSection({ categories, setCategories, products }: Categ
     setError(null)
   }
 
-  function save() {
+  async function save() {
     if (!draft) return
     const code = draft.code.trim().toUpperCase()
     if (!code || !draft.name.trim()) {
@@ -41,11 +44,22 @@ export function CategoriesSection({ categories, setCategories, products }: Categ
       setError('This category code already exists.')
       return
     }
-    setCategories((current) => [
-      ...current,
-      { id: `draft-category-${current.length + 1}`, code, name: draft.name.trim(), description: draft.description.trim() || undefined },
-    ])
-    setDraft(null)
+
+    setBusy(true)
+    setError(null)
+    try {
+      const created = await createCategory({
+        code,
+        name: draft.name.trim(),
+        description: draft.description.trim() || undefined,
+      })
+      setCategories((current) => [...current, created].sort((a, b) => a.code.localeCompare(b.code)))
+      setDraft(null)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'The category could not be saved.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -72,11 +86,20 @@ export function CategoriesSection({ categories, setCategories, products }: Categ
               <Td align="right">{productCount(category.id)}</Td>
             </Tr>
           ))}
+          {categories.length === 0 ? (
+            <EmptyRow colSpan={4}>
+              {loadState === 'loading'
+                ? 'Loading categories…'
+                : loadState === 'error'
+                  ? 'Could not load categories. Check that the API is running, then reload.'
+                  : 'No categories yet. Add the first one.'}
+            </EmptyRow>
+          ) : null}
         </tbody>
       </Table>
 
       {draft ? (
-        <Dialog title="Add category" submitLabel="Create category" onClose={() => setDraft(null)} onSubmit={save}>
+        <Dialog title="Add category" submitLabel="Create category" busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
           <FieldRow>
             <Field label="Code">
               <input

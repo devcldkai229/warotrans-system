@@ -159,6 +159,23 @@ export interface ListAccountsResponse {
   items: Account[]
 }
 
+/** Body of POST /api/identity/accounts. The username is lower case and cannot be changed later. */
+export interface CreateAccountBody {
+  username: string
+  email: string
+  fullName: string
+  role: AccountRole
+}
+
+/** Response of POST /api/identity/accounts. The temporary password is returned this once and cannot be read again. */
+export interface CreateAccountResponse {
+  account: Account
+  temporaryPassword: string
+}
+
+/** Body of PUT /api/identity/accounts/{id}. */
+export type UpdateAccountBody = Pick<Account, 'email' | 'fullName' | 'role'>
+
 /* --------------------------------------------------------------------- Fleet */
 
 export type NavigationStatus = 'IDLE' | 'NAVIGATING' | 'PAUSED' | 'SUCCEEDED' | 'FAILED' | 'CANCELED'
@@ -503,6 +520,22 @@ export interface Product {
   isActive: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** Body of POST /api/warehouse/products. The server upper-cases the SKU and starts the product active. */
+export interface CreateProductBody {
+  categoryId: string
+  sku: string
+  name: string
+  supplierBarcode?: string
+  description?: string
+}
+
+/** Body of POST /api/warehouse/product-categories. The server upper-cases the code. */
+export interface CreateCategoryBody {
+  code: string
+  name: string
+  description?: string
 }
 
 export type ContainerStatus = 'CREATED' | 'PACKED' | 'RESERVED' | 'IN_TRANSIT' | 'STORED' | 'HOLD' | 'EMPTY' | 'OUT_OF_SERVICE'

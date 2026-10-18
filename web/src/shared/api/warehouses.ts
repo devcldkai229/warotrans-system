@@ -25,6 +25,8 @@ export interface ContainerListItem {
   currentStorageLocationCode: string | null
   currentEndpointId: string | null
   currentLevelNo: number | null
+  supplierPackageBarcode: string | null
+  updatedAt: string
 }
 
 export interface ListContainersResponse {
@@ -39,10 +41,35 @@ export interface StorageLocationListItem {
   code: string
   name: string
   isActive: boolean
+  warehouseName: string
+  /** Null when Navigation no longer knows the Endpoint. */
+  endpointCode: string | null
+  endpointName: string | null
+  endpointType: string | null
+  createdAt: string
 }
 
 export interface ListStorageLocationsResponse {
   items: StorageLocationListItem[]
+  total: number
+}
+
+export interface InventoryListItem {
+  id: string
+  productId: string
+  productSku: string
+  productName: string
+  storageLocationId: string
+  storageLocationCode: string
+  storageLocationName: string
+  levelNo: number
+  /** Number of Containers, not product units. */
+  containerCount: number
+  updatedAt: string
+}
+
+export interface ListInventoryResponse {
+  items: InventoryListItem[]
   total: number
 }
 
@@ -67,6 +94,29 @@ export function listContainers(params: {
   if (params.eligibleOnly !== undefined) query.set('eligibleOnly', String(params.eligibleOnly))
   if (params.take !== undefined) query.set('take', String(params.take))
   return apiFetch<ListContainersResponse>(`/api/warehouse/containers?${query}`)
+}
+
+export function listInventory(params: { warehouseId: string; search?: string; skip?: number; take?: number }) {
+  const query = new URLSearchParams()
+  query.set('warehouseId', params.warehouseId)
+  if (params.search) query.set('search', params.search)
+  if (params.skip !== undefined) query.set('skip', String(params.skip))
+  if (params.take !== undefined) query.set('take', String(params.take))
+  return apiFetch<ListInventoryResponse>(`/api/warehouse/inventory?${query}`)
+}
+
+export function createStorageLocation(body: { warehouseId: string; endpointId: string; code: string; name: string }) {
+  return apiFetch<StorageLocationListItem>('/api/warehouse/storage-locations', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function setStorageLocationStatus(id: string, isActive: boolean) {
+  return apiFetch<StorageLocationListItem>(`/api/warehouse/storage-locations/${id}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ isActive }),
+  })
 }
 
 export function listStorageLocations(params: { warehouseId: string; activeOnly?: boolean }) {

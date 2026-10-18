@@ -7,15 +7,17 @@ interface ModalProps {
   title: string
   subtitle?: string
   onClose: () => void
+  /** False when a click beside the card must not dismiss it, e.g. while it shows something that cannot be shown again. */
+  closeOnBackdrop?: boolean
   /** Tailwind width class of the card. */
   width?: string
   children: ReactNode
 }
 
 /** Dimmed backdrop with a centred card. Clicking the backdrop closes it. */
-export function Modal({ title, subtitle, onClose, width = 'w-[480px]', children }: ModalProps) {
+export function Modal({ title, subtitle, onClose, closeOnBackdrop = true, width = 'w-[480px]', children }: ModalProps) {
   return (
-    <div className="fixed inset-0 z-100 grid place-items-center bg-ink/40 p-4" role="presentation" onClick={onClose}>
+    <div className="fixed inset-0 z-100 grid place-items-center bg-ink/40 p-4" role="presentation" onClick={closeOnBackdrop ? onClose : undefined}>
       <div
         className={cx('max-h-full max-w-full overflow-auto rounded-lg bg-surface shadow-modal', width)}
         role="dialog"
@@ -43,11 +45,13 @@ interface DialogProps {
   submitLabel: string
   onClose: () => void
   onSubmit: () => void
+  /** True while the save runs: the submit button is disabled and says so. */
+  busy?: boolean
   children: ReactNode
 }
 
 /** Modal form used by the admin screens. The caller owns validation and the actual save. */
-export function Dialog({ title, submitLabel, onClose, onSubmit, children }: DialogProps) {
+export function Dialog({ title, submitLabel, onClose, onSubmit, busy = false, children }: DialogProps) {
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     onSubmit()
@@ -61,8 +65,8 @@ export function Dialog({ title, submitLabel, onClose, onSubmit, children }: Dial
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary">
-            {submitLabel}
+          <Button type="submit" variant="primary" disabled={busy}>
+            {busy ? 'Saving…' : submitLabel}
           </Button>
         </footer>
       </form>

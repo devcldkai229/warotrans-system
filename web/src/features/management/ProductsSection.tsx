@@ -6,7 +6,11 @@ import { Field, FieldRow, FormError, SearchInput } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
+import { createProduct, setProductStatus } from './api'
 import { AddButton, SectionHead } from './SectionHead'
+
+/** Web-only limit: the API accepts up to 128 characters, the console keeps barcodes to 13 digits (EAN-13 length). */
+const BARCODE_MAX_DIGITS = 13
 
 interface ProductDraft {
   sku: string
@@ -20,14 +24,18 @@ interface ProductsSectionProps {
   products: Product[]
   setProducts: (update: (current: Product[]) => Product[]) => void
   categories: ProductCategory[]
+  loadState: 'loading' | 'ready' | 'error'
 }
 
 /** warehouse.products: SKU and supplier barcode are unique; the supplier barcode identifies the product on receiving. */
-export function ProductsSection({ products, setProducts, categories }: ProductsSectionProps) {
+export function ProductsSection({ products, setProducts, categories, loadState }: ProductsSectionProps) {
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [draft, setDraft] = useState<ProductDraft | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const categoryName = (id: string) => categories.find((category) => category.id === id)?.name ?? '—'
 
@@ -48,7 +56,7 @@ export function ProductsSection({ products, setProducts, categories }: ProductsS
     setError(null)
   }
 
-  function save() {
+  async function save() {
     if (!draft) return
     const sku = draft.sku.trim().toUpperCase()
     const barcode = draft.supplierBarcode.trim()
@@ -64,30 +72,39 @@ export function ProductsSection({ products, setProducts, categories }: ProductsS
       setError('This supplier barcode already belongs to another product.')
       return
     }
-    const now = new Date().toISOString()
-    setProducts((current) => [
-      ...current,
-      {
-        id: `draft-product-${current.length + 1}`,
+
+    setBusy(true)
+    setError(null)
+    try {
+      const created = await createProduct({
         categoryId: draft.categoryId,
         sku,
         name: draft.name.trim(),
-        description: draft.description.trim() || undefined,
         supplierBarcode: barcode || undefined,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ])
-    setDraft(null)
+        description: draft.description.trim() || undefined,
+      })
+      setProducts((current) => [...current, created].sort((a, b) => a.sku.localeCompare(b.sku)))
+      setNotice(null)
+      setDraft(null)
+    } catch (failure) {
+      // e.g. the same SKU was just added by someone else: the server's message says which value clashes.
+      setError(failure instanceof Error ? failure.message : 'The product could not be saved.')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function toggle(id: string) {
-    setProducts((current) =>
-      current.map((product) =>
-        product.id === id ? { ...product, isActive: !product.isActive, updatedAt: new Date().toISOString() } : product,
-      ),
-    )
+  async function toggle(product: Product) {
+    setBusyId(product.id)
+    setNotice(null)
+    try {
+      const updated = await setProductStatus(product, !product.isActive)
+      setProducts((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+    } catch (failure) {
+      setNotice(failure instanceof Error ? failure.message : 'The status could not be changed.')
+    } finally {
+      setBusyId(null)
+    }
   }
 
   return (
@@ -109,6 +126,12 @@ export function ProductsSection({ products, setProducts, categories }: ProductsS
         </select>
         <AddButton onClick={open}>Add product</AddButton>
       </SectionHead>
+
+      {notice ? (
+        <div className="mb-3">
+          <FormError>{notice}</FormError>
+        </div>
+      ) : null}
 
       <Table>
         <thead>
@@ -139,19 +162,29 @@ export function ProductsSection({ products, setProducts, categories }: ProductsS
               </Td>
               <Td>
                 <div className="flex justify-end">
-                  <Button size="sm" variant={product.isActive ? 'ghost' : 'tonal'} onClick={() => toggle(product.id)}>
+                  <Button size="sm" variant={product.isActive ? 'ghost' : 'tonal'} disabled={busyId === product.id} onClick={() => toggle(product)}>
                     {product.isActive ? 'Deactivate' : 'Activate'}
                   </Button>
                 </div>
               </Td>
             </Tr>
           ))}
-          {visible.length === 0 ? <EmptyRow colSpan={7}>No products match this filter.</EmptyRow> : null}
+          {visible.length === 0 ? (
+            <EmptyRow colSpan={7}>
+              {loadState === 'loading'
+                ? 'Loading products…'
+                : loadState === 'error'
+                  ? 'Could not load products. Check that the API is running, then reload.'
+                  : products.length === 0
+                    ? 'No products yet. Add the first one.'
+                    : 'No products match this filter.'}
+            </EmptyRow>
+          ) : null}
         </tbody>
       </Table>
 
       {draft ? (
-        <Dialog title="Add product" submitLabel="Create product" onClose={() => setDraft(null)} onSubmit={save}>
+        <Dialog title="Add product" submitLabel="Create product" busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
           <FieldRow>
             <Field label="SKU">
               <input
@@ -186,13 +219,16 @@ export function ProductsSection({ products, setProducts, categories }: ProductsS
           </Field>
           <Field
             label="Supplier barcode"
-            hint="Scanned on the supplier package to identify the product when receiving. Must be unique."
+            hint="Up to 13 digits, scanned on the supplier package to identify the product when receiving. Must be unique."
           >
             <input
               className={controlClass()}
               value={draft.supplierBarcode}
-              maxLength={128}
-              onChange={(event) => setDraft({ ...draft, supplierBarcode: event.target.value })}
+              inputMode="numeric"
+              maxLength={BARCODE_MAX_DIGITS}
+              onChange={(event) =>
+                setDraft({ ...draft, supplierBarcode: event.target.value.replace(/\D/g, '').slice(0, BARCODE_MAX_DIGITS) })
+              }
             />
           </Field>
           <Field label="Description">
