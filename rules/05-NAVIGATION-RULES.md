@@ -34,11 +34,16 @@ A semantic robot destination.
 
 Examples:
 ```text
-EP-INBOUND-01
-EP-SHELF-A
-EP-OUTBOUND-01
-EP-CHARGING-01
-EP-MAINTENANCE-01
+EP-WAYPOINT-01
+EP-CHARGER-01
+EP-PARK-01
+```
+
+Typical EndpointType values:
+```text
+WAYPOINT
+CHARGER
+PARK
 ```
 
 Stores map pose (world meters / radians):
@@ -79,10 +84,10 @@ Rules: finite numbers, at least 3 unique vertices, outer ring closed (first == l
 
 Typical types:
 ```text
-INTERSECTION
-NARROW_AREA
-OPERATIONAL_AREA
-RESTRICTED_AREA
+KEEP_OUT
+SPEED
+NO_STOP
+SINGLE_OCCUPANCY
 ```
 
 Zone columns:
@@ -99,10 +104,10 @@ Typed common fields stay on columns; `policy` only holds type-specific extras.
 
 | ZoneType | Policy rules |
 |----------|----------------|
-| `RESTRICTED_AREA` | empty/null policy OK; Capacity ≥ 1 |
-| `NARROW_AREA` | Capacity must be 1; MaxSpeed required (m/s) |
-| `INTERSECTION` | optional `{ preferredDirectionYaw, headingToleranceRadians }` (radians) |
-| `OPERATIONAL_AREA` | optional `{ costMultiplier > 0 }` |
+| `KEEP_OUT` | empty/null policy OK; Capacity ≥ 1 (no entry) |
+| `SPEED` | Capacity ≥ 1; MaxSpeed required (m/s) |
+| `NO_STOP` | empty/null policy OK; Capacity ≥ 1 |
+| `SINGLE_OCCUPANCY` | Capacity must be 1; MaxSpeed optional |
 
 Do not invent ZoneType values beyond the enum above.
 

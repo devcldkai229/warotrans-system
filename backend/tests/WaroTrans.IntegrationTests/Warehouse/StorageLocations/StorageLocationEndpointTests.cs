@@ -78,7 +78,7 @@ public sealed class StorageLocationEndpointTests(WaroTransWebApplicationFactory 
         return map;
     });
 
-    private Task<NavEndpoint> SeedEndpointAsync(Guid mapVersionId, string code, string name, EndpointType type = EndpointType.STORAGE, bool enabled = true) =>
+    private Task<NavEndpoint> SeedEndpointAsync(Guid mapVersionId, string code, string name, EndpointType type = EndpointType.WAYPOINT, bool enabled = true) =>
         WithAsync<NavigationDbContext, NavEndpoint>(async db =>
         {
             var endpoint = new NavEndpoint
@@ -153,7 +153,7 @@ public sealed class StorageLocationEndpointTests(WaroTransWebApplicationFactory 
         Assert.Equal("Warehouse WH-A", created.WarehouseName);
         Assert.Equal(endpoint.Code, created.EndpointCode);
         Assert.Equal("Rack A-01", created.EndpointName);
-        Assert.Equal("STORAGE", created.EndpointType);
+        Assert.Equal("WAYPOINT", created.EndpointType);
 
         var list = (await (await client.GetWithTokenAsync($"{Locations}?warehouseId={warehouse.Id}", token))
             .Content.ReadFromJsonAsync<ListStorageLocationsDto>())!;

@@ -14,41 +14,29 @@ export const MAP_RED = '#d93025'
 export const MAP_AMBER = '#e37400'
 
 export const ZONE_LABEL: Record<ZoneType, string> = {
-  INTERSECTION: 'Intersection',
-  NARROW_AREA: 'Narrow area',
-  OPERATIONAL_AREA: 'Operational area',
-  RESTRICTED_AREA: 'Restricted area',
+  KEEP_OUT: 'Keep-out',
+  SPEED: 'Speed zone',
+  NO_STOP: 'No-stop',
+  SINGLE_OCCUPANCY: 'Single-occupancy',
 }
 
 export const ZONE_COLOR: Record<ZoneType, string> = {
-  OPERATIONAL_AREA: '#3279f9',
-  NARROW_AREA: '#d81b60',
-  INTERSECTION: '#e37400',
-  RESTRICTED_AREA: '#d93025',
+  KEEP_OUT: '#d93025',
+  SPEED: '#3279f9',
+  NO_STOP: '#e37400',
+  SINGLE_OCCUPANCY: '#d81b60',
 }
 
 export const ENDPOINT_COLOR: Record<EndpointType, string> = {
-  INBOUND: '#3279f9',
-  STORAGE: '#9a4b00',
-  OUTBOUND: '#137333',
-  PARKING: '#6a6a71',
-  CHARGING: '#0f8a99',
-  MAINTENANCE: '#8430ce',
-  INSPECTION: '#4355d9',
-  RECOVERY: '#d93025',
-  TRANSIT: '#45474d',
+  WAYPOINT: '#45474d',
+  CHARGER: '#0f8a99',
+  PARK: '#6a6a71',
 }
 
 export const ENDPOINT_NAME: Record<EndpointType, string> = {
-  INBOUND: 'Inbound',
-  STORAGE: 'Storage',
-  OUTBOUND: 'Outbound',
-  PARKING: 'Parking',
-  CHARGING: 'Charging',
-  MAINTENANCE: 'Maintenance',
-  INSPECTION: 'Inspection',
-  RECOVERY: 'Recovery',
-  TRANSIT: 'Transit',
+  WAYPOINT: 'Waypoint',
+  CHARGER: 'Charger',
+  PARK: 'Park',
 }
 
 export const ROBOT_COLOR: Record<RobotStatus, string> = {
@@ -64,15 +52,15 @@ export const ROBOT_COLOR: Record<RobotStatus, string> = {
 
 export const EDGE_COLOR: Record<EdgeDirection, string> = { BIDIRECTIONAL: '#3279f9', ONE_WAY: '#8430ce' }
 
-export const ZONE_ORDER: ZoneType[] = ['OPERATIONAL_AREA', 'NARROW_AREA', 'INTERSECTION', 'RESTRICTED_AREA']
+export const ZONE_ORDER: ZoneType[] = ['SPEED', 'NO_STOP', 'SINGLE_OCCUPANCY', 'KEEP_OUT']
 
-/** Guide swatch of a Zone type: the same tint as on the map, hatched for a restricted area. */
+/** Guide swatch of a Zone type: the same tint as on the map, hatched for keep-out. */
 export function zoneSwatchStyle(type: ZoneType): CSSProperties {
   const color = ZONE_COLOR[type]
   return {
     borderColor: color,
     background:
-      type === 'RESTRICTED_AREA'
+      type === 'KEEP_OUT'
         ? `repeating-linear-gradient(45deg, ${color}47 0 2px, transparent 2px 4px)`
         : `${color}24`,
   }

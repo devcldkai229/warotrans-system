@@ -353,7 +353,7 @@ export function WarehouseMap({
                       ? { fill: MAP_OFF, fillOpacity: 0.08, stroke: MAP_OFF, strokeOpacity: 1, strokeWidth: 0.1 * mark }
                       : {
                           fill: 'currentColor',
-                          fillOpacity: zone.zoneType === 'INTERSECTION' ? 0.11 : 0.07,
+                          fillOpacity: zone.zoneType === 'NO_STOP' ? 0.11 : 0.07,
                           stroke: 'currentColor',
                           strokeOpacity: 0.55,
                           strokeWidth: 0.1 * mark,
@@ -381,7 +381,7 @@ export function WarehouseMap({
                       {...paint}
                       {...(isSelected ? { stroke: 'currentColor', strokeOpacity: 1, strokeWidth: 0.32 * mark } : null)}
                     />
-                    {zone.zoneType === 'RESTRICTED_AREA' ? <polygon points={stagePoints(points)} fill="url(#wmap-hatch)" stroke="none" /> : null}
+                    {zone.zoneType === 'KEEP_OUT' ? <polygon points={stagePoints(points)} fill="url(#wmap-hatch)" stroke="none" /> : null}
                     <circle
                       cx={X(anchor.x)}
                       cy={Y(anchor.y)}
@@ -674,7 +674,7 @@ export function WarehouseMap({
                   const anchor = zoneCentroid(polygonToPoints(zone.geometry))
                   const load = zoneLoad.get(zone.id) ?? 0
                   const capacityLine =
-                    zone.zoneType === 'RESTRICTED_AREA'
+                    zone.zoneType === 'KEEP_OUT'
                       ? 'No entry'
                       : show.occupancy
                         ? `${load}/${zone.capacity} robots`

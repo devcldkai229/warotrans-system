@@ -183,9 +183,6 @@ export function MapEditorPage() {
     capacity: number
     maxSpeed: string
     isActive: boolean
-    preferredDirectionYawDeg: string
-    headingToleranceDeg: string
-    costMultiplier: string
   } | null>(null)
   const latestWidth = useRef(panelWidth)
 
@@ -291,18 +288,12 @@ export function MapEditorPage() {
   function selectZone(id: string) {
     const zone = zones.find((z) => z.id === id)
     if (!zone) return
-    const policy = (zone.policy ?? {}) as Record<string, number>
     setZoneDraft({
       name: zone.name,
       zoneType: zone.zoneType,
       capacity: zone.capacity,
       maxSpeed: zone.maxSpeed?.toString() ?? '',
       isActive: zone.isActive,
-      preferredDirectionYawDeg:
-        policy.preferredDirectionYaw != null ? String(radToDeg(policy.preferredDirectionYaw)) : '',
-      headingToleranceDeg:
-        policy.headingToleranceRadians != null ? String(radToDeg(policy.headingToleranceRadians)) : '',
-      costMultiplier: policy.costMultiplier != null ? String(policy.costMultiplier) : '',
     })
     setMode({ kind: 'zone', zoneId: id })
     setTool('select')
@@ -314,7 +305,7 @@ export function MapEditorPage() {
     const at = { x: snap(world.x), y: snap(world.y) }
 
     if (tool === 'endpoint' && mode.kind !== 'placing') {
-      setMode({ kind: 'placing', endpointType: 'CHARGING', at, yawDeg: DEFAULT_YAW_DEG })
+      setMode({ kind: 'placing', endpointType: 'WAYPOINT', at, yawDeg: DEFAULT_YAW_DEG })
       return
     }
     if (mode.kind === 'placing') {
@@ -373,7 +364,7 @@ export function MapEditorPage() {
     try {
       await updateEndpoint(epDraft.id, {
         name: epDraft.name ?? '',
-        endpointType: epDraft.endpointType ?? 'TRANSIT',
+        endpointType: epDraft.endpointType ?? 'WAYPOINT',
         x: Number(epDraft.x),
         y: Number(epDraft.y),
         yaw: Number(epDraft.yaw),
@@ -463,26 +454,13 @@ export function MapEditorPage() {
     }
   }
 
-  function buildZonePolicy(draft: NonNullable<typeof zoneDraft>) {
-    if (draft.zoneType === 'INTERSECTION') {
-      const policy: Record<string, number> = {}
-      if (draft.preferredDirectionYawDeg !== '') {
-        policy.preferredDirectionYaw = degToRad(Number(draft.preferredDirectionYawDeg))
-      }
-      if (draft.headingToleranceDeg !== '') {
-        policy.headingToleranceRadians = degToRad(Number(draft.headingToleranceDeg))
-      }
-      return Object.keys(policy).length ? policy : null
-    }
-    if (draft.zoneType === 'OPERATIONAL_AREA' && draft.costMultiplier !== '') {
-      return { costMultiplier: Number(draft.costMultiplier) }
-    }
+  function buildZonePolicy(_draft: NonNullable<typeof zoneDraft>) {
     return null
   }
 
   async function finishZone(points: Point[], zoneType?: ZoneType, title?: string) {
     if (!version || !isDraft || points.length < 3) return
-    const type = zoneType ?? (mode.kind === 'drawingZone' ? mode.zoneType : 'RESTRICTED_AREA')
+    const type = zoneType ?? (mode.kind === 'drawingZone' ? mode.zoneType : 'KEEP_OUT')
     const name =
       title ?? (mode.kind === 'drawingZone' ? `${mode.title} - ${zones.length + 1}` : `Zone ${zones.length + 1}`)
     setActionError(null)
@@ -491,8 +469,8 @@ export function MapEditorPage() {
         name,
         zoneType: type,
         geometry: pointsToPolygon(points),
-        capacity: type === 'NARROW_AREA' ? 1 : 2,
-        maxSpeed: type === 'NARROW_AREA' ? 0.5 : null,
+        capacity: type === 'SINGLE_OCCUPANCY' ? 1 : 2,
+        maxSpeed: type === 'SPEED' ? 0.5 : null,
         isActive: true,
       })
       await invalidate()
@@ -503,9 +481,6 @@ export function MapEditorPage() {
         capacity: created.capacity,
         maxSpeed: created.maxSpeed?.toString() ?? '',
         isActive: created.isActive,
-        preferredDirectionYawDeg: '',
-        headingToleranceDeg: '',
-        costMultiplier: '',
       })
       setMode({ kind: 'zone', zoneId: created.id })
       setTool('select')
@@ -1047,13 +1022,15 @@ export function MapEditorPage() {
                 className={controlClass()}
                 value={zoneDraft.zoneType}
                 disabled={!isDraft}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const next = e.target.value as ZoneType
                   setZoneDraft({
                     ...zoneDraft,
-                    zoneType: e.target.value as ZoneType,
-                    capacity: e.target.value === 'NARROW_AREA' ? 1 : zoneDraft.capacity,
+                    zoneType: next,
+                    capacity: next === 'SINGLE_OCCUPANCY' ? 1 : zoneDraft.capacity,
+                    maxSpeed: next === 'SPEED' && zoneDraft.maxSpeed === '' ? '0.5' : zoneDraft.maxSpeed,
                   })
-                }
+                }}
               >
                 {ZONE_TEMPLATES.map((t) => (
                   <option key={t.type} value={t.type}>
@@ -1062,8 +1039,11 @@ export function MapEditorPage() {
                 ))}
               </select>
             </Field>
-            {zoneDraft.zoneType === 'NARROW_AREA' ? (
-              <p className="text-xs text-amber-ink">NARROW_AREA requires Capacity = 1 and MaxSpeed (m/s).</p>
+            {zoneDraft.zoneType === 'SPEED' ? (
+              <p className="text-xs text-amber-ink">SPEED requires MaxSpeed (m/s).</p>
+            ) : null}
+            {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' ? (
+              <p className="text-xs text-amber-ink">SINGLE_OCCUPANCY requires Capacity = 1.</p>
             ) : null}
             <FieldRow>
               <Field label="Capacity">
@@ -1085,37 +1065,6 @@ export function MapEditorPage() {
                 />
               </Field>
             </FieldRow>
-            {zoneDraft.zoneType === 'INTERSECTION' ? (
-              <FieldRow>
-                <Field label="Preferred yaw (°)">
-                  <input
-                    className={controlClass()}
-                    value={zoneDraft.preferredDirectionYawDeg}
-                    disabled={!isDraft}
-                    onChange={(e) => setZoneDraft({ ...zoneDraft, preferredDirectionYawDeg: e.target.value })}
-                  />
-                </Field>
-                <Field label="Heading tol (°)">
-                  <input
-                    className={controlClass()}
-                    value={zoneDraft.headingToleranceDeg}
-                    disabled={!isDraft}
-                    onChange={(e) => setZoneDraft({ ...zoneDraft, headingToleranceDeg: e.target.value })}
-                  />
-                </Field>
-              </FieldRow>
-            ) : null}
-            {zoneDraft.zoneType === 'OPERATIONAL_AREA' ? (
-              <Field label="Cost multiplier">
-                <input
-                  className={controlClass()}
-                  value={zoneDraft.costMultiplier}
-                  disabled={!isDraft}
-                  placeholder="optional > 0"
-                  onChange={(e) => setZoneDraft({ ...zoneDraft, costMultiplier: e.target.value })}
-                />
-              </Field>
-            ) : null}
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

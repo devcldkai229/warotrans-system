@@ -8,15 +8,9 @@ export interface EndpointTemplate {
 
 /** One entry per backend EndpointType; the labels/descriptions are UI copy. */
 export const ENDPOINT_TEMPLATES: EndpointTemplate[] = [
-  { type: 'CHARGING', title: 'Charging', description: 'Marks the location of a charging dock' },
-  { type: 'STORAGE', title: 'Storage', description: 'Marks a storage position such as a shelf row' },
-  { type: 'INBOUND', title: 'Inbound', description: 'Receiving point where Containers enter the warehouse' },
-  { type: 'OUTBOUND', title: 'Outbound', description: 'Dispatch point where Containers leave the warehouse' },
-  { type: 'PARKING', title: 'Parking', description: 'Waiting position for idle Robots' },
-  { type: 'MAINTENANCE', title: 'Maintenance', description: 'Service point for Robot maintenance' },
-  { type: 'INSPECTION', title: 'Inspection', description: 'Quality inspection transfer point' },
-  { type: 'RECOVERY', title: 'Recovery', description: 'Safe point for payload recovery transfers' },
-  { type: 'TRANSIT', title: 'Transit', description: 'Intermediate routing point' },
+  { type: 'WAYPOINT', title: 'Waypoint', description: 'Intermediate path point or general destination' },
+  { type: 'CHARGER', title: 'Charger', description: 'Charging dock for Robots' },
+  { type: 'PARK', title: 'Park', description: 'Waiting / parking position for idle Robots' },
 ]
 
 export interface ZoneTemplate {
@@ -27,10 +21,10 @@ export interface ZoneTemplate {
 
 /** One entry per backend ZoneType (rules/05). */
 export const ZONE_TEMPLATES: ZoneTemplate[] = [
-  { type: 'INTERSECTION', title: 'Intersection', description: 'Junction where Robots must coordinate right of way' },
-  { type: 'NARROW_AREA', title: 'Narrow area', description: 'Corridor that fits a limited number of Robots' },
-  { type: 'OPERATIONAL_AREA', title: 'Operational area', description: 'Area with its own speed and capacity rules' },
-  { type: 'RESTRICTED_AREA', title: 'Restricted area', description: 'Robots must not enter this area' },
+  { type: 'KEEP_OUT', title: 'Keep-out', description: 'Robots must not enter this area' },
+  { type: 'SPEED', title: 'Speed zone', description: 'Area with a required speed limit' },
+  { type: 'NO_STOP', title: 'No-stop', description: 'Robots must not stop in this area' },
+  { type: 'SINGLE_OCCUPANCY', title: 'Single-occupancy', description: 'Only one Robot may occupy this area' },
 ]
 
 export interface EdgeTemplate {

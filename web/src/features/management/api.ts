@@ -228,7 +228,7 @@ export async function listManagedLocations(): Promise<LocationListing> {
 }
 
 // A Container is stored at a shelf or an inspection area; the other Endpoint types (docks, chargers, parking...) are not.
-const STORABLE_ENDPOINT_TYPES = ['STORAGE', 'INSPECTION']
+const STORABLE_ENDPOINT_TYPES = ['WAYPOINT', 'PARK']
 
 /**
  * The enabled storage and inspection Endpoints of the warehouse's published map that no location uses yet.
