@@ -47,7 +47,7 @@ public sealed class EndpointDeleteTests(WaroTransWebApplicationFactory factory) 
         var response = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", new
         {
             name = "Dock Delete",
-            endpointType = "INBOUND",
+            endpointType = "WAYPOINT",
             x = 1.0,
             y = 2.0,
             yaw = 0.0,

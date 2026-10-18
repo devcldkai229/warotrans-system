@@ -32,7 +32,7 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
         double YawTolerance,
         bool IsEnabled);
 
-    private static object CreateBody(string name = "Receiving dock 1", string type = "INBOUND") => new
+    private static object CreateBody(string name = "Receiving dock 1", string type = "WAYPOINT") => new
     {
         name,
         endpointType = type,
@@ -72,7 +72,7 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
         return (await response.Content.ReadFromJsonAsync<MapDto>())!.Id;
     }
 
-    private async Task<EndpointDto> CreateEndpointAsync(Guid mapId, string name, string type = "INBOUND")
+    private async Task<EndpointDto> CreateEndpointAsync(Guid mapId, string name, string type = "WAYPOINT")
     {
         var response = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", CreateBody(name, type));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -90,14 +90,14 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
     {
         var mapId = await CreateDraftMapAsync();
 
-        var response = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", CreateBody("Shelf A", "STORAGE"));
+        var response = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", CreateBody("Shelf A", "WAYPOINT"));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var created = (await response.Content.ReadFromJsonAsync<EndpointDto>())!;
         Assert.Equal($"/api/navigation/endpoints/{created.Id}", response.Headers.Location?.ToString());
         Assert.Equal("EP-SHELF-A", created.Code);
         Assert.Equal("Shelf A", created.Name);
-        Assert.Equal("STORAGE", created.EndpointType);
+        Assert.Equal("WAYPOINT", created.EndpointType);
         Assert.True(created.IsEnabled);
 
         await using var connection = new NpgsqlConnection(PostgreSql.ConnectionString);
@@ -111,7 +111,7 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
         Assert.True(await reader.ReadAsync());
         Assert.Equal(mapId, reader.GetGuid(0));
         Assert.Equal("EP-SHELF-A", reader.GetString(1));
-        Assert.Equal("STORAGE", reader.GetString(2));
+        Assert.Equal("WAYPOINT", reader.GetString(2));
         Assert.Equal(12.5, reader.GetDouble(3));
         Assert.Equal(3.25, reader.GetDouble(4));
         Assert.Equal(1.57, reader.GetDouble(5));
@@ -124,9 +124,9 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
     public async Task Post_endpoint_returns_409_when_name_already_used_on_same_map()
     {
         var mapId = await CreateDraftMapAsync();
-        await CreateEndpointAsync(mapId, "Charging dock 1", "CHARGING");
+        await CreateEndpointAsync(mapId, "Charging dock 1", "CHARGER");
 
-        var response = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", CreateBody("charging dock 1", "CHARGING"));
+        var response = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", CreateBody("charging dock 1", "CHARGER"));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("endpoint_code_conflict", await ProblemCodeAsync(response));
@@ -138,8 +138,8 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
         var mapId = await CreateDraftMapAsync();
         var otherMapId = await CreateDraftMapAsync();
 
-        var first = await CreateEndpointAsync(mapId, "Outbound 01", "OUTBOUND");
-        var second = await CreateEndpointAsync(otherMapId, "Outbound 01", "OUTBOUND");
+        var first = await CreateEndpointAsync(mapId, "Outbound 01", "WAYPOINT");
+        var second = await CreateEndpointAsync(otherMapId, "Outbound 01", "WAYPOINT");
 
         Assert.Equal("EP-OUTBOUND-01", first.Code);
         Assert.Equal("EP-OUTBOUND-01", second.Code);
@@ -183,7 +183,7 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
         var mapId = await CreateDraftMapAsync();
 
         var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
-            Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", CreateBody("Parking 1", "PARKING"))));
+            Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", CreateBody("Parking 1", "PARK"))));
 
         // Losers of the race must get 409 (existence check or unique index), never 500.
         Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Created);
@@ -200,9 +200,9 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
     {
         var mapId = await CreateDraftMapAsync();
         var otherMapId = await CreateDraftMapAsync();
-        await CreateEndpointAsync(mapId, "Shelf A", "STORAGE");
-        await CreateEndpointAsync(mapId, "Charger 1", "CHARGING");
-        await CreateEndpointAsync(otherMapId, "Dock 1", "INBOUND");
+        await CreateEndpointAsync(mapId, "Shelf A", "WAYPOINT");
+        await CreateEndpointAsync(mapId, "Charger 1", "CHARGER");
+        await CreateEndpointAsync(otherMapId, "Dock 1", "WAYPOINT");
 
         var list = (await Client.GetFromJsonAsync<List<EndpointDto>>($"/api/navigation/maps/{mapId}/endpoints"))!;
 
@@ -222,7 +222,7 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
     public async Task Get_endpoint_by_id_returns_endpoint_or_404()
     {
         var mapId = await CreateDraftMapAsync();
-        var created = await CreateEndpointAsync(mapId, "Outbound 01", "OUTBOUND");
+        var created = await CreateEndpointAsync(mapId, "Outbound 01", "WAYPOINT");
 
         var found = await Client.GetFromJsonAsync<EndpointDto>($"/api/navigation/endpoints/{created.Id}");
         var missing = await Client.GetAsync($"/api/navigation/endpoints/{Guid.NewGuid()}");
@@ -236,12 +236,12 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
     public async Task Put_endpoint_updates_fields_and_keeps_code()
     {
         var mapId = await CreateDraftMapAsync();
-        var endpoint = await CreateEndpointAsync(mapId, "Dock 1", "INBOUND");
+        var endpoint = await CreateEndpointAsync(mapId, "Dock 1", "WAYPOINT");
 
         var response = await Client.PutAsJsonAsync($"/api/navigation/endpoints/{endpoint.Id}", new
         {
             name = "Charger 2",
-            endpointType = "CHARGING",
+            endpointType = "CHARGER",
             x = 20.0,
             y = 30.0,
             yaw = -1.0,
@@ -254,7 +254,7 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
         var updated = (await response.Content.ReadFromJsonAsync<EndpointDto>())!;
         Assert.Equal("EP-DOCK-1", updated.Code);
         Assert.Equal("Charger 2", updated.Name);
-        Assert.Equal("CHARGING", updated.EndpointType);
+        Assert.Equal("CHARGER", updated.EndpointType);
 
         var reloaded = await Client.GetFromJsonAsync<EndpointDto>($"/api/navigation/endpoints/{endpoint.Id}");
         Assert.Equal(updated, reloaded);
@@ -266,13 +266,13 @@ public sealed class EndpointEndpointTests(WaroTransWebApplicationFactory factory
     public async Task Put_endpoint_returns_400_when_map_published()
     {
         var mapId = await CreateDraftMapAsync();
-        var endpoint = await CreateEndpointAsync(mapId, "Dock 1", "INBOUND");
+        var endpoint = await CreateEndpointAsync(mapId, "Dock 1", "WAYPOINT");
         (await Client.PostAsync($"/api/navigation/maps/{mapId}/publish", null)).EnsureSuccessStatusCode();
 
         var response = await Client.PutAsJsonAsync($"/api/navigation/endpoints/{endpoint.Id}", new
         {
             name = "Changed",
-            endpointType = "INBOUND",
+            endpointType = "WAYPOINT",
             x = 1.0,
             y = 1.0,
             yaw = 0.0,

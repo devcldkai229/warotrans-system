@@ -103,23 +103,10 @@ export interface ListWarehousesResponse {
 export type MapStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
 /** `Navigation/Enums/EndpointType.cs`. */
-export type EndpointType =
-  | 'INBOUND'
-  | 'STORAGE'
-  | 'OUTBOUND'
-  | 'PARKING'
-  | 'CHARGING'
-  | 'MAINTENANCE'
-  | 'INSPECTION'
-  | 'RECOVERY'
-  | 'TRANSIT';
+export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK';
 
 /** `Navigation/Enums/ZoneType.cs`. */
-export type ZoneType =
-  | 'INTERSECTION'
-  | 'NARROW_AREA'
-  | 'OPERATIONAL_AREA'
-  | 'RESTRICTED_AREA';
+export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY';
 
 /** `Navigation/Features/GetEndpoint/Response.cs` (also the `EndpointListItemDto` shape). */
 export interface EndpointResponse {

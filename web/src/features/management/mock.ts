@@ -72,7 +72,7 @@ export const STORAGE_LOCATIONS: StorageLocationView[] = [
 
 /** Endpoints that can still be given to a new location. */
 export const ENDPOINT_OPTIONS = SCENE_ENDPOINTS.filter(
-  (endpoint) => endpoint.endpointType === 'STORAGE' || endpoint.endpointType === 'INSPECTION',
+  (endpoint) => endpoint.endpointType === 'WAYPOINT' || endpoint.endpointType === 'PARK',
 )
 
 /* ---------------------------------------------------------------------------------------- containers */

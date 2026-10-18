@@ -5,7 +5,7 @@ using WaroTrans.Navigation.Enums;
 namespace WaroTrans.Navigation.Geometry;
 
 /// <summary>
-/// Validates type-specific Zone.Policy JSON against existing ZoneType enum values only.
+/// Validates type-specific Zone.Policy JSON against ZoneType enum values.
 /// </summary>
 public static class ZonePolicyValidator
 {
@@ -37,103 +37,40 @@ public static class ZonePolicyValidator
                 "zone_policy_invalid");
         }
 
+        // Type-specific extras are no longer required in schema v1; keep the argument for API stability.
+        _ = policy;
+
         switch (zoneType)
         {
-            case ZoneType.RESTRICTED_AREA:
+            case ZoneType.KEEP_OUT:
+            case ZoneType.NO_STOP:
                 // No extra policy required.
                 break;
 
-            case ZoneType.NARROW_AREA:
-                if (capacity != 1)
-                {
-                    throw new DomainValidationException(
-                        "NARROW_AREA zones require Capacity = 1.",
-                        "zone_policy_invalid");
-                }
-
+            case ZoneType.SPEED:
                 if (maxSpeed is null)
                 {
                     throw new DomainValidationException(
-                        "NARROW_AREA zones require MaxSpeed (meters/second).",
+                        "SPEED zones require MaxSpeed (meters/second).",
                         "zone_policy_invalid");
                 }
 
                 break;
 
-            case ZoneType.INTERSECTION:
-                ValidateIntersectionPolicy(policy);
-                break;
+            case ZoneType.SINGLE_OCCUPANCY:
+                if (capacity != 1)
+                {
+                    throw new DomainValidationException(
+                        "SINGLE_OCCUPANCY zones require Capacity = 1.",
+                        "zone_policy_invalid");
+                }
 
-            case ZoneType.OPERATIONAL_AREA:
-                ValidateOperationalPolicy(policy);
                 break;
 
             default:
                 throw new DomainValidationException(
                     $"Unsupported ZoneType '{zoneType}'.",
                     "zone_policy_invalid");
-        }
-    }
-
-    private static void ValidateIntersectionPolicy(JsonDocument? policy)
-    {
-        if (policy is null)
-        {
-            return;
-        }
-
-        var root = policy.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            throw new DomainValidationException("INTERSECTION policy must be a JSON object.", "zone_policy_invalid");
-        }
-
-        if (root.TryGetProperty("preferredDirectionYaw", out var yaw))
-        {
-            if (yaw.ValueKind != JsonValueKind.Number || !double.IsFinite(yaw.GetDouble()))
-            {
-                throw new DomainValidationException(
-                    "preferredDirectionYaw must be a finite number (radians).",
-                    "zone_policy_invalid");
-            }
-        }
-
-        if (root.TryGetProperty("headingToleranceRadians", out var tol))
-        {
-            var value = tol.GetDouble();
-            if (tol.ValueKind != JsonValueKind.Number || !double.IsFinite(value) || value < 0)
-            {
-                throw new DomainValidationException(
-                    "headingToleranceRadians must be a finite number >= 0.",
-                    "zone_policy_invalid");
-            }
-        }
-    }
-
-    private static void ValidateOperationalPolicy(JsonDocument? policy)
-    {
-        if (policy is null)
-        {
-            return;
-        }
-
-        var root = policy.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            throw new DomainValidationException("OPERATIONAL_AREA policy must be a JSON object.", "zone_policy_invalid");
-        }
-
-        if (!root.TryGetProperty("costMultiplier", out var multiplier))
-        {
-            return;
-        }
-
-        var value = multiplier.GetDouble();
-        if (multiplier.ValueKind != JsonValueKind.Number || !double.IsFinite(value) || value <= 0)
-        {
-            throw new DomainValidationException(
-                "costMultiplier must be a finite number greater than 0.",
-                "zone_policy_invalid");
         }
     }
 }

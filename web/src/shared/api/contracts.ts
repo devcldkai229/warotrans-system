@@ -100,18 +100,9 @@ export type WorkflowStatus = 'DRAFT' | 'PUBLISHED'
 
 export type MapStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 
-export type ZoneType = 'INTERSECTION' | 'NARROW_AREA' | 'OPERATIONAL_AREA' | 'RESTRICTED_AREA'
+export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY'
 
-export type EndpointType =
-  | 'INBOUND'
-  | 'STORAGE'
-  | 'OUTBOUND'
-  | 'PARKING'
-  | 'CHARGING'
-  | 'MAINTENANCE'
-  | 'INSPECTION'
-  | 'RECOVERY'
-  | 'TRANSIT'
+export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK'
 
 export type EdgeDirection = 'ONE_WAY' | 'BIDIRECTIONAL'
 
