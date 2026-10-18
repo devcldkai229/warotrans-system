@@ -1,818 +1,143 @@
-import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {
-  ArrowRight,
-  Check,
-  Layers,
-  MapPin,
-  Plus,
-  Rocket,
-  Trash2,
-} from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View } from 'react-native';
+import { OperationalScreen } from '../../app/shell/OperationalScreen';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { Button } from '../../shared/components/Button';
-import { Input } from '../../shared/components/Input';
-import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { colors } from '../../shared/theme/colors';
-import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
-import { Text } from '../../shared/ui/Text';
-import { toast } from '../../shared/context/ToastContext';
-import { triggerHaptic } from '../../shared/utils/haptics';
-import {
-  createTransportRequest,
-  queueTransportRequest,
-  listPublishedWorkflows,
-  listWarehouses,
-  getActiveMapVersion,
-  getMapVersionDetail,
-  listContainers,
-  WarehouseListItem,
-  EndpointDto,
-  ContainerListItem,
-  WorkflowListItem,
-  QueuedJobResponse,
-} from '../../shared/api';
-import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
-import { WorkflowTemplateCard } from './WorkflowTemplateCard';
+import { listWarehouses, listContainers, listStorageLocations } from '../../shared/api/warehouseApi';
+import { getActiveMapVersion, getMapVersionDetail } from '../../shared/api/navigationApi';
+import { listPublishedWorkflows, getWorkflowRequestInputSchema } from '../../shared/api/workflowApi';
+import { getTransportRequest, CreateTransportRequestResponse, QueueTransportRequestResponse } from '../../shared/api/transportApi';
+import { listRobots } from '../../shared/api/fleetApi';
+import { executeTransportLifecycle } from './transportLifecycle';
+import { useRemoteData } from '../../shared/hooks/useRemoteData';
+import { useRealtime } from '../../shared/realtime';
+import type { JobDetailResponse } from '../../shared/types/contracts';
+import { Button, Card, ChoiceField, ErrorBanner, StatusPill, Text, TextField } from '../../shared/ui';
+import { coerceWorkflowInputs } from './workflowInputs';
 
-interface SlotItem {
-  slotNo: 1 | 2 | 3;
-  container: string;
-  product: string;
-  source: string;
-  destination: string;
-  qty: string;
-}
-
-const PRESET_PRODUCTS = [
-  { name: 'Electronic Components', container: 'BOX-101', defaultQty: '45', source: 'DOCK-IN-01', destination: 'RACK-A-02 · L2 · Bin 03' },
-  { name: 'Control Module (CM-3100)', container: 'BOX-102', defaultQty: '25', source: 'DOCK-IN-01', destination: 'RACK-B-04 · L1 · Bin 02' },
-  { name: 'Sensor Array (SA-8820)', container: 'BOX-103', defaultQty: '20', source: 'RACK-D-01', destination: 'RACK-A-01 · L3 · Bin 01' },
-];
-
+import { buildTransportMovements, MovementDraft } from './transportMovements';
+const emptyMovement = (): MovementDraft => ({ sourceEndpointId: '', destinationEndpointId: '', destinationStorageLocationId: '', destinationLevel: '' });
 export function TransportCreationScreen() {
-  const { goBack, navigate, params } = useNavigation();
-
-  const initialWorkflowName = params?.workflow || 'Inbound Putaway';
-  const initialContainer = params?.container || 'BOX-101';
-  const initialProduct = params?.product || 'Electronic Components';
-  const initialSource = params?.source || 'DOCK-IN-01';
-
-  // Step 1: Workflow Pick, Step 2: Configure Slots & Route, Step 3: Success
-  const [step, setStep] = useState<number>(params?.workflow ? 2 : 1);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowItem>(
-    WORKFLOWS.find((w) => w.name === initialWorkflowName) || WORKFLOWS[0]
-  );
-
-  const [slots, setSlots] = useState<SlotItem[]>([
-    {
-      slotNo: 1,
-      container: initialContainer,
-      product: initialProduct,
-      source: initialSource,
-      destination: 'RACK-A-02 · Level 2 · Bin 03',
-      qty: params?.qty || '45',
-    },
-  ]);
-  const [activeSlotIdx, setActiveSlotIdx] = useState<number>(0);
-
-  // Real backend context
-  const [warehouses, setWarehouses] = useState<WarehouseListItem[]>([]);
-  const [activeWarehouseId, setActiveWarehouseId] = useState<string>('');
-  const [activeMapVersionId, setActiveMapVersionId] = useState<string>('');
-  const [endpoints, setEndpoints] = useState<EndpointDto[]>([]);
-  const [containers, setContainers] = useState<ContainerListItem[]>([]);
-  const [publishedWorkflows, setPublishedWorkflows] = useState<WorkflowListItem[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [dispatchedOrder, setDispatchedOrder] = useState<{
-    requestCode: string;
-    jobs: QueuedJobResponse[];
-    carrier: string;
-  } | null>(null);
-
+  const { params, navigate } = useNavigation();
+  const repeatId = typeof params.repeatRequestId === 'string' ? params.repeatRequestId : '';
+  const catalog = useRemoteData(async () => {
+    const [warehouses, workflows, repeat] = await Promise.all([listWarehouses({ isActive: true }), listPublishedWorkflows(), repeatId ? getTransportRequest(repeatId) : Promise.resolve(null)]);
+    return { warehouses: warehouses.items, workflows: workflows.items, repeat };
+  }, [repeatId]);
+  const [warehouseId, setWarehouseId] = useState('');
+  const [workflowId, setWorkflowId] = useState('');
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [movements, setMovements] = useState<Record<string, MovementDraft>>({});
+  const [note, setNote] = useState('');
+  const [robotId, setRobotId] = useState('');
+  const [request, setRequest] = useState<CreateTransportRequestResponse | null>(null);
+  const [queued, setQueued] = useState<QueueTransportRequestResponse | null>(null);
+  const [started, setStarted] = useState<Record<string, JobDetailResponse>>({});
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState('');
   useEffect(() => {
-    let isMounted = true;
-    async function loadBackendContext() {
-      try {
-        const [wfRes, whRes] = await Promise.allSettled([
-          listPublishedWorkflows(),
-          listWarehouses({ isActive: true }),
-        ]);
-
-        if (!isMounted) return;
-        if (wfRes.status === 'fulfilled' && wfRes.value?.items) {
-          setPublishedWorkflows(wfRes.value.items);
-        }
-
-        let whId = '';
-        if (whRes.status === 'fulfilled' && whRes.value?.items?.length) {
-          setWarehouses(whRes.value.items);
-          whId = whRes.value.items[0].id;
-          setActiveWarehouseId(whId);
-        }
-
-        if (whId) {
-          const [activeMap, contRes] = await Promise.allSettled([
-            getActiveMapVersion(whId),
-            listContainers({ warehouseId: whId, take: 50 }),
-          ]);
-
-          if (!isMounted) return;
-          if (contRes.status === 'fulfilled' && contRes.value?.items) {
-            setContainers(contRes.value.items);
-          }
-
-          if (activeMap.status === 'fulfilled' && activeMap.value?.id) {
-            setActiveMapVersionId(activeMap.value.id);
-            const mapDetail = await getMapVersionDetail(activeMap.value.id).catch(() => null);
-            if (isMounted && mapDetail?.endpoints) {
-              setEndpoints(mapDetail.endpoints);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Backend context loading encountered error, using fallback presets:', err);
-      }
-    }
-
-    loadBackendContext();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const handleSelectWorkflow = (wf: WorkflowItem) => {
-    setSelectedWorkflow(wf);
-    if (wf.id === 'replenishment') {
-      navigate('replenishment');
-    } else if (wf.id === 'point-to-point') {
-      navigate('point_to_point');
-    } else if (wf.id === 'block-path') {
-      navigate('block_path');
-    } else {
-      setStep(2);
-    }
-  };
-
-  const handleAddSlot = () => {
-    if (slots.length >= 3) return;
-    const nextSlotNo = (slots.length + 1) as 1 | 2 | 3;
-    const preset = PRESET_PRODUCTS[(nextSlotNo - 1) % PRESET_PRODUCTS.length];
-    setSlots([
-      ...slots,
-      {
-        slotNo: nextSlotNo,
-        container: `BOX-10${nextSlotNo}`,
-        product: preset.name,
-        source: selectedWorkflow.id === 'inbound' ? 'DOCK-IN-01' : preset.source,
-        destination: preset.destination,
-        qty: preset.defaultQty,
-      },
+    if (!catalog.data) return;
+    const { repeat, warehouses, workflows } = catalog.data;
+    setWarehouseId(repeat?.warehouseId ?? params.warehouseId ?? warehouses[0]?.id ?? '');
+    const requestedWorkflow = workflows.find(w => w.id === params.workflowId || w.code === params.workflow);
+    setWorkflowId(repeat?.workflowId ?? requestedWorkflow?.id ?? workflows[0]?.id ?? '');
+    setNote(repeat?.note ?? '');
+    setInputs(Object.fromEntries(Object.entries(repeat?.workflowInputs ?? {}).map(([k,v]) => [k, String(v ?? '')])));
+    setMovements(Object.fromEntries(repeat?.details.map(d => [d.containerId, { sourceEndpointId: '', destinationEndpointId: d.destinationEndpointId, destinationStorageLocationId: d.destinationStorageLocationId ?? '', destinationLevel: d.destinationLevelNo == null ? '' : String(d.destinationLevelNo) }]) ?? []));
+    if (typeof params.containerId === 'string') setMovements(previous => ({ ...previous, [params.containerId]: emptyMovement() }));
+  }, [catalog.data, params.workflowId, params.workflow, params.containerId]);
+  const resources = useRemoteData(async () => {
+    if (!warehouseId) return null;
+    const [activeMap, containers, locations] = await Promise.all([
+      getActiveMapVersion(warehouseId), listContainers({ warehouseId, eligibleOnly: true, take: 100 }),
+      listStorageLocations({ warehouseId, activeOnly: true }),
     ]);
-    setActiveSlotIdx(slots.length);
-  };
-
-  const handleRemoveSlot = (index: number) => {
-    if (slots.length <= 1) return;
-    const filtered = slots
-      .filter((_, i) => i !== index)
-      .map((s, idx) => ({ ...s, slotNo: (idx + 1) as 1 | 2 | 3 }));
-    setSlots(filtered);
-    setActiveSlotIdx(Math.max(0, index - 1));
-  };
-
-  const handleUpdateActiveSlot = (field: keyof SlotItem, val: string) => {
-    const updated = [...slots];
-    const current = { ...updated[activeSlotIdx], [field]: val };
-
-    // Autofill product info if matching container barcode is known
-    if (field === 'container' && val.trim()) {
-      const match = containers.find((c) => c.barcode.toLowerCase() === val.trim().toLowerCase());
-      if (match) {
-        current.product = match.productName || match.productSku;
-        if (match.currentEndpointId) {
-          const ep = endpoints.find((e) => e.id === match.currentEndpointId);
-          if (ep) current.source = ep.code;
-        }
-      }
-    }
-
-    updated[activeSlotIdx] = current;
-    setSlots(updated);
-  };
-
-  const handleConfirmDispatch = async () => {
-    setIsSubmitting(true);
+    const map = activeMap ? await getMapVersionDetail(activeMap.id) : null;
+    return { map, containers: containers.items.filter(c => ['CREATED', 'PACKED', 'STORED'].includes(c.status)), locations: locations.items };
+  }, [warehouseId]);
+  const schema = useRemoteData(() => workflowId ? getWorkflowRequestInputSchema(workflowId) : Promise.resolve(null), [workflowId]);
+  const { robotConnectivity, resyncVersion, lastJobUpdate } = useRealtime();
+  const fleet = useRemoteData(() => warehouseId ? listRobots({ warehouseId, isEnabled: true }) : Promise.resolve({ items: [], total: 0 }), [warehouseId, robotConnectivity, resyncVersion, lastJobUpdate]);
+  const map = resources.data?.map;
+  const endpoints = map?.endpoints.filter(e => e.isEnabled) ?? [];
+  const locations = resources.data?.locations ?? [];
+  const containers = resources.data?.containers ?? [];
+  const robots = fleet.data?.items.filter(r => r.currentMapVersionId === map?.id && r.isEnabled && r.isOnline && r.status === 'AVAILABLE') ?? [];
+  const selectedIds = Object.keys(movements);
+  const readonly = busy || !!request;
+  const patchMovement = (id: string, patch: Partial<MovementDraft>) => setMovements(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const execute = async (run: boolean, queueOnly = false) => {
+    if (lock.current) return;
+    lock.current = true; setBusy(true); setError(null);
     try {
-      const matchedWf = publishedWorkflows.find(
-        (w) => w.code.toUpperCase() === selectedWorkflow.code.toUpperCase()
-      );
-      const workflowId = matchedWf?.id || '00000000-0000-0000-0002-000000000001';
-      const whId = activeWarehouseId || '00000000-0000-0000-0000-000000000001';
-      const mvId = activeMapVersionId || '00000000-0000-0000-0001-000000000001';
-
-      const details = slots.map((s, idx) => {
-        const foundContainer = containers.find(
-          (c) => c.barcode.trim().toUpperCase() === s.container.trim().toUpperCase()
-        );
-        const containerId =
-          foundContainer?.id || `00000000-0000-0000-0003-00000000000${idx + 1}`;
-
-        const foundSrc = endpoints.find(
-          (e) => e.code.trim().toUpperCase() === s.source.trim().toUpperCase()
-        );
-        const sourceEndpointId =
-          foundSrc?.id || '00000000-0000-0000-0004-000000000001';
-
-        const foundDst = endpoints.find(
-          (e) =>
-            e.code.trim().toUpperCase() === s.destination.trim().toUpperCase() ||
-            s.destination.toUpperCase().includes(e.code.toUpperCase())
-        );
-        const destinationEndpointId =
-          foundDst?.id || '00000000-0000-0000-0004-000000000002';
-
-        return {
-          sequenceNo: idx + 1,
-          containerId,
-          sourceStorageLocationId: null,
-          sourceEndpointId,
-          sourceLevelNo: null,
-          destinationStorageLocationId: null,
-          destinationEndpointId,
-          destinationLevelNo: 2,
-        };
-      });
-
-      const createPayload = {
-        warehouseId: whId,
-        mapVersionId: mvId,
-        workflowId,
-        workflowInputs: {
-          operator: 'Staff Operator',
-          priority: 'NORMAL',
+      if (!request && (!map || !schema.data || !catalog.data?.workflows.some(w => w.id === workflowId) || !catalog.data.warehouses.some(w => w.id === warehouseId))) throw new Error('Select An Active Warehouse, Published Workflow And Active Map.');
+      const result = await executeTransportLifecycle({
+        mode: run ? 'run' : queueOnly ? 'queue' : 'submit',
+        progress: { request, queued, started }, robotId,
+        createBody: () => {
+          if (!map || !schema.data) throw new Error('Active Map And Workflow Input Schema Are Required.');
+          const details = buildTransportMovements(movements, containers, locations, endpoints, schema.data.movementInputs);
+          if (!details.length) throw new Error('Select At Least One Eligible Container.');
+          return { warehouseId, mapVersionId: map.id, workflowId,
+            workflowInputs: coerceWorkflowInputs(schema.data.workflowInputs, inputs), note: note.trim() || null, details };
         },
-        note: `Staff app dispatch: ${selectedWorkflow.name} (${slots.length} totes)`,
-        details,
-      };
-
-      let requestCode = `TR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      let jobs: QueuedJobResponse[] = [];
-
-      try {
-        const created = await createTransportRequest(createPayload);
-        requestCode = created.requestCode || requestCode;
-
-        try {
-          const queued = await queueTransportRequest(created.id);
-          if (queued.jobs && queued.jobs.length > 0) {
-            jobs = queued.jobs;
-          }
-          if (queued.requestCode) {
-            requestCode = queued.requestCode;
-          }
-        } catch (queueErr) {
-          console.warn('Queue request API call returned error:', queueErr);
-        }
-        toast.success(`Dispatched ${requestCode} successfully!`);
-      } catch (apiErr) {
-        console.warn('Backend API unreachable, simulating dispatch:', apiErr);
-        toast.warning(`Simulated dispatch: ${requestCode} (Backend offline)`);
-        jobs = [
-          {
-            jobId: `JOB-${Math.floor(1000 + Math.random() * 9000)}`,
-            jobNo: 'JOB-01',
-            batchKey: 'BATCH-ALPHA',
-            jobContainerCount: slots.length,
-            jobTaskCount: slots.length * 2,
-            jobStepCount: slots.length * 4,
-          },
-        ];
-      }
-
-      triggerHaptic('success');
-      setDispatchedOrder({
-        requestCode,
-        jobs,
-        carrier: 'AMR-01 (Online · 85% Battery)',
+        onProgress: progress => { setRequest(progress.request); setQueued(progress.queued); setStarted(progress.started); },
+        onPhase: setPhase,
       });
-      setStep(3);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to dispatch mission');
-    } finally {
-      setIsSubmitting(false);
-    }
+      setPhase(result);
+      if (run) { setRobotId(''); void fleet.reload(); }
+    } catch (error) { setError(error instanceof Error ? error.message : 'Request Failed'); }
+    finally { lock.current = false; setBusy(false); }
   };
-
-  const currentSlot = slots[activeSlotIdx] || slots[0];
-
-  return (
-    <View style={styles.container}>
-      <SubScreenHeader
-        label={
-          step === 1
-            ? 'New Transport Request'
-            : selectedWorkflow.name
-        }
-        title={
-          step === 1
-            ? 'Select Workflow'
-            : step === 2
-            ? 'Configure Mission Payload'
-            : 'Dispatch Confirmed'
-        }
-        onBack={() => {
-          if (step === 2 && !params?.workflow) {
-            setStep(1);
-          } else {
-            goBack();
-          }
-        }}
-      />
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Step 1: Workflow Template Selection Grid */}
-        {step === 1 && (
-          <View style={{ gap: 14 }}>
-            <View style={styles.workflowIntro}>
-              <Text variant="headline" style={styles.workflowIntroTitle}>
-                Available Mission Templates
-              </Text>
-            </View>
-
-            <View style={styles.workflowGrid}>
-              {WORKFLOWS.map((wf) => (
-                <View key={wf.id} style={styles.workflowGridItem}>
-                  <WorkflowTemplateCard
-                    workflow={wf}
-                    onSelect={handleSelectWorkflow}
-                  />
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Step 2: Multi-Slot Chassis Dispatch Configuration */}
-        {step === 2 && (
-          <View style={{ gap: 16 }}>
-            {/* Workflow Banner */}
-            <View style={styles.flowBanner}>
-              <View style={styles.flowBannerTop}>
-                <View style={styles.flowBadge}>
-                  <Text variant="caption" color={colors.primaryText} style={styles.flowBadgeText}>
-                    {selectedWorkflow.category}
-                  </Text>
-                </View>
-                <Text variant="headline" numberOfLines={1} style={styles.flowTitle}>
-                  {selectedWorkflow.name}
-                </Text>
-              </View>
-              <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-                Template Code: {selectedWorkflow.code}
-              </Text>
-            </View>
-
-            {/* Flatbed 3-Slot Selector */}
-            <View style={styles.deckCard}>
-              <View style={styles.deckHeader}>
-                <View style={styles.deckHeaderLeft}>
-                  <Layers size={16} color={colors.primary} />
-                  <Text variant="bodyMedium" style={styles.deckTitle}>
-                    AMR Flatbed 3-Slot Payload
-                  </Text>
-                </View>
-                <View style={styles.deckSlotsBadge}>
-                  <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                    {slots.length} / 3 Trays Active
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.slotsSelectorRow}>
-                {slots.map((s, idx) => {
-                  const isActive = activeSlotIdx === idx;
-                  return (
-                    <Pressable
-                      key={s.slotNo}
-                      onPress={() => setActiveSlotIdx(idx)}
-                      style={[
-                        styles.slotTab,
-                        isActive && styles.slotTabActive,
-                      ]}
-                    >
-                      <Text
-                        variant="caption"
-                        color={isActive ? colors.textPrimary : colors.textMuted}
-                        style={[styles.slotTabLabel, isActive && styles.slotTabLabelActive]}
-                      >
-                        Slot {s.slotNo}
-                      </Text>
-                      <Text
-                        variant="caption"
-                        color={isActive ? colors.textPrimary : colors.textSecondary}
-                        style={[styles.slotTabCode, isActive && styles.slotTabCodeActive]}
-                      >
-                        {s.container}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-
-                {slots.length < 3 && (
-                  <Pressable onPress={handleAddSlot} style={styles.addSlotBtn}>
-                    <Plus size={15} color={colors.primary} />
-                    <Text variant="caption" color={colors.primary} style={styles.addSlotText}>
-                      + Add Tote
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-
-            {/* Active Slot Configuration Card */}
-            <View style={styles.configCard}>
-              <View style={styles.slotConfigHeader}>
-                <Text variant="headline" style={styles.slotConfigTitle}>
-                  Configuring Tray Slot {currentSlot.slotNo}
-                </Text>
-                {slots.length > 1 && (
-                  <Pressable
-                    onPress={() => handleRemoveSlot(activeSlotIdx)}
-                    style={styles.deleteSlotBtn}
-                    accessibilityLabel={`Remove Slot ${currentSlot.slotNo}`}
-                  >
-                    <Trash2 size={16} color={colors.danger} />
-                  </Pressable>
-                )}
-              </View>
-
-              <Input
-                label="Container Barcode (Tote ID)"
-                value={currentSlot.container}
-                onChangeText={(v) => handleUpdateActiveSlot('container', v)}
-                placeholder="e.g. BOX-101"
-              />
-
-              <Input
-                label="Product Cargo SKU"
-                value={currentSlot.product}
-                onChangeText={(v) => handleUpdateActiveSlot('product', v)}
-                placeholder="e.g. Electronic Components"
-              />
-
-              <Input
-                label="Pickup Source Station"
-                value={currentSlot.source}
-                onChangeText={(v) => handleUpdateActiveSlot('source', v)}
-                placeholder="e.g. DOCK-IN-01"
-              />
-
-              <Input
-                label="Dropoff Destination Location"
-                value={currentSlot.destination}
-                onChangeText={(v) => handleUpdateActiveSlot('destination', v)}
-                placeholder="e.g. RACK-A-02 · Level 2 · Bin 03"
-              />
-
-              <Input
-                label="Cargo Quantity in Tote"
-                value={currentSlot.qty}
-                onChangeText={(v) => handleUpdateActiveSlot('qty', v)}
-                keyboardType="numeric"
-                placeholder="e.g. 45"
-              />
-            </View>
-
-            <Button
-              label={isSubmitting ? 'Queueing Mission...' : 'Dispatch Mission'}
-              loading={isSubmitting}
-              disabled={isSubmitting}
-              icon={<Rocket size={18} color="#ffffff" />}
-              onPress={handleConfirmDispatch}
-              variant="primary"
-              size="lg"
-            />
-          </View>
-        )}
-
-        {/* Step 3: Success Confirmation Screen */}
-        {step === 3 && (
-          <View style={styles.successCard}>
-            <View style={styles.successIconBadge}>
-              <Check size={28} color="#ffffff" strokeWidth={2.8} />
-            </View>
-
-            <Text variant="title" style={styles.successTitle}>
-              Transport Mission Dispatched
-            </Text>
-            <Text variant="caption" color={colors.textSecondary} style={styles.successSub}>
-              {slots.length} container{slots.length !== 1 ? 's' : ''} assigned to autonomous routing.
-            </Text>
-
-            <View style={styles.receiptBox}>
-              <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Dispatch Order:</Text>
-                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
-                  {dispatchedOrder?.requestCode || 'TR-2049'}
-                </Text>
-              </View>
-              <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Workflow:</Text>
-                <Text variant="caption" color={colors.primary} style={styles.receiptHighlight}>
-                  {selectedWorkflow.name}
-                </Text>
-              </View>
-              <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Assigned Carrier:</Text>
-                <Text variant="caption" color={colors.success} style={styles.receiptSuccess}>
-                  {dispatchedOrder?.carrier || 'AMR Fleet (Online)'}
-                </Text>
-              </View>
-              <View style={styles.receiptRow}>
-                <Text variant="caption" color={colors.textSecondary}>Payload Slots:</Text>
-                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
-                  {slots.length} Containers Loaded
-                </Text>
-              </View>
-              <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                <Text variant="caption" color={colors.textSecondary}>First Waypoint:</Text>
-                <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
-                  {slots[0].destination}
-                </Text>
-              </View>
-              {dispatchedOrder?.jobs && dispatchedOrder.jobs.length > 0 && (
-                <View style={[styles.receiptRow, styles.receiptBorderTop]}>
-                  <Text variant="caption" color={colors.textSecondary}>Queued Jobs:</Text>
-                  <Text variant="caption" color={colors.primary} style={styles.receiptVal}>
-                    {dispatchedOrder.jobs.map((j) => j.jobNo || j.jobId).join(', ')}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.successActions}>
-              <Button
-                label="Track on Live Map"
-                icon={<MapPin size={16} color="#ffffff" />}
-                onPress={() =>
-                  navigate('live_map', {
-                    robotId: 'AMR-01',
-                    jobId:
-                      dispatchedOrder?.jobs?.[0]?.jobId ||
-                      dispatchedOrder?.requestCode ||
-                      'TR-2049',
-                  })
-                }
-                variant="primary"
-                size="lg"
-              />
-              <Button
-                label="View in Transport History"
-                onPress={() => navigate('transport_history')}
-                variant="outline"
-                size="md"
-              />
-              <Button
-                label="Back to Transport Hub"
-                onPress={goBack}
-                variant="secondary"
-                size="md"
-              />
-            </View>
-          </View>
-        )}
-      </ScrollView>
-    </View>
-  );
+  return <OperationalScreen title="Create Transport Request" loading={catalog.loading || resources.loading || schema.loading} error={catalog.error ?? resources.error ?? schema.error ?? fleet.error}>
+    <Text>Create A Request, Queue Its Jobs, Then Start A Job On A Robot.</Text>
+    <ChoiceField label="Active Warehouse" value={warehouseId} disabled={readonly} options={catalog.data?.warehouses.map(w => ({ value: w.id, label: `${w.code} · ${w.name}` })) ?? []}
+      onChange={id => { setWarehouseId(id); setMovements({}); setRobotId(''); }} />
+    <ChoiceField label="Published Workflow" value={workflowId} disabled={readonly} options={catalog.data?.workflows.map(w => ({ value: w.id, label: `${w.name} · v${w.versionNo}` })) ?? []}
+      onChange={id => { setWorkflowId(id); setInputs({}); }} />
+    <Text variant="caption">Active Map: {map?.name ?? 'No Active Map Available'}</Text>
+    {catalog.data?.repeat && map && catalog.data.repeat.mapVersionId !== map.id && <Text color="warningText">The Previous Request Used A Different Map. Review Every Movement Before Submitting.</Text>}
+    {schema.data?.workflowInputs.map(field => field.dataType === 'BOOLEAN'
+      ? <ChoiceField key={field.key} label={`${field.label}${field.required ? ' (Required)' : ''}`} value={inputs[field.key] ?? ''} options={[{ value: '', label: 'Unspecified' }, { value: 'true', label: 'True' }, { value: 'false', label: 'False' }]}
+        disabled={readonly} onChange={value => setInputs(prev => ({ ...prev, [field.key]: value }))} />
+      : <TextField key={field.key} label={`${field.label}${field.required ? ' (Required)' : ''}`} hint={field.description ?? field.dataType} value={inputs[field.key] ?? ''}
+        keyboardType={field.dataType === 'INTEGER' || field.dataType === 'DECIMAL' ? 'numeric' : 'default'} editable={!readonly}
+        onChangeText={value => setInputs(prev => ({ ...prev, [field.key]: value }))} />)}
+    <Card gap={12}>
+      <Text variant="headline">Eligible Containers</Text>
+      {!containers.length && <Text>No Eligible Containers Reported</Text>}
+      {containers.map(c => <Button key={c.id} title={`${selectedIds.includes(c.id) ? '✓ ' : ''}${c.barcode} · ${c.productSku}`} variant="outline" disabled={readonly} onPress={() => setMovements(prev => {
+        const next = { ...prev }; if (next[c.id]) delete next[c.id]; else next[c.id] = emptyMovement(); return next;
+      })} />)}
+    </Card>
+    {selectedIds.map(id => {
+      const c = containers.find(c => c.id === id); const draft = movements[id];
+      const sourceEndpointId = c?.currentEndpointId ?? locations.find(l => l.id === c?.currentStorageLocationId)?.endpointId;
+      return <Card key={id} gap={12}>
+        <Text variant="headline">{c?.barcode ?? params.barcode ?? id}</Text>
+        <Text>Current Location: {c?.currentStorageLocationCode ?? endpoints.find(e => e.id === sourceEndpointId)?.name ?? 'Unspecified'}{c?.currentLevelNo != null ? ` · Level ${c.currentLevelNo}` : ''}</Text>
+        {!sourceEndpointId && <ChoiceField label="Source Endpoint (Required)" disabled={readonly || !!c?.currentStorageLocationId} value={draft.sourceEndpointId} options={endpoints.map(e => ({ value: e.id, label: `${e.code} · ${e.name}` }))} onChange={value => patchMovement(id, { sourceEndpointId: value })} />}
+        <ChoiceField label="Destination Endpoint" disabled={readonly} value={draft.destinationEndpointId} options={endpoints.map(e => ({ value: e.id, label: `${e.code} · ${e.name}` }))}
+          onChange={value => patchMovement(id, { destinationEndpointId: value, destinationStorageLocationId: '', destinationLevel: '' })} />
+        <ChoiceField label="Destination Storage Location (Optional)" disabled={readonly} value={draft.destinationStorageLocationId}
+          options={[{ value: '', label: 'Endpoint Only' }, ...locations.filter(l => l.endpointId === draft.destinationEndpointId).map(l => ({ value: l.id, label: `${l.code} · ${l.name}` }))]}
+          onChange={value => patchMovement(id, { destinationStorageLocationId: value })} />
+        <TextField label="Destination Level (Optional)" value={draft.destinationLevel} editable={!readonly} keyboardType="number-pad" onChangeText={value => patchMovement(id, { destinationLevel: value })} />
+        {!request && <Button title="Remove Container" variant="ghost" disabled={busy} onPress={() => setMovements(prev => { const next = { ...prev }; delete next[id]; return next; })} />}
+      </Card>;
+    })}
+    <TextField label="Request Note (Optional)" value={note} onChangeText={setNote} editable={!readonly} multiline />
+    <ChoiceField label="Robot For Start" value={robotId} disabled={busy} options={robots.map(r => ({ value: r.id, label: `${r.code} · ${r.batteryPercent}%` }))} onChange={setRobotId} />
+    <ErrorBanner message={error} />
+    {!!phase && <Text>{phase}</Text>}
+    {request && <Card gap={10}><Text variant="headline">{request.requestCode}</Text><StatusPill status={queued?.status ?? request.status} />
+      <Button title="View Request & Jobs" variant="outline" onPress={() => navigate('transport_history', { requestId: request.id })} />
+      {queued?.jobs.map(j => <Button key={j.jobId} title={`${j.jobNo}${started[j.jobId] ? ' · Started' : ' · View Job'}`} variant="outline" onPress={() => navigate('job_detail', { jobId: j.jobId })} />)}
+    </Card>}
+    {!request && <Button title="Submit Request" loading={busy} disabled={!map || !schema.data || !!resources.error || !!schema.error} onPress={() => execute(false)} />}
+    {!queued && request && <Button title="Queue Request" loading={busy} onPress={() => execute(false, true)} />}
+    <Button title={request ? 'Queue & Start Next Job' : 'Submit & Run on Robot'} loading={busy} disabled={!map || !schema.data || !robotId || !!resources.error || !!schema.error || !!fleet.error || !robots.some(r => r.id === robotId) || (!!queued && queued.jobs.every(j => !!started[j.jobId]))} onPress={() => execute(true)} />
+    <Text variant="caption">Starting Sends A Real Robot Command. Additional Jobs Stay Created Until A Robot Is Available.</Text>
+  </OperationalScreen>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  workflowIntro: {
-    marginBottom: 4,
-  },
-  workflowIntroTitle: {
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  workflowGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  workflowGridItem: {
-    width: '48%',
-  },
-  flowBanner: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 6,
-    ...shadows.sm,
-  },
-  flowBannerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  flowBadge: {
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-  },
-  flowBadgeText: {
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  flowTitle: {
-    fontWeight: '700',
-    flex: 1,
-  },
-  deckCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 12,
-    ...shadows.sm,
-  },
-  deckHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  deckHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  deckTitle: {
-    fontWeight: '700',
-  },
-  deckSlotsBadge: {
-    backgroundColor: colors.surfaceSubtle,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  slotsSelectorRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  slotTab: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    gap: 2,
-  },
-  slotTabActive: {
-    backgroundColor: colors.surface,
-    borderColor: colors.darkAction,
-    borderWidth: 1.5,
-  },
-  slotTabLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  slotTabLabelActive: {
-    fontWeight: '700',
-  },
-  slotTabCode: {
-    fontWeight: '700',
-  },
-  slotTabCodeActive: {
-    fontWeight: '800',
-  },
-  addSlotBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    borderStyle: 'dashed',
-    backgroundColor: colors.primaryLight,
-  },
-  addSlotText: {
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  configCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    gap: 14,
-    ...shadows.sm,
-  },
-  slotConfigHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 10,
-  },
-  slotConfigTitle: {
-    fontWeight: '700',
-  },
-  deleteSlotBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.sm,
-    backgroundColor: colors.dangerBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  successCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-    ...shadows.md,
-  },
-  successIconBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  successTitle: {
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  successSub: {
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  receiptBox: {
-    width: '100%',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 10,
-    marginTop: 8,
-  },
-  receiptRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  receiptVal: {
-    fontWeight: '700',
-  },
-  receiptHighlight: {
-    fontWeight: '700',
-  },
-  receiptSuccess: {
-    fontWeight: '700',
-  },
-  receiptBorderTop: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 8,
-    marginTop: 2,
-  },
-  successActions: {
-    width: '100%',
-    gap: 10,
-    marginTop: 12,
-  },
-});
