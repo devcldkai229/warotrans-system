@@ -101,7 +101,7 @@ export function FleetMap({
         occupancyImageUrl={occupancyImageUrl}
         robots={mapRobots}
         layers={{ occupancy: true }}
-        labels="focus"
+        labels="all"
         focusEndpointIds={focusEndpointIds}
         focusRobotCodes={detail && selectedCode ? [selectedCode] : undefined}
         movements={movements}

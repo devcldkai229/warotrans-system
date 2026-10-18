@@ -570,13 +570,30 @@ export function MapEditorPage() {
     )
   }
 
-  if (!version || !transform || version.imageWidthPixels <= 0) {
+  if (!version) {
     return (
       <div className="fixed inset-0 z-40 grid place-items-center bg-surface">
         <div className="text-center">
-          <p className="text-sm text-ink-2">Map version not found or missing image metadata.</p>
+          <p className="text-sm text-ink-2">Map version not found.</p>
           <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>
             Back to Facility
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!transform || version.imageWidthPixels <= 0 || version.imageHeightPixels <= 0) {
+    return (
+      <div className="fixed inset-0 z-40 grid place-items-center bg-surface">
+        <div className="mx-auto max-w-md px-6 text-center">
+          <p className="text-sm text-ink-2">
+            This draft has no occupancy image yet (image width/height is 0). Create-metadata-only maps cannot be
+            edited until you Import <span className="font-mono">map.yaml</span> +{' '}
+            <span className="font-mono">map.pgm</span> on Facility.
+          </p>
+          <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>
+            Back to Facility · Import assets
           </Button>
         </div>
       </div>

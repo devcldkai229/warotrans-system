@@ -1,10 +1,12 @@
-import { apiFetch } from './client'
+import { apiFetch, apiRequest } from './client'
 import type { ContainerStatus } from './contracts'
 
 export interface WarehouseListItem {
   id: string
   code: string
   name: string
+  address?: string | null
+  timezone?: string
   isActive: boolean
   createdAt: string
 }
@@ -53,6 +55,31 @@ export function listWarehouses(params?: { isActive?: boolean; skip?: number; tak
   if (params?.take !== undefined) query.set('take', String(params.take))
   const qs = query.toString()
   return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${qs ? `?${qs}` : ''}`)
+}
+
+export interface CreateWarehouseBody {
+  code: string
+  name: string
+  timezone?: string | null
+  address?: string | null
+  isActive?: boolean | null
+}
+
+export interface CreateWarehouseResponse {
+  id: string
+  code: string
+  name: string
+  address: string | null
+  timezone: string
+  isActive: boolean
+  createdAt: string
+}
+
+export function createWarehouse(body: CreateWarehouseBody) {
+  return apiRequest<CreateWarehouseResponse>('/api/warehouse/warehouses', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }
 
 export function listContainers(params: {

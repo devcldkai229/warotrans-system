@@ -356,7 +356,7 @@ export function TransportRequestsPage() {
           }
           robots={composing ? [] : mapRobots}
           layers={{ occupancy: true }}
-          labels="focus"
+          labels="all"
           focusEndpointIds={mapFocus}
           focusRobotCodes={composing ? undefined : listMapView.focusRobotCodes}
           movements={mapMovements}

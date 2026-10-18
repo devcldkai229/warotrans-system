@@ -50,7 +50,8 @@ function App() {
         <Route path="/admin" element={<Navigate to="/management?tab=accounts" replace />} />
         <Route path="/admin/accounts" element={<Navigate to="/management?tab=accounts" replace />} />
         <Route path="/admin/roles" element={<Navigate to="/management?tab=roles" replace />} />
-        <Route path="/data" element={<Navigate to="/management?tab=products" replace />} />
+        <Route path="/data" element={<Navigate to="/management?tab=warehouses" replace />} />
+        <Route path="/data/warehouses" element={<Navigate to="/management?tab=warehouses" replace />} />
         <Route path="/data/products" element={<Navigate to="/management?tab=products" replace />} />
         <Route path="/data/categories" element={<Navigate to="/management?tab=categories" replace />} />
         <Route path="/data/inventory" element={<Navigate to="/management?tab=inventory" replace />} />

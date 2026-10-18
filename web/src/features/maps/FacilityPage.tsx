@@ -30,6 +30,11 @@ import { controlClass } from '@/shared/ui/controlClass'
 
 const WAREHOUSE_KEY = 'warotrans.facilityWarehouseId'
 
+/** Map Editor needs pixel size from PGM import; Create-metadata-only leaves width/height = 0. */
+function hasMapImage(version: MapVersionDto) {
+  return version.imageWidthPixels > 0 && version.imageHeightPixels > 0
+}
+
 interface MapCardProps {
   version: MapVersionDto
   warehouseName: string
@@ -249,12 +254,13 @@ export function FacilityPage() {
         originYaw,
       })
     },
-    onSuccess: async (created) => {
+    onSuccess: async () => {
       setCreateOpen(false)
       setCreateForm(emptyCreateForm())
       setCreateError(null)
+      setImportOpen(true)
+      setActionError('Draft created. Import map.yaml + map.pgm next — Edit needs image size from the PGM.')
       await invalidateMaps()
-      navigate(`/configure/facility/maps/${created.id}/edit`)
     },
     onError: (err) => {
       setCreateError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Create failed')
@@ -358,7 +364,18 @@ export function FacilityPage() {
     return (
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
         <h1 className="text-4xl font-book">Facility</h1>
-        <p className="mt-3 text-base text-ink-2">Create an active warehouse before managing maps.</p>
+        <p className="mt-3 max-w-xl text-base text-ink-2">
+          Facility maps belong to a warehouse. Create an active warehouse in Management, then return here to
+          import or create a map version.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => navigate('/management?tab=warehouses')}>
+            <Icon name="plus" size={15} /> Create warehouse
+          </Button>
+          <Button variant="outline" onClick={() => warehousesQuery.refetch()}>
+            Refresh
+          </Button>
+        </div>
       </div>
     )
   }
@@ -426,9 +443,21 @@ export function FacilityPage() {
               <Button variant="outline" onClick={() => openEdit(draft)}>
                 Metadata
               </Button>
-              <Button variant="primary" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>
-                Edit
-              </Button>
+              {hasMapImage(draft) ? (
+                <Button variant="primary" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>
+                  Edit
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setImportOpen(true)
+                    setActionError('Import yaml + pgm first. Create-only drafts have no image size for the editor.')
+                  }}
+                >
+                  Import assets
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 disabled={archiveMutation.isPending}
@@ -452,9 +481,11 @@ export function FacilityPage() {
               when={`Published ${formatDateTime(published.publishedAt)}`}
               active={activeMap?.id === published.id}
             >
-              <Button variant="surface" onClick={() => navigate(`/configure/facility/maps/${published.id}/edit`)}>
-                View
-              </Button>
+              {hasMapImage(published) ? (
+                <Button variant="surface" onClick={() => navigate(`/configure/facility/maps/${published.id}/edit`)}>
+                  View
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 disabled={archiveMutation.isPending}
@@ -509,8 +540,8 @@ export function FacilityPage() {
           <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
             <h3 className="text-md font-book">Create map (metadata only)</h3>
             <p className="mt-1 text-sm text-ink-2">
-              Creates a DRAFT without importing files. Asset URIs stay pending:// until you Import yaml + pgm
-              (stored locally or on S3 per server MapAssetStorage config).
+              Creates a DRAFT with name/resolution/origin only (not from a file). You must Import yaml + pgm
+              next before Edit — the editor needs image width/height from the PGM.
             </p>
             <div className="mt-4 flex flex-wrap items-end gap-4">
               <label className="text-sm">
@@ -696,15 +727,24 @@ export function FacilityPage() {
               maps.map((version) => (
                 <Tr key={version.id}>
                   <Td tone="strong">
-                    <button
-                      type="button"
-                      className="text-left font-medium text-ink hover:underline"
-                      onClick={() => navigate(`/configure/facility/maps/${version.id}/edit`)}
-                    >
-                      {version.code}
-                    </button>
+                    {hasMapImage(version) ? (
+                      <button
+                        type="button"
+                        className="text-left font-medium text-ink hover:underline"
+                        onClick={() => navigate(`/configure/facility/maps/${version.id}/edit`)}
+                      >
+                        {version.code}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-ink" title="Import yaml + pgm before editing">
+                        {version.code}
+                      </span>
+                    )}
                     {activeMap?.id === version.id ? (
                       <span className="ml-2 text-xs font-medium text-green">Active</span>
+                    ) : null}
+                    {!hasMapImage(version) ? (
+                      <span className="ml-2 text-xs text-muted">no image</span>
                     ) : null}
                   </Td>
                   <Td className="tabular-nums">v{version.versionNo}</Td>
@@ -727,10 +767,31 @@ export function FacilityPage() {
                           >
                             Metadata
                           </button>
+                          {hasMapImage(version) ? (
+                            <button
+                              type="button"
+                              className="text-sm text-ink hover:underline"
+                              onClick={() => navigate(`/configure/facility/maps/${version.id}/edit`)}
+                            >
+                              Edit
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-sm text-ink hover:underline"
+                              onClick={() => {
+                                setImportOpen(true)
+                                setActionError('Import yaml + pgm to unlock the map editor for this draft.')
+                              }}
+                            >
+                              Import assets
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="text-sm text-ink hover:underline"
-                            disabled={publishMutation.isPending}
+                            disabled={publishMutation.isPending || !hasMapImage(version)}
+                            title={!hasMapImage(version) ? 'Import yaml + pgm first' : undefined}
                             onClick={() => publishMutation.mutate(version.id)}
                           >
                             Publish

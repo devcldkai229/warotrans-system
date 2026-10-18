@@ -44,6 +44,16 @@ export function LoginPage() {
   // Already signed in (for example after a reload on /login): go straight to the console.
   if (status === 'authenticated') return <Navigate to={from} replace />
 
+  // Wait for cookie restore — signing in while refresh is in flight can rotate/overwrite the cookie
+  // and surface a misleading "Incorrect username or password".
+  if (status === 'loading') {
+    return (
+      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">
+        Restoring session…
+      </div>
+    )
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (submitting) return

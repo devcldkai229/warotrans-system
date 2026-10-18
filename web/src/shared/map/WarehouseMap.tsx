@@ -11,10 +11,8 @@ import {
   ENDPOINT_NAME,
   MAP_AMBER,
   MAP_INK,
-  MAP_INK_2,
   MAP_LANE,
   MAP_LINE,
-  MAP_MUTED,
   MAP_OFF,
   MAP_RED,
   ROBOT_COLOR,
@@ -104,15 +102,6 @@ export interface WarehouseMapProps {
   children?: ReactNode
 }
 
-// SVG text cannot carry its own background: a white outline keeps it readable over zones and lanes.
-const TEXT_HALO = {
-  paintOrder: 'stroke',
-  stroke: '#fff',
-  strokeWidth: 0.22,
-  strokeLinejoin: 'round',
-  pointerEvents: 'none',
-} as const
-
 const CALLOUT_TONE = { dark: 'bg-ink', warn: 'bg-amber-ink', danger: 'bg-red-ink' }
 
 // Map chrome (Guide, zoom, coordinates): floating white cards, the same as panels elsewhere in the console.
@@ -157,6 +146,9 @@ export function WarehouseMap({
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [cursor, setCursor] = useState<Point | null>(null)
+  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
+  const [hoveredEndpointId, setHoveredEndpointId] = useState<string | null>(null)
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
   const dragged = useRef(false)
 
   const toMetres = (clientX: number, clientY: number): Point | null => {
@@ -291,19 +283,16 @@ export function WarehouseMap({
             <rect x={0} y={0} width={width} height={height} fill="url(#wmap-dots)" />
           )}
 
-          {/* Zones: soft tinted areas with a thin edge, a coloured dot and the name. */}
+          {/* Zones: soft tinted areas with a thin edge and a coloured anchor dot (names are HTML callouts). */}
           {show.zones ? (
             <g opacity={layerOpacity('zones')}>
               {zones.map((zone) => {
                 const points = polygonToPoints(zone.geometry)
-                const xs = points.map((point) => X(point.x))
-                const ys = points.map((point) => Y(point.y))
                 const load = zoneLoad.get(zone.id) ?? 0
                 const over = show.occupancy && zone.capacity > 0 && load > zone.capacity
                 const full = show.occupancy && zone.capacity > 0 && load === zone.capacity
                 const isSelected = selected.zoneId === zone.id
-                const left = Math.min(...xs)
-                const top = Math.min(...ys)
+                const anchor = zoneCentroid(points)
                 // Later states win: switched off, then full, then over capacity; a selection only thickens the edge.
                 const paint = over
                   ? { fill: MAP_RED, fillOpacity: 0.18, stroke: MAP_RED, strokeOpacity: 1, strokeWidth: 0.22 }
@@ -322,7 +311,9 @@ export function WarehouseMap({
                   <g
                     key={zone.id}
                     color={ZONE_COLOR[zone.zoneType]}
-                    className={onZoneClick ? 'cursor-pointer' : undefined}
+                    className="cursor-pointer"
+                    onPointerEnter={() => setHoveredZoneId(zone.id)}
+                    onPointerLeave={() => setHoveredZoneId((id) => (id === zone.id ? null : id))}
                     onClick={
                       onZoneClick
                         ? (event) => {
@@ -340,17 +331,7 @@ export function WarehouseMap({
                       {...(isSelected ? { stroke: 'currentColor', strokeOpacity: 1, strokeWidth: 0.32 } : null)}
                     />
                     {zone.zoneType === 'RESTRICTED_AREA' ? <polygon points={stagePoints(points)} fill="url(#wmap-hatch)" stroke="none" /> : null}
-                    <circle cx={left + 0.85} cy={top + 0.95} r={0.22} fill="currentColor" />
-                    <text x={left + 1.3} y={top + 1.28} fontSize={0.82} fontWeight={600} fill={MAP_INK} {...TEXT_HALO}>
-                      {zone.name}
-                    </text>
-                    <text x={left + 0.65} y={top + 2.2} fontSize={0.6} fill={MAP_MUTED} {...TEXT_HALO}>
-                      {zone.zoneType === 'RESTRICTED_AREA'
-                        ? 'No entry'
-                        : show.occupancy
-                          ? `${load}/${zone.capacity} Robots${zone.maxSpeed != null ? ` · max ${zone.maxSpeed} m/s` : ''}`
-                          : `${ZONE_LABEL[zone.zoneType]} · capacity ${zone.capacity}`}
-                    </text>
+                    <circle cx={X(anchor.x)} cy={Y(anchor.y)} r={0.28} fill="currentColor" stroke="#fff" strokeWidth={0.1} />
                   </g>
                 )
               })}
@@ -363,11 +344,15 @@ export function WarehouseMap({
               {edges.map((edge) => {
                 const points = lineStringToPoints(edge.geometry)
                 const mid = points[Math.floor(points.length / 2)]
-                const load = edgeLoad.get(edge.id) ?? 0
                 const lane = stagePoints(points)
                 const isSelected = selected.edgeId === edge.id
                 return (
-                  <g key={edge.id} color={EDGE_COLOR[edge.direction]}>
+                  <g
+                    key={edge.id}
+                    color={EDGE_COLOR[edge.direction]}
+                    onPointerEnter={() => setHoveredEdgeId(edge.id)}
+                    onPointerLeave={() => setHoveredEdgeId((id) => (id === edge.id ? null : id))}
+                  >
                     <polyline
                       points={lane}
                       fill="none"
@@ -409,32 +394,38 @@ export function WarehouseMap({
                           )
                         })
                       : null}
-                    {onEdgeClick ? (
-                      <polyline
-                        className="cursor-pointer"
-                        points={lane}
-                        fill="none"
-                        stroke="transparent"
-                        strokeWidth={2}
-                        pointerEvents="stroke"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onEdgeClick(edge.id)
-                        }}
-                      />
-                    ) : null}
+                    {/* Wide hit stroke so hover/click work on thin paths */}
+                    <polyline
+                      className="cursor-pointer"
+                      points={lane}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={2}
+                      pointerEvents="stroke"
+                      onClick={
+                        onEdgeClick
+                          ? (event) => {
+                              event.stopPropagation()
+                              onEdgeClick(edge.id)
+                            }
+                          : undefined
+                      }
+                    />
                     {isSelected
                       ? points.map((point, index) => (
                           <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38} fill="#fff" stroke="currentColor" strokeWidth={0.16} />
                         ))
                       : null}
-                    {show.occupancy && load > 0 ? (
-                      <g transform={`translate(${X(mid.x)} ${Y(mid.y)})`}>
-                        <rect x={-1.25} y={-0.72} width={2.5} height={1.44} rx={0.72} fill="#fff" stroke={MAP_LINE} strokeWidth={0.08} />
-                        <text textAnchor="middle" y={0.26} fontSize={0.68} fontWeight={600} fill={MAP_INK_2}>
-                          {load}/{edge.capacity}
-                        </text>
-                      </g>
+                    {labels !== 'none' && hoveredEdgeId === edge.id ? (
+                      <circle
+                        cx={X(mid.x)}
+                        cy={Y(mid.y)}
+                        r={0.32}
+                        fill="currentColor"
+                        stroke="#fff"
+                        strokeWidth={0.1}
+                        pointerEvents="none"
+                      />
                     ) : null}
                   </g>
                 )
@@ -515,21 +506,18 @@ export function WarehouseMap({
           {/* Endpoints: a tile in the type colour and a wedge for the arrival heading. */}
           {show.endpoints ? (
             <g opacity={layerOpacity('endpoints')}>
-              {endpoints.map((endpoint, index) => {
+              {endpoints.map((endpoint) => {
                 const isFocus = focused.has(endpoint.id)
                 const isSelected = selected.endpointId === endpoint.id
-                const labelled = labels === 'all' || (labels === 'focus' && isFocus)
-                const small = labels === 'all' && !isFocus
-                const text = small ? endpoint.name.replace(/^Rack /, '') : endpoint.name
-                const fontSize = small ? 0.6 : 0.75
-                const labelY = 1.9 + (labels === 'all' && index % 2 === 1 ? 0.95 : 0)
                 return (
                   <g
                     key={endpoint.id}
                     color={ENDPOINT_COLOR[endpoint.endpointType]}
                     opacity={endpoint.isEnabled ? undefined : 0.4}
-                    className={onEndpointClick ? 'cursor-pointer' : undefined}
+                    className="cursor-pointer"
                     transform={`translate(${X(endpoint.x)} ${Y(endpoint.y)})`}
+                    onPointerEnter={() => setHoveredEndpointId(endpoint.id)}
+                    onPointerLeave={() => setHoveredEndpointId((id) => (id === endpoint.id ? null : id))}
                     onClick={
                       onEndpointClick
                         ? (event) => {
@@ -539,7 +527,9 @@ export function WarehouseMap({
                         : undefined
                     }
                   >
-                    {isFocus || isSelected ? <circle r={1.7} fill="currentColor" fillOpacity={0.16} /> : null}
+                    {isFocus || isSelected || hoveredEndpointId === endpoint.id ? (
+                      <circle r={1.7} fill="currentColor" fillOpacity={0.16} />
+                    ) : null}
                     <path d="M1.6 0 1.0 -0.32 1.0 0.32Z" fill="currentColor" opacity={0.85} transform={`rotate(${-endpoint.yaw})`} />
                     <g transform={isFocus ? 'scale(1.2)' : undefined}>
                       <rect
@@ -556,24 +546,6 @@ export function WarehouseMap({
                         <MapGlyph icon={endpoint.endpointType} size={0.92} />
                       </g>
                     </g>
-                    {labelled ? (
-                      <g transform={`translate(0 ${labelY})`} pointerEvents="none">
-                        <rect
-                          x={-chipWidth(text, fontSize) / 2}
-                          y={-fontSize * 0.85}
-                          width={chipWidth(text, fontSize)}
-                          height={fontSize * 1.6}
-                          rx={fontSize * 0.5}
-                          fill="#fff"
-                          fillOpacity={0.92}
-                          stroke={MAP_LINE}
-                          strokeWidth={0.06}
-                        />
-                        <text fontSize={fontSize} fontWeight={500} fill={MAP_INK} textAnchor="middle" y={fontSize * 0.33}>
-                          {text}
-                        </text>
-                      </g>
-                    ) : null}
                   </g>
                 )
               })}
@@ -637,6 +609,82 @@ export function WarehouseMap({
         </svg>
 
         <div data-map-overlay className="pointer-events-none absolute inset-0 [&>:not([data-map-tip])]:pointer-events-auto">
+          {show.zones && hoveredZoneId
+            ? zones
+                .filter((zone) => zone.id === hoveredZoneId)
+                .map((zone) => {
+                  const anchor = zoneCentroid(polygonToPoints(zone.geometry))
+                  const load = zoneLoad.get(zone.id) ?? 0
+                  const capacityLine =
+                    zone.zoneType === 'RESTRICTED_AREA'
+                      ? 'No entry'
+                      : show.occupancy
+                        ? `${load}/${zone.capacity} robots`
+                        : `${zone.capacity} robots`
+                  return (
+                    <MapNameCallout
+                      key={zone.id}
+                      title={zone.name}
+                      accent={ZONE_COLOR[zone.zoneType]}
+                      anchor={anchor}
+                      bounds={bounds}
+                      details={[
+                        { label: 'Type', value: ZONE_LABEL[zone.zoneType] },
+                        { label: 'Capacity', value: capacityLine },
+                        ...(show.occupancy && zone.maxSpeed != null
+                          ? [{ label: 'Max', value: `${zone.maxSpeed} m/s` }]
+                          : []),
+                      ]}
+                    />
+                  )
+                })
+            : null}
+          {show.endpoints && labels !== 'none' && hoveredEndpointId
+            ? endpoints
+                .filter((endpoint) => endpoint.id === hoveredEndpointId)
+                .map((endpoint) => (
+                  <MapNameCallout
+                    key={endpoint.id}
+                    title={endpoint.name}
+                    accent={ENDPOINT_COLOR[endpoint.endpointType]}
+                    anchor={{ x: endpoint.x, y: endpoint.y }}
+                    bounds={bounds}
+                    details={[
+                      { label: 'Type', value: ENDPOINT_NAME[endpoint.endpointType] },
+                      { label: 'Code', value: endpoint.code },
+                    ]}
+                  />
+                ))
+            : null}
+          {show.edges && labels !== 'none' && hoveredEdgeId
+            ? edges
+                .filter((edge) => edge.id === hoveredEdgeId)
+                .map((edge) => {
+                  const points = lineStringToPoints(edge.geometry)
+                  const mid = points[Math.floor(points.length / 2)] ?? { x: 0, y: 0 }
+                  const load = edgeLoad.get(edge.id) ?? 0
+                  return (
+                    <MapNameCallout
+                      key={edge.id}
+                      title={edge.code}
+                      accent={EDGE_COLOR[edge.direction]}
+                      anchor={mid}
+                      bounds={bounds}
+                      details={[
+                        {
+                          label: 'Type',
+                          value: edge.direction === 'ONE_WAY' ? 'One-way edge' : 'Two-way edge',
+                        },
+                        {
+                          label: 'Capacity',
+                          value: show.occupancy ? `${load}/${edge.capacity} robots` : `${edge.capacity} robots`,
+                        },
+                        ...(edge.maxSpeed != null ? [{ label: 'Max', value: `${edge.maxSpeed} m/s` }] : []),
+                      ]}
+                    />
+                  )
+                })
+            : null}
           {callouts.map((callout, index) => (
             <div
               key={index}
@@ -754,5 +802,84 @@ function GuideItem({ label, children }: { label: string; children: ReactNode }) 
       {children}
       {label}
     </li>
+  )
+}
+
+function zoneCentroid(points: Point[]): Point {
+  if (points.length === 0) return { x: 0, y: 0 }
+  const x = points.reduce((sum, point) => sum + point.x, 0) / points.length
+  const y = points.reduce((sum, point) => sum + point.y, 0) / points.length
+  return { x, y }
+}
+
+/** Place the bubble toward the map centre so edge zones keep a full name on screen. */
+function zoneCalloutSide(anchor: Point, bounds: MapBounds): { horizontal: 'left' | 'right'; vertical: 'above' | 'below' } {
+  const rx = (anchor.x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1e-6)
+  const ry = (anchor.y - bounds.minY) / Math.max(bounds.maxY - bounds.minY, 1e-6)
+  return {
+    horizontal: rx < 0.55 ? 'right' : 'left',
+    vertical: ry < 0.45 ? 'above' : 'below',
+  }
+}
+
+function MapNameCallout({
+  title,
+  accent,
+  anchor,
+  bounds,
+  details,
+}: {
+  title: string
+  accent: string
+  anchor: Point
+  bounds: MapBounds
+  details: { label: string; value: string }[]
+}) {
+  const { horizontal, vertical } = zoneCalloutSide(anchor, bounds)
+
+  return (
+    <div
+      data-map-tip
+      className="absolute z-5 scale-[calc(1/var(--z,1))]"
+      style={toPercent(anchor, bounds)}
+    >
+      <span
+        aria-hidden
+        className={cx(
+          'absolute left-0 top-0 w-px bg-ink/35',
+          vertical === 'above' ? 'h-3.5 -translate-y-full' : 'h-3.5',
+          horizontal === 'right' ? 'translate-x-0' : '-translate-x-px',
+        )}
+      />
+      <div
+        className={cx(
+          'absolute w-max max-w-none rounded-sm border border-outline-soft bg-surface/95 px-2.5 py-1.5 text-xs whitespace-nowrap text-ink shadow-float ring-1 ring-amber/40',
+          vertical === 'above' ? 'bottom-3.5' : 'top-3.5',
+          horizontal === 'right' ? 'left-0' : 'right-0',
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <i className="size-1.5 shrink-0 rounded-full" style={{ background: accent }} aria-hidden />
+          <span className="font-medium">{title}</span>
+          {details.map((row) => (
+            <span key={row.label} className="flex items-center gap-1 text-ink-2">
+              <span className="text-muted/70" aria-hidden>
+                ·
+              </span>
+              <span className="text-muted">{row.label}</span>
+              <span>{row.value}</span>
+            </span>
+          ))}
+        </div>
+        <span
+          aria-hidden
+          className={cx(
+            'absolute size-1.5 rotate-45 border-outline-soft bg-surface',
+            vertical === 'above' ? 'bottom-[-3px] border-r border-b' : 'top-[-3px] border-l border-t',
+            horizontal === 'right' ? 'left-2' : 'right-2',
+          )}
+        />
+      </div>
+    </div>
   )
 }
