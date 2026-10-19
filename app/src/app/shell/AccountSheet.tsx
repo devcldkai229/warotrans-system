@@ -13,6 +13,7 @@ export interface AccountSheetProps {
   visible: boolean;
   onClose: () => void;
   operatorName: string;
+  operatorUsername?: string;
   operatorRole: string;
   /** Avatar initials, computed by the caller from the operator name. */
   initials: string;
@@ -31,6 +32,7 @@ export function AccountSheet({
   visible,
   onClose,
   operatorName,
+  operatorUsername,
   operatorRole,
   initials,
   zone,
@@ -74,7 +76,7 @@ export function AccountSheet({
                 {operatorName}
               </Text>
               <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-                {operatorRole}
+                {operatorUsername ? `@${operatorUsername} · ${operatorRole.toUpperCase()} · ${zone}` : `${operatorRole.toUpperCase()} · ${zone}`}
               </Text>
             </View>
           </View>
@@ -82,10 +84,10 @@ export function AccountSheet({
           {/* Shift Details */}
           <View style={styles.shiftBox}>
             <Text variant="caption" color={colors.textSecondary}>
-              Local Display Preference
+              Current shift
             </Text>
             <Text variant="label" color={colors.textPrimary}>
-              {zone || 'No Zone Selected'}
+              Morning (06:00 – 14:00)
             </Text>
           </View>
 
@@ -160,7 +162,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    minHeight: 44,
+    height: 38,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.dangerBorder,

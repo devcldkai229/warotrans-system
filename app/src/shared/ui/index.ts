@@ -35,4 +35,3 @@ export type { EmptyStateProps } from './EmptyState';
 
 export { ProgressMeter } from './ProgressMeter';
 export type { ProgressMeterProps, MeterTone } from './ProgressMeter';
-export { ActionModal, ChoiceField, ErrorBanner } from './OperationalFields';

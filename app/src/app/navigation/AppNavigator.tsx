@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../../features/auth/authContext';
 import { LoginScreen } from '../../features/auth/LoginScreen';
 import { HomeScreen } from '../../features/home/HomeScreen';
@@ -22,10 +22,8 @@ import { BottomTabBar } from './BottomTabBar';
 import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
-  const { session, isAuthenticated, isLoading, logout, updateZone } = useAuth();
+  const { session, isAuthenticated, logout, updateZone } = useAuth();
   const { currentScreen, goBack, params, navigate } = useNavigation();
-
-  if (isLoading) return <View style={styles.root}><ActivityIndicator accessibilityLabel="Verifying Session" /></View>;
 
   if (!isAuthenticated || !session) {
     return <LoginScreen />;

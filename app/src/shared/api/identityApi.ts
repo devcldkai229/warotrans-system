@@ -68,11 +68,11 @@ export async function getCurrentAccount(): Promise<AccountDto> {
 /**
  * Invalidates the current refresh session and logs out (`POST /api/identity/logout`).
  */
-export async function logoutSession(refreshToken?: string | null, accessToken?: string | null): Promise<void> {
+export async function logoutSession(refreshToken?: string | null): Promise<void> {
   return apiFetch<void>('/api/identity/logout', {
     method: 'POST',
     body: JSON.stringify({
       refreshToken: refreshToken || null,
     }),
-  }, accessToken);
+  });
 }
