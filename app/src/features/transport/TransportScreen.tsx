@@ -139,7 +139,7 @@ export function TransportScreen() {
   const { isHolding, toggleHold: toggleFleetHold } = useSafetyHold();
   const [hasActiveAlert, setHasActiveAlert] = useState(false);
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
-  const [dispatches, setDispatches] = useState<RecentDispatchItem[]>(RECENT_DISPATCHES);
+  const [dispatches, setDispatches] = useState<RecentDispatchItem[]>(RECENT_DISPATCHES.slice(0, 3));
   const [totalRecords, setTotalRecords] = useState<number>(RECENT_DISPATCHES.length);
   const [isLoadingDispatches, setIsLoadingDispatches] = useState(false);
   const [availableRobots, setAvailableRobots] = useState<RobotDto[]>([]);
@@ -155,10 +155,10 @@ export function TransportScreen() {
     async function loadRecent() {
       setIsLoadingDispatches(true);
       try {
-        const res = await listTransportRequests({ take: 5 });
+        const res = await listTransportRequests({ take: 3 });
         if (isMounted && res?.items) {
           setTotalRecords(res.total || res.items.length);
-          const mapped = res.items.map((item) => {
+          const mapped = res.items.slice(0, 3).map((item) => {
             const details = item.details || [];
             const first = details[0];
             const route = first

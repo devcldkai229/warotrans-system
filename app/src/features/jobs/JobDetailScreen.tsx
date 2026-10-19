@@ -553,63 +553,65 @@ export function JobDetailScreen() {
 
       {/* Sticky Bottom Action Console */}
       <View style={styles.bottomConsole} onLayout={(event) => setBottomConsoleHeight(event.nativeEvent.layout.height)}>
-        {/* Tier 1 Safety & Utilities Strip */}
-        <View style={styles.consoleUtilityRow}>
-          <Pressable
-            onPress={handleToggleSoftHold}
-            style={({ pressed }) => [
-              styles.utilityBtn,
-              isHolding && styles.utilityBtnActive,
-              pressed && styles.btnPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Soft hold"
-          >
-            <PauseCircle
-              size={15}
-              color={isHolding ? '#ffffff' : colors.warning}
-              style={{ marginRight: 6 }}
-            />
-            <Text
-              variant="caption"
-              color={isHolding ? '#ffffff' : colors.textPrimary}
-              style={{ fontWeight: '600' }}
+        {/* Tier 1 Safety & Utilities Strip (Hidden once mission is completed) */}
+        {!isCompleted && (
+          <View style={styles.consoleUtilityRow}>
+            <Pressable
+              onPress={handleToggleSoftHold}
+              style={({ pressed }) => [
+                styles.utilityBtn,
+                isHolding && styles.utilityBtnActive,
+                pressed && styles.btnPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Soft hold"
             >
-              {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
-            </Text>
-          </Pressable>
+              <PauseCircle
+                size={15}
+                color={isHolding ? '#ffffff' : colors.warning}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                variant="caption"
+                color={isHolding ? '#ffffff' : colors.textPrimary}
+                style={{ fontWeight: '600' }}
+              >
+                {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
+              </Text>
+            </Pressable>
 
-          <Pressable
-            onPress={() => setShowNudgeControls((prev) => !prev)}
-            style={({ pressed }) => [
-              styles.utilityBtn,
-              showNudgeControls && styles.utilityBtnSelected,
-              pressed && styles.btnPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Nudge dock alignment"
-          >
-            <SlidersHorizontal size={14} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '600' }}>
-              Dock Nudge · Sim Aid
-            </Text>
-          </Pressable>
+            <Pressable
+              onPress={() => setShowNudgeControls((prev) => !prev)}
+              style={({ pressed }) => [
+                styles.utilityBtn,
+                showNudgeControls && styles.utilityBtnSelected,
+                pressed && styles.btnPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Nudge dock alignment"
+            >
+              <SlidersHorizontal size={14} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '600' }}>
+                Dock Nudge · Sim Aid
+              </Text>
+            </Pressable>
 
-          <Pressable
-            onPress={() => setIsIssueOpen(true)}
-            style={({ pressed }) => [
-              styles.utilityBtnDanger,
-              pressed && styles.btnPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Report issue"
-          >
-            <AlertTriangle size={14} color={colors.danger} style={{ marginRight: 6 }} />
-            <Text variant="caption" color={colors.danger} style={{ fontWeight: '600' }}>
-              Report Issue
-            </Text>
-          </Pressable>
-        </View>
+            <Pressable
+              onPress={() => setIsIssueOpen(true)}
+              style={({ pressed }) => [
+                styles.utilityBtnDanger,
+                pressed && styles.btnPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Report issue"
+            >
+              <AlertTriangle size={14} color={colors.danger} style={{ marginRight: 6 }} />
+              <Text variant="caption" color={colors.danger} style={{ fontWeight: '600' }}>
+                Report Issue
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* Tier 2 Commanding Action Button (Machined Obsidian #121317) */}
         {isQueuedOrCreated && (
