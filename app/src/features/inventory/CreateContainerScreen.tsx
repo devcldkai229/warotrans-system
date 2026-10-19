@@ -31,10 +31,10 @@ interface ProductCatalogEntry {
   sku: string;
 }
 
-const DEMO_PRODUCT_LABEL = 'Thùng linh kiện demo (SKU-DEMO-000001)';
+const DEMO_PRODUCT_LABEL = 'Electronic Components Tote (SKU-DEMO-000001)';
 const INITIAL_PRODUCT_CATALOG: Record<string, ProductCatalogEntry> = {
   [DEMO_PRODUCT_LABEL]: {
-    name: 'Thùng linh kiện demo',
+    name: 'Electronic Components Tote',
     productId: 'dddddddd-0000-4000-8000-000000000001',
     sku: 'SKU-DEMO-000001',
   },

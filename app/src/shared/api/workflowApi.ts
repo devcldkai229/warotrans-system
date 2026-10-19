@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import { normalizeWorkflowDisplayName } from './warehouseApi';
 
 export interface RequestInputField {
   key: string;
@@ -40,18 +41,29 @@ export interface WorkflowDetail {
   updatedAt: string;
 }
 
-export function listPublishedWorkflows(params?: { code?: string }) {
+export async function listPublishedWorkflows(params?: { code?: string }) {
   const query = new URLSearchParams();
   query.set('status', 'PUBLISHED');
   if (params?.code) query.set('code', params.code);
   const qs = query.toString();
-  return apiFetch<ListWorkflowsResponse>(
+  const res = await apiFetch<ListWorkflowsResponse>(
     `/api/workflow-execution/workflows${qs ? `?${qs}` : ''}`,
   );
+  if (res?.items) {
+    return {
+      ...res,
+      items: res.items.map((w) => ({
+        ...w,
+        name: normalizeWorkflowDisplayName(w.code, w.name),
+      })),
+    };
+  }
+  return res;
 }
 
-export function getWorkflow(id: string) {
-  return apiFetch<WorkflowDetail>(`/api/workflow-execution/workflows/${id}`);
+export async function getWorkflow(id: string) {
+  const res = await apiFetch<WorkflowDetail>(`/api/workflow-execution/workflows/${id}`);
+  return res ? { ...res, name: normalizeWorkflowDisplayName(res.code, res.name) } : res;
 }
 
 export function getWorkflowRequestInputSchema(id: string) {

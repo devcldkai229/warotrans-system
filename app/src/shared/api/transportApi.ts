@@ -2,7 +2,13 @@ import { apiFetch } from './client';
 import type { JobDetailResponse, TransportRequestStatus } from '../types/contracts';
 import { listJobs, registerProvisionedJobs } from './executionApi';
 import { listPublishedWorkflows } from './workflowApi';
-import { getSeedContainersSnapshot as getContainersSnapshot, listContainers, reserveStorageSlots } from './warehouseApi';
+import {
+  getSeedContainersSnapshot as getContainersSnapshot,
+  listContainers,
+  normalizeProductName,
+  normalizeWorkflowDisplayName,
+  reserveStorageSlots,
+} from './warehouseApi';
 
 export interface CreateTransportRequestDetailBody {
   sequenceNo: number;
@@ -653,10 +659,12 @@ export async function listTransportRequests(params?: {
               job.contextValues?.transportRequestId === item.requestCode ||
               job.containers?.some((c) => c.transportRequestId === item.id);
           });
+          const resolvedWorkflowCode = friendly?.code || workflow?.code || item.workflowCode;
+          const rawWorkflowName = friendly?.name || workflow?.name || item.workflowName;
           return {
             ...item,
-            workflowCode: friendly?.code || workflow?.code || item.workflowCode,
-            workflowName: friendly?.name || workflow?.name || item.workflowName,
+            workflowCode: resolvedWorkflowCode,
+            workflowName: normalizeWorkflowDisplayName(resolvedWorkflowCode, rawWorkflowName),
             linkedJobId: matchedJob?.id || item.linkedJobId || null,
             assignedRobotCode: (matchedJob?.contextValues?.assignedRobotCode as string) || item.assignedRobotCode || 'AMR-01',
             details: (item.details || []).map((d) => {
@@ -664,7 +672,7 @@ export async function listTransportRequests(params?: {
               return {
                 ...d,
                 containerBarcode: matchedContainer?.barcode || d.containerBarcode,
-                productName: matchedContainer?.productName || 'Thùng linh kiện demo',
+                productName: normalizeProductName(matchedContainer?.productName),
                 qty: matchedContainer?.qty || 20,
               };
             }),

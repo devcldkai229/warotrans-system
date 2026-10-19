@@ -95,7 +95,10 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
   const effectiveStatus = job.hasWaitingHandover ? 'ASSIGNED' : job.status;
   const status = JOB_STATUS_PRESENTATION[effectiveStatus];
   const action = ACTION_BY_STATUS[effectiveStatus];
-  const containerCode = job.containers?.[0]?.code ?? job.payloadSummary;
+  const primaryCode = job.containers?.[0]?.code ?? job.payloadSummary;
+  const extraCount = (job.containers?.length ?? 0) > 1 ? job.containers!.length - 1 : 0;
+  const containerCode = extraCount > 0 ? `${primaryCode} (+${extraCount})` : primaryCode;
+  const isUnstarted = effectiveStatus === 'CREATED' || effectiveStatus === 'QUEUED';
 
   return (
     <Card
@@ -156,38 +159,30 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
         </View>
       </View>
 
-      <View style={styles.progressBlock}>
-        <ProgressMeter
-          value={job.progressPercent ?? 0}
-          tone={METER_BY_STATUS[job.status]}
-          accessibilityLabel={`${job.id} progress ${job.progressPercent ?? 0} percent`}
-        />
-        <Text variant="caption" color={colors.textSecondary} numberOfLines={2}>
-          {job.currentStop}
-        </Text>
-      </View>
-
-      {onAccept && ((job.status === 'CREATED' || job.status === 'QUEUED') || (!job.isMine && (job.status === 'ASSIGNED' || job.status === 'PAUSED'))) ? (
-        <View style={styles.actionRow}>
-          <Button
-            title={job.status === 'CREATED' || job.status === 'QUEUED' ? 'Start Job' : 'Accept Task'}
-            onPress={onAccept}
-            variant="primary"
-            size="md"
-            style={styles.flexBtn}
-            icon={ArrowRight}
-            iconPosition="right"
-            accessibilityLabel={`Accept task ${job.id}`}
+      {!isUnstarted && (
+        <View style={styles.progressBlock}>
+          <ProgressMeter
+            value={job.progressPercent ?? 0}
+            tone={METER_BY_STATUS[job.status]}
+            accessibilityLabel={`${job.id} progress ${job.progressPercent ?? 0} percent`}
           />
-          <Button
-            title="Details"
-            onPress={onPress}
-            variant="outline"
-            size="md"
-            style={styles.flexBtn}
-            accessibilityLabel={`View details for ${job.id}`}
-          />
+          <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+            {job.currentStop}
+          </Text>
         </View>
+      )}
+
+      {onAccept && (isUnstarted || (!job.isMine && (job.status === 'ASSIGNED' || job.status === 'PAUSED'))) ? (
+        <Button
+          title={isUnstarted ? 'Start Job' : 'Accept Task'}
+          onPress={onAccept}
+          variant="primary"
+          size="md"
+          fullWidth
+          icon={ArrowRight}
+          iconPosition="right"
+          accessibilityLabel={`Accept task ${job.id}`}
+        />
       ) : (
         <Button
           title={action.title}

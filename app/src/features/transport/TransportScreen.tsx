@@ -164,11 +164,11 @@ export function TransportScreen() {
             const route = first
               ? `${first.sourceEndpointCode || 'DOCK-IN-01'} ➔ ${first.destinationEndpointCode || 'RACK-A-01'}`
               : 'Multi-stop movement';
-            const barcodes = details.map((d) => d.containerBarcode || 'TOTE').join(', ');
+            const firstBarcode = first?.containerBarcode || 'TOTE-01';
             const containerSummary =
               details.length > 1
-                ? `${barcodes} (${details.length} Totes)`
-                : barcodes || 'Payload Item';
+                ? `${firstBarcode} (+${details.length - 1})`
+                : firstBarcode;
 
             let mappedStatus: any = item.status;
             let statusLabel: string = item.status;
@@ -458,7 +458,7 @@ export function TransportScreen() {
               accessibilityLabel="View history"
             >
               <Text variant="caption" color={colors.primaryText} style={styles.viewHistoryText}>
-                View History
+                View All ({totalRecords})
               </Text>
               <ChevronRight size={14} color={colors.primaryText} />
             </Pressable>
@@ -488,15 +488,15 @@ export function TransportScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Dispatch ${dispatch.id}, ${dispatch.type}`}
                 >
-                  {/* Top: TR Badge, Name, Status Pill */}
-                  <View style={styles.dispatchTopRow}>
-                    <View style={[styles.dispatchBadgeRow, { flex: 1, minWidth: 0, marginRight: 8 }]}>
-                      <View style={styles.trCodeChip}>
+                  {/* Top: TR Badge + Workflow Name stacked on left, Status Pill on right */}
+                  <View style={[styles.dispatchTopRow, { alignItems: 'flex-start' }]}>
+                    <View style={{ flex: 1, minWidth: 0, marginRight: 8, gap: 4 }}>
+                      <View style={[styles.trCodeChip, { alignSelf: 'flex-start' }]}>
                         <Text variant="caption" color={colors.primaryText} style={styles.trCodeText}>
                           {dispatch.id}
                         </Text>
                       </View>
-                      <Text variant="bodyMedium" color={colors.textPrimary} numberOfLines={1} style={[styles.dispatchTypeName, { flexShrink: 1 }]}>
+                      <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={styles.dispatchTypeName}>
                         {dispatch.type}
                       </Text>
                     </View>
@@ -509,10 +509,15 @@ export function TransportScreen() {
                     {dispatch.route}
                   </Text>
 
-                  {/* Footer: Robot, Container, Time */}
+                  {/* Footer: Robot (no-wrap), Container summary, Time */}
                   <View style={styles.dispatchFooter}>
                     <View style={[styles.dispatchMetaGroup, { flex: 1, minWidth: 0, marginRight: 8 }]}>
-                      <Text variant="caption" color={colors.textPrimary} style={styles.boldText}>
+                      <Text
+                        variant="caption"
+                        color={colors.textPrimary}
+                        numberOfLines={1}
+                        style={[styles.boldText, { flexShrink: 0 }]}
+                      >
                         {dispatch.robot}
                       </Text>
                       <Text variant="caption" color={colors.textMuted}>·</Text>
@@ -520,7 +525,7 @@ export function TransportScreen() {
                         {dispatch.container}
                       </Text>
                     </View>
-                    <Text variant="caption" color={colors.textMuted}>
+                    <Text variant="caption" color={colors.textMuted} style={{ flexShrink: 0 }}>
                       {dispatch.time}
                     </Text>
                   </View>
@@ -530,36 +535,7 @@ export function TransportScreen() {
           </View>
         </View>
 
-        {/* 5. Dispatch History & Audit Log Card */}
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            navigate('transport_history');
-          }}
-          style={({ pressed }) => [
-            styles.historyEntryCard,
-            pressed && styles.pressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Transport history and audit log"
-        >
-          <View style={styles.historyLeft}>
-            <View style={styles.historyIconWell}>
-              <History size={18} color={colors.primaryText} />
-            </View>
-            <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
-              Dispatch History & Audit Log
-            </Text>
-            <View style={styles.recordsPill}>
-              <Text variant="caption" color={colors.textSecondary} style={styles.recordsText}>
-                {totalRecords} records
-              </Text>
-            </View>
-          </View>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </Pressable>
-
-        {/* 6. Inventory & SKU Catalog Lookup Card */}
+        {/* 5. Inventory & SKU Catalog Lookup Card */}
         <Pressable
           onPress={() => {
             triggerHaptic('tap');

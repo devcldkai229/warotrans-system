@@ -759,6 +759,57 @@ export function reserveStorageSlots(
   });
 }
 
+export function normalizeProductName(name?: string | null): string {
+  if (!name) return 'Electronic Components Tote';
+  if (/thùng linh kiện|linh kiện demo/i.test(name)) {
+    return 'Electronic Components Tote';
+  }
+  return name;
+}
+
+export function normalizeWarehouseName(name?: string | null): string {
+  if (!name) return 'WaroTrans Central Facility';
+  if (/kho demo|kho mô phỏng/i.test(name)) {
+    return 'WaroTrans Central Facility';
+  }
+  return name;
+}
+
+export function normalizeStorageLocationName(name?: string | null, code?: string | null): string {
+  if (!name) return code ? `Storage Bay ${code}` : 'Storage Bay';
+  if (/vị trí lưu trữ/i.test(name)) {
+    return code ? `Storage Bay (${code})` : name.replace(/vị trí lưu trữ/i, 'Storage Bay').trim();
+  }
+  return name;
+}
+
+export function normalizeWorkflowDisplayName(code?: string | null, name?: string | null): string {
+  const combined = `${code || ''} ${name || ''}`;
+  if (/INTERNAL_RELOCATION|vận chuyển nội bộ|reallocation/i.test(combined)) {
+    return 'Internal Relocation';
+  }
+  if (/INBOUND_PUTAWAY|nhập kho/i.test(combined)) {
+    return 'Inbound Putaway';
+  }
+  if (/OUTBOUND_RETRIEVAL|xuất kho/i.test(combined)) {
+    return 'Outbound Retrieval';
+  }
+  if (/REPLENISHMENT|bổ sung/i.test(combined)) {
+    return 'Replenishment';
+  }
+  if (/POINT_TO_POINT/i.test(combined)) {
+    return 'Point-to-Point';
+  }
+  return name || (code ? code.replace(/_/g, ' ') : 'Internal Relocation');
+}
+
+function normalizeContainerItem(c: ContainerListItem): ContainerListItem {
+  return {
+    ...c,
+    productName: normalizeProductName(c.productName),
+  };
+}
+
 export async function listWarehouses(params?: { isActive?: boolean; skip?: number; take?: number }) {
   try {
     const query = new URLSearchParams();
@@ -766,7 +817,14 @@ export async function listWarehouses(params?: { isActive?: boolean; skip?: numbe
     if (params?.skip !== undefined) query.set('skip', String(params.skip));
     if (params?.take !== undefined) query.set('take', String(params.take));
     const qs = query.toString();
-    return await apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${qs ? `?${qs}` : ''}`);
+    const res = await apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${qs ? `?${qs}` : ''}`);
+    if (res?.items) {
+      return {
+        ...res,
+        items: res.items.map((w) => ({ ...w, name: normalizeWarehouseName(w.name) })),
+      };
+    }
+    return res;
   } catch {
     return {
       items: [
@@ -798,14 +856,14 @@ export async function listContainers(params: {
     const qs = query.toString();
     const res = await apiFetch<ListContainersResponse>(`/api/warehouse/containers${qs ? `?${qs}` : ''}`);
     if (res?.items && res.items.length > 0) {
-      const merged = [...REGISTERED_CONTAINERS, ...res.items];
+      const merged = [...REGISTERED_CONTAINERS, ...res.items].map(normalizeContainerItem);
       return { items: merged, total: merged.length };
     }
   } catch {
     // Fallback to reactive in-memory container store
   }
 
-  let all = [...REGISTERED_CONTAINERS, ...SEED_CONTAINERS];
+  let all = [...REGISTERED_CONTAINERS, ...SEED_CONTAINERS].map(normalizeContainerItem);
   if (params.search) {
     const q = params.search.toLowerCase().trim();
     all = all.filter(
@@ -823,12 +881,14 @@ export async function listContainers(params: {
   };
 }
 
-export function getContainer(id: string) {
-  return apiFetch<ContainerListItem>(`/api/warehouse/containers/${id}`);
+export async function getContainer(id: string) {
+  const res = await apiFetch<ContainerListItem>(`/api/warehouse/containers/${id}`);
+  return res ? normalizeContainerItem(res) : res;
 }
 
-export function getContainerByBarcode(barcode: string) {
-  return apiFetch<ContainerListItem>(`/api/warehouse/containers/by-barcode/${encodeURIComponent(barcode)}`);
+export async function getContainerByBarcode(barcode: string) {
+  const res = await apiFetch<ContainerListItem>(`/api/warehouse/containers/by-barcode/${encodeURIComponent(barcode)}`);
+  return res ? normalizeContainerItem(res) : res;
 }
 
 export async function listStorageLocations(params: {
@@ -845,6 +905,7 @@ export async function listStorageLocations(params: {
     );
     if (res?.items && res.items.length > 0) {
       const enriched: StorageLocationListItem[] = res.items.map((loc) => {
+        const cleanName = normalizeStorageLocationName(loc.name, loc.code);
         const seedMatch = SEED_STORAGE_LOCATIONS.find((s) => s.code === loc.code || s.id === loc.id);
         if (seedMatch) {
           return {
@@ -853,7 +914,7 @@ export async function listStorageLocations(params: {
             warehouseId: loc.warehouseId,
             endpointId: loc.endpointId,
             code: loc.code,
-            name: loc.name,
+            name: cleanName,
             isActive: loc.isActive,
           };
         }
@@ -868,7 +929,7 @@ export async function listStorageLocations(params: {
           endpointId: loc.endpointId,
           endpointCode: loc.code,
           code: loc.code,
-          name: loc.name,
+          name: cleanName,
           zone,
           zoneLabel:
             zone === 'ZONE_B'

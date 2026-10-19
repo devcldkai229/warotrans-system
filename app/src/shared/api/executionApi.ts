@@ -3,6 +3,8 @@ import {
   getSeedContainersSnapshot as getContainersSnapshot,
   getStorageLocationsSnapshot,
   getContainer,
+  normalizeProductName,
+  normalizeWorkflowDisplayName,
   type ContainerListItem,
 } from './warehouseApi';
 import type {
@@ -501,7 +503,7 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
           location: item?.currentStorageLocationCode || item?.currentEndpointCode || destinationEndpointCode,
           currentEndpointCode: item?.currentEndpointCode,
           currentStorageLocationCode: item?.currentStorageLocationCode,
-          product: item?.productName || 'Warehouse Tote',
+          product: normalizeProductName(item?.productName),
           productSku: item?.productSku,
           qty: item?.qty ?? 0,
         };
@@ -517,6 +519,15 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
           },
         ]);
 
+  const rawWfCode =
+    raw.workflowId === 'e86995fe-461a-4329-8724-a7beab6b57ab'
+      ? 'INTERNAL_RELOCATION'
+      : raw.contextValues?.workflowCode || existingSeed?.contextValues?.workflowCode || 'INBOUND_PUTAWAY';
+  const rawWfName =
+    raw.contextValues?.workflowName ||
+    existingSeed?.contextValues?.workflowName ||
+    (raw.workflowId === 'e86995fe-461a-4329-8724-a7beab6b57ab' ? 'Internal Relocation' : 'Inbound Putaway');
+
   const enrichedContextValues = {
     batchKey: raw.contextValues?.batchKey || existingSeed?.contextValues?.batchKey || 'BATCH-001',
     warehouseId:
@@ -528,23 +539,14 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
       raw.transportRequestIds?.[0] ||
       existingSeed?.contextValues?.transportRequestId ||
       'TR-2048',
-    workflowCode:
-      raw.contextValues?.workflowCode ||
-      existingSeed?.contextValues?.workflowCode ||
-      'INBOUND_PUTAWAY',
-    workflowName:
-      raw.contextValues?.workflowName ||
-      existingSeed?.contextValues?.workflowName ||
-      'Inbound Putaway',
     assignedRobotCode,
     sourceEndpointCode,
     destinationEndpointCode,
     routeText,
     currentStop,
     ...raw.contextValues,
-    ...(raw.workflowId === 'e86995fe-461a-4329-8724-a7beab6b57ab' && !raw.contextValues?.workflowName
-      ? { workflowCode: 'INTERNAL_RELOCATION', workflowName: 'Internal Relocation' }
-      : {}),
+    workflowCode: rawWfCode,
+    workflowName: normalizeWorkflowDisplayName(rawWfCode, rawWfName),
     containerMeta,
     assignedRobotId: raw.assignedRobotId || raw.contextValues?.assignedRobotId,
     activeStepId: waitingStep?.id || (raw.status === 'ASSIGNED' ? raw.currentStepId : undefined),
