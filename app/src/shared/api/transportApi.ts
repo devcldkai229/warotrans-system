@@ -1,7 +1,8 @@
 import { apiFetch } from './client';
 import type { JobDetailResponse, TransportRequestStatus } from '../types/contracts';
-import { registerProvisionedJobs } from './executionApi';
-import { reserveStorageSlots } from './warehouseApi';
+import { listJobs, registerProvisionedJobs } from './executionApi';
+import { listPublishedWorkflows } from './workflowApi';
+import { getSeedContainersSnapshot as getContainersSnapshot, listContainers, reserveStorageSlots } from './warehouseApi';
 
 export interface CreateTransportRequestDetailBody {
   sequenceNo: number;
@@ -622,8 +623,54 @@ export async function listTransportRequests(params?: {
     const res = await apiFetch<ListTransportRequestsResponse>(
       `/api/transportation/transport-requests${qs ? `?${qs}` : ''}`
     );
-    if (res?.items && res.items.length > 0) {
-      return res;
+    if (res?.items) {
+      const [jobs, publishedWorkflows, liveContainers] = await Promise.all([
+        listJobs().catch(() => []),
+        listPublishedWorkflows().catch(() => ({ items: [] })),
+        // The warehouse snapshot currently contains seeds only; prefer live metadata.
+        Promise.all(Array.from(new Set(res.items.map((item) => item.warehouseId))).map(
+          (warehouseId) => listContainers({ warehouseId }).then((result) => result.items).catch(() => []),
+        )),
+      ]);
+      const containers = [...liveContainers.flat(), ...getContainersSnapshot()];
+      const friendlyWorkflows = [
+        { name: 'Inbound Putaway', code: 'INBOUND_PUTAWAY' },
+        { name: 'Outbound Retrieval', code: 'OUTBOUND_RETRIEVAL' },
+        { name: 'Reallocation', code: 'INTERNAL_RELOCATION' },
+        { name: 'Replenishment', code: 'REPLENISHMENT' },
+        { name: 'Point-to-Point', code: 'POINT_TO_POINT_TRANSPORT' },
+      ];
+      return {
+        ...res,
+        items: res.items.map((item) => {
+          const workflow = publishedWorkflows.items.find((w) => w.id === item.workflowId);
+          const friendly = friendlyWorkflows.find((w) => item.note?.startsWith(`${w.name}:`));
+          const matchedJob = jobs.find((job) => {
+            if (['JOB-2026-0812', 'JOB-2026-0819'].includes(job.id)) return false;
+            const requestIds = (job as JobDetailResponse & { transportRequestIds?: string[] }).transportRequestIds;
+            return (Array.isArray(requestIds) && requestIds.includes(item.id)) ||
+              job.contextValues?.transportRequestId === item.id ||
+              job.contextValues?.transportRequestId === item.requestCode ||
+              job.containers?.some((c) => c.transportRequestId === item.id);
+          });
+          return {
+            ...item,
+            workflowCode: friendly?.code || workflow?.code || item.workflowCode,
+            workflowName: friendly?.name || workflow?.name || item.workflowName,
+            linkedJobId: matchedJob?.id || item.linkedJobId || null,
+            assignedRobotCode: (matchedJob?.contextValues?.assignedRobotCode as string) || item.assignedRobotCode || 'AMR-01',
+            details: (item.details || []).map((d) => {
+              const matchedContainer = containers.find((c) => c.id === d.containerId || c.barcode === d.containerBarcode);
+              return {
+                ...d,
+                containerBarcode: matchedContainer?.barcode || d.containerBarcode,
+                productName: matchedContainer?.productName || 'Thùng linh kiện demo',
+                qty: matchedContainer?.qty || 20,
+              };
+            }),
+          };
+        }),
+      };
     }
   } catch {
     // Fallback to reactive in-memory transport request store

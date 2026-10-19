@@ -34,7 +34,7 @@ import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { StatusPill } from '../../shared/ui/StatusPill';
 import { Text } from '../../shared/ui/Text';
-import { listTransportRequests } from '../../shared/api';
+import { cancelRobotCommand, listRobots, listTransportRequests, type RobotDto } from '../../shared/api';
 
 export interface RecentDispatchItem {
   id: string;
@@ -141,6 +141,13 @@ export function TransportScreen() {
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
   const [dispatches, setDispatches] = useState<RecentDispatchItem[]>(RECENT_DISPATCHES);
   const [isLoadingDispatches, setIsLoadingDispatches] = useState(false);
+  const [availableRobots, setAvailableRobots] = useState<RobotDto[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    listRobots().then((res) => { if (mounted) setAvailableRobots(res.items); }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -148,7 +155,7 @@ export function TransportScreen() {
       setIsLoadingDispatches(true);
       try {
         const res = await listTransportRequests({ take: 5 });
-        if (isMounted && res?.items && res.items.length > 0) {
+        if (isMounted && res?.items) {
           const mapped = res.items.map((item) => {
             const details = item.details || [];
             const first = details[0];
@@ -203,7 +210,7 @@ export function TransportScreen() {
                     minute: '2-digit',
                   })
                 : 'Just now',
-              jobId: item.linkedJobId || 'JOB-2026-0812',
+              jobId: item.linkedJobId || '',
             };
           });
           setDispatches(mapped);
@@ -231,6 +238,13 @@ export function TransportScreen() {
         'Nearby AMR soft-pause released. Normal Nav2 navigation resumed.'
       );
     } else {
+      const activeRobot = availableRobots.find((robot) =>
+        robot.currentCommandId || ['BUSY', 'RUNNING', 'EXECUTING'].includes(robot.status) ||
+        robot.navigationStatus === 'NAVIGATING');
+      const selectedRobotUuid = activeRobot?.id;
+      if (selectedRobotUuid) {
+        void cancelRobotCommand(selectedRobotUuid, 'Operator soft-hold from mobile console').catch(() => {});
+      }
       toast.warning(
         'HOLD ROBOT ACTIVE: Nearby AMRs within 3m perimeter soft-paused.'
       );
@@ -459,10 +473,10 @@ export function TransportScreen() {
                   key={dispatch.id}
                   onPress={() => {
                     triggerHaptic('tap');
-                    if (dispatch.status === 'SUBMITTED') {
-                      navigate('transport_history');
-                    } else {
+                    if (dispatch.jobId) {
                       navigate('job_detail', { jobId: dispatch.jobId });
+                    } else {
+                      navigate('transport_history');
                     }
                   }}
                   style={({ pressed }) => [

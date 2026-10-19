@@ -1,4 +1,10 @@
 import { apiFetch } from './client';
+import {
+  getSeedContainersSnapshot as getContainersSnapshot,
+  getStorageLocationsSnapshot,
+  getContainer,
+  type ContainerListItem,
+} from './warehouseApi';
 import type {
   HandoverConfirmationBody,
   HandoverConfirmationResponse,
@@ -273,12 +279,24 @@ export function completePayloadRecoveryJob(jobId: string, rescueRobotCode: strin
   });
 }
 
-/**
- * Normalizes backend JobSummaryDto or JobDetailDto into rich JobDetailResponse.
- * Ensures `task.workflowStepKey ?? step.stepKey`, `task.contextValues`
- * (with executionScope, stopAction, containerId, stopEndpointId),
- * and `job.contextValues` are fully populated.
- */
+const executionContainers = new Map<string, ContainerListItem>();
+const isUuid = (value: string) => /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(value);
+
+// Warehouse snapshots contain demo/local registrations in this checkout. Cache
+// missing backend containers here without changing the warehouse API contract.
+async function hydrateJobContainers(jobs: any[]): Promise<void> {
+  const ids = new Set<string>(jobs.flatMap((job) =>
+    (job.containers || []).map((c: any) => c.containerId).filter((id: string) =>
+      typeof id === 'string' && isUuid(id) && !executionContainers.has(id) &&
+      !getContainersSnapshot().some((c) => c.id === id || c.barcode === id)),
+  ));
+  await Promise.allSettled([...ids].map(async (id) => {
+    const container = await getContainer(id);
+    if (container?.id) executionContainers.set(id, container);
+  }));
+}
+
+/** Normalizes backend summaries and task graphs into the existing rich UI model. */
 function normalizeJobDetail(raw: any): JobDetailResponse {
   if (!raw) return raw;
 
@@ -334,7 +352,9 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
     });
 
     const executionScope = task.executionScope ?? task.contextValues?.executionScope;
-    const stopAction = task.stopAction ?? task.contextValues?.stopAction;
+    const stopAction = task.stopAction ?? task.contextValues?.stopAction ??
+      (steps.some((step) => step.operationCode === 'PICKUP_CONFIRM' || step.workflowStepKey === 'PICKUP_CONFIRM') ? 'PICKUP'
+        : steps.some((step) => step.operationCode === 'DROPOFF_CONFIRM' || step.workflowStepKey === 'DROPOFF_CONFIRM') ? 'DROPOFF' : undefined);
     const stopEndpointId = task.stopEndpointId ? String(task.stopEndpointId) : task.contextValues?.stopEndpointId;
     const containerId = task.containerId ? String(task.containerId) : task.contextValues?.containerId;
 
@@ -358,13 +378,39 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
     };
   });
 
+  const waitingTask = tasks.find((task) => task.steps.some((step) =>
+    step.status === 'WAITING' && (step.stepType === 'HUMAN_INTERACTION' ||
+      ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.operationCode) ||
+      ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.workflowStepKey)),
+  ));
+  const waitingStep = waitingTask?.steps.find((step) =>
+    step.status === 'WAITING' && (step.stepType === 'HUMAN_INTERACTION' ||
+      ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.operationCode) ||
+      ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.workflowStepKey)),
+  );
+  const handoverOperation = waitingStep?.operationCode || waitingStep?.workflowStepKey;
+  const activeStepOperation = ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(handoverOperation || '')
+    ? handoverOperation
+    : ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(waitingStep?.workflowStepKey || '')
+    ? waitingStep?.workflowStepKey
+    : waitingTask?.contextValues?.stopAction === 'PICKUP' ? 'PICKUP_CONFIRM'
+    : waitingTask?.contextValues?.stopAction === 'DROPOFF' ? 'DROPOFF_CONFIRM' : undefined;
+  const waitingContainerId = (waitingStep?.resolvedInputs?.containerId as string) ||
+    (waitingTask?.contextValues?.containerId as string) || null;
+  const containerSnapshot = [...executionContainers.values(), ...getContainersSnapshot()];
+  const locations = getStorageLocationsSnapshot();
+  const endpointCode = (id: unknown) => {
+    const location = locations.find((loc) => loc.id === id || loc.endpointId === id);
+    return location?.endpointCode || location?.code || id;
+  };
+
   // Determine robot code
   const assignedRobotCode =
     raw.contextValues?.assignedRobotCode ||
     raw.assignedRobotCode ||
     (raw.assignedRobotId
       ? typeof raw.assignedRobotId === 'string' &&
-        (raw.assignedRobotId.includes('02') || raw.assignedRobotId.endsWith('2'))
+        raw.assignedRobotId.endsWith('2')
         ? 'AMR-02'
         : 'AMR-01'
       : existingSeed?.contextValues?.assignedRobotCode || 'AMR-01');
@@ -375,13 +421,13 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
 
   const sourceEndpointCode =
     raw.contextValues?.sourceEndpointCode ||
-    pickupTask?.contextValues?.stopEndpointId ||
+    endpointCode(pickupTask?.contextValues?.stopEndpointId) ||
     existingSeed?.contextValues?.sourceEndpointCode ||
     'DOCK-IN-01';
 
   const destinationEndpointCode =
     raw.contextValues?.destinationEndpointCode ||
-    dropoffTask?.contextValues?.stopEndpointId ||
+    endpointCode(dropoffTask?.contextValues?.stopEndpointId) ||
     existingSeed?.contextValues?.destinationEndpointCode ||
     'RACK-A-02 · Level 1';
 
@@ -397,25 +443,37 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
 
   // Enrich containerMeta if not present
   const containerMeta =
-    raw.contextValues?.containerMeta ||
-    existingSeed?.contextValues?.containerMeta ||
+    (!isUuid(raw.id) && (raw.contextValues?.containerMeta || existingSeed?.contextValues?.containerMeta)) ||
     (containers.length > 0
-      ? containers.map((c, idx) => ({
-          code: c.containerId,
+      ? containers.map((c, idx) => {
+        const item = containerSnapshot.find((item) => item.id === c.containerId || item.barcode === c.containerId);
+        // An explicit target must never accidentally select Bay 1 as well.
+        const isWaitingTarget = waitingContainerId ? waitingContainerId === c.containerId : idx === 0;
+        return {
+          containerId: c.containerId,
+          status: c.status,
+          code: item?.barcode || (isUuid(c.containerId) ? `Container ${c.sequenceNo}` : c.containerId),
           slot: idx === 0 ? 'Bay 1 (Front)' : 'Bay 2 (Rear)',
           action:
             c.status === 'DELIVERED'
               ? 'DELIVERED'
-              : c.status === 'ONBOARD' && idx === 0
+              : waitingStep && activeStepOperation === 'DROPOFF_CONFIRM' && isWaitingTarget
               ? 'UNLOAD'
-              : c.status === 'ONBOARD'
+              : waitingStep && activeStepOperation === 'PICKUP_CONFIRM' && isWaitingTarget
+              ? 'PICKUP'
+              : c.status === 'ONBOARD' || String(c.status) === 'LOADED'
               ? 'KEEP ONBOARD'
               : 'PICKUP',
-          location: destinationEndpointCode,
-          product: 'Warehouse Tote',
-          qty: 20,
-        }))
-      : [
+          isTarget: Boolean(waitingStep && isWaitingTarget && c.status !== 'DELIVERED'),
+          location: item?.currentStorageLocationCode || item?.currentEndpointCode || destinationEndpointCode,
+          currentEndpointCode: item?.currentEndpointCode,
+          currentStorageLocationCode: item?.currentStorageLocationCode,
+          product: item?.productName || 'Warehouse Tote',
+          productSku: item?.productSku,
+          qty: item?.qty ?? 0,
+        };
+      })
+      : isUuid(raw.id) ? [] : [
           {
             code: 'BOX-101',
             slot: 'Bay 1 (Front)',
@@ -450,8 +508,13 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
     destinationEndpointCode,
     routeText,
     currentStop,
-    containerMeta,
     ...raw.contextValues,
+    containerMeta,
+    assignedRobotId: raw.assignedRobotId || raw.contextValues?.assignedRobotId,
+    activeStepId: waitingStep?.id || (raw.status === 'ASSIGNED' ? raw.currentStepId : undefined),
+    activeStepOperation,
+    hasWaitingHandover: Boolean(waitingStep),
+    waitingContainerId,
   };
 
   return {
@@ -497,7 +560,18 @@ export async function listJobs(filter?: {
     const query = params.toString() ? `?${params.toString()}` : '';
     const apiRes = await apiFetch<any>(`/api/workflow-execution/jobs${query}`);
     const rawList: any[] = Array.isArray(apiRes) ? apiRes : apiRes?.items;
-    if (rawList && rawList.length > 0) {
+    if (Array.isArray(rawList)) {
+      const pendingDetails = rawList.filter((item) => !(Array.isArray(item.tasks) && item.tasks.length > 0)).slice(0, 8);
+      const details = await Promise.allSettled(pendingDetails.map((item) =>
+        apiFetch<any>(`/api/workflow-execution/jobs/${item.id}`),
+      ));
+      details.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value?.id === pendingDetails[index].id) {
+          const position = rawList.indexOf(pendingDetails[index]);
+          rawList[position] = { ...pendingDetails[index], ...result.value };
+        }
+      });
+      await hydrateJobContainers(rawList);
       return rawList.map(normalizeJobDetail);
     }
   } catch (err) {
@@ -510,7 +584,7 @@ export async function listJobs(filter?: {
   if (filter?.status) {
     result = result.filter((j) => j.status === filter.status);
   }
-  return result;
+  return result.map(normalizeJobDetail);
 }
 
 /**
@@ -520,6 +594,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetailResponse> {
   try {
     const raw = await apiFetch<any>(`/api/workflow-execution/jobs/${jobId}`);
     if (raw) {
+      await hydrateJobContainers([raw]);
       const normalized = normalizeJobDetail(raw);
       const index = SEED_JOBS.findIndex((j) => j.id === normalized.id || j.jobNo === normalized.jobNo);
       if (index >= 0) {
@@ -536,7 +611,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetailResponse> {
   }
 
   const match = SEED_JOBS.find((j) => j.id === jobId || j.jobNo === jobId);
-  if (match) return match;
+  if (match) return normalizeJobDetail(match);
   return SEED_JOBS[0];
 }
 
@@ -553,6 +628,7 @@ export async function startJob(
       body: JSON.stringify({ robotId: robotId ?? null }),
     });
     if (res) {
+      await hydrateJobContainers([res]);
       const normalized = normalizeJobDetail(res);
       SEED_JOBS = SEED_JOBS.map((j) => (j.id === normalized.id || j.jobNo === normalized.jobNo ? normalized : j));
       return normalized;
@@ -633,7 +709,8 @@ export async function confirmHandover(
         }),
       },
     );
-    if (apiRes) {
+    if (apiRes?.id && apiRes?.status) {
+      await hydrateJobContainers([apiRes]);
       const normalized = normalizeJobDetail(apiRes);
       const index = SEED_JOBS.findIndex((j) => j.id === normalized.id || j.jobNo === normalized.jobNo);
       if (index >= 0) {
@@ -641,6 +718,7 @@ export async function confirmHandover(
       }
       return normalized;
     }
+    if (apiRes?.id) return apiRes as HandoverConfirmationResponse;
   } catch (err) {
     if (__DEV__) {
       console.info('[ExecutionApi] confirmHandover fallback to local in-memory state:', err);

@@ -25,6 +25,9 @@ export interface JobStopItem {
 }
 
 export interface JobContainerItem {
+  containerId?: string;
+  status?: string;
+  isTarget?: boolean;
   code: string;
   slot: string;
   action: 'UNLOAD' | 'KEEP ONBOARD' | 'PICKUP' | 'DELIVERED';
@@ -34,6 +37,10 @@ export interface JobContainerItem {
 }
 
 export interface AppJobItem extends JobSummary {
+  activeStepId?: string;
+  activeStepOperation?: 'PICKUP_CONFIRM' | 'DROPOFF_CONFIRM' | string;
+  hasWaitingHandover?: boolean;
+  assignedRobotId?: string;
   target: string;
   route: string;
   robot: string;
@@ -130,10 +137,16 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse): AppJobItem 
     : null;
 
   const containers: JobContainerItem[] = rawMeta
-    ? rawMeta.slice(0, 2)
+    ? rawMeta.slice(0, 2).map((c, idx) => ({
+        ...c,
+        containerId: c.containerId || detail.containers[idx]?.containerId,
+        status: c.status || detail.containers[idx]?.status,
+      }))
     : existingMock?.containers
     ? existingMock.containers.slice(0, 2)
     : detail.containers.slice(0, 2).map((c, idx) => ({
+        containerId: c.containerId,
+        status: c.status,
         code: c.containerId,
         slot: idx === 0 ? 'Bay 1 (Front)' : 'Bay 2 (Rear)',
         action:
@@ -141,7 +154,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse): AppJobItem 
             ? 'DELIVERED'
             : c.status === 'ONBOARD' && idx === 0
             ? 'UNLOAD'
-            : c.status === 'ONBOARD'
+            : c.status === 'ONBOARD' || String(c.status) === 'LOADED'
             ? 'KEEP ONBOARD'
             : 'PICKUP',
         location: destCode,
@@ -181,7 +194,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse): AppJobItem 
           }))
         );
 
-  const stopsList: JobStopItem[] =
+  let stopsList: JobStopItem[] =
     existingMock?.stopsList && existingMock.stopsList.length > 0
       ? existingMock.stopsList
       : [
@@ -204,12 +217,47 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse): AppJobItem 
           },
         ];
 
+  // Preserve the demo tour; backend stops follow the actual ordered task graph.
+  const isBackendJob = !['JOB-2026-0812', 'JOB-2026-0819'].includes(detail.id);
+  const stopTasks = [...detail.tasks]
+    .sort((a, b) => a.sequenceNo - b.sequenceNo)
+    .filter((task) => ['PICKUP', 'DROPOFF'].includes(String(task.contextValues?.stopAction)));
+  if (isBackendJob && stopTasks.length > 0) {
+    const activeIndex = stopTasks.findIndex((task) => !['COMPLETED', 'SKIPPED'].includes(task.status));
+    stopsList = stopTasks.map((task, index): JobStopItem => {
+      const pickup = task.contextValues?.stopAction === 'PICKUP';
+      const done = ['COMPLETED', 'SKIPPED'].includes(task.status);
+      const active = !done && index === activeIndex && !['CREATED', 'QUEUED'].includes(detail.status) &&
+        !isTerminalJobStatus(detail.status);
+      const location = String(task.contextValues?.stopEndpointCode || (pickup ? sourceCode : destCode));
+      const target = containers.find((c) => c.containerId === task.contextValues?.containerId);
+      return {
+        id: index + 1,
+        name: `Stop ${index + 1}: ${pickup ? 'Pickup' : 'Dropoff'} · ${location}`,
+        description: `${pickup ? 'Load' : 'Unload'} ${target?.code || containers.map((c) => c.code).join(', ')} · ${location}`,
+        state: done ? 'done' : active ? 'active' : 'future',
+        current: active,
+        steps: task.steps.map((step) => ({
+          type: step.stepType,
+          label: step.workflowStepKey || step.operationCode,
+          status: step.status === 'COMPLETED' ? 'done'
+            : step.status === 'WAITING' ? 'waiting'
+            : step.status === 'EXECUTING' ? 'running' : 'future',
+        })),
+      };
+    });
+  }
+
   return {
     id: detail.id,
     jobNo: detail.jobNo,
     workflowCode: wfCode,
     workflowName: wfName,
     status: detail.status,
+    activeStepId: (detail.contextValues?.activeStepId as string) || undefined,
+    activeStepOperation: (detail.contextValues?.activeStepOperation as string) || undefined,
+    hasWaitingHandover: Boolean(detail.contextValues?.hasWaitingHandover || detail.status === 'ASSIGNED'),
+    assignedRobotId: (detail.contextValues?.assignedRobotId as string) || undefined,
     assignedRobotCode: robotCode,
     sourceEndpointCode: sourceCode,
     destinationEndpointCode: destCode,
@@ -225,10 +273,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse): AppJobItem 
     target: destCode,
     route: routeText,
     robot: robotCode,
-    isMine:
-      detail.status === 'ASSIGNED' ||
-      detail.status === 'RUNNING' ||
-      detail.status === 'RECOVERY_REQUIRED',
+    isMine: !isTerminalJobStatus(detail.status),
     battery: robotCode === 'AMR-02' ? '92%' : '85%',
     speed: detail.status === 'RUNNING' ? '0.65 m/s' : '0.0 m/s',
     distanceRemaining:

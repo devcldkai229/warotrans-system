@@ -60,6 +60,17 @@ const INITIAL_ROBOTS: MapRobot[] = [
 
 const INITIAL_JOB = MOCK_JOBS.find((job) => job.id === 'JOB-2026-0812') ?? MOCK_JOBS[0];
 
+function mapRobotPose(poseX: number, poseY: number, fallback: MapRobot) {
+  if (poseX === 0 && poseY === 0) {
+    return { xPercent: fallback.xPercent, yPercent: fallback.yPercent };
+  }
+  // Project metres onto the schematic's 50 x 30 m viewport, inside its safe bounds.
+  return {
+    xPercent: Math.max(18, Math.min(82, 18 + (poseX / 50) * 64)),
+    yPercent: Math.max(18, Math.min(68, 68 - (poseY / 30) * 50)),
+  };
+}
+
 /**
  * Modern "Command Center" HomeScreen.
  *
@@ -77,17 +88,28 @@ export function HomeScreen() {
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
   const [activeJob, setActiveJob] = useState<AppJobItem>(INITIAL_JOB);
   const [fleetRobots, setFleetRobots] = useState<MapRobot[]>(INITIAL_ROBOTS);
-  const { robotTelemetry } = useRealtime();
+  const { robotTelemetry, lastJobUpdate } = useRealtime();
 
   useEffect(() => {
     let isMounted = true;
-    listJobs({ status: 'ASSIGNED' })
+    listJobs()
       .then((jobs) => {
-        if (isMounted && jobs && jobs.length > 0) {
-          setActiveJob(mapJobDetailToAppJobItem(jobs[0]));
+        if (isMounted) {
+          const mapped = jobs.map(mapJobDetailToAppJobItem);
+          const priority = (job: AppJobItem) => job.hasWaitingHandover || job.status === 'ASSIGNED' ? 0
+            : ['RECOVERY_REQUIRED', 'PAUSED', 'FAILED'].includes(job.status) ? 1
+            : job.status === 'RUNNING' ? 2
+            : ['QUEUED', 'CREATED'].includes(job.status) ? 3 : 4;
+          setActiveJob(mapped.sort((a, b) => priority(a) - priority(b))[0] || INITIAL_JOB);
         }
       })
       .catch(() => {});
+
+    return () => { isMounted = false; };
+  }, [lastJobUpdate]);
+
+  useEffect(() => {
+    let isMounted = true;
 
     // Fetch initial fleet status from backend so battery/status/pose reflects database on mount
     listRobots()
@@ -99,17 +121,14 @@ export function HomeScreen() {
               INITIAL_ROBOTS[idx % INITIAL_ROBOTS.length];
             return {
               id: r.code,
-              xPercent: fallback ? fallback.xPercent : 50,
-              yPercent: fallback ? fallback.yPercent : 50,
-              headingDeg: r.poseYaw
-                ? Math.round((r.poseYaw * 180) / Math.PI)
-                : fallback?.headingDeg || 0,
+              ...mapRobotPose(r.poseX ?? 0, r.poseY ?? 0, fallback),
+              headingDeg: Math.round(((r.poseYaw ?? 0) * 180) / Math.PI),
               status: (r.navigationStatus === 'NAVIGATING'
                 ? 'EN_ROUTE'
                 : r.navigationStatus === 'PAUSED'
                   ? 'PAUSED'
                   : 'STANDBY') as any,
-              battery: Math.round(r.batteryPercent || 85),
+              battery: Math.round(r.batteryPercent ?? 85),
               speed: r.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
             };
           });
@@ -124,19 +143,23 @@ export function HomeScreen() {
   }, []);
 
   const robots = useMemo(() => {
-    return fleetRobots.map((r) => {
+    return fleetRobots.map((r, idx) => {
       const live = robotTelemetry[r.id];
       if (!live) return r;
       return {
         ...r,
-        battery: Math.round(Number(live.batteryPercent) || r.battery),
+        ...mapRobotPose(live.poseX, live.poseY,
+          INITIAL_ROBOTS.find((initial) => initial.id === r.id) || INITIAL_ROBOTS[idx % INITIAL_ROBOTS.length]),
+        battery: Math.round(live.batteryPercent ?? r.battery),
         status: (live.navigationStatus === 'NAVIGATING'
           ? 'EN_ROUTE'
           : live.navigationStatus === 'STANDBY'
           ? 'STANDBY'
-          : r.status) as any,
+          : live.navigationStatus === 'PAUSED'
+          ? 'PAUSED'
+          : 'STANDBY') as any,
         speed: live.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
-        headingDeg: live.poseYaw ? Math.round((live.poseYaw * 180) / Math.PI) : r.headingDeg,
+        headingDeg: Math.round(((live.poseYaw ?? 0) * 180) / Math.PI),
       };
     });
   }, [fleetRobots, robotTelemetry]);

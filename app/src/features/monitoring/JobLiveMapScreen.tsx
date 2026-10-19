@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -21,6 +21,8 @@ import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
 import { useRealtime } from '../../shared/realtime';
+import { getJobDetail, listJobs, listRobots } from '../../shared/api';
+import { mapJobDetailToAppJobItem, type AppJobItem } from '../jobs/jobData';
 
 const SHEET_GAP = 8;
 const DOCK_ZONE_GAP = 12;
@@ -28,7 +30,8 @@ const SHEET_FALLBACK_HEIGHT = 174;
 
 export function JobLiveMapScreen() {
   const { params, dockHeight, goBack } = useNavigation();
-  const { robotTelemetry } = useRealtime();
+  const { robotTelemetry, lastJobUpdate } = useRealtime();
+  const [liveJob, setLiveJob] = useState<AppJobItem | null>(null);
   const dockInset = dockReservedSpace(dockHeight);
   const [sheetHeight, setSheetHeight] = useState(0);
   const sheetBottom = dockInset + SHEET_GAP;
@@ -41,6 +44,40 @@ export function JobLiveMapScreen() {
   const jobId = params?.jobId || 'JOB-2026-0812';
   const target = params?.target || 'Rack A · Level 2 · Bin 03';
   const route = params?.route || 'Dock 01 ➔ Rack A · Level 2 · Bin 03';
+  const headerJobNo = liveJob?.jobNo || jobId;
+
+  useEffect(() => {
+    setLiveJob(null);
+  }, [params?.jobId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (params?.robotId) setSelectedRobot(params.robotId === 'AMR-02' ? 'AMR-02' : 'AMR-01');
+    async function loadLiveJob() {
+      const fleetPromise = listRobots().catch(() => ({ items: [] }));
+      const detailPromise = (async () => {
+        if (params?.jobId && params.jobId !== 'JOB-2026-0812') {
+          const detail = await getJobDetail(params.jobId);
+          return detail.id === params.jobId || detail.jobNo === params.jobId ? detail : null;
+        }
+        const jobs = await listJobs();
+        const active = jobs.find((job) => !['JOB-2026-0812', 'JOB-2026-0819'].includes(job.id) &&
+          !['COMPLETED', 'CANCELLED', 'FAILED'].includes(job.status));
+        if (!active) return null;
+        const detail = await getJobDetail(active.id);
+        return detail.id === active.id ? detail : active;
+      })();
+      const [detail, fleet] = await Promise.all([detailPromise, fleetPromise]);
+      if (cancelled || !detail) return;
+      const mapped = mapJobDetailToAppJobItem(detail);
+      const assignedRobot = fleet.items.find((robot) => robot.id === detail.contextValues?.assignedRobotId);
+      if (assignedRobot) mapped.robot = assignedRobot.code;
+      setLiveJob(mapped);
+      if (!params?.robotId) setSelectedRobot(mapped.robot === 'AMR-02' ? 'AMR-02' : 'AMR-01');
+    }
+    loadLiveJob().catch(() => {});
+    return () => { cancelled = true; };
+  }, [params?.jobId, params?.robotId, lastJobUpdate]);
 
   const isAmr2 = selectedRobot === 'AMR-02';
   const telemetry = robotTelemetry[selectedRobot];
@@ -57,7 +94,7 @@ export function JobLiveMapScreen() {
       {/* Safe-Area Aware Industrial SubScreenHeader with Back & Center Actions */}
       <SubScreenHeader
         label={`Tracking ${selectedRobot}`}
-        title={jobId}
+        title={headerJobNo.length === 36 ? 'Live Job' : headerJobNo}
         onBack={goBack}
         rightAction={
           <Pressable
@@ -190,13 +227,13 @@ export function JobLiveMapScreen() {
             !isAmr2 && styles.robotWrapperActive,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="AMR-01, en route"
+          accessibilityLabel={`AMR-01, ${robotTelemetry['AMR-01']?.navigationStatus || 'Standby'}`}
           accessibilityState={{ selected: !isAmr2 }}
         >
           {!isAmr2 && <View style={styles.sonarCone} />}
           <View style={[styles.robotCircle, !isAmr2 && styles.robotCircleSelected]}>
             <Svg width={24} height={24} viewBox="0 0 24 24">
-              <G rotation={0} origin="12, 12">
+              <G rotation={Math.round(((robotTelemetry['AMR-01']?.poseYaw || 0) * 180) / Math.PI)} origin="12, 12">
                 <Path
                   d={ROBOT_HEADING_ARROW_PATH}
                   fill="#ffffff"
@@ -210,7 +247,7 @@ export function JobLiveMapScreen() {
           <View style={[styles.robotPill, !isAmr2 && styles.robotPillActive]}>
             <View style={[styles.robotDot, { backgroundColor: '#16a34a' }]} />
             <Text style={styles.robotPillId} numberOfLines={1}>AMR-01</Text>
-            <Text style={styles.robotPillSub} numberOfLines={1}>1.2 m/s</Text>
+            <Text style={styles.robotPillSub} numberOfLines={1}>{robotTelemetry['AMR-01']?.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : 'Standby'}</Text>
           </View>
         </Pressable>
 
@@ -226,13 +263,13 @@ export function JobLiveMapScreen() {
             isAmr2 && styles.robotWrapperActive,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="AMR-02, on standby"
+          accessibilityLabel={`AMR-02, ${robotTelemetry['AMR-02']?.navigationStatus || 'Standby'}`}
           accessibilityState={{ selected: isAmr2 }}
         >
           {isAmr2 && <View style={styles.sonarCone} />}
           <View style={[styles.robotCircle, isAmr2 && styles.robotCircleSelected]}>
             <Svg width={24} height={24} viewBox="0 0 24 24">
-              <G rotation={180} origin="12, 12">
+              <G rotation={Math.round(((robotTelemetry['AMR-02']?.poseYaw || 0) * 180) / Math.PI)} origin="12, 12">
                 <Path
                   d={ROBOT_HEADING_ARROW_PATH}
                   fill="#ffffff"
@@ -246,7 +283,7 @@ export function JobLiveMapScreen() {
           <View style={[styles.robotPill, isAmr2 && styles.robotPillActive]}>
             <View style={[styles.robotDot, { backgroundColor: colors.warning }]} />
             <Text style={styles.robotPillId} numberOfLines={1}>AMR-02</Text>
-            <Text style={styles.robotPillSub} numberOfLines={1}>Standby</Text>
+            <Text style={styles.robotPillSub} numberOfLines={1}>{robotTelemetry['AMR-02']?.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : 'Standby'}</Text>
           </View>
         </Pressable>
 
@@ -259,7 +296,7 @@ export function JobLiveMapScreen() {
             <View>
               <Text style={styles.sheetRobotId}>{selectedRobot}</Text>
               <Text style={styles.sheetRoute} numberOfLines={1}>
-                {route}
+                {liveJob?.route || route}
               </Text>
             </View>
             <View style={styles.statusBadge}>
@@ -293,7 +330,7 @@ export function JobLiveMapScreen() {
           <View style={styles.targetBanner}>
             <Clock3 size={15} color={colors.textSecondary} />
             <Text style={styles.targetBannerText} numberOfLines={1}>
-              Target: {target}
+              Target: {liveJob?.target || target}
             </Text>
           </View>
         </View>

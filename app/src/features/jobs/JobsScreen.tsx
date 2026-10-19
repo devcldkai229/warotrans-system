@@ -14,7 +14,7 @@ import {
 } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { acceptHumanTask, listJobs } from '../../shared/api';
+import { acceptHumanTask, listJobs, startJob } from '../../shared/api';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { JobCard } from './JobCard';
 import { AppJobItem, countMyActiveJobs, isTerminalJobStatus, mapJobDetailToAppJobItem, MOCK_JOBS } from './jobData';
@@ -199,14 +199,10 @@ export function JobsScreen() {
   const loadJobs = React.useCallback(async () => {
     try {
       const res = await listJobs();
-      if (res && res.length > 0) {
-        const mapped = res.map(mapJobDetailToAppJobItem);
-        setJobsList((prev) => {
-          const liveIds = new Set(mapped.map((m) => m.id));
-          const existingRemaining = prev.filter((p) => !liveIds.has(p.id));
-          return [...mapped, ...existingRemaining];
-        });
-      }
+      const realJobs = res.filter((job) => !['JOB-2026-0812', 'JOB-2026-0819'].includes(job.id));
+      const mapped = (realJobs.length > 0 ? realJobs : res).map(mapJobDetailToAppJobItem);
+      const liveIds = new Set(mapped.map((job) => job.id));
+      setJobsList(realJobs.length > 0 ? mapped : [...mapped, ...MOCK_JOBS.filter((job) => !liveIds.has(job.id))]);
     } catch (err) {
       console.warn('JobsScreen loadJobs error:', err);
     }
@@ -288,6 +284,14 @@ export function JobsScreen() {
   const handleAcceptTask = async (job: AppJobItem) => {
     triggerHaptic('success');
     try {
+      if (job.status === 'CREATED' || job.status === 'QUEUED') {
+        const updated = await startJob(job.id);
+        if (!updated) throw new Error('Job could not be started');
+        toast.success(`Job ${job.jobNo || job.id} started!`);
+        await loadJobs();
+        navigate('job_detail', { jobId: job.id });
+        return;
+      }
       await acceptHumanTask(job.id, session?.id || 'staff-01');
       toast.success(`Task ${job.id} accepted! Moved to My Tasks.`);
       setJobsList((prev) =>

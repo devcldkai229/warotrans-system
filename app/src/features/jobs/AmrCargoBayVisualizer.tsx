@@ -37,7 +37,9 @@ export function AmrCargoBayVisualizer({
 
   const totalCount = containers.length;
   const targetItems = containers.filter(
-    (c) => c.isTarget || (targetCode && c.code === targetCode) || (isWaiting && c.action === 'UNLOAD'),
+    (c) => isWaiting && c.status !== 'DELIVERED' && c.action !== 'DELIVERED' &&
+      (c.action === 'UNLOAD' || c.action === 'PICKUP') &&
+      (targetCode ? c.code === targetCode : c.isTarget ?? c === containers.find((item) => item.action === 'UNLOAD' || item.action === 'PICKUP')),
   );
 
   return (
@@ -77,9 +79,7 @@ export function AmrCargoBayVisualizer({
         <View style={styles.containersList}>
           {containers.map((container, idx) => {
             const isTarget =
-              container.isTarget ||
-              (targetCode && container.code === targetCode) ||
-              (isWaiting && (container.action === 'UNLOAD' || container.action === 'PICKUP'));
+              targetItems.includes(container);
 
             const isDelivered =
               container.status === 'DELIVERED' || container.action === 'DELIVERED';
@@ -120,7 +120,7 @@ export function AmrCargoBayVisualizer({
 
                   {/* Status Badge */}
                   {isTarget ? (
-                    <View style={styles.targetActionBadge}>
+                    <View style={[styles.targetActionBadge, styles.handoverActionBadge]}>
                       {isUnload ? (
                         <ArrowDownRight size={13} color="#FFFFFF" />
                       ) : (
@@ -140,7 +140,9 @@ export function AmrCargoBayVisualizer({
                   ) : (
                     <View style={styles.onboardBadge}>
                       <Text variant="caption" color={colors.textSecondary} style={styles.badgeText}>
-                        Onboard
+                        {isPickup && container.status !== 'LOADED' && container.status !== 'ONBOARD'
+                          ? 'Waiting Pickup'
+                          : targetItems.some((c) => c.action === 'UNLOAD') ? 'Keep Onboard' : 'Onboard AMR'}
                       </Text>
                     </View>
                   )}
@@ -171,6 +173,9 @@ export function AmrCargoBayVisualizer({
 }
 
 const styles = StyleSheet.create({
+  handoverActionBadge: {
+    backgroundColor: colors.primary,
+  },
   container: {
     backgroundColor: '#FFFFFF',
     borderRadius: radii.lg,

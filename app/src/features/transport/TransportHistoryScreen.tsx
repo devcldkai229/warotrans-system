@@ -250,7 +250,7 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
     product: first?.productName || item.note || 'Standard Cargo',
     qty: totalQty || 1,
     robot: item.assignedRobotCode || 'AMR-01',
-    linkedJobId: item.linkedJobId || 'JOB-2026-0812',
+    linkedJobId: item.linkedJobId || undefined,
     timeLabel: item.submittedAt
       ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : 'Just now',
@@ -275,7 +275,7 @@ export function TransportHistoryScreen() {
     setIsRefreshing(true);
     try {
       const res = await listTransportRequests({ take: 50 });
-      if (res?.items && res.items.length > 0) {
+      if (res?.items) {
         const liveOrders = res.items.map(mapRequestToOrder);
         setOrders(liveOrders);
       }
@@ -585,7 +585,15 @@ export function TransportHistoryScreen() {
                 order.rawStatus === 'FAILED';
 
               return (
-                <View key={order.id} style={styles.orderCard}>
+                <Pressable
+                  key={order.id}
+                  style={styles.orderCard}
+                  onPress={() => {
+                    if (order.linkedJobId) navigate('job_detail', { jobId: order.linkedJobId });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Transport request ${order.requestCode}`}
+                >
                   {/* Card Header: TR ID & Status */}
                   <View style={styles.cardHeader}>
                     <View style={styles.idGroup}>
@@ -699,7 +707,7 @@ export function TransportHistoryScreen() {
                           onPress={() => {
                             triggerHaptic('tap');
                             navigate('live_map', {
-                              jobId: order.linkedJobId || 'JOB-2026-0812',
+                              jobId: order.linkedJobId,
                               robotId: order.robot.includes('AMR-02') ? 'AMR-02' : 'AMR-01',
                             });
                           }}
@@ -713,9 +721,9 @@ export function TransportHistoryScreen() {
                         <Pressable
                           onPress={() => {
                             triggerHaptic('tap');
-                            navigate('job_detail', {
-                              jobId: order.linkedJobId || 'JOB-2026-0812',
-                            });
+                            if (order.linkedJobId) {
+                              navigate('job_detail', { jobId: order.linkedJobId });
+                            }
                           }}
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
@@ -777,7 +785,7 @@ export function TransportHistoryScreen() {
                       </Pressable>
                     ) : null}
                   </View>
-                </View>
+                </Pressable>
               );
             })
           )}

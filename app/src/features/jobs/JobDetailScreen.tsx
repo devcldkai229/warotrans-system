@@ -41,7 +41,8 @@ import { JobStepper } from './JobStepper';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, MOCK_JOBS } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
-import { getJobDetail, reportTaskProblem } from '../../shared/api';
+import { cancelRobotCommand, FALLBACK_ROBOTS, getJobDetail, listRobots, reportTaskProblem, startJob, type RobotDto } from '../../shared/api';
+import type { JobDetailResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 
 export function JobDetailScreen() {
@@ -61,6 +62,21 @@ export function JobDetailScreen() {
   const [showMenu, setShowMenu] = useState(false);
   const [showOtherContainers, setShowOtherContainers] = useState(false);
   const [showNudgeControls, setShowNudgeControls] = useState(false);
+  const [availableRobots, setAvailableRobots] = useState<RobotDto[]>(FALLBACK_ROBOTS);
+  const [selectedRobotId, setSelectedRobotId] = useState(FALLBACK_ROBOTS[0].id);
+  const [isStartingJob, setIsStartingJob] = useState(false);
+  const [bottomConsoleHeight, setBottomConsoleHeight] = useState(160);
+
+  useEffect(() => {
+    let mounted = true;
+    listRobots().then((res) => {
+      if (mounted && res.items.length > 0) {
+        setAvailableRobots(res.items);
+        setSelectedRobotId(res.items[0].id);
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   /** Shared safety hold context */
   const { isHolding, toggleHold } = useSafetyHold();
@@ -114,15 +130,37 @@ export function JobDetailScreen() {
     job.containers?.filter((c) => c.action === 'UNLOAD' || c.action === 'PICKUP') || [];
   const otherContainers =
     job.containers?.filter((c) => c.action !== 'UNLOAD' && c.action !== 'PICKUP') || [];
-  const primaryTarget = targetContainers[0] || job.containers?.[0];
+  const primaryTarget = job.containers?.find((c) => c.isTarget) || targetContainers[0] || job.containers?.[0];
 
   const [targetContainer, setTargetContainer] = useState(primaryTarget?.code || 'BOX-101');
 
-  const isEnRoute = job.status === 'RUNNING';
-  const isWaiting = job.status === 'ASSIGNED';
+  const isWaiting = Boolean(job.hasWaitingHandover || job.status === 'ASSIGNED');
+  const isQueuedOrCreated = job.status === 'CREATED' || job.status === 'QUEUED';
+  const isEnRoute = job.status === 'RUNNING' && !isWaiting;
   const isCompleted = job.status === 'COMPLETED';
+  const selectedRobotCode = availableRobots.find((robot) => robot.id === selectedRobotId)?.code || 'AMR-01';
+  const selectedRobotUuid = job.assignedRobotId || availableRobots.find((robot) => robot.code === job.robot)?.id;
 
-  const statusPresentation = JOB_STATUS_PRESENTATION[job.status];
+  useEffect(() => {
+    setTargetContainer(primaryTarget?.code || 'BOX-101');
+  }, [job.id, primaryTarget?.code]);
+
+  const handleStartJob = async () => {
+    if (isStartingJob) return;
+    setIsStartingJob(true);
+    try {
+      const updated = await startJob(job.id, selectedRobotId);
+      if (!updated) throw new Error('Job could not be started');
+      setJob(mapJobDetailToAppJobItem(updated));
+      toast.success(`Job ${job.jobNo || job.id} started on ${selectedRobotCode}!`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to start job');
+    } finally {
+      setIsStartingJob(false);
+    }
+  };
+
+  const statusPresentation = JOB_STATUS_PRESENTATION[isWaiting ? 'ASSIGNED' : job.status];
 
   const handleNudge = (delta: string) => {
     triggerHaptic('tap');
@@ -133,6 +171,9 @@ export function JobDetailScreen() {
     triggerHaptic('tap');
     if (!isHolding) {
       toggleHold();
+      if (!isQueuedOrCreated && !isCompleted && selectedRobotUuid) {
+        void cancelRobotCommand(selectedRobotUuid, 'Operator soft-hold from mobile console').catch(() => {});
+      }
       toast.warning(`HOLD ACTIVE: Soft-paused ${job.robot} within 3m safety perimeter.`);
     } else {
       toggleHold();
@@ -146,8 +187,10 @@ export function JobDetailScreen() {
     setIsVerifyOpen(true);
   };
 
-  const handleVerifySuccess = (scannedCode: string) => {
+  const handleVerifySuccess = (scannedCode: string, updatedJob?: JobDetailResponse | null) => {
     setIsVerifyOpen(false);
+    if (updatedJob) setJob(mapJobDetailToAppJobItem(updatedJob));
+    getJobDetail(jobId).then((updated) => setJob(mapJobDetailToAppJobItem(updated))).catch(() => {});
     toast.success(`Handover verified for ${scannedCode}. Robot cleared for next waypoint.`);
   };
 
@@ -181,7 +224,7 @@ export function JobDetailScreen() {
         <View style={styles.headerTitleCol}>
           <View style={styles.headerTitleRow}>
             <Text variant="headline" style={styles.jobIdText}>
-              {job.id}
+              {job.jobNo || job.id}
             </Text>
             <View style={styles.robotPill}>
               <Text variant="caption" color={colors.primary} style={styles.robotPillText}>
@@ -229,7 +272,7 @@ export function JobDetailScreen() {
             >
               <PauseCircle size={16} color={isHolding ? colors.primary : colors.warning} />
               <Text variant="body" style={styles.menuItemText}>
-                {isHolding ? 'Release Soft Hold' : 'Soft Hold Robot (3m)'}
+                {isHolding ? 'Release Soft Hold · Sim Aid' : 'Soft Hold (3m) · Sim Aid'}
               </Text>
             </Pressable>
 
@@ -242,7 +285,7 @@ export function JobDetailScreen() {
             >
               <SlidersHorizontal size={16} color={colors.primary} />
               <Text variant="body" style={styles.menuItemText}>
-                Dock Alignment Nudge
+                Dock Alignment Nudge · Sim Aid
               </Text>
             </Pressable>
 
@@ -266,7 +309,7 @@ export function JobDetailScreen() {
       {/* Main Content Body */}
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomConsoleHeight + 16 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -417,7 +460,8 @@ export function JobDetailScreen() {
 
             <View style={styles.focusBody}>
               <Text variant="caption" color={colors.textSecondary} style={styles.focusLabel}>
-                Container to Unload
+                {job.activeStepOperation === 'PICKUP_CONFIRM' || primaryTarget.action === 'PICKUP'
+                  ? 'Container to Load (Pickup)' : 'Container to Unload (Dropoff)'}
               </Text>
               <Text variant="title" style={styles.focusBarcode}>
                 {primaryTarget.code}
@@ -490,7 +534,7 @@ export function JobDetailScreen() {
           containers={job.containers?.map((c, idx) => ({
             code: c.code,
             sequenceNo: idx + 1,
-            status: c.action === 'DELIVERED' ? 'DELIVERED' : 'ONBOARD',
+            status: c.status || (c.action === 'DELIVERED' ? 'DELIVERED' : c.action === 'PICKUP' ? 'ASSIGNED' : 'ONBOARD'),
             action: c.action,
             location: c.location,
             isTarget: c.code === primaryTarget?.code,
@@ -498,7 +542,7 @@ export function JobDetailScreen() {
           targetCode={primaryTarget?.code}
           isWaiting={isWaiting}
           robotCode={job.assignedRobotCode || job.robot}
-          onSelectContainer={(code) => handleOpenVerify(code)}
+          onSelectContainer={(code) => { if (isWaiting && code === primaryTarget?.code) handleOpenVerify(code); }}
         />
 
         {/* Stepper Itinerary */}
@@ -508,7 +552,7 @@ export function JobDetailScreen() {
       </ScrollView>
 
       {/* Sticky Bottom Action Console */}
-      <View style={styles.bottomConsole}>
+      <View style={styles.bottomConsole} onLayout={(event) => setBottomConsoleHeight(event.nativeEvent.layout.height)}>
         {/* Tier 1 Safety & Utilities Strip */}
         <View style={styles.consoleUtilityRow}>
           <Pressable
@@ -547,7 +591,7 @@ export function JobDetailScreen() {
           >
             <SlidersHorizontal size={14} color={colors.primary} style={{ marginRight: 6 }} />
             <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '600' }}>
-              Dock Nudge
+              Dock Nudge · Sim Aid
             </Text>
           </Pressable>
 
@@ -568,8 +612,35 @@ export function JobDetailScreen() {
         </View>
 
         {/* Tier 2 Commanding Action Button (Machined Obsidian #121317) */}
+        {isQueuedOrCreated && (
+          <View style={styles.robotSelectorRow}>
+            {availableRobots.map((robot) => (
+              <Pressable
+                key={robot.id}
+                onPress={() => setSelectedRobotId(robot.id)}
+                disabled={isStartingJob}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedRobotId === robot.id }}
+                style={[styles.robotSelectorChip, selectedRobotId === robot.id && styles.robotSelectorChipSelected]}
+              >
+                <Text variant="label" color={selectedRobotId === robot.id ? colors.primaryText : colors.textSecondary}>
+                  {robot.code}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         <View style={styles.consoleCtaRow}>
-          {job.status === 'RECOVERY_REQUIRED' ? (
+          {isQueuedOrCreated ? (
+            <Button
+              title={`Start Job on ${selectedRobotCode}`}
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={isStartingJob}
+              onPress={handleStartJob}
+            />
+          ) : job.status === 'RECOVERY_REQUIRED' ? (
             <Button
               title="Initiate Cargo Rescue"
               variant="danger"
@@ -637,8 +708,10 @@ export function JobDetailScreen() {
       {/* Verification Modal Sheet */}
       <VerifyModal
         visible={isVerifyOpen}
-        targetContainer={targetContainer}
-        jobStepId={`${job.id}-step-02`}
+        targetContainer={primaryTarget?.code || 'BOX-101'}
+        targetContainerId={primaryTarget?.containerId}
+        jobStepId={job.activeStepId || `${job.id}-step-02`}
+        handoverType={job.activeStepOperation === 'PICKUP_CONFIRM' || primaryTarget?.action === 'PICKUP' ? 'PICKUP' : 'DROPOFF'}
         operatorId="staff-01"
         robotCode={job.robot}
         location={job.currentStop || 'Rack A-02'}
@@ -668,6 +741,13 @@ export function JobDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  robotSelectorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  robotSelectorChip: {
+    minHeight: 44, paddingHorizontal: 16, borderRadius: radii.pill,
+    justifyContent: 'center', borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  robotSelectorChipSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   root: {
     flex: 1,
     backgroundColor: colors.background,

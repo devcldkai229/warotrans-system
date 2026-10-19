@@ -24,7 +24,8 @@ import { typography } from '../../shared/theme/typography';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { confirmHandover } from '../../shared/api';
+import { confirmHandover, getContainerByBarcode } from '../../shared/api';
+import type { JobDetailResponse } from '../../shared/types/contracts';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 
 interface OtherContainerInfo {
@@ -37,6 +38,7 @@ interface VerifyModalProps {
   targetContainer?: string;
   targetContainerId?: string;
   jobStepId?: string;
+  handoverType?: 'PICKUP' | 'DROPOFF';
   operatorId?: string;
   robotCode?: string;
   location?: string;
@@ -48,7 +50,7 @@ interface VerifyModalProps {
   otherContainers?: OtherContainerInfo[];
   isBulkMode?: boolean;
   onClose: () => void;
-  onSuccess: (code: string) => void;
+  onSuccess: (code: string, updatedJob?: JobDetailResponse | null) => void;
   onReportIssue: () => void;
 }
 
@@ -57,6 +59,7 @@ export function VerifyModal({
   targetContainer = 'BOX-101',
   targetContainerId,
   jobStepId,
+  handoverType,
   operatorId,
   robotCode = 'AMR-01',
   location = 'Stop 2/3: Rack A-02',
@@ -103,22 +106,25 @@ export function VerifyModal({
     const code = (codeToVerify ?? barcodeInput).trim();
     if (!code || isSubmitting) return;
 
-    if (code.toUpperCase() === targetContainer.toUpperCase()) {
+    if (code.toUpperCase() === targetContainer.toUpperCase() || code.toUpperCase() === targetContainerId?.toUpperCase()) {
       setIsSubmitting(true);
       try {
-        await confirmHandover({
+        const targetIsUuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(targetContainerId || '');
+        const resolved = targetIsUuid ? null : await getContainerByBarcode(code).catch(() => null);
+        const resolvedContainerId = targetIsUuid ? targetContainerId! : resolved?.id || targetContainerId || code;
+        const res = await confirmHandover({
           jobStepId: jobStepId || 'step-handover-01',
-          scannedContainerBarcode: targetContainerId || code,
-          containerId: targetContainerId || code,
+          scannedContainerBarcode: resolvedContainerId,
+          containerId: resolvedContainerId,
           confirmedBy: operatorId || 'staff-01',
-          handoverType: 'DROPOFF',
+          handoverType: handoverType || 'DROPOFF',
           notes: `Handover confirmed for ${code} on ${robotCode}`,
           note: `Handover confirmed for ${code} on ${robotCode}`,
         });
         triggerHaptic('success');
         setMismatch(false);
         toast.success(`Payload ${code} verified. Handover completed.`);
-        onSuccess(code);
+        onSuccess(code, res && 'status' in res && res.id ? res as JobDetailResponse : null);
       } catch (err: any) {
         toast.error(err?.message || 'Handover confirmation failed');
       } finally {

@@ -92,8 +92,9 @@ function workflowTag(workflowName: string): string {
  * concern, no second "kind" field to drift out of sync with it.
  */
 export function JobCard({ job, onPress, onAccept }: JobCardProps) {
-  const status = JOB_STATUS_PRESENTATION[job.status];
-  const action = ACTION_BY_STATUS[job.status];
+  const effectiveStatus = job.hasWaitingHandover ? 'ASSIGNED' : job.status;
+  const status = JOB_STATUS_PRESENTATION[effectiveStatus];
+  const action = ACTION_BY_STATUS[effectiveStatus];
   const containerCode = job.containers?.[0]?.code ?? job.payloadSummary;
 
   return (
@@ -112,14 +113,14 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text variant="bodyMedium" style={styles.jobId} numberOfLines={1}>
-            {job.id}
+            {job.jobNo || job.id}
           </Text>
           <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
             {workflowTag(job.workflowName)}
           </Text>
         </View>
         <StatusPill
-          status={job.status}
+          status={effectiveStatus}
           label={status.label}
           tone={status.tone}
           size="sm"
@@ -166,10 +167,10 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
         </Text>
       </View>
 
-      {!job.isMine && onAccept && (job.status === 'ASSIGNED' || job.status === 'PAUSED' || job.status === 'CREATED' || job.status === 'QUEUED') ? (
+      {onAccept && ((job.status === 'CREATED' || job.status === 'QUEUED') || (!job.isMine && (job.status === 'ASSIGNED' || job.status === 'PAUSED'))) ? (
         <View style={styles.actionRow}>
           <Button
-            title="Accept Task"
+            title={job.status === 'CREATED' || job.status === 'QUEUED' ? 'Start Job' : 'Accept Task'}
             onPress={onAccept}
             variant="primary"
             size="md"
