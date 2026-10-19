@@ -13,6 +13,7 @@ import { AccountSheet } from './AccountSheet';
 import { NotificationSheet } from './NotificationSheet';
 import { ZonePickerModal } from './ZonePickerModal';
 import { useRealtime } from '../../shared/realtime';
+import { useAuth } from '../../features/auth/authContext';
 
 interface AppHeaderProps {
   operatorName?: string;
@@ -54,6 +55,7 @@ export function AppHeader({
 }: AppHeaderProps) {
   const topInset = useTopInset();
   const { unreadCount } = useRealtime();
+  const { session } = useAuth();
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(initialOpen === 'zone');
   const [isAccountOpen, setIsAccountOpen] = useState(initialOpen === 'account');
   const [isNotificationOpen, setIsNotificationOpen] = useState(initialOpen === 'notifications');
@@ -136,6 +138,7 @@ export function AppHeader({
       <AccountSheet
         visible={isAccountOpen}
         operatorName={operatorName}
+        operatorUsername={session?.username}
         operatorRole={operatorRole}
         initials={avatarInitials}
         zone={zone}

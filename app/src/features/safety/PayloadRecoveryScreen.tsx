@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -24,7 +24,7 @@ import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { completePayloadRecoveryJob } from '../../shared/api';
+import { completePayloadRecoveryJob, getJobDetail, listJobs, listRobots, listContainers, getMapVersionDetail } from '../../shared/api';
 
 type RescuePhase = 'briefing' | 'rendezvous' | 'transfer' | 'resuming' | 'completed';
 
@@ -35,9 +35,72 @@ export function PayloadRecoveryScreen() {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const jobId = params?.jobId || 'JOB-2026-0819';
-  const faultedRobot = params?.robot || 'AMR-02';
+  const robotId = params?.robotId || params?.robot || 'AMR-02';
+  const [displayJobNo, setDisplayJobNo] = useState(jobId);
+  const [displayRobotId, setDisplayRobotId] = useState(robotId);
+  const [displayContainer, setDisplayContainer] = useState('CTN-DEMO-000001');
+  const [displayLocation, setDisplayLocation] = useState('EP-A ➔ EP-D (Active Corridor)');
+  const [displayTarget, setDisplayTarget] = useState('EP-D');
+  const [resolvedJobId, setResolvedJobId] = useState(jobId);
+  const faultedRobot = displayRobotId;
   const rescueRobot = faultedRobot === 'AMR-01' ? 'AMR-02' : 'AMR-01';
-  const targetContainer = params?.container || 'BOX-401';
+  const targetContainer = displayContainer;
+
+  useEffect(() => {
+    let mounted = true;
+    const loadRecoveryContext = async () => {
+      const loadJob = async () => {
+        const requested = await getJobDetail(jobId).catch(() => null);
+        if (requested && (requested.id === jobId || requested.jobNo === jobId)) return requested;
+        const jobs = await listJobs({ take: 5 });
+        return jobs.find((job) => job.id === jobId || job.jobNo === jobId) || jobs[0] || requested;
+      };
+      const [jobResult, robotResult, containerResult] = await Promise.allSettled([
+        loadJob(),
+        listRobots(),
+        listContainers({ warehouseId: '11111111-1111-1111-1111-111111111111', take: 50 }),
+      ]);
+      for (const result of [jobResult, robotResult, containerResult]) {
+        if (result.status === 'rejected') console.warn('Recovery context lookup unavailable:', result.reason);
+      }
+      const job = jobResult.status === 'fulfilled' ? jobResult.value : null;
+      const robots = robotResult.status === 'fulfilled' ? robotResult.value.items : [];
+      const containers = containerResult.status === 'fulfilled' ? containerResult.value.items : [];
+      const map = job ? await getMapVersionDetail(job.mapVersionId).catch(() => null) : null;
+      if (!mounted) return;
+      const context = job?.contextValues || {};
+      const textValue = (value: unknown) => typeof value === 'string' && value.trim() ? value : undefined;
+      const assignedRobot = robots.find((robot) => robot.id === context.assignedRobotId)
+        || robots.find((robot) => robot.code === context.assignedRobotCode)
+        || robots.find((robot) => robot.id === robotId || robot.code === robotId);
+      if (assignedRobot) setDisplayRobotId(assignedRobot.code);
+      if (!job) return;
+      setResolvedJobId(job.id);
+      setDisplayJobNo(job.jobNo);
+      const container = containers.find((item) => item.id === job.containers[0]?.containerId);
+      if (container) setDisplayContainer(container.barcode);
+      const resolveEndpoint = (value: unknown) => {
+        const code = map?.endpoints.find((endpoint) => endpoint.id === value || endpoint.code === value)?.code;
+        const text = textValue(value);
+        return code || (text && !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(text) ? text : undefined);
+      };
+      const dropoff = job.tasks.find((task) => task.contextValues?.stopAction === 'DROPOFF');
+      const pickup = job.tasks.find((task) => task.contextValues?.stopAction === 'PICKUP');
+      const target = resolveEndpoint(dropoff?.contextValues?.stopEndpointId)
+        || resolveEndpoint(context.destinationEndpointCode)
+        || resolveEndpoint(context.targetEndpointCode)
+        || resolveEndpoint(dropoff?.steps.find((step) => step.targetEndpointId)?.targetEndpointId)
+        || resolveEndpoint(job.tasks.flatMap((task) => task.steps).reverse().find((step) => step.targetEndpointId)?.targetEndpointId);
+      if (target) setDisplayTarget(target);
+      const source = resolveEndpoint(pickup?.contextValues?.stopEndpointId) || resolveEndpoint(context.sourceEndpointCode);
+      const location = container?.currentEndpointCode || resolveEndpoint(container?.currentEndpointId)
+        || container?.currentStorageLocationCode || textValue(context.currentStop)
+        || (source && target ? `${source} ➔ ${target} (Active Corridor)` : undefined);
+      if (location) setDisplayLocation(location);
+    };
+    loadRecoveryContext().catch((err) => console.warn('Recovery context unavailable:', err));
+    return () => { mounted = false; };
+  }, [jobId, robotId]);
 
   const handleDispatchRescue = () => {
     triggerHaptic('success');
@@ -59,15 +122,15 @@ export function PayloadRecoveryScreen() {
 
   const handleResumeMission = () => {
     triggerHaptic('success');
-    completePayloadRecoveryJob(jobId, rescueRobot);
+    completePayloadRecoveryJob(resolvedJobId, rescueRobot);
     setPhase('completed');
-    setFeedback(`Job ${jobId} successfully transferred to ${rescueRobot}. Resuming dropoff.`);
+    setFeedback(`Job ${displayJobNo} successfully transferred to ${rescueRobot}. Resuming dropoff.`);
   };
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Payload recovery"
+        label="Payload recovery · Sim Aid"
         title="Emergency Cargo Rescue"
         onBack={goBack}
       />
@@ -92,7 +155,7 @@ export function PayloadRecoveryScreen() {
             <View style={styles.receiptBox}>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Original mission</Text>
-                <Text style={styles.receiptVal}>{jobId}</Text>
+                <Text style={styles.receiptVal}>{displayJobNo}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Rescued container</Text>
@@ -104,7 +167,7 @@ export function PayloadRecoveryScreen() {
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Target destination</Text>
-                <Text style={styles.receiptVal}>Rack A · Level 2 · Bin 03</Text>
+                <Text style={styles.receiptVal}>{displayTarget}</Text>
               </View>
               <View style={[styles.receiptRow, styles.receiptBorderTop]}>
                 <Text style={styles.receiptLabel}>Faulted unit</Text>
@@ -115,7 +178,7 @@ export function PayloadRecoveryScreen() {
             <View style={{ gap: 10, marginTop: 18 }}>
               <Button
                 label="Track Resumed Mission on Map"
-                onPress={() => navigate('live_map', { jobId, robotId: rescueRobot })}
+                onPress={() => navigate('live_map', { jobId: resolvedJobId, robotId: rescueRobot })}
                 variant="primary"
                 size="lg"
                 style={{ width: '100%' }}
@@ -230,11 +293,11 @@ export function PayloadRecoveryScreen() {
             {/* Diagnostics Cards */}
             <View style={styles.diagRow}>
               <View style={styles.diagFaulted}>
-                <Text style={styles.diagLabel}>Faulted robot</Text>
+                <Text style={styles.diagLabel}>Unit & Mission</Text>
                 <Text style={styles.diagRobotId}>{faultedRobot}</Text>
-                <Text style={styles.diagDetail}>Error: Drive motor stall</Text>
+                <Text style={styles.diagDetail}>{displayJobNo} · Error: Drive motor stall</Text>
                 <View style={styles.diagPillFaulted}>
-                  <Text style={styles.diagPillTextFaulted}>Pos: (12.4m, 8.2m)</Text>
+                  <Text style={styles.diagPillTextFaulted}>Current Halted Position: {displayLocation}</Text>
                 </View>
               </View>
 
@@ -260,8 +323,8 @@ export function PayloadRecoveryScreen() {
                   </Text>
                 </View>
                 <View style={styles.cargoDestLine}>
-                  <Text style={styles.cargoDestLabel}>Destination:</Text>
-                  <Text style={styles.cargoDestVal}>Rack A · Level 2 · Bin 03</Text>
+                  <Text style={styles.cargoDestLabel}>Original Target:</Text>
+                  <Text style={styles.cargoDestVal}>{displayTarget}</Text>
                 </View>
               </View>
             </View>

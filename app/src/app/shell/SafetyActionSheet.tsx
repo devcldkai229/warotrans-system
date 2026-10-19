@@ -72,7 +72,7 @@ export function SafetyActionSheet({
     {
       key: 'hold',
       icon: CirclePause,
-      title: 'Hold Nearby Robot (3m Soft Pause)',
+      title: 'Hold Nearby Robot (3m Soft Pause · Sim Aid)',
       description:
         'Temporarily holds robots within 3m for safe manual crossing. (Local Fleet Simulation)',
       kind: 'toggle',
@@ -81,7 +81,7 @@ export function SafetyActionSheet({
     {
       key: 'hazard',
       icon: AlertTriangle,
-      title: 'Report Path Hazard',
+      title: 'Report Path Hazard · Sim Aid',
       description: 'Report a blocked corridor, a water leak, or a fallen pallet.',
       kind: 'navigate',
       tone: 'danger',
@@ -89,7 +89,7 @@ export function SafetyActionSheet({
     {
       key: 'defect',
       icon: PackageSearch,
-      title: 'Report Cargo Defect',
+      title: 'Report Cargo Defect · Sim Aid',
       description: 'Report damaged packaging or an unreadable barcode.',
       kind: 'navigate',
       tone: 'danger',

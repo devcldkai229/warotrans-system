@@ -120,7 +120,7 @@ export function IssueReportingModal({
     >
       <View style={styles.fullScreenContainer}>
         <SubScreenHeader
-          label={`Incident report · ${robotCode}`}
+          label={`Incident report · ${robotCode} · Sim Aid`}
           title="Report Exception"
           onBack={onClose}
         />

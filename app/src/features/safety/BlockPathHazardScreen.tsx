@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -21,6 +21,7 @@ import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { Text } from '../../shared/ui/Text';
+import { getActiveMapVersion, getMapVersionDetail } from '../../shared/api';
 
 const CORRIDORS = [
   { id: 'CORR-A01-A02', name: 'Aisle A-01 (Between Rack A01 & A02)', zone: 'Zone A Storage' },
@@ -38,6 +39,7 @@ const HAZARD_CATEGORIES = [
 
 export function BlockPathHazardScreen() {
   const { goBack } = useNavigation();
+  const [corridorOptions, setCorridorOptions] = useState(CORRIDORS);
   const [selectedCorridor, setSelectedCorridor] = useState('CORR-A01-A02');
   const [hazardType, setHazardType] = useState('LIQUID_SPILL');
   const [severity, setSeverity] = useState<'CRITICAL_BLOCK' | 'CAUTION_SLOW'>('CRITICAL_BLOCK');
@@ -45,6 +47,43 @@ export function BlockPathHazardScreen() {
   const [notes, setNotes] = useState('Hydraulic fluid leakage spotted near Rack A-02 column 3. Caution cone placed.');
   const [submitted, setSubmitted] = useState(false);
   const [incidentCode, setIncidentCode] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    const loadCorridors = async () => {
+      try {
+        const activeMap = await getActiveMapVersion('11111111-1111-1111-1111-111111111111');
+        if (!activeMap) return;
+        const detail = await getMapVersionDetail(activeMap.id);
+        const endpoints = detail.endpoints.filter((ep) => ep.isEnabled);
+        if (!endpoints.length || !mounted) return;
+        const epA = endpoints.find((ep) => ep.code === 'EP-A') || endpoints[0];
+        const epD = endpoints.find((ep) => ep.code === 'EP-D') || endpoints[endpoints.length - 1];
+        const dockIn = endpoints.find((ep) => ep.code === 'DOCK-IN-01');
+        const liveCorridors = [{
+          id: `MAP-${epA.id}-${epD.id}`,
+          name: `${epA.code} ➔ ${epD.code} (Active Map Corridor)`,
+          zone: activeMap.code,
+        }];
+        if (dockIn) liveCorridors.push({
+          id: `MAP-${dockIn.id}-STAGING`,
+          name: `${dockIn.code} Staging Approach`,
+          zone: activeMap.code,
+        });
+        const otherEndpoint = endpoints.find((ep) => ep.id !== epA.id && ep.id !== epD.id && ep.id !== dockIn?.id);
+        if (otherEndpoint) liveCorridors.push({
+          id: `MAP-${epA.id}-${otherEndpoint.id}`,
+          name: `${epA.code} ➔ ${otherEndpoint.code} (Active Map Corridor)`,
+          zone: activeMap.code,
+        });
+        setCorridorOptions([...liveCorridors, ...CORRIDORS]);
+      } catch (err) {
+        console.warn('Active map corridor discovery unavailable:', err);
+      }
+    };
+    loadCorridors();
+    return () => { mounted = false; };
+  }, []);
 
   const handleSubmit = () => {
     triggerHaptic('success');
@@ -57,12 +96,12 @@ export function BlockPathHazardScreen() {
     setSubmitted(false);
   };
 
-  const activeCorridorObj = CORRIDORS.find((c) => c.id === selectedCorridor) || CORRIDORS[0];
+  const activeCorridorObj = corridorOptions.find((c) => c.id === selectedCorridor) || corridorOptions[0];
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Floor Safety & Exceptions"
+        label="Floor Safety & Exceptions · Sim Aid"
         title="Report Corridor Hazard"
         onBack={goBack}
       />
@@ -140,7 +179,7 @@ export function BlockPathHazardScreen() {
                 AFFECTED CORRIDOR / AISLE
               </Text>
               <View style={{ gap: 8 }}>
-                {CORRIDORS.map((c) => {
+                {corridorOptions.map((c) => {
                   const isSelected = selectedCorridor === c.id;
                   return (
                     <Pressable

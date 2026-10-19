@@ -13,6 +13,7 @@ export interface AccountSheetProps {
   visible: boolean;
   onClose: () => void;
   operatorName: string;
+  operatorUsername?: string;
   operatorRole: string;
   /** Avatar initials, computed by the caller from the operator name. */
   initials: string;
@@ -31,6 +32,7 @@ export function AccountSheet({
   visible,
   onClose,
   operatorName,
+  operatorUsername,
   operatorRole,
   initials,
   zone,
@@ -74,7 +76,7 @@ export function AccountSheet({
                 {operatorName}
               </Text>
               <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-                {operatorRole} · {zone}
+                {operatorUsername ? `@${operatorUsername} · ${operatorRole.toUpperCase()} · ${zone}` : `${operatorRole.toUpperCase()} · ${zone}`}
               </Text>
             </View>
           </View>

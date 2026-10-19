@@ -909,6 +909,7 @@ export interface CreateContainerBody {
 }
 
 export interface CreateContainerResponse {
+  registrationMode?: 'LIVE_API' | 'LOCAL_SESSION_SIM';
   id: string;
   barcode: string;
   status: string;
@@ -940,29 +941,30 @@ export async function createContainer(body: CreateContainerBody): Promise<Create
         productName: body.productName || 'Warehouse Item',
         currentStorageLocationId: body.initialStorageLocationId || null,
         currentStorageLocationCode: null,
-        currentEndpointId: '00000000-0000-0000-0004-000000000001',
+        currentEndpointId: 'ee000000-0000-4000-8000-000000000101',
         currentEndpointCode: 'DOCK-IN-01',
         currentLevelNo: null,
         qty: body.qty || 24,
         category: body.category || 'Electronics',
         zoneLabel: 'Inbound Dock 01',
       });
-      return res;
+      return { ...res, registrationMode: 'LIVE_API' };
     }
   } catch (err) {
     console.warn('Backend createContainer API call failed, using graceful offline registration:', err);
   }
 
-  // Graceful offline registration matching C# CreateContainerResponse
+  // Local session sim aid until WarehouseModule maps POST /api/warehouse/containers.
   const generatedBarcode = `BOX-${Math.floor(100 + Math.random() * 900)}`;
   const containerRecord: CreateContainerResponse = {
     id: `cont-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     barcode: generatedBarcode,
-    status: 'STAGED',
+    status: 'CREATED',
     productId: body.productId,
     productName: body.productName || 'Warehouse Item',
     productSku: body.productSku || 'SKU-GEN',
-    currentEndpointId: '00000000-0000-0000-0004-000000000001',
+    currentEndpointId: 'ee000000-0000-4000-8000-000000000101',
+    registrationMode: 'LOCAL_SESSION_SIM',
     createdAt: new Date().toISOString(),
   };
 
@@ -975,7 +977,7 @@ export async function createContainer(body: CreateContainerBody): Promise<Create
     productName: body.productName || 'Warehouse Item',
     currentStorageLocationId: body.initialStorageLocationId || null,
     currentStorageLocationCode: null,
-    currentEndpointId: '00000000-0000-0000-0004-000000000001',
+    currentEndpointId: 'ee000000-0000-4000-8000-000000000101',
     currentEndpointCode: 'DOCK-IN-01',
     currentLevelNo: null,
     qty: body.qty || 24,

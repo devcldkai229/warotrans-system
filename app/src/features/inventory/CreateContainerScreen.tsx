@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -23,10 +23,26 @@ import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { createContainer } from '../../shared/api';
+import { createContainer, listContainers } from '../../shared/api';
+
+interface ProductCatalogEntry {
+  name: string;
+  productId: string;
+  sku: string;
+}
+
+const DEMO_PRODUCT_LABEL = 'Thùng linh kiện demo (SKU-DEMO-000001)';
+const INITIAL_PRODUCT_CATALOG: Record<string, ProductCatalogEntry> = {
+  [DEMO_PRODUCT_LABEL]: {
+    name: 'Thùng linh kiện demo',
+    productId: 'dddddddd-0000-4000-8000-000000000001',
+    sku: 'SKU-DEMO-000001',
+  },
+};
 
 const CATEGORIES: Record<string, string[]> = {
   Electronics: [
+    DEMO_PRODUCT_LABEL,
     'Control Module',
     'Sensor Array',
     'Electronic Components',
@@ -47,7 +63,9 @@ export function CreateContainerScreen() {
   const { goBack, navigate } = useNavigation();
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [category, setCategory] = useState<string>('Electronics');
-  const [product, setProduct] = useState<string>('Electronic Components');
+  const [product, setProduct] = useState<string>(DEMO_PRODUCT_LABEL);
+  const [productCatalog, setProductCatalog] = useState(INITIAL_PRODUCT_CATALOG);
+  const [registrationMode, setRegistrationMode] = useState<'LIVE_API' | 'LOCAL_SESSION_SIM'>('LOCAL_SESSION_SIM');
   const [quantity, setQuantity] = useState<string>('45');
   const [batchCount, setBatchCount] = useState<string>('10');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -61,6 +79,31 @@ export function CreateContainerScreen() {
   } | null>(null);
   const [printFeedback, setPrintFeedback] = useState<string | null>(null);
 
+  useEffect(() => {
+    let mounted = true;
+    listContainers({ warehouseId: '11111111-1111-1111-1111-111111111111', take: 50 })
+      .then(({ items }) => {
+        const discovered: Record<string, ProductCatalogEntry> = {};
+        const seen = new Set([INITIAL_PRODUCT_CATALOG[DEMO_PRODUCT_LABEL].productId]);
+        for (const item of items) {
+          if (!item.productId || !item.productSku || !item.productName || seen.has(item.productId)) continue;
+          seen.add(item.productId);
+          discovered[`${item.productName} (${item.productSku})`] = {
+            name: item.productName,
+            productId: item.productId,
+            sku: item.productSku,
+          };
+        }
+        if (mounted) setProductCatalog((prev) => ({ ...prev, ...discovered }));
+      })
+      .catch((err) => console.warn('Product catalog discovery unavailable:', err));
+    return () => { mounted = false; };
+  }, []);
+
+  const productOptions = category === 'Electronics'
+    ? [...new Set([...CATEGORIES.Electronics, ...Object.keys(productCatalog)])]
+    : CATEGORIES[category] || [];
+
   const packQty = Number(quantity) || 0;
   const numContainers = Number(batchCount) || 0;
   const totalBatchUnits = packQty * numContainers;
@@ -68,28 +111,29 @@ export function CreateContainerScreen() {
 
   const handleGenerate = async () => {
     setIsSubmitting(true);
+    const catalogEntry = productCatalog[product];
+    const containerBody = {
+      productId: catalogEntry?.productId || '00000000-0000-0000-0001-000000000001',
+      productName: catalogEntry?.name || product,
+      productSku: catalogEntry?.sku || category.slice(0, 3).toUpperCase() + '-9042',
+      qty: packQty,
+    };
     try {
       if (mode === 'single') {
-        const res = await createContainer({
-          productId: '00000000-0000-0000-0001-000000000001',
-          productName: product,
-          productSku: category.slice(0, 3).toUpperCase() + '-9042',
-          qty: packQty,
-        });
+        const res = await createContainer(containerBody);
+        setRegistrationMode(res.registrationMode || 'LOCAL_SESSION_SIM');
         setGeneratedBarcode(res.barcode);
         setBatchGenerated(null);
       } else {
         const count = Math.min(numContainers, 10);
         const created: string[] = [];
+        let batchMode: 'LIVE_API' | 'LOCAL_SESSION_SIM' = 'LIVE_API';
         for (let i = 0; i < count; i++) {
-          const res = await createContainer({
-            productId: '00000000-0000-0000-0001-000000000001',
-            productName: product,
-            productSku: category.slice(0, 3).toUpperCase() + '-9042',
-            qty: packQty,
-          });
+          const res = await createContainer(containerBody);
+          if (res.registrationMode !== 'LIVE_API') batchMode = 'LOCAL_SESSION_SIM';
           created.push(res.barcode);
         }
+        setRegistrationMode(batchMode);
         setBatchGenerated({
           start: created[0] || 'BOX-201',
           end: created[created.length - 1] || 'BOX-210',
@@ -126,7 +170,11 @@ export function CreateContainerScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Cargo induction"
+        label={isSuccess
+          ? registrationMode === 'LOCAL_SESSION_SIM'
+            ? 'Inbound Receiving · Local Session Sim Aid'
+            : 'Inbound Receiving · Live Backend Registered'
+          : 'Cargo induction'}
         title="Pack & Ingest Container"
         onBack={goBack}
       />
@@ -176,7 +224,9 @@ export function CreateContainerScreen() {
                   {batchGenerated ? `${batchGenerated.count} containers registered` : 'Container registered'}
                 </Text>
                 <Text style={styles.successSub}>
-                  {batchGenerated
+                  {registrationMode === 'LOCAL_SESSION_SIM'
+                    ? 'Container registration saved in the local session store · Sim Aid.'
+                    : batchGenerated
                     ? 'Batch containers registered to Central Registry at Inbound Dock 01.'
                     : 'Tote container registered to Central Registry at Inbound Dock 01.'}
                 </Text>
@@ -229,6 +279,12 @@ export function CreateContainerScreen() {
                   <Text style={styles.stagedLocLabel}>Induction terminal</Text>
                   <Text style={styles.stagedLocVal}>Handheld Staff 01</Text>
                 </View>
+              </View>
+              <View style={styles.ticketFooter}>
+                <Text style={styles.stagedLocLabel}>Registry Mode</Text>
+                <Text style={styles.stagedLocVal}>
+                  {registrationMode === 'LOCAL_SESSION_SIM' ? 'Local Session Store · Sim Aid' : 'Warehouse DB · Live'}
+                </Text>
               </View>
             </View>
 
@@ -302,7 +358,7 @@ export function CreateContainerScreen() {
             {/* Step 2: Product SKU Picker */}
             <Text style={styles.fieldLabel}>Target SKU</Text>
             <View style={styles.productChips}>
-              {(CATEGORIES[category] || []).map((p) => {
+              {productOptions.map((p) => {
                 const isSelected = product === p;
                 return (
                   <Pressable
