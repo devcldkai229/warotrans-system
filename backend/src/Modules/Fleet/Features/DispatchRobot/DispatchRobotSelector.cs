@@ -12,7 +12,9 @@ public static class DispatchRobotSelector
     {
         return candidates
             .Where(r => r.IsEnabled && r.IsOnline && r.Status == RobotStatus.AVAILABLE)
-            .OrderByDescending(r => r.BatteryPercent)
+            // Null battery (no sensor) sorts last among otherwise equal candidates.
+            .OrderByDescending(r => r.BatteryPercent.HasValue)
+            .ThenByDescending(r => r.BatteryPercent)
             .ThenBy(r => r.Code, StringComparer.Ordinal)
             .FirstOrDefault();
     }

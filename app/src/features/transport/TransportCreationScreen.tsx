@@ -128,7 +128,7 @@ export function TransportCreationScreen() {
       </Card>;
     })}
     <TextField label="Request Note (Optional)" value={note} onChangeText={setNote} editable={!readonly} multiline />
-    <ChoiceField label="Robot For Start" value={robotId} disabled={busy} options={robots.map(r => ({ value: r.id, label: `${r.code} · ${r.batteryPercent}%` }))} onChange={setRobotId} />
+    <ChoiceField label="Robot For Start" value={robotId} disabled={busy} options={robots.map(r => ({ value: r.id, label: `${r.code} · ${r.batteryPercent == null ? 'No sensor' : `${r.batteryPercent}%`}` }))} onChange={setRobotId} />
     <ErrorBanner message={error} />
     {!!phase && <Text>{phase}</Text>}
     {request && <Card gap={10}><Text variant="headline">{request.requestCode}</Text><StatusPill status={queued?.status ?? request.status} />

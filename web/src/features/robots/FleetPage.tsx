@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Robot, RobotStatus, RobotView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
@@ -8,7 +8,11 @@ import { humanize } from '@/shared/lib/format'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
-import { useNotificationsHub, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
+import {
+  useNotificationsHub,
+  type RobotConnectivityMessage,
+  type RobotTelemetryMessage,
+} from '@/shared/realtime/useNotificationsHub'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
@@ -41,13 +45,19 @@ export function FleetPage() {
   const debouncedQuery = useDebouncedValue(query.trim(), 250)
   const search = debouncedQuery || undefined
 
+  const queryClient = useQueryClient()
   // Live poses over SignalR (5 Hz telemetry); the REST list refreshes status/command every few seconds.
   const [livePoses, setLivePoses] = useState<Record<string, RobotTelemetryMessage>>({})
+  const [liveConnectivity, setLiveConnectivity] = useState<Record<string, RobotConnectivityMessage>>({})
   const onTelemetry = useCallback(
     (message: RobotTelemetryMessage) => setLivePoses((current) => ({ ...current, [message.robotId]: message })),
     [],
   )
-  useNotificationsHub({ robotTelemetryUpdated: onTelemetry })
+  const onConnectivity = useCallback((message: RobotConnectivityMessage) => {
+    setLiveConnectivity((current) => ({ ...current, [message.robotId]: message }))
+    void queryClient.invalidateQueries({ queryKey: ['fleet-robots'] })
+  }, [queryClient])
+  useNotificationsHub({ robotTelemetryUpdated: onTelemetry, robotConnectivityChanged: onConnectivity })
 
   const countsQuery = useQuery({
     queryKey: ['fleet-robots', 'counts', search ?? ''],
@@ -69,20 +79,35 @@ export function FleetPage() {
     () =>
       (countsQuery.data?.items ?? []).map((robot) => {
         const live = livePoses[robot.id]
+        const conn = liveConnectivity[robot.id]
         const fresher = live && (!robot.lastTelemetryAt || (live.lastTelemetryAt ?? '') >= robot.lastTelemetryAt)
-        return toRobotView(
-          fresher
+        const merged: Robot = {
+          ...robot,
+          ...(conn
             ? {
-                ...robot,
+                isOnline: conn.isOnline,
+                status: conn.status as RobotStatus,
+                lastHeartbeatAt: conn.lastHeartbeatAt ?? robot.lastHeartbeatAt,
+              }
+            : {}),
+          ...(fresher
+            ? {
                 poseX: live.poseX,
                 poseY: live.poseY,
                 poseYaw: live.poseYaw,
+                batteryPercent: live.batteryPercent,
                 navigationStatus: (live.navigationStatus as Robot['navigationStatus']) ?? robot.navigationStatus,
+                localizationStatus:
+                  (live.localizationStatus as Robot['localizationStatus']) ?? robot.localizationStatus,
+                lastTelemetryAt: live.lastTelemetryAt ?? robot.lastTelemetryAt,
+                linearVelocity: live.linearVelocity ?? robot.linearVelocity,
+                angularVelocity: live.angularVelocity ?? robot.angularVelocity,
               }
-            : robot,
-        )
+            : {}),
+        }
+        return toRobotView(merged)
       }),
-    [countsQuery.data, livePoses],
+    [countsQuery.data, livePoses, liveConnectivity],
   )
   const robots = useMemo(
     () => (listQuery.data?.items ?? []).map(toRobotView),

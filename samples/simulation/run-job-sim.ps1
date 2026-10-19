@@ -7,6 +7,9 @@
   -Scenario inbound (mặc định), workflow INBOUND_PUTAWAY, 3 thùng vừa nhận ở cửa nhập đem cất lên kệ:
       CTN-IN-000001 IN1→A,  CTN-IN-000002 IN1→B,  CTN-IN-000003 IN2→C
       Planner: PICKUP IN1 [1,2] → PICKUP IN2 [3] → DROPOFF A [1] → DROPOFF B [2] → DROPOFF C [3]
+  -Scenario inbound-multi, workflow INBOUND_PUTAWAY, 1 nguồn nhiều đích:
+      CTN-IN-000001/2/3 IN1→A, IN1→B, IN1→C
+      Planner: PICKUP IN1 [1,2,3] → DROPOFF A [1] → DROPOFF B [2] → DROPOFF C [3]
   -Scenario relocation, workflow INTERNAL_RELOCATION:
       CTN-SIM-000001 IN1→A,  CTN-SIM-000002 IN1→B,  CTN-SIM-000003 C→OUT1
 
@@ -22,7 +25,7 @@
   powershell -ExecutionPolicy Bypass -File samples/simulation/run-job-sim.ps1
 #>
 param(
-    [ValidateSet("inbound", "relocation")]
+    [ValidateSet("inbound", "inbound-multi", "relocation")]
     [string]$Scenario = "inbound",
     [string]$BaseUrl = "http://localhost:5090",
     [int]$ConfirmDelaySeconds = 3,
@@ -52,6 +55,13 @@ $scenarios = @{
         moves    = @(@("e4000000-0000-4000-8000-000000000004", "IN1", "A"),
                      @("e5000000-0000-4000-8000-000000000005", "IN1", "B"),
                      @("e6000000-0000-4000-8000-000000000006", "IN2", "C"))
+    }
+    # One pickup (IN1), many destinations (A/B/C) — full INBOUND multi-drop putaway.
+    "inbound-multi" = @{
+        workflow = "INBOUND_PUTAWAY"; title = "CTN-IN-000001/2/3 IN1->A, IN1->B, IN1->C (1 source, many dest)"
+        moves    = @(@("e4000000-0000-4000-8000-000000000004", "IN1", "A"),
+                     @("e5000000-0000-4000-8000-000000000005", "IN1", "B"),
+                     @("e6000000-0000-4000-8000-000000000006", "IN1", "C"))
     }
     relocation = @{
         workflow = "INTERNAL_RELOCATION"; title = "C1 IN1->A, C2 IN1->B, C3 C->OUT1"
@@ -101,8 +111,13 @@ Assert-Status $tr 201 "create transport request"
 Save-Text "10-job.transport-request.response.json" (Format-Json $tr.Raw)
 $queue = Invoke-Api POST "/api/transportation/transport-requests/$($tr.Body.id)/queue" $null $staffToken
 Assert-Status $queue 200 "queue (plan + provision Job)"
+Save-Text "10b-queue.response.json" (Format-Json $queue.Raw)
 $jobId = $queue.Body.jobs[0].jobId
 Write-Host ("  {0} -> {1} ({2} tasks, {3} steps)" -f $tr.Body.requestCode, $queue.Body.jobs[0].jobNo, $queue.Body.jobs[0].jobTaskCount, $queue.Body.jobs[0].jobStepCount)
+
+$afterQueue = Invoke-Api GET "/api/workflow-execution/jobs/$jobId" $null $staffToken
+Assert-Status $afterQueue 200 "get job after queue"
+Save-Text "10c-job.after-queue.json" (Format-Json $afterQueue.Raw)
 
 if ($PrepareOnly) {
     Write-Host ""
@@ -115,6 +130,7 @@ if ($PrepareOnly) {
 Write-Host "2. Start Job on $($config.robotCode)" -ForegroundColor Cyan
 $start = Invoke-Api POST "/api/workflow-execution/jobs/$jobId/start" (@{ robotId = $config.robotId } | ConvertTo-Json -Compress) $staffToken
 Assert-Status $start 200 "start job"
+Save-Text "10d-job.after-start.json" (Format-Json $start.Raw)
 
 # ---------------------------------------------------------------- 3. follow + confirm
 Write-Host "3. Follow the Job (robot moves in Gazebo, script confirms as Staff)" -ForegroundColor Cyan

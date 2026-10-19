@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { listJobs, startJob, type JobSummaryDto } from '@/shared/api/jobs'
-import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
+import { getTransportRequest, listTransportRequests, queueTransportRequest } from '@/shared/api/transportRequests'
+import { RobotSelect } from '@/features/jobs/RobotSelect'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
@@ -26,7 +27,7 @@ import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
 import { detailToView, listItemToView } from './mapTransportRequest'
 import { RequestDetailPanel } from './RequestDetailPanel'
-import { queueAndStart, runAgain } from './runOnRobot'
+import { runAgain } from './runOnRobot'
 
 function RequestCard({
   request,
@@ -86,14 +87,14 @@ function RequestCard({
 const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED']
 
 /**
- * Run a request on a robot: SUBMITTED → queue (plan Jobs) → start the Job (backend picks the best free
- * robot on the request's map) → open the live view, where the robot moves in step with Gazebo / the
- * real robot and staff confirm each pickup / drop-off.
+ * Explicit flow: SUBMITTED → Queue (plan Jobs) → pick robot → Start Job → live view.
+ * Staff confirm each pickup / drop-off on the live page.
  */
 function RunControls({ request, jobs }: { request: TransportRequestView; jobs: JobSummaryDto[] }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
+  const [robotByJob, setRobotByJob] = useState<Record<string, string>>({})
 
   const refresh = () =>
     Promise.all([
@@ -101,12 +102,11 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
       queryClient.invalidateQueries({ queryKey: ['jobs'] }),
     ])
 
-  const run = useMutation({
-    mutationFn: () => queueAndStart(request.id),
-    onSuccess: async (jobId) => {
+  const queue = useMutation({
+    mutationFn: () => queueTransportRequest(request.id),
+    onSuccess: async () => {
       setError(null)
       await refresh()
-      navigate(`/monitor/live/${jobId}`)
     },
     onError: async (err: Error) => {
       setError(err.message)
@@ -128,7 +128,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
   })
 
   const start = useMutation({
-    mutationFn: (jobId: string) => startJob(jobId).then(() => jobId),
+    mutationFn: (jobId: string) => startJob(jobId, robotByJob[jobId] || undefined).then(() => jobId),
     onSuccess: async (jobId) => {
       setError(null)
       await refresh()
@@ -137,7 +137,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     onError: (err: Error) => setError(err.message),
   })
 
-  const busy = run.isPending || start.isPending || again.isPending
+  const busy = queue.isPending || start.isPending || again.isPending
   const finished = TERMINAL_REQUEST_STATUSES.includes(request.status) && request.status !== 'CANCELLED'
   return (
     <>
@@ -147,24 +147,36 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
         </Button>
       ) : null}
       {request.status === 'SUBMITTED' && jobs.length === 0 ? (
-        <Button variant="primary" size="sm" disabled={busy} onClick={() => run.mutate()}>
-          <Icon name="bolt" size={14} /> {run.isPending ? 'Starting…' : 'Run on robot'}
-        </Button>
+        <>
+          <Button variant="primary" size="sm" disabled={busy} onClick={() => queue.mutate()}>
+            <Icon name="bolt" size={14} /> {queue.isPending ? 'Queuing…' : 'Queue (plan job)'}
+          </Button>
+          <p className="text-xs text-muted">
+            Step 1: plan the Job (containers, tasks, steps). Then pick a robot and Start.
+          </p>
+        </>
       ) : null}
       {jobs.map((job) =>
         job.status === 'CREATED' ? (
-          <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => start.mutate(job.id)}>
-            <Icon name="bolt" size={14} /> {start.isPending ? 'Starting…' : `Start ${job.jobNo} on robot`}
-          </Button>
+          <div key={job.id} className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <RobotSelect
+                mapVersionId={job.mapVersionId}
+                value={robotByJob[job.id] ?? ''}
+                onChange={(id) => setRobotByJob((prev) => ({ ...prev, [job.id]: id }))}
+              />
+              <Button variant="primary" size="sm" disabled={busy} onClick={() => start.mutate(job.id)}>
+                <Icon name="play" size={14} /> {start.isPending ? 'Starting…' : `Start ${job.jobNo}`}
+              </Button>
+            </div>
+            <p className="text-xs text-muted">Step 2: assign a robot (defaults to online AVAILABLE) and start.</p>
+          </div>
         ) : (
           <Button key={job.id} variant="outline" size="sm" onClick={() => navigate(`/monitor/live/${job.id}`)}>
             <Icon name="target" size={14} /> Watch {job.jobNo} live
           </Button>
         ),
       )}
-      {request.status === 'SUBMITTED' && jobs.length === 0 ? (
-        <p className="text-xs text-muted">Plans the route, starts the best free robot on this map and opens the live view.</p>
-      ) : null}
       {error ? <p className="text-xs text-red-ink">{error}</p> : null}
     </>
   )

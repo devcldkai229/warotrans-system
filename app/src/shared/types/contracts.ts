@@ -200,7 +200,8 @@ export interface RobotResponse {
   name: string;
   status: RobotStatus;
   isOnline: boolean;
-  batteryPercent: number;
+  /** Null when the robot has no battery sensor. */
+  batteryPercent: number | null;
   poseX: number;
   poseY: number;
   poseYaw: number;

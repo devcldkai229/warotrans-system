@@ -14,7 +14,7 @@ export function JobLiveMapScreen() {
     {state.robots.map(robot => <Card key={robot.id} gap={8}>
       <Text variant="headline">{robot.code}</Text><StatusPill status={robot.status} />
       <Text variant="code">X {robot.poseX.toFixed(2)} m · Y {robot.poseY.toFixed(2)} m · Yaw {robot.poseYaw.toFixed(2)} rad</Text>
-      <Text>Battery {robot.batteryPercent}% · {robot.isOnline ? 'Online' : 'Offline'}</Text>
+      <Text>Battery {robot.batteryPercent == null ? 'No sensor' : `${robot.batteryPercent}%`} · {robot.isOnline ? 'Online' : 'Offline'}</Text>
       <Text>Navigation: {robot.navigationStatus ?? 'Not Reported'} · Localization: {robot.localizationStatus ?? 'Not Reported'}</Text>
       <Text variant="caption">Last Telemetry: {robot.lastTelemetryAt ? new Date(robot.lastTelemetryAt).toLocaleString() : 'Not Reported'}</Text>
     </Card>)}

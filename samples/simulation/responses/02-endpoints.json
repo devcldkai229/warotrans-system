@@ -1,10 +1,10 @@
 [
   {
-    "id": "9a6b0b1b-81fb-43ba-a5ae-46123768a90c",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "c3acef3a-0252-4e69-bc5b-71a07f6f978a",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-CHARGER",
     "name": "Charger",
-    "endpointType": "CHARGING",
+    "endpointType": "CHARGER",
     "x": 5.75,
     "y": 6.75,
     "yaw": 1.570796,
@@ -13,11 +13,11 @@
     "isEnabled": true
   },
   {
-    "id": "13982982-7250-49a5-a126-506cb7b004f5",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "2fbb93c3-909d-449c-89cc-48970954c7dc",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-INBOUND-1",
     "name": "Inbound 1",
-    "endpointType": "INBOUND",
+    "endpointType": "WAYPOINT",
     "x": 0.9,
     "y": 5.5,
     "yaw": 3.14159,
@@ -26,11 +26,11 @@
     "isEnabled": true
   },
   {
-    "id": "e211f809-0286-439c-b9fd-90f823869d0f",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "35d758c6-cd37-433e-8f9d-b1a26b6cccb9",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-INBOUND-2",
     "name": "Inbound 2",
-    "endpointType": "INBOUND",
+    "endpointType": "WAYPOINT",
     "x": 0.9,
     "y": 2,
     "yaw": 3.14159,
@@ -39,11 +39,11 @@
     "isEnabled": true
   },
   {
-    "id": "e4b2cb63-c913-43d9-8a0c-8a8fb228c788",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "dfa57318-c469-4024-92fc-81c96ad7669f",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-OUTBOUND-1",
     "name": "Outbound 1",
-    "endpointType": "OUTBOUND",
+    "endpointType": "WAYPOINT",
     "x": 10.1,
     "y": 5.5,
     "yaw": 0,
@@ -52,11 +52,11 @@
     "isEnabled": true
   },
   {
-    "id": "3835634d-188a-460b-b908-1f144ed51a10",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "99b92cee-49c8-41df-b8ef-bb57dbfeeda9",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-OUTBOUND-2",
     "name": "Outbound 2",
-    "endpointType": "OUTBOUND",
+    "endpointType": "WAYPOINT",
     "x": 10.1,
     "y": 2,
     "yaw": 0,
@@ -65,11 +65,11 @@
     "isEnabled": true
   },
   {
-    "id": "8d095762-ac76-42c4-a3b9-734762872310",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "e7d78756-da0a-424d-9935-f3a404ab3ef6",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-PARKING",
     "name": "Parking",
-    "endpointType": "PARKING",
+    "endpointType": "PARK",
     "x": 5.75,
     "y": 0.9,
     "yaw": 1.570796,
@@ -78,11 +78,11 @@
     "isEnabled": true
   },
   {
-    "id": "ef799401-db31-4b0d-95e2-00f47e6ad124",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "2fb7cac4-02c3-46b9-a3e3-07eaff45c6d7",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-RACK-A",
     "name": "Rack A",
-    "endpointType": "STORAGE",
+    "endpointType": "WAYPOINT",
     "x": 3.2,
     "y": 3.75,
     "yaw": 0,
@@ -91,11 +91,11 @@
     "isEnabled": true
   },
   {
-    "id": "39866c77-920a-4856-a013-a65d4ac8acda",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "d1a40b84-d72b-4fc9-ae1c-c2490b6018a3",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-RACK-B",
     "name": "Rack B",
-    "endpointType": "STORAGE",
+    "endpointType": "WAYPOINT",
     "x": 4.875,
     "y": 3.75,
     "yaw": 0,
@@ -104,11 +104,11 @@
     "isEnabled": true
   },
   {
-    "id": "63ea01f3-41ac-40f2-ae2e-fa9b2dace47f",
-    "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+    "id": "f363b95c-0974-4040-acb3-68053fba1653",
+    "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
     "code": "EP-RACK-C",
     "name": "Rack C",
-    "endpointType": "STORAGE",
+    "endpointType": "WAYPOINT",
     "x": 6.625,
     "y": 3.75,
     "yaw": 0,

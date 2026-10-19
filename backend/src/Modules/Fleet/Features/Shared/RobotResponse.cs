@@ -11,7 +11,7 @@ public sealed record RobotResponse(
     string Name,
     RobotStatus Status,
     bool IsOnline,
-    decimal BatteryPercent,
+    decimal? BatteryPercent,
     double PoseX,
     double PoseY,
     double PoseYaw,

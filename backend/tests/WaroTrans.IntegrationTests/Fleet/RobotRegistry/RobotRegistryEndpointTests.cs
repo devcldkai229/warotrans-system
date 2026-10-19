@@ -43,7 +43,7 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
         Assert.Equal(RobotStatus.OFFLINE, robot.Status);
         Assert.False(robot.IsOnline);
         Assert.True(robot.IsEnabled);
-        Assert.Equal(0m, robot.BatteryPercent);
+        Assert.Null(robot.BatteryPercent);
         Assert.NotEqual(Guid.Empty, robot.Id);
     }
 
@@ -239,7 +239,7 @@ public sealed class RobotRegistryEndpointTests(WaroTransWebApplicationFactory fa
         string Name,
         RobotStatus Status,
         bool IsOnline,
-        decimal BatteryPercent,
+        decimal? BatteryPercent,
         bool IsEnabled);
 
     private sealed record ListDto(IReadOnlyList<RobotDto> Items, int Total);

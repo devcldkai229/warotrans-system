@@ -57,4 +57,29 @@ public class DispatchRobotSelectorTests
 
         Assert.Same(available, selected);
     }
+
+    [Fact]
+    public void Select_prefers_known_battery_over_null()
+    {
+        var withBattery = new Robot
+        {
+            Code = "RBT-020",
+            Status = RobotStatus.AVAILABLE,
+            BatteryPercent = 40,
+            IsEnabled = true,
+            IsOnline = true
+        };
+        var noSensor = new Robot
+        {
+            Code = "RBT-021",
+            Status = RobotStatus.AVAILABLE,
+            BatteryPercent = null,
+            IsEnabled = true,
+            IsOnline = true
+        };
+
+        var selected = DispatchRobotSelector.Select([noSensor, withBattery]);
+
+        Assert.Same(withBattery, selected);
+    }
 }

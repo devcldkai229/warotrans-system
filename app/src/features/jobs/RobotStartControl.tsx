@@ -27,7 +27,7 @@ export function RobotStartControl({ jobId, mapVersionId, onStarted }: {
   };
   return <View style={{ gap: 10 }}>
     <ChoiceField label="Robot" value={selectedRobotId} onChange={setSelectedRobotId} disabled={busy}
-      options={eligible.map(r => ({ value: r.id, label: `${r.code} · ${r.batteryPercent}%` }))} />
+      options={eligible.map(r => ({ value: r.id, label: `${r.code} · ${r.batteryPercent == null ? 'No sensor' : `${r.batteryPercent}%`}` }))} />
     {!robots.loading && !robots.error && !eligible.length && <Text variant="caption">No Available Robot On This Map</Text>}
     <ErrorBanner message={robots.error ?? error} />
     <Button title="Start Job on Robot" loading={busy} disabled={!!robots.error || !eligible.some(r => r.id === selectedRobotId)} onPress={run} />

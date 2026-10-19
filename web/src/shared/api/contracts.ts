@@ -181,7 +181,8 @@ export interface Robot {
   name: string
   status: RobotStatus
   isOnline: boolean
-  batteryPercent: number
+  /** Null when the robot has no battery sensor. */
+  batteryPercent: number | null
   /** Map coordinates in metres (same frame as Endpoint.x / Endpoint.y). */
   poseX: number
   poseY: number

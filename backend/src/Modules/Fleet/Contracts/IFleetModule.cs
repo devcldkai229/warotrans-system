@@ -40,7 +40,7 @@ public sealed record RobotSnapshot(
     bool IsOnline,
     LocalizationStatus? LocalizationStatus,
     NavigationStatus? NavigationStatus,
-    decimal BatteryPercent,
+    decimal? BatteryPercent,
     DateTimeOffset? LastTelemetryAt,
     double PoseX,
     double PoseY,

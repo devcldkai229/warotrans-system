@@ -28,7 +28,7 @@ export function HomeScreen() {
     <Text variant="headline">Robots{state.data ? ` (${state.robots.length})` : ''}</Text>
     {state.robots.map(robot => <Card key={robot.id} gap={8}>
       <Text variant="headline">{robot.code}</Text><StatusPill status={robot.status} />
-      <Text>{robot.isOnline ? 'Online' : 'Offline'} · Battery {robot.batteryPercent}%</Text>
+      <Text>{robot.isOnline ? 'Online' : 'Offline'} · Battery {robot.batteryPercent == null ? 'No sensor' : `${robot.batteryPercent}%`}</Text>
       <Text variant="caption">Last Telemetry: {robot.lastTelemetryAt ? new Date(robot.lastTelemetryAt).toLocaleString() : 'Not Reported'}</Text>
     </Card>)}
   </OperationalScreen>;

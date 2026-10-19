@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
 import type { Endpoint } from '@/shared/api/contracts'
-import { getRobot, listRobots } from '@/shared/api/fleet'
+import { getRobot } from '@/shared/api/fleet'
 import { confirmJobStep, getJob, listJobs, startJob, type JobDetailDto, type JobStepDto, type JobTaskDto } from '@/shared/api/jobs'
+import { RobotSelect } from '@/features/jobs/RobotSelect'
 import { getTransportRequest } from '@/shared/api/transportRequests'
 import { cx } from '@/shared/lib/cx'
 import { formatClock, humanize } from '@/shared/lib/format'
@@ -275,8 +276,6 @@ function JobPanel({
 
 function StartJob({ job }: { job: JobDetailDto }) {
   const queryClient = useQueryClient()
-  const robotsQuery = useQuery({ queryKey: ['fleet-robots', 'for-job', job.mapVersionId], queryFn: () => listRobots({ take: 100 }) })
-  const candidates = (robotsQuery.data?.items ?? []).filter((r) => r.currentMapVersionId === job.mapVersionId)
   const [robotId, setRobotId] = useState('')
   const start = useMutation({
     mutationFn: () => startJob(job.id, robotId || undefined),
@@ -285,19 +284,7 @@ function StartJob({ job }: { job: JobDetailDto }) {
 
   return (
     <div className="mt-3 flex items-center gap-2">
-      <select
-        className="h-8 min-w-0 flex-1 rounded-md bg-container px-2 text-sm"
-        value={robotId}
-        onChange={(event) => setRobotId(event.target.value)}
-        aria-label="Robot"
-      >
-        <option value="">Best available robot</option>
-        {candidates.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.code} · {r.status} · {r.isOnline ? 'online' : 'offline'}
-          </option>
-        ))}
-      </select>
+      <RobotSelect mapVersionId={job.mapVersionId} value={robotId} onChange={setRobotId} />
       <Button variant="primary" size="sm" onClick={() => start.mutate()} disabled={start.isPending}>
         <Icon name="play" size={14} /> Start
       </Button>

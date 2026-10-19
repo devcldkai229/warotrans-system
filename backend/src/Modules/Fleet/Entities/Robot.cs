@@ -11,7 +11,8 @@ public sealed class Robot
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public RobotStatus Status { get; set; }
-    public decimal BatteryPercent { get; set; }
+    /// <summary>Null when the robot has no battery sensor (honest "no reading").</summary>
+    public decimal? BatteryPercent { get; set; }
     public double PoseX { get; set; }
     public double PoseY { get; set; }
     public double PoseYaw { get; set; }
@@ -48,7 +49,7 @@ public sealed class Robot
             Code = code,
             Name = name,
             Status = RobotStatus.OFFLINE,
-            BatteryPercent = 0,
+            BatteryPercent = null,
             PoseX = 0,
             PoseY = 0,
             PoseYaw = 0,
@@ -86,7 +87,9 @@ public sealed class Robot
     }
 
     /// <summary>
-    /// Applies heartbeat. Does not change operational <see cref="Status"/>.
+    /// Applies heartbeat. Liveness uses <paramref name="utcNow"/> (server receive time) so
+    /// robot clock skew cannot flap the offline monitor. On first online transition from
+    /// <see cref="RobotStatus.OFFLINE"/> (enabled, no active command), sets Status to AVAILABLE.
     /// Returns false when the message is stale/duplicate.
     /// </summary>
     public bool TryApplyHeartbeat(Guid bootId, long sequence, DateTimeOffset sentAt, DateTimeOffset utcNow, out bool becameOnline)
@@ -102,12 +105,21 @@ public sealed class Robot
 
         LastHeartbeatBootId = bootId;
         LastHeartbeatSequence = sequence;
-        LastHeartbeatAt = sentAt == default ? utcNow : sentAt;
+        // Receive time for liveness (payload sentAt is not used for the offline timer).
+        LastHeartbeatAt = utcNow;
 
         if (!IsOnline)
         {
             IsOnline = true;
             becameOnline = true;
+        }
+
+        if (becameOnline
+            && Status == RobotStatus.OFFLINE
+            && IsEnabled
+            && CurrentCommandId is null)
+        {
+            Status = RobotStatus.AVAILABLE;
         }
 
         UpdatedAt = utcNow;
@@ -159,7 +171,7 @@ public sealed class Robot
 
         if (batteryPercent is not null)
         {
-            BatteryPercent = batteryPercent.Value;
+            BatteryPercent = batteryPercent;
         }
 
         NavigationStatus = navigationStatus;
@@ -174,7 +186,7 @@ public sealed class Robot
     }
 
     /// <summary>
-    /// Marks connectivity offline. Does not change operational <see cref="Status"/>.
+    /// Marks connectivity offline (<see cref="IsOnline"/>). Does not change operational Status.
     /// </summary>
     public bool MarkOffline(DateTimeOffset utcNow)
     {
@@ -186,6 +198,21 @@ public sealed class Robot
         IsOnline = false;
         UpdatedAt = utcNow;
         return true;
+    }
+
+    /// <summary>
+    /// After a heartbeat timeout: set operational Status to OFFLINE (unless MAINTENANCE/ERROR)
+    /// and clear the current command.
+    /// </summary>
+    public void MarkStatusOffline(DateTimeOffset utcNow)
+    {
+        if (Status is not RobotStatus.MAINTENANCE and not RobotStatus.ERROR)
+        {
+            Status = RobotStatus.OFFLINE;
+        }
+
+        CurrentCommandId = null;
+        UpdatedAt = utcNow;
     }
 
     /// <summary>Backend-owned: reserve robot for an issued navigate command.</summary>

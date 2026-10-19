@@ -111,16 +111,20 @@ function buildSections(robot: RobotView): Section[] {
     {
       id: 'telemetry',
       label: 'Telemetry',
-      summary: hasTelemetry ? `${robot.batteryPercent}%` : 'No telemetry yet',
+      summary: hasTelemetry
+        ? robot.batteryPercent == null
+          ? 'No sensor'
+          : `${robot.batteryPercent}%`
+        : 'No telemetry yet',
       body: (
         <dl>
           <Field label="Battery">
-            {hasTelemetry ? (
+            {robot.batteryPercent == null ? (
+              <span className="text-muted">No sensor</span>
+            ) : (
               <>
                 {robot.batteryPercent}% <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
               </>
-            ) : (
-              '—'
             )}
           </Field>
           <Field label="Pose X">{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
@@ -131,8 +135,8 @@ function buildSections(robot: RobotView): Section[] {
           <Field label="Last telemetry">{formatDateTimeWithYear(robot.lastTelemetryAt)}</Field>
           {!hasTelemetry ? (
             <p className="py-2 text-xs text-muted">
-              Pose and battery default to 0 until the first telemetry message. Values shown as "—" until
-              telemetry is received.
+              Pose stays at 0 until the first localized telemetry. Battery stays &quot;No sensor&quot; until the robot
+              reports a reading.
             </p>
           ) : null}
         </dl>

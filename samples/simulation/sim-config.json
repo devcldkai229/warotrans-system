@@ -1,0 +1,81 @@
+{
+  "warehouseId": "33333333-3333-3333-3333-333333333333",
+  "mapVersionId": "710305af-755b-4c2c-bc48-734930215d64",
+  "mapVersionCode": "MAP-WHSIM-V002",
+  "robotId": "26a87e79-7e4f-46fb-b815-8c6bcb0f7805",
+  "robotCode": "RBT-SIM-01",
+  "endpoints": [
+    {
+      "alias": "A",
+      "endpointId": "2fb7cac4-02c3-46b9-a3e3-07eaff45c6d7",
+      "code": "EP-RACK-A",
+      "x": 3.2,
+      "y": 3.75,
+      "yaw": 0
+    },
+    {
+      "alias": "B",
+      "endpointId": "d1a40b84-d72b-4fc9-ae1c-c2490b6018a3",
+      "code": "EP-RACK-B",
+      "x": 4.875,
+      "y": 3.75,
+      "yaw": 0
+    },
+    {
+      "alias": "C",
+      "endpointId": "f363b95c-0974-4040-acb3-68053fba1653",
+      "code": "EP-RACK-C",
+      "x": 6.625,
+      "y": 3.75,
+      "yaw": 0
+    },
+    {
+      "alias": "IN1",
+      "endpointId": "2fbb93c3-909d-449c-89cc-48970954c7dc",
+      "code": "EP-INBOUND-1",
+      "x": 0.9,
+      "y": 5.5,
+      "yaw": 3.14159
+    },
+    {
+      "alias": "IN2",
+      "endpointId": "35d758c6-cd37-433e-8f9d-b1a26b6cccb9",
+      "code": "EP-INBOUND-2",
+      "x": 0.9,
+      "y": 2,
+      "yaw": 3.14159
+    },
+    {
+      "alias": "OUT1",
+      "endpointId": "dfa57318-c469-4024-92fc-81c96ad7669f",
+      "code": "EP-OUTBOUND-1",
+      "x": 10.1,
+      "y": 5.5,
+      "yaw": 0
+    },
+    {
+      "alias": "OUT2",
+      "endpointId": "99b92cee-49c8-41df-b8ef-bb57dbfeeda9",
+      "code": "EP-OUTBOUND-2",
+      "x": 10.1,
+      "y": 2,
+      "yaw": 0
+    },
+    {
+      "alias": "CHG",
+      "endpointId": "c3acef3a-0252-4e69-bc5b-71a07f6f978a",
+      "code": "EP-CHARGER",
+      "x": 5.75,
+      "y": 6.75,
+      "yaw": 1.570796
+    },
+    {
+      "alias": "PARK",
+      "endpointId": "e7d78756-da0a-424d-9935-f3a404ab3ef6",
+      "code": "EP-PARKING",
+      "x": 5.75,
+      "y": 0.9,
+      "yaw": 1.570796
+    }
+  ]
+}

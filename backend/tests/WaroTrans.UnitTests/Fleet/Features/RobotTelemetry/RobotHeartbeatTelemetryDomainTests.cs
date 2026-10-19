@@ -6,17 +6,62 @@ namespace WaroTrans.UnitTests.Fleet.Features.RobotTelemetry;
 public class RobotHeartbeatTelemetryDomainTests
 {
     [Fact]
-    public void ApplyHeartbeat_sets_online_without_changing_Status()
+    public void ApplyHeartbeat_sets_online_and_AVAILABLE_from_OFFLINE()
     {
-        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", DateTimeOffset.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", now);
         Assert.Equal(RobotStatus.OFFLINE, robot.Status);
+        Assert.Null(robot.BatteryPercent);
 
-        var applied = robot.TryApplyHeartbeat(Guid.NewGuid(), 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, out var becameOnline);
+        var applied = robot.TryApplyHeartbeat(Guid.NewGuid(), 1, now.AddMinutes(-5), now, out var becameOnline);
 
         Assert.True(applied);
         Assert.True(becameOnline);
         Assert.True(robot.IsOnline);
+        Assert.Equal(RobotStatus.AVAILABLE, robot.Status);
+        // Liveness uses receive time, not skewed sentAt.
+        Assert.Equal(now, robot.LastHeartbeatAt);
+    }
+
+    [Fact]
+    public void ApplyHeartbeat_does_not_force_AVAILABLE_when_disabled()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", now);
+        robot.Disable();
+
+        Assert.True(robot.TryApplyHeartbeat(Guid.NewGuid(), 1, now, now, out var becameOnline));
+
+        Assert.True(becameOnline);
+        Assert.True(robot.IsOnline);
         Assert.Equal(RobotStatus.OFFLINE, robot.Status);
+    }
+
+    [Fact]
+    public void ApplyHeartbeat_does_not_force_AVAILABLE_when_command_active()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", now);
+        robot.CurrentCommandId = Guid.NewGuid();
+
+        Assert.True(robot.TryApplyHeartbeat(Guid.NewGuid(), 1, now, now, out _));
+
+        Assert.True(robot.IsOnline);
+        Assert.Equal(RobotStatus.OFFLINE, robot.Status);
+    }
+
+    [Fact]
+    public void ApplyHeartbeat_does_not_overwrite_EXECUTING()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", now);
+        robot.Status = RobotStatus.EXECUTING;
+        robot.IsOnline = false;
+
+        Assert.True(robot.TryApplyHeartbeat(Guid.NewGuid(), 1, now, now, out _));
+
+        Assert.True(robot.IsOnline);
+        Assert.Equal(RobotStatus.EXECUTING, robot.Status);
     }
 
     [Fact]
@@ -59,6 +104,29 @@ public class RobotHeartbeatTelemetryDomainTests
     }
 
     [Fact]
+    public void MarkStatusOffline_sets_OFFLINE_unless_MAINTENANCE_or_ERROR()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", now);
+        robot.Status = RobotStatus.AVAILABLE;
+        robot.CurrentCommandId = Guid.NewGuid();
+
+        robot.MarkStatusOffline(now);
+        Assert.Equal(RobotStatus.OFFLINE, robot.Status);
+        Assert.Null(robot.CurrentCommandId);
+
+        robot.Status = RobotStatus.MAINTENANCE;
+        robot.CurrentCommandId = Guid.NewGuid();
+        robot.MarkStatusOffline(now);
+        Assert.Equal(RobotStatus.MAINTENANCE, robot.Status);
+        Assert.Null(robot.CurrentCommandId);
+
+        robot.Status = RobotStatus.ERROR;
+        robot.MarkStatusOffline(now);
+        Assert.Equal(RobotStatus.ERROR, robot.Status);
+    }
+
+    [Fact]
     public void ApplyTelemetry_updates_pose_not_Status_or_IsOnline()
     {
         var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", DateTimeOffset.UtcNow);
@@ -90,6 +158,32 @@ public class RobotHeartbeatTelemetryDomainTests
         Assert.Equal(77.5m, robot.BatteryPercent);
         Assert.Equal(NavigationStatus.NAVIGATING, robot.NavigationStatus);
         Assert.Equal(LocalizationStatus.LOCALIZED, robot.LocalizationStatus);
+    }
+
+    [Fact]
+    public void ApplyTelemetry_null_battery_keeps_previous_or_null()
+    {
+        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", DateTimeOffset.UtcNow);
+        Assert.Null(robot.BatteryPercent);
+
+        Assert.True(robot.TryApplyTelemetry(
+            Guid.NewGuid(), 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+            null, null, null, null, NavigationStatus.IDLE, LocalizationStatus.UNKNOWN,
+            0, 0, null, null, null));
+
+        Assert.Null(robot.BatteryPercent);
+
+        Assert.True(robot.TryApplyTelemetry(
+            Guid.NewGuid(), 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+            1, 2, 0, 55m, NavigationStatus.IDLE, LocalizationStatus.LOCALIZED,
+            0, 0, null, null, null));
+        Assert.Equal(55m, robot.BatteryPercent);
+
+        Assert.True(robot.TryApplyTelemetry(
+            Guid.NewGuid(), 2, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+            1, 2, 0, null, NavigationStatus.IDLE, LocalizationStatus.LOCALIZED,
+            0, 0, null, null, null));
+        Assert.Equal(55m, robot.BatteryPercent);
     }
 
     [Fact]

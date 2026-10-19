@@ -84,17 +84,11 @@ public sealed class RobotConnectivityMonitorHostedService(
                                 || c.Status == RobotCommandStatus.RUNNING))
                 .ToListAsync(cancellationToken);
 
-            var abortedNavigate = false;
             foreach (var command in inFlight)
             {
                 if (!command.TryAbortOffline(utcNow))
                 {
                     continue;
-                }
-
-                if (command.Type == RobotCommandType.NAVIGATE_TO_POSE)
-                {
-                    abortedNavigate = true;
                 }
 
                 if (command.JobAssignmentId is { } assignmentId)
@@ -120,14 +114,8 @@ public sealed class RobotConnectivityMonitorHostedService(
                     cancellationToken);
             }
 
-            if (abortedNavigate)
-            {
-                robot.MarkAvailable(utcNow);
-            }
-            else
-            {
-                robot.ClearCurrentCommand(utcNow);
-            }
+            // Heartbeat timeout → operational OFFLINE (keep MAINTENANCE/ERROR) and clear command.
+            robot.MarkStatusOffline(utcNow);
 
             // Persist before fan-out so API polls and SignalR subscribers see the same offline snapshot.
             await db.SaveChangesAsync(cancellationToken);

@@ -84,9 +84,23 @@ else {
     Save-Text "01-map.import.response.json" (Format-Json $raw)
 
     # Endpoints and zones can only be created while the map is DRAFT.
+    # Layout JSON (robot repo) may still use legacy labels; map to current enums (rules/05).
+    function Map-EndpointType([string]$legacy) {
+        switch ($legacy) {
+            "CHARGING" { "CHARGER" }
+            "PARKING"  { "PARK" }
+            default    { "WAYPOINT" }  # STORAGE / INBOUND / OUTBOUND / WAYPOINT
+        }
+    }
+    function Map-ZoneType($z) {
+        if ($null -ne $z.maxSpeed) { return "SPEED" }
+        if ([int]$z.capacity -eq 1) { return "SINGLE_OCCUPANCY" }
+        return "NO_STOP"
+    }
     foreach ($ep in $layout.endpoints) {
+        $epType = Map-EndpointType $ep.endpointType
         $body = @{
-            name = $ep.name; endpointType = $ep.endpointType
+            name = $ep.name; endpointType = $epType
             x = $ep.x; y = $ep.y; yaw = $ep.yaw
             positionTolerance = 0.15; yawTolerance = 0.25
         } | ConvertTo-Json -Compress
@@ -97,11 +111,13 @@ else {
         # PowerShell 5.1 ConvertTo-Json mangles nested arrays: write the GeoJSON ring by hand.
         $inv = [System.Globalization.CultureInfo]::InvariantCulture
         $ring = ($z.polygon | ForEach-Object { "[{0},{1}]" -f ([double]$_[0]).ToString($inv), ([double]$_[1]).ToString($inv) }) -join ","
-        $zone = @{ name = $z.name; zoneType = $z.zoneType; capacity = [int]$z.capacity; isActive = $true; geometry = "__GEOMETRY__" }
-        if ($null -ne $z.maxSpeed) { $zone.maxSpeed = [double]$z.maxSpeed }
+        $zoneType = Map-ZoneType $z
+        $capacity = if ($zoneType -eq "SINGLE_OCCUPANCY") { 1 } else { [int]$z.capacity }
+        $zone = @{ name = $z.name; zoneType = $zoneType; capacity = $capacity; isActive = $true; geometry = "__GEOMETRY__" }
+        if ($zoneType -eq "SPEED") { $zone.maxSpeed = [double]$z.maxSpeed }
         $body = ($zone | ConvertTo-Json -Compress).Replace('"__GEOMETRY__"', "{`"type`":`"Polygon`",`"coordinates`":[[$ring]]}")
         $r = Invoke-Api POST "/api/navigation/maps/$($map.id)/zones" $body $token
-        Assert-Status $r 201 "create zone $($z.name) ($($z.zoneType))"
+        Assert-Status $r 201 "create zone $($z.name) ($zoneType)"
     }
 
     $publish = Invoke-Api POST "/api/navigation/maps/$($map.id)/publish" $null $token

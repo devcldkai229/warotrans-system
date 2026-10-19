@@ -9,13 +9,21 @@ export interface RobotTelemetryMessage {
   poseX: number
   poseY: number
   poseYaw: number
-  batteryPercent: number
+  batteryPercent: number | null
   navigationStatus: string | null
   localizationStatus: string | null
   lastTelemetryAt: string | null
   /** m/s and rad/s from the robot's odometry (null on older backends / before the first telemetry). */
   linearVelocity?: number | null
   angularVelocity?: number | null
+}
+
+export interface RobotConnectivityMessage {
+  robotId: string
+  robotCode: string
+  isOnline: boolean
+  status: string
+  lastHeartbeatAt: string | null
 }
 
 export interface JobUpdatedMessage {
@@ -29,6 +37,7 @@ export interface JobUpdatedMessage {
 
 export interface HubHandlers {
   robotTelemetryUpdated?: (message: RobotTelemetryMessage) => void
+  robotConnectivityChanged?: (message: RobotConnectivityMessage) => void
   jobUpdated?: (message: JobUpdatedMessage) => void
 }
 
@@ -67,12 +76,13 @@ function ensureStarted(): Promise<void> {
  */
 export function useNotificationsHub(handlers: HubHandlers): boolean {
   const [connected, setConnected] = useState(false)
-  const { robotTelemetryUpdated, jobUpdated } = handlers
+  const { robotTelemetryUpdated, robotConnectivityChanged, jobUpdated } = handlers
 
   useEffect(() => {
     const hub = getConnection()
     let cancelled = false
     if (robotTelemetryUpdated) hub.on('robotTelemetryUpdated', robotTelemetryUpdated)
+    if (robotConnectivityChanged) hub.on('robotConnectivityChanged', robotConnectivityChanged)
     if (jobUpdated) hub.on('jobUpdated', jobUpdated)
 
     const sync = () => !cancelled && setConnected(hub.state === HubConnectionState.Connected)
@@ -84,9 +94,10 @@ export function useNotificationsHub(handlers: HubHandlers): boolean {
     return () => {
       cancelled = true
       if (robotTelemetryUpdated) hub.off('robotTelemetryUpdated', robotTelemetryUpdated)
+      if (robotConnectivityChanged) hub.off('robotConnectivityChanged', robotConnectivityChanged)
       if (jobUpdated) hub.off('jobUpdated', jobUpdated)
     }
-  }, [robotTelemetryUpdated, jobUpdated])
+  }, [robotTelemetryUpdated, robotConnectivityChanged, jobUpdated])
 
   return connected
 }

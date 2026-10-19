@@ -30,8 +30,9 @@ warotrans/v1/robots/{robotCode}/teleop             # backend → robot (QoS0), m
 ```
 
 Backend sets connectivity `IsOnline=true` from heartbeat. Robot never sends OFFLINE.  
-If no heartbeat within `Mqtt:HeartbeatTimeoutSeconds` (default 5), backend sets `IsOnline=false`.  
-Operational `Robot.Status` is not changed by heartbeat alone.  
+Liveness uses **server receive time** (`LastHeartbeatAt`), not payload `sentAt`, so robot clock skew cannot flap the offline monitor.  
+If no heartbeat within `Mqtt:HeartbeatTimeoutSeconds` (default 5), backend sets `IsOnline=false` and operational `Robot.Status` to `OFFLINE` (unless already `MAINTENANCE` / `ERROR`).  
+On the first heartbeat that brings a robot online from `OFFLINE` (enabled, no active command), backend sets `Status` to `AVAILABLE`.  
 If a command is `RUNNING` when heartbeat times out, backend aborts that command and ends related `JobAssignment` with `ROBOT_OFFLINE`.
 
 ## Telemetry

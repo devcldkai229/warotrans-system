@@ -132,7 +132,7 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("angular_velocity");
 
-                    b.Property<decimal>("BatteryPercent")
+                    b.Property<decimal?>("BatteryPercent")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("battery_percent");
