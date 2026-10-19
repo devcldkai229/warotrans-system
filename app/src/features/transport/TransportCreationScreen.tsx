@@ -391,10 +391,8 @@ export function TransportCreationScreen() {
   }, []);
 
   // Target Destination Mode: 'ENDPOINT' vs 'SLOT'
-  const isInitialReloc =
-    resolvedInitialWf.id === 'reallocation' || resolvedInitialWf.code === 'INTERNAL_RELOCATION';
   const [destinationType, setDestinationType] = useState<'ENDPOINT' | 'SLOT'>(
-    isInitialReloc ? 'ENDPOINT' : currentPreset.requiresRackSlot ? 'SLOT' : 'ENDPOINT'
+    'ENDPOINT'
   );
   const [perContainerEndpointOverrides, setPerContainerEndpointOverrides] = useState<
     Record<string, EndpointTargetOption>
@@ -593,8 +591,7 @@ export function TransportCreationScreen() {
     setSelectedWorkflow(wf);
     const preset = WORKFLOW_ROUTE_PRESETS[wf.id] || WORKFLOW_ROUTE_PRESETS.inbound;
     setTargetZone(preset.defaultTargetZone);
-    const isReloc = wf.id === 'reallocation' || wf.code === 'INTERNAL_RELOCATION';
-    setDestinationType(isReloc ? 'ENDPOINT' : preset.requiresRackSlot ? 'SLOT' : 'ENDPOINT');
+    setDestinationType('ENDPOINT');
     if (preset.endpointOptions?.[0]) {
       setSelectedEndpointOption(preset.endpointOptions[0]);
     }

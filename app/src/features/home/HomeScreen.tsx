@@ -30,7 +30,7 @@ import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime } from '../../shared/realtime';
 import { listJobs, listRobots } from '../../shared/api';
-import { AppJobItem, mapJobDetailToAppJobItem, MOCK_JOBS } from '../jobs/jobData';
+import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, MOCK_JOBS } from '../jobs/jobData';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -165,6 +165,12 @@ export function HomeScreen() {
   }, [fleetRobots, robotTelemetry]);
 
   const activeZone = session?.zone || 'Inbound Dock 01';
+  const isWaitingHandover = Boolean(activeJob.hasWaitingHandover || activeJob.status === 'ASSIGNED');
+  const isQueuedOrCreated = activeJob.status === 'CREATED' || activeJob.status === 'QUEUED';
+  const activeStatusLabel = isWaitingHandover ? 'Waiting Handover' : JOB_STATUS_PRESENTATION[activeJob.status]?.label || activeJob.status;
+  const activePositionLabel = isWaitingHandover ? 'At Station (0m)' : isQueuedOrCreated ? 'Awaiting Robot Start' : activeJob.status === 'RUNNING' ? 'En Route' : activeJob.status;
+  const collapsedBtnTitle = isWaitingHandover ? 'Verify' : isQueuedOrCreated ? 'Start' : 'Open';
+  const expandedBtnTitle = isWaitingHandover ? 'Verify Handover' : isQueuedOrCreated ? 'Open & Start Job' : 'View Mission Detail';
 
   const toggleSheetExpand = () => {
     triggerHaptic('tap');
@@ -242,7 +248,7 @@ export function HomeScreen() {
               accessibilityLabel={`Job ${activeJob.id}, waiting handover. Tap to view details.`}
             >
               <View style={styles.collapsedTopLine}>
-                <StatusPill status={activeJob.status} label="Waiting Handover" size="sm" dot />
+                <StatusPill status={activeJob.status} label={activeStatusLabel} size="sm" dot />
               </View>
               <View style={styles.collapsedBottomRow}>
                 <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.jobCode}>
@@ -257,7 +263,7 @@ export function HomeScreen() {
 
             <View style={styles.collapsedActionGroup}>
               <Button
-                title="Start"
+                title={collapsedBtnTitle}
                 variant="primary"
                 size="sm"
                 onPress={handleStartHandover}
@@ -280,7 +286,7 @@ export function HomeScreen() {
           <>
             {/* Top row: Status pill + Action controls */}
             <View style={styles.expandedTopBar}>
-              <StatusPill status={activeJob.status} label="Waiting Handover" size="sm" dot />
+              <StatusPill status={activeJob.status} label={activeStatusLabel} size="sm" dot />
 
               <View style={styles.expandedHeaderActions}>
                 <Pressable
@@ -335,7 +341,7 @@ export function HomeScreen() {
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Assigned</Text>
                 <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
-                  <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text> · At Station (0m)
+                  <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text> · {activePositionLabel}
                 </Text>
               </View>
 
@@ -349,7 +355,7 @@ export function HomeScreen() {
 
             {/* Primary Action Button */}
             <Button
-              title="Start Handover"
+              title={expandedBtnTitle}
               variant="primary"
               size="md"
               onPress={handleStartHandover}

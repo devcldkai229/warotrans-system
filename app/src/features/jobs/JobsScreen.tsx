@@ -134,16 +134,16 @@ function matchesZone(job: AppJobItem, zone: string): boolean {
     .toLowerCase();
 
   if (zLower.includes('inbound') || zLower.includes('dock 01') || zLower.includes('dock 1')) {
-    return text.includes('dock 01') || text.includes('dock-01') || text.includes('inbound');
+    return ['dock 01', 'dock-01', 'dock-in', 'inbound', 'ep-a', 'ep-b'].some((code) => text.includes(code));
   }
   if (zLower.includes('zone a')) {
-    return text.includes('rack a') || text.includes('zone a');
+    return ['rack a', 'rack-a', 'zone a', 'ep-a', 'ep-b', 'ep-c'].some((code) => text.includes(code));
   }
   if (zLower.includes('zone b')) {
-    return text.includes('rack b') || text.includes('zone b');
+    return ['rack b', 'rack-b', 'zone b', 'ep-d', 'ep-e', 'ep-f'].some((code) => text.includes(code));
   }
   if (zLower.includes('outbound') || zLower.includes('dock 04') || zLower.includes('shipping')) {
-    return text.includes('dock 04') || text.includes('dock out') || text.includes('outbound') || text.includes('shipping');
+    return ['dock 04', 'dock out', 'dock-out', 'outbound', 'shipping', 'ep-d', 'ep-e', 'ep-f'].some((code) => text.includes(code));
   }
   return true;
 }

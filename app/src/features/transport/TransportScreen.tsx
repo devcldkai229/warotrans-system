@@ -140,6 +140,7 @@ export function TransportScreen() {
   const [hasActiveAlert, setHasActiveAlert] = useState(false);
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
   const [dispatches, setDispatches] = useState<RecentDispatchItem[]>(RECENT_DISPATCHES);
+  const [totalRecords, setTotalRecords] = useState<number>(RECENT_DISPATCHES.length);
   const [isLoadingDispatches, setIsLoadingDispatches] = useState(false);
   const [availableRobots, setAvailableRobots] = useState<RobotDto[]>([]);
 
@@ -156,6 +157,7 @@ export function TransportScreen() {
       try {
         const res = await listTransportRequests({ take: 5 });
         if (isMounted && res?.items) {
+          setTotalRecords(res.total || res.items.length);
           const mapped = res.items.map((item) => {
             const details = item.details || [];
             const first = details[0];
@@ -550,7 +552,7 @@ export function TransportScreen() {
             </Text>
             <View style={styles.recordsPill}>
               <Text variant="caption" color={colors.textSecondary} style={styles.recordsText}>
-                8 records
+                {totalRecords} records
               </Text>
             </View>
           </View>

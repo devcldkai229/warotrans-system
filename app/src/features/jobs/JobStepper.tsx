@@ -34,12 +34,17 @@ export function JobStepper({ steps }: JobStepperProps) {
       <View style={styles.stepsList}>
         {steps.map((step, idx) => {
           const isCompleted = step.status === 'COMPLETED';
-          const isExecuting = step.status === 'EXECUTING';
+          const isExecuting = step.status === 'EXECUTING' || step.status === 'WAITING';
           const isLast = idx === steps.length - 1;
-          const isHuman = step.type === 'HUMAN_INTERACTION';
+          const isHuman =
+            step.type === 'HUMAN_INTERACTION' ||
+            String(step.type) === 'MANUAL_CONFIRM' ||
+            String(step.title).toUpperCase().includes('CONFIRM') ||
+            String(step.title).toUpperCase().includes('VERIFICATION') ||
+            String(step.title).toUpperCase().includes('HANDOVER');
 
           return (
-            <View key={step.sequenceNo} style={styles.stepItem}>
+            <View key={`${step.sequenceNo}-${idx}`} style={styles.stepItem}>
               {/* Vertical timeline spine */}
               <View style={styles.indicatorCol}>
                 <View
@@ -120,7 +125,7 @@ export function JobStepper({ steps }: JobStepperProps) {
                   <View style={styles.executingPill}>
                     <Clock size={12} color={colors.primaryDark} />
                     <Text variant="caption" color={colors.primaryDark} style={styles.executingText}>
-                      Active Step · Action Required
+                      {isHuman ? 'Active Step · Awaiting Operator Handover' : 'Active Step · AMR Executing'}
                     </Text>
                   </View>
                 )}

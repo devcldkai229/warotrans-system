@@ -180,19 +180,57 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse): AppJobItem 
     };
   });
 
+  const containerCodes = containers.map((c) => c.code).join(', ');
   const steps: JobStepSummary[] =
     existingMock?.steps && existingMock.steps.length > 0
       ? existingMock.steps
-      : detail.tasks.flatMap((t) =>
-          t.steps.map((s) => ({
-            sequenceNo: s.sequenceNo,
-            type: s.stepType,
-            title: s.workflowStepKey || s.operationCode,
-            description: s.errorMessage || s.operationCode,
-            status: s.status,
-            targetEndpointCode: s.targetEndpointId || destCode,
-          }))
-        );
+      : [...detail.tasks]
+          .sort((a, b) => a.sequenceNo - b.sequenceNo)
+          .flatMap((t) =>
+            [...t.steps]
+              .sort((a, b) => a.sequenceNo - b.sequenceNo)
+              .map((s) => ({ t, s }))
+          )
+          .map(({ t, s }, globalIdx) => {
+            const pickupEndpointCode =
+              (String(t.contextValues?.stopAction) === 'PICKUP' &&
+                (t.contextValues?.stopEndpointCode as string)) || sourceCode;
+            const dropoffEndpointCode =
+              (String(t.contextValues?.stopAction) === 'DROPOFF' &&
+                (t.contextValues?.stopEndpointCode as string)) || destCode;
+            const stepKey = s.workflowStepKey || s.operationCode;
+            const presentation: Record<string, { title: string; description: string }> = {
+              MOVE_PICKUP: {
+                title: 'Autonomous Transit to Pickup',
+                description: `Navigate AMR to pickup endpoint (${pickupEndpointCode})`,
+              },
+              PICKUP_CONFIRM: {
+                title: 'Operator Pickup Verification',
+                description: `Scan & confirm loading of ${containerCodes} onto AMR bay`,
+              },
+              MOVE_DROPOFF: {
+                title: 'Autonomous Transit to Dropoff',
+                description: `Navigate AMR to destination endpoint (${dropoffEndpointCode})`,
+              },
+              DROPOFF_CONFIRM: {
+                title: 'Operator Dropoff Verification',
+                description: `Scan & confirm unloading of ${containerCodes} at destination`,
+              },
+            };
+            const targetIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+              .test(s.targetEndpointId || '');
+            return {
+              sequenceNo: globalIdx + 1,
+              type: s.stepType,
+              title: presentation[stepKey]?.title || stepKey,
+              description: presentation[stepKey]?.description || s.errorMessage || s.operationCode,
+              status: s.status,
+              targetEndpointCode: !s.targetEndpointId || targetIsUuid
+                ? (t.contextValues?.stopEndpointCode as string) ||
+                  (String(t.contextValues?.stopAction) === 'PICKUP' ? sourceCode : destCode)
+                : s.targetEndpointId,
+            };
+          });
 
   let stopsList: JobStopItem[] =
     existingMock?.stopsList && existingMock.stopsList.length > 0

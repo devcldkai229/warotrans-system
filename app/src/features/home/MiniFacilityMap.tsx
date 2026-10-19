@@ -209,7 +209,7 @@ export function MiniFacilityMap({
 
       {/* 6. Storage Zone A Card */}
       <View style={styles.zoneCardA}>
-        <Text style={styles.zoneTitle}>Zone A · Storage</Text>
+        <Text style={styles.zoneTitle}>Zone A · EP-A..C / RACK-A</Text>
         <View style={styles.rackGridA}>
           {Array.from({ length: 12 }).map((_, i) => (
             <View key={i} style={styles.rackPill} />
@@ -219,7 +219,7 @@ export function MiniFacilityMap({
 
       {/* 7. Storage Zone B Card */}
       <View style={styles.zoneCardB}>
-        <Text style={styles.zoneTitle}>Zone B · Storage</Text>
+        <Text style={styles.zoneTitle}>Zone B · EP-D..F / RACK-B</Text>
         <View style={styles.rackGridB}>
           {Array.from({ length: 8 }).map((_, i) => (
             <View key={i} style={styles.rackPill} />
@@ -232,13 +232,13 @@ export function MiniFacilityMap({
         <Text style={styles.zoneTitle}>Loading Docks</Text>
         <View style={styles.docksRow}>
           <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>Dock 01</Text>
+            <Text style={styles.dockSlotText}>DOCK-IN-01</Text>
           </View>
           <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>Dock 02</Text>
+            <Text style={styles.dockSlotText}>EP-A / EP-D</Text>
           </View>
           <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>Dock 03</Text>
+            <Text style={styles.dockSlotText}>DOCK-OUT-04</Text>
           </View>
         </View>
       </View>
