@@ -93,10 +93,10 @@ public class EndpointTests
     private static UpdateEndpointHandler UpdateHandler(NavigationDbContext dbContext) =>
         new(dbContext, new UpdateEndpointValidator());
 
-    private static CreateEndpointRequest ValidCreateRequest(string type = "INBOUND", bool? isEnabled = null) =>
+    private static CreateEndpointRequest ValidCreateRequest(string type = "WAYPOINT", bool? isEnabled = null) =>
         new("Receiving dock 1", type, 12.5, 3.25, 1.57, 0.1, 0.2, isEnabled);
 
-    private static UpdateEndpointRequest ValidUpdateRequest(string type = "INBOUND") =>
+    private static UpdateEndpointRequest ValidUpdateRequest(string type = "WAYPOINT") =>
         new("Renamed", type, 20, 30, -1.0, 0.15, 0.3, false);
 
     /* ------------------------------------------------------------ CreateEndpoint */
@@ -114,7 +114,7 @@ public class EndpointTests
         Assert.Equal("EP-RECEIVING-DOCK-1", response.Code);
         Assert.Equal(map.Id, response.MapVersionId);
         Assert.Equal("Receiving dock 1", response.Name);
-        Assert.Equal("INBOUND", response.EndpointType);
+        Assert.Equal("WAYPOINT", response.EndpointType);
         Assert.Equal(12.5, response.X);
         Assert.Equal(3.25, response.Y);
         Assert.Equal(1.57, response.Yaw);
@@ -125,7 +125,7 @@ public class EndpointTests
         var saved = await dbContext.Endpoints.SingleAsync();
         Assert.Equal(response.Id, saved.Id);
         Assert.Equal("EP-RECEIVING-DOCK-1", saved.Code);
-        Assert.Equal(EndpointType.INBOUND, saved.EndpointType);
+        Assert.Equal(EndpointType.WAYPOINT, saved.EndpointType);
     }
 
     [Fact]
@@ -150,9 +150,9 @@ public class EndpointTests
         var map = AddMap(dbContext);
         await dbContext.SaveChangesAsync();
 
-        var response = await CreateHandler(dbContext).HandleAsync(map.Id, ValidCreateRequest("maintenance"));
+        var response = await CreateHandler(dbContext).HandleAsync(map.Id, ValidCreateRequest("charger"));
 
-        Assert.Equal("MAINTENANCE", response.EndpointType);
+        Assert.Equal("CHARGER", response.EndpointType);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class EndpointTests
     {
         using var dbContext = CreateDbContext();
         var map = AddMap(dbContext);
-        AddEndpoint(dbContext, map.Id, EndpointType.STORAGE, "EP-SHELF-A");
+        AddEndpoint(dbContext, map.Id, EndpointType.WAYPOINT, "EP-SHELF-A");
         await dbContext.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
@@ -188,11 +188,11 @@ public class EndpointTests
         using var dbContext = CreateDbContext();
         var map1 = AddMap(dbContext);
         var map2 = AddMap(dbContext);
-        AddEndpoint(dbContext, map1.Id, EndpointType.STORAGE, "EP-SHELF-A");
+        AddEndpoint(dbContext, map1.Id, EndpointType.WAYPOINT, "EP-SHELF-A");
         await dbContext.SaveChangesAsync();
 
         var response = await CreateHandler(dbContext, new FakeCodeGenerator("EP-SHELF-A"))
-            .HandleAsync(map2.Id, ValidCreateRequest("STORAGE"));
+            .HandleAsync(map2.Id, ValidCreateRequest("WAYPOINT"));
 
         Assert.Equal("EP-SHELF-A", response.Code);
         Assert.Equal(map2.Id, response.MapVersionId);
@@ -323,9 +323,9 @@ public class EndpointTests
         using var dbContext = CreateDbContext();
         var map = AddMap(dbContext);
         var otherMap = AddMap(dbContext);
-        AddEndpoint(dbContext, map.Id, EndpointType.STORAGE, "EP-SHELF-A");
-        AddEndpoint(dbContext, map.Id, EndpointType.CHARGING, "EP-CHARGER-1");
-        AddEndpoint(dbContext, otherMap.Id, EndpointType.INBOUND, "EP-DOCK-1");
+        AddEndpoint(dbContext, map.Id, EndpointType.WAYPOINT, "EP-SHELF-A");
+        AddEndpoint(dbContext, map.Id, EndpointType.CHARGER, "EP-CHARGER-1");
+        AddEndpoint(dbContext, otherMap.Id, EndpointType.WAYPOINT, "EP-DOCK-1");
         await dbContext.SaveChangesAsync();
 
         var response = await new GetEndpointHandler(dbContext).GetByMapVersionIdAsync(map.Id);
@@ -362,14 +362,14 @@ public class EndpointTests
     {
         using var dbContext = CreateDbContext();
         var map = AddMap(dbContext);
-        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.OUTBOUND, "EP-OUTBOUND-01");
+        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.WAYPOINT, "EP-OUTBOUND-01");
         await dbContext.SaveChangesAsync();
 
         var response = await new GetEndpointHandler(dbContext).GetByIdAsync(endpoint.Id);
 
         Assert.Equal(endpoint.Id, response.Id);
         Assert.Equal("EP-OUTBOUND-01", response.Code);
-        Assert.Equal("OUTBOUND", response.EndpointType);
+        Assert.Equal("WAYPOINT", response.EndpointType);
     }
 
     [Fact]
@@ -390,14 +390,14 @@ public class EndpointTests
     {
         using var dbContext = CreateDbContext();
         var map = AddMap(dbContext);
-        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.INBOUND, "EP-DOCK-1");
+        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.WAYPOINT, "EP-DOCK-1");
         await dbContext.SaveChangesAsync();
 
-        var response = await UpdateHandler(dbContext).HandleAsync(endpoint.Id, ValidUpdateRequest("charging"));
+        var response = await UpdateHandler(dbContext).HandleAsync(endpoint.Id, ValidUpdateRequest("CHARGER"));
 
         Assert.Equal("EP-DOCK-1", response.Code);
         Assert.Equal("Renamed", response.Name);
-        Assert.Equal("CHARGING", response.EndpointType);
+        Assert.Equal("CHARGER", response.EndpointType);
         Assert.Equal(20, response.X);
         Assert.Equal(30, response.Y);
         Assert.Equal(-1.0, response.Yaw);
@@ -408,7 +408,7 @@ public class EndpointTests
         var saved = await dbContext.Endpoints.SingleAsync();
         Assert.Equal("EP-DOCK-1", saved.Code);
         Assert.Equal("Renamed", saved.Name);
-        Assert.Equal(EndpointType.CHARGING, saved.EndpointType);
+        Assert.Equal(EndpointType.CHARGER, saved.EndpointType);
         Assert.Equal(20, saved.X);
         Assert.False(saved.IsEnabled);
     }
@@ -428,7 +428,7 @@ public class EndpointTests
     public async Task UpdateEndpoint_ThrowsNotFound_WhenMapVersionMissing()
     {
         using var dbContext = CreateDbContext();
-        var endpoint = AddEndpoint(dbContext, Guid.NewGuid(), EndpointType.INBOUND, "EP-DOCK-1");
+        var endpoint = AddEndpoint(dbContext, Guid.NewGuid(), EndpointType.WAYPOINT, "EP-DOCK-1");
         await dbContext.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
@@ -444,7 +444,7 @@ public class EndpointTests
     {
         using var dbContext = CreateDbContext();
         var map = AddMap(dbContext, status);
-        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.INBOUND, "EP-DOCK-1");
+        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.WAYPOINT, "EP-DOCK-1");
         await dbContext.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
@@ -460,7 +460,7 @@ public class EndpointTests
     {
         using var dbContext = CreateDbContext();
         var map = AddMap(dbContext);
-        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.INBOUND, "EP-DOCK-1");
+        var endpoint = AddEndpoint(dbContext, map.Id, EndpointType.WAYPOINT, "EP-DOCK-1");
         await dbContext.SaveChangesAsync();
 
         await Assert.ThrowsAsync<FluentValidation.ValidationException>(() =>

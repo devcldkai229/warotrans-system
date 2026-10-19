@@ -58,7 +58,7 @@ public sealed class CreateTransportRequestHandlerTests
     }
 
     private void AddEndpoint(Guid id, Guid mapVersionId, string code, bool isEnabled = true) =>
-        _navigation.Endpoints[id] = new EndpointSnapshot(id, mapVersionId, code, code, EndpointType.STORAGE, isEnabled);
+        _navigation.Endpoints[id] = new EndpointSnapshot(id, mapVersionId, code, code, EndpointType.WAYPOINT, isEnabled);
 
     private CreateTransportRequestHandler CreateHandler(out Persistence db)
     {

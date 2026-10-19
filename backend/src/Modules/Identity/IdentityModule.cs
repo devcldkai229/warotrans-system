@@ -7,11 +7,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.Identity.Entities;
+using WaroTrans.Identity.Features.ChangeAccountStatus;
+using WaroTrans.Identity.Features.CreateAccount;
 using WaroTrans.Identity.Features.GetCurrentAccount;
 using WaroTrans.Identity.Features.ListAccounts;
 using WaroTrans.Identity.Features.Login;
 using WaroTrans.Identity.Features.Logout;
 using WaroTrans.Identity.Features.RefreshSession;
+using WaroTrans.Identity.Features.UpdateAccount;
 using WaroTrans.Identity.Persistence;
 using WaroTrans.Identity.Security;
 
@@ -35,6 +38,13 @@ public static class IdentityModule
         services.AddScoped<GetCurrentAccountHandler>();
         services.AddScoped<ListAccountsHandler>();
 
+        services.AddScoped<IValidator<CreateAccountRequest>, CreateAccountValidator>();
+        services.AddScoped<CreateAccountHandler>();
+        services.AddScoped<IValidator<UpdateAccountRequest>, UpdateAccountValidator>();
+        services.AddScoped<UpdateAccountHandler>();
+        services.AddScoped<IValidator<ChangeAccountStatusRequest>, ChangeAccountStatusValidator>();
+        services.AddScoped<ChangeAccountStatusHandler>();
+
         return services;
     }
 
@@ -48,6 +58,9 @@ public static class IdentityModule
         group.MapLogout();
         group.MapGetCurrentAccount();
         group.MapListAccounts();
+        group.MapCreateAccount();
+        group.MapUpdateAccount();
+        group.MapChangeAccountStatus();
 
         return endpoints;
     }

@@ -100,18 +100,9 @@ export type WorkflowStatus = 'DRAFT' | 'PUBLISHED'
 
 export type MapStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 
-export type ZoneType = 'INTERSECTION' | 'NARROW_AREA' | 'OPERATIONAL_AREA' | 'RESTRICTED_AREA'
+export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY'
 
-export type EndpointType =
-  | 'INBOUND'
-  | 'STORAGE'
-  | 'OUTBOUND'
-  | 'PARKING'
-  | 'CHARGING'
-  | 'MAINTENANCE'
-  | 'INSPECTION'
-  | 'RECOVERY'
-  | 'TRANSIT'
+export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK'
 
 export type EdgeDirection = 'ONE_WAY' | 'BIDIRECTIONAL'
 
@@ -158,6 +149,23 @@ export interface Session {
 export interface ListAccountsResponse {
   items: Account[]
 }
+
+/** Body of POST /api/identity/accounts. The username is lower case and cannot be changed later. */
+export interface CreateAccountBody {
+  username: string
+  email: string
+  fullName: string
+  role: AccountRole
+}
+
+/** Response of POST /api/identity/accounts. The temporary password is returned this once and cannot be read again. */
+export interface CreateAccountResponse {
+  account: Account
+  temporaryPassword: string
+}
+
+/** Body of PUT /api/identity/accounts/{id}. */
+export type UpdateAccountBody = Pick<Account, 'email' | 'fullName' | 'role'>
 
 /* --------------------------------------------------------------------- Fleet */
 
@@ -503,6 +511,22 @@ export interface Product {
   isActive: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** Body of POST /api/warehouse/products. The server upper-cases the SKU and starts the product active. */
+export interface CreateProductBody {
+  categoryId: string
+  sku: string
+  name: string
+  supplierBarcode?: string
+  description?: string
+}
+
+/** Body of POST /api/warehouse/product-categories. The server upper-cases the code. */
+export interface CreateCategoryBody {
+  code: string
+  name: string
+  description?: string
 }
 
 export type ContainerStatus = 'CREATED' | 'PACKED' | 'RESERVED' | 'IN_TRANSIT' | 'STORED' | 'HOLD' | 'EMPTY' | 'OUT_OF_SERVICE'

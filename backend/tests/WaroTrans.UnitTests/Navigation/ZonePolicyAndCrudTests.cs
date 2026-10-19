@@ -68,30 +68,29 @@ public class ZonePolicyAndCrudTests
         });
 
     [Fact]
-    public void NarrowArea_RequiresCapacityOne_AndMaxSpeed()
+    public void SingleOccupancy_RequiresCapacityOne()
     {
         Assert.Throws<DomainValidationException>(() =>
-            ZonePolicyValidator.Validate(ZoneType.NARROW_AREA, 2, 0.5, null, 1));
+            ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, 2, 0.5, null, 1));
 
-        Assert.Throws<DomainValidationException>(() =>
-            ZonePolicyValidator.Validate(ZoneType.NARROW_AREA, 1, null, null, 1));
-
-        ZonePolicyValidator.Validate(ZoneType.NARROW_AREA, 1, 0.4, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, 1, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, 1, 0.4, null, 1);
     }
 
     [Fact]
-    public void Intersection_AcceptsOptionalYawPolicy()
+    public void Speed_RequiresMaxSpeed()
     {
-        using var policy = JsonDocument.Parse("""{"preferredDirectionYaw":1.57,"headingToleranceRadians":0.2}""");
-        ZonePolicyValidator.Validate(ZoneType.INTERSECTION, 2, null, policy, 1);
+        Assert.Throws<DomainValidationException>(() =>
+            ZonePolicyValidator.Validate(ZoneType.SPEED, 3, null, null, 1));
+
+        ZonePolicyValidator.Validate(ZoneType.SPEED, 3, 0.8, null, 1);
     }
 
     [Fact]
-    public void Operational_RejectsNonPositiveCostMultiplier()
+    public void KeepOut_AndNoStop_AcceptEmptyPolicy()
     {
-        using var policy = JsonDocument.Parse("""{"costMultiplier":0}""");
-        Assert.Throws<DomainValidationException>(() =>
-            ZonePolicyValidator.Validate(ZoneType.OPERATIONAL_AREA, 3, null, policy, 1));
+        ZonePolicyValidator.Validate(ZoneType.KEEP_OUT, 1, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.NO_STOP, 2, null, null, 1);
     }
 
     [Fact]
@@ -105,7 +104,7 @@ public class ZonePolicyAndCrudTests
         var handler = new CreateZoneHandler(db, new FakeCodeGenerator(), new CreateZoneValidator());
         var created = await handler.HandleAsync(draft.Id, new CreateZoneRequest(
             "Dock gate",
-            "RESTRICTED_AREA",
+            "KEEP_OUT",
             ClosedSquare(),
             1,
             null,
@@ -117,7 +116,7 @@ public class ZonePolicyAndCrudTests
         var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
             handler.HandleAsync(published.Id, new CreateZoneRequest(
                 "No",
-                "RESTRICTED_AREA",
+                "KEEP_OUT",
                 ClosedSquare(),
                 1,
                 null,
@@ -136,7 +135,7 @@ public class ZonePolicyAndCrudTests
             MapVersionId = map.Id,
             Code = "ZONE-A",
             Name = "A",
-            ZoneType = ZoneType.RESTRICTED_AREA,
+            ZoneType = ZoneType.KEEP_OUT,
             Geometry = GeoJsonGeometry.NormalizePolygon(ClosedSquare()),
             Capacity = 1,
             IsActive = true,
@@ -148,7 +147,7 @@ public class ZonePolicyAndCrudTests
         var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
             new UpdateZoneHandler(db, new UpdateZoneValidator()).HandleAsync(zone.Id, new UpdateZoneRequest(
                 "B",
-                "RESTRICTED_AREA",
+                "KEEP_OUT",
                 ClosedSquare(),
                 1,
                 null,

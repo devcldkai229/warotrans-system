@@ -298,7 +298,7 @@ public sealed class ListGetTransportRequestEndpointTests(WaroTransWebApplication
         var response = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/endpoints", new
         {
             name,
-            endpointType = "STORAGE",
+            endpointType = "WAYPOINT",
             x = 1.0,
             y = 2.0,
             yaw = 0.0,
