@@ -574,6 +574,19 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
   };
 }
 
+const localJobProgression = new Map<string, JobDetailResponse>();
+
+function saveLocalProgression(job: JobDetailResponse) {
+  localJobProgression.set(job.id, job);
+  if (job.jobNo) localJobProgression.set(job.jobNo, job);
+  const index = SEED_JOBS.findIndex((j) => j.id === job.id || j.jobNo === job.jobNo);
+  if (index >= 0) {
+    SEED_JOBS[index] = job;
+  } else {
+    SEED_JOBS.unshift(job);
+  }
+}
+
 /**
  * List active or historical jobs.
  * Connects to Backend REST when available, with automatic high-fidelity seed fallback.
@@ -608,7 +621,13 @@ export async function listJobs(filter?: {
         }
       });
       await hydrateJobContainers(rawList);
-      return rawList.map(normalizeJobDetail);
+      return rawList.map((raw) => {
+        const progressed = localJobProgression.get(raw.id) || (raw.jobNo ? localJobProgression.get(raw.jobNo) : undefined);
+        if (progressed && (raw.status === 'CREATED' || raw.status === 'QUEUED')) {
+          return progressed;
+        }
+        return normalizeJobDetail(raw);
+      });
     }
   } catch (err) {
     if (__DEV__) {
@@ -631,6 +650,10 @@ export async function getJobDetail(jobId: string): Promise<JobDetailResponse> {
     const raw = await apiFetch<any>(`/api/workflow-execution/jobs/${jobId}`);
     if (raw) {
       await hydrateJobContainers([raw]);
+      const progressed = localJobProgression.get(raw.id) || (raw.jobNo ? localJobProgression.get(raw.jobNo) : undefined);
+      if (progressed && (raw.status === 'CREATED' || raw.status === 'QUEUED')) {
+        return progressed;
+      }
       const normalized = normalizeJobDetail(raw);
       const index = SEED_JOBS.findIndex((j) => j.id === normalized.id || j.jobNo === normalized.jobNo);
       if (index >= 0) {
@@ -646,6 +669,8 @@ export async function getJobDetail(jobId: string): Promise<JobDetailResponse> {
     }
   }
 
+  const progressed = localJobProgression.get(jobId);
+  if (progressed) return progressed;
   const match = SEED_JOBS.find((j) => j.id === jobId || j.jobNo === jobId);
   if (match) return normalizeJobDetail(match);
   return SEED_JOBS[0];
@@ -666,6 +691,8 @@ export async function startJob(
     if (res) {
       await hydrateJobContainers([res]);
       const normalized = normalizeJobDetail(res);
+      localJobProgression.delete(normalized.id);
+      if (normalized.jobNo) localJobProgression.delete(normalized.jobNo);
       SEED_JOBS = SEED_JOBS.map((j) => (j.id === normalized.id || j.jobNo === normalized.jobNo ? normalized : j));
       return normalized;
     }
@@ -675,36 +702,70 @@ export async function startJob(
     }
   }
 
-  // Graceful local fallback: transitions local job from QUEUED/CREATED to ASSIGNED
-  let updatedJob: JobDetailResponse | null = null;
-  SEED_JOBS = SEED_JOBS.map((job) => {
-    if (job.id !== jobId && job.jobNo !== jobId) return job;
-    const nextStatus: JobStatus =
-      job.status === 'CREATED' || job.status === 'QUEUED' ? 'ASSIGNED' : job.status;
-    const robotCode = robotId
-      ? robotId.includes('02')
-        ? 'AMR-02'
-        : 'AMR-01'
-      : (job.contextValues?.assignedRobotCode as string) || 'AMR-01';
-    updatedJob = {
-      ...job,
-      status: nextStatus,
-      startedAt: job.startedAt || new Date().toISOString(),
-      contextValues: {
-        ...job.contextValues,
-        assignedRobotCode: robotCode,
-      },
+  // Ensure base job exists in SEED_JOBS (e.g. if started directly from Step 3 receipt)
+  let baseJob = SEED_JOBS.find((j) => j.id === jobId || j.jobNo === jobId);
+  if (!baseJob) {
+    try {
+      const fetched = await getJobDetail(jobId);
+      if (fetched) baseJob = fetched;
+    } catch {}
+  }
+  if (!baseJob) return null;
+
+  const now = new Date().toISOString();
+  const robotCode = robotId
+    ? robotId.includes('02')
+      ? 'AMR-02'
+      : 'AMR-01'
+    : (baseJob.contextValues?.assignedRobotCode as string) || 'AMR-01';
+
+  let foundFirstHandover = false;
+  const progressedTasks = baseJob.tasks.map((task, tIdx) => {
+    const steps = task.steps.map((step) => {
+      const isConfirm =
+        step.stepType === 'HUMAN_INTERACTION' ||
+        (step.stepType as string) === 'MANUAL_CONFIRM' ||
+        ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.operationCode) ||
+        ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.workflowStepKey);
+      if (!foundFirstHandover) {
+        if (isConfirm) {
+          foundFirstHandover = true;
+          return { ...step, status: 'WAITING' as JobStepStatus, startedAt: now };
+        }
+        return { ...step, status: 'COMPLETED' as JobStepStatus, startedAt: now, completedAt: now };
+      }
+      return step;
+    });
+    return {
+      ...task,
+      status: (tIdx === 0 ? 'RUNNING' : task.status) as JobTaskStatus,
+      startedAt: tIdx === 0 ? now : task.startedAt,
+      steps,
     };
-    return updatedJob;
   });
 
-  return updatedJob;
+  const sourceCode = (baseJob.contextValues?.sourceEndpointCode as string) || 'EP-A';
+  const normalized = normalizeJobDetail({
+    ...baseJob,
+    status: 'ASSIGNED',
+    startedAt: baseJob.startedAt || now,
+    assignedRobotId: robotId || baseJob.contextValues?.assignedRobotId,
+    contextValues: {
+      ...baseJob.contextValues,
+      assignedRobotCode: robotCode,
+      currentStop: `Stop 1/2: ${sourceCode}`,
+    },
+    tasks: progressedTasks,
+  });
+
+  saveLocalProgression(normalized);
+  return normalized;
 }
 
 /**
  * Confirm physical container handover at station.
  * Calls backend POST /api/workflow-execution/job-steps/${req.jobStepId}/confirm
- * with local fallback when running against develop.
+ * with local fallback when running against develop or without MQTT simulator.
  */
 export async function confirmHandover(
   req: HandoverConfirmRequest,
@@ -748,6 +809,8 @@ export async function confirmHandover(
     if (apiRes?.id && apiRes?.status) {
       await hydrateJobContainers([apiRes]);
       const normalized = normalizeJobDetail(apiRes);
+      localJobProgression.delete(normalized.id);
+      if (normalized.jobNo) localJobProgression.delete(normalized.jobNo);
       const index = SEED_JOBS.findIndex((j) => j.id === normalized.id || j.jobNo === normalized.jobNo);
       if (index >= 0) {
         SEED_JOBS[index] = normalized;
@@ -761,47 +824,102 @@ export async function confirmHandover(
     }
   }
 
+  const now = new Date().toISOString();
   const response: HandoverConfirmationResponse = {
     id: `hc-${Date.now()}`,
     jobStepId: req.jobStepId,
     containerId: containerBarcode || 'BOX-101',
     confirmedBy: req.confirmedBy || 'staff-01',
     handoverType: req.handoverType || 'DROPOFF',
-    confirmedAt: new Date().toISOString(),
+    confirmedAt: now,
     note: note,
     evidence: req.evidence,
   };
 
-  SEED_JOBS = SEED_JOBS.map((job) => ({
-    ...job,
-    tasks: job.tasks.map((task) => ({
-      ...task,
-      steps: task.steps.map((step) => {
-        if (step.id === req.jobStepId) {
+  let updatedJobResult: JobDetailResponse | null = null;
+
+  SEED_JOBS = SEED_JOBS.map((job) => {
+    const hasStep = job.tasks.some((t) => t.steps.some((s) => s.id === req.jobStepId));
+    if (!hasStep) return job;
+
+    let confirmedCurrent = false;
+    let activatedNextHandover = false;
+
+    const updatedTasks = job.tasks.map((task) => {
+      const steps = task.steps.map((step) => {
+        if (step.id === req.jobStepId || (!confirmedCurrent && step.status === 'WAITING')) {
+          confirmedCurrent = true;
           return {
             ...step,
-            status: 'COMPLETED',
-            completedAt: new Date().toISOString(),
+            status: 'COMPLETED' as JobStepStatus,
+            completedAt: now,
             handoverConfirmation: response,
           };
         }
+        if (confirmedCurrent && !activatedNextHandover && step.status === 'PENDING') {
+          const isConfirm =
+            step.stepType === 'HUMAN_INTERACTION' ||
+            (step.stepType as string) === 'MANUAL_CONFIRM' ||
+            ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.operationCode) ||
+            ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(step.workflowStepKey);
+          if (isConfirm) {
+            activatedNextHandover = true;
+            return {
+              ...step,
+              status: 'WAITING' as JobStepStatus,
+              startedAt: now,
+            };
+          }
+          return {
+            ...step,
+            status: 'COMPLETED' as JobStepStatus,
+            startedAt: now,
+            completedAt: now,
+          };
+        }
         return step;
-      }),
-    })),
-    containers: job.containers.map((c) => {
-      if (c.containerId === containerBarcode || !containerBarcode) {
-        return {
-          ...c,
-          status: (req.handoverType || 'DROPOFF') === 'PICKUP' ? 'ONBOARD' : 'DELIVERED',
-          deliveredAt:
-            (req.handoverType || 'DROPOFF') === 'DROPOFF' ? new Date().toISOString() : c.deliveredAt,
-        };
-      }
-      return c;
-    }),
-  }));
+      });
 
-  return response;
+      const allDone = steps.every((s) => s.status === 'COMPLETED');
+      const anyActive = steps.some((s) => s.status === 'WAITING' || s.status === 'EXECUTING');
+      return {
+        ...task,
+        status: (allDone ? 'COMPLETED' : anyActive ? 'RUNNING' : task.status) as JobTaskStatus,
+        completedAt: allDone ? now : task.completedAt,
+        steps,
+      };
+    });
+
+    const isJobDone = updatedTasks.every((t) => t.steps.every((s) => s.status === 'COMPLETED'));
+    const nextContainerStatus = isJobDone ? 'DELIVERED' : 'ONBOARD';
+    const destCode = (job.contextValues?.destinationEndpointCode as string) || 'EP-D';
+
+    const updatedContainers = job.containers.map((c) => ({
+      ...c,
+      status: nextContainerStatus as any,
+      loadedAt: nextContainerStatus === 'ONBOARD' ? now : c.loadedAt,
+      deliveredAt: isJobDone ? now : c.deliveredAt,
+    }));
+
+    const normalized = normalizeJobDetail({
+      ...job,
+      status: isJobDone ? 'COMPLETED' : 'ASSIGNED',
+      completedAt: isJobDone ? now : job.completedAt,
+      contextValues: {
+        ...job.contextValues,
+        currentStop: isJobDone ? `Delivered at ${destCode}` : `Stop 2/2: ${destCode}`,
+      },
+      containers: updatedContainers,
+      tasks: updatedTasks,
+    });
+
+    localJobProgression.set(normalized.id, normalized);
+    if (normalized.jobNo) localJobProgression.set(normalized.jobNo, normalized);
+    updatedJobResult = normalized;
+    return normalized;
+  });
+
+  return updatedJobResult || response;
 }
 
 /**
