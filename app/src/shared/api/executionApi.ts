@@ -21,6 +21,37 @@ import type {
   StepType,
 } from '../types/contracts';
 
+const KNOWN_ENDPOINT_CODES: Record<string, string> = {
+  'ee000000-0000-4000-8000-000000000101': 'DOCK-IN-01',
+  'ee000000-0000-4000-8000-000000000104': 'DOCK-OUT-04',
+  'ee000000-0000-4000-8000-000000000001': 'EP-A',
+  'ee000000-0000-4000-8000-000000000002': 'EP-B',
+  'ee000000-0000-4000-8000-000000000003': 'EP-C',
+  'ee000000-0000-4000-8000-000000000004': 'EP-D',
+  'ee000000-0000-4000-8000-000000000005': 'EP-E',
+  'ee000000-0000-4000-8000-000000000006': 'EP-F',
+  'ee000000-0000-4000-8000-00000000000a': 'EP-A',
+  'ee000000-0000-4000-8000-00000000000b': 'EP-B',
+  'ee000000-0000-4000-8000-00000000000c': 'EP-C',
+  'ee000000-0000-4000-8000-00000000000d': 'EP-D',
+  'ee000000-0000-4000-8000-00000000000e': 'EP-E',
+  'ee000000-0000-4000-8000-00000000000f': 'EP-F',
+  'ee000000-0000-4000-8000-000000000a01': 'RACK-A-01',
+  'ee000000-0000-4000-8000-000000000a02': 'RACK-A-02',
+  'ee000000-0000-4000-8000-000000000b01': 'RACK-B-01',
+  'ee000000-0000-4000-8000-000000000b04': 'RACK-B-04',
+  'ee000000-0000-4000-8000-000000000d01': 'RACK-D-01',
+  'bde8dfb6-189b-41d0-8f29-6a104879f914': 'EP-CHARGER',
+  'ad53b126-812b-442e-afc2-8812d1085ddc': 'EP-INBOUND-1',
+  'cfbc965d-6992-4417-bdcd-17b147a16327': 'EP-INBOUND-2',
+  'd8dd7555-0cae-47d0-bccb-f7eacd7a586a': 'EP-OUTBOUND-1',
+  '0eaf7c51-d27b-4de0-a8ac-79b7d92094d2': 'EP-OUTBOUND-2',
+  'e26c3c5e-ac0b-48e8-9e2a-595b93722719': 'EP-PARKING',
+  '4357a0a2-fd9a-43a0-b7b0-71d7f92100a3': 'EP-RACK-A',
+  '3974cb12-7900-47bd-be7d-6e8e216d7a40': 'EP-RACK-B',
+  '39222c6a-e465-4c5a-9e92-078b3b427c66': 'EP-RACK-C',
+};
+
 export interface AcceptTaskResponse {
   taskId: string;
   status: string;
@@ -301,6 +332,12 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
   if (!raw) return raw;
 
   const existingSeed = SEED_JOBS.find((j) => j.id === raw.id || j.jobNo === raw.jobNo);
+  const locations = getStorageLocationsSnapshot();
+  const endpointCode = (id: unknown) => {
+    if (typeof id === 'string' && KNOWN_ENDPOINT_CODES[id.toLowerCase()]) return KNOWN_ENDPOINT_CODES[id.toLowerCase()];
+    const location = locations.find((loc) => loc.id === id || loc.endpointId === id);
+    return location?.endpointCode || location?.code || id;
+  };
 
   // Normalize containers
   const rawContainers =
@@ -369,6 +406,7 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
         ...(executionScope ? { executionScope } : {}),
         ...(stopAction ? { stopAction } : {}),
         ...(stopEndpointId ? { stopEndpointId } : {}),
+        stopEndpointCode: endpointCode(stopEndpointId),
         ...(containerId ? { containerId } : {}),
       },
       startedAt: task.startedAt ?? null,
@@ -398,11 +436,6 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
   const waitingContainerId = (waitingStep?.resolvedInputs?.containerId as string) ||
     (waitingTask?.contextValues?.containerId as string) || null;
   const containerSnapshot = [...executionContainers.values(), ...getContainersSnapshot()];
-  const locations = getStorageLocationsSnapshot();
-  const endpointCode = (id: unknown) => {
-    const location = locations.find((loc) => loc.id === id || loc.endpointId === id);
-    return location?.endpointCode || location?.code || id;
-  };
 
   // Determine robot code
   const assignedRobotCode =
@@ -509,6 +542,9 @@ function normalizeJobDetail(raw: any): JobDetailResponse {
     routeText,
     currentStop,
     ...raw.contextValues,
+    ...(raw.workflowId === 'e86995fe-461a-4329-8724-a7beab6b57ab' && !raw.contextValues?.workflowName
+      ? { workflowCode: 'INTERNAL_RELOCATION', workflowName: 'Internal Relocation' }
+      : {}),
     containerMeta,
     assignedRobotId: raw.assignedRobotId || raw.contextValues?.assignedRobotId,
     activeStepId: waitingStep?.id || (raw.status === 'ASSIGNED' ? raw.currentStepId : undefined),

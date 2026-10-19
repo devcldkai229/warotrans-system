@@ -490,13 +490,13 @@ export function TransportScreen() {
                 >
                   {/* Top: TR Badge, Name, Status Pill */}
                   <View style={styles.dispatchTopRow}>
-                    <View style={styles.dispatchBadgeRow}>
+                    <View style={[styles.dispatchBadgeRow, { flex: 1, minWidth: 0, marginRight: 8 }]}>
                       <View style={styles.trCodeChip}>
                         <Text variant="caption" color={colors.primaryText} style={styles.trCodeText}>
                           {dispatch.id}
                         </Text>
                       </View>
-                      <Text variant="bodyMedium" color={colors.textPrimary} style={styles.dispatchTypeName}>
+                      <Text variant="bodyMedium" color={colors.textPrimary} numberOfLines={1} style={[styles.dispatchTypeName, { flexShrink: 1 }]}>
                         {dispatch.type}
                       </Text>
                     </View>
@@ -511,12 +511,12 @@ export function TransportScreen() {
 
                   {/* Footer: Robot, Container, Time */}
                   <View style={styles.dispatchFooter}>
-                    <View style={styles.dispatchMetaGroup}>
+                    <View style={[styles.dispatchMetaGroup, { flex: 1, minWidth: 0, marginRight: 8 }]}>
                       <Text variant="caption" color={colors.textPrimary} style={styles.boldText}>
                         {dispatch.robot}
                       </Text>
                       <Text variant="caption" color={colors.textMuted}>·</Text>
-                      <Text variant="caption" color={colors.textPrimary} style={styles.boldMono}>
+                      <Text variant="caption" color={colors.textPrimary} numberOfLines={1} style={[styles.boldMono, { flexShrink: 1 }]}>
                         {dispatch.container}
                       </Text>
                     </View>

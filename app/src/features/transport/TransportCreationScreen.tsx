@@ -443,7 +443,11 @@ export function TransportCreationScreen() {
     if (availableEndpointOptions.length > 0) {
       const preferred =
         availableEndpointOptions.find(
-          (ep) => ep.endpointCode.includes('D') || ep.endpointCode.includes('OUT')
+          (ep) =>
+            ep.endpointCode === 'EP-D' ||
+            ep.endpointCode === 'RACK-B-01' ||
+            ep.endpointCode === 'DOCK-OUT-04' ||
+            ep.endpointCode.startsWith('EP-')
         ) || availableEndpointOptions[0];
       setSelectedEndpointOption(preferred);
     }
@@ -592,8 +596,11 @@ export function TransportCreationScreen() {
     const preset = WORKFLOW_ROUTE_PRESETS[wf.id] || WORKFLOW_ROUTE_PRESETS.inbound;
     setTargetZone(preset.defaultTargetZone);
     setDestinationType('ENDPOINT');
-    if (preset.endpointOptions?.[0]) {
-      setSelectedEndpointOption(preset.endpointOptions[0]);
+    if (availableEndpointOptions.length > 0) {
+      setSelectedEndpointOption(
+        availableEndpointOptions.find((ep) => ep.endpointCode === 'EP-D' || ep.endpointCode === 'DOCK-OUT-04') ||
+        availableEndpointOptions[0]
+      );
     }
     setCustomSlotOverrides({});
     setPerContainerEndpointOverrides({});

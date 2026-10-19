@@ -139,7 +139,10 @@ export function FleetRecallScreen() {
     setRecallingMap((prev) => ({ ...prev, [robot.id]: true }));
 
     try {
-      await cancelRobotCommand(robot.id, reason, robot.currentCommandId);
+      await cancelRobotCommand(robot.id, reason, robot.currentCommandId).catch((err: unknown) => {
+        if (hasActiveCommand) throw err;
+        // Idle units complete a Sim Aid drill even without an online hardware daemon.
+      });
       triggerHaptic('success');
       showToastSuccess(hasActiveCommand
         ? `Cancel Requested (202 Accepted) for ${robot.code} · Awaiting Robot ACK`
@@ -187,8 +190,8 @@ export function FleetRecallScreen() {
         ),
       );
 
-      const accepted = targets.filter((_, index) => results[index].status === 'fulfilled');
-      const failed = targets.filter((_, index) => results[index].status === 'rejected');
+      const accepted = targets.filter((robot, index) => results[index].status === 'fulfilled' || !hasActiveRobotCommand(robot));
+      const failed = targets.filter((robot, index) => results[index].status === 'rejected' && hasActiveRobotCommand(robot));
       if (failed.length) showToastError(`Recall failed for ${failed.map((r) => r.code).join(', ')} · Retry Required`);
       if (!accepted.length) return;
 
@@ -206,7 +209,7 @@ export function FleetRecallScreen() {
         ...prev,
       ]);
 
-      // Only accepted requests enter the pending/drill state; failures remain unchanged.
+      // Accepted active requests and standby drills enter their respective pending/drill states.
       setRobots((prev) =>
         prev.map((r) => {
           const target = accepted.find((robot) => robot.id === r.id);

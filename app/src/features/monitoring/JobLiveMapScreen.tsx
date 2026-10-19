@@ -12,7 +12,7 @@ import {
 import Svg, { Circle, Defs, G, Line, Path, Pattern, Rect } from 'react-native-svg';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { ROBOT_HEADING_ARROW_PATH } from '../home/MiniFacilityMap';
+import { ROBOT_HEADING_ARROW_PATH, type MapRobot } from '../home/MiniFacilityMap';
 import { colors } from '../../shared/theme/colors';
 import { dockReservedSpace } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
@@ -21,17 +21,35 @@ import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
 import { useRealtime } from '../../shared/realtime';
-import { getJobDetail, listJobs, listRobots } from '../../shared/api';
+import { getJobDetail, listJobs, listRobots, type RobotDto } from '../../shared/api';
 import { mapJobDetailToAppJobItem, type AppJobItem } from '../jobs/jobData';
 
 const SHEET_GAP = 8;
 const DOCK_ZONE_GAP = 12;
 const SHEET_FALLBACK_HEIGHT = 174;
 
+const INITIAL_ROBOTS: MapRobot[] = [
+  { id: 'AMR-01', xPercent: 46, yPercent: 28, headingDeg: 0, status: 'EN_ROUTE', battery: 85, speed: '1.2 m/s' },
+  { id: 'AMR-02', xPercent: 72, yPercent: 16, headingDeg: 0, status: 'STANDBY', battery: 92, speed: '0.0 m/s' },
+];
+
+function mapRobotPose(poseX: number, poseY: number, fallback: MapRobot) {
+  if (poseX === 0 && poseY === 0) {
+    return { xPercent: fallback.xPercent, yPercent: fallback.yPercent };
+  }
+  const maxX = poseX <= 12 && poseY <= 10 ? 8 : 50;
+  const maxY = poseX <= 12 && poseY <= 10 ? 6 : 30;
+  return {
+    xPercent: Math.max(22, Math.min(80, Math.round(22 + (poseX / maxX) * 56))),
+    yPercent: Math.max(22, Math.min(58, Math.round(58 - (poseY / maxY) * 34))),
+  };
+}
+
 export function JobLiveMapScreen() {
   const { params, dockHeight, goBack } = useNavigation();
   const { robotTelemetry, lastJobUpdate } = useRealtime();
   const [liveJob, setLiveJob] = useState<AppJobItem | null>(null);
+  const [fleetRobots, setFleetRobots] = useState<RobotDto[]>([]);
   const dockInset = dockReservedSpace(dockHeight);
   const [sheetHeight, setSheetHeight] = useState(0);
   const sheetBottom = dockInset + SHEET_GAP;
@@ -54,7 +72,10 @@ export function JobLiveMapScreen() {
     let cancelled = false;
     if (params?.robotId) setSelectedRobot(params.robotId === 'AMR-02' ? 'AMR-02' : 'AMR-01');
     async function loadLiveJob() {
-      const fleetPromise = listRobots().catch(() => ({ items: [] }));
+      const fleetPromise = listRobots().then((fleet) => {
+        if (!cancelled) setFleetRobots(fleet.items);
+        return fleet;
+      }).catch(() => ({ items: [] }));
       const detailPromise = (async () => {
         if (params?.jobId && params.jobId !== 'JOB-2026-0812') {
           const detail = await getJobDetail(params.jobId);
@@ -81,6 +102,10 @@ export function JobLiveMapScreen() {
 
   const isAmr2 = selectedRobot === 'AMR-02';
   const telemetry = robotTelemetry[selectedRobot];
+  const [amr1Position, amr2Position] = INITIAL_ROBOTS.map((fallback) => {
+    const pose = robotTelemetry[fallback.id] || fleetRobots.find((robot) => robot.code === fallback.id);
+    return mapRobotPose(pose?.poseX ?? 0, pose?.poseY ?? 0, fallback);
+  });
 
   const handleCenter = () => {
     triggerHaptic('tap');
@@ -223,7 +248,7 @@ export function JobLiveMapScreen() {
           }}
           style={[
             styles.robotWrapper,
-            { left: '46%', top: '28%' },
+            { left: `${amr1Position.xPercent}%`, top: `${amr1Position.yPercent}%` },
             !isAmr2 && styles.robotWrapperActive,
           ]}
           accessibilityRole="button"
@@ -259,7 +284,7 @@ export function JobLiveMapScreen() {
           }}
           style={[
             styles.robotWrapper,
-            { left: '72%', top: '16%' },
+            { left: `${amr2Position.xPercent}%`, top: `${amr2Position.yPercent}%` },
             isAmr2 && styles.robotWrapperActive,
           ]}
           accessibilityRole="button"

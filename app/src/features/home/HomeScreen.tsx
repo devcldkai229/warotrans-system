@@ -64,10 +64,11 @@ function mapRobotPose(poseX: number, poseY: number, fallback: MapRobot) {
   if (poseX === 0 && poseY === 0) {
     return { xPercent: fallback.xPercent, yPercent: fallback.yPercent };
   }
-  // Project metres onto the schematic's 50 x 30 m viewport, inside its safe bounds.
+  const maxX = poseX <= 12 && poseY <= 10 ? 8 : 50;
+  const maxY = poseX <= 12 && poseY <= 10 ? 6 : 30;
   return {
-    xPercent: Math.max(18, Math.min(82, 18 + (poseX / 50) * 64)),
-    yPercent: Math.max(18, Math.min(68, 68 - (poseY / 30) * 50)),
+    xPercent: Math.max(22, Math.min(80, Math.round(22 + (poseX / maxX) * 56))),
+    yPercent: Math.max(22, Math.min(58, Math.round(58 - (poseY / maxY) * 34))),
   };
 }
 
