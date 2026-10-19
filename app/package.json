@@ -27,8 +27,7 @@
     "ios": "expo start --ios --port 8080",
     "web": "expo start --web --port 8080",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit",
-    "test:realignment": "node tests/backend-realignment.test.cjs"
+    "lint": "tsc --noEmit"
   },
   "private": true
 }

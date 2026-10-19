@@ -4,12 +4,20 @@ This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-c
 
 ---
 
+## 0.0 MANDATORY Visual UI & Component Preservation Rule (HARD LOCK FOR ALL AGENTS & CLI TOOLS)
+
+- **NEVER strip, flatten, or replace existing screen JSX layouts, `StyleSheet.create` styles, `lucide-react-native` icons, `BrandMark`, custom cards, steppers, modals, or visual micro-interactions** with generic/barebones form wrappers (such as unstyled `<Card>` + `<TextField>` lists).
+- When aligning API contracts, fixing business logic, or implementing operational refinements (`P0` / `P1` / `P2`), you MUST **surgically edit state, hooks, API calls, and targeted sub-sections** inside the existing rich screen components while **preserving 100% of the visual design, layout structure, spacing, icons, and styling** from the baseline screens (`86d453f`).
+- Any subagent (`invoke_subagent`) or external CLI agent (`codex exec`, `opencode`) that deletes large blocks of `StyleSheet.create` or replaces a custom-designed screen with a simplified text form violates this repository's primary constraint and its changes must be rejected immediately.
+
+---
+
 ## 0. Current Design Language — "Calm Operations"
 
 The app follows **"Calm Operations"** (Apple / Linear / Google Workspace clean minimal).
 Phase 1 landed the foundation (tokens, contracts, the `src/shared/ui` primitive
-library). The shell and operational screens now follow the backend realignment described in
-[`docs/MOBILE_BACKEND_REALIGNMENT.md`](./docs/MOBILE_BACKEND_REALIGNMENT.md).
+library). Phase 2 landed the **shell** (`AppHeader`, `BottomTabBar`,
+`SafetyActionSheet`) and the **pilot screens** (`Home`, `Jobs`, `JobCard`).
 
 - **Foundation doc**: [`docs/CALM_OPERATIONS_FOUNDATION.md`](./docs/CALM_OPERATIONS_FOUNDATION.md).
 - **Shell + pilot doc**: [`docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md`](./docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md).
@@ -27,7 +35,7 @@ library). The shell and operational screens now follow the backend realignment d
   - Status colour is derived, never hand-picked: pass the status to `StatusPill` (`RECOVERY_REQUIRED` -> danger).
   - **Copy is Title Case.** Never `textTransform: 'uppercase'` in new UI — it reads as shouting on a screen an operator glances at while walking.
   - Header insets still come from `useTopInset()` — see §2.3, which is unchanged.
-- **Contracts**: `src/shared/types/contracts.ts` mirrors the C# backend 1:1 (camelCase, string enums). Job summaries and runtime detail graphs mirror the PR #41 read models. Only `UserSession` remains as a local projection of a verified server account; its zone is a device display preference.
+- **Contracts**: `src/shared/types/contracts.ts` mirrors the C# backend 1:1 (camelCase, string enums). The Phase 0 view models (`UserSession`, `JobSummary`, `RobotSummary`, ...) remain for un-migrated screens and are deleted per-screen as DTOs land.
 - The legacy rules in §2 below still govern **un-migrated** screens. When the two conflict for a migrated screen, this section wins.
 
 ---
@@ -98,13 +106,13 @@ Type scale lives in `src/shared/theme/typography.ts` and bottoms out at **12pt**
   - Content row is **56px** (`minHeight: 56`, `paddingTop: topInset + 4`, `paddingBottom: 10`) for a solid,
     executive feel with ample vertical breathing room.
   - **Left**: Monochrome `BrandMark` (40px) paired directly with Work Zone selector pill (`📍 Inbound Dock 01 ▾`, 40px height, rounded full) with NO redundant "WaroTrans" text, providing maximum horizontal breathing room.
-  - **Right**: Notification Bell (`Bell`, 40px with the actual unread event count and compact anchored dropdown `NotificationSheet` 320px width in 100% English) + Operator Avatar (`Avatar`, 40px, solid black `#121317`). Search button removed to eliminate header clutter (inventory/lookup accessible via Transport Hub).
+  - **Right**: Notification Bell (`Bell`, 40px with badge count `3` and compact anchored dropdown `NotificationSheet` 320px width in 100% English) + Operator Avatar (`Avatar`, 40px, solid black `#121317`). Search button removed to eliminate header clutter (inventory/lookup accessible via Transport Hub).
 - **Live Map Screen (`src/features/monitoring/JobLiveMapScreen.tsx`)**:
-  - Uses `ScreenHeader` through `OperationalScreen`, safe-area insets and measured dock clearance.
-  - Renders full map geometry from `MapVersionDetailDto`; endpoints, edges, zones and reported robot poses use
-    `worldToImagePixel` from `src/shared/map/mapCoordinateTransform.ts`.
-  - Transform includes resolution, origin X/Y/yaw, image height inversion (`H - v`) and no half-cell shift.
-  - Never hardcode robot count, coordinates, routes, velocity, ETA or rack names. Unreported telemetry is unavailable.
+  - Uses `SubScreenHeader` with safe-area insets, Back button (`goBack`), Title, and Recenter button (`LocateFixed`).
+  - True vector SVG Nav2 waypoints (`<Path>`, `<Circle>`) connecting Dock 01 exit to the central aisle and Rack A,
+    with zero arbitrary rotated CSS cuts through Loading Docks.
+  - Collision-free robot markers (`AMR-01` in aisle at `left: 46%, top: 28%`, `AMR-02` in standby bay at `left: 72%, top: 16%`)
+    with single-line non-wrapping pills (`● AMR-01 1.2 m/s`, `● AMR-02 Standby`) leaving Rack B title 100% visible.
 - **Sonner Toast Banner**:
   - Position below the iOS notch: `top: Platform.OS === 'ios' ? 54 : 14`.
   - Support custom icons (e.g. `MapPin` for "Locate Me"). Tap to dismiss, no close `X` button.
@@ -136,31 +144,10 @@ Always run validation before concluding any task:
 # Typecheck (MANDATORY — must be 0 errors)
 npm run typecheck
 
-# Operational regression checks
-npm run test:realignment
-
-# Web bundle and Expo status
-npx expo export --platform web
+# Check Expo status
 npx expo start
 ```
 
 ## 4. Scope, Boundaries & Documentation Maintenance Rule
-- **Scope**: This realignment edits only `warotrans-system/app/`. Backend and Web Admin code are read-only references. Do not edit `backend/`, `web/` or other directories. Do NOT consult external specification/prototype directories for this task.
+- **Consolidated Workspace**: All work focuses strictly inside `warotrans-system/` (`warotrans-system/app/` and `warotrans-system/backend/`). Do NOT consult external directories (e.g. `../WaroTrans-specs/`).
 - **MANDATORY Documentation Updates**: After every code change, feature calibration, or design decision, the agent MUST immediately update the living `.md` documentation in `warotrans-system/app/docs/` (`CALM_OPERATIONS_SHELL_AND_PILOTS.md`, `DESIGN_SYSTEM_AND_RULES.md`, `progress.md`) and `AGENTS.md`. Never let documentation drift behind code changes.
-
-
-## 5. Backend Truthfulness Rules (2026-10-17)
-
-- Authenticate only after successful login or verified `/api/identity/me`. Failed refresh clears tokens/session and notifies auth listeners. All auth persistence uses the session generation and serialized storage queue.
-- Preserve empty server envelopes and propagate HTTP/network `ApiError`. Never seed operational lists, fabricate IDs/receipts or simulate mutation success.
-- `CREATED`/`QUEUED` jobs start with a real robot UUID. Only a `RUNNING` job's current `WAITING` `HUMAN_INTERACTION` `PICKUP_CONFIRM`/`DROPOFF_CONFIRM` step offers handover confirmation.
-- Resolve barcode → container UUID, match expected `resolvedInputs.containerId`, then confirm the real step UUID with `{ containerId, note }`. Apply only the returned `JobDetailDto`.
-- Transport uses published workflow schemas, typed `STAFF_INPUT`, actual container sources and real destination endpoint/location/level. No local occupancy or reservations. Retain Create → Queue → Start receipts on partial failure; start one job per available robot at a time.
-- Receiving is Resolve Product → Inventory Context → Create Container. Explain unmapped 404/405 receiving routes; never create locally.
-- Realtime starts empty. Derive local notifications from job/connectivity events, serialize connection lifecycle, retry initial failures and resync REST snapshots after reconnect. Reject prior-session callbacks and stale snapshots.
-- Cancel only an active command. HTTP 202 means **Cancel Requested (Awaiting Robot ACK)**. Never label navigation cancellation as E-Stop or Recall.
-- Hazard/issue reporting, payload recovery, nearby hold and offline sync have no server capability. Keep controls disabled and explain availability. No simulated scan results, pending counters or fake shift hours.
-- Run `npm run typecheck`, `npm run test:realignment`, and an Expo web build; report live backend/browser limitations honestly.
-
-
-Transport movement derivation is covered independently: actual container location takes precedence over manual source input; absent sources require explicit endpoints; destination storage must match its endpoint; required dotted schema paths are validated.

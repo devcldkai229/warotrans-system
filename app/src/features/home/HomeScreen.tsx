@@ -1,35 +1,617 @@
-import React, { useEffect } from 'react';
-import { OperationalScreen } from '../../app/shell/OperationalScreen';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  StyleSheet,
+  UIManager,
+  View,
+} from 'react-native';
+import {
+  ArrowRight,
+  BatteryMedium,
+  ChevronDown,
+  ChevronUp,
+  ShieldAlert,
+} from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
-import { useFacilityData } from '../../shared/hooks/useFacilityData';
-import { Button, Card, ChoiceField, StatusPill, Text } from '../../shared/ui';
-import { MiniFacilityMap } from './MiniFacilityMap';
-export function HomeScreen() {
-  const { navigate, setActiveJobCount } = useNavigation();
-  const { session } = useAuth();
-  const state = useFacilityData();
-  useEffect(() => { setActiveJobCount(state.jobs.length); }, [state.data, setActiveJobCount]);
-  return <OperationalScreen title="Home" header={false} back={false} loading={state.loading} error={state.error} onRefresh={state.reload}>
-    <Text variant="title">Hello, {session?.fullName}</Text>
-    <Text color={state.isConnected ? 'textSecondary' : 'warningText'}>{state.isConnected ? 'Live Updates Connected' : 'Live Updates Disconnected · Showing Last REST Snapshot'}</Text>
-    <ChoiceField label="Warehouse" value={state.warehouseId} onChange={state.setWarehouseId} options={state.warehouses.map(w => ({ value: w.id, label: w.name }))} />
-    <Card gap={10}>
-      <Text variant="headline">Facility Map</Text>
-      <MiniFacilityMap map={state.map} robots={state.robots} onPress={() => navigate('live_map', { mapVersionId: state.map?.id })} />
-    </Card>
-    <Button title="Create Transport Request" onPress={() => navigate('transport_create', { warehouseId: state.warehouseId })} />
-    <Text variant="headline">Active Jobs{state.data ? ` (${state.jobs.length})` : ''}</Text>
-    {state.jobs.map(job => <Card key={job.id} gap={10} onPress={() => navigate('job_detail', { jobId: job.id })}>
-      <Text variant="headline">{job.jobNo}</Text><StatusPill status={job.status} />
-      <Text>{job.containerCount} Containers · {job.completedSteps}/{job.totalSteps} Steps</Text>
-    </Card>)}
-    {!state.loading && !state.error && !state.jobs.length && <Text>No Active Jobs On This Map</Text>}
-    <Text variant="headline">Robots{state.data ? ` (${state.robots.length})` : ''}</Text>
-    {state.robots.map(robot => <Card key={robot.id} gap={8}>
-      <Text variant="headline">{robot.code}</Text><StatusPill status={robot.status} />
-      <Text>{robot.isOnline ? 'Online' : 'Offline'} · Battery {robot.batteryPercent}%</Text>
-      <Text variant="caption">Last Telemetry: {robot.lastTelemetryAt ? new Date(robot.lastTelemetryAt).toLocaleString() : 'Not Reported'}</Text>
-    </Card>)}
-  </OperationalScreen>;
+import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
+import {
+  Button,
+  ProgressMeter,
+  StatusPill,
+  Text,
+} from '../../shared/ui';
+import { toast } from '../../shared/context/ToastContext';
+import { triggerHaptic } from '../../shared/utils/haptics';
+import { useRealtime } from '../../shared/realtime';
+import { listJobs, listRobots } from '../../shared/api';
+import { AppJobItem, mapJobDetailToAppJobItem, MOCK_JOBS } from '../jobs/jobData';
+import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const INITIAL_ROBOTS: MapRobot[] = [
+  {
+    id: 'AMR-01',
+    xPercent: 38,
+    yPercent: 44,
+    headingDeg: 45,
+    status: 'EN_ROUTE',
+    battery: 85,
+    speed: '1.2 m/s',
+  },
+  {
+    id: 'AMR-02',
+    xPercent: 74,
+    yPercent: 26,
+    headingDeg: 180,
+    status: 'STANDBY',
+    battery: 94,
+    speed: '0.0 m/s',
+  },
+];
+
+const INITIAL_JOB = MOCK_JOBS.find((job) => job.id === 'JOB-2026-0812') ?? MOCK_JOBS[0];
+
+/**
+ * Modern "Command Center" HomeScreen.
+ *
+ * Visual Architecture:
+ *   - Background: Live Interactive 2D Warehouse Telemetry Map with AMR markers,
+ *     racks, docks, and real-time radar sweep.
+ *   - Foreground Float: Next Handover Task card (peek sheet), with smooth
+ *     expand/collapse to inspect the full fleet status.
+ */
+export function HomeScreen() {
+  const { session } = useAuth();
+  const { navigate, dockHeight } = useNavigation();
+  const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
+  const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
+  const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
+  const [activeJob, setActiveJob] = useState<AppJobItem>(INITIAL_JOB);
+  const [fleetRobots, setFleetRobots] = useState<MapRobot[]>(INITIAL_ROBOTS);
+  const { robotTelemetry } = useRealtime();
+
+  useEffect(() => {
+    let isMounted = true;
+    listJobs({ status: 'ASSIGNED' })
+      .then((jobs) => {
+        if (isMounted && jobs && jobs.length > 0) {
+          setActiveJob(mapJobDetailToAppJobItem(jobs[0]));
+        }
+      })
+      .catch(() => {});
+
+    // Fetch initial fleet status from backend so battery/status/pose reflects database on mount
+    listRobots()
+      .then((res) => {
+        if (isMounted && res?.items && res.items.length > 0) {
+          const mapped: MapRobot[] = res.items.map((r, idx) => {
+            const fallback =
+              INITIAL_ROBOTS.find((init) => init.id === r.code) ||
+              INITIAL_ROBOTS[idx % INITIAL_ROBOTS.length];
+            return {
+              id: r.code,
+              xPercent: fallback ? fallback.xPercent : 50,
+              yPercent: fallback ? fallback.yPercent : 50,
+              headingDeg: r.poseYaw
+                ? Math.round((r.poseYaw * 180) / Math.PI)
+                : fallback?.headingDeg || 0,
+              status: (r.navigationStatus === 'NAVIGATING'
+                ? 'EN_ROUTE'
+                : r.navigationStatus === 'PAUSED'
+                  ? 'PAUSED'
+                  : 'STANDBY') as any,
+              battery: Math.round(r.batteryPercent || 85),
+              speed: r.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
+            };
+          });
+          setFleetRobots(mapped);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const robots = useMemo(() => {
+    return fleetRobots.map((r) => {
+      const live = robotTelemetry[r.id];
+      if (!live) return r;
+      return {
+        ...r,
+        battery: Math.round(Number(live.batteryPercent) || r.battery),
+        status: (live.navigationStatus === 'NAVIGATING'
+          ? 'EN_ROUTE'
+          : live.navigationStatus === 'STANDBY'
+          ? 'STANDBY'
+          : r.status) as any,
+        speed: live.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
+        headingDeg: live.poseYaw ? Math.round((live.poseYaw * 180) / Math.PI) : r.headingDeg,
+      };
+    });
+  }, [fleetRobots, robotTelemetry]);
+
+  const activeZone = session?.zone || 'Inbound Dock 01';
+
+  const toggleSheetExpand = () => {
+    triggerHaptic('tap');
+    if (Platform.OS !== 'web') {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+    setIsSheetExpanded((prev) => !prev);
+  };
+
+  const toggleFleetExpand = () => {
+    triggerHaptic('tap');
+    if (Platform.OS !== 'web') {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+    setIsFleetExpanded(!isFleetExpanded);
+  };
+
+  const handleStartHandover = () => {
+    triggerHaptic('tap');
+    navigate('job_detail', { jobId: activeJob.id });
+  };
+
+  const handleLocateUser = () => {
+    setSelectedRobotId('AMR-01');
+    toast.info(`Centered on your station: ${activeZone}`);
+  };
+
+  const handleSearchOnMap = () => {
+    triggerHaptic('tap');
+    navigate('inventory_lookup');
+  };
+
+  return (
+    <View style={styles.root}>
+      {/* 1. Full-screen Interactive 2D Facility Map */}
+      <MiniFacilityMap
+        currentZone={activeZone}
+        selectedRobotId={selectedRobotId}
+        onSelectRobot={(id) => {
+          setSelectedRobotId(id);
+          const r = robots.find((item) => item.id === id);
+          if (r) {
+            toast.info(`${r.id}: Battery ${r.battery}%, Speed ${r.speed}`);
+          }
+        }}
+        onLocateUser={handleLocateUser}
+        onSearch={handleSearchOnMap}
+        robots={robots}
+        style={styles.mapCanvas}
+      />
+
+      {/* 2. Floating Next Handover Task Card (Peek Sheet) */}
+      <View
+        style={[
+          styles.peekSheetContainer,
+          { bottom: dockHeight + 10 },
+        ]}
+      >
+        <Pressable
+          onPress={toggleSheetExpand}
+          style={styles.cardHeaderHandle}
+          accessibilityRole="button"
+          accessibilityLabel={isSheetExpanded ? 'Collapse card' : 'Expand card'}
+        >
+          <View style={styles.dragPill} />
+        </Pressable>
+
+        {!isSheetExpanded ? (
+          /* Collapsed Mode (Peek: ~68px, frees up 80% of screen for map) */
+          <View style={styles.collapsedRow}>
+            <Pressable
+              onPress={toggleSheetExpand}
+              style={styles.collapsedInfo}
+              accessibilityRole="button"
+              accessibilityLabel={`Job ${activeJob.id}, waiting handover. Tap to view details.`}
+            >
+              <View style={styles.collapsedTopLine}>
+                <StatusPill status={activeJob.status} label="Waiting Handover" size="sm" dot />
+              </View>
+              <View style={styles.collapsedBottomRow}>
+                <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.jobCode}>
+                  {activeJob.jobNo || activeJob.id}
+                </Text>
+                <Text variant="caption" color={colors.textMuted}>·</Text>
+                <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={styles.collapsedTarget}>
+                  <Text style={styles.boldText}>{activeJob.target || 'Rack A · Level 2'}</Text> · <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text>
+                </Text>
+              </View>
+            </Pressable>
+
+            <View style={styles.collapsedActionGroup}>
+              <Button
+                title="Start"
+                variant="primary"
+                size="sm"
+                onPress={handleStartHandover}
+                icon={ArrowRight}
+                iconPosition="right"
+                style={styles.compactStartBtn}
+              />
+              <Pressable
+                onPress={toggleSheetExpand}
+                accessibilityRole="button"
+                accessibilityLabel="Expand handover details"
+                style={({ pressed }) => [styles.expandChevronBtn, pressed && styles.pressed]}
+              >
+                <ChevronUp size={16} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          /* Expanded Mode: Full inspection */
+          <>
+            {/* Top row: Status pill + Action controls */}
+            <View style={styles.expandedTopBar}>
+              <StatusPill status={activeJob.status} label="Waiting Handover" size="sm" dot />
+
+              <View style={styles.expandedHeaderActions}>
+                <Pressable
+                  onPress={toggleFleetExpand}
+                  accessibilityRole="button"
+                  accessibilityLabel={isFleetExpanded ? 'Collapse fleet details' : 'Expand fleet details'}
+                  style={({ pressed }) => [styles.fleetToggleBtn, pressed && styles.pressed]}
+                >
+                  <Text variant="caption" color={colors.primaryText} style={styles.fleetToggleText}>
+                    {isFleetExpanded ? 'Hide Fleet' : 'Fleet (2)'}
+                  </Text>
+                  {isFleetExpanded ? (
+                    <ChevronDown size={14} color={colors.primaryText} />
+                  ) : (
+                    <ChevronUp size={14} color={colors.primaryText} />
+                  )}
+                </Pressable>
+
+                <Pressable
+                  onPress={toggleSheetExpand}
+                  accessibilityRole="button"
+                  accessibilityLabel="Collapse card"
+                  style={({ pressed }) => [styles.collapseBtn, pressed && styles.pressed]}
+                >
+                  <ChevronDown size={16} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Second row: Job ID with full breathing room */}
+            <Text variant="headline" color={colors.textPrimary} numberOfLines={1} style={styles.jobCode}>
+              {activeJob.jobNo || activeJob.id}
+            </Text>
+
+            {/* Task Details Inset Box */}
+            <View style={styles.insetBox}>
+              <View style={styles.detailRow}>
+                <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Target</Text>
+                <Text variant="bodyMedium" color={colors.textPrimary} style={[styles.detailValue, styles.targetValue]}>
+                  {activeJob.target || 'Rack A · Level 2 · Bin 03'}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Cargo</Text>
+                <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
+                  <Text style={styles.boldMono}>{activeJob.containers[0]?.code || 'BOX-101'}</Text>
+                  {activeJob.containers.length > 1 ? ` (+${activeJob.containers.length - 1} more totes)` : ''}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Assigned</Text>
+                <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
+                  <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text> · At Station (0m)
+                </Text>
+              </View>
+
+              <ProgressMeter
+                value={activeJob.progressPercent ?? 68}
+                tone="warning"
+                style={styles.meter}
+                accessibilityLabel="Handover progress 68 percent"
+              />
+            </View>
+
+            {/* Primary Action Button */}
+            <Button
+              title="Start Handover"
+              variant="primary"
+              size="md"
+              onPress={handleStartHandover}
+              icon={ArrowRight}
+              iconPosition="right"
+              style={styles.actionBtn}
+            />
+
+            {/* Optional Expanded Fleet Details */}
+            {isFleetExpanded && (
+              <View style={styles.expandedFleetSection}>
+                <View style={styles.fleetHeaderWithAction}>
+                  <Text variant="label" color={colors.textSecondary} style={styles.fleetSectionTitle}>
+                    Active Fleet Status
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      navigate('fleet_recall');
+                    }}
+                    style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Emergency Recall console"
+                  >
+                    <ShieldAlert size={13} color="#dc2626" />
+                    <Text variant="caption" style={styles.fleetRecallLinkText}>
+                      Recall & E-Stop
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.fleetRow}>
+                  {robots.map((r) => (
+                    <View key={r.id} style={styles.fleetItemCard}>
+                      <View style={styles.fleetItemHeader}>
+                        <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName}>
+                          {r.id}
+                        </Text>
+                        <StatusPill
+                          status={r.status === 'EN_ROUTE' ? 'RUNNING' : r.status === 'PAUSED' ? 'WARNING' : 'COMPLETED'}
+                          label={r.status === 'EN_ROUTE' ? 'In Transit' : r.status === 'PAUSED' ? 'Paused' : 'Standby'}
+                          tone={r.status === 'PAUSED' ? 'warning' : undefined}
+                          size="sm"
+                        />
+                      </View>
+                      <Text variant="caption" color={colors.textSecondary}>Speed: {r.speed}</Text>
+                      <View style={styles.batteryRow}>
+                        <BatteryMedium size={14} color={r.battery < 20 ? '#dc2626' : colors.successText} />
+                        <Text variant="caption" color={colors.textSecondary}>{r.battery}%</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#eef1f6',
+    position: 'relative',
+  },
+  mapCanvas: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  peekSheetContainer: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 14,
+    gap: 10,
+    zIndex: 70,
+    ...shadows.lg,
+  },
+  cardHeaderHandle: {
+    alignItems: 'center',
+    paddingVertical: 4,
+    marginBottom: 2,
+  },
+  dragPill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+  },
+  collapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  collapsedInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  collapsedTopLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  collapsedBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  collapsedTarget: {
+    fontWeight: '500',
+    flex: 1,
+  },
+  collapsedActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  compactStartBtn: {
+    minHeight: 38,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  expandChevronBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expandedHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  collapseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expandedTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  jobCode: {
+    fontWeight: '700',
+    flexShrink: 0,
+    marginBottom: 8,
+  },
+  fleetToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(50, 53, 62, 0.08)',
+  },
+  fleetToggleText: {
+    fontWeight: '600',
+  },
+  insetBox: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
+    padding: 12,
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  detailLabel: {
+    width: 62,
+    paddingTop: 1,
+    flexShrink: 0,
+  },
+  detailValue: {
+    flex: 1,
+    textAlign: 'right',
+  },
+  targetValue: {
+    fontWeight: '700',
+  },
+  boldText: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  boldMono: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  meter: {
+    marginTop: 4,
+  },
+  actionBtn: {
+    minHeight: 48,
+  },
+  expandedFleetSection: {
+    marginTop: 4,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 8,
+  },
+  fleetHeaderWithAction: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  fleetRecallLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#fef2f2',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  fleetRecallLinkText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#b91c1c',
+  },
+  fleetSectionTitle: {
+    fontWeight: '600',
+  },
+  fleetRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  fleetItemCard: {
+    flex: 1,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.sm,
+    padding: 8,
+    gap: 4,
+  },
+  fleetItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  fleetRobotName: {
+    fontWeight: '700',
+  },
+  batteryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+});

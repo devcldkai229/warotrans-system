@@ -1,56 +1,318 @@
-# Calm Operations — Shell And Operational Screens
+# Calm Operations — Phase 2: Shell Rebuild & Pilot Screens
 
-Updated 2026-10-17. All changes are within `app/`; backend and Web Admin are read-only references. The operational behavior in [MOBILE_BACKEND_REALIGNMENT.md](./MOBILE_BACKEND_REALIGNMENT.md) supersedes the former prototype and demo behavior.
+> **Scope**: `warotrans-system/app` only. FE-only change; no backend, database or
+> API-schema edits.
+> **Status**: shipped, plus a review pass (contrast, lifecycle, zone filtering,
+> simulation notice, shell modularity). `npm run typecheck` is at zero errors and
+> the web bundle builds (`npx expo export --platform web`).
+> **Builds on**: [CALM_OPERATIONS_FOUNDATION.md](./CALM_OPERATIONS_FOUNDATION.md) (Phase 1).
 
-The app uses the [foundation primitives](./CALM_OPERATIONS_FOUNDATION.md) and the current [design rules](./DESIGN_SYSTEM_AND_RULES.md). Operational screens import `Text`, `Button`, `Card`, `StatusPill`, `TextField`, `ChoiceField`, `ErrorBanner`, and `ActionModal` from `src/shared/ui`.
+Phase 2 turns the Phase 1 foundation into a shipped shell and three screens that
+use nothing but it. Nothing outside `src/shared/theme`, `src/shared/ui`,
+`src/app/{navigation,shell}` and the three pilot screens was redesigned; the
+remaining screens still render their own headers inside the new shell.
 
-## Shell
+---
 
-`AppHeader`, `AccountSheet`, `ZonePickerModal`, `NotificationSheet`, `SafetyActionSheet`, and `OperationalScreen` live in `src/app/shell`. Shared UI stays independent of the navigation layer.
+## 1. Palette — the Google Workspace shift
 
-The root remains a plain View inside SafeAreaProvider. Headers read `useTopInset()`. OperationalScreen renders an inset-aware ScreenHeader, scrollable content, loading/error state and measured `dockReservedSpace(dockHeight)` clearance. ActionModal constrains width/height, scrolls its content and accommodates the keyboard.
+The Phase 1 palette was a *warm-neutral slate* system. Phase 2 moves it onto the
+**Google Cloud Console** family: a cool grey canvas, near-black inks, and a
+single blue accent that is allowed to be bright because nothing else is.
 
-AppHeader retains BrandMark, zone preference, notification bell and operator avatar. The zone is explicitly a local display preference. AccountSheet shows verified identity and that preference, with no invented shift schedule. Notification count starts at zero and follows actual received events. Logout clears session, route history and the job badge.
+| Group | Phase 1 | Phase 2 (now) |
+| :--- | :--- | :--- |
+| Canvas | `#f8fafc` | **`#eef1f6`** |
+| Surface | `#ffffff` | `#ffffff` |
+| Inset | `#f1f5f9` | **`#f4f6fa`** |
+| Muted track | `#e2e8f0` | **`#e5e9f0`** |
+| Border | `#e2e8f0` | **`rgba(33, 34, 38, 0.08)`** |
+| Border (strong) | `#cbd5e1` | `#c4c8d0` |
+| Ink / secondary / muted | `#0f172a` `#475569` `#64748b` | **`#121317` `#45474d` `#6a6a71`** |
+| Accent | `#0062ff` | **`#1557d0`** |
+| Accent (dark / light / border / text) | `#0052d9` `#edf5ff` `#b8d5ff` `#004bb0` | `#0f3f9e` `#ebf2fe` `#b8d5ff` `#1557d0` |
+| Success / Warning / Danger / Info | `#059669` `#d97706` `#dc2626` `#0284c7` | unchanged |
 
-BottomTabBar remains flat and edge to edge with Home, Jobs and Transport. Its badge begins empty and is updated from actual job snapshots. It does not imply staff assignment, which the current job API does not expose.
+**Why `border` became translucent.** A fixed hairline hex has to be re-tuned for
+every surface it lands on — white cards, the `#eef1f6` canvas, a tinted status
+fill. `rgba(33, 34, 38, 0.08)` is one value that reads correctly on all three,
+which is what removes a whole category of "why is this hairline invisible here".
 
-## Jobs
+**Blueprint map tokens were retuned off cyan.** `mapBackground` is now `#e9eefa`
+(not `#e0f2fe`). A saturated cyan map inside a calm grey app reads as a different
+application pasted into the frame; the grid and zone blocks carry the same
+information at a fraction of the contrast cost.
 
-JobsScreen loads real job summaries and presents active/history filters and search. Empty server responses replace the list with an empty state; errors remain visible. JobCard shows server progress and container counts.
+**The accent was darkened after the review.** `#3279f9` is 3.53:1 against white —
+it passes as a *graphic* (a meter fill, a selected chip's border) and fails as a
+*surface with white text on it*, which is exactly what every `variant="primary"`
+button is. `primary` is now `#1557d0` (6.35:1 on white), `primaryDark` dropped to
+`#0f3f9e`, and `primaryText` stays `#1557d0`: one accent value that is legible as
+a fill *and* as foreground. The bottom tab bar's active icon and label read
+`primaryText` for the same reason — 12pt text on a white bar is the foreground
+case, not the fill case.
 
-RobotStartControl lists actual available, online, enabled robots on the job's map. CREATED and QUEUED jobs expose Start Job on Robot. Successful start replaces detail with the returned DTO or reloads the summary list.
+---
 
-JobDetailScreen resolves `currentStepId`, falling back only to active graph steps when no ID is supplied. A RUNNING job's current WAITING HUMAN_INTERACTION PICKUP_CONFIRM or DROPOFF_CONFIRM step exposes Handover Confirmation.
+## 2. Phase 1 primitive fixes
 
-VerifyModal resolves the entered barcode through the server, compares the returned UUID with the expected container UUID, and confirms the step using `{ containerId, note }`. Server validation/conflict errors remain inside the modal. Only the returned JobDetailDto changes execution state. A mutation response supersedes older pending GET requests.
+| Primitive | Change | Why |
+| :--- | :--- | :--- |
+| `Text` | `color` resolves a **token name** through `colors` first (`hasOwnProperty`, so `'constructor'` cannot leak `Object.prototype`) | Lets a caller pass `'textMuted'` and follow the palette; a raw hex still passes through untouched. |
+| `Text` | Applies `typography.fontSans` on the non-mono path | The scale previously only set a family for `variant="code"`; everything else inherited whatever the host set. |
+| `SegmentedControl` | Segment `minHeight` 32 → **44** (the touch floor); `md` track `minHeight` 48; label `flexShrink: 1` + `minWidth: 0` | `My Tasks (12)` set the width of all three segments and pushed the track off a 390pt screen. The brief asked for 40, but a control this size is the whole target — `hitSlop` is not an option for the default size. |
+| `StatusPill` | Dot `flexShrink: 0`, label `flexShrink: 1` | The dot was the first flex child to absorb the squeeze and became a sliver. |
+| `StatusPill` | Tone map gains `EN_ROUTE`, `STANDBY`, `WAITING_HANDOVER`, `AWAITING_HANDOVER` | `WAITING_HANDOVER` fell through to `neutral` (grey) while meaning "a human is blocking this job". |
+| `TextField` | `onClear` defaults to `onChangeText('')`; hidden when `editable === false`; `accessibilityLabel` defaults to `label`; caller `placeholderTextColor` is no longer swallowed | Four small footguns in the most-used primitive. The last one silently discarded a prop that is in the public type. |
+| `TextField` | Input text uses `typography.bodyMedium` + `fontSans` | It hardcoded `fontSize: 14` and set no family, so on web the field rendered in the browser default face while every label around it rendered in Inter. |
+| `Card` | Pressable cards get `minWidth/minHeight: 44`; **`gap` and `contentStyle` props apply to the inner content wrapper** | A two-word fleet chip was a ~30pt target. The two new props exist because `style` lands on the *outer* card — a `gap` passed there is inert, which is how the Home hero card rendered its rows flush while the stylesheet claimed 14pt. |
+| `Button` | `minWidth: 44`; `size="md"` 44 → **48**, `size="lg"` 48 → **52** | `Cancel` / `OK` produced a ~60x44 control. `md` is the size every primary action uses ("Start Handover", "Inspect Issue") and is hit one-handed while the other hand holds a scanner — 48 is the comfortable target, not the legal minimum. |
+| `ScreenHeader` | Row is `minHeight: 48`, not a fixed height | A wrapped subtitle used to be clipped instead of growing the header. |
+| `Text` | **`uppercase` prop deleted** | Zero call sites used it, and it was an ALL-CAPS escape hatch the new copy rule bans. |
+| `ProgressMeter` | **New primitive** | Handover progress, battery and job progress were three copies of the same 4pt bar. |
 
-AmrCargoBayVisualizer lists every job container and resolves product/barcode metadata from real container details. There is no two-bay limit or fabricated quantity. JobStepper renders CHECK, MOVE, HUMAN_INTERACTION and WAIT, keyed by step UUID.
+`ProgressMeter` is the only addition to the barrel. It exists because the brief
+specifies "a 4px meter progress bar in amber/blue" in three places, and the
+alternative was a fourth divergent copy.
 
-## Transport And Inventory
+---
 
-TransportScreen and TransportHistoryScreen show actual request lists and associated jobs queried by transportRequestId. Submitted requests can be queued; CREATED/QUEUED jobs can be started. Run Again retrieves request details and opens a new editable request. It does not copy a previous execution result.
+## 3. Shell
 
-TransportCreationScreen loads active warehouses/maps, eligible containers, real storage locations and published workflows. Workflow input fields are generated from STAFF_INPUT schema and coerced by wire type. Source endpoint/location/level comes from current container data; a missing source endpoint requires explicit choice. Destinations use real enabled endpoints and optional storage location/level. No slot availability is inferred.
+The shell lives in **`src/app/shell/`**, not `src/shared/components/`. It
+navigates (`useNavigation`), so it sits *above* the feature layer; keeping it in
+`shared/` would have made the leaf layer depend on the app layer. This also
+leaves `src/shared/components/*` genuinely frozen.
 
-Create, Queue and Start have distinct outcomes. Receipts are preserved on partial failure. Submit & Run starts one queued job on the selected robot; remaining jobs stay visible for deliberate start when a robot is available.
+### 3.1 `AppHeader` — `src/app/shell/AppHeader.tsx`
 
-InventoryLookupScreen shows only real container, product and location fields. Relocation passes both container UUID and barcode. CreateContainerScreen implements product resolution, inventory context review and receiving, with an explicit unmapped-route banner for unavailable receiving endpoints.
+56px content row + safe-area insets (`paddingTop: topInset + 4`, `paddingBottom: 10`, `minHeight: 56`):
 
-## Facility Map And Safety
+```
+left:   [BrandMark 40px]  [ 📍 Inbound Dock 01 ▾ (40px pill) ]
+right:  [ 🔔 Bell (40px) ]  [ AT Avatar (40px) ]
+```
 
-Home and Live Map use the same MiniFacilityMap renderer. It plots the real map image, GeoJSON zones/edges, endpoints and robot poses through the ROS transform including origin yaw. Marker positions require reported telemetry on the displayed map. Missing images retain geometry and show an image-unavailable notice. Connection and last-telemetry labels expose stale data.
+- **Top padding from `useTopInset()`**, never a hardcoded constant.
+- **Left group (Logo + Zone)**: `BrandMark` squircle icon (40px) paired directly with the work zone selector pill (`[ 📍 Inbound Dock 01 ▾ ]`, 40px height, rounded full) without redundant "WaroTrans" text, providing clear horizontal breathing room across 390pt mobile viewports.
+- **Right toolset (Duo)**: Dedicated 40px circular buttons for rapid 1-handed thumb access to notifications (`[ 🔔³ Bell ]`) and shift profile (`[ AT Avatar ]`). The Search button was intentionally removed from the header to maximize negative space and prevent visual crowding; inventory lookup is intuitively accessed via the Transport screen.
+- **Compact Anchored Notification Dropdown (`NotificationSheet`)**: Drops down cleanly right beneath the notification bell (`top: topInset + 54`, `right: 12`, `width: 320px`, `maxHeight: 390px`) with solid `#ffffff` surface, gentle dimming backdrop, and smooth tap-outside dismiss. All operational alert copy is strictly in English (`AMR-01 Arrived at Dock 01`, `Aisle A-02 Obstacle Detected`, `Transfer Order TR-2049 Assigned`, `AMR-02 Returning to Charging Bay`), leaving the rest of the operational map and dock status fully visible.
+- **The zone picker and account sheet are `Modal`s.** Occasional actions do not earn
+  permanently mounted popovers, ensuring robust behavior across all devices.
+- **Layout budget is tight and deliberate.** Row 1 has 358pt to spend on a 44pt
+  avatar, a name, a role chip, a 125pt status pill and a 44pt button. Gaps are
+  8pt, not 10pt: at 10pt the name truncated to `Alex Tr…` at 390pt wide. Longer
+  names still ellipsize; the avatar initials stay legible, so the failure is
+  graceful.
+- Logout lives in the account sheet, after the shift summary, in `danger` on
+  `dangerBg` — never a bare icon that can be hit by accident.
+- **The header holds no overlay markup.** `ZonePickerModal`, `AccountSheet` and
+  `SafetyActionSheet` are sibling files over a shared `SheetDialog` frame; the
+  header keeps two rows, three booleans and the wiring. It was 519 lines with
+  three copies of the same modal chrome inlined.
 
-Cancel Active Navigation Command targets only a reported currentCommandId. A successful HTTP 202 is displayed as Cancel Requested (Awaiting Robot ACK). It is not an emergency stop or return-to-base command.
+### 3.2 `SafetyActionSheet` — `src/app/shell/SafetyActionSheet.tsx`
 
-Hazard reporting, issue submission, cargo transfer, nearby robot hold and offline mutation sync remain visibly unavailable. SafetyHoldContext and local success simulations are removed. BarcodeScannerHUD accepts actual scanner/manual input and explains that camera capture is not connected.
+Four exceptions, one bottom sheet: hold nearby robots (3m soft pause), report a
+path hazard, report a cargo defect, view fleet maintenance. Each row states what
+it **does** in one sentence rather than an exception code — the person reading it
+is deciding whether to step into traffic.
 
-## Verification
+The hold is **state, not a local toggle**. `SafetyHoldContext`
+(`src/shared/context/`) owns it, because three surfaces act on it: the header
+shield, this sheet, and the Transport hub. Before the context existed, holding
+from the header left the Transport hub still reading "not holding".
 
-- `npm run typecheck` — zero errors.
-- `npm run test:realignment` — operational regression suite.
-- `npx expo export --platform web` — web bundle verification.
-- Expo dev server starts and serves HTTP 200 on local port 8088.
-- No connected browser or reachable running backend was available for end-to-end validation. Expo's optional native DevTools launcher failed in this environment; Metro itself started successfully.
+**The hold says it is a simulation.** `SafetyHoldContext` flips a boolean and the
+sheet re-renders; no AMR is told anything, because `POST /api/fleet/soft-hold` is
+not wired. The hold row's subtitle carries `(Local Fleet Simulation)` and an
+`info` notice under the list names the missing route. The header repeats it in
+both toasts and in the shield button's `accessibilityHint`, the Transport hub
+says it too, and `JobDetailScreen` says it — three surfaces toggle the same
+switch, so all of them have to be honest about what it does.
 
+Toggling the hold **closes the sheet**. It used to stay open and flip its own
+state pill, which looks like it works — except the confirmation is a `toast`,
+and a toast lives in the React tree *below* this `Modal`. RN renders a `Modal`
+into its own native window, so `zIndex` cannot lift the toast above it: the tap
+produced a confirmation nobody could see, on the screen where the operator is
+deciding whether to step into traffic.
 
-Transport movement derivation is covered independently: actual container location takes precedence over manual source input; absent sources require explicit endpoints; destination storage must match its endpoint; required dotted schema paths are validated.
+**"Report Cargo Defect" opens the incident report**, `job_detail` with
+`{ modal: 'issue' }`. It used to route to `payload_recovery`, which is the
+chassis rescue flow: an operator reporting a crushed tote was taken to a screen
+about lifting a stalled AMR off a pallet.
+
+**Four surfaces, one switch.** `SafetyHoldContext` has four readers now — the
+header shield, this sheet, the Transport hub, and `JobDetailScreen`. The detail
+screen kept a private `useState` copy until the review pass, so holding from
+there left every other surface reading "not holding": the same defect the
+context was introduced to end, one surface over.
+
+### 3.3 `BottomTabBar` — `src/app/navigation/BottomTabBar.tsx`
+
+Flat, edge to edge, **three tabs** (`Home`, `Jobs`, `Transport`), minimalist icon-only
+with touch targets >= 72pt width x 44pt height.
+
+- `position: absolute`, with the bottom inset applied as a **sibling strip** rather
+  than a `paddingBottom` on the row: on a device with a home indicator a padding
+  would inset the icons too, which is not what "clear the indicator" means.
+- Still publishes its measured height through `NavigationContext`, so
+  `dockReservedSpace(dockHeight)` remains the one way to clear it.
+- **Active state**: soft pill highlight (`rgba(21, 87, 208, 0.08)`) with `colors.primaryText`.
+- **Jobs counter badge**: calibrated to **bright warm Amber-400 (`#fbbf24`)** with a
+  crisp **1.5px white border (`#ffffff`)** and **deep amber text (`#78350f`)** (WCAG AAA >= 7:1),
+  eliminating the previous dark/muddy burnt-orange badge appearance.
+- The Jobs badge is seeded from `countMyActiveJobs()` in `features/jobs/jobData`
+  — the same helper the Jobs screen counts with.
+
+### 3.4 Navigation
+
+`MainTab` is `'home' | 'jobs' | 'transport'`, and `isMainTabScreen()` is exported from
+`NavigationContext` so `AppNavigator` has a single gate for "render the shell".
+Dedicated destinations (`JobLiveMapScreen`, `JobDetailScreen`, `TransportScreen`) carry
+their own `SubScreenHeader` with explicit back navigation.
+
+**The dock zone follows the sheet, it is not a second constant.** Moving the
+sheet to the measured bar clearance buried the `LOADING DOCKS` block underneath
+it — that block still sat at its own hardcoded `bottom: 120`, so a 174pt opaque
+panel covered the only label saying where the docks are. The sheet now reports
+its height via `onLayout` and the zone is stacked on top of it. The lesson is the
+one AGENTS.md §2.3 already states: one measurement feeds every dependent
+position, and a second hand-tuned number next to it is a number that will be
+wrong.
+
+`TransportScreen` had the same class of bug in `paddingBottom: 140` — a
+constant standing in for `dockReservedSpace(dockHeight)`, which cleared the bar
+only on the device it was measured on. Both now measure.
+
+---
+
+## 4. Pilot screens
+
+### 4.1 Home — `src/features/home/HomeScreen.tsx`
+
+Rebuilt from scratch. Three sections, in the order the operator asks the
+questions: my task, my robots, the floor.
+
+1. **Next handover task** — `StatusPill` (`ASSIGNED` rendered as `Waiting
+   Handover`, amber) + job ID, an inset block with target location / cargo /
+   assigned robot, an amber 4pt meter, and the screen's only filled primary
+   button (`lg`, 52pt).
+2. **Active fleet** — one card per AMR: status pill, destination, battery with a
+   green meter, payload.
+3. **Facility map thumbnail** — 150pt blueprint preview
+   (`FacilityMapPreview.tsx`) plus a `Open Live Telemetry Map` CTA that switches
+   to the `live_map` tab.
+
+The old screen had a full-bleed map, a pan-responsive bottom sheet and a radar
+sweep: three large surfaces for a job queue that is one glance wide. The preview
+keeps the "where is my fleet" answer and hands over to the live screen for the
+rest.
+
+**The hero reads the job out of `jobData`.** It hardcoded
+`BOX-101 · Electronics · 45 pcs` while the fixture said 12 — a quantity that
+differs between the screen you act from and the screen you verify in. Target,
+cargo (code, product, quantity), robot, status and the progress meter are now
+all `MOCK_JOBS[0]`'s, so there is exactly one place to change them. The two
+fleet cards and the hero use `Card`'s new `gap` prop instead of per-row
+`marginTop`, which the outer card style could not carry.
+
+Transport quoted the same wrong number in its incident card (`BOX-101 (45
+units)`); it reads the fixture now too, which is what caught the fact that the
+two screens had been describing one tote differently for a while.
+
+### 4.2 Jobs — `src/features/jobs/JobsScreen.tsx` + `JobCard.tsx`
+
+- Title `Job Execution Center`, a `SegmentedControl` (My Tasks / Fleet Queue /
+  History) and a `TextField` above a `FlatList`.
+- Search matches job numbers, container codes, rack labels, endpoints, robot
+  codes and workflow names, ignoring hyphens and spaces so `JOB20260812` finds
+  `JOB-2026-0812`.
+- Counts are **live**, not fixed: the brief's `My Tasks (2)` / `Fleet Queue (5)`
+  were placeholders, and a count that disagrees with the list is worse than no
+  count. They reflect the active query.
+- **Scope is `JobStatus`, not a UI flag.** `history` is exactly the terminal
+  states — `COMPLETED`, `FAILED`, `CANCELLED` — via `isTerminalJobStatus()`
+  (`jobData.ts`); `mine` and `fleet` exclude them.
+- **Deep links select the scope.** `?screen=jobs-history` and
+  `?screen=jobs-global` map to `history` / `fleet`, read from `params.view`.
+  The screen re-syncs on `params.view` rather than only as a `useState`
+  initialiser, because `navigate('jobs', { view })` re-uses the instance instead
+  of remounting it.
+- **A zone filter chip reads `session.zone`.** Off by default — an operator
+  checking the fleet still wants the whole fleet — and when on it reads
+  `Filtered by Inbound Dock 01` with a clear affordance, because a filter that
+  hides rows has to announce itself or the shorter list reads as "everything
+  there is". Matching is text-based over the job's own place names, with a
+  direction guard so `Inbound Dock 01` does not swallow `Outbound Dock Out 01`.
+- Three empty states, not one: "no jobs match that search" offers **Clear
+  search**; "nothing routed through <zone>" offers **Show all zones**; "no tasks
+  assigned to you" points at the fleet queue instead of offering a button that
+  would do nothing.
+- `JobCard` reads top to bottom as *which job* → *where does it go* → *what is on
+  it* → *what do I do*. Both its pill and its button come from a per-`JobStatus`
+  table, so a `QUEUED` job never offers to start a handover against a robot that
+  has not been assigned, and `FAILED` / `RECOVERY_REQUIRED` say *Inspect Issue*
+  instead of pretending the job can still move.
+
+**One lifecycle axis.** `AppJobItem.kind` (`waiting | transit | complete |
+queued`) is gone. It duplicated `JobStatus` on the same fixture, which is how two
+screens could disagree about one job; `JobCard`, `JobsScreen` and
+`JobDetailScreen` now read `status` directly. `jobData.ts` owns what the app
+knows about a job's state: `isTerminalJobStatus()` and
+`JOB_STATUS_PRESENTATION` — the single label/tone table every screen names a
+status from. It started life inside `JobCard`, which left the Transport hub
+hand-writing `ALLOCATING AMR` and `EN ROUTE` for jobs the Jobs list called
+*Waiting Handover* and *Running*.
+
+---
+
+## 5. Copy rule
+
+**Title Case, never ALL-CAPS.** The Phase 0 screens used `textTransform:
+'uppercase'` with wide tracking for eyebrows and status tags; on a screen an
+operator reads while walking, that reads as shouting. New UI gets no uppercase
+transform at all — `StatusPill` humanises the status (`WAITING_HANDOVER` →
+`Waiting handover`) and the screens pass an explicit `label` where Title Case
+matters (`Waiting Handover`).
+
+The last two main-tab holdouts are now clean at the *header* level: the Live Map
+telemetry badge reads `Live Telemetry` at the 12pt scale floor (it was 9pt at
+weight 900 in caps — below the type scale *and* shouting), and Transport's
+section eyebrows read `Dispatch Operations` and `Safety & Incident Hub` in Title
+Case without the 1.4pt tracking, with the hero button's 3D bevel replaced by a
+hairline plus one shadow step.
+
+That is the *header* layer only. Both of those screens are still un-migrated
+below the fold and still carry Phase 0 furniture: 8–10pt map and incident labels,
+literal ALL-CAPS state strings (`AMR-01 STALLED · CARGO AT RISK`,
+`PERIMETER`, `RECENT DISPATCHES`), and inline styles throughout. Finishing them
+is the same mechanical pass as the rest of §6 — it was not started here because
+it is a screen migration, not a copy fix.
+
+---
+
+## 6. What is still un-migrated
+
+Everything not listed above still renders its own header and its own inline
+styles inside the new shell, and is expected to look like itself:
+
+`JobDetailScreen`, `TransportScreen`, `JobMonitoringScreen`,
+`InventoryLookupScreen`, `CreateContainerScreen`, `TransportCreationScreen`,
+`TransportHistoryScreen`, `PointToPointScreen`, `ReplenishmentScreen`,
+`PayloadRecoveryScreen`, `FleetRecallScreen`, `BlockPathHazardScreen`,
+`OfflineBannerHUD`, `BarcodeScannerHUD`, `IssueReportingModal`, `LoginScreen`.
+
+*Note*: `JobLiveMapScreen` has been migrated to Calm Operations (using `SubScreenHeader`, vector SVG Nav2 waypoint trajectories, and collision-free AMR markers).
+
+Migrating them is mechanical — swap `shared/components/*` for the barrel, drop
+inline `fontSize`, delete the now-duplicate page header — and each one deletes
+its `shared/components/*` dependency as it lands.
+
+**Dead code note**: `HeroHandoverCard`, `FleetRobotCard` and `WarehousePulseCard`
+were already orphaned before this phase (Phase 1 left them unreferenced); the Home
+rebuild does not change that, so they are left for a dedicated cleanup rather
+than deleted inside a redesign diff. `MiniFacilityMap.tsx` is still imported for
+`ROBOT_HEADING_ARROW_PATH`, which the preview and the live map share so a robot
+keeps one silhouette across screens; the component itself is the next thing to go.

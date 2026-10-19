@@ -1,8 +1,5 @@
 # Calm Operations — Phase 1 Foundation (Design Tokens, Contracts, UI Primitives)
 
-> Updated operational reference: [Mobile Backend Realignment](./MOBILE_BACKEND_REALIGNMENT.md). Runtime screens now use server DTOs; prototype job/robot/slot view models are removed. Use current tokens and rules from [DESIGN_SYSTEM_AND_RULES.md](./DESIGN_SYSTEM_AND_RULES.md). The original foundation history below is retained for context.
-
-
 > **Scope**: `warotrans-system/app` only. FE-only change; no backend, database or
 > API-schema edits.
 > **Status**: Phase 1 of the redesign (complete). Tokens + primitives landed first;

@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
-import { useAuth } from '../../features/auth/authContext';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Platform } from 'react-native';
+import { countMyActiveJobs } from '../../features/jobs/jobData';
 
 export type MainTab = 'home' | 'jobs' | 'live_map' | 'transport';
 
@@ -126,8 +126,6 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   return { screen: 'home', tab: 'home', params: {} };
 };
 
-  const { session, isLoading } = useAuth();
-  const previousAccount = useRef<string | null>(null);
   const initial = getInitial();
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(initial.screen);
   const [activeTab, setActiveTab] = useState<MainTab>(initial.tab);
@@ -135,19 +133,14 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<{ screen: AppScreen; params: Record<string, any> }[]>([
     { screen: initial.screen, params: initial.params },
   ]);
-  const [activeJobCount, setActiveJobCount] = useState<number>(0);
+  // Seeded from the same helper the Jobs screen counts with, so the bar's badge
+  // and the screen's "My Tasks (n)" cannot disagree. The badge used to be a
+  // hardcoded 1 sitting next to a list of four.
+  const [activeJobCount, setActiveJobCount] = useState<number>(countMyActiveJobs);
   // Initial guess until BottomTabBar's onLayout reports the real bar height
   // (56pt + the bottom safe-area inset, so 64 on web, ~90 on a notched phone).
   // Prevents a visible one-frame jump in the screens that dock content.
   const [dockHeight, setDockHeight] = useState<number>(64);
-
-  useEffect(() => {
-    if (!isLoading && !session && previousAccount.current) {
-      setCurrentScreen('home'); setActiveTab('home'); setParams({});
-      setHistory([{ screen: 'home', params: {} }]); setActiveJobCount(0);
-    }
-    previousAccount.current = session?.id ?? null;
-  }, [session?.id, isLoading]);
 
   const navigate = (screen: AppScreen, newParams: Record<string, any> = {}) => {
     setHistory((prev) => [...prev, { screen, params: newParams }]);

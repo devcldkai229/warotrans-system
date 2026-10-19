@@ -1,21 +1,725 @@
-import React from 'react';
-import { OperationalScreen } from '../../app/shell/OperationalScreen';
+import React, { useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {
+  AlertTriangle,
+  Box,
+  Check,
+  CheckCircle2,
+  LifeBuoy,
+  Navigation,
+  RefreshCw,
+  ScanLine,
+} from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { listJobs } from '../../shared/api/executionApi';
-import { useRemoteData } from '../../shared/hooks/useRemoteData';
-import { useRealtime } from '../../shared/realtime';
-import { Button, Card, Text } from '../../shared/ui';
+import { Button } from '../../shared/components/Button';
+import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
+import { colors } from '../../shared/theme/colors';
+import { radii } from '../../shared/theme/radii';
+import { shadows } from '../../shared/theme/shadows';
+import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
+import { completePayloadRecoveryJob } from '../../shared/api';
+
+type RescuePhase = 'briefing' | 'rendezvous' | 'transfer' | 'resuming' | 'completed';
+
 export function PayloadRecoveryScreen() {
-  const { navigate } = useNavigation();
-  const { resyncVersion, lastJobUpdate } = useRealtime();
-  const jobs = useRemoteData(() => listJobs({ status: 'RECOVERY_REQUIRED' }), [resyncVersion, lastJobUpdate]);
-  return <OperationalScreen title="Payload Recovery" loading={jobs.loading} error={jobs.error} onRefresh={jobs.reload}>
-    <Card gap={16}>
-      <Text variant="headline">Operations Capability Unavailable</Text>
-      <Text>The Server Does Not Provide A Payload Recovery Or Cargo Transfer Endpoint. Recovery Cannot Be Completed From This Screen.</Text>
-      <Button title="Transfer Payload (Unavailable)" disabled onPress={() => {}} />
-    </Card>
-    {jobs.data?.items.map(job => <Button key={job.id} title={`${job.jobNo} · View Recovery Required Job`} variant="outline" onPress={() => navigate('job_detail', { jobId: job.id })} />)}
-    {!jobs.loading && !jobs.error && !jobs.data?.items.length && <Text>No Jobs Require Recovery</Text>}
-  </OperationalScreen>;
+  const { goBack, navigate, params } = useNavigation();
+  const [phase, setPhase] = useState<RescuePhase>('briefing');
+  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const jobId = params?.jobId || 'JOB-2026-0819';
+  const faultedRobot = params?.robot || 'AMR-02';
+  const rescueRobot = faultedRobot === 'AMR-01' ? 'AMR-02' : 'AMR-01';
+  const targetContainer = params?.container || 'BOX-401';
+
+  const handleDispatchRescue = () => {
+    triggerHaptic('success');
+    setPhase('rendezvous');
+    setFeedback(`Emergency rescue: ${rescueRobot} dispatched to rendezvous coordinates (X: 12.4m, Y: 8.2m).`);
+  };
+
+  const handleConfirmArrival = () => {
+    triggerHaptic('tap');
+    setPhase('transfer');
+    setFeedback(`${rescueRobot} arrived at scene. Parked 1.0m from stalled ${faultedRobot}.`);
+  };
+
+  const handleScanStrandedTote = () => {
+    triggerHaptic('success');
+    setScannedBarcode(targetContainer);
+    setFeedback(`Barcode ${targetContainer} verified against stranded cargo manifest.`);
+  };
+
+  const handleResumeMission = () => {
+    triggerHaptic('success');
+    completePayloadRecoveryJob(jobId, rescueRobot);
+    setPhase('completed');
+    setFeedback(`Job ${jobId} successfully transferred to ${rescueRobot}. Resuming dropoff.`);
+  };
+
+  return (
+    <View style={styles.container}>
+      <SubScreenHeader
+        label="Payload recovery"
+        title="Emergency Cargo Rescue"
+        onBack={goBack}
+      />
+
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {feedback && (
+          <View style={styles.feedbackToast}>
+            <Text style={styles.feedbackText}>{feedback}</Text>
+          </View>
+        )}
+
+        {phase === 'completed' ? (
+          <View style={styles.completedCard}>
+            <View style={styles.completedIconBadge}>
+              <Check size={24} color="#16a34a" />
+            </View>
+            <Text style={styles.completedTitle}>Cargo rescue succeeded</Text>
+            <Text style={styles.completedSub}>
+              {rescueRobot} has assumed mission execution and is en route to target shelf.
+            </Text>
+
+            <View style={styles.receiptBox}>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Original mission</Text>
+                <Text style={styles.receiptVal}>{jobId}</Text>
+              </View>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Rescued container</Text>
+                <Text style={styles.receiptHighlight}>{targetContainer} (45 units)</Text>
+              </View>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Active carrier</Text>
+                <Text style={styles.receiptSuccess}>{rescueRobot} (Healthy)</Text>
+              </View>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Target destination</Text>
+                <Text style={styles.receiptVal}>Rack A · Level 2 · Bin 03</Text>
+              </View>
+              <View style={[styles.receiptRow, styles.receiptBorderTop]}>
+                <Text style={styles.receiptLabel}>Faulted unit</Text>
+                <Text style={styles.receiptDanger}>{faultedRobot} (Flagged for towing)</Text>
+              </View>
+            </View>
+
+            <View style={{ gap: 10, marginTop: 18 }}>
+              <Button
+                label="Track Resumed Mission on Map"
+                onPress={() => navigate('live_map', { jobId, robotId: rescueRobot })}
+                variant="primary"
+                size="lg"
+                style={{ width: '100%' }}
+              />
+              <Button
+                label="Back to Fleet Jobs"
+                onPress={() => navigate('jobs')}
+                variant="outline"
+                size="md"
+                style={{ width: '100%' }}
+              />
+            </View>
+          </View>
+        ) : (
+          <View style={{ gap: 16 }}>
+            {/* Critical Alert Banner */}
+            <View style={styles.alertCard}>
+              <View style={styles.alertIconBox}>
+                <LifeBuoy size={22} color="#dc2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.alertBadgeRow}>
+                  <View style={styles.alertBadge}>
+                    <Text style={styles.alertBadgeText}>Fleet incident</Text>
+                  </View>
+                  <Text style={styles.alertRobotText}>{faultedRobot} Stalled</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Stepper Progress */}
+            <View style={styles.stepperBox}>
+              <View style={styles.stepItem}>
+                <View
+                  style={[
+                    styles.stepNum,
+                    (phase === 'briefing' || phase === 'rendezvous') && styles.stepNumActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.stepNumText,
+                      (phase === 'briefing' || phase === 'rendezvous') && styles.stepNumTextActive,
+                    ]}
+                  >
+                    1
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.stepText,
+                    (phase === 'briefing' || phase === 'rendezvous') && styles.stepTextActive,
+                  ]}
+                >
+                  Rendezvous
+                </Text>
+              </View>
+              <Text style={styles.stepArrow}>➔</Text>
+              <View style={styles.stepItem}>
+                <View
+                  style={[
+                    styles.stepNum,
+                    phase === 'transfer' && styles.stepNumActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.stepNumText,
+                      phase === 'transfer' && styles.stepNumTextActive,
+                    ]}
+                  >
+                    2
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.stepText,
+                    phase === 'transfer' && styles.stepTextActive,
+                  ]}
+                >
+                  Transfer & scan
+                </Text>
+              </View>
+              <Text style={styles.stepArrow}>➔</Text>
+              <View style={styles.stepItem}>
+                <View
+                  style={[
+                    styles.stepNum,
+                    phase === 'resuming' && styles.stepNumActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.stepNumText,
+                      phase === 'resuming' && styles.stepNumTextActive,
+                    ]}
+                  >
+                    3
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.stepText,
+                    phase === 'resuming' && styles.stepTextActive,
+                  ]}
+                >
+                  Resume
+                </Text>
+              </View>
+            </View>
+
+            {/* Diagnostics Cards */}
+            <View style={styles.diagRow}>
+              <View style={styles.diagFaulted}>
+                <Text style={styles.diagLabel}>Faulted robot</Text>
+                <Text style={styles.diagRobotId}>{faultedRobot}</Text>
+                <Text style={styles.diagDetail}>Error: Drive motor stall</Text>
+                <View style={styles.diagPillFaulted}>
+                  <Text style={styles.diagPillTextFaulted}>Pos: (12.4m, 8.2m)</Text>
+                </View>
+              </View>
+
+              <View style={styles.diagRescue}>
+                <Text style={styles.diagLabel}>Rescue robot</Text>
+                <Text style={styles.diagRobotId}>{rescueRobot}</Text>
+                <Text style={styles.diagDetail}>Battery: 92% · Deck empty</Text>
+                <View style={styles.diagPillRescue}>
+                  <Text style={styles.diagPillTextRescue}>Status: Ready</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Stranded Cargo Info */}
+            <View style={styles.cargoCard}>
+              <Text style={styles.cargoTitle}>Stranded cargo onboard</Text>
+              <View style={styles.cargoStack}>
+                <View style={styles.cargoTopLine}>
+                  <Box size={16} color={colors.textSecondary} />
+                  <Text style={styles.cargoCode}>{targetContainer}</Text>
+                  <Text style={styles.cargoDesc}>
+                    Electronic Components · <Text style={styles.boldUnits}>45 units</Text>
+                  </Text>
+                </View>
+                <View style={styles.cargoDestLine}>
+                  <Text style={styles.cargoDestLabel}>Destination:</Text>
+                  <Text style={styles.cargoDestVal}>Rack A · Level 2 · Bin 03</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Phase Actions with Warm Dark Gray CTAs */}
+            {phase === 'briefing' && (
+              <View style={styles.actionCard}>
+                <Text style={styles.actionTitle}>Step 1: Dispatch rendezvous</Text>
+                <Text style={styles.actionDesc}>
+                  Dispatch {rescueRobot} to stage 1.0m from {faultedRobot} for tote transfer.
+                </Text>
+                <Button
+                  label={`Dispatch Rescue (${rescueRobot})`}
+                  icon={<Navigation size={18} color="#ffffff" />}
+                  onPress={handleDispatchRescue}
+                  variant="primary"
+                  size="lg"
+                  style={{ marginTop: 12 }}
+                />
+              </View>
+            )}
+
+            {phase === 'rendezvous' && (
+              <View style={styles.actionCard}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <RefreshCw size={16} color={colors.primary} />
+                  <Text style={styles.actionTitle}>{rescueRobot} en route to scene</Text>
+                </View>
+                <Text style={styles.actionDesc}>
+                  Navigating transit corridor. ETA 15 seconds. Please set up perimeter safety cones.
+                </Text>
+                <Button
+                  label={`Confirm ${rescueRobot} Arrived & Parked`}
+                  icon={<Check size={18} color="#ffffff" />}
+                  onPress={handleConfirmArrival}
+                  variant="primary"
+                  size="lg"
+                  style={{ marginTop: 12 }}
+                />
+              </View>
+            )}
+
+            {phase === 'transfer' && (
+              <View style={styles.actionCard}>
+                <Text style={styles.actionTitle}>Step 2: Transfer stranded tote & scan barcode</Text>
+                <Text style={styles.actionDesc}>
+                  Physically move container {targetContainer} from {faultedRobot} Bay 1 to {rescueRobot} Bay 1, then scan barcode to verify.
+                </Text>
+
+                {scannedBarcode ? (
+                  <View style={styles.verifiedBox}>
+                    <CheckCircle2 size={18} color="#16a34a" />
+                    <Text style={styles.verifiedText}>Barcode verified: {scannedBarcode}</Text>
+                  </View>
+                ) : (
+                  <Button
+                    label={`Simulate scan barcode (${targetContainer})`}
+                    icon={<ScanLine size={16} color={colors.textPrimary} />}
+                    onPress={handleScanStrandedTote}
+                    variant="outline"
+                    size="md"
+                    style={{ marginTop: 10 }}
+                  />
+                )}
+
+                <Button
+                  label="Confirm Transfer & Resume Mission"
+                  icon={<Check size={18} color="#ffffff" />}
+                  onPress={handleResumeMission}
+                  disabled={!scannedBarcode}
+                  variant="primary"
+                  size="lg"
+                  style={{ marginTop: 12 }}
+                />
+              </View>
+            )}
+
+            {phase === 'resuming' && (
+              <View style={styles.actionCard}>
+                <Text style={styles.actionTitle}>Re-assigning mission to {rescueRobot}...</Text>
+                <Text style={styles.actionDesc}>
+                  Updating Central FMS dispatch records and Nav2 dropoff route.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 48,
+  },
+  feedbackToast: {
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: 12,
+    marginBottom: 14,
+  },
+  feedbackText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  completedCard: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#ffffff',
+    padding: 18,
+    ...shadows.panel,
+  },
+  completedIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  completedTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  completedSub: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: 16,
+    fontFamily: typography.fontSans,
+  },
+  receiptBox: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  receiptLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  receiptVal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  receiptHighlight: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  receiptSuccess: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: typography.fontMono,
+  },
+  receiptDanger: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#dc2626',
+    fontFamily: typography.fontMono,
+  },
+  receiptBorderTop: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    marginTop: 2,
+  },
+  alertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.25)',
+    borderRadius: radii.lg,
+    padding: 16,
+    ...shadows.panel,
+  },
+  alertIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  alertBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  alertBadge: {
+    backgroundColor: 'rgba(220, 38, 38, 0.12)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  alertBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
+    fontFamily: typography.fontSans,
+  },
+  alertRobotText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  alertTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 4,
+    fontFamily: typography.fontSans,
+  },
+  stepperBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepNum: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumActive: {
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
+  },
+  stepNumText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    fontFamily: typography.fontMono,
+  },
+  stepNumTextActive: {
+    color: '#ffffff',
+  },
+  stepText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
+  },
+  stepTextActive: {
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  stepArrow: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  diagRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  diagFaulted: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.25)',
+    padding: 14,
+    ...shadows.panel,
+  },
+  diagRescue: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.25)',
+    padding: 14,
+    ...shadows.panel,
+  },
+  diagLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
+  },
+  diagRobotId: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 4,
+    fontFamily: typography.fontMono,
+  },
+  diagDetail: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginVertical: 6,
+    fontFamily: typography.fontSans,
+  },
+  diagPillFaulted: {
+    backgroundColor: 'rgba(220, 38, 38, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  diagPillTextFaulted: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
+    fontFamily: typography.fontMono,
+  },
+  diagPillRescue: {
+    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  diagPillTextRescue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: typography.fontSans,
+  },
+  cargoCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    ...shadows.panel,
+  },
+  cargoTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 10,
+    fontFamily: typography.fontSans,
+  },
+  cargoStack: {
+    gap: 8,
+  },
+  cargoTopLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  cargoCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+  },
+  cargoDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  boldUnits: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  cargoDestLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  cargoDestLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
+  },
+  cargoDestVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  actionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    ...shadows.panel,
+  },
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  actionDesc: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginTop: 4,
+    fontFamily: typography.fontSans,
+  },
+  verifiedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.25)',
+    padding: 12,
+    borderRadius: radii.md,
+    marginTop: 10,
+  },
+  verifiedText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: typography.fontMono,
+  },
+});
