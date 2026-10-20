@@ -6,9 +6,12 @@ import {
   CheckCircle2,
   PackageCheck,
   Truck,
+  X,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
+import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
+import { shadows } from '../../shared/theme/shadows';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { toast } from '../../shared/context/ToastContext';
@@ -32,6 +35,7 @@ export function NotificationSheet({
   onClose,
   onUnreadCountChange,
 }: NotificationSheetProps) {
+  const topInset = useTopInset();
   const { navigate } = useNavigation();
   const {
     notifications,
@@ -80,112 +84,127 @@ export function NotificationSheet({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.modalOverlay}>
+      <View style={StyleSheet.absoluteFill}>
         {/* Dismiss Backdrop */}
         <Pressable
           style={styles.backdrop}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close notifications bottom sheet"
+          accessibilityLabel="Close notifications dropdown"
         />
 
-        {/* Bottom Sheet Container */}
-        <View style={styles.sheet}>
-          {/* Drag Handle */}
-          <View style={styles.dragHandle} />
+        {/* Anchored Popover Card below Header Bell */}
+        <View style={[styles.cardContainer, { top: topInset + 54 }]}>
+          {/* Top Anchor Caret pointing directly to Notification Bell */}
+          <View style={styles.caret} />
 
-          {/* Sheet Header */}
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Notifications</Text>
+          <View style={styles.card}>
+            {/* Minimalist Popover Header */}
+            <View style={styles.header}>
+              <Text variant="headline" color={colors.textPrimary} style={styles.title}>
+                Notifications
+              </Text>
 
-            {unreadCount > 0 && (
-              <Pressable
-                onPress={handleMarkAllRead}
-                accessibilityRole="button"
-                accessibilityLabel="Mark all as read"
-                style={({ pressed }) => [styles.markReadBtn, pressed && styles.btnPressed]}
-              >
-                <CheckCheck size={18} color={colors.primary} strokeWidth={2.2} />
-              </Pressable>
-            )}
-          </View>
+              <View style={styles.headerActions}>
+                {unreadCount > 0 && (
+                  <Pressable
+                    onPress={handleMarkAllRead}
+                    accessibilityRole="button"
+                    accessibilityLabel="Mark all as read"
+                    style={({ pressed }) => [styles.iconActionBtn, pressed && styles.btnPressed]}
+                  >
+                    <CheckCheck size={14} color={colors.primary} strokeWidth={2.2} />
+                  </Pressable>
+                )}
 
-          {/* Notification items list */}
-          <ScrollView
-            style={styles.list}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {notifications.map((item) => {
-              const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
-              const isHazard = item.category === 'HAZARD';
-              const isReadyOrAssigned =
-                item.category === 'JOB_ASSIGNED' ||
-                item.title?.toLowerCase().includes('ready') ||
-                item.message?.toLowerCase().includes('ready');
-              const displayTitle = item.title.startsWith('Job JOB-')
-                ? item.title.slice(4)
-                : item.title;
-
-              return (
                 <Pressable
-                  key={item.id}
-                  onPress={() => handleItemPress(item)}
+                  onPress={onClose}
                   accessibilityRole="button"
-                  accessibilityLabel={`${displayTitle}, ${item.timeLabel}`}
-                  style={({ pressed }) => [
-                    styles.item,
-                    !item.isRead && styles.itemUnread,
-                    pressed && styles.itemPressed,
-                  ]}
+                  accessibilityLabel="Close notifications"
+                  style={({ pressed }) => [styles.iconActionBtn, pressed && styles.btnPressed]}
                 >
-                  <View
-                    style={[
-                      styles.iconBox,
-                      isCompleted
-                        ? styles.iconBoxJob
-                        : isHazard
-                        ? styles.iconBoxHazard
-                        : isReadyOrAssigned
-                        ? styles.iconBoxRobot
-                        : undefined,
+                  <X size={14} color={colors.textSecondary} strokeWidth={2.2} />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Notification items list */}
+            <ScrollView
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {notifications.map((item) => {
+                const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
+                const isHazard = item.category === 'HAZARD';
+                const isReadyOrAssigned =
+                  item.category === 'JOB_ASSIGNED' ||
+                  item.title?.toLowerCase().includes('ready') ||
+                  item.message?.toLowerCase().includes('ready');
+                const displayTitle = item.title.startsWith('Job JOB-')
+                  ? item.title.slice(4)
+                  : item.title;
+
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => handleItemPress(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${displayTitle}, ${item.timeLabel}`}
+                    style={({ pressed }) => [
+                      styles.item,
+                      !item.isRead && styles.itemUnread,
+                      pressed && styles.itemPressed,
                     ]}
                   >
-                    {renderIcon(item)}
-                  </View>
-
-                  <View style={styles.itemContent}>
-                    <View style={styles.itemTopRow}>
-                      {!item.isRead && <View style={styles.unreadDot} />}
-                      <Text
-                        variant="label"
-                        color={colors.textPrimary}
-                        style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
-                      >
-                        {displayTitle}
-                      </Text>
+                    <View
+                      style={[
+                        styles.iconBox,
+                        isCompleted
+                          ? styles.iconBoxJob
+                          : isHazard
+                          ? styles.iconBoxHazard
+                          : isReadyOrAssigned
+                          ? styles.iconBoxRobot
+                          : undefined,
+                      ]}
+                    >
+                      {renderIcon(item)}
                     </View>
 
-                    <Text
-                      variant="caption"
-                      color={colors.textSecondary}
-                      style={styles.itemDesc}
-                    >
-                      {item.message}
-                    </Text>
+                    <View style={styles.itemContent}>
+                      <View style={styles.itemTopRow}>
+                        {!item.isRead && <View style={styles.unreadDot} />}
+                        <Text
+                          variant="label"
+                          color={colors.textPrimary}
+                          style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
+                        >
+                          {displayTitle}
+                        </Text>
+                      </View>
 
-                    <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
-                      {item.timeLabel}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+                      <Text
+                        variant="caption"
+                        color={colors.textSecondary}
+                        style={styles.itemDesc}
+                      >
+                        {item.message}
+                      </Text>
+
+                      <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
+                        {item.timeLabel}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -193,57 +212,65 @@ export function NotificationSheet({
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'flex-end',
-  },
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
-  sheet: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '62%',
-    width: '100%',
+  cardContainer: {
+    position: 'absolute',
+    right: 14,
+    width: 280,
+    zIndex: 1000,
+  },
+  caret: {
+    position: 'absolute',
+    top: -5,
+    right: 64,
+    width: 10,
+    height: 10,
+    backgroundColor: '#f8fafc',
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderLeftWidth: 1,
+    borderColor: colors.borderStrong,
+    transform: [{ rotate: '45deg' }],
+    zIndex: 10,
+  },
+  card: {
+    width: 280,
+    maxHeight: 320,
+    backgroundColor: '#ffffff',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 16,
+    ...shadows.lg,
   },
-  dragHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#cbd5e1',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  sheetHeader: {
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
+    borderBottomColor: colors.border,
+    backgroundColor: '#f8fafc',
   },
-  sheetTitle: {
-    fontSize: 18,
+  title: {
     fontWeight: '800',
-    color: colors.textPrimary,
+    fontSize: 14,
   },
-  markReadBtn: {
-    width: 32,
-    height: 32,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconActionBtn: {
+    width: 26,
+    height: 26,
     borderRadius: radii.sm,
-    backgroundColor: 'rgba(50, 121, 249, 0.08)',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -251,20 +278,20 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   list: {
-    flexGrow: 0,
+    maxHeight: 260,
     backgroundColor: '#ffffff',
   },
   listContent: {
-    paddingBottom: 28,
+    paddingBottom: 4,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.borderSubtle,
     backgroundColor: '#ffffff',
   },
   itemUnread: {
@@ -274,8 +301,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
   },
   iconBox: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
@@ -306,10 +333,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   itemTitle: {
-    fontSize: 13.5,
+    fontSize: 12.5,
     fontWeight: '600',
     flex: 1,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   itemTitleUnread: {
     fontWeight: '700',
@@ -323,13 +350,13 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   itemDesc: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
   },
   itemTime: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
-    marginTop: 4,
+    marginTop: 3,
   },
 });
