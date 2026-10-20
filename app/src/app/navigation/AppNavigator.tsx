@@ -67,6 +67,7 @@ export function AppNavigator() {
         return <TransportHistoryScreen />;
       case 'offline_hud':
         return <OfflineBannerHUD />;
+      case 'scanner':
       case 'scanner_hud':
         return (
           <BarcodeScannerHUD

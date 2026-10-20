@@ -645,13 +645,10 @@ export function TransportHistoryScreen() {
                     </View>
                   </View>
 
-                  {/* Row 2: Workflow Name & Category Badge */}
+                  {/* Row 2: Workflow Name */}
                   <View style={styles.cardHeaderSub}>
                     <View style={styles.workflowRow}>
                       <Text style={styles.workflowTitle}>{order.workflowName}</Text>
-                      <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryBadgeText}>{order.category.toLowerCase()}</Text>
-                      </View>
                     </View>
                   </View>
 

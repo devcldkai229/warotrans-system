@@ -2,17 +2,13 @@ import React, { useEffect } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   AlertTriangle,
-  BatteryMedium,
   CheckCheck,
   CheckCircle2,
   PackageCheck,
   Truck,
-  X,
 } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
-import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { toast } from '../../shared/context/ToastContext';
@@ -26,17 +22,16 @@ export interface NotificationSheetProps {
 }
 
 /**
- * Compact Anchored Notification Dropdown Sheet.
+ * Native Bottom Sheet for Operational Notifications.
  *
- * Drops down cleanly right beneath the notification bell in the AppHeader,
- * providing quick access to live operational alerts without taking over the screen.
+ * Slides up from the bottom of the screen with a native drag pill,
+ * full backdrop tap-to-dismiss, and compact mark-all-read action.
  */
 export function NotificationSheet({
   visible,
   onClose,
   onUnreadCountChange,
 }: NotificationSheetProps) {
-  const topInset = useTopInset();
   const { navigate } = useNavigation();
   const {
     notifications,
@@ -66,87 +61,65 @@ export function NotificationSheet({
   const renderIcon = (item: LiveNotificationEvent) => {
     const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
     if (isCompleted) {
-      return <CheckCircle2 size={14} color="#059669" strokeWidth={2.2} />;
+      return <CheckCircle2 size={16} color="#059669" strokeWidth={2.2} />;
     }
     if (item.category === 'HAZARD') {
-      return <AlertTriangle size={14} color="#d97706" strokeWidth={2.2} />;
+      return <AlertTriangle size={16} color="#d97706" strokeWidth={2.2} />;
     }
     if (
       item.category === 'JOB_ASSIGNED' ||
       item.title?.toLowerCase().includes('ready') ||
       item.message?.toLowerCase().includes('ready')
     ) {
-      return <PackageCheck size={14} color="#2563eb" strokeWidth={2.2} />;
+      return <PackageCheck size={16} color="#2563eb" strokeWidth={2.2} />;
     }
-    return <Truck size={14} color={colors.primaryText} strokeWidth={2.2} />;
+    return <Truck size={16} color={colors.primaryText} strokeWidth={2.2} />;
   };
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="none"
+      animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={StyleSheet.absoluteFill}>
+      <View style={styles.modalOverlay}>
         {/* Dismiss Backdrop */}
         <Pressable
           style={styles.backdrop}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close notifications dropdown"
+          accessibilityLabel="Close notifications bottom sheet"
         />
 
-        {/* Dropdown Card Anchored below Header Bell */}
-        <View style={[styles.cardContainer, { top: topInset + 54 }]}>
-          {/* Top Anchor Caret pointing directly to Notification Bell */}
-          <View style={styles.caret} />
+        {/* Bottom Sheet Container */}
+        <View style={styles.sheet}>
+          {/* Drag Handle */}
+          <View style={styles.dragHandle} />
 
-          <View style={styles.card}>
-            {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Text variant="headline" color={colors.textPrimary} style={styles.title}>
-                Notifications
-              </Text>
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text variant="caption" style={styles.badgeText}>
-                    {unreadCount} new
-                  </Text>
-                </View>
-              )}
-            </View>
+          {/* Sheet Header */}
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>Notifications</Text>
 
-            <View style={styles.headerActions}>
-              {unreadCount > 0 && (
-                <Pressable
-                  onPress={handleMarkAllRead}
-                  accessibilityRole="button"
-                  accessibilityLabel="Mark all as read"
-                  style={({ pressed }) => [styles.markReadBtn, pressed && styles.btnPressed]}
-                >
-                  <CheckCheck size={13} color={colors.primaryText} strokeWidth={2.2} />
-                  <Text variant="caption" color={colors.primaryText} style={styles.markReadText}>
-                    Mark all read
-                  </Text>
-                </Pressable>
-              )}
-
+            {unreadCount > 0 && (
               <Pressable
-                onPress={onClose}
+                onPress={handleMarkAllRead}
                 accessibilityRole="button"
-                accessibilityLabel="Close notifications"
-                style={({ pressed }) => [styles.closeBtn, pressed && styles.btnPressed]}
+                accessibilityLabel="Mark all as read"
+                style={({ pressed }) => [styles.markReadBtn, pressed && styles.btnPressed]}
               >
-                <X size={14} color={colors.textSecondary} strokeWidth={2.2} />
+                <CheckCheck size={18} color={colors.primary} strokeWidth={2.2} />
               </Pressable>
-            </View>
+            )}
           </View>
 
-          {/* List of Alerts */}
-          <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+          {/* Notification items list */}
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          >
             {notifications.map((item) => {
               const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
               const isHazard = item.category === 'HAZARD';
@@ -191,7 +164,6 @@ export function NotificationSheet({
                       <Text
                         variant="label"
                         color={colors.textPrimary}
-                        numberOfLines={2}
                         style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
                       >
                         {displayTitle}
@@ -201,7 +173,6 @@ export function NotificationSheet({
                     <Text
                       variant="caption"
                       color={colors.textSecondary}
-                      numberOfLines={2}
                       style={styles.itemDesc}
                     >
                       {item.message}
@@ -217,116 +188,81 @@ export function NotificationSheet({
           </ScrollView>
         </View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'flex-end',
+  },
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
-  cardContainer: {
-    position: 'absolute',
-    right: 14,
-    width: 280,
-    zIndex: 1000,
-  },
-  caret: {
-    position: 'absolute',
-    top: -5,
-    right: 64,
-    width: 10,
-    height: 10,
-    backgroundColor: '#f8fafc',
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderColor: colors.borderStrong,
-    transform: [{ rotate: '45deg' }],
-    zIndex: 10,
-  },
-  card: {
-    width: 280,
-    maxHeight: 310,
+  sheet: {
     backgroundColor: '#ffffff',
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '62%',
+    width: '100%',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
     overflow: 'hidden',
-    ...shadows.lg,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 16,
   },
-  header: {
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  sheetHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: '#f8fafc',
+    borderBottomColor: colors.borderSubtle,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  title: {
+  sheetTitle: {
+    fontSize: 18,
     fontWeight: '800',
-    fontSize: 14,
-  },
-  badge: {
-    backgroundColor: '#fbbf24',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: radii.full,
-  },
-  badgeText: {
-    fontSize: 9.5,
-    fontWeight: '700',
-    color: '#78350f',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    color: colors.textPrimary,
   },
   markReadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    width: 32,
+    height: 32,
     borderRadius: radii.sm,
-    backgroundColor: 'rgba(21, 87, 208, 0.06)',
-  },
-  markReadText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  closeBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: radii.sm,
+    backgroundColor: 'rgba(50, 121, 249, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   btnPressed: {
     opacity: 0.65,
   },
   list: {
-    maxHeight: 250,
+    flexGrow: 0,
     backgroundColor: '#ffffff',
+  },
+  listContent: {
+    paddingBottom: 28,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: '#ffffff',
@@ -338,15 +274,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
   },
   iconBox: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
+    marginTop: 2,
   },
   iconBoxRobot: {
     backgroundColor: 'rgba(37, 99, 235, 0.08)',
@@ -370,9 +306,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   itemTitle: {
-    fontSize: 12.5,
+    fontSize: 13.5,
     fontWeight: '600',
     flex: 1,
+    lineHeight: 18,
   },
   itemTitleUnread: {
     fontWeight: '700',
@@ -386,13 +323,13 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   itemDesc: {
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   itemTime: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '500',
-    marginTop: 3,
+    marginTop: 4,
   },
 });
