@@ -68,33 +68,35 @@ export function ZonePickerModal({
           </View>
 
           <View style={styles.list} accessibilityRole="radiogroup">
-            {WORK_ZONE_OPTIONS.map((option) => {
+            {WORK_ZONE_OPTIONS.map((option, idx) => {
               const isSelected = option === zone;
               return (
-                <Pressable
-                  key={option}
-                  onPress={() => handleSelect(option)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={option}
-                  style={({ pressed }) => [
-                    styles.option,
-                    isSelected && styles.optionSelected,
-                    pressed && !isSelected && styles.optionPressed,
-                  ]}
-                >
-                  <Text
-                    variant="bodyMedium"
-                    color={isSelected ? colors.primaryText : colors.textPrimary}
-                    numberOfLines={1}
-                    style={[styles.optionText, isSelected && styles.optionTextSelected]}
+                <React.Fragment key={option}>
+                  {idx > 0 && <View style={styles.separator} />}
+                  <Pressable
+                    onPress={() => handleSelect(option)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={option}
+                    style={({ pressed }) => [
+                      styles.option,
+                      isSelected && styles.optionSelected,
+                      pressed && !isSelected && styles.optionPressed,
+                    ]}
                   >
-                    {option}
-                  </Text>
-                  {isSelected && (
-                    <Check size={16} color={colors.primary} strokeWidth={2.4} />
-                  )}
-                </Pressable>
+                    <Text
+                      variant="bodyMedium"
+                      color={isSelected ? colors.primaryText : colors.textPrimary}
+                      numberOfLines={1}
+                      style={[styles.optionText, isSelected && styles.optionTextSelected]}
+                    >
+                      {option}
+                    </Text>
+                    {isSelected && (
+                      <Check size={16} color={colors.primary} strokeWidth={2.4} />
+                    )}
+                  </Pressable>
+                </React.Fragment>
               );
             })}
           </View>
@@ -107,7 +109,7 @@ export function ZonePickerModal({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.18)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   dropdownCard: {
     position: 'absolute',
@@ -135,16 +137,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   list: {
-    gap: 2,
+    gap: 1,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
+    marginHorizontal: 6,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 40,
+    minHeight: 42,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: radii.md,
+    paddingVertical: 9,
+    borderRadius: radii.sm,
   },
   optionSelected: {
     backgroundColor: colors.primaryLight,

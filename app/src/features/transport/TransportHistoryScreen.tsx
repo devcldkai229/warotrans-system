@@ -199,6 +199,19 @@ export const TRANSPORT_ORDERS: TransportOrder[] = [
   },
 ];
 
+function formatContainerDisplay(raw: string): string {
+  if (!raw) return 'Container';
+  if (/\(\+\d+\)/.test(raw)) return raw;
+  if (raw.includes(',')) {
+    const parts = raw.split(',').map((p) => p.trim());
+    const first = parts[0];
+    const match = raw.match(/\((\d+)\s*Totes?\)/i);
+    const count = match ? parseInt(match[1], 10) - 1 : parts.length - 1;
+    return `${first} (+${count})`;
+  }
+  return raw;
+}
+
 function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
   const details = item.details || [];
   const first = details[0];
@@ -222,16 +235,20 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
   else if (item.status === 'REJECTED') statusText = 'Rejected by scheduler';
   else if (item.status === 'FAILED') statusText = 'Failed';
 
-  const barcodes = details.map((d) => d.containerBarcode || 'TOTE').join(', ');
+  const firstBarcode = details[0]?.containerBarcode || 'CTN-IN-000001';
   const containerLabel =
     details.length > 1
-      ? `${barcodes} (${details.length} Totes)`
-      : barcodes || 'Container Tote';
+      ? `${firstBarcode} (+${details.length - 1})`
+      : details[0]?.containerBarcode || 'Container Tote';
 
   const totalQty = details.reduce((acc, d) => acc + (d.qty || 1), 0);
   const destinations = Array.from(
     new Set(details.map((d) => d.destinationEndpointCode).filter(Boolean))
   );
+  const destinationLabel =
+    destinations.length > 1
+      ? `${destinations[0]} (+${destinations.length - 1} racks)`
+      : destinations[0] || 'Storage Rack';
 
   return {
     id: item.requestCode,
@@ -245,7 +262,7 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
     status: isInProgress ? 'IN_PROGRESS' : isCompleted ? 'COMPLETED' : 'CANCELLED',
     statusText,
     source: first?.sourceEndpointCode || 'DOCK-IN-01',
-    destination: destinations.join(' · ') || 'Storage Rack',
+    destination: destinationLabel,
     container: containerLabel,
     product: first?.productName || item.note || 'Standard Cargo',
     qty: totalQty || 1,
@@ -646,10 +663,10 @@ export function TransportHistoryScreen() {
 
                   {/* Cargo Information */}
                   <View style={styles.cargoRow}>
-                    <Box size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                    <Text style={styles.cargoContainer}>{order.container}</Text>
+                    <Box size={14} color={colors.textSecondary} style={{ marginRight: 6, flexShrink: 0 }} />
+                    <Text style={styles.cargoContainer} numberOfLines={1}>{formatContainerDisplay(order.container)}</Text>
                     <Text style={styles.cargoDot}>·</Text>
-                    <Text style={styles.cargoDetails}>
+                    <Text style={styles.cargoDetails} numberOfLines={1}>
                       <Text style={styles.cargoQty}>{order.qty} × </Text>
                       {order.product}
                     </Text>
@@ -756,11 +773,11 @@ export function TransportHistoryScreen() {
                               qty: String(order.qty),
                             });
                           }}
-                          style={styles.actionBtnOutline}
+                          style={styles.actionBtnRepeat}
                           accessibilityRole="button"
                         >
-                          <RefreshCw size={13} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                          <Text style={styles.actionBtnOutlineText}>Repeat</Text>
+                          <RefreshCw size={13} color={colors.primaryText} style={{ marginRight: 6 }} />
+                          <Text style={styles.actionBtnRepeatText}>Repeat Dispatch</Text>
                         </Pressable>
                       </>
                     ) : isCancelled ? (
@@ -1070,13 +1087,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.textPrimary,
-    flexShrink: 1,
+    flexShrink: 0,
     fontFamily: typography.fontSans,
   },
   routeDestination: {
     fontSize: 13,
     fontWeight: '600',
     color: colors.textPrimary,
+    flex: 1,
     flexShrink: 1,
     fontFamily: typography.fontSans,
   },
@@ -1190,6 +1208,24 @@ const styles = StyleSheet.create({
   actionBtnOutlineText: {
     fontSize: 13,
     fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontSans,
+  },
+  actionBtnRepeat: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radii.sm,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSubtle,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  actionBtnRepeatText: {
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },

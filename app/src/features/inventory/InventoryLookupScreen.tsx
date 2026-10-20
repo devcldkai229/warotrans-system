@@ -229,6 +229,10 @@ export function InventoryLookupScreen() {
     });
   };
 
+  const primaryProd = filteredProducts[0];
+  const primarySp = primaryProd?.startpoints?.[0];
+  const bottomDispatchLabel = `Dispatch ${verifiedContainer?.barcode || primarySp?.container || 'Container'}`;
+
   return (
     <View style={styles.container}>
       <SubScreenHeader
@@ -373,9 +377,13 @@ export function InventoryLookupScreen() {
       </View>
 
       {/* Catalog Product Cards */}
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {filteredProducts.map((prod) => {
-          const primarySp = prod.startpoints[0];
+          const cardPrimarySp = prod.startpoints[0];
           return (
             <View key={prod.id} style={styles.productCard}>
               <View style={styles.cardHeader}>
@@ -414,9 +422,7 @@ export function InventoryLookupScreen() {
                       </View>
                     </View>
                     <View style={styles.startpointRight}>
-                      <Text style={styles.startpointQty}>
-                        Qty: <Text style={styles.boldText}>{sp.qty}</Text>
-                      </Text>
+                      <Text style={styles.startpointQty}>{sp.qty} pcs</Text>
                       <View style={styles.containerPill}>
                         <Text style={styles.containerPillText}>{sp.container}</Text>
                       </View>
@@ -426,11 +432,11 @@ export function InventoryLookupScreen() {
               </View>
 
               {/* Context-Aware Quick Dispatch CTA */}
-              {primarySp && (
+              {cardPrimarySp && (
                 <Button
-                  label={`Dispatch ${primarySp.container} (${primarySp.recommendedWorkflow})`}
+                  label={`Dispatch ${cardPrimarySp.container} (${cardPrimarySp.recommendedWorkflow})`}
                   icon={<Rocket size={16} color="#ffffff" />}
-                  onPress={() => handleDispatchStartpoint(prod, primarySp)}
+                  onPress={() => handleDispatchStartpoint(prod, cardPrimarySp)}
                   variant="primary"
                   size="md"
                   style={{ marginTop: 4 }}
@@ -450,6 +456,30 @@ export function InventoryLookupScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Sticky Bottom Dispatch CTA */}
+      <View style={styles.stickyBottomBar}>
+        <Button
+          label={bottomDispatchLabel}
+          icon={<Rocket size={16} color="#ffffff" />}
+          variant="primary"
+          size="md"
+          onPress={() => {
+            if (verifiedContainer) {
+              triggerHaptic('tap');
+              navigate('transport_create', {
+                workflow: 'INTERNAL_RELOCATION',
+                container: verifiedContainer.barcode,
+              });
+            } else if (primaryProd && primarySp) {
+              handleDispatchStartpoint(primaryProd, primarySp);
+            } else {
+              triggerHaptic('tap');
+              navigate('transport_create');
+            }
+          }}
+        />
+      </View>
     </View>
   );
 }
@@ -465,6 +495,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    zIndex: 10,
   },
   searchBox: {
     position: 'relative',
@@ -501,6 +532,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingVertical: 8,
+    zIndex: 9,
   },
   categoryScroll: {
     paddingHorizontal: 16,
@@ -530,9 +562,13 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
   },
+  scrollArea: {
+    flex: 1,
+  },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 48,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 24,
     gap: 14,
   },
   productCard: {
@@ -615,13 +651,14 @@ const styles = StyleSheet.create({
   startpointRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   startpointQty: {
     fontSize: 12,
-    fontWeight: '400',
+    fontWeight: '500',
     color: colors.textSecondary,
     fontFamily: typography.fontMono,
+    textAlign: 'right',
   },
   boldText: {
     fontWeight: '700',
@@ -733,5 +770,14 @@ const styles = StyleSheet.create({
     color: '#064E3B',
     fontWeight: '800',
     fontFamily: typography.fontMono,
+  },
+  stickyBottomBar: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    ...shadows.md,
   },
 });

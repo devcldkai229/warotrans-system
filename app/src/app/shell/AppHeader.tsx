@@ -37,6 +37,14 @@ function initialsOf(name: string): string {
   );
 }
 
+function formatZonePillLabel(z: string): string {
+  if (z.includes('Storage Zone A')) return 'Zone A · A01-A12';
+  if (z.includes('Storage Zone B')) return 'Zone B · B01-B08';
+  if (z.includes('Inbound Dock')) return 'Inbound Dock 01';
+  if (z.includes('Outbound Shipping')) return 'Shipping Bay 01';
+  return z;
+}
+
 /**
  * Enterprise Calm Operations Home Header.
  *
@@ -87,7 +95,7 @@ export function AppHeader({
           >
             <MapPin size={13} color={colors.primaryText} strokeWidth={2.4} />
             <Text variant="label" color={colors.textPrimary} numberOfLines={1} style={styles.zoneName}>
-              {zone}
+              {formatZonePillLabel(zone)}
             </Text>
             <ChevronDown size={13} color={colors.textMuted} strokeWidth={2.2} />
           </Pressable>

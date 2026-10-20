@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BatteryMedium,
   CheckCheck,
+  CheckCircle2,
   PackageCheck,
   Truck,
   X,
@@ -62,18 +63,22 @@ export function NotificationSheet({
     }
   };
 
-  const renderIcon = (type: LiveNotificationEvent['category']) => {
-    switch (type) {
-      case 'ROBOT_ARRIVED':
-        return <Truck size={14} color={colors.primaryText} strokeWidth={2.2} />;
-      case 'HAZARD':
-        return <AlertTriangle size={14} color="#d97706" strokeWidth={2.2} />;
-      case 'JOB_ASSIGNED':
-        return <PackageCheck size={14} color="#059669" strokeWidth={2.2} />;
-      case 'BATTERY_LOW':
-      default:
-        return <BatteryMedium size={14} color={colors.textMuted} strokeWidth={2.2} />;
+  const renderIcon = (item: LiveNotificationEvent) => {
+    const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
+    if (isCompleted) {
+      return <CheckCircle2 size={14} color="#059669" strokeWidth={2.2} />;
     }
+    if (item.category === 'HAZARD') {
+      return <AlertTriangle size={14} color="#d97706" strokeWidth={2.2} />;
+    }
+    if (
+      item.category === 'JOB_ASSIGNED' ||
+      item.title?.toLowerCase().includes('ready') ||
+      item.message?.toLowerCase().includes('ready')
+    ) {
+      return <PackageCheck size={14} color="#2563eb" strokeWidth={2.2} />;
+    }
+    return <Truck size={14} color={colors.primaryText} strokeWidth={2.2} />;
   };
 
   return (
@@ -138,57 +143,73 @@ export function NotificationSheet({
 
           {/* List of Alerts */}
           <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-            {notifications.map((item) => (
-              <Pressable
-                key={item.id}
-                onPress={() => handleItemPress(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.title}, ${item.timeLabel}`}
-                style={({ pressed }) => [
-                  styles.item,
-                  !item.isRead && styles.itemUnread,
-                  pressed && styles.itemPressed,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.iconBox,
-                    item.category === 'HAZARD' && styles.iconBoxHazard,
-                    item.category === 'JOB_ASSIGNED' && styles.iconBoxJob,
-                    item.category === 'ROBOT_ARRIVED' && styles.iconBoxRobot,
+            {notifications.map((item) => {
+              const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
+              const isHazard = item.category === 'HAZARD';
+              const isReadyOrAssigned =
+                item.category === 'JOB_ASSIGNED' ||
+                item.title?.toLowerCase().includes('ready') ||
+                item.message?.toLowerCase().includes('ready');
+              const displayTitle = item.title.startsWith('Job JOB-')
+                ? item.title.slice(4)
+                : item.title;
+
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => handleItemPress(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${displayTitle}, ${item.timeLabel}`}
+                  style={({ pressed }) => [
+                    styles.item,
+                    !item.isRead && styles.itemUnread,
+                    pressed && styles.itemPressed,
                   ]}
                 >
-                  {renderIcon(item.category)}
-                </View>
-
-                <View style={styles.itemContent}>
-                  <View style={styles.itemTopRow}>
-                    <Text
-                      variant="label"
-                      color={colors.textPrimary}
-                      numberOfLines={1}
-                      style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
-                    >
-                      {item.title}
-                    </Text>
-                    {!item.isRead && <View style={styles.unreadDot} />}
+                  <View
+                    style={[
+                      styles.iconBox,
+                      isCompleted
+                        ? styles.iconBoxJob
+                        : isHazard
+                        ? styles.iconBoxHazard
+                        : isReadyOrAssigned
+                        ? styles.iconBoxRobot
+                        : undefined,
+                    ]}
+                  >
+                    {renderIcon(item)}
                   </View>
 
-                  <Text
-                    variant="caption"
-                    color={colors.textSecondary}
-                    numberOfLines={2}
-                    style={styles.itemDesc}
-                  >
-                    {item.message}
-                  </Text>
+                  <View style={styles.itemContent}>
+                    <View style={styles.itemTopRow}>
+                      {!item.isRead && <View style={styles.unreadDot} />}
+                      <Text
+                        variant="label"
+                        color={colors.textPrimary}
+                        numberOfLines={2}
+                        style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
+                      >
+                        {displayTitle}
+                      </Text>
+                    </View>
 
-                  <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
-                    {item.timeLabel}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
+                    <Text
+                      variant="caption"
+                      color={colors.textSecondary}
+                      numberOfLines={2}
+                      style={styles.itemDesc}
+                    >
+                      {item.message}
+                    </Text>
+
+                    <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
+                      {item.timeLabel}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
       </View>
@@ -199,7 +220,7 @@ export function NotificationSheet({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.22)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   card: {
     position: 'absolute',
@@ -306,8 +327,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   iconBoxRobot: {
-    backgroundColor: 'rgba(21, 87, 208, 0.08)',
-    borderColor: 'rgba(21, 87, 208, 0.2)',
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    borderColor: 'rgba(37, 99, 235, 0.2)',
   },
   iconBoxHazard: {
     backgroundColor: 'rgba(217, 119, 6, 0.08)',
@@ -324,7 +345,6 @@ const styles = StyleSheet.create({
   itemTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 6,
   },
   itemTitle: {
@@ -337,10 +357,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   unreadDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: colors.primaryText,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2563eb',
+    flexShrink: 0,
   },
   itemDesc: {
     fontSize: 11,
