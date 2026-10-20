@@ -54,6 +54,49 @@ export interface CatalogProductItem {
   startpoints: CatalogStartpoint[];
 }
 
+export type ZoneFilterKey = 'ALL' | 'INBOUND' | 'ZONE_A' | 'ZONE_B' | 'ZONE_D';
+export type LevelFilterKey = 'ALL' | 1 | 2 | 3;
+
+const ZONE_OPTIONS: { key: ZoneFilterKey; label: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'INBOUND', label: 'Inbound' },
+  { key: 'ZONE_A', label: 'Zone A' },
+  { key: 'ZONE_B', label: 'Zone B' },
+  { key: 'ZONE_D', label: 'Zone D' },
+];
+
+const LEVEL_OPTIONS: { value: LevelFilterKey; label: string }[] = [
+  { value: 'ALL', label: 'All Levels' },
+  { value: 1, label: 'Level 1' },
+  { value: 2, label: 'Level 2' },
+  { value: 3, label: 'Level 3' },
+];
+
+function getContainerZone(c: ContainerListItem): 'INBOUND' | 'ZONE_A' | 'ZONE_B' | 'ZONE_D' | 'OTHER' {
+  const zoneLabel = (c.zoneLabel || '').toLowerCase();
+  const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toUpperCase();
+
+  if (zoneLabel.includes('zone a') || loc.startsWith('RACK-A')) {
+    return 'ZONE_A';
+  }
+  if (zoneLabel.includes('zone b') || loc.startsWith('RACK-B')) {
+    return 'ZONE_B';
+  }
+  if (zoneLabel.includes('zone d') || loc.startsWith('RACK-D')) {
+    return 'ZONE_D';
+  }
+  if (
+    zoneLabel.includes('dock') ||
+    zoneLabel.includes('inbound') ||
+    loc.startsWith('DOCK-IN') ||
+    loc.startsWith('EP-DOCK') ||
+    loc.includes('DOCK')
+  ) {
+    return 'INBOUND';
+  }
+  return 'OTHER';
+}
+
 function resolveRecommendedWorkflow(c: ContainerListItem): string {
   const loc = (c.currentStorageLocationCode || c.currentEndpointCode || 'DOCK-IN-01').toUpperCase();
   if (loc.startsWith('DOCK-IN')) return 'Inbound Putaway';
@@ -118,6 +161,8 @@ export function InventoryLookupScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [inventoryTab, setInventoryTab] = useState<'containers' | 'skus'>('containers');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedZone, setSelectedZone] = useState<ZoneFilterKey>('ALL');
+  const [selectedLevel, setSelectedLevel] = useState<LevelFilterKey>('ALL');
   const [containers, setContainers] = useState<ContainerListItem[]>(() =>
     getSeedContainersSnapshot()
   );
@@ -211,10 +256,55 @@ export function InventoryLookupScreen() {
 
   const categories = ['All', 'Electronics', 'Sensors', 'Mechanical', 'Packaging'];
 
+  const zoneCounts = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    const base = q
+      ? containers.filter((c) => {
+          const barcode = (c.barcode || '').toLowerCase();
+          const sku = (c.productSku || '').toLowerCase();
+          const name = (c.productName || '').toLowerCase();
+          const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toLowerCase();
+          return (
+            barcode.includes(q) ||
+            sku.includes(q) ||
+            name.includes(q) ||
+            loc.includes(q)
+          );
+        })
+      : containers;
+
+    const counts: Record<ZoneFilterKey, number> = {
+      ALL: base.length,
+      INBOUND: 0,
+      ZONE_A: 0,
+      ZONE_B: 0,
+      ZONE_D: 0,
+    };
+
+    base.forEach((c) => {
+      const z = getContainerZone(c);
+      if (z === 'INBOUND') counts.INBOUND += 1;
+      else if (z === 'ZONE_A') counts.ZONE_A += 1;
+      else if (z === 'ZONE_B') counts.ZONE_B += 1;
+      else if (z === 'ZONE_D') counts.ZONE_D += 1;
+    });
+
+    return counts;
+  }, [containers, searchTerm]);
+
   const filteredContainers = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
-    if (!q) return containers;
     return containers.filter((c) => {
+      if (selectedZone !== 'ALL') {
+        const zone = getContainerZone(c);
+        if (zone !== selectedZone) return false;
+      }
+
+      if (selectedLevel !== 'ALL') {
+        if (c.currentLevelNo !== selectedLevel) return false;
+      }
+
+      if (!q) return true;
       const barcode = (c.barcode || '').toLowerCase();
       const sku = (c.productSku || '').toLowerCase();
       const name = (c.productName || '').toLowerCase();
@@ -226,7 +316,7 @@ export function InventoryLookupScreen() {
         loc.includes(q)
       );
     });
-  }, [containers, searchTerm]);
+  }, [containers, selectedZone, selectedLevel, searchTerm]);
 
   const filteredProducts = useMemo(() => {
     return catalogProducts.filter((p) => {
@@ -370,8 +460,8 @@ export function InventoryLookupScreen() {
       <View style={styles.tabsWrapper}>
         <SegmentedControl
           options={[
-            { label: `📦 Containers (${filteredContainers.length})`, value: 'containers' },
-            { label: `🏷️ By SKU (${filteredProducts.length})`, value: 'skus' },
+            { label: `Containers (${filteredContainers.length})`, value: 'containers' },
+            { label: `By SKU (${filteredProducts.length})`, value: 'skus' },
           ]}
           value={inventoryTab}
           onChange={(val) => {
@@ -384,11 +474,84 @@ export function InventoryLookupScreen() {
 
       {/* Tab 1: Containers List */}
       {inventoryTab === 'containers' && (
-        <ScrollView
-          style={styles.scrollArea}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+        <>
+          {/* Spatial Warehouse Zone & Level Filter Section */}
+          <View style={styles.spatialFilterSection}>
+            {/* Zone Filter Row */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRowScroll}
+            >
+              {ZONE_OPTIONS.map((opt) => {
+                const isSelected = selectedZone === opt.key;
+                const count = zoneCounts[opt.key];
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setSelectedZone(opt.key);
+                    }}
+                    style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by zone ${opt.label}`}
+                  >
+                    <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={[styles.filterChipCount, isSelected && styles.filterChipCountActive]}>
+                      ({count})
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* Rack Level Filter Row */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRowScroll}
+              style={styles.levelFilterRow}
+            >
+              {LEVEL_OPTIONS.map((lvl) => {
+                const isSelected = selectedLevel === lvl.value;
+                return (
+                  <Pressable
+                    key={String(lvl.value)}
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setSelectedLevel(lvl.value);
+                    }}
+                    style={[
+                      styles.filterChip,
+                      styles.levelChip,
+                      isSelected && styles.filterChipActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by level ${lvl.label}`}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        styles.levelChipText,
+                        isSelected && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {lvl.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
           {filteredContainers.map((c) => {
             const statusText = String(c.status || 'STORED');
             const isStored = statusText === 'STORED';
@@ -472,7 +635,8 @@ export function InventoryLookupScreen() {
             </View>
           )}
         </ScrollView>
-      )}
+      </>
+    )}
 
       {/* Tab 2: By SKU List */}
       {inventoryTab === 'skus' && (
@@ -629,6 +793,67 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 4,
   },
+  spatialFilterSection: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 8,
+    gap: 6,
+    zIndex: 9,
+  },
+  filterRowScroll: {
+    paddingHorizontal: 16,
+    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  levelFilterRow: {
+    marginTop: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    minHeight: 30,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  filterChipActive: {
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  filterChipCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  filterChipCountActive: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '800',
+    fontFamily: typography.fontMono,
+  },
+  levelChip: {
+    paddingHorizontal: 10,
+    minHeight: 28,
+  },
+  levelChipText: {
+    fontSize: 11.5,
+  },
   categoryBar: {
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
@@ -708,7 +933,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: radii.full,
+    borderRadius: 4,
   },
   statusPillStored: {
     backgroundColor: colors.successBg,
@@ -967,9 +1192,11 @@ const styles = StyleSheet.create({
   },
   verifiedStatusBadge: {
     backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: radii.full,
+    borderRadius: 4,
   },
   verifiedStatusText: {
     fontSize: 10,
@@ -979,7 +1206,7 @@ const styles = StyleSheet.create({
   },
   verifiedCloseBtn: {
     padding: 4,
-    borderRadius: radii.full,
+    borderRadius: 4,
     backgroundColor: '#DCFCE7',
     alignItems: 'center',
     justifyContent: 'center',
