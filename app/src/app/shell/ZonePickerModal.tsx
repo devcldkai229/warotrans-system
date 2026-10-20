@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   dropdownCard: {
     position: 'absolute',
     left: 16,
-    width: 290,
+    width: 265,
     backgroundColor: '#ffffff',
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -148,9 +148,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 42,
+    minHeight: 40,
     paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderRadius: radii.sm,
   },
   optionSelected: {

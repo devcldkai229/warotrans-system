@@ -120,6 +120,7 @@ export function InventoryLookupScreen() {
     getSeedContainersSnapshot()
   );
   const [verifiedContainer, setVerifiedContainer] = useState<ContainerListItem | null>(null);
+  const [selectedContainerCode, setSelectedContainerCode] = useState<string | null>(null);
   const [isVerifyingBarcode, setIsVerifyingBarcode] = useState(false);
   const [activeWarehouseId, setActiveWarehouseId] = useState('11111111-1111-1111-1111-111111111111');
 
@@ -219,19 +220,14 @@ export function InventoryLookupScreen() {
     return matchesCategory && matchesSearch;
   });
 
-  const handleDispatchStartpoint = (prod: CatalogProductItem, sp: CatalogStartpoint) => {
+  const handleSelectStartpoint = (sp: CatalogStartpoint) => {
     triggerHaptic('tap');
-    navigate('transport_create', {
-      workflow: sp.recommendedWorkflow,
-      product: prod.name,
-      container: sp.container,
-      source: sp.id,
-    });
+    setSelectedContainerCode((prev) => (prev === sp.container ? null : sp.container));
   };
 
   const primaryProd = filteredProducts[0];
   const primarySp = primaryProd?.startpoints?.[0];
-  const bottomDispatchLabel = `Dispatch ${verifiedContainer?.barcode || primarySp?.container || 'Container'}`;
+  const bottomDispatchLabel = `Dispatch ${selectedContainerCode || verifiedContainer?.barcode || primarySp?.container || 'Container'}`;
 
   return (
     <View style={styles.container}>
@@ -249,7 +245,7 @@ export function InventoryLookupScreen() {
             value={searchTerm}
             onChangeText={setSearchTerm}
             onSubmitEditing={() => handleVerifyBarcode()}
-            placeholder="Search or enter barcode (e.g. C1, CTN-DEMO-000001)..."
+            placeholder="Search container, SKU or barcode..."
             containerStyle={styles.inputContainer}
             inputStyle={styles.searchInput}
           />
@@ -290,11 +286,15 @@ export function InventoryLookupScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={() => setVerifiedContainer(null)}
-              hitSlop={8}
-              style={{ marginLeft: 8 }}
+              onPress={() => {
+                triggerHaptic('tap');
+                setVerifiedContainer(null);
+              }}
+              style={styles.verifiedCloseBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss verified card"
             >
-              <X size={16} color={colors.textMuted} />
+              <X size={15} color="#059669" />
             </Pressable>
           </View>
 
@@ -382,69 +382,78 @@ export function InventoryLookupScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {filteredProducts.map((prod) => {
-          const cardPrimarySp = prod.startpoints[0];
-          return (
-            <View key={prod.id} style={styles.productCard}>
-              <View style={styles.cardHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.productName}>{prod.name}</Text>
-                  <Text style={styles.productMeta}>
-                    {prod.category} · SKU: <Text style={styles.boldText}>{prod.sku}</Text>
-                  </Text>
-                </View>
-                <View style={styles.stockBox}>
-                  <Text style={styles.stockCount}>{prod.totalStock}</Text>
-                  <Text style={styles.stockLabel}>Available</Text>
-                </View>
+        {filteredProducts.map((prod) => (
+          <View key={prod.id} style={styles.productCard}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.productName}>{prod.name}</Text>
+                <Text style={styles.productMeta}>
+                  {prod.category} · SKU: <Text style={styles.boldText}>{prod.sku}</Text>
+                </Text>
               </View>
+              <View style={styles.stockBox}>
+                <Text style={styles.stockCount}>{prod.totalStock}</Text>
+                <Text style={styles.stockLabel}>Available</Text>
+              </View>
+            </View>
 
-              {/* Startpoints Locations (Tap any row to dispatch that specific tote) */}
-              <View style={styles.startpointsList}>
-                {prod.startpoints.map((sp) => (
+            {/* Startpoints Locations (Tap row to select container for dispatch) */}
+            <View style={styles.startpointsList}>
+              {prod.startpoints.map((sp) => {
+                const isSelected = selectedContainerCode === sp.container;
+                return (
                   <Pressable
                     key={`${sp.container}-${sp.id}`}
-                    onPress={() => handleDispatchStartpoint(prod, sp)}
+                    onPress={() => handleSelectStartpoint(sp)}
                     style={({ pressed }) => [
                       styles.startpointRow,
+                      isSelected && styles.startpointRowSelected,
                       pressed && { opacity: 0.78 },
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Dispatch ${sp.container} at ${sp.id} via ${sp.recommendedWorkflow}`}
+                    accessibilityLabel={
+                      isSelected
+                        ? `Selected container ${sp.container}`
+                        : `Select container ${sp.container} at ${sp.id} for dispatch`
+                    }
                   >
                     <View style={styles.startpointLeft}>
                       <MapPin size={14} color={colors.textSecondary} />
-                      <View>
-                        <Text style={styles.startpointId}>{sp.id}</Text>
-                        <Text style={styles.startpointZone}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.startpointId} numberOfLines={1}>
+                          {sp.id}
+                        </Text>
+                        <Text style={styles.startpointZone} numberOfLines={1}>
                           {sp.zone} · {sp.recommendedWorkflow}
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.startpointRight}>
-                      <Text style={styles.startpointQty}>{sp.qty} pcs</Text>
-                      <View style={styles.containerPill}>
-                        <Text style={styles.containerPillText}>{sp.container}</Text>
+
+                    <View style={styles.startpointRightCol}>
+                      <View
+                        style={[
+                          styles.containerPill,
+                          isSelected && styles.containerPillSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.containerPillText,
+                            isSelected && styles.containerPillTextSelected,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {sp.container}
+                        </Text>
                       </View>
+                      <Text style={styles.startpointQty}>{sp.qty} pcs</Text>
                     </View>
                   </Pressable>
-                ))}
-              </View>
-
-              {/* Context-Aware Quick Dispatch CTA */}
-              {cardPrimarySp && (
-                <Button
-                  label={`Dispatch ${cardPrimarySp.container} (${cardPrimarySp.recommendedWorkflow})`}
-                  icon={<Rocket size={16} color="#ffffff" />}
-                  onPress={() => handleDispatchStartpoint(prod, cardPrimarySp)}
-                  variant="primary"
-                  size="md"
-                  style={{ marginTop: 4 }}
-                />
-              )}
+                );
+              })}
             </View>
-          );
-        })}
+          </View>
+        ))}
 
         {filteredProducts.length === 0 && (
           <View style={styles.emptyState}>
@@ -465,16 +474,29 @@ export function InventoryLookupScreen() {
           variant="primary"
           size="md"
           onPress={() => {
-            if (verifiedContainer) {
-              triggerHaptic('tap');
+            triggerHaptic('tap');
+            const targetCode =
+              selectedContainerCode || verifiedContainer?.barcode || primarySp?.container;
+            if (targetCode) {
+              const targetSp = catalogProducts
+                .flatMap((p) => p.startpoints)
+                .find((sp) => sp.container === targetCode);
+              const targetProd = catalogProducts.find((p) =>
+                p.startpoints.some((sp) => sp.container === targetCode)
+              );
               navigate('transport_create', {
-                workflow: 'INTERNAL_RELOCATION',
-                container: verifiedContainer.barcode,
+                workflow:
+                  targetSp?.recommendedWorkflow ||
+                  (verifiedContainer ? 'INTERNAL_RELOCATION' : 'Inbound Putaway'),
+                container: targetCode,
+                source:
+                  targetSp?.id ||
+                  verifiedContainer?.currentStorageLocationCode ||
+                  verifiedContainer?.currentEndpointCode ||
+                  undefined,
+                product: targetProd?.name || verifiedContainer?.productName || undefined,
               });
-            } else if (primaryProd && primarySp) {
-              handleDispatchStartpoint(primaryProd, primarySp);
             } else {
-              triggerHaptic('tap');
               navigate('transport_create');
             }
           }}
@@ -631,11 +653,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  startpointRowSelected: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(21, 87, 208, 0.04)',
+  },
   startpointLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flex: 1,
+    marginRight: 8,
   },
   startpointId: {
     fontSize: 12,
@@ -648,10 +675,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 1,
   },
-  startpointRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  startpointRightCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 3,
   },
   startpointQty: {
     fontSize: 12,
@@ -672,11 +699,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
+  containerPillSelected: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
   containerPillText: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontMono,
+  },
+  containerPillTextSelected: {
+    color: colors.primaryText,
+    fontWeight: '800',
   },
   emptyState: {
     alignItems: 'center',
@@ -743,6 +778,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#166534',
     fontFamily: typography.fontMono,
+  },
+  verifiedCloseBtn: {
+    padding: 4,
+    borderRadius: radii.full,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
   verifiedBody: {
     gap: 5,

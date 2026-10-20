@@ -99,8 +99,12 @@ export function NotificationSheet({
         />
 
         {/* Dropdown Card Anchored below Header Bell */}
-        <View style={[styles.card, { top: topInset + 54 }]}>
-          {/* Header */}
+        <View style={[styles.cardContainer, { top: topInset + 54 }]}>
+          {/* Top Anchor Caret pointing directly to Notification Bell */}
+          <View style={styles.caret} />
+
+          <View style={styles.card}>
+            {/* Header */}
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Text variant="headline" color={colors.textPrimary} style={styles.title}>
@@ -213,8 +217,9 @@ export function NotificationSheet({
           </ScrollView>
         </View>
       </View>
-    </Modal>
-  );
+    </View>
+  </Modal>
+);
 }
 
 const styles = StyleSheet.create({
@@ -222,11 +227,28 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
-  card: {
+  cardContainer: {
     position: 'absolute',
-    right: 12,
-    width: 320,
-    maxHeight: 390,
+    right: 14,
+    width: 280,
+    zIndex: 1000,
+  },
+  caret: {
+    position: 'absolute',
+    top: -5,
+    right: 64,
+    width: 10,
+    height: 10,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderColor: colors.borderStrong,
+    transform: [{ rotate: '45deg' }],
+    zIndex: 10,
+  },
+  card: {
+    width: 280,
+    maxHeight: 310,
     backgroundColor: '#ffffff',
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -296,7 +318,7 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   list: {
-    maxHeight: 330,
+    maxHeight: 250,
     backgroundColor: '#ffffff',
   },
   item: {

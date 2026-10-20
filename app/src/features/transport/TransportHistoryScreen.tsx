@@ -611,14 +611,9 @@ export function TransportHistoryScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Transport request ${order.requestCode}`}
                 >
-                  {/* Card Header: TR ID & Status */}
-                  <View style={styles.cardHeader}>
-                    <View style={styles.idGroup}>
-                      <Text style={styles.orderId}>{order.id}</Text>
-                      <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryBadgeText}>{order.category.toLowerCase()}</Text>
-                      </View>
-                    </View>
+                  {/* Row 1: TR ID & Status Badge */}
+                  <View style={styles.cardHeaderTop}>
+                    <Text style={styles.orderId}>{order.id}</Text>
 
                     <View
                       style={[
@@ -650,8 +645,15 @@ export function TransportHistoryScreen() {
                     </View>
                   </View>
 
-                  {/* Workflow Title */}
-                  <Text style={styles.workflowTitle}>{order.workflowName}</Text>
+                  {/* Row 2: Workflow Name & Category Badge */}
+                  <View style={styles.cardHeaderSub}>
+                    <View style={styles.workflowRow}>
+                      <Text style={styles.workflowTitle}>{order.workflowName}</Text>
+                      <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryBadgeText}>{order.category.toLowerCase()}</Text>
+                      </View>
+                    </View>
+                  </View>
 
                   {/* Route Visualizer */}
                   <View style={styles.routeBox}>
@@ -1001,13 +1003,18 @@ const styles = StyleSheet.create({
     padding: 16,
     ...shadows.panel,
   },
-  cardHeader: {
+  cardHeaderTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  idGroup: {
+  cardHeaderSub: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  workflowRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -1071,7 +1078,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: 8,
     fontFamily: typography.fontSans,
   },
   routeBox: {
