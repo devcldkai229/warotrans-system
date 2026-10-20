@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   MapPin,
   PackagePlus,
-  RotateCw,
   Search,
   X,
 } from 'lucide-react-native';
@@ -253,18 +252,18 @@ export function InventoryLookupScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Warehouse catalog"
-        title="Inventory Lookup"
+        label={`${containers.length} Containers · ${uniqueLocationsCount} Locations`}
+        title="Inventory Catalog"
         onBack={goBack}
       />
 
-      {/* Tầng 1: Search & Barcode Scan Section */}
+      {/* Tầng 1: Single Compact Search & Barcode Scan Section */}
       <View style={styles.searchSection}>
         <Input
           value={searchTerm}
           onChangeText={setSearchTerm}
           onSubmitEditing={() => handleVerifyBarcode()}
-          placeholder="Search container, SKU, or location..."
+          placeholder="Search container, SKU, or rack..."
           containerStyle={styles.inputContainer}
           leftIcon={<Search size={16} color={colors.textMuted} />}
           rightIcon={
@@ -293,19 +292,9 @@ export function InventoryLookupScreen() {
             </View>
           }
         />
-
-        <Button
-          label={isVerifyingBarcode ? 'Verifying Barcode...' : 'Verify Container Barcode'}
-          icon={<RotateCw size={14} color={colors.primary} />}
-          variant="outline"
-          size="sm"
-          loading={isVerifyingBarcode}
-          onPress={() => handleVerifyBarcode()}
-          style={styles.verifyBtn}
-        />
       </View>
 
-      {/* Prominent Verified Container Details Card */}
+      {/* Prominent Verified Container Details Card (if verified) */}
       {verifiedContainer && (
         <View style={styles.verifiedCard}>
           <View style={styles.verifiedCardHeader}>
@@ -377,30 +366,12 @@ export function InventoryLookupScreen() {
         </View>
       )}
 
-      {/* Tầng 2: Inventory Glance Metrics Bar */}
-      <View style={styles.metricsBar}>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricEmoji}>📦</Text>
-          <Text style={styles.metricLabel}>{containers.length} Containers</Text>
-        </View>
-        <View style={styles.metricDivider} />
-        <View style={styles.metricItem}>
-          <Text style={styles.metricEmoji}>🏷️</Text>
-          <Text style={styles.metricLabel}>{catalogProducts.length} SKUs</Text>
-        </View>
-        <View style={styles.metricDivider} />
-        <View style={styles.metricItem}>
-          <Text style={styles.metricEmoji}>📍</Text>
-          <Text style={styles.metricLabel}>{uniqueLocationsCount} Locations</Text>
-        </View>
-      </View>
-
-      {/* Tầng 3: Segmented Control Tabs (By Containers vs By SKU) */}
+      {/* Tầng 2: Segmented Control Tabs (directly below the search box) */}
       <View style={styles.tabsWrapper}>
         <SegmentedControl
           options={[
-            { label: `📦 Containers (${containers.length})`, value: 'containers' },
-            { label: `🏷️ By SKU (${catalogProducts.length})`, value: 'skus' },
+            { label: `📦 Containers (${filteredContainers.length})`, value: 'containers' },
+            { label: `🏷️ By SKU (${filteredProducts.length})`, value: 'skus' },
           ]}
           value={inventoryTab}
           onChange={(val) => {
@@ -419,68 +390,74 @@ export function InventoryLookupScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {filteredContainers.map((c) => {
-            const locText = c.currentStorageLocationCode || c.currentEndpointCode || 'EP-A';
             const statusText = String(c.status || 'STORED');
             const isStored = statusText === 'STORED';
 
             return (
               <View key={c.id || c.barcode} style={styles.containerCard}>
-                {/* Card Header: Barcode in bold mono & Status badge */}
+                {/* Card Header Row */}
                 <View style={styles.containerCardHeader}>
-                  <Text style={styles.containerBarcodeMono}>{c.barcode}</Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      isStored ? styles.statusBadgeStored : styles.statusBadgeOther,
-                    ]}
-                  >
-                    <Text
+                  <View style={styles.headerLeftGroup}>
+                    <Text style={styles.containerBarcode}>{c.barcode}</Text>
+                    <View
                       style={[
-                        styles.statusBadgeText,
-                        isStored ? styles.statusBadgeTextStored : styles.statusBadgeTextOther,
+                        styles.statusPill,
+                        isStored ? styles.statusPillStored : styles.statusPillOther,
                       ]}
                     >
-                      {statusText}
-                    </Text>
+                      <View
+                        style={[
+                          styles.statusDot,
+                          isStored ? styles.statusDotStored : styles.statusDotOther,
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.statusText,
+                          isStored ? styles.statusTextStored : styles.statusTextOther,
+                        ]}
+                      >
+                        {statusText}
+                      </Text>
+                    </View>
                   </View>
+
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      navigate('transport_create', {
+                        workflow: 'INTERNAL_RELOCATION',
+                        container: c.barcode,
+                      });
+                    }}
+                    style={({ pressed }) => [styles.relocateBtn, pressed && styles.btnPressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Relocate container ${c.barcode}`}
+                  >
+                    <ArrowUpRight size={13} color={colors.primary} strokeWidth={2.4} />
+                    <Text style={styles.relocateBtnText}>Move</Text>
+                  </Pressable>
                 </View>
 
-                {/* Location row */}
-                <View style={styles.infoRow}>
-                  <MapPin size={13} color={colors.textSecondary} style={styles.rowIcon} />
-                  <Text style={styles.infoLabel}>Location: </Text>
-                  <Text style={styles.boldMono}>{locText}</Text>
-                  {c.currentLevelNo ? (
-                    <Text style={styles.infoSecondary}> · Level {c.currentLevelNo}</Text>
-                  ) : null}
-                </View>
-
-                {/* Cargo row */}
-                <View style={styles.infoRow}>
-                  <Box size={13} color={colors.textSecondary} style={styles.rowIcon} />
-                  <Text style={styles.infoText} numberOfLines={1}>
-                    {c.productName || 'Warehouse Item'} ({c.productSku || 'SKU-GEN'}) ·{' '}
-                    <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
-                      {c.qty || 20} pcs
-                    </Text>
+                {/* Location Row */}
+                <View style={styles.locationRow}>
+                  <MapPin size={13} color={colors.primaryText} style={{ marginRight: 6 }} />
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    {c.currentStorageLocationCode || c.currentEndpointCode || 'EP-A'}
+                    {c.currentLevelNo ? ' · Level ' + c.currentLevelNo : ''}
+                    {c.zoneLabel ? ' (' + c.zoneLabel + ')' : ''}
                   </Text>
                 </View>
 
-                {/* Action button: Relocate Container */}
-                <Button
-                  label="↗ Relocate Container (INTERNAL_RELOCATION)"
-                  icon={<ArrowUpRight size={14} color="#ffffff" />}
-                  variant="primary"
-                  size="sm"
-                  onPress={() => {
-                    triggerHaptic('tap');
-                    navigate('transport_create', {
-                      workflow: 'INTERNAL_RELOCATION',
-                      container: c.barcode,
-                    });
-                  }}
-                  style={styles.relocateBtn}
-                />
+                {/* Cargo Row (QUANTITY FIRST, NEVER TRUNCATE QUANTITY!) */}
+                <View style={styles.cargoRow}>
+                  <Box size={13} color={colors.textSecondary} style={{ marginRight: 6 }} />
+                  <Text style={styles.cargoQty}>{c.qty || 20} pcs</Text>
+                  <Text style={styles.cargoDot}>·</Text>
+                  <Text style={styles.cargoProduct} numberOfLines={1}>
+                    {c.productName || 'Warehouse Item'} ({c.productSku || 'SKU-GEN'})
+                  </Text>
+                </View>
               </View>
             );
           })}
@@ -490,7 +467,7 @@ export function InventoryLookupScreen() {
               <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
               <Text style={styles.emptyTitle}>No matching containers found</Text>
               <Text style={styles.emptySub}>
-                Try searching with a different container barcode, SKU, or location code.
+                Try searching with a different container barcode, SKU, or rack.
               </Text>
             </View>
           )}
@@ -546,7 +523,7 @@ export function InventoryLookupScreen() {
                       {prod.category} · SKU: <Text style={styles.boldText}>{prod.sku}</Text>
                     </Text>
                   </View>
-                  <View style={styles.stockBox}>
+                  <View style={styles.stockBadge}>
                     <Text style={styles.stockCount}>{prod.totalStock}</Text>
                     <Text style={styles.stockLabel}>Available</Text>
                   </View>
@@ -572,34 +549,31 @@ export function InventoryLookupScreen() {
                       </View>
 
                       <View style={styles.startpointRightCol}>
-                        <View style={styles.containerPill}>
+                        <Pressable
+                          onPress={() => {
+                            triggerHaptic('tap');
+                            navigate('transport_create', {
+                              workflow: 'INTERNAL_RELOCATION',
+                              container: sp.container,
+                            });
+                          }}
+                          style={({ pressed }) => [
+                            styles.containerPill,
+                            pressed && styles.btnPressed,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Relocate container ${sp.container}`}
+                        >
                           <Text style={styles.containerPillText} numberOfLines={1}>
                             {sp.container}
                           </Text>
-                        </View>
+                          <ArrowUpRight size={10} color={colors.primary} style={{ marginLeft: 2 }} />
+                        </Pressable>
                         <Text style={styles.startpointQty}>{sp.qty} pcs</Text>
                       </View>
                     </View>
                   ))}
                 </View>
-
-                <Button
-                  label={`↗ Relocate (${prod.startpoints[0]?.container || 'Container'})`}
-                  icon={<ArrowUpRight size={14} color={colors.primary} />}
-                  variant="outline"
-                  size="sm"
-                  onPress={() => {
-                    const firstC = prod.startpoints[0]?.container;
-                    if (firstC) {
-                      triggerHaptic('tap');
-                      navigate('transport_create', {
-                        workflow: 'INTERNAL_RELOCATION',
-                        container: firstC,
-                      });
-                    }
-                  }}
-                  style={{ marginTop: 2 }}
-                />
               </View>
             ))}
 
@@ -650,45 +624,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  verifyBtn: {
-    marginTop: 8,
-    width: '100%',
-  },
-  metricsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.sm,
-  },
-  metricItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  metricEmoji: {
-    fontSize: 14,
-  },
-  metricLabel: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  metricDivider: {
-    width: 1,
-    height: 18,
-    backgroundColor: colors.border,
-  },
   tabsWrapper: {
     marginHorizontal: 16,
     marginTop: 10,
@@ -736,18 +671,141 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 28,
-    gap: 12,
+    gap: 10,
   },
   containerCard: {
     backgroundColor: '#ffffff',
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 14,
-    gap: 8,
-    ...shadows.panel,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+    ...shadows.sm,
   },
   containerCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  containerBarcode: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+    letterSpacing: 0.3,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  statusPillStored: {
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+  },
+  statusPillOther: {
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotStored: {
+    backgroundColor: colors.success,
+  },
+  statusDotOther: {
+    backgroundColor: colors.textMuted,
+  },
+  statusText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    fontFamily: typography.fontMono,
+  },
+  statusTextStored: {
+    color: colors.successText,
+  },
+  statusTextOther: {
+    color: colors.textSecondary,
+  },
+  relocateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(50, 121, 249, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(50, 121, 249, 0.25)',
+  },
+  btnPressed: {
+    opacity: 0.7,
+    backgroundColor: 'rgba(50, 121, 249, 0.16)',
+  },
+  relocateBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    fontFamily: typography.fontSans,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+    flex: 1,
+  },
+  cargoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cargoQty: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+    flexShrink: 0,
+  },
+  cargoDot: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginHorizontal: 5,
+  },
+  cargoProduct: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+    flex: 1,
+  },
+  productCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 8,
+    ...shadows.sm,
+  },
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -755,120 +813,46 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     paddingBottom: 8,
   },
-  containerBarcodeMono: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-    letterSpacing: 0.3,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.full,
-  },
-  statusBadgeStored: {
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-  },
-  statusBadgeOther: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statusBadgeText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    fontFamily: typography.fontMono,
-  },
-  statusBadgeTextStored: {
-    color: '#047857',
-  },
-  statusBadgeTextOther: {
-    color: colors.textSecondary,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rowIcon: {
-    marginRight: 6,
-    flexShrink: 0,
-  },
-  infoLabel: {
-    fontSize: 12.5,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  boldMono: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    fontFamily: typography.fontMono,
-    color: colors.textPrimary,
-  },
-  infoSecondary: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  infoText: {
-    fontSize: 12.5,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-  relocateBtn: {
-    marginTop: 4,
-    width: '100%',
-  },
-  productCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    gap: 10,
-    ...shadows.panel,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 12,
-  },
   productName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   productMeta: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '500',
     color: colors.textMuted,
-    marginTop: 3,
+    marginTop: 2,
     fontFamily: typography.fontSans,
   },
-  stockBox: {
-    alignItems: 'flex-end',
+  stockBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(50, 121, 249, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(50, 121, 249, 0.2)',
+    borderRadius: radii.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    minWidth: 64,
   },
   stockCount: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: colors.primary,
     fontFamily: typography.fontMono,
   },
   stockLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textMuted,
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: colors.primaryText,
     fontFamily: typography.fontSans,
-    marginTop: 1,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   startpointsList: {
-    marginVertical: 4,
-    gap: 8,
+    gap: 6,
   },
   startpointRow: {
     flexDirection: 'row',
@@ -876,8 +860,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -902,11 +886,11 @@ const styles = StyleSheet.create({
   startpointRightCol: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    gap: 3,
+    gap: 2,
   },
   startpointQty: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 11.5,
+    fontWeight: '600',
     color: colors.textSecondary,
     fontFamily: typography.fontMono,
     textAlign: 'right',
@@ -916,17 +900,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   containerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    borderColor: colors.primaryBorder,
+    borderRadius: 4,
+    paddingHorizontal: 6,
     paddingVertical: 2,
   },
   containerPillText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.primaryText,
     fontFamily: typography.fontMono,
   },
   emptyState: {
