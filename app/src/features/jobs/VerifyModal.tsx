@@ -56,27 +56,25 @@ interface VerifyModalProps {
 
 export function VerifyModal({
   visible,
-  targetContainer = 'BOX-101',
+  targetContainer = '',
   targetContainerId,
   jobStepId,
   handoverType,
   operatorId,
-  robotCode = 'AMR-01',
-  location = 'Stop 2/3: Rack A-02',
-  targetShelf = 'Rack A · Level 2 · Bin 03',
-  productName = 'Electronic Components',
-  quantity = 12,
+  robotCode = 'Unassigned',
+  location = 'Unknown Location',
+  targetShelf = 'Unknown Destination',
+  productName = '',
+  quantity = 1,
   initialMismatch = false,
   initialBarcodeInput = '',
-  otherContainers = [
-    { code: 'BOX-102', slot: 'Bay 2 (Rear)' },
-  ],
+  otherContainers = [],
   isBulkMode = false,
   onClose,
   onSuccess,
   onReportIssue,
 }: VerifyModalProps) {
-  const [timeLeft, setTimeLeft] = useState(300); // 300s standard timeout
+  const [verificationError, setVerificationError] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
   const [mismatch, setMismatch] = useState(initialMismatch);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -84,39 +82,29 @@ export function VerifyModal({
 
   useEffect(() => {
     if (!visible) return;
-    setTimeLeft(300);
+    setVerificationError(null);
     setBarcodeInput(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
     setMismatch(initialMismatch);
     setIsSubmitting(false);
   }, [visible, initialMismatch, initialBarcodeInput]);
 
-  useEffect(() => {
-    if (!visible || timeLeft <= 0) return;
-    const interval = setInterval(() => {
-      setTimeLeft((t) => Math.max(0, t - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [visible, timeLeft]);
-
-  const mins = Math.floor(timeLeft / 60);
-  const secs = (timeLeft % 60).toString().padStart(2, '0');
-  const isUrgent = timeLeft < 30;
-
   const handleVerify = async (codeToVerify?: string) => {
     const code = (codeToVerify ?? barcodeInput).trim();
     if (!code || isSubmitting) return;
+    setVerificationError(null);
 
     if (code.toUpperCase() === targetContainer.toUpperCase() || code.toUpperCase() === targetContainerId?.toUpperCase()) {
       setIsSubmitting(true);
       try {
+        if (!jobStepId || !targetContainerId) throw new Error('No waiting handover step is available. Refresh the job.');
         const targetIsUuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(targetContainerId || '');
-        const resolved = targetIsUuid ? null : await getContainerByBarcode(code).catch(() => null);
+        const resolved = targetIsUuid ? null : await getContainerByBarcode(code);
         const resolvedContainerId = targetIsUuid ? targetContainerId! : resolved?.id || targetContainerId || code;
         const res = await confirmHandover({
-          jobStepId: jobStepId || 'step-handover-01',
+          jobStepId,
           scannedContainerBarcode: resolvedContainerId,
           containerId: resolvedContainerId,
-          confirmedBy: operatorId || 'staff-01',
+          confirmedBy: operatorId,
           handoverType: handoverType || 'DROPOFF',
           notes: `Handover confirmed for ${code} on ${robotCode}`,
           note: `Handover confirmed for ${code} on ${robotCode}`,
@@ -126,7 +114,7 @@ export function VerifyModal({
         toast.success(`Payload ${code} verified. Handover completed.`);
         onSuccess(code, res && 'status' in res && res.id ? res as JobDetailResponse : null);
       } catch (err: any) {
-        toast.error(err?.message || 'Handover confirmation failed');
+        setVerificationError(err?.message || 'Handover confirmation failed');
       } finally {
         setIsSubmitting(false);
       }
@@ -172,14 +160,14 @@ export function VerifyModal({
                     <Text variant="caption" color={colors.primary} style={styles.eyebrow}>
                       {isBulkMode ? 'Batch Dock Handover' : 'Handover Verification'}
                     </Text>
-                    <View style={[styles.timerBadge, isUrgent && styles.timerBadgeUrgent]}>
-                      <Timer size={13} color={isUrgent ? colors.danger : colors.warning} />
+                    <View style={styles.timerBadge}>
+                      <Timer size={13} color={colors.warning} />
                       <Text
                         variant="caption"
-                        color={isUrgent ? colors.danger : colors.warning}
+                        color={colors.warning}
                         style={styles.timerText}
                       >
-                        {timeLeft > 0 ? `${mins}:${secs}` : 'Expired'}
+                        Waiting
                       </Text>
                     </View>
                   </View>
@@ -233,6 +221,7 @@ export function VerifyModal({
 
               {/* Barcode Scan & Input Console */}
               <View style={styles.scanSection}>
+                {verificationError && <Text variant="body" color={colors.danger}>{verificationError}</Text>}
                 <Text variant="label" style={styles.sectionLabel}>
                   Scan or Enter Barcode
                 </Text>

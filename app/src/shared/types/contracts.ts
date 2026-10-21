@@ -638,7 +638,7 @@ export interface QueueTransportRequestResponse {
 /*                                                                             */
 /* Still consumed by the existing screens (jobs, transport, auth). Kept so the  */
 /* migration onto the DTOs above can land screen by screen instead of in one   */
-/* breaking sweep. See docs/CALM_OPERATIONS_FOUNDATION.md.                      */
+/* breaking sweep. See README.md (Source cần đọc theo task).                   */
 /* -------------------------------------------------------------------------- */
 
 /** Prototype workflow catalogue. Distinct from `WorkflowListItemDto`, which is server-owned. */

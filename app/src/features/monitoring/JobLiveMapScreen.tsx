@@ -1,3 +1,5 @@
+import { WarehouseMapLayer } from '../../shared/components/WarehouseMapLayer';
+import { getMapVersionDetail, getActiveMapVersion, listWarehouses, type MapVersionDetailDto } from '../../shared/api';
 import React, { useEffect, useState } from 'react';
 import {
   Pressable,
@@ -12,7 +14,6 @@ import {
 import Svg, { Circle, Defs, G, Line, Path, Pattern, Rect } from 'react-native-svg';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { ROBOT_HEADING_ARROW_PATH, type MapRobot } from '../home/MiniFacilityMap';
 import { colors } from '../../shared/theme/colors';
 import { dockReservedSpace } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
@@ -28,40 +29,23 @@ const SHEET_GAP = 8;
 const DOCK_ZONE_GAP = 12;
 const SHEET_FALLBACK_HEIGHT = 174;
 
-const INITIAL_ROBOTS: MapRobot[] = [
-  { id: 'AMR-01', xPercent: 46, yPercent: 28, headingDeg: 0, status: 'EN_ROUTE', battery: 85, speed: '1.2 m/s' },
-  { id: 'AMR-02', xPercent: 72, yPercent: 16, headingDeg: 0, status: 'STANDBY', battery: 92, speed: '0.0 m/s' },
-];
-
-function mapRobotPose(poseX: number, poseY: number, fallback: MapRobot) {
-  if (poseX === 0 && poseY === 0) {
-    return { xPercent: fallback.xPercent, yPercent: fallback.yPercent };
-  }
-  const maxX = poseX <= 12 && poseY <= 10 ? 8 : 50;
-  const maxY = poseX <= 12 && poseY <= 10 ? 6 : 30;
-  return {
-    xPercent: Math.max(22, Math.min(80, Math.round(22 + (poseX / maxX) * 56))),
-    yPercent: Math.max(22, Math.min(58, Math.round(58 - (poseY / maxY) * 34))),
-  };
-}
-
 export function JobLiveMapScreen() {
   const { params, dockHeight, goBack } = useNavigation();
   const { robotTelemetry, lastJobUpdate } = useRealtime();
+  const [activeMap, setActiveMap] = useState<MapVersionDetailDto | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [liveJob, setLiveJob] = useState<AppJobItem | null>(null);
   const [fleetRobots, setFleetRobots] = useState<RobotDto[]>([]);
   const dockInset = dockReservedSpace(dockHeight);
   const [sheetHeight, setSheetHeight] = useState(0);
-  const sheetBottom = dockInset + SHEET_GAP;
+  const sheetBottom = SHEET_GAP;
   const dockZoneBottom = sheetBottom + (sheetHeight || SHEET_FALLBACK_HEIGHT) + DOCK_ZONE_GAP;
-  const [selectedRobot, setSelectedRobot] = useState<'AMR-01' | 'AMR-02'>(
-    params?.robotId === 'AMR-02' ? 'AMR-02' : 'AMR-01'
-  );
+  const [selectedRobot, setSelectedRobot] = useState<string>(params?.robotId || '');
   const [toastFeedback, setToastFeedback] = useState<string | null>(null);
 
-  const jobId = params?.jobId || 'JOB-2026-0812';
-  const target = params?.target || 'Rack A · Level 2 · Bin 03';
-  const route = params?.route || 'Dock 01 ➔ Rack A · Level 2 · Bin 03';
+  const jobId = params?.jobId || '';
+  const target = params?.target || 'Unknown Destination';
+  const route = params?.route || 'No Job Selected';
   const headerJobNo = liveJob?.jobNo || jobId;
 
   useEffect(() => {
@@ -70,42 +54,30 @@ export function JobLiveMapScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    if (params?.robotId) setSelectedRobot(params.robotId === 'AMR-02' ? 'AMR-02' : 'AMR-01');
     async function loadLiveJob() {
-      const fleetPromise = listRobots().then((fleet) => {
-        if (!cancelled) setFleetRobots(fleet.items);
-        return fleet;
-      }).catch(() => ({ items: [] }));
-      const detailPromise = (async () => {
-        if (params?.jobId && params.jobId !== 'JOB-2026-0812') {
-          const detail = await getJobDetail(params.jobId);
-          return detail.id === params.jobId || detail.jobNo === params.jobId ? detail : null;
+      try {
+        const fleet = await listRobots();
+        const detail = params?.jobId ? await getJobDetail(params.jobId) : null;
+        let mapId = detail?.mapVersionId;
+        if (!mapId) {
+          const warehouse = (await listWarehouses({ isActive: true })).items[0];
+          if (warehouse) mapId = (await getActiveMapVersion(warehouse.id))?.id;
         }
-        const jobs = await listJobs();
-        const active = jobs.find((job) => !['JOB-2026-0812', 'JOB-2026-0819'].includes(job.id) &&
-          !['COMPLETED', 'CANCELLED', 'FAILED'].includes(job.status));
-        if (!active) return null;
-        const detail = await getJobDetail(active.id);
-        return detail.id === active.id ? detail : active;
-      })();
-      const [detail, fleet] = await Promise.all([detailPromise, fleetPromise]);
-      if (cancelled || !detail) return;
-      const mapped = mapJobDetailToAppJobItem(detail);
-      const assignedRobot = fleet.items.find((robot) => robot.id === detail.contextValues?.assignedRobotId);
-      if (assignedRobot) mapped.robot = assignedRobot.code;
-      setLiveJob(mapped);
-      if (!params?.robotId) setSelectedRobot(mapped.robot === 'AMR-02' ? 'AMR-02' : 'AMR-01');
+        const map = mapId ? await getMapVersionDetail(mapId) : null;
+        if (cancelled) return;
+        setFleetRobots(fleet.items); setActiveMap(map); setMapError(null);
+        const requested = fleet.items.find(robot => robot.id === params?.robotId || robot.code === params?.robotId);
+        const assigned = fleet.items.find(robot => robot.id === detail?.contextValues?.assignedRobotId);
+        setSelectedRobot(current => requested?.code || assigned?.code || (fleet.items.some(robot => robot.code === current) ? current : fleet.items.find(robot => robot.currentMapVersionId === map?.id)?.code || ''));
+        setLiveJob(detail ? mapJobDetailToAppJobItem(detail) : null);
+      } catch (error: any) {
+        if (!cancelled) { setMapError(error.message || 'Map could not be loaded.'); setLiveJob(null); setActiveMap(null); }
+      }
     }
-    loadLiveJob().catch(() => {});
+    void loadLiveJob();
     return () => { cancelled = true; };
   }, [params?.jobId, params?.robotId, lastJobUpdate]);
-
-  const isAmr2 = selectedRobot === 'AMR-02';
-  const telemetry = robotTelemetry[selectedRobot];
-  const [amr1Position, amr2Position] = INITIAL_ROBOTS.map((fallback) => {
-    const pose = robotTelemetry[fallback.id] || fleetRobots.find((robot) => robot.code === fallback.id);
-    return mapRobotPose(pose?.poseX ?? 0, pose?.poseY ?? 0, fallback);
-  });
+  const telemetry = robotTelemetry[selectedRobot] || fleetRobots.find(robot => robot.code === selectedRobot);
 
   const handleCenter = () => {
     triggerHaptic('tap');
@@ -143,174 +115,9 @@ export function JobLiveMapScreen() {
           </View>
         )}
 
-        {/* Blueprint Grid */}
-        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
-          <Defs>
-            <Pattern id="livemap-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-              <Line x1="0" y1="0" x2="24" y2="0" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
-              <Line x1="0" y1="0" x2="0" y2="24" stroke={colors.mapGrid} strokeWidth="1" strokeOpacity="0.65" />
-            </Pattern>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#livemap-grid)" />
-        </Svg>
-
-        {/* Concentric Radar Rings */}
-        <View style={styles.radarCenter} pointerEvents="none">
-          <View style={[styles.radarRing, styles.ringLarge]} />
-          <View style={[styles.radarRing, styles.ringMedium]} />
-          <View style={[styles.radarRing, styles.ringSmall]} />
-        </View>
-
-        {/* Dynamic Nav2 Waypoint Trajectory (SVG Path replacing arbitrary CSS rotated line) */}
-        <Svg
-          width="100%"
-          height="100%"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        >
-          {/* Planned Nav2 Route Path */}
-          <Path
-            d={
-              isAmr2
-                ? 'M 32 58 L 32 50 L 52 50 L 52 30 L 68 30 L 68 22'
-                : 'M 16 58 L 16 48 L 46 48 L 46 22 L 28 22'
-            }
-            stroke="rgba(21, 87, 208, 0.55)"
-            strokeWidth="1.2"
-            strokeDasharray="2.5, 2.5"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* Origin Waypoint at Dock Bay Exit */}
-          <Circle
-            cx={isAmr2 ? 32 : 16}
-            cy={58}
-            r="1.6"
-            fill="#ffffff"
-            stroke={colors.primaryText}
-            strokeWidth="0.8"
-          />
-          {/* Destination Waypoint at Target Rack Bin */}
-          <Circle
-            cx={isAmr2 ? 68 : 28}
-            cy={isAmr2 ? 22 : 22}
-            r="2"
-            fill={colors.success}
-            stroke="#ffffff"
-            strokeWidth="0.8"
-          />
-        </Svg>
-
-        {/* Rack Zones */}
-        <View style={styles.zoneRackA}>
-          <Text style={styles.zoneLabel}>Rack A (Multi-SKU)</Text>
-          <View style={styles.rackGrid}>
-            {Array.from({ length: 9 }).map((_, i) => (
-              <View key={i} style={styles.rackCell} />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.zoneRackB}>
-          <Text style={styles.zoneLabel}>Rack B · QA Zone</Text>
-          <View style={styles.rackCellBulk} />
-        </View>
-
-        <View style={[styles.zoneDocks, { bottom: dockZoneBottom }]}>
-          <Text style={styles.zoneLabel}>Loading Docks</Text>
-          <View style={styles.docksRow}>
-            <View style={styles.dockBox}>
-              <Text style={styles.dockText}>Dock 01</Text>
-            </View>
-            <View style={styles.dockBox}>
-              <Text style={styles.dockText}>Dock 02</Text>
-            </View>
-            <View style={styles.dockBox}>
-              <Text style={styles.dockText}>Dock 03</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Active Nav2 Path Badge */}
-        <View style={styles.statusPill}>
-          <View style={styles.pulseDot} />
-          <Text style={styles.statusPillText}>Nav2 active · {selectedRobot}</Text>
-        </View>
-
-        {/* Robot AMR-01 Marker (En Route in Central Aisle) */}
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            setSelectedRobot('AMR-01');
-          }}
-          style={[
-            styles.robotWrapper,
-            { left: `${amr1Position.xPercent}%`, top: `${amr1Position.yPercent}%` },
-            !isAmr2 && styles.robotWrapperActive,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={`AMR-01, ${robotTelemetry['AMR-01']?.navigationStatus || 'Standby'}`}
-          accessibilityState={{ selected: !isAmr2 }}
-        >
-          {!isAmr2 && <View style={styles.sonarCone} />}
-          <View style={[styles.robotCircle, !isAmr2 && styles.robotCircleSelected]}>
-            <Svg width={24} height={24} viewBox="0 0 24 24">
-              <G rotation={Math.round(((robotTelemetry['AMR-01']?.poseYaw || 0) * 180) / Math.PI)} origin="12, 12">
-                <Path
-                  d={ROBOT_HEADING_ARROW_PATH}
-                  fill="#ffffff"
-                  stroke="#ffffff"
-                  strokeWidth={1.5}
-                  strokeLinejoin="round"
-                />
-              </G>
-            </Svg>
-          </View>
-          <View style={[styles.robotPill, !isAmr2 && styles.robotPillActive]}>
-            <View style={[styles.robotDot, { backgroundColor: '#16a34a' }]} />
-            <Text style={styles.robotPillId} numberOfLines={1}>AMR-01</Text>
-            <Text style={styles.robotPillSub} numberOfLines={1}>{robotTelemetry['AMR-01']?.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : 'Standby'}</Text>
-          </View>
-        </Pressable>
-
-        {/* Robot AMR-02 Marker (Standby Bay - Separate from Rack B) */}
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            setSelectedRobot('AMR-02');
-          }}
-          style={[
-            styles.robotWrapper,
-            { left: `${amr2Position.xPercent}%`, top: `${amr2Position.yPercent}%` },
-            isAmr2 && styles.robotWrapperActive,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={`AMR-02, ${robotTelemetry['AMR-02']?.navigationStatus || 'Standby'}`}
-          accessibilityState={{ selected: isAmr2 }}
-        >
-          {isAmr2 && <View style={styles.sonarCone} />}
-          <View style={[styles.robotCircle, isAmr2 && styles.robotCircleSelected]}>
-            <Svg width={24} height={24} viewBox="0 0 24 24">
-              <G rotation={Math.round(((robotTelemetry['AMR-02']?.poseYaw || 0) * 180) / Math.PI)} origin="12, 12">
-                <Path
-                  d={ROBOT_HEADING_ARROW_PATH}
-                  fill="#ffffff"
-                  stroke="#ffffff"
-                  strokeWidth={1.5}
-                  strokeLinejoin="round"
-                />
-              </G>
-            </Svg>
-          </View>
-          <View style={[styles.robotPill, isAmr2 && styles.robotPillActive]}>
-            <View style={[styles.robotDot, { backgroundColor: colors.warning }]} />
-            <Text style={styles.robotPillId} numberOfLines={1}>AMR-02</Text>
-            <Text style={styles.robotPillSub} numberOfLines={1}>{robotTelemetry['AMR-02']?.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : 'Standby'}</Text>
-          </View>
-        </Pressable>
+        <WarehouseMapLayer map={activeMap} robots={fleetRobots} telemetry={robotTelemetry}
+          selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} />
+        {mapError && <View style={styles.toast}><Text style={styles.toastText}>{mapError}</Text></View>}
 
         {/* Telemetry Bottom Sheet */}
         <View
@@ -325,7 +132,7 @@ export function JobLiveMapScreen() {
               </Text>
             </View>
             <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>Live telemetry</Text>
+              <Text style={styles.statusBadgeText}>{telemetry?.lastTelemetryAt ? 'Telemetry Snapshot' : 'Telemetry Unavailable'}</Text>
             </View>
           </View>
 
@@ -333,19 +140,19 @@ export function JobLiveMapScreen() {
           <View style={styles.metricRow}>
             <View style={styles.metricCol}>
               <Text style={styles.metricVal}>
-                {telemetry ? `${Math.round(Number(telemetry.batteryPercent))}%` : isAmr2 ? '92%' : '85%'}
+                {telemetry ? `${Math.round(Number(telemetry.batteryPercent))}%` : '—'}
               </Text>
               <Text style={styles.metricLabel}>Battery</Text>
             </View>
             <View style={styles.metricCol}>
               <Text style={styles.metricVal}>
-                {telemetry ? `${telemetry.poseX.toFixed(1)}m, ${telemetry.poseY.toFixed(1)}m` : isAmr2 ? '0m' : '8m'}
+                {telemetry ? `${telemetry.poseX.toFixed(1)}m, ${telemetry.poseY.toFixed(1)}m` : '—'}
               </Text>
               <Text style={styles.metricLabel}>{telemetry ? 'Live Pose' : 'To target'}</Text>
             </View>
             <View style={[styles.metricCol, { borderRightWidth: 0 }]}>
               <Text style={[styles.metricVal, { color: colors.darkAction }]}>
-                {telemetry?.navigationStatus || (isAmr2 ? 'Standby' : '45s')}
+                {telemetry?.navigationStatus || 'Unknown'}
               </Text>
               <Text style={styles.metricLabel}>{telemetry ? 'Nav State' : 'Est. arrival'}</Text>
             </View>

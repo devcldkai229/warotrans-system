@@ -1,3 +1,4 @@
+import { getActiveMapVersion, getMapVersionDetail, listWarehouses, type MapVersionDetailDto, type RobotDto } from '../../shared/api';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LayoutAnimation,
@@ -30,47 +31,14 @@ import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime } from '../../shared/realtime';
 import { listJobs, listRobots } from '../../shared/api';
-import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, MOCK_JOBS } from '../jobs/jobData';
+import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from '../jobs/jobData';
 import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const INITIAL_ROBOTS: MapRobot[] = [
-  {
-    id: 'AMR-01',
-    xPercent: 38,
-    yPercent: 44,
-    headingDeg: 45,
-    status: 'EN_ROUTE',
-    battery: 85,
-    speed: '1.2 m/s',
-  },
-  {
-    id: 'AMR-02',
-    xPercent: 74,
-    yPercent: 26,
-    headingDeg: 180,
-    status: 'STANDBY',
-    battery: 94,
-    speed: '0.0 m/s',
-  },
-];
-
-const INITIAL_JOB = MOCK_JOBS.find((job) => job.id === 'JOB-2026-0812') ?? MOCK_JOBS[0];
-
-function mapRobotPose(poseX: number, poseY: number, fallback: MapRobot) {
-  if (poseX === 0 && poseY === 0) {
-    return { xPercent: fallback.xPercent, yPercent: fallback.yPercent };
-  }
-  const maxX = poseX <= 12 && poseY <= 10 ? 8 : 50;
-  const maxY = poseX <= 12 && poseY <= 10 ? 6 : 30;
-  return {
-    xPercent: Math.max(22, Math.min(80, Math.round(22 + (poseX / maxX) * 56))),
-    yPercent: Math.max(22, Math.min(58, Math.round(58 - (poseY / maxY) * 34))),
-  };
-}
+const INITIAL_JOB = EMPTY_JOB;
 
 /**
  * Modern "Command Center" HomeScreen.
@@ -84,11 +52,12 @@ function mapRobotPose(poseX: number, poseY: number, fallback: MapRobot) {
 export function HomeScreen() {
   const { session } = useAuth();
   const { navigate, dockHeight } = useNavigation();
-  const [selectedRobotId, setSelectedRobotId] = useState<string>('AMR-01');
+  const [activeMap, setActiveMap] = useState<MapVersionDetailDto | null>(null);
+  const [rawFleet, setRawFleet] = useState<RobotDto[]>([]);
+  const [selectedRobotId, setSelectedRobotId] = useState<string>('');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
   const [activeJob, setActiveJob] = useState<AppJobItem>(INITIAL_JOB);
-  const [fleetRobots, setFleetRobots] = useState<MapRobot[]>(INITIAL_ROBOTS);
   const { robotTelemetry, lastJobUpdate } = useRealtime();
 
   useEffect(() => {
@@ -96,8 +65,8 @@ export function HomeScreen() {
     listJobs()
       .then((jobs) => {
         if (isMounted) {
-          const mapped = jobs.map(mapJobDetailToAppJobItem);
-          const priority = (job: AppJobItem) => job.hasWaitingHandover || job.status === 'ASSIGNED' ? 0
+          const mapped = jobs.filter(job => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(job.status)).map(job => mapJobDetailToAppJobItem(job, session?.id));
+          const priority = (job: AppJobItem) => job.hasWaitingHandover ? 0
             : ['RECOVERY_REQUIRED', 'PAUSED', 'FAILED'].includes(job.status) ? 1
             : job.status === 'RUNNING' ? 2
             : ['QUEUED', 'CREATED'].includes(job.status) ? 3 : 4;
@@ -107,33 +76,23 @@ export function HomeScreen() {
       .catch(() => {});
 
     return () => { isMounted = false; };
-  }, [lastJobUpdate]);
+  }, [lastJobUpdate, session?.id]);
 
   useEffect(() => {
     let isMounted = true;
 
+    listWarehouses({ isActive: true }).then(async response => {
+      const warehouse = response.items[0];
+      if (!warehouse) return;
+      const map = await getActiveMapVersion(warehouse.id);
+      if (map) { const detail = await getMapVersionDetail(map.id); if (isMounted) setActiveMap(detail); }
+    }).catch(() => {});
     // Fetch initial fleet status from backend so battery/status/pose reflects database on mount
     listRobots()
       .then((res) => {
         if (isMounted && res?.items && res.items.length > 0) {
-          const mapped: MapRobot[] = res.items.map((r, idx) => {
-            const fallback =
-              INITIAL_ROBOTS.find((init) => init.id === r.code) ||
-              INITIAL_ROBOTS[idx % INITIAL_ROBOTS.length];
-            return {
-              id: r.code,
-              ...mapRobotPose(r.poseX ?? 0, r.poseY ?? 0, fallback),
-              headingDeg: Math.round(((r.poseYaw ?? 0) * 180) / Math.PI),
-              status: (r.navigationStatus === 'NAVIGATING'
-                ? 'EN_ROUTE'
-                : r.navigationStatus === 'PAUSED'
-                  ? 'PAUSED'
-                  : 'STANDBY') as any,
-              battery: Math.round(r.batteryPercent ?? 85),
-              speed: r.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
-            };
-          });
-          setFleetRobots(mapped);
+          setRawFleet(res.items);
+          setSelectedRobotId(current => res.items.some(robot => robot.code === current) ? current : res.items[0].code);
         }
       })
       .catch(() => {});
@@ -143,33 +102,25 @@ export function HomeScreen() {
     };
   }, []);
 
-  const robots = useMemo(() => {
-    return fleetRobots.map((r, idx) => {
-      const live = robotTelemetry[r.id];
-      if (!live) return r;
-      return {
-        ...r,
-        ...mapRobotPose(live.poseX, live.poseY,
-          INITIAL_ROBOTS.find((initial) => initial.id === r.id) || INITIAL_ROBOTS[idx % INITIAL_ROBOTS.length]),
-        battery: Math.round(live.batteryPercent ?? r.battery),
-        status: (live.navigationStatus === 'NAVIGATING'
-          ? 'EN_ROUTE'
-          : live.navigationStatus === 'STANDBY'
-          ? 'STANDBY'
-          : live.navigationStatus === 'PAUSED'
-          ? 'PAUSED'
-          : 'STANDBY') as any,
-        speed: live.navigationStatus === 'NAVIGATING' ? '1.2 m/s' : '0.0 m/s',
-        headingDeg: Math.round(((live.poseYaw ?? 0) * 180) / Math.PI),
-      };
-    });
-  }, [fleetRobots, robotTelemetry]);
+  const robots = useMemo<MapRobot[]>(() => rawFleet.map(robot => {
+    const live = robotTelemetry[robot.code];
+    const navigation = live?.navigationStatus || robot.navigationStatus;
+    const battery = live?.batteryPercent ?? robot.batteryPercent;
+    const velocity = live?.linearVelocity ?? robot.linearVelocity;
+    return {
+      id: robot.code,
+      status: navigation === 'NAVIGATING' ? 'EN_ROUTE' : navigation === 'PAUSED' ? 'PAUSED'
+        : navigation === 'STANDBY' ? 'STANDBY' : 'UNKNOWN',
+      battery: typeof battery === 'number' ? Math.round(battery) : null,
+      speed: typeof velocity === 'number' ? `${velocity.toFixed(2)} m/s` : '—',
+    };
+  }), [rawFleet, robotTelemetry]);
 
   const activeZone = session?.zone || 'Inbound Dock 01';
-  const isWaitingHandover = Boolean(activeJob.hasWaitingHandover || activeJob.status === 'ASSIGNED');
+  const isWaitingHandover = Boolean(activeJob.hasWaitingHandover);
   const isQueuedOrCreated = activeJob.status === 'CREATED' || activeJob.status === 'QUEUED';
   const activeStatusLabel = isWaitingHandover ? 'Waiting Handover' : JOB_STATUS_PRESENTATION[activeJob.status]?.label || activeJob.status;
-  const activePositionLabel = isWaitingHandover ? 'At Station (0m)' : isQueuedOrCreated ? 'Awaiting Robot Start' : activeJob.status === 'RUNNING' ? 'En Route' : activeJob.status;
+  const activePositionLabel = isWaitingHandover ? 'Waiting at Station' : isQueuedOrCreated ? 'Awaiting Robot Start' : activeJob.status === 'RUNNING' ? 'En Route' : activeJob.status;
   const collapsedBtnTitle = isWaitingHandover ? 'Verify' : isQueuedOrCreated ? 'Start' : 'Open';
   const expandedBtnTitle = isWaitingHandover ? 'Verify Handover' : isQueuedOrCreated ? 'Open & Start Job' : 'View Mission Detail';
 
@@ -190,13 +141,13 @@ export function HomeScreen() {
   };
 
   const handleStartHandover = () => {
+    if (!activeJob.id) { navigate('jobs'); return; }
     triggerHaptic('tap');
     navigate('job_detail', { jobId: activeJob.id });
   };
 
   const handleLocateUser = () => {
-    setSelectedRobotId('AMR-01');
-    toast.info(`Centered on your station: ${activeZone}`);
+    toast.info('Staff station coordinates are not available yet.');
   };
 
   const handleSearchOnMap = () => {
@@ -208,13 +159,14 @@ export function HomeScreen() {
     <View style={styles.root}>
       {/* 1. Full-screen Interactive 2D Facility Map */}
       <MiniFacilityMap
+        map={activeMap} fleet={rawFleet} telemetry={robotTelemetry}
         currentZone={activeZone}
         selectedRobotId={selectedRobotId}
         onSelectRobot={(id) => {
           setSelectedRobotId(id);
           const r = robots.find((item) => item.id === id);
           if (r) {
-            toast.info(`${r.id}: Battery ${r.battery}%, Speed ${r.speed}`);
+            toast.info(`${r.id}: Battery ${r.battery == null ? '—' : `${r.battery}%`}, Speed ${r.speed}`);
           }
         }}
         onLocateUser={handleLocateUser}
@@ -239,7 +191,10 @@ export function HomeScreen() {
           <View style={styles.dragPill} />
         </Pressable>
 
-        {!isSheetExpanded ? (
+        {!activeJob.id ? <View style={styles.insetBox}>
+          <Text variant="headline">No Active Jobs</Text>
+          <Button title="View Jobs" onPress={() => navigate('jobs')} />
+        </View> : !isSheetExpanded ? (
           /* Collapsed Mode (Peek: ~68px, frees up 80% of screen for map) */
           <View style={styles.collapsedRow}>
             <Pressable
@@ -257,7 +212,7 @@ export function HomeScreen() {
                 </Text>
                 <Text variant="caption" color={colors.textMuted}>·</Text>
                 <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={styles.collapsedTarget}>
-                  <Text style={styles.boldText}>{activeJob.target || 'Rack A · Level 2'}</Text> · <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text>
+                  <Text style={styles.boldText}>{activeJob.target || 'Unknown Destination'}</Text> · <Text style={styles.boldMono}>{activeJob.robot || 'Unassigned'}</Text>
                 </Text>
               </View>
             </Pressable>
@@ -297,7 +252,7 @@ export function HomeScreen() {
                   style={({ pressed }) => [styles.fleetToggleBtn, pressed && styles.pressed]}
                 >
                   <Text variant="caption" color={colors.primaryText} style={styles.fleetToggleText}>
-                    {isFleetExpanded ? 'Hide Fleet' : 'Fleet (2)'}
+                    {isFleetExpanded ? 'Hide Fleet' : `Fleet (${robots.length})`}
                   </Text>
                   {isFleetExpanded ? (
                     <ChevronDown size={14} color={colors.primaryText} />
@@ -334,7 +289,7 @@ export function HomeScreen() {
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Cargo</Text>
                 <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
-                  <Text style={styles.boldMono}>{activeJob.containers[0]?.code || 'BOX-101'}</Text>
+                  <Text style={styles.boldMono}>{activeJob.containers[0]?.code || 'Unknown Container'}</Text>
                   {activeJob.containers.length > 1 ? ` (+${activeJob.containers.length - 1} more totes)` : ''}
                 </Text>
               </View>
@@ -342,15 +297,15 @@ export function HomeScreen() {
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Assigned</Text>
                 <Text variant="body" color={colors.textSecondary} style={styles.detailValue}>
-                  <Text style={styles.boldMono}>{activeJob.robot || 'AMR-01'}</Text> · {activePositionLabel}
+                  <Text style={styles.boldMono}>{activeJob.robot || 'Unassigned'}</Text> · {activePositionLabel}
                 </Text>
               </View>
 
               <ProgressMeter
-                value={activeJob.progressPercent ?? 68}
+                value={activeJob.progressPercent ?? 0}
                 tone="warning"
                 style={styles.meter}
-                accessibilityLabel="Handover progress 68 percent"
+                accessibilityLabel={`Job progress ${activeJob.progressPercent ?? 0} percent`}
               />
             </View>
 
@@ -379,11 +334,11 @@ export function HomeScreen() {
                     }}
                     style={({ pressed }) => [styles.fleetRecallLink, pressed && styles.pressed]}
                     accessibilityRole="button"
-                    accessibilityLabel="Open Emergency Recall console"
+                    accessibilityLabel="Open command cancellation console"
                   >
                     <ShieldAlert size={13} color="#b91c1c" />
                     <Text style={styles.fleetRecallLinkText}>
-                      E-Stop & Recall
+                      Command Cancellation
                     </Text>
                   </Pressable>
                 </View>
@@ -406,14 +361,14 @@ export function HomeScreen() {
                           ]}
                         />
                         <Text variant="caption" color={colors.textSecondary} style={styles.statusLabel}>
-                          {r.status === 'EN_ROUTE' ? 'In Transit' : r.status === 'PAUSED' ? 'Paused' : 'Standby'}
+                          {r.status === 'EN_ROUTE' ? 'In Transit' : r.status === 'PAUSED' ? 'Paused' : r.status === 'STANDBY' ? 'Standby' : 'Unknown'}
                         </Text>
                       </View>
                       <View style={styles.fleetTelemetryRow}>
                         <Text variant="caption" color={colors.textSecondary}>Speed: {r.speed}</Text>
                         <View style={styles.batteryRow}>
-                          <BatteryMedium size={13} color={r.battery < 20 ? '#dc2626' : colors.successText} />
-                          <Text variant="caption" color={colors.textSecondary}>{r.battery}%</Text>
+                          <BatteryMedium size={13} color={r.battery != null && r.battery < 20 ? '#dc2626' : colors.successText} />
+                          <Text variant="caption" color={colors.textSecondary}>{r.battery == null ? '—' : `${r.battery}%`}</Text>
                         </View>
                       </View>
                     </View>

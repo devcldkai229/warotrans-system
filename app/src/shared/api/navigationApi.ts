@@ -9,6 +9,13 @@ export interface MapVersionDto {
   name: string;
   status: MapStatus | string;
   mapUri: string;
+  previewImageUri?: string | null;
+  imageWidthPixels: number;
+  imageHeightPixels: number;
+  resolution: number;
+  originX: number;
+  originY: number;
+  originYaw: number;
   frameId: string;
   createdAt: string;
   publishedAt: string | null;
@@ -28,6 +35,7 @@ export interface EndpointDto {
 
 export interface MapVersionDetailDto extends MapVersionDto {
   endpoints: EndpointDto[];
+  edges?: { id: string; isActive: boolean; geometry: { type: string; coordinates: number[][] } }[];
 }
 
 export function listMapVersionsForWarehouse(warehouseId: string) {

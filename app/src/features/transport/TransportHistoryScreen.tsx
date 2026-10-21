@@ -1,3 +1,5 @@
+import { useRealtime } from '../../shared/realtime';
+import { requestStatusLabel } from './dispatchData';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
@@ -61,144 +63,6 @@ export interface TransportOrder {
   operator: string;
 }
 
-export const TRANSPORT_ORDERS: TransportOrder[] = [
-  {
-    id: 'TR-2048',
-    rawId: '7439150f-3796-4404-9f9d-b894b72dc3f1',
-    requestCode: 'TR-2048',
-    rawStatus: 'IN_PROGRESS',
-    workflowName: 'Inbound Putaway',
-    category: 'INBOUND',
-    status: 'IN_PROGRESS',
-    statusText: 'Waiting Handover',
-    source: 'DOCK-IN-01',
-    destination: 'RACK-A-02 · Level 1 & 3',
-    container: 'BOX-101, BOX-102 (2 Totes)',
-    product: 'Electronic Components & Control Modules',
-    qty: 70,
-    robot: 'AMR-01',
-    linkedJobId: 'JOB-2026-0812',
-    timeLabel: 'Requested 2m ago',
-    operator: 'Alex Tran',
-  },
-  {
-    id: 'TR-2047',
-    rawId: 'tr-seed-2047',
-    requestCode: 'TR-2047',
-    rawStatus: 'IN_PROGRESS',
-    workflowName: 'Replenishment',
-    category: 'INTERNAL',
-    status: 'IN_PROGRESS',
-    statusText: 'Needs Recovery',
-    source: 'RACK-D-01 · Level 1',
-    destination: 'RACK-A-01 · Level 1',
-    container: 'BOX-401, BOX-402 (2 Totes)',
-    product: 'Sensor Array & Control Module',
-    qty: 80,
-    robot: 'AMR-02',
-    linkedJobId: 'JOB-2026-0819',
-    timeLabel: 'Dispatched 14m ago',
-    operator: 'Alex Tran',
-  },
-  {
-    id: 'TR-2046',
-    rawId: 'tr-seed-2046',
-    requestCode: 'TR-2046',
-    rawStatus: 'IN_PROGRESS',
-    workflowName: 'Outbound Retrieval',
-    category: 'OUTBOUND',
-    status: 'IN_PROGRESS',
-    statusText: 'En Route',
-    source: 'RACK-B-04 · Level 2',
-    destination: 'DOCK-OUT-04',
-    container: 'BOX-204',
-    product: 'Hydraulic Valves',
-    qty: 16,
-    robot: 'AMR-02',
-    linkedJobId: 'JOB-2026-0813',
-    timeLabel: 'Dispatched 25m ago',
-    operator: 'Alex Tran',
-  },
-  {
-    id: 'TR-2045',
-    rawId: 'tr-seed-2045',
-    requestCode: 'TR-2045',
-    rawStatus: 'COMPLETED',
-    workflowName: 'Reallocation',
-    category: 'INTERNAL',
-    status: 'COMPLETED',
-    statusText: 'Delivered & Verified',
-    source: 'RACK-A-01 · Level 1',
-    destination: 'RACK-B-01 · Level 2',
-    container: 'BOX-105',
-    product: 'Control Relays',
-    qty: 30,
-    robot: 'AMR-01',
-    linkedJobId: 'JOB-2026-0808',
-    timeLabel: 'Completed at 09:50 AM',
-    duration: '6m 40s',
-    operator: 'David Nguyen',
-  },
-  {
-    id: 'TR-2044',
-    rawId: 'tr-seed-2044',
-    requestCode: 'TR-2044',
-    rawStatus: 'COMPLETED',
-    workflowName: 'Point-to-Point',
-    category: 'INTERNAL',
-    status: 'COMPLETED',
-    statusText: 'Handover Complete',
-    source: 'QA-02',
-    destination: 'ASSEMBLY-01',
-    container: 'TOTE-QA-01',
-    product: 'Drive Assembly Kit',
-    qty: 15,
-    robot: 'AMR-01',
-    linkedJobId: 'JOB-2026-0808',
-    timeLabel: 'Completed at 09:12 AM',
-    duration: '4m 10s',
-    operator: 'Alex Tran',
-  },
-  {
-    id: 'TR-2042',
-    rawId: 'tr-seed-2042',
-    requestCode: 'TR-2042',
-    rawStatus: 'CANCELLED',
-    workflowName: 'Outbound Retrieval',
-    category: 'OUTBOUND',
-    status: 'CANCELLED',
-    statusText: 'Cancelled',
-    source: 'RACK-A-08 · Level 1',
-    destination: 'DOCK-OUT-04',
-    container: 'BOX-215',
-    product: 'Drive Assembly',
-    qty: 8,
-    robot: 'AMR-01',
-    timeLabel: 'Cancelled at 08:10 AM',
-    cancelReason: 'Shelf slot obstructed by forklift. Task aborted.',
-    operator: 'Alex Tran',
-  },
-  {
-    id: 'TR-2041',
-    rawId: 'tr-seed-2041',
-    requestCode: 'TR-2041',
-    rawStatus: 'CANCELLED',
-    workflowName: 'Inbound Putaway',
-    category: 'INBOUND',
-    status: 'CANCELLED',
-    statusText: 'Cancelled',
-    source: 'DOCK-IN-01',
-    destination: 'RACK-B-01 · Level 1',
-    container: 'BOX-104',
-    product: 'Protective Insert',
-    qty: 30,
-    robot: 'AMR-02',
-    timeLabel: 'Cancelled at 07:45 AM',
-    cancelReason: 'Operator reported barcode label damaged and unreadable.',
-    operator: 'David Nguyen',
-  },
-];
-
 function formatContainerDisplay(raw: string): string {
   if (!raw) return 'Container';
   if (/\(\+\d+\)/.test(raw)) return raw;
@@ -225,21 +89,13 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
   if (wf.includes('INBOUND')) category = 'INBOUND';
   else if (wf.includes('OUTBOUND')) category = 'OUTBOUND';
 
-  let statusText = 'Processing';
-  if (item.requestCode === 'TR-2047') statusText = 'Needs Recovery';
-  else if (item.status === 'SUBMITTED') statusText = 'Submitted';
-  else if (item.status === 'QUEUED') statusText = 'Queued for fleet';
-  else if (item.status === 'IN_PROGRESS') statusText = 'En Route';
-  else if (item.status === 'COMPLETED') statusText = 'Delivered & Verified';
-  else if (item.status === 'CANCELLED') statusText = 'Cancelled';
-  else if (item.status === 'REJECTED') statusText = 'Rejected by scheduler';
-  else if (item.status === 'FAILED') statusText = 'Failed';
+  const statusText = requestStatusLabel(item.status);
 
-  const firstBarcode = details[0]?.containerBarcode || 'CTN-IN-000001';
+  const firstBarcode = details[0]?.containerBarcode || first?.containerId || 'Unknown Container';
   const containerLabel =
     details.length > 1
       ? `${firstBarcode} (+${details.length - 1})`
-      : details[0]?.containerBarcode || 'Container Tote';
+      : firstBarcode;
 
   const totalQty = details.reduce((acc, d) => acc + (d.qty || 1), 0);
   const destinations = Array.from(
@@ -248,7 +104,7 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
   const destinationLabel =
     destinations.length > 1
       ? `${destinations[0]} (+${destinations.length - 1} racks)`
-      : destinations[0] || 'Storage Rack';
+      : destinations[0] || first?.destinationEndpointId || 'Unknown Destination';
 
   return {
     id: item.requestCode,
@@ -261,12 +117,12 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
     category,
     status: isInProgress ? 'IN_PROGRESS' : isCompleted ? 'COMPLETED' : 'CANCELLED',
     statusText,
-    source: first?.sourceEndpointCode || 'DOCK-IN-01',
+    source: first?.sourceEndpointCode || first?.sourceEndpointId || 'Unknown Pickup',
     destination: destinationLabel,
     container: containerLabel,
-    product: first?.productName || item.note || 'Standard Cargo',
+    product: first?.productName || 'Unknown Product',
     qty: totalQty || 1,
-    robot: item.assignedRobotCode || 'AMR-01',
+    robot: item.assignedRobotCode || 'Unassigned',
     linkedJobId: item.linkedJobId || undefined,
     timeLabel: item.submittedAt
       ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -280,11 +136,12 @@ export type TabFilter = 'TOTAL' | 'ACTIVE' | 'DONE' | 'VOID';
 
 export function TransportHistoryScreen() {
   const { navigate, goBack } = useNavigation();
+  const { lastJobUpdate } = useRealtime();
   const [filter, setFilter] = useState<TabFilter>('TOTAL');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
   const [showCategoryChips, setShowCategoryChips] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [orders, setOrders] = useState<TransportOrder[]>(TRANSPORT_ORDERS);
+  const [orders, setOrders] = useState<TransportOrder[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [queueingId, setQueueingId] = useState<string | null>(null);
 
@@ -321,7 +178,9 @@ export function TransportHistoryScreen() {
 
   useEffect(() => {
     fetchHistory();
-  }, [fetchHistory]);
+    const poll = setInterval(fetchHistory, 15000);
+    return () => clearInterval(poll);
+  }, [fetchHistory, lastJobUpdate]);
 
   const totalCount = orders.length;
   const activeCount = orders.filter(
@@ -722,9 +581,10 @@ export function TransportHistoryScreen() {
                         <Pressable
                           onPress={() => {
                             triggerHaptic('tap');
+                            if (!order.linkedJobId) { toast.warning('No job is linked to this request yet. Refresh after queueing.'); return; }
                             navigate('live_map', {
                               jobId: order.linkedJobId,
-                              robotId: order.robot.includes('AMR-02') ? 'AMR-02' : 'AMR-01',
+                              robotId: order.robot,
                             });
                           }}
                           style={styles.actionBtnPrimary}
@@ -752,7 +612,7 @@ export function TransportHistoryScreen() {
                         <Pressable
                           onPress={() => {
                             triggerHaptic('tap');
-                            toast.success(`Audit slip printed for ${order.id}`);
+                            toast.info('Printer integration is not configured.');
                           }}
                           style={styles.actionBtnOutline}
                           accessibilityRole="button"
@@ -766,6 +626,7 @@ export function TransportHistoryScreen() {
                             triggerHaptic('tap');
                             navigate('transport_create', {
                               workflow: order.workflowName,
+                              repeatRequestId: order.rawId,
                               source: order.source,
                               destination: order.destination,
                               container: order.container,
@@ -785,6 +646,7 @@ export function TransportHistoryScreen() {
                           triggerHaptic('tap');
                           navigate('transport_create', {
                             workflow: order.workflowName,
+                              repeatRequestId: order.rawId,
                             source: order.source,
                             destination: order.destination,
                             container: order.container,

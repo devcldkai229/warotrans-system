@@ -1,3 +1,4 @@
+import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -98,7 +99,7 @@ function getContainerZone(c: ContainerListItem): 'INBOUND' | 'ZONE_A' | 'ZONE_B'
 }
 
 function resolveRecommendedWorkflow(c: ContainerListItem): string {
-  const loc = (c.currentStorageLocationCode || c.currentEndpointCode || 'DOCK-IN-01').toUpperCase();
+  const loc = (c.currentStorageLocationCode || c.currentEndpointCode || 'Location Unavailable').toUpperCase();
   if (loc.startsWith('DOCK-IN')) return 'Inbound Putaway';
   if (loc.startsWith('RACK-D')) return 'Replenishment';
   if (loc.startsWith('QA-') || loc.startsWith('ASSEMBLY')) return 'Point-to-Point';
@@ -111,10 +112,10 @@ function buildCatalogFromContainers(containers: ContainerListItem[]): CatalogPro
 
   containers.forEach((c) => {
     const sku = c.productSku || 'SKU-GEN';
-    const qty = c.qty || 20;
+    const qty = 1;
     const locCode = c.currentStorageLocationCode
       ? `${c.currentStorageLocationCode}${c.currentLevelNo ? ` · L${c.currentLevelNo}` : ''}`
-      : c.currentEndpointCode || 'DOCK-IN-01';
+      : c.currentEndpointCode || 'Location Unavailable';
     const zone =
       c.zoneLabel ||
       (locCode.startsWith('RACK-A')
@@ -125,7 +126,7 @@ function buildCatalogFromContainers(containers: ContainerListItem[]): CatalogPro
         ? 'Zone D'
         : locCode.startsWith('QA')
         ? 'QA Bay'
-        : 'Inbound Dock');
+        : 'Unclassified Location');
 
     const startpoint: CatalogStartpoint = {
       id: locCode,
@@ -145,7 +146,7 @@ function buildCatalogFromContainers(containers: ContainerListItem[]): CatalogPro
       bySku.set(sku, {
         id: `${c.productId}-${sku}`,
         name: c.productName || 'Warehouse Item',
-        category: c.category || 'Electronics',
+        category: c.category || 'Uncategorized',
         sku,
         totalStock: qty,
         startpoints: [startpoint],
@@ -158,6 +159,7 @@ function buildCatalogFromContainers(containers: ContainerListItem[]): CatalogPro
 
 export function InventoryLookupScreen() {
   const { goBack, navigate } = useNavigation();
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [inventoryTab, setInventoryTab] = useState<'containers' | 'skus'>('containers');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -190,7 +192,7 @@ export function InventoryLookupScreen() {
           warehouseId: whId,
           take: 100,
         });
-        if (isMounted && res?.items?.length) {
+        if (isMounted && res?.items) {
           setContainers(res.items);
         }
       } catch {}
@@ -225,8 +227,7 @@ export function InventoryLookupScreen() {
       const clean = raw.toUpperCase();
       const localMatch = containers.find(
         (c) =>
-          c.barcode.toUpperCase() === clean ||
-          c.barcode.toUpperCase().includes(clean)
+          c.barcode.toUpperCase() === clean
       );
       if (localMatch) {
         setVerifiedContainer(localMatch);
@@ -371,7 +372,7 @@ export function InventoryLookupScreen() {
               <Pressable
                 onPress={() => {
                   triggerHaptic('tap');
-                  navigate('scanner');
+                  setScannerOpen(true);
                 }}
                 style={styles.scannerBtn}
                 accessibilityRole="button"
@@ -428,13 +429,13 @@ export function InventoryLookupScreen() {
                   ? `${verifiedContainer.currentStorageLocationCode}${
                       verifiedContainer.currentLevelNo ? ` · Level ${verifiedContainer.currentLevelNo}` : ''
                     }`
-                  : verifiedContainer.currentEndpointCode || 'Origin Bay (EP-A)'}
+                  : verifiedContainer.currentEndpointCode || 'Location Unavailable'}
               </Text>
             </View>
             <View style={styles.verifiedRow}>
               <Text style={styles.verifiedLabel}>Inventory Status:</Text>
               <Text style={styles.verifiedValue}>
-                {verifiedContainer.status || 'STORED'} · {verifiedContainer.qty || 24} pcs
+                {verifiedContainer.status || 'STORED'} · 1 container
               </Text>
             </View>
           </View>
@@ -615,7 +616,7 @@ export function InventoryLookupScreen() {
                 {/* Cargo Row (QUANTITY FIRST, NEVER TRUNCATE QUANTITY!) */}
                 <View style={styles.cargoRow}>
                   <Box size={13} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                  <Text style={styles.cargoQty}>{c.qty || 20} pcs</Text>
+                  <Text style={styles.cargoQty}>{1} containers</Text>
                   <Text style={styles.cargoDot}>·</Text>
                   <Text style={styles.cargoProduct} numberOfLines={1}>
                     {c.productName || 'Warehouse Item'} ({c.productSku || 'SKU-GEN'})
@@ -733,7 +734,7 @@ export function InventoryLookupScreen() {
                           </Text>
                           <ArrowUpRight size={10} color={colors.primary} style={{ marginLeft: 2 }} />
                         </Pressable>
-                        <Text style={styles.startpointQty}>{sp.qty} pcs</Text>
+                        <Text style={styles.startpointQty}>{sp.qty} containers</Text>
                       </View>
                     </View>
                   ))}
@@ -753,6 +754,8 @@ export function InventoryLookupScreen() {
           </ScrollView>
         </>
       )}
+      <BarcodeScannerHUD visible={scannerOpen} onClose={() => setScannerOpen(false)}
+        onScanResult={(barcode) => { setScannerOpen(false); setSearchTerm(barcode); void handleVerifyBarcode(barcode); }} />
     </View>
   );
 }

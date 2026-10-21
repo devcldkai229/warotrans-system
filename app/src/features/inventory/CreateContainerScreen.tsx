@@ -1,3 +1,5 @@
+import { mobileCapabilities } from '../../shared/api/capabilities';
+import { toast } from '../../shared/context/ToastContext';
 import React, { useEffect, useState } from 'react';
 import {
   Pressable,
@@ -23,7 +25,7 @@ import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { createContainer, listContainers } from '../../shared/api';
+import { createContainer, listProducts, listProductCategories } from '../../shared/api';
 
 interface ProductCatalogEntry {
   name: string;
@@ -31,78 +33,49 @@ interface ProductCatalogEntry {
   sku: string;
 }
 
-const DEMO_PRODUCT_LABEL = 'Electronic Components Tote (SKU-DEMO-000001)';
-const INITIAL_PRODUCT_CATALOG: Record<string, ProductCatalogEntry> = {
-  [DEMO_PRODUCT_LABEL]: {
-    name: 'Electronic Components Tote',
-    productId: 'dddddddd-0000-4000-8000-000000000001',
-    sku: 'SKU-DEMO-000001',
-  },
-};
-
-const CATEGORIES: Record<string, string[]> = {
-  Electronics: [
-    DEMO_PRODUCT_LABEL,
-    'Control Module',
-    'Sensor Array',
-    'Electronic Components',
-  ],
-  'Mechanical Parts': [
-    'Drive Assembly',
-    'Bearing Kit',
-    'Fastener Set',
-  ],
-  Packaging: [
-    'Shipping Carton',
-    'Protective Insert',
-    'Pallet Wrap',
-  ],
-};
 
 export function CreateContainerScreen() {
   const { goBack, navigate } = useNavigation();
   const [mode, setMode] = useState<'single' | 'batch'>('single');
-  const [category, setCategory] = useState<string>('Electronics');
-  const [product, setProduct] = useState<string>(DEMO_PRODUCT_LABEL);
-  const [productCatalog, setProductCatalog] = useState(INITIAL_PRODUCT_CATALOG);
-  const [registrationMode, setRegistrationMode] = useState<'LIVE_API' | 'LOCAL_SESSION_SIM'>('LOCAL_SESSION_SIM');
-  const [quantity, setQuantity] = useState<string>('45');
+  const [category, setCategory] = useState<string>('');
+  const [product, setProduct] = useState<string>('');
+  const [productCatalog, setProductCatalog] = useState<Record<string, ProductCatalogEntry>>({});
+  const [quantity, setQuantity] = useState<string>('1');
   const [batchCount, setBatchCount] = useState<string>('10');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const [generatedBarcode, setGeneratedBarcode] = useState<string>('BOX-482');
+  const [generatedBarcode, setGeneratedBarcode] = useState<string>('');
   const [batchGenerated, setBatchGenerated] = useState<{
     start: string;
     end: string;
     count: number;
     totalUnits: number;
   } | null>(null);
+  const [categoryProducts, setCategoryProducts] = useState<Record<string, string[]>>({});
+  const [createdBarcodes, setCreatedBarcodes] = useState<string[]>([]);
+  const [supplierBarcode, setSupplierBarcode] = useState('');
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [printFeedback, setPrintFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    listContainers({ warehouseId: '11111111-1111-1111-1111-111111111111', take: 50 })
-      .then(({ items }) => {
-        const discovered: Record<string, ProductCatalogEntry> = {};
-        const seen = new Set([INITIAL_PRODUCT_CATALOG[DEMO_PRODUCT_LABEL].productId]);
-        for (const item of items) {
-          if (!item.productId || !item.productSku || !item.productName || seen.has(item.productId)) continue;
-          seen.add(item.productId);
-          discovered[`${item.productName} (${item.productSku})`] = {
-            name: item.productName,
-            productId: item.productId,
-            sku: item.productSku,
-          };
-        }
-        if (mounted) setProductCatalog((prev) => ({ ...prev, ...discovered }));
-      })
-      .catch((err) => console.warn('Product catalog discovery unavailable:', err));
+    Promise.all([listProducts({ isActive: true, take: 100 }), listProductCategories()]).then(([products, categories]) => {
+      if (!mounted) return;
+      const catalog: Record<string, ProductCatalogEntry> = {};
+      const groups: Record<string, string[]> = {};
+      products.items.forEach(item => {
+        const label = `${item.name} (${item.sku})`;
+        catalog[label] = { name: item.name, productId: item.id, sku: item.sku };
+        const categoryName = categories.items.find(category => category.id === item.categoryId)?.name || 'Products';
+        (groups[categoryName] ||= []).push(label);
+      });
+      setProductCatalog(catalog); setCategoryProducts(groups);
+      const firstCategory = Object.keys(groups)[0] || '';
+      setCategory(firstCategory); setProduct(groups[firstCategory]?.[0] || '');
+    }).catch(error => { if (mounted) setCatalogError(error.message || 'Product catalog could not be loaded.'); });
     return () => { mounted = false; };
   }, []);
-
-  const productOptions = category === 'Electronics'
-    ? [...new Set([...CATEGORIES.Electronics, ...Object.keys(productCatalog)])]
-    : CATEGORIES[category] || [];
+  const productOptions = categoryProducts[category] || [];
 
   const packQty = Number(quantity) || 0;
   const numContainers = Number(batchCount) || 0;
@@ -110,59 +83,36 @@ export function CreateContainerScreen() {
   const batchCountLabel = batchCount.trim() || '0';
 
   const handleGenerate = async () => {
+    const item = productCatalog[product];
+    const count = mode === 'single' ? 1 : Number(batchCount);
+    if (!item) { toast.error('Select an active product from the server catalog.'); return; }
+    if (!Number.isInteger(count) || count < 1 || count > 10) { toast.error('Enter between 1 and 10 containers.'); return; }
+    if (isSubmitting) return;
     setIsSubmitting(true);
-    const catalogEntry = productCatalog[product];
-    const containerBody = {
-      productId: catalogEntry?.productId || '00000000-0000-0000-0001-000000000001',
-      productName: catalogEntry?.name || product,
-      productSku: catalogEntry?.sku || category.slice(0, 3).toUpperCase() + '-9042',
-      qty: packQty,
-    };
+    const created: string[] = [];
     try {
-      if (mode === 'single') {
-        const res = await createContainer(containerBody);
-        setRegistrationMode(res.registrationMode || 'LOCAL_SESSION_SIM');
-        setGeneratedBarcode(res.barcode);
-        setBatchGenerated(null);
-      } else {
-        const count = Math.min(numContainers, 10);
-        const created: string[] = [];
-        let batchMode: 'LIVE_API' | 'LOCAL_SESSION_SIM' = 'LIVE_API';
-        for (let i = 0; i < count; i++) {
-          const res = await createContainer(containerBody);
-          if (res.registrationMode !== 'LIVE_API') batchMode = 'LOCAL_SESSION_SIM';
-          created.push(res.barcode);
-        }
-        setRegistrationMode(batchMode);
-        setBatchGenerated({
-          start: created[0] || 'BOX-201',
-          end: created[created.length - 1] || 'BOX-210',
-          count: created.length,
-          totalUnits: packQty * created.length,
-        });
+      for (let index = 0; index < count; index++) {
+        const response = await createContainer({ productId: item.productId, supplierPackageBarcode: supplierBarcode.trim() || null });
+        created.push(response.barcode);
       }
-      setIsSuccess(true);
-      triggerHaptic('success');
-    } catch (err: any) {
-      console.warn('Failed to create container:', err);
+    } catch (error: any) {
+      toast.error(`${created.length} of ${count} containers registered. ${error.message || 'Registration failed.'}`);
     } finally {
+      if (created.length) {
+        setCreatedBarcodes(created); setGeneratedBarcode(created[0]);
+        setBatchGenerated(mode === 'batch' ? { start: created[0], end: created[created.length - 1], count: created.length, totalUnits: created.length } : null);
+        setIsSuccess(true);
+      }
       setIsSubmitting(false);
     }
   };
-
   const handlePrint = () => {
-    triggerHaptic('tap');
-    setPrintFeedback('Dispatched print job to Zebra ZT411 Direct Thermal Mobile Printer (ZPL II · 203 DPI).');
+    setPrintFeedback('Printer integration is not configured. Use the registered container code for manual entry.');
     setTimeout(() => setPrintFeedback(null), 4000);
   };
-
   const handleDispatchInbound = () => {
-    triggerHaptic('tap');
-    const targetBarcode = mode === 'single' ? generatedBarcode : batchGenerated?.start || 'BOX-101';
-    navigate('transport_create', {
-      workflow: 'Inbound Putaway',
-      container: targetBarcode,
-    });
+    if (!createdBarcodes.length) return;
+    navigate('transport_create', { workflow: 'INBOUND_PUTAWAY', container: createdBarcodes[0], containers: createdBarcodes });
   };
 
   const barcodeBars = [3, 1, 2, 1, 4, 1, 2, 3, 2, 1, 1, 3, 4, 1, 2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 3, 1, 2, 3, 1, 2, 4, 1];
@@ -170,11 +120,7 @@ export function CreateContainerScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label={isSuccess
-          ? registrationMode === 'LOCAL_SESSION_SIM'
-            ? 'Inbound Receiving · Local Session Sim Aid'
-            : 'Inbound Receiving · Live Backend Registered'
-          : 'Cargo induction'}
+        label={isSuccess ? 'Inbound Receiving · Registered' : 'Cargo induction'}
         title="Pack & Ingest Container"
         onBack={goBack}
       />
@@ -206,6 +152,8 @@ export function CreateContainerScreen() {
       )}
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {!mobileCapabilities.createContainer && <Text style={{ color: colors.textSecondary }}>Container registration is not available on the current backend. Product browsing remains available.</Text>}
+        {catalogError && <Text style={{ color: colors.danger }}>{catalogError}</Text>}
         {printFeedback && (
           <View style={styles.printToast}>
             <Printer size={16} color={colors.primary} />
@@ -224,11 +172,9 @@ export function CreateContainerScreen() {
                   {batchGenerated ? `${batchGenerated.count} containers registered` : 'Container registered'}
                 </Text>
                 <Text style={styles.successSub}>
-                  {registrationMode === 'LOCAL_SESSION_SIM'
-                    ? 'Container registration saved in the local session store · Sim Aid.'
-                    : batchGenerated
-                    ? 'Batch containers registered to Central Registry at Inbound Dock 01.'
-                    : 'Tote container registered to Central Registry at Inbound Dock 01.'}
+                  {batchGenerated
+                    ? 'Batch containers registered to Central Registry in the backend registry.'
+                    : 'Tote container registered to Central Registry in the backend registry.'}
                 </Text>
               </View>
             </View>
@@ -239,7 +185,7 @@ export function CreateContainerScreen() {
                 <Text style={styles.ticketMetaTag}>
                   {batchGenerated
                     ? `BATCH TOTE LABELS · ${batchGenerated.count} SEQUENTIAL`
-                    : 'CODE 128 SHIPPING LABEL'}
+                    : 'CONTAINER REFERENCE · MANUAL ENTRY'}
                 </Text>
                 <Text style={styles.ticketDpi}>203 DPI</Text>
               </View>
@@ -261,11 +207,11 @@ export function CreateContainerScreen() {
               <Text style={styles.barcodeProductText}>
                 {batchGenerated ? (
                   <>
-                    <Text style={styles.boldQty}>{batchGenerated.count} Totes × {packQty} units</Text> ({batchGenerated.totalUnits} Total Units)
+                    <Text style={styles.boldQty}>{batchGenerated.count} Totes × {packQty} containers</Text> ({batchGenerated.totalUnits} Total Containers)
                   </>
                 ) : (
                   <>
-                    <Text style={styles.boldQty}>{quantity} units</Text> · {product}
+                    <Text style={styles.boldQty}>{quantity} containers</Text> · {product}
                   </>
                 )}
               </Text>
@@ -283,7 +229,7 @@ export function CreateContainerScreen() {
               <View style={styles.ticketFooter}>
                 <Text style={styles.stagedLocLabel}>Registry Mode</Text>
                 <Text style={styles.stagedLocVal}>
-                  {registrationMode === 'LOCAL_SESSION_SIM' ? 'Local Session Store · Sim Aid' : 'Warehouse DB · Live'}
+                  Warehouse DB · Live
                 </Text>
               </View>
             </View>
@@ -336,14 +282,14 @@ export function CreateContainerScreen() {
             {/* Step 1: Category Picker */}
             <Text style={styles.fieldLabelFirst}>Product category</Text>
             <View style={styles.categoryChips}>
-              {Object.keys(CATEGORIES).map((cat) => {
+              {Object.keys(categoryProducts).map((cat) => {
                 const isSelected = category === cat;
                 return (
                   <Pressable
                     key={cat}
                     onPress={() => {
                       setCategory(cat);
-                      setProduct(CATEGORIES[cat][0]);
+                      setProduct(categoryProducts[cat][0]);
                     }}
                     style={[styles.chip, isSelected && styles.chipSelected]}
                   >
@@ -383,13 +329,12 @@ export function CreateContainerScreen() {
             </View>
 
             {/* Step 3: Quantity */}
-            <Text style={styles.fieldLabel}>Packing quantity</Text>
+            <Text style={styles.fieldLabel}>Supplier Package</Text>
             <Input
-              label="Units per container (pcs)"
-              value={quantity}
-              onChangeText={setQuantity}
-              keyboardType="numeric"
-              placeholder="e.g. 45"
+              label="Supplier Package Barcode (Optional)"
+              value={supplierBarcode}
+              onChangeText={setSupplierBarcode}
+              placeholder="Supplier package barcode"
             />
 
             {mode === 'batch' && (
@@ -410,7 +355,7 @@ export function CreateContainerScreen() {
               }
               icon={<PackageCheck size={18} color="#ffffff" />}
               loading={isSubmitting}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !productCatalog[product] || !mobileCapabilities.createContainer}
               onPress={handleGenerate}
               variant="primary"
               size="lg"

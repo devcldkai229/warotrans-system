@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Platform } from 'react-native';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { AccountRole, UserSession } from '../../shared/types/contracts';
 import {
   getCurrentAccount,
   loginWithCredentials,
   logoutSession,
 } from '../../shared/api/identityApi';
-import { ApiError, setAccessToken } from '../../shared/api/client';
+import { setAccessToken, onSessionExpired } from '../../shared/api/client';
 import {
   clearAllStoredAuth,
   getStoredAccessToken,
@@ -16,6 +16,8 @@ import {
   saveStoredRefreshToken,
   saveStoredUserSession,
 } from '../../shared/api/secureStore';
+import { clearWarehouseSnapshots } from '../../shared/api/warehouseApi';
+import { queryClient } from '../../app/providers/QueryProvider';
 
 interface AuthContextType {
   session: UserSession | null;
@@ -26,50 +28,6 @@ interface AuthContextType {
   logout: () => void;
   updateZone: (zone: string) => void;
 }
-
-export const PRESET_OPERATORS: {
-  id: string;
-  username: string;
-  name: string;
-  zone: string;
-  role: 'STAFF' | 'ADMIN';
-}[] = [
-  {
-    id: 'a0000000-0000-4000-8000-000000000002',
-    username: 'staff',
-    name: 'Warehouse Staff',
-    zone: 'Inbound Dock 01',
-    role: 'STAFF',
-  },
-  {
-    id: 'a0000000-0000-4000-8000-000000000001',
-    username: 'admin',
-    name: 'WaroTrans Admin',
-    zone: 'Inbound Dock 01',
-    role: 'ADMIN',
-  },
-  {
-    id: 'STF-2026-088',
-    username: 'alex.tran',
-    name: 'Alex Tran',
-    zone: 'Inbound Dock 01',
-    role: 'STAFF',
-  },
-  {
-    id: 'STF-2026-042',
-    username: 'sarah.connor',
-    name: 'Sarah Connor',
-    zone: 'Inbound Dock 01',
-    role: 'STAFF',
-  },
-  {
-    id: 'STF-2026-015',
-    username: 'david.miller',
-    name: 'David Miller',
-    zone: 'Outbound Dock 04',
-    role: 'STAFF',
-  },
-];
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -91,59 +49,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAccessToken(token);
         }
 
-        if (stored) {
-          if (isMounted) setSession(stored);
-
-          // In the background, validate profile via getCurrentAccount()
-          if (token) {
-            getCurrentAccount()
-              .then((acct) => {
-                if (!isMounted) return;
-                const fullName = acct.fullName || acct.username;
-                const initials =
-                  fullName
-                    .split(' ')
-                    .map((part) => part[0])
-                    .join('')
-                    .slice(0, 2)
-                    .toUpperCase() || 'OP';
-                const role = (acct.role === 'ADMIN' ? 'ADMIN' : 'STAFF') as AccountRole;
-
-                const refreshed: UserSession = {
-                  ...stored,
-                  id: acct.id,
-                  username: acct.username,
-                  fullName,
-                  role,
-                  avatarInitials: initials,
-                };
-                setSession(refreshed);
-                saveStoredUserSession(refreshed).catch(() => {});
-              })
-              .catch((err) => {
-                console.warn('Profile background verification skipped/failed:', err?.message);
-              });
-          }
-        } else if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.search) {
-          try {
-            const sp = new URLSearchParams(window.location.search);
-            const scr = sp.get('screen');
-            if (scr !== 'login' && (scr || sp.get('auth') === '1')) {
-              const matched = PRESET_OPERATORS[0];
-              const demoSession: UserSession = {
-                id: matched.id,
-                username: matched.username,
-                fullName: matched.name,
-                role: matched.role as AccountRole,
-                zone: matched.zone,
-                avatarInitials: 'WS',
-              };
-              if (isMounted) setSession(demoSession);
-            }
-          } catch {}
+        if (stored && token) {
+          const account = await getCurrentAccount();
+          if (!isMounted) return;
+          const fullName = account.fullName || account.username;
+          const refreshed: UserSession = {
+            ...stored, id: account.id, username: account.username, fullName,
+            role: account.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+            avatarInitials: fullName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase(),
+          };
+          setSession(refreshed);
+          await saveStoredUserSession(refreshed);
+        } else {
+          setAccessToken(null);
+          await clearAllStoredAuth();
         }
       } catch (err) {
-        console.warn('Hydration error:', err);
+        setAccessToken(null);
+        if (isMounted) setSession(null);
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -162,98 +85,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     zone?: string,
   ): Promise<UserSession> => {
     const trimmed = username.trim();
-    const pwd = password || 'Staff@123';
-    const activeZone = zone || 'Inbound Dock 01';
-
-    try {
-      const res = await loginWithCredentials(trimmed, pwd);
-      setAccessToken(res.accessToken);
-      await saveStoredAccessToken(res.accessToken);
-      if (res.refreshToken) {
-        await saveStoredRefreshToken(res.refreshToken);
-      }
-
-      const fullName = res.account.fullName || res.account.username;
-      const initials =
-        fullName
-          .split(' ')
-          .map((part) => part[0])
-          .join('')
-          .slice(0, 2)
-          .toUpperCase() || 'OP';
-
-      const role = (res.account.role === 'ADMIN' ? 'ADMIN' : 'STAFF') as AccountRole;
-
-      const newSession: UserSession = {
-        id: res.account.id,
-        username: res.account.username,
-        fullName,
-        role,
-        zone: activeZone,
-        avatarInitials: initials,
-      };
-
-      await saveStoredUserSession(newSession);
-      setSession(newSession);
-      return newSession;
-    } catch (err: any) {
-      // Graceful fallback to offline preset session if backend is completely unreachable
-      if (err instanceof ApiError && err.status === 0) {
-        console.warn('Backend identity service unreachable. Falling back to offline preset session for demo.');
-        const matched = PRESET_OPERATORS.find(
-          (op) =>
-            op.username.toLowerCase() === trimmed.toLowerCase() ||
-            op.id.toLowerCase() === trimmed.toLowerCase(),
-        );
-        const fullName = matched
-          ? matched.name
-          : trimmed.includes('.')
-            ? trimmed
-                .split('.')
-                .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-                .join(' ')
-            : `Operator (${trimmed})`;
-        const initials =
-          fullName
-            .split(' ')
-            .map((part) => part[0])
-            .join('')
-            .slice(0, 2)
-            .toUpperCase() || 'OP';
-
-        const fallbackSession: UserSession = {
-          id: matched ? matched.id : 'STF-2026-088',
-          username: matched ? matched.username : trimmed,
-          fullName,
-          role: (matched?.role || 'STAFF') as AccountRole,
-          zone: activeZone,
-          avatarInitials: initials,
-        };
-
-        await saveStoredUserSession(fallbackSession);
-        setSession(fallbackSession);
-        return fallbackSession;
-      }
-
-      // Re-throw 401, 400, 422 to show real authentication error on login screen
-      throw err;
-    }
+    if (!password) throw new Error('A password is required.');
+    const res = await loginWithCredentials(trimmed, password);
+    const fullName = res.account.fullName || res.account.username;
+    const nextSession: UserSession = {
+      id: res.account.id, username: res.account.username, fullName,
+      role: res.account.role === 'ADMIN' ? 'ADMIN' : 'STAFF', zone: zone || 'Inbound Dock 01',
+      avatarInitials: fullName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'OP',
+    };
+    clearWarehouseSnapshots();
+    queryClient.clear();
+    await clearAllStoredAuth();
+    await saveStoredAccessToken(res.accessToken);
+    if (res.refreshToken) await saveStoredRefreshToken(res.refreshToken);
+    await saveStoredUserSession(nextSession);
+    setAccessToken(res.accessToken);
+    setSession(nextSession);
+    return nextSession;
   };
 
-  const login = (identifier: string, zone?: string, password?: string): boolean => {
-    loginAsync(identifier, password, zone).catch((err) => {
-      console.warn('login() asynchronous error:', err);
-    });
+  const login = async (identifier: string, zone?: string, password?: string): Promise<boolean> => {
+    await loginAsync(identifier, password, zone);
     return true;
   };
 
-  const logout = () => {
-    getStoredRefreshToken()
-      .then((rt) => logoutSession(rt))
-      .catch(() => {});
+  const clearSession = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') window.history.replaceState(null, '', window.location.pathname);
     setAccessToken(null);
-    clearAllStoredAuth().catch(() => {});
+    clearWarehouseSnapshots();
+    queryClient.clear();
+    void clearAllStoredAuth();
     setSession(null);
+  };
+  useEffect(() => onSessionExpired(clearSession), []);
+
+  const logout = () => {
+    const token = getStoredRefreshToken();
+    // Revoke the captured refresh session after local state is removed.
+    clearSession();
+    void token.then(refreshToken => logoutSession(refreshToken)).catch(() => {});
   };
 
   const updateZone = (zone: string) => {
