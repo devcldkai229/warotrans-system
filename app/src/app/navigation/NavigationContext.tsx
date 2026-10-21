@@ -21,7 +21,8 @@ export type AppScreen =
   | 'block_path'
   | 'transport_history'
   | 'offline_hud'
-  | 'scanner_hud';
+  | 'scanner_hud'
+  | 'scanner';
 
 /** Screens that own the shell (AppHeader + bottom bar). Keep in one place. */
 const MAIN_TABS: ReadonlySet<string> = new Set<MainTab>([
@@ -77,7 +78,7 @@ function mapRawScreen(raw: string | null): AppScreen | null {
   if (s === 'block-path' || s === 'block_path') return 'block_path';
   if (s === 'transport-history' || s === 'transport_history') return 'transport_history';
   if (s === 'offline-hud' || s === 'offline_hud') return 'offline_hud';
-  if (s === 'scanner-hud' || s === 'scanner_hud') return 'scanner_hud';
+  if (s === 'scanner' || s === 'scanner-hud' || s === 'scanner_hud') return 'scanner_hud';
   return null;
 }
 

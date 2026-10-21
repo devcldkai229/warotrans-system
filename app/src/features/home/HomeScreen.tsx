@@ -381,9 +381,9 @@ export function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Open Emergency Recall console"
                   >
-                    <ShieldAlert size={13} color="#dc2626" />
-                    <Text variant="caption" style={styles.fleetRecallLinkText}>
-                      Recall & E-Stop
+                    <ShieldAlert size={13} color="#b91c1c" />
+                    <Text style={styles.fleetRecallLinkText}>
+                      E-Stop & Recall
                     </Text>
                   </Pressable>
                 </View>
@@ -391,21 +391,30 @@ export function HomeScreen() {
                 <View style={styles.fleetRow}>
                   {robots.map((r) => (
                     <View key={r.id} style={styles.fleetItemCard}>
-                      <View style={styles.fleetItemHeader}>
-                        <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName}>
-                          {r.id}
-                        </Text>
-                        <StatusPill
-                          status={r.status === 'EN_ROUTE' ? 'RUNNING' : r.status === 'PAUSED' ? 'WARNING' : 'COMPLETED'}
-                          label={r.status === 'EN_ROUTE' ? 'In Transit' : r.status === 'PAUSED' ? 'Paused' : 'Standby'}
-                          tone={r.status === 'PAUSED' ? 'warning' : undefined}
-                          size="sm"
+                      <Text variant="label" color={colors.textPrimary} style={styles.fleetRobotName} numberOfLines={1}>
+                        {r.id}
+                      </Text>
+                      <View style={styles.statusDotRow}>
+                        <View
+                          style={[
+                            styles.statusDot,
+                            r.status === 'EN_ROUTE'
+                              ? styles.statusDotRunning
+                              : r.status === 'PAUSED'
+                              ? styles.statusDotWarning
+                              : styles.statusDotStandby,
+                          ]}
                         />
+                        <Text variant="caption" color={colors.textSecondary} style={styles.statusLabel}>
+                          {r.status === 'EN_ROUTE' ? 'In Transit' : r.status === 'PAUSED' ? 'Paused' : 'Standby'}
+                        </Text>
                       </View>
-                      <Text variant="caption" color={colors.textSecondary}>Speed: {r.speed}</Text>
-                      <View style={styles.batteryRow}>
-                        <BatteryMedium size={14} color={r.battery < 20 ? '#dc2626' : colors.successText} />
-                        <Text variant="caption" color={colors.textSecondary}>{r.battery}%</Text>
+                      <View style={styles.fleetTelemetryRow}>
+                        <Text variant="caption" color={colors.textSecondary}>Speed: {r.speed}</Text>
+                        <View style={styles.batteryRow}>
+                          <BatteryMedium size={13} color={r.battery < 20 ? '#dc2626' : colors.successText} />
+                          <Text variant="caption" color={colors.textSecondary}>{r.battery}%</Text>
+                        </View>
                       </View>
                     </View>
                   ))}
@@ -609,7 +618,7 @@ const styles = StyleSheet.create({
     borderColor: '#fca5a5',
   },
   fleetRecallLinkText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '800',
     color: '#b91c1c',
   },
@@ -624,22 +633,52 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.sm,
-    padding: 8,
+    padding: 9,
     gap: 4,
-  },
-  fleetItemHeader: {
-    flexDirection: 'row',
+    minHeight: 76,
     justifyContent: 'space-between',
-    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   fleetRobotName: {
     fontWeight: '700',
+    fontFamily: typography.fontMono,
+    fontSize: 13,
+  },
+  statusDotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotRunning: {
+    backgroundColor: '#059669',
+  },
+  statusDotWarning: {
+    backgroundColor: '#d97706',
+  },
+  statusDotStandby: {
+    backgroundColor: '#64748b',
+  },
+  statusLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  fleetTelemetryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+    marginTop: 2,
   },
   batteryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    gap: 3,
   },
   pressed: {
     opacity: 0.7,

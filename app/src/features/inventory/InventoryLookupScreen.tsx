@@ -7,12 +7,12 @@ import {
   View,
 } from 'react-native';
 import {
+  ArrowUpRight,
   Barcode,
+  Box,
   CheckCircle2,
   MapPin,
   PackagePlus,
-  Rocket,
-  RotateCw,
   Search,
   X,
 } from 'lucide-react-native';
@@ -20,6 +20,7 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
+import { SegmentedControl } from '../../shared/ui/SegmentedControl';
 import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
@@ -51,6 +52,49 @@ export interface CatalogProductItem {
   sku: string;
   totalStock: number;
   startpoints: CatalogStartpoint[];
+}
+
+export type ZoneFilterKey = 'ALL' | 'INBOUND' | 'ZONE_A' | 'ZONE_B' | 'ZONE_D';
+export type LevelFilterKey = 'ALL' | 1 | 2 | 3;
+
+const ZONE_OPTIONS: { key: ZoneFilterKey; label: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'INBOUND', label: 'Inbound' },
+  { key: 'ZONE_A', label: 'Zone A' },
+  { key: 'ZONE_B', label: 'Zone B' },
+  { key: 'ZONE_D', label: 'Zone D' },
+];
+
+const LEVEL_OPTIONS: { value: LevelFilterKey; label: string }[] = [
+  { value: 'ALL', label: 'All Levels' },
+  { value: 1, label: 'Level 1' },
+  { value: 2, label: 'Level 2' },
+  { value: 3, label: 'Level 3' },
+];
+
+function getContainerZone(c: ContainerListItem): 'INBOUND' | 'ZONE_A' | 'ZONE_B' | 'ZONE_D' | 'OTHER' {
+  const zoneLabel = (c.zoneLabel || '').toLowerCase();
+  const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toUpperCase();
+
+  if (zoneLabel.includes('zone a') || loc.startsWith('RACK-A')) {
+    return 'ZONE_A';
+  }
+  if (zoneLabel.includes('zone b') || loc.startsWith('RACK-B')) {
+    return 'ZONE_B';
+  }
+  if (zoneLabel.includes('zone d') || loc.startsWith('RACK-D')) {
+    return 'ZONE_D';
+  }
+  if (
+    zoneLabel.includes('dock') ||
+    zoneLabel.includes('inbound') ||
+    loc.startsWith('DOCK-IN') ||
+    loc.startsWith('EP-DOCK') ||
+    loc.includes('DOCK')
+  ) {
+    return 'INBOUND';
+  }
+  return 'OTHER';
 }
 
 function resolveRecommendedWorkflow(c: ContainerListItem): string {
@@ -115,13 +159,16 @@ function buildCatalogFromContainers(containers: ContainerListItem[]): CatalogPro
 export function InventoryLookupScreen() {
   const { goBack, navigate } = useNavigation();
   const [searchTerm, setSearchTerm] = useState('');
+  const [inventoryTab, setInventoryTab] = useState<'containers' | 'skus'>('containers');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedZone, setSelectedZone] = useState<ZoneFilterKey>('ALL');
+  const [selectedLevel, setSelectedLevel] = useState<LevelFilterKey>('ALL');
   const [containers, setContainers] = useState<ContainerListItem[]>(() =>
     getSeedContainersSnapshot()
   );
   const [verifiedContainer, setVerifiedContainer] = useState<ContainerListItem | null>(null);
   const [isVerifyingBarcode, setIsVerifyingBarcode] = useState(false);
-  const [activeWarehouseId, setActiveWarehouseId] = useState('11111111-1111-1111-1111-111111111111');
+  const [, setActiveWarehouseId] = useState('11111111-1111-1111-1111-111111111111');
 
   useEffect(() => {
     let isMounted = true;
@@ -198,81 +245,146 @@ export function InventoryLookupScreen() {
     [containers]
   );
 
+  const uniqueLocationsCount = useMemo(() => {
+    const locs = new Set<string>();
+    containers.forEach((c) => {
+      const code = c.currentStorageLocationCode || c.currentEndpointCode;
+      if (code) locs.add(code);
+    });
+    return locs.size || 1;
+  }, [containers]);
+
   const categories = ['All', 'Electronics', 'Sensors', 'Mechanical', 'Packaging'];
 
-  const filteredProducts = catalogProducts.filter((p) => {
-    const matchesCategory =
-      selectedCategory === 'All' ||
-      p.category.toLowerCase() === selectedCategory.toLowerCase();
+  const zoneCounts = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
-    if (!q) return matchesCategory;
-    const matchesSearch =
-      p.name.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.startpoints.some(
-        (sp) =>
-          sp.id.toLowerCase().includes(q) ||
-          sp.container.toLowerCase().includes(q) ||
-          sp.zone.toLowerCase().includes(q)
-      );
-    return matchesCategory && matchesSearch;
-  });
+    const base = q
+      ? containers.filter((c) => {
+          const barcode = (c.barcode || '').toLowerCase();
+          const sku = (c.productSku || '').toLowerCase();
+          const name = (c.productName || '').toLowerCase();
+          const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toLowerCase();
+          return (
+            barcode.includes(q) ||
+            sku.includes(q) ||
+            name.includes(q) ||
+            loc.includes(q)
+          );
+        })
+      : containers;
 
-  const handleDispatchStartpoint = (prod: CatalogProductItem, sp: CatalogStartpoint) => {
-    triggerHaptic('tap');
-    navigate('transport_create', {
-      workflow: sp.recommendedWorkflow,
-      product: prod.name,
-      container: sp.container,
-      source: sp.id,
+    const counts: Record<ZoneFilterKey, number> = {
+      ALL: base.length,
+      INBOUND: 0,
+      ZONE_A: 0,
+      ZONE_B: 0,
+      ZONE_D: 0,
+    };
+
+    base.forEach((c) => {
+      const z = getContainerZone(c);
+      if (z === 'INBOUND') counts.INBOUND += 1;
+      else if (z === 'ZONE_A') counts.ZONE_A += 1;
+      else if (z === 'ZONE_B') counts.ZONE_B += 1;
+      else if (z === 'ZONE_D') counts.ZONE_D += 1;
     });
-  };
+
+    return counts;
+  }, [containers, searchTerm]);
+
+  const filteredContainers = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    return containers.filter((c) => {
+      if (selectedZone !== 'ALL') {
+        const zone = getContainerZone(c);
+        if (zone !== selectedZone) return false;
+      }
+
+      if (selectedLevel !== 'ALL') {
+        if (c.currentLevelNo !== selectedLevel) return false;
+      }
+
+      if (!q) return true;
+      const barcode = (c.barcode || '').toLowerCase();
+      const sku = (c.productSku || '').toLowerCase();
+      const name = (c.productName || '').toLowerCase();
+      const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toLowerCase();
+      return (
+        barcode.includes(q) ||
+        sku.includes(q) ||
+        name.includes(q) ||
+        loc.includes(q)
+      );
+    });
+  }, [containers, selectedZone, selectedLevel, searchTerm]);
+
+  const filteredProducts = useMemo(() => {
+    return catalogProducts.filter((p) => {
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        p.category.toLowerCase() === selectedCategory.toLowerCase();
+      const q = searchTerm.toLowerCase().trim();
+      if (!q) return matchesCategory;
+      const matchesSearch =
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q) ||
+        p.startpoints.some(
+          (sp) =>
+            sp.id.toLowerCase().includes(q) ||
+            sp.container.toLowerCase().includes(q) ||
+            sp.zone.toLowerCase().includes(q)
+        );
+      return matchesCategory && matchesSearch;
+    });
+  }, [catalogProducts, selectedCategory, searchTerm]);
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Warehouse catalog"
-        title="Inventory Lookup"
+        label={`${containers.length} Containers · ${uniqueLocationsCount} Locations`}
+        title="Inventory Catalog"
         onBack={goBack}
       />
 
-      {/* Search & Live Verification Section */}
+      {/* Tầng 1: Single Compact Search & Barcode Scan Section */}
       <View style={styles.searchSection}>
-        <View style={styles.searchBox}>
-          <Search size={16} color={colors.textMuted} style={styles.searchIcon} />
-          <Input
-            value={searchTerm}
-            onChangeText={setSearchTerm}
-            onSubmitEditing={() => handleVerifyBarcode()}
-            placeholder="Search or enter barcode (e.g. C1, CTN-DEMO-000001)..."
-            containerStyle={styles.inputContainer}
-            inputStyle={styles.searchInput}
-          />
-          {searchTerm ? (
-            <Pressable
-              onPress={() => setSearchTerm('')}
-              style={styles.clearBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-            >
-              <X size={16} color={colors.textMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        <Button
-          label={isVerifyingBarcode ? 'Verifying Barcode...' : 'Verify Container Barcode'}
-          icon={<Barcode size={15} color="#FFFFFF" />}
-          variant="primary"
-          size="sm"
-          loading={isVerifyingBarcode}
-          onPress={() => handleVerifyBarcode()}
-          style={styles.verifyBtn}
+        <Input
+          value={searchTerm}
+          onChangeText={setSearchTerm}
+          onSubmitEditing={() => handleVerifyBarcode()}
+          placeholder="Search container, SKU, or rack..."
+          containerStyle={styles.inputContainer}
+          leftIcon={<Search size={16} color={colors.textMuted} />}
+          rightIcon={
+            <View style={styles.searchRightIcons}>
+              {searchTerm ? (
+                <Pressable
+                  onPress={() => setSearchTerm('')}
+                  style={styles.clearBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                >
+                  <X size={15} color={colors.textMuted} />
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
+                  navigate('scanner');
+                }}
+                style={styles.scannerBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Open barcode scanner"
+              >
+                <Barcode size={18} color={colors.primary} />
+              </Pressable>
+            </View>
+          }
         />
       </View>
 
-      {/* Prominent Verified Container Details Card */}
+      {/* Prominent Verified Container Details Card (if verified) */}
       {verifiedContainer && (
         <View style={styles.verifiedCard}>
           <View style={styles.verifiedCardHeader}>
@@ -286,11 +398,15 @@ export function InventoryLookupScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={() => setVerifiedContainer(null)}
-              hitSlop={8}
-              style={{ marginLeft: 8 }}
+              onPress={() => {
+                triggerHaptic('tap');
+                setVerifiedContainer(null);
+              }}
+              style={styles.verifiedCloseBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss verified card"
             >
-              <X size={16} color={colors.textMuted} />
+              <X size={15} color="#059669" />
             </Pressable>
           </View>
 
@@ -324,10 +440,10 @@ export function InventoryLookupScreen() {
           </View>
 
           <Button
-            label="Relocate Container (INTERNAL_RELOCATION)"
-            icon={<RotateCw size={15} color="#ffffff" />}
+            label="↗ Relocate Container (INTERNAL_RELOCATION)"
+            icon={<ArrowUpRight size={14} color="#ffffff" />}
             variant="primary"
-            size="md"
+            size="sm"
             onPress={() => {
               triggerHaptic('tap');
               navigate('transport_create', {
@@ -340,116 +456,303 @@ export function InventoryLookupScreen() {
         </View>
       )}
 
-      {/* Category Filter Chips */}
-      <View style={styles.categoryBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroll}
-        >
-          {categories.map((cat) => {
-            const isSelected = selectedCategory === cat;
-            return (
-              <Pressable
-                key={cat}
-                onPress={() => {
-                  triggerHaptic('tap');
-                  setSelectedCategory(cat);
-                }}
-                style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    isSelected && styles.categoryChipTextActive,
-                  ]}
-                >
-                  {cat}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+      {/* Tầng 2: Segmented Control Tabs (directly below the search box) */}
+      <View style={styles.tabsWrapper}>
+        <SegmentedControl
+          options={[
+            { label: `Containers (${filteredContainers.length})`, value: 'containers' },
+            { label: `By SKU (${filteredProducts.length})`, value: 'skus' },
+          ]}
+          value={inventoryTab}
+          onChange={(val) => {
+            triggerHaptic('tap');
+            setInventoryTab(val as 'containers' | 'skus');
+          }}
+          size="md"
+        />
       </View>
 
-      {/* Catalog Product Cards */}
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {filteredProducts.map((prod) => {
-          const primarySp = prod.startpoints[0];
-          return (
-            <View key={prod.id} style={styles.productCard}>
-              <View style={styles.cardHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.productName}>{prod.name}</Text>
-                  <Text style={styles.productMeta}>
-                    {prod.category} · SKU: <Text style={styles.boldText}>{prod.sku}</Text>
-                  </Text>
-                </View>
-                <View style={styles.stockBox}>
-                  <Text style={styles.stockCount}>{prod.totalStock}</Text>
-                  <Text style={styles.stockLabel}>Available</Text>
-                </View>
-              </View>
-
-              {/* Startpoints Locations (Tap any row to dispatch that specific tote) */}
-              <View style={styles.startpointsList}>
-                {prod.startpoints.map((sp) => (
+      {/* Tab 1: Containers List */}
+      {inventoryTab === 'containers' && (
+        <>
+          {/* Spatial Warehouse Zone & Level Filter Section */}
+          <View style={styles.spatialFilterSection}>
+            {/* Zone Filter Row */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRowScroll}
+            >
+              {ZONE_OPTIONS.map((opt) => {
+                const isSelected = selectedZone === opt.key;
+                const count = zoneCounts[opt.key];
+                return (
                   <Pressable
-                    key={`${sp.container}-${sp.id}`}
-                    onPress={() => handleDispatchStartpoint(prod, sp)}
-                    style={({ pressed }) => [
-                      styles.startpointRow,
-                      pressed && { opacity: 0.78 },
+                    key={opt.key}
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setSelectedZone(opt.key);
+                    }}
+                    style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by zone ${opt.label}`}
+                  >
+                    <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={[styles.filterChipCount, isSelected && styles.filterChipCountActive]}>
+                      ({count})
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* Rack Level Filter Row */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRowScroll}
+              style={styles.levelFilterRow}
+            >
+              {LEVEL_OPTIONS.map((lvl) => {
+                const isSelected = selectedLevel === lvl.value;
+                return (
+                  <Pressable
+                    key={String(lvl.value)}
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setSelectedLevel(lvl.value);
+                    }}
+                    style={[
+                      styles.filterChip,
+                      styles.levelChip,
+                      isSelected && styles.filterChipActive,
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Dispatch ${sp.container} at ${sp.id} via ${sp.recommendedWorkflow}`}
+                    accessibilityLabel={`Filter by level ${lvl.label}`}
                   >
-                    <View style={styles.startpointLeft}>
-                      <MapPin size={14} color={colors.textSecondary} />
-                      <View>
-                        <Text style={styles.startpointId}>{sp.id}</Text>
-                        <Text style={styles.startpointZone}>
-                          {sp.zone} · {sp.recommendedWorkflow}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.startpointRight}>
-                      <Text style={styles.startpointQty}>
-                        Qty: <Text style={styles.boldText}>{sp.qty}</Text>
-                      </Text>
-                      <View style={styles.containerPill}>
-                        <Text style={styles.containerPillText}>{sp.container}</Text>
-                      </View>
-                    </View>
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        styles.levelChipText,
+                        isSelected && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {lvl.label}
+                    </Text>
                   </Pressable>
-                ))}
-              </View>
-
-              {/* Context-Aware Quick Dispatch CTA */}
-              {primarySp && (
-                <Button
-                  label={`Dispatch ${primarySp.container} (${primarySp.recommendedWorkflow})`}
-                  icon={<Rocket size={16} color="#ffffff" />}
-                  onPress={() => handleDispatchStartpoint(prod, primarySp)}
-                  variant="primary"
-                  size="md"
-                  style={{ marginTop: 4 }}
-                />
-              )}
-            </View>
-          );
-        })}
-
-        {filteredProducts.length === 0 && (
-          <View style={styles.emptyState}>
-            <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
-            <Text style={styles.emptyTitle}>No matching products found</Text>
-            <Text style={styles.emptySub}>
-              Try searching with a different product name, SKU, tote barcode, or category filter.
-            </Text>
+                );
+              })}
+            </ScrollView>
           </View>
-        )}
-      </ScrollView>
+
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+          {filteredContainers.map((c) => {
+            const statusText = String(c.status || 'STORED');
+            const isStored = statusText === 'STORED';
+
+            return (
+              <View key={c.id || c.barcode} style={styles.containerCard}>
+                {/* Card Header Row */}
+                <View style={styles.containerCardHeader}>
+                  <View style={styles.headerLeftGroup}>
+                    <Text style={styles.containerBarcode}>{c.barcode}</Text>
+                    <View
+                      style={[
+                        styles.statusPill,
+                        isStored ? styles.statusPillStored : styles.statusPillOther,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.statusDot,
+                          isStored ? styles.statusDotStored : styles.statusDotOther,
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.statusText,
+                          isStored ? styles.statusTextStored : styles.statusTextOther,
+                        ]}
+                      >
+                        {statusText}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      navigate('transport_create', {
+                        workflow: 'INTERNAL_RELOCATION',
+                        container: c.barcode,
+                      });
+                    }}
+                    style={({ pressed }) => [styles.relocateBtn, pressed && styles.btnPressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Relocate container ${c.barcode}`}
+                  >
+                    <ArrowUpRight size={13} color={colors.primary} strokeWidth={2.4} />
+                    <Text style={styles.relocateBtnText}>Move</Text>
+                  </Pressable>
+                </View>
+
+                {/* Location Row */}
+                <View style={styles.locationRow}>
+                  <MapPin size={13} color={colors.primaryText} style={{ marginRight: 6 }} />
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    {c.currentStorageLocationCode || c.currentEndpointCode || 'EP-A'}
+                    {c.currentLevelNo ? ' · Level ' + c.currentLevelNo : ''}
+                    {c.zoneLabel ? ' (' + c.zoneLabel + ')' : ''}
+                  </Text>
+                </View>
+
+                {/* Cargo Row (QUANTITY FIRST, NEVER TRUNCATE QUANTITY!) */}
+                <View style={styles.cargoRow}>
+                  <Box size={13} color={colors.textSecondary} style={{ marginRight: 6 }} />
+                  <Text style={styles.cargoQty}>{c.qty || 20} pcs</Text>
+                  <Text style={styles.cargoDot}>·</Text>
+                  <Text style={styles.cargoProduct} numberOfLines={1}>
+                    {c.productName || 'Warehouse Item'} ({c.productSku || 'SKU-GEN'})
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+
+          {filteredContainers.length === 0 && (
+            <View style={styles.emptyState}>
+              <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
+              <Text style={styles.emptyTitle}>No matching containers found</Text>
+              <Text style={styles.emptySub}>
+                Try searching with a different container barcode, SKU, or rack.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </>
+    )}
+
+      {/* Tab 2: By SKU List */}
+      {inventoryTab === 'skus' && (
+        <>
+          {/* Category Filter Chips */}
+          <View style={styles.categoryBar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScroll}
+            >
+              {categories.map((cat) => {
+                const isSelected = selectedCategory === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      setSelectedCategory(cat);
+                    }}
+                    style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        isSelected && styles.categoryChipTextActive,
+                      ]}
+                    >
+                      {cat}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {filteredProducts.map((prod) => (
+              <View key={prod.id} style={styles.productCard}>
+                <View style={styles.cardHeader}>
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={styles.productName}>{prod.name}</Text>
+                    <Text style={styles.productMeta}>
+                      {prod.category} · SKU: <Text style={styles.boldText}>{prod.sku}</Text>
+                    </Text>
+                  </View>
+                  <View style={styles.stockBadge}>
+                    <Text style={styles.stockCount}>{prod.totalStock}</Text>
+                    <Text style={styles.stockLabel}>Available</Text>
+                  </View>
+                </View>
+
+                {/* Startpoints Locations */}
+                <View style={styles.startpointsList}>
+                  {prod.startpoints.map((sp) => (
+                    <View
+                      key={`${sp.container}-${sp.id}`}
+                      style={styles.startpointRow}
+                    >
+                      <View style={styles.startpointLeft}>
+                        <MapPin size={13} color={colors.textSecondary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.startpointId} numberOfLines={1}>
+                            {sp.id}
+                          </Text>
+                          <Text style={styles.startpointZone} numberOfLines={1}>
+                            {sp.zone} · {sp.recommendedWorkflow}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.startpointRightCol}>
+                        <Pressable
+                          onPress={() => {
+                            triggerHaptic('tap');
+                            navigate('transport_create', {
+                              workflow: 'INTERNAL_RELOCATION',
+                              container: sp.container,
+                            });
+                          }}
+                          style={({ pressed }) => [
+                            styles.containerPill,
+                            pressed && styles.btnPressed,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Relocate container ${sp.container}`}
+                        >
+                          <Text style={styles.containerPillText} numberOfLines={1}>
+                            {sp.container}
+                          </Text>
+                          <ArrowUpRight size={10} color={colors.primary} style={{ marginLeft: 2 }} />
+                        </Pressable>
+                        <Text style={styles.startpointQty}>{sp.qty} pcs</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+
+            {filteredProducts.length === 0 && (
+              <View style={styles.emptyState}>
+                <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
+                <Text style={styles.emptyTitle}>No matching products found</Text>
+                <Text style={styles.emptySub}>
+                  Try searching with a different product name, SKU, or category filter.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </>
+      )}
     </View>
   );
 }
@@ -465,42 +768,98 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-  },
-  searchBox: {
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: 12,
     zIndex: 10,
   },
   inputContainer: {
     marginBottom: 0,
   },
-  searchInput: {
-    paddingLeft: 38,
-    paddingRight: 32,
-    height: 44,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    fontSize: 14,
-    fontWeight: '500',
-    borderWidth: 1,
-    borderColor: colors.border,
-    fontFamily: typography.fontSans,
+  searchRightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   clearBtn: {
-    position: 'absolute',
-    right: 12,
-    zIndex: 10,
     padding: 4,
+  },
+  scannerBtn: {
+    padding: 6,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(50, 121, 249, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabsWrapper: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  spatialFilterSection: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 8,
+    gap: 6,
+    zIndex: 9,
+  },
+  filterRowScroll: {
+    paddingHorizontal: 16,
+    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  levelFilterRow: {
+    marginTop: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    minHeight: 30,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  filterChipActive: {
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  filterChipCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    fontFamily: typography.fontMono,
+  },
+  filterChipCountActive: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '800',
+    fontFamily: typography.fontMono,
+  },
+  levelChip: {
+    paddingHorizontal: 10,
+    minHeight: 28,
+  },
+  levelChipText: {
+    fontSize: 11.5,
   },
   categoryBar: {
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingVertical: 8,
+    zIndex: 9,
   },
   categoryScroll: {
     paddingHorizontal: 16,
@@ -530,59 +889,195 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
   },
+  scrollArea: {
+    flex: 1,
+  },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 48,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 28,
+    gap: 10,
+  },
+  containerCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+    ...shadows.sm,
+  },
+  containerCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  containerBarcode: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+    letterSpacing: 0.3,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  statusPillStored: {
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+  },
+  statusPillOther: {
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotStored: {
+    backgroundColor: colors.success,
+  },
+  statusDotOther: {
+    backgroundColor: colors.textMuted,
+  },
+  statusText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    fontFamily: typography.fontMono,
+  },
+  statusTextStored: {
+    color: colors.successText,
+  },
+  statusTextOther: {
+    color: colors.textSecondary,
+  },
+  relocateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(50, 121, 249, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(50, 121, 249, 0.25)',
+  },
+  btnPressed: {
+    opacity: 0.7,
+    backgroundColor: 'rgba(50, 121, 249, 0.16)',
+  },
+  relocateBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    fontFamily: typography.fontSans,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+    flex: 1,
+  },
+  cargoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cargoQty: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.fontMono,
+    flexShrink: 0,
+  },
+  cargoDot: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginHorizontal: 5,
+  },
+  cargoProduct: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+    flex: 1,
   },
   productCard: {
     backgroundColor: '#ffffff',
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
-    ...shadows.panel,
+    padding: 12,
+    gap: 8,
+    ...shadows.sm,
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
   productName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.fontSans,
   },
   productMeta: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '500',
     color: colors.textMuted,
-    marginTop: 3,
+    marginTop: 2,
     fontFamily: typography.fontSans,
   },
-  stockBox: {
-    alignItems: 'flex-end',
+  stockBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(50, 121, 249, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(50, 121, 249, 0.2)',
+    borderRadius: radii.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    minWidth: 64,
   },
   stockCount: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: colors.primary,
     fontFamily: typography.fontMono,
   },
   stockLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textMuted,
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: colors.primaryText,
     fontFamily: typography.fontSans,
-    marginTop: 1,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   startpointsList: {
-    marginVertical: 12,
-    gap: 8,
+    gap: 6,
   },
   startpointRow: {
     flexDirection: 'row',
@@ -590,8 +1085,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -600,6 +1095,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flex: 1,
+    marginRight: 8,
   },
   startpointId: {
     fontSize: 12,
@@ -612,33 +1108,36 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 1,
   },
-  startpointRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  startpointRightCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 2,
   },
   startpointQty: {
-    fontSize: 12,
-    fontWeight: '400',
+    fontSize: 11.5,
+    fontWeight: '600',
     color: colors.textSecondary,
     fontFamily: typography.fontMono,
+    textAlign: 'right',
   },
   boldText: {
     fontWeight: '700',
     color: colors.textPrimary,
   },
   containerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    borderColor: colors.primaryBorder,
+    borderRadius: 4,
+    paddingHorizontal: 6,
     paddingVertical: 2,
   },
   containerPillText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.primaryText,
     fontFamily: typography.fontMono,
   },
   emptyState: {
@@ -661,13 +1160,9 @@ const styles = StyleSheet.create({
     maxWidth: 260,
     fontFamily: typography.fontSans,
   },
-  verifyBtn: {
-    marginTop: 8,
-    width: '100%',
-  },
   verifiedCard: {
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 10,
     backgroundColor: '#F0FDF4',
     borderRadius: radii.md,
     borderWidth: 1,
@@ -697,15 +1192,25 @@ const styles = StyleSheet.create({
   },
   verifiedStatusBadge: {
     backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: radii.full,
+    borderRadius: 4,
   },
   verifiedStatusText: {
     fontSize: 10,
     fontWeight: '800',
     color: '#166534',
     fontFamily: typography.fontMono,
+  },
+  verifiedCloseBtn: {
+    padding: 4,
+    borderRadius: 4,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
   verifiedBody: {
     gap: 5,
