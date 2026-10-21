@@ -1,0 +1,79 @@
+[   1s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 5.75, 0.91) NAVIGATING
+[   2s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 5.55, 1.06) NAVIGATING
+[   3s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 5.17, 1.20) NAVIGATING
+[   5s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 4.86, 1.36) NAVIGATING
+[   6s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 4.50, 1.57) NAVIGATING
+[   7s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 4.26, 1.72) NAVIGATING
+[   8s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.95, 1.90) NAVIGATING
+[   9s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.63, 2.05) NAVIGATING
+[  10s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.34, 2.23) NAVIGATING
+[  11s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.20, 2.52) NAVIGATING
+[  12s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.21, 2.85) NAVIGATING
+[  13s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.21, 3.19) NAVIGATING
+[  14s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.20, 3.45) NAVIGATING
+[  15s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.19, 3.58) NAVIGATING
+[  17s] job=RUNNING    4/17 | MOVE_PICKUP EXECUTING A                       | robot ( 3.18, 3.60) NAVIGATING
+[  18s] job=RUNNING    5/17 | PICKUP_CONFIRM WAITING A CTN-RL-000001        | robot ( 3.18, 3.59) SUCCEEDED
+   confirm PICKUP_CONFIRM CTN-RL-000001
+[  21s] job=RUNNING    6/17 | PICKUP_CONFIRM WAITING A CTN-RL-000002        | robot ( 3.20, 3.61) IDLE
+   confirm PICKUP_CONFIRM CTN-RL-000002
+[  24s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 3.19, 3.61) NAVIGATING
+[  25s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 3.25, 3.41) NAVIGATING
+[  26s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 3.19, 3.07) NAVIGATING
+[  27s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 3.19, 2.71) NAVIGATING
+[  28s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 3.23, 2.38) NAVIGATING
+[  29s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 3.40, 2.15) NAVIGATING
+[  30s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 3.72, 2.06) NAVIGATING
+[  31s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.07, 2.01) NAVIGATING
+[  33s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.44, 2.12) NAVIGATING
+[  34s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.64, 2.37) NAVIGATING
+[  35s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.69, 2.72) NAVIGATING
+[  36s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.68, 3.07) NAVIGATING
+[  37s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.74, 3.38) NAVIGATING
+[  38s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.78, 3.55) NAVIGATING
+[  39s] job=RUNNING    8/17 | MOVE_PICKUP EXECUTING B                       | robot ( 4.81, 3.62) NAVIGATING
+[  40s] job=RUNNING    9/17 | PICKUP_CONFIRM WAITING B CTN-RL-000003        | robot ( 4.81, 3.60) SUCCEEDED
+   confirm PICKUP_CONFIRM CTN-RL-000003
+[  43s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 4.83, 3.60) NAVIGATING
+[  45s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 4.94, 3.42) NAVIGATING
+[  46s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 4.92, 3.09) NAVIGATING
+[  47s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 4.93, 2.75) NAVIGATING
+[  48s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 5.00, 2.34) NAVIGATING
+[  49s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 5.19, 2.12) NAVIGATING
+[  50s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 5.54, 2.06) NAVIGATING
+[  51s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 5.88, 2.05) NAVIGATING
+[  52s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 6.12, 2.07) NAVIGATING
+[  53s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 6.34, 2.30) NAVIGATING
+[  54s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 6.47, 2.58) NAVIGATING
+[  55s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 6.43, 2.93) NAVIGATING
+[  57s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 6.47, 3.33) NAVIGATING
+[  58s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 6.49, 3.53) NAVIGATING
+[  59s] job=RUNNING   11/17 | MOVE_DROPOFF EXECUTING C                      | robot ( 6.54, 3.63) NAVIGATING
+[  60s] job=RUNNING   12/17 | DROPOFF_CONFIRM WAITING C CTN-RL-000001       | robot ( 6.53, 3.62) SUCCEEDED
+   confirm DROPOFF_CONFIRM CTN-RL-000001
+[  63s] job=RUNNING   13/17 | DROPOFF_CONFIRM WAITING C CTN-RL-000002       | robot ( 6.55, 3.63) IDLE
+   confirm DROPOFF_CONFIRM CTN-RL-000002
+[  66s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 6.56, 3.63) NAVIGATING
+[  67s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 6.60, 3.73) NAVIGATING
+[  68s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 6.54, 4.06) NAVIGATING
+[  70s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 6.54, 4.42) NAVIGATING
+[  71s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 6.49, 4.78) NAVIGATING
+[  72s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 6.36, 5.11) NAVIGATING
+[  73s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 6.12, 5.31) NAVIGATING
+[  74s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 5.77, 5.35) NAVIGATING
+[  75s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 5.42, 5.32) NAVIGATING
+[  76s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 5.07, 5.30) NAVIGATING
+[  77s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 4.72, 5.30) NAVIGATING
+[  78s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 4.38, 5.34) NAVIGATING
+[  79s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 4.03, 5.35) NAVIGATING
+[  80s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 3.60, 5.33) NAVIGATING
+[  82s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 3.32, 5.17) NAVIGATING
+[  83s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 3.20, 4.84) NAVIGATING
+[  84s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 3.19, 4.50) NAVIGATING
+[  85s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 3.19, 4.17) NAVIGATING
+[  86s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 3.19, 3.95) NAVIGATING
+[  87s] job=RUNNING   15/17 | MOVE_DROPOFF EXECUTING A                      | robot ( 3.19, 3.88) NAVIGATING
+[  88s] job=RUNNING   16/17 | DROPOFF_CONFIRM WAITING A CTN-RL-000003       | robot ( 3.19, 3.87) SUCCEEDED
+   confirm DROPOFF_CONFIRM CTN-RL-000003
+[  91s] job=COMPLETED 17/17 |                                               | robot ( 3.19, 3.84) IDLE
+Job JOB-20261016-000003: COMPLETED (17/17 steps) in 92s · TransportRequest REQ-20261016-000003: COMPLETED · details: COMPLETED,COMPLETED,COMPLETED

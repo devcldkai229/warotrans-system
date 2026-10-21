@@ -5,10 +5,12 @@
 
 .DESCRIPTION
   -Scenario inbound (mặc định), workflow INBOUND_PUTAWAY, 3 thùng vừa nhận ở cửa nhập đem cất lên kệ:
-      CTN-IN-000001 IN1→A,  CTN-IN-000002 IN1→B,  CTN-IN-000003 IN2→C
-      Planner: PICKUP IN1 [1,2] → PICKUP IN2 [3] → DROPOFF A [1] → DROPOFF B [2] → DROPOFF C [3]
-  -Scenario relocation, workflow INTERNAL_RELOCATION:
-      CTN-SIM-000001 IN1→A,  CTN-SIM-000002 IN1→B,  CTN-SIM-000003 C→OUT1
+      CTN-IN-000001 IN→S01,  CTN-IN-000002 IN→S02,  CTN-IN-000003 IN→S03
+      Planner: PICKUP IN [1,2,3] → DROPOFF S01 [1] → DROPOFF S02 [2] → DROPOFF S03 [3]
+  -Scenario relocation, workflow INTERNAL_RELOCATION, chuyển thùng đang nằm trên kệ sang kệ khác:
+      CTN-RL-000001 S01→S04,  CTN-RL-000002 S01→S04,  CTN-RL-000003 S02→S01   (LOC-SIM-S01..S04)
+      Planner: PICKUP S01 [1,2] → PICKUP S02 [3] → DROPOFF S04 [1,2] → DROPOFF S01 [3]
+  Alias = code endpoint của demo map v6 (sim-config.json): S01..S04, IN, QC-01, QC-02, OUT, CHG-01, PARK-01...
 
   Cần: backend (run-backend-sim.ps1), seed-sim.ps1 đã chạy, robot ảo đang chạy:
     wsl -d Ubuntu-24.04 -- bash /mnt/d/WaroTransSim/scripts/run-sim.sh
@@ -45,22 +47,36 @@ $containers = @{
     "e4000000-0000-4000-8000-000000000004" = "CTN-IN-000001"
     "e5000000-0000-4000-8000-000000000005" = "CTN-IN-000002"
     "e6000000-0000-4000-8000-000000000006" = "CTN-IN-000003"
+    "e7000000-0000-4000-8000-000000000007" = "CTN-RL-000001"
+    "e8000000-0000-4000-8000-000000000008" = "CTN-RL-000002"
+    "e9000000-0000-4000-8000-000000000009" = "CTN-RL-000003"
+    "ea000000-0000-4000-8000-000000000010" = "CTN-RL-000004"
+    "eb000000-0000-4000-8000-000000000011" = "CTN-RL-000005"
+}
+# Storage location of each shelf (seed-sim.ps1 step 2b). A shelf endpoint in a detail is sent with its location.
+$storageLocations = @{
+    S01 = "f0000000-0000-4000-8000-000000000001"
+    S02 = "f0000000-0000-4000-8000-000000000002"
+    S03 = "f0000000-0000-4000-8000-000000000003"
+    S04 = "f0000000-0000-4000-8000-000000000004"
 }
 $scenarios = @{
     inbound    = @{
-        workflow = "INBOUND_PUTAWAY"; title = "CTN-IN-000001 IN1->A, CTN-IN-000002 IN1->B, CTN-IN-000003 IN2->C"
-        moves    = @(@("e4000000-0000-4000-8000-000000000004", "IN1", "A"),
-                     @("e5000000-0000-4000-8000-000000000005", "IN1", "B"),
-                     @("e6000000-0000-4000-8000-000000000006", "IN2", "C"))
+        workflow = "INBOUND_PUTAWAY"; title = "CTN-IN-000001 IN->S01, CTN-IN-000002 IN->S02, CTN-IN-000003 IN->S03"
+        moves    = @(@("e4000000-0000-4000-8000-000000000004", "IN", "S01"),
+                     @("e5000000-0000-4000-8000-000000000005", "IN", "S02"),
+                     @("e6000000-0000-4000-8000-000000000006", "IN", "S03"))
     }
     relocation = @{
-        workflow = "INTERNAL_RELOCATION"; title = "C1 IN1->A, C2 IN1->B, C3 C->OUT1"
-        moves    = @(@("e1000000-0000-4000-8000-000000000001", "IN1", "A"),
-                     @("e2000000-0000-4000-8000-000000000002", "IN1", "B"),
-                     @("e3000000-0000-4000-8000-000000000003", "C", "OUT1"))
+        workflow = "INTERNAL_RELOCATION"; title = "CTN-RL-000001 S01->S04, CTN-RL-000002 S01->S04, CTN-RL-000003 S02->S01"
+        moves    = @(@("e7000000-0000-4000-8000-000000000007", "S01", "S04"),
+                     @("e8000000-0000-4000-8000-000000000008", "S01", "S04"),
+                     @("e9000000-0000-4000-8000-000000000009", "S02", "S01"))
     }
 }
 $plan = $scenarios[$Scenario]
+# Result files in responses/: inbound keeps the original names, other scenarios get a prefix (relocation.10-job...).
+$resultPrefix = if ($Scenario -eq "inbound") { "" } else { "$Scenario." }
 $endpointNames = @{}
 foreach ($e in $config.endpoints) { $endpointNames[$e.endpointId] = $e.alias }
 
@@ -89,7 +105,10 @@ Write-Host "1. TransportRequest ($wfCode) $($plan.title)" -ForegroundColor Cyan
 $seq = 0
 $details = foreach ($m in $plan.moves) {
     $seq++
-    @{ sequenceNo = $seq; containerId = $m[0]; sourceEndpointId = (Endpoint $m[1]); destinationEndpointId = (Endpoint $m[2]) }
+    $detail = @{ sequenceNo = $seq; containerId = $m[0]; sourceEndpointId = (Endpoint $m[1]); destinationEndpointId = (Endpoint $m[2]) }
+    if ($storageLocations.ContainsKey($m[1])) { $detail.sourceStorageLocationId = $storageLocations[$m[1]] }
+    if ($storageLocations.ContainsKey($m[2])) { $detail.destinationStorageLocationId = $storageLocations[$m[2]] }
+    $detail
 }
 $body = @{
     warehouseId = $config.warehouseId; mapVersionId = $config.mapVersionId; workflowId = $workflowId
@@ -98,7 +117,7 @@ $body = @{
 } | ConvertTo-Json -Depth 5 -Compress
 $tr = Invoke-Api POST "/api/transportation/transport-requests" $body $staffToken
 Assert-Status $tr 201 "create transport request"
-Save-Text "10-job.transport-request.response.json" (Format-Json $tr.Raw)
+Save-Text "$($resultPrefix)10-job.transport-request.response.json" (Format-Json $tr.Raw)
 $queue = Invoke-Api POST "/api/transportation/transport-requests/$($tr.Body.id)/queue" $null $staffToken
 Assert-Status $queue 200 "queue (plan + provision Job)"
 $jobId = $queue.Body.jobs[0].jobId
@@ -150,13 +169,13 @@ do {
 
 # ---------------------------------------------------------------- 4. result
 $final = Invoke-Api GET "/api/workflow-execution/jobs/$jobId" $null $staffToken
-Save-Text "11-job.final.json" (Format-Json $final.Raw)
+Save-Text "$($resultPrefix)11-job.final.json" (Format-Json $final.Raw)
 $request = Invoke-Api GET "/api/transportation/transport-requests/$($tr.Body.id)" $null $staffToken
-Save-Text "12-job.transport-request.final.json" (Format-Json $request.Raw)
+Save-Text "$($resultPrefix)12-job.transport-request.final.json" (Format-Json $request.Raw)
 $summary = "Job {0}: {1} ({2}/{3} steps) in {4}s · TransportRequest {5}: {6} · details: {7}" -f `
     $final.Body.jobNo, $final.Body.status, $final.Body.completedSteps, $final.Body.totalSteps, [int]((Get-Date) - $t0).TotalSeconds,
     $request.Body.requestCode, $request.Body.status, (($request.Body.details | ForEach-Object { $_.status }) -join ",")
 $log.Add($summary)
-Save-Text "13-job.run.log.txt" (($log -join "`n") + "`n")
+Save-Text "$($resultPrefix)13-job.run.log.txt" (($log -join "`n") + "`n")
 Write-Host ""
 Write-Host $summary -ForegroundColor $(if ($final.Body.status -eq "COMPLETED") { "Green" } else { "Yellow" })
