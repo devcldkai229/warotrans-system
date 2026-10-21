@@ -33,6 +33,6 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
         dbContext.Endpoints
             .AsNoTracking()
             .Where(e => e.Id == endpointId)
-            .Select(e => new EndpointPoseSnapshot(e.Id, e.MapVersionId, e.Code, e.X, e.Y, e.Yaw, e.IsEnabled))
+            .Select(e => new EndpointPoseSnapshot(e.Id, e.MapVersionId, e.Code, e.X, e.Y, e.Yaw, e.IsEnabled, e.PositionTolerance))
             .FirstOrDefaultAsync(cancellationToken);
 }

@@ -24,7 +24,8 @@ public sealed record EndpointPoseSnapshot(
     double X,
     double Y,
     double Yaw,
-    bool IsEnabled);
+    bool IsEnabled,
+    double PositionTolerance = 0.25);
 
 public sealed record MapVersionSnapshot(Guid Id, Guid WarehouseId, int VersionNo, MapStatus Status);
 

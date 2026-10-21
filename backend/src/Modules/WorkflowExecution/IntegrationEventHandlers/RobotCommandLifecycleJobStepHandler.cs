@@ -48,6 +48,18 @@ public sealed class RobotCommandLifecycleJobStepHandler(
             return; // late / duplicate lifecycle event
         }
 
+        if (!JobExecutionEngine.IsCurrentCommand(step, integrationEvent.CommandId))
+        {
+            // A command of an earlier attempt (the Job was resumed): e.g. the robot only lost the network,
+            // finished the old goal and reports late. It must not complete or fail the new attempt.
+            logger.LogInformation(
+                "Ignoring {Phase} of superseded command {CommandId} for JobStep {JobStepId}",
+                integrationEvent.Phase,
+                integrationEvent.CommandId,
+                stepId);
+            return;
+        }
+
         var utcNow = DateTimeOffset.UtcNow;
         var finished = false;
         switch (integrationEvent.Phase)
