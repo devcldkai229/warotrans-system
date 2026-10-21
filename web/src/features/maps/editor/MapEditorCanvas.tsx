@@ -1,4 +1,12 @@
-import { useCallback, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
 import type { Edge, Endpoint, Point, Zone } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
 import { Icon } from '@/shared/ui/Icon'
@@ -62,6 +70,25 @@ export function MapEditorCanvas({
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [cursor, setCursor] = useState<{ image: PixelCoord; world: WorldCoord } | null>(null)
   const dragged = useRef(false)
+  // Screen px per image px at zoom 1 (the SVG is fitted into its box). A small PGM (e.g. 82 x 103 px for a
+  // 3.5 x 4.55 m floor) is drawn ~5x larger, so marks sized in image px would cover the whole floor.
+  const [fitScale, setFitScale] = useState(1)
+
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const update = () => {
+      const scale = Math.min(svg.clientWidth / W, svg.clientHeight / H)
+      if (Number.isFinite(scale) && scale > 0) setFitScale(scale)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(svg)
+    return () => observer.disconnect()
+  }, [W, H])
+
+  // Fleet-manager style (OTTO): places are small fixed-size dots on screen whatever the map size or zoom.
+  const px = (screenPixels: number) => screenPixels / (fitScale * zoom)
 
   const toImage = useCallback(
     (clientX: number, clientY: number): PixelCoord | null => {
@@ -212,30 +239,45 @@ export function MapEditorCanvas({
           })}
 
           {endpoints.map((ep) => {
-            const px = worldToPixel(transform, { x: ep.x, y: ep.y })
+            const at = worldToPixel(transform, { x: ep.x, y: ep.y })
             const isSel = selected.endpointId === ep.id
-            const r = Math.max(4, 6 / zoom)
+            const color = isSel ? '#2563eb' : '#0f172a'
             return (
               <g
                 key={ep.id}
-                transform={`translate(${px.u} ${px.v})`}
+                transform={`translate(${at.u} ${at.v})`}
                 onClick={(e) => {
                   e.stopPropagation()
                   onEndpointClick?.(ep.id)
                 }}
                 style={{ cursor: 'pointer' }}
               >
-                <circle r={r} fill={isSel ? '#2563eb' : '#0f172a'} stroke="#fff" strokeWidth={1.5 / zoom} />
+                {/* invisible hit area: the dot is small, the click target is not */}
+                <circle r={px(9)} fill="transparent" />
                 <line
                   x1={0}
                   y1={0}
-                  x2={18 / zoom}
+                  x2={px(11)}
                   y2={0}
                   stroke={isSel ? '#2563eb' : '#f59e0b'}
-                  strokeWidth={2 / zoom}
+                  strokeWidth={px(2)}
+                  strokeLinecap="round"
                   transform={`rotate(${headingDeg(ep.yaw)})`}
-                  markerEnd="url(#ep-arrow)"
                 />
+                <circle r={px(isSel ? 5 : 4)} fill={color} stroke="#fff" strokeWidth={px(1.5)} />
+                <text
+                  y={px(15)}
+                  textAnchor="middle"
+                  fontSize={px(10)}
+                  fontWeight={600}
+                  fill={color}
+                  stroke="#fff"
+                  strokeWidth={px(3)}
+                  paintOrder="stroke"
+                  pointerEvents="none"
+                >
+                  {ep.name}
+                </text>
               </g>
             )
           })}
@@ -262,15 +304,12 @@ export function MapEditorCanvas({
             )
           ) : null}
           {draftPixels.map((p, i) => (
-            <circle key={`d-${i}`} cx={p.u} cy={p.v} r={3 / zoom} fill="#2563eb" />
+            <circle key={`d-${i}`} cx={p.u} cy={p.v} r={px(3)} fill="#2563eb" />
           ))}
 
           <defs>
             <marker id="edge-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M1 1 9 5 1 9Z" fill="#334155" />
-            </marker>
-            <marker id="ep-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-              <path d="M1 1 9 5 1 9Z" fill="#f59e0b" />
             </marker>
           </defs>
         </svg>

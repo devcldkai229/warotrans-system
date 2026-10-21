@@ -4,7 +4,16 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
 import type { Endpoint } from '@/shared/api/contracts'
 import { getRobot, listRobots } from '@/shared/api/fleet'
-import { confirmJobStep, getJob, listJobs, startJob, type JobDetailDto, type JobStepDto, type JobTaskDto } from '@/shared/api/jobs'
+import {
+  confirmJobStep,
+  getJob,
+  listJobs,
+  resumeJob,
+  startJob,
+  type JobDetailDto,
+  type JobStepDto,
+  type JobTaskDto,
+} from '@/shared/api/jobs'
 import { getTransportRequest } from '@/shared/api/transportRequests'
 import { cx } from '@/shared/lib/cx'
 import { formatClock, humanize } from '@/shared/lib/format'
@@ -238,6 +247,7 @@ function JobPanel({
           </p>
         ) : null}
         {job.status === 'CREATED' || job.status === 'QUEUED' ? <StartJob job={job} /> : null}
+        {job.status === 'PAUSED' || job.status === 'REASSIGNING' ? <ResumeJob job={job} robotCode={robotCode} /> : null}
         {job.status === 'COMPLETED' || job.status === 'FAILED' ? <RunAgain job={job} /> : null}
         <ul className="mt-3 flex flex-wrap gap-1.5">
           {job.containers.map((c) => (
@@ -302,6 +312,52 @@ function StartJob({ job }: { job: JobDetailDto }) {
         <Icon name="play" size={14} /> Start
       </Button>
       {start.error ? <span className="text-xs text-red-ink">{errorText(start.error)}</span> : null}
+    </div>
+  )
+}
+
+/**
+ * A Job stopped by a failure (robot offline, navigation failed, check failed) continues from that step.
+ * Default = the same robot once it is back online; completed steps are not repeated. If the robot came back
+ * somewhere else, the backend sends it to the current stop again before asking Staff.
+ */
+function ResumeJob({ job, robotCode }: { job: JobDetailDto; robotCode: string | null }) {
+  const queryClient = useQueryClient()
+  const robotsQuery = useQuery({ queryKey: ['fleet-robots', 'for-job', job.mapVersionId], queryFn: () => listRobots({ take: 100 }) })
+  const candidates = (robotsQuery.data?.items ?? []).filter(
+    (r) => r.currentMapVersionId === job.mapVersionId && r.id !== job.assignedRobotId,
+  )
+  const [robotId, setRobotId] = useState('')
+  const resume = useMutation({
+    mutationFn: () => resumeJob(job.id, robotId || undefined),
+    onSuccess: (detail) => {
+      queryClient.setQueryData(['job', job.id], detail)
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+
+  return (
+    <div className="mt-3 flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <select
+          className="h-8 min-w-0 flex-1 rounded-md bg-container px-2 text-sm"
+          value={robotId}
+          onChange={(event) => setRobotId(event.target.value)}
+          aria-label="Robot"
+        >
+          <option value="">Same robot{robotCode ? ` (${robotCode})` : ''}</option>
+          {candidates.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.code} · {r.status} · {r.isOnline ? 'online' : 'offline'}
+            </option>
+          ))}
+        </select>
+        <Button variant="primary" size="sm" onClick={() => resume.mutate()} disabled={resume.isPending}>
+          <Icon name="play" size={14} /> {resume.isPending ? 'Resuming…' : 'Resume'}
+        </Button>
+      </div>
+      <span className="text-xs text-muted">Continues from the failed step. The robot must be online and localized.</span>
+      {resume.error ? <span className="text-xs text-red-ink">{errorText(resume.error)}</span> : null}
     </div>
   )
 }
