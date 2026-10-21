@@ -41,6 +41,12 @@ public sealed class JobExecutionEngine(
     private static readonly JobStatus[] ActiveJobStatuses =
         [JobStatus.ASSIGNED, JobStatus.RUNNING, JobStatus.PAUSED, JobStatus.REASSIGNING, JobStatus.RECOVERY_REQUIRED];
 
+    private const string RobotCommandIdKey = "robotCommandId";
+    private const string SupersededCommandIdsKey = "supersededRobotCommandIds";
+
+    /// <summary>Resume needs a pose this fresh: a robot that came back online may be somewhere else.</summary>
+    private static readonly TimeSpan ResumeTelemetryMaxAge = TimeSpan.FromSeconds(15);
+
     private readonly List<IIntegrationEvent> _pendingEvents = [];
 
     // ------------------------------------------------------------------ start
@@ -96,6 +102,186 @@ public sealed class JobExecutionEngine(
 
         await AdvanceAsync(job.Id, cancellationToken);
         return job;
+    }
+
+    // ------------------------------------------------------------------ resume
+
+    /// <summary>
+    /// Continues a PAUSED / REASSIGNING Job from the step that stopped it, on the same robot (default) or another one.
+    /// Completed steps are kept. The robot must be localized with fresh telemetry: it may have come back somewhere
+    /// else (rebooted, pushed by hand), so a stop it already reached is driven to again before Staff confirm there.
+    /// </summary>
+    public async Task<Job> ResumeAsync(Guid jobId, Guid? robotId, CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        if (job.Status is not (JobStatus.PAUSED or JobStatus.REASSIGNING))
+        {
+            throw new ConflictException(
+                $"Job {job.JobNo} cannot be resumed from status {job.Status} (only PAUSED or REASSIGNING).",
+                "job_not_resumable");
+        }
+
+        var previousRobot = AssignedRobot(job);
+        var targetRobotId = robotId ?? previousRobot
+            ?? throw new DomainValidationException($"Job {job.JobNo} has no robot; pass robotId.", "robot_required");
+        var robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken)
+            ?? throw new NotFoundException($"Robot '{targetRobotId}' was not found.", "robot_not_found");
+        EnsureRobotCanTakeJob(robot, job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken));
+        EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
+
+        if (previousRobot is { } previous && previous != robot.Id
+            && job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
+        {
+            throw new ConflictException(
+                $"Job {job.JobNo} has containers on its previous robot; transfer them first (payload recovery).",
+                "payload_recovery_required");
+        }
+
+        var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+            .ToDictionaryAsync(s => s.Id, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.Status is JobStepStatus.FAILED or JobStepStatus.CANCELLED))
+        {
+            ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+        }
+
+        await ReturnToStopIfMovedAsync(job, robot, workflowSteps, now, cancellationToken);
+
+        foreach (var task in job.JobTasks.Where(t => t.Status == JobTaskStatus.FAILED))
+        {
+            task.Status = task.JobSteps.Any(s => s.Status == JobStepStatus.COMPLETED) ? JobTaskStatus.RUNNING : JobTaskStatus.PENDING;
+            task.CompletedAt = null;
+            task.FailureCode = null;
+        }
+
+        job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
+        {
+            [AssignedRobotKey] = JsonSerializer.SerializeToElement(robot.Id)
+        };
+        job.Status = JobStatus.RUNNING;
+        job.FailureCode = null;
+        job.FailureMessage = null;
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robot.Id, null));
+        await SaveAndPublishAsync(cancellationToken);
+        logger.LogInformation("Job {JobNo} resumed on robot {RobotCode}", job.JobNo, robot.Code);
+
+        await AdvanceAsync(job.Id, cancellationToken);
+        return job;
+    }
+
+    /// <summary>
+    /// The current stop's MOVE already finished but the robot is no longer there (it came back online elsewhere):
+    /// drive to the stop again, and ask Staff again once it is there.
+    /// </summary>
+    private async Task ReturnToStopIfMovedAsync(
+        Job job,
+        RobotSnapshot robot,
+        IReadOnlyDictionary<Guid, WorkflowStep> workflowSteps,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        // A stop is one ONCE_PER_STOP task (CHECK + MOVE) followed by PER_CONTAINER_AT_STOP tasks (confirmations),
+        // all carrying the same stopSequenceNo / stopEndpointId.
+        var current = job.JobTasks.OrderBy(t => t.SequenceNo)
+            .FirstOrDefault(t => t.JobSteps.Any(s => s.Status != JobStepStatus.COMPLETED));
+        if (current is null
+            || !current.ContextValues.TryGetValue("stopSequenceNo", out var stopNo)
+            || !current.ContextValues.TryGetValue("stopEndpointId", out var stop) || stop.ValueKind != JsonValueKind.String)
+        {
+            return;
+        }
+
+        var stopTasks = job.JobTasks.OrderBy(t => t.SequenceNo)
+            .Where(t => t.ContextValues.TryGetValue("stopSequenceNo", out var n) && n.GetRawText() == stopNo.GetRawText())
+            .ToList();
+        var move = stopTasks.SelectMany(t => t.JobSteps.Select(s => (Task: t, Step: s)))
+            .LastOrDefault(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.COMPLETED);
+        if (move.Step is null)
+        {
+            return; // the stop has not been reached yet: the pending MOVE drives there anyway
+        }
+
+        var pose = await navigation.GetEndpointPoseAsync(stop.GetGuid(), cancellationToken);
+        var distance = pose is null ? 0 : Math.Sqrt(Math.Pow(robot.PoseX - pose.X, 2) + Math.Pow(robot.PoseY - pose.Y, 2));
+        if (pose is null || distance <= pose.PositionTolerance)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "Job {JobNo}: robot {RobotCode} is {Distance:F2} m from stop {Stop}; driving back before continuing",
+            job.JobNo, robot.Code, distance, pose.Code);
+        // The MOVE + what is still open at this stop (confirmations already given there stay done).
+        ReopenStep(job, move.Task, move.Step, workflowSteps[move.Step.WorkflowStepId].StepKey, now);
+        foreach (var task in stopTasks)
+        {
+            foreach (var step in task.JobSteps.Where(s => s.Status is JobStepStatus.WAITING or JobStepStatus.EXECUTING))
+            {
+                ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+            }
+        }
+
+        foreach (var task in stopTasks.Where(t => t.JobSteps.Any(s => s.Status != JobStepStatus.COMPLETED)))
+        {
+            task.Status = JobTaskStatus.RUNNING;
+            task.CompletedAt = null;
+        }
+    }
+
+    /// <summary>Back to PENDING. A command id the step issued is kept as superseded: its late lifecycle events are ignored.</summary>
+    private void ReopenStep(Job job, JobTask task, JobStep step, string stepKey, DateTimeOffset now)
+    {
+        var superseded = SupersededCommandIds(step.OutputValues);
+        if (step.OutputValues.TryGetValue(RobotCommandIdKey, out var commandId) && commandId.ValueKind == JsonValueKind.String)
+        {
+            superseded.Add(commandId.GetGuid());
+        }
+
+        step.OutputValues = superseded.Count == 0
+            ? new Dictionary<string, JsonElement>()
+            : new Dictionary<string, JsonElement> { [SupersededCommandIdsKey] = JsonSerializer.SerializeToElement(superseded) };
+        step.ErrorCode = null;
+        step.ErrorMessage = null;
+        step.StartedAt = null;
+        step.CompletedAt = null;
+        SetStepStatus(job, task, step, stepKey, JobStepStatus.PENDING, now);
+    }
+
+    /// <summary>A lifecycle event belongs to the step only when it is for the step's current robot command.</summary>
+    public static bool IsCurrentCommand(JobStep step, Guid commandId)
+    {
+        if (SupersededCommandIds(step.OutputValues).Contains(commandId))
+        {
+            return false;
+        }
+
+        return !step.OutputValues.TryGetValue(RobotCommandIdKey, out var current)
+               || current.ValueKind != JsonValueKind.String
+               || current.GetGuid() == commandId;
+    }
+
+    private static List<Guid> SupersededCommandIds(IReadOnlyDictionary<string, JsonElement> outputs) =>
+        outputs.TryGetValue(SupersededCommandIdsKey, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetGuid()).ToList()
+            : [];
+
+    private static void EnsureRobotLocalized(RobotSnapshot robot, DateTimeOffset now)
+    {
+        if (robot.LocalizationStatus != LocalizationStatus.LOCALIZED)
+        {
+            throw new ConflictException(
+                $"Robot {robot.Code} is not localized ({robot.LocalizationStatus?.ToString() ?? "unknown"}). Set its pose on the map first.",
+                "robot_not_localized");
+        }
+
+        if (robot.LastTelemetryAt is not { } at || now - at > ResumeTelemetryMaxAge)
+        {
+            throw new ConflictException(
+                $"Robot {robot.Code} has no telemetry in the last {ResumeTelemetryMaxAge.TotalSeconds:F0} s; its position is unknown.",
+                "robot_telemetry_stale");
+        }
     }
 
     // ------------------------------------------------------------------ advance
@@ -322,11 +508,17 @@ public sealed class JobExecutionEngine(
         try
         {
             var commandId = await fleet.NavigateAsync(robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken);
-            step.OutputValues = new Dictionary<string, JsonElement>
+            var outputs = new Dictionary<string, JsonElement>
             {
                 ["startedAt"] = JsonSerializer.SerializeToElement(now),
-                ["robotCommandId"] = JsonSerializer.SerializeToElement(commandId)
+                [RobotCommandIdKey] = JsonSerializer.SerializeToElement(commandId)
             };
+            if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var superseded))
+            {
+                outputs[SupersededCommandIdsKey] = superseded; // commands of earlier attempts (resume)
+            }
+
+            step.OutputValues = outputs;
             logger.LogInformation("Job {JobNo} {StepKey} → robot command {CommandId} to {Endpoint}", job.JobNo, stepKey, commandId, pose.Code);
             return false;
         }
@@ -414,7 +606,8 @@ public sealed class JobExecutionEngine(
         task.CompletedAt ??= now;
         task.FailureCode = step.ErrorCode;
 
-        // OnFailure policy. V1 has no automatic reassignment / operator resume: the Job stops in that state.
+        // OnFailure policy. No automatic reassignment: the Job stops in that state until an operator resumes it
+        // (POST /jobs/{id}/resume → ResumeAsync) or it is cancelled.
         job.Status = workflowStep.OnFailure switch
         {
             StepFailurePolicy.PAUSE_FOR_OPERATOR => JobStatus.PAUSED,
