@@ -15,4 +15,10 @@ public sealed class Endpoint
     public double PositionTolerance { get; set; }
     public double YawTolerance { get; set; }
     public bool IsEnabled { get; set; }
+
+    /// <summary>
+    /// Endpoint of the source map this one was cloned from (new id; code from the system code generator).
+    /// On publish, storage locations bound to the source endpoint (or its own sources) move to this one.
+    /// </summary>
+    public Guid? SourceEndpointId { get; set; }
 }

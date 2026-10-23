@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 using WaroTrans.Navigation.Entities;
@@ -16,6 +17,15 @@ namespace WaroTrans.UnitTests.Navigation;
 
 public class MapVersionTests
 {
+    private sealed class NoOpRebinder : IStorageLocationEndpointRebinder
+    {
+        public Task<int> RebindAsync(Guid warehouseId, IReadOnlyDictionary<Guid, Guid> endpointMap, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
+    }
+
+    private static PublishMapVersionHandler Publisher(NavigationDbContext dbContext) =>
+        new(dbContext, new NoOpRebinder(), NullLogger<PublishMapVersionHandler>.Instance);
+
     private sealed class FakeWarehouseModule(WarehouseSnapshot? warehouse = null) : IWarehouseModule
     {
         public WarehouseSnapshot? Warehouse { get; set; } = warehouse;
@@ -196,7 +206,7 @@ public class MapVersionTests
         var map2 = SeedMap(dbContext, warehouseId, MapStatus.DRAFT, 2, "MAP-B");
         await dbContext.SaveChangesAsync();
 
-        var response = await new PublishMapVersionHandler(dbContext).HandleAsync(map2.Id);
+        var response = await Publisher(dbContext).HandleAsync(map2.Id);
 
         Assert.Equal("PUBLISHED", response.Status);
         Assert.NotNull(response.PublishedAt);
@@ -211,7 +221,7 @@ public class MapVersionTests
         await dbContext.SaveChangesAsync();
 
         await Assert.ThrowsAsync<DomainValidationException>(() =>
-            new PublishMapVersionHandler(dbContext).HandleAsync(map.Id));
+            Publisher(dbContext).HandleAsync(map.Id));
     }
 
     [Fact]
@@ -223,7 +233,7 @@ public class MapVersionTests
         await dbContext.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
-            new PublishMapVersionHandler(dbContext).HandleAsync(map.Id));
+            Publisher(dbContext).HandleAsync(map.Id));
 
         Assert.Equal("map_assets_pending", ex.Code);
     }
