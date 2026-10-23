@@ -75,6 +75,13 @@ public sealed class GetMapVersionHandler(NavigationDbContext dbContext)
             .OrderBy(z => z.Code)
             .ToListAsync(cancellationToken);
 
+        var sourceCode = mapVersion.SourceMapVersionId is { } sourceId
+            ? await dbContext.MapVersions.AsNoTracking()
+                .Where(m => m.Id == sourceId)
+                .Select(m => m.Code)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         return new MapVersionDetailResponse(
             mapVersion.Id,
             mapVersion.WarehouseId,
@@ -120,6 +127,8 @@ public sealed class GetMapVersionHandler(NavigationDbContext dbContext)
                 z.MaxSpeed,
                 z.IsActive,
                 z.Policy?.RootElement.Clone(),
-                z.PolicySchemaVersion)).ToList());
+                z.PolicySchemaVersion)).ToList(),
+            mapVersion.SourceMapVersionId,
+            sourceCode);
     }
 }

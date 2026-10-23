@@ -55,6 +55,7 @@ public static class WarehouseModule
         services.AddScoped<CreateProductCategoryHandler>();
 
         services.AddScoped<IWarehouseModule, WarehouseModuleApi>();
+        services.AddScoped<IStorageLocationEndpointRebinder, StorageLocationEndpointRebinder>();
 
         return services;
     }

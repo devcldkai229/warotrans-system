@@ -19,5 +19,6 @@ public sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
         builder.HasIndex(x => x.MapVersionId);
         builder.HasIndex(x => x.Code);
         builder.HasIndex(x => x.IsEnabled);
+        builder.HasIndex(x => x.SourceEndpointId);
     }
 }
