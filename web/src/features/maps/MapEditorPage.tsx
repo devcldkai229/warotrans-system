@@ -13,6 +13,7 @@ import type {
 } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import {
+  cloneMapVersion,
   createEdge,
   createEndpoint,
   createZone,
@@ -201,6 +202,17 @@ export function MapEditorPage() {
     onSuccess: async () => {
       await invalidate()
       navigate('/configure/facility')
+    },
+    onError: (err) => setActionError(errMessage(err)),
+  })
+
+  // Read-only (published / archived) map → edit a DRAFT copy of it.
+  const cloneMutation = useMutation({
+    mutationFn: () => cloneMapVersion(mapId!),
+    onSuccess: async (copy) => {
+      setActionError(null)
+      await queryClient.invalidateQueries({ queryKey: ['navigation', 'maps'] })
+      navigate(`/configure/facility/maps/${copy.id}/edit`)
     },
     onError: (err) => setActionError(errMessage(err)),
   })
@@ -585,6 +597,9 @@ export function MapEditorPage() {
           {version.code} · v{version.versionNo}
         </h1>
         <StatusBadge tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}>{version.status}</StatusBadge>
+        {version.sourceMapVersionCode ? (
+          <span className="text-xs text-muted">Cloned from {version.sourceMapVersionCode}</span>
+        ) : null}
         <span className="ml-2 flex items-center gap-2 text-xs text-muted">
           {actionError ? (
             <span className="text-red">{actionError}</span>
@@ -595,20 +610,27 @@ export function MapEditorPage() {
           ) : isDraft ? (
             'World meters · pan/zoom display-only · continuous image coords'
           ) : (
-            'Read-only: only DRAFT maps can be edited.'
+            'Read-only: only DRAFT maps can be edited. Clone & edit makes an editable copy.'
           )}
         </span>
         <div className="ml-auto flex gap-2">
           <Button variant="ghost" onClick={() => navigate('/configure/facility')}>
             Close
           </Button>
-          <Button
-            variant="primary"
-            disabled={!isDraft || publishMutation.isPending}
-            onClick={() => publishMutation.mutate()}
-          >
-            Publish
-          </Button>
+          {isDraft ? (
+            <Button variant="primary" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>
+              Publish
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              disabled={cloneMutation.isPending}
+              title="Copy this map (image, endpoints, zones, edges) into a new DRAFT and edit the copy"
+              onClick={() => cloneMutation.mutate()}
+            >
+              {cloneMutation.isPending ? 'Cloning…' : 'Clone & edit'}
+            </Button>
+          )}
         </div>
       </header>
 
