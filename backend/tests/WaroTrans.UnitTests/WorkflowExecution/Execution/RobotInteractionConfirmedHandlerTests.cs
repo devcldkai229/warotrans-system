@@ -81,14 +81,14 @@ public sealed class RobotInteractionConfirmedHandlerTests
 
     private Task RobotResultAsync(Guid stepId, string outcome = "SUCCEEDED") =>
         ResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
-            Guid.NewGuid(), _fleet.RobotId, "RBT-SIM-01", "NAVIGATE_TO_POSE", "COMPLETED",
+            _fleet.Commands.Last(c => c.JobStepId == stepId).CommandId, _fleet.RobotId, "RBT-SIM-01", "NAVIGATE_TO_POSE", "COMPLETED",
             null, stepId, outcome, outcome == "SUCCEEDED" ? null : "NAV_FAILED", RobotCommandLifecycleChanged.Phases.Result));
 
     private async Task<(Guid StepId, Guid ContainerId, Guid EndpointId)> WaitingHandoverAsync(Guid jobId)
     {
-        var stepId = await CurrentStepIdAsync(jobId);
-        var step = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == stepId);
-        return (stepId, step.ResolvedInputs["containerId"].GetGuid(), step.ResolvedInputs["endpointId"].GetGuid());
+        var job = await _db.Jobs.Include(j => j.JobTasks).ThenInclude(t => t.JobSteps).SingleAsync(j => j.Id == jobId);
+        var step = job.JobTasks.SelectMany(t => t.JobSteps).Single(s => s.Status == JobStepStatus.WAITING);
+        return (step.Id, step.ResolvedInputs["containerId"].GetGuid(), step.ResolvedInputs["endpointId"].GetGuid());
     }
 
     private RobotInteractionConfirmed Evt(
@@ -339,7 +339,7 @@ public sealed class RobotInteractionConfirmedHandlerTests
     private sealed class FakeFleet : IFleetModule
     {
         public Dictionary<Guid, RobotSnapshot> Robots { get; } = [];
-        public List<(Guid RobotId, double X, double Y, Guid JobStepId)> Commands { get; } = [];
+        public List<(Guid RobotId, double X, double Y, Guid JobStepId, Guid CommandId)> Commands { get; } = [];
         public List<(Guid RobotId, Guid JobStepId, string InteractionType, Guid ContainerId, Guid EndpointId)> InteractionRequests { get; } = [];
         public List<(Guid RobotId, Guid JobStepId, Guid ConfirmMessageId, bool Accepted, string? ReasonCode)> InteractionResults { get; } = [];
         public Guid RobotId { get; private set; }
@@ -362,8 +362,9 @@ public sealed class RobotInteractionConfirmedHandlerTests
 
         public Task<Guid> NavigateAsync(Guid robotId, double x, double y, double yaw, Guid jobId, Guid jobStepId, CancellationToken cancellationToken = default)
         {
-            Commands.Add((robotId, x, y, jobStepId));
-            return Task.FromResult(Guid.NewGuid());
+            var commandId = Guid.NewGuid();
+            Commands.Add((robotId, x, y, jobStepId, commandId));
+            return Task.FromResult(commandId);
         }
 
         public Task RequestHumanInteractionAsync(Guid robotId, Guid jobId, Guid jobStepId, string interactionType, Guid containerId, Guid endpointId, CancellationToken cancellationToken = default)

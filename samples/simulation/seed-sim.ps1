@@ -20,7 +20,10 @@
 param(
     [string]$BaseUrl = "http://localhost:5090",
     [string]$RobotRepo = "D:\FPT_edu\CaptoneProject\sourceCode\robotSource\warotrans",
-    [string]$RobotCode = "RBT-SIM-01"
+    [string]$RobotCode = "RBT-SIM-01",
+    # Import the map image only and leave the MapVersion DRAFT: endpoints, zones and lanes are drawn in the web
+    # Map Editor, then published from the web. Re-running reuses a DRAFT with the same content.
+    [switch]$Draft
 )
 
 $script:BaseUrl = $BaseUrl
@@ -64,7 +67,18 @@ function Test-MapComplete($candidate) {
 
 $active = Invoke-Api GET "/api/navigation/warehouses/$warehouseId/active-map" $null $token
 $map = $null
-if ($active.Status -eq 200 -and $active.Body.contentHash -eq $localHash -and (Test-MapComplete $active.Body)) {
+$existingDraft = $null
+if ($Draft) {
+    $versions = (Invoke-Api GET "/api/navigation/warehouses/$warehouseId/maps" $null $token).Body
+    $versionItems = if ($versions.items) { $versions.items } else { $versions }
+    $existingDraft = $versionItems | Where-Object { $_.status -eq "DRAFT" -and $_.contentHash -eq $localHash } |
+        Sort-Object versionNo -Descending | Select-Object -First 1
+}
+if ($existingDraft) {
+    $map = $existingDraft
+    Write-Host "  reuse DRAFT $($map.code) (same content hash)"
+}
+elseif (-not $Draft -and $active.Status -eq 200 -and $active.Body.contentHash -eq $localHash -and (Test-MapComplete $active.Body)) {
     $map = $active.Body
     Write-Host "  reuse PUBLISHED $($map.code) (same content hash, endpoints and zones)"
 }
@@ -104,9 +118,14 @@ else {
         Assert-Status $r 201 "create zone $($z.name) ($($z.zoneType))"
     }
 
-    $publish = Invoke-Api POST "/api/navigation/maps/$($map.id)/publish" $null $token
-    Assert-Status $publish 200 "publish map"
-    $map = $publish.Body
+    if ($Draft) {
+        Write-Host "  left DRAFT: draw endpoints / zones / lanes in the web Map Editor, then publish there" -ForegroundColor Yellow
+    }
+    else {
+        $publish = Invoke-Api POST "/api/navigation/maps/$($map.id)/publish" $null $token
+        Assert-Status $publish 200 "publish map"
+        $map = $publish.Body
+    }
 }
 Write-Host "  map $($map.code) id=$($map.id) status=$($map.status)"
 

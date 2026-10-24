@@ -9,7 +9,12 @@ WHERE id IN (SELECT job_id FROM execution.job_containers
                                     'e3000000-0000-4000-8000-000000000003',
                                     'e4000000-0000-4000-8000-000000000004',
                                     'e5000000-0000-4000-8000-000000000005',
-                                    'e6000000-0000-4000-8000-000000000006'));
+                                    'e6000000-0000-4000-8000-000000000006',
+                                    'e7000000-0000-4000-8000-000000000007',
+                                    'e8000000-0000-4000-8000-000000000008',
+                                    'e9000000-0000-4000-8000-000000000009',
+                                    'ea000000-0000-4000-8000-000000000010',
+                                    'eb000000-0000-4000-8000-000000000011'));
 
 DELETE FROM transportation.transport_requests
 WHERE id IN (SELECT transport_request_id FROM transportation.transport_request_details
@@ -18,7 +23,12 @@ WHERE id IN (SELECT transport_request_id FROM transportation.transport_request_d
                                     'e3000000-0000-4000-8000-000000000003',
                                     'e4000000-0000-4000-8000-000000000004',
                                     'e5000000-0000-4000-8000-000000000005',
-                                    'e6000000-0000-4000-8000-000000000006'));
+                                    'e6000000-0000-4000-8000-000000000006',
+                                    'e7000000-0000-4000-8000-000000000007',
+                                    'e8000000-0000-4000-8000-000000000008',
+                                    'e9000000-0000-4000-8000-000000000009',
+                                    'ea000000-0000-4000-8000-000000000010',
+                                    'eb000000-0000-4000-8000-000000000011'));
 
 INSERT INTO warehouse.product_categories (id, code, name, description)
 VALUES ('cccccccc-0000-4000-8000-0000000000a1', 'CAT-SIM', 'Simulation goods', 'Category for the Gazebo demo')
@@ -45,5 +55,18 @@ VALUES
     ('e5000000-0000-4000-8000-000000000005', 'dddddddd-0000-4000-8000-0000000000a1', 'CTN-IN-000002', NULL, 'PACKED', NULL, NULL, 'a0000000-0000-4000-8000-000000000001', now(), now()),
     ('e6000000-0000-4000-8000-000000000006', 'dddddddd-0000-4000-8000-0000000000a1', 'CTN-IN-000003', NULL, 'PACKED', NULL, NULL, 'a0000000-0000-4000-8000-000000000001', now(), now())
 ON CONFLICT (id) DO UPDATE SET status = 'PACKED', updated_at = now();
+
+-- Rack-to-rack relocation demo: containers already stored on the racks (storage locations from seed-sim.ps1:
+-- demo map v6: LOC-SIM-S01..S04 = f0..01..04). Re-running puts them back on their starting shelf.
+INSERT INTO warehouse.containers (id, product_id, barcode, supplier_package_barcode, status,
+                                  current_storage_location_id, current_level_no, created_by, created_at, updated_at)
+VALUES
+    ('e7000000-0000-4000-8000-000000000007', 'dddddddd-0000-4000-8000-0000000000a1', 'CTN-RL-000001', NULL, 'STORED', 'f0000000-0000-4000-8000-000000000001', NULL, 'a0000000-0000-4000-8000-000000000001', now(), now()),
+    ('e8000000-0000-4000-8000-000000000008', 'dddddddd-0000-4000-8000-0000000000a1', 'CTN-RL-000002', NULL, 'STORED', 'f0000000-0000-4000-8000-000000000001', NULL, 'a0000000-0000-4000-8000-000000000001', now(), now()),
+    ('e9000000-0000-4000-8000-000000000009', 'dddddddd-0000-4000-8000-0000000000a1', 'CTN-RL-000003', NULL, 'STORED', 'f0000000-0000-4000-8000-000000000002', NULL, 'a0000000-0000-4000-8000-000000000001', now(), now()),
+    ('ea000000-0000-4000-8000-000000000010', 'dddddddd-0000-4000-8000-0000000000a1', 'CTN-RL-000004', NULL, 'STORED', 'f0000000-0000-4000-8000-000000000003', NULL, 'a0000000-0000-4000-8000-000000000001', now(), now()),
+    ('eb000000-0000-4000-8000-000000000011', 'dddddddd-0000-4000-8000-0000000000a1', 'CTN-RL-000005', NULL, 'STORED', 'f0000000-0000-4000-8000-000000000004', NULL, 'a0000000-0000-4000-8000-000000000001', now(), now())
+ON CONFLICT (id) DO UPDATE SET status = 'STORED', current_storage_location_id = EXCLUDED.current_storage_location_id,
+                               current_level_no = NULL, updated_at = now();
 
 COMMIT;

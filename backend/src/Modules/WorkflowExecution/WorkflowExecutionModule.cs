@@ -12,13 +12,16 @@ using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.ConfirmJobStep;
 using WaroTrans.WorkflowExecution.Features.CreateWorkflow;
 using WaroTrans.WorkflowExecution.Features.CreateWorkflowVersion;
+using WaroTrans.WorkflowExecution.Features.DeleteWorkflow;
 using WaroTrans.WorkflowExecution.Features.GetJob;
+using WaroTrans.WorkflowExecution.Features.GetJobStatistics;
 using WaroTrans.WorkflowExecution.Features.GetWorkflow;
 using WaroTrans.WorkflowExecution.Features.GetWorkflowMetadata;
 using WaroTrans.WorkflowExecution.Features.GetWorkflowRequestInputSchema;
 using WaroTrans.WorkflowExecution.Features.ListJobs;
 using WaroTrans.WorkflowExecution.Features.ListWorkflows;
 using WaroTrans.WorkflowExecution.Features.Shared;
+using WaroTrans.WorkflowExecution.Features.ResumeJob;
 using WaroTrans.WorkflowExecution.Features.StartJob;
 using WaroTrans.WorkflowExecution.Features.PublishWorkflow;
 using WaroTrans.WorkflowExecution.Features.UpdateWorkflow;
@@ -47,6 +50,13 @@ public static class WorkflowExecutionModule
         services.AddScoped<UpdateWorkflowHandler>();
         services.AddScoped<PublishWorkflowHandler>();
         services.AddScoped<CreateWorkflowVersionHandler>();
+        services.AddScoped<DeleteWorkflowHandler>();
+        services.AddScoped<GetJobStatisticsHandler>();
+
+        // Work waiting on a person (an un-started job, an unconfirmed step) is noticed by a timer.
+        services.Configure<StalledWorkOptions>(configuration.GetSection(StalledWorkOptions.SectionName));
+        services.AddScoped<StalledWorkChecker>();
+        services.AddHostedService<StalledWorkMonitorHostedService>();
 
         services.AddSingleton<ISystemVariableResolver, SystemVariableResolver>();
         services.AddSingleton<StepInputResolver>();
@@ -59,6 +69,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<JobExecutionEngine>();
         services.AddScoped<JobQueries>();
         services.AddScoped<StartJobHandler>();
+        services.AddScoped<ResumeJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
@@ -84,9 +95,12 @@ public static class WorkflowExecutionModule
         group.MapUpdateWorkflow();
         group.MapPublishWorkflow();
         group.MapCreateWorkflowVersion();
+        group.MapDeleteWorkflow();
         group.MapListJobs();
         group.MapGetJob();
+        group.MapGetJobStatistics();
         group.MapStartJob();
+        group.MapResumeJob();
         group.MapConfirmJobStep();
         
         return endpoints;

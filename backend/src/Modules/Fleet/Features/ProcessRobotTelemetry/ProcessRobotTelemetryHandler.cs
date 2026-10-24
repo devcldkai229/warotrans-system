@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Abstractions;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Features.GetRobotStatistics;
+using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.ProcessRobotTelemetry;
@@ -10,6 +13,7 @@ namespace WaroTrans.Fleet.Features.ProcessRobotTelemetry;
 public sealed class ProcessRobotTelemetryHandler(
     FleetDbContext db,
     IRobotRealtimeNotifier realtimeNotifier,
+    IIntegrationEventPublisher events,
     ILogger<ProcessRobotTelemetryHandler> logger)
 {
     public async Task HandleAsync(RobotTelemetryMessage message, CancellationToken cancellationToken)
@@ -37,6 +41,8 @@ public sealed class ProcessRobotTelemetryHandler(
         }
 
         var utcNow = DateTimeOffset.UtcNow;
+        var batteryBefore = robot.BatteryPercent;
+        var errorBefore = robot.ErrorCode;
         var applied = robot.TryApplyTelemetry(
             message.BootId,
             message.Sequence,
@@ -65,6 +71,19 @@ public sealed class ProcessRobotTelemetryHandler(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // Admin notifications: only the moment something starts, not every reading while it lasts.
+        if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent
+            && robot.BatteryPercent <= GetRobotStatisticsHandler.LowBatteryPercent
+            && robot.Status != RobotStatus.CHARGING)
+        {
+            await events.PublishAsync(new RobotBatteryLow(robot.Id, robot.Code, robot.BatteryPercent), cancellationToken);
+        }
+
+        if (string.IsNullOrEmpty(errorBefore) && !string.IsNullOrEmpty(robot.ErrorCode))
+        {
+            await events.PublishAsync(new RobotErrorReported(robot.Id, robot.Code, robot.ErrorCode), cancellationToken);
+        }
 
         logger.LogDebug(
             "Telemetry applied robotCode {RobotCode} messageId {MessageId}",

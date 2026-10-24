@@ -51,6 +51,11 @@ export function publishWorkflow(id: string) {
   })
 }
 
+/** Removes one workflow version; the API answers 409 workflow_in_use while a request or job still uses it. */
+export function deleteWorkflow(id: string) {
+  return apiFetch<void>(`/api/workflow-execution/workflows/${id}`, { method: 'DELETE' })
+}
+
 export function createWorkflowVersion(id: string) {
   return apiFetch<WorkflowDetail>(`/api/workflow-execution/workflows/${id}/versions`, {
     method: 'POST',

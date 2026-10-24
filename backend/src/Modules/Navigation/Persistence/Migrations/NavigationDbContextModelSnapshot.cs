@@ -129,6 +129,10 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("position_tolerance");
 
+                    b.Property<Guid?>("SourceEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_endpoint_id");
+
                     b.Property<double>("X")
                         .HasColumnType("double precision")
                         .HasColumnName("x");
@@ -156,6 +160,9 @@ namespace WaroTrans.Navigation.Persistence.Migrations
 
                     b.HasIndex("MapVersionId")
                         .HasDatabaseName("i_x_endpoints_map_version_id");
+
+                    b.HasIndex("SourceEndpointId")
+                        .HasDatabaseName("i_x_endpoints_source_endpoint_id");
 
                     b.HasIndex("MapVersionId", "Code")
                         .IsUnique()
@@ -324,6 +331,10 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                     b.Property<double>("Resolution")
                         .HasColumnType("double precision")
                         .HasColumnName("resolution");
+
+                    b.Property<Guid?>("SourceMapVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_map_version_id");
 
                     b.Property<string>("Status")
                         .IsRequired()

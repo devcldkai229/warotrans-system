@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import type { TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
+import type { JobStatus, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
-import { listJobs, startJob, type JobSummaryDto } from '@/shared/api/jobs'
+import { listJobs, resumeJob, startJob, type JobSummaryDto } from '@/shared/api/jobs'
 import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
@@ -84,6 +84,7 @@ function RequestCard({
 }
 
 const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED']
+const TERMINAL_JOB_STATUSES: JobStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED']
 
 /**
  * Run a request on a robot: SUBMITTED → queue (plan Jobs) → start the Job (backend picks the best free
@@ -137,8 +138,20 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     onError: (err: Error) => setError(err.message),
   })
 
-  const busy = run.isPending || start.isPending || again.isPending
-  const finished = TERMINAL_REQUEST_STATUSES.includes(request.status) && request.status !== 'CANCELLED'
+  const resume = useMutation({
+    mutationFn: (jobId: string) => resumeJob(jobId).then(() => jobId),
+    onSuccess: async (jobId) => {
+      setError(null)
+      await refresh()
+      navigate(`/monitor/live/${jobId}`)
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
+  const busy = run.isPending || start.isPending || again.isPending || resume.isPending
+  // A Job stopped half-way (robot offline) keeps its containers: resume it, do not replay the request.
+  const jobOpen = jobs.some((job) => !TERMINAL_JOB_STATUSES.includes(job.status))
+  const finished = TERMINAL_REQUEST_STATUSES.includes(request.status) && request.status !== 'CANCELLED' && !jobOpen
   return (
     <>
       {finished ? (
@@ -155,6 +168,10 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
         job.status === 'CREATED' ? (
           <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => start.mutate(job.id)}>
             <Icon name="bolt" size={14} /> {start.isPending ? 'Starting…' : `Start ${job.jobNo} on robot`}
+          </Button>
+        ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
+          <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => resume.mutate(job.id)}>
+            <Icon name="play" size={14} /> {resume.isPending ? 'Resuming…' : `Resume ${job.jobNo} on robot`}
           </Button>
         ) : (
           <Button key={job.id} variant="outline" size="sm" onClick={() => navigate(`/monitor/live/${job.id}`)}>

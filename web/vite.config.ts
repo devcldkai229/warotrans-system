@@ -28,6 +28,12 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        // SignalR: negotiation over HTTP, then a WebSocket, both to the backend.
+        '/hubs': {
+          target: apiTarget,
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
     test: {

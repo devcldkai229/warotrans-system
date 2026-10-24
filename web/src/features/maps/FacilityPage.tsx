@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import type { MapStatus } from '@/shared/api/contracts'
 import {
   archiveMapVersion,
+  cloneMapVersion,
   createMapVersion,
   fetchSampleMapFiles,
   getActiveMapVersion,
@@ -221,6 +222,19 @@ export function FacilityPage() {
     },
     onError: (err) => {
       setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Publish failed')
+    },
+  })
+
+  // Published / archived maps are read-only: edit a copy, then publish the copy.
+  const cloneMutation = useMutation({
+    mutationFn: (id: string) => cloneMapVersion(id),
+    onSuccess: async (copy) => {
+      setActionError(null)
+      await invalidateMaps()
+      navigate(`/configure/facility/maps/${copy.id}/edit`)
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Clone failed')
     },
   })
 
@@ -798,6 +812,17 @@ export function FacilityPage() {
                             Publish
                           </button>
                         </>
+                      ) : null}
+                      {hasMapImage(version) ? (
+                        <button
+                          type="button"
+                          className="text-sm text-ink hover:underline"
+                          disabled={cloneMutation.isPending}
+                          title="Copy this map (image, endpoints, zones, edges) into a new DRAFT to edit"
+                          onClick={() => cloneMutation.mutate(version.id)}
+                        >
+                          {cloneMutation.isPending && cloneMutation.variables === version.id ? 'Cloning…' : 'Clone to draft'}
+                        </button>
                       ) : null}
                       {version.status !== 'ARCHIVED' ? (
                         <button

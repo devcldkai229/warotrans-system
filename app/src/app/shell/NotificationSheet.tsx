@@ -2,8 +2,8 @@ import React, { useEffect } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   AlertTriangle,
-  BatteryMedium,
   CheckCheck,
+  CheckCircle2,
   PackageCheck,
   Truck,
   X,
@@ -25,10 +25,10 @@ export interface NotificationSheetProps {
 }
 
 /**
- * Compact Anchored Notification Dropdown Sheet.
+ * Native Bottom Sheet for Operational Notifications.
  *
- * Drops down cleanly right beneath the notification bell in the AppHeader,
- * providing quick access to live operational alerts without taking over the screen.
+ * Slides up from the bottom of the screen with a native drag pill,
+ * full backdrop tap-to-dismiss, and compact mark-all-read action.
  */
 export function NotificationSheet({
   visible,
@@ -62,25 +62,29 @@ export function NotificationSheet({
     }
   };
 
-  const renderIcon = (type: LiveNotificationEvent['category']) => {
-    switch (type) {
-      case 'ROBOT_ARRIVED':
-        return <Truck size={14} color={colors.primaryText} strokeWidth={2.2} />;
-      case 'HAZARD':
-        return <AlertTriangle size={14} color="#d97706" strokeWidth={2.2} />;
-      case 'JOB_ASSIGNED':
-        return <PackageCheck size={14} color="#059669" strokeWidth={2.2} />;
-      case 'BATTERY_LOW':
-      default:
-        return <BatteryMedium size={14} color={colors.textMuted} strokeWidth={2.2} />;
+  const renderIcon = (item: LiveNotificationEvent) => {
+    const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
+    if (isCompleted) {
+      return <CheckCircle2 size={16} color="#059669" strokeWidth={2.2} />;
     }
+    if (item.category === 'HAZARD') {
+      return <AlertTriangle size={16} color="#d97706" strokeWidth={2.2} />;
+    }
+    if (
+      item.category === 'JOB_ASSIGNED' ||
+      item.title?.toLowerCase().includes('ready') ||
+      item.message?.toLowerCase().includes('ready')
+    ) {
+      return <PackageCheck size={16} color="#2563eb" strokeWidth={2.2} />;
+    }
+    return <Truck size={16} color={colors.primaryText} strokeWidth={2.2} />;
   };
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="none"
+      animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent
     >
@@ -93,103 +97,114 @@ export function NotificationSheet({
           accessibilityLabel="Close notifications dropdown"
         />
 
-        {/* Dropdown Card Anchored below Header Bell */}
-        <View style={[styles.card, { top: topInset + 54 }]}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
+        {/* Anchored Popover Card below Header Bell */}
+        <View style={[styles.cardContainer, { top: topInset + 54 }]}>
+          {/* Top Anchor Caret pointing directly to Notification Bell */}
+          <View style={styles.caret} />
+
+          <View style={styles.card}>
+            {/* Minimalist Popover Header */}
+            <View style={styles.header}>
               <Text variant="headline" color={colors.textPrimary} style={styles.title}>
                 Notifications
               </Text>
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text variant="caption" style={styles.badgeText}>
-                    {unreadCount} new
-                  </Text>
-                </View>
-              )}
-            </View>
 
-            <View style={styles.headerActions}>
-              {unreadCount > 0 && (
-                <Pressable
-                  onPress={handleMarkAllRead}
-                  accessibilityRole="button"
-                  accessibilityLabel="Mark all as read"
-                  style={({ pressed }) => [styles.markReadBtn, pressed && styles.btnPressed]}
-                >
-                  <CheckCheck size={13} color={colors.primaryText} strokeWidth={2.2} />
-                  <Text variant="caption" color={colors.primaryText} style={styles.markReadText}>
-                    Mark all read
-                  </Text>
-                </Pressable>
-              )}
-
-              <Pressable
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Close notifications"
-                style={({ pressed }) => [styles.closeBtn, pressed && styles.btnPressed]}
-              >
-                <X size={14} color={colors.textSecondary} strokeWidth={2.2} />
-              </Pressable>
-            </View>
-          </View>
-
-          {/* List of Alerts */}
-          <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-            {notifications.map((item) => (
-              <Pressable
-                key={item.id}
-                onPress={() => handleItemPress(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.title}, ${item.timeLabel}`}
-                style={({ pressed }) => [
-                  styles.item,
-                  !item.isRead && styles.itemUnread,
-                  pressed && styles.itemPressed,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.iconBox,
-                    item.category === 'HAZARD' && styles.iconBoxHazard,
-                    item.category === 'JOB_ASSIGNED' && styles.iconBoxJob,
-                    item.category === 'ROBOT_ARRIVED' && styles.iconBoxRobot,
-                  ]}
-                >
-                  {renderIcon(item.category)}
-                </View>
-
-                <View style={styles.itemContent}>
-                  <View style={styles.itemTopRow}>
-                    <Text
-                      variant="label"
-                      color={colors.textPrimary}
-                      numberOfLines={1}
-                      style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
-                    >
-                      {item.title}
-                    </Text>
-                    {!item.isRead && <View style={styles.unreadDot} />}
-                  </View>
-
-                  <Text
-                    variant="caption"
-                    color={colors.textSecondary}
-                    numberOfLines={2}
-                    style={styles.itemDesc}
+              <View style={styles.headerActions}>
+                {unreadCount > 0 && (
+                  <Pressable
+                    onPress={handleMarkAllRead}
+                    accessibilityRole="button"
+                    accessibilityLabel="Mark all as read"
+                    style={({ pressed }) => [styles.iconActionBtn, pressed && styles.btnPressed]}
                   >
-                    {item.message}
-                  </Text>
+                    <CheckCheck size={14} color={colors.primary} strokeWidth={2.2} />
+                  </Pressable>
+                )}
 
-                  <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
-                    {item.timeLabel}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
+                <Pressable
+                  onPress={onClose}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close notifications"
+                  style={({ pressed }) => [styles.iconActionBtn, pressed && styles.btnPressed]}
+                >
+                  <X size={14} color={colors.textSecondary} strokeWidth={2.2} />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Notification items list */}
+            <ScrollView
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {notifications.map((item) => {
+                const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
+                const isHazard = item.category === 'HAZARD';
+                const isReadyOrAssigned =
+                  item.category === 'JOB_ASSIGNED' ||
+                  item.title?.toLowerCase().includes('ready') ||
+                  item.message?.toLowerCase().includes('ready');
+                const displayTitle = item.title.startsWith('Job JOB-')
+                  ? item.title.slice(4)
+                  : item.title;
+
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => handleItemPress(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${displayTitle}, ${item.timeLabel}`}
+                    style={({ pressed }) => [
+                      styles.item,
+                      !item.isRead && styles.itemUnread,
+                      pressed && styles.itemPressed,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.iconBox,
+                        isCompleted
+                          ? styles.iconBoxJob
+                          : isHazard
+                          ? styles.iconBoxHazard
+                          : isReadyOrAssigned
+                          ? styles.iconBoxRobot
+                          : undefined,
+                      ]}
+                    >
+                      {renderIcon(item)}
+                    </View>
+
+                    <View style={styles.itemContent}>
+                      <View style={styles.itemTopRow}>
+                        {!item.isRead && <View style={styles.unreadDot} />}
+                        <Text
+                          variant="label"
+                          color={colors.textPrimary}
+                          style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
+                        >
+                          {displayTitle}
+                        </Text>
+                      </View>
+
+                      <Text
+                        variant="caption"
+                        color={colors.textSecondary}
+                        style={styles.itemDesc}
+                      >
+                        {item.message}
+                      </Text>
+
+                      <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
+                        {item.timeLabel}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -199,13 +214,30 @@ export function NotificationSheet({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.22)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+  },
+  cardContainer: {
+    position: 'absolute',
+    right: 14,
+    width: 280,
+    zIndex: 1000,
+  },
+  caret: {
+    position: 'absolute',
+    top: -5,
+    right: 64,
+    width: 10,
+    height: 10,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderColor: colors.borderStrong,
+    transform: [{ rotate: '45deg' }],
+    zIndex: 10,
   },
   card: {
-    position: 'absolute',
-    right: 12,
-    width: 320,
-    maxHeight: 390,
+    width: 280,
+    maxHeight: 320,
     backgroundColor: '#ffffff',
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -223,60 +255,34 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     backgroundColor: '#f8fafc',
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   title: {
     fontWeight: '800',
     fontSize: 14,
-  },
-  badge: {
-    backgroundColor: '#fbbf24',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: radii.full,
-  },
-  badgeText: {
-    fontSize: 9.5,
-    fontWeight: '700',
-    color: '#78350f',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  markReadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+  iconActionBtn: {
+    width: 26,
+    height: 26,
     borderRadius: radii.sm,
-    backgroundColor: 'rgba(21, 87, 208, 0.06)',
-  },
-  markReadText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  closeBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: radii.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   btnPressed: {
     opacity: 0.65,
   },
   list: {
-    maxHeight: 330,
+    maxHeight: 260,
     backgroundColor: '#ffffff',
+  },
+  listContent: {
+    paddingBottom: 4,
   },
   item: {
     flexDirection: 'row',
@@ -285,7 +291,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.borderSubtle,
     backgroundColor: '#ffffff',
   },
   itemUnread: {
@@ -303,11 +309,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
+    marginTop: 2,
   },
   iconBoxRobot: {
-    backgroundColor: 'rgba(21, 87, 208, 0.08)',
-    borderColor: 'rgba(21, 87, 208, 0.2)',
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    borderColor: 'rgba(37, 99, 235, 0.2)',
   },
   iconBoxHazard: {
     backgroundColor: 'rgba(217, 119, 6, 0.08)',
@@ -324,23 +330,24 @@ const styles = StyleSheet.create({
   itemTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 6,
   },
   itemTitle: {
     fontSize: 12.5,
     fontWeight: '600',
     flex: 1,
+    lineHeight: 17,
   },
   itemTitleUnread: {
     fontWeight: '700',
     color: colors.textPrimary,
   },
   unreadDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: colors.primaryText,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2563eb',
+    flexShrink: 0,
   },
   itemDesc: {
     fontSize: 11,

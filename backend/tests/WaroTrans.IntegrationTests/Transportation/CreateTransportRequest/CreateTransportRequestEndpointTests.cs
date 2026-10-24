@@ -99,6 +99,23 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
     }
 
     [Fact]
+    public async Task Delete_workflow_used_by_a_transport_request_is_refused()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var created = await Client.PostAsJsonAsync(Route, Body(scenario, workflowId,
+            Detail(1, scenario.Containers[0], scenario.A, scenario.D)), JsonOptions);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var delete = await Client.DeleteAsync($"/api/workflow-execution/workflows/{workflowId}");
+
+        Assert.Equal(HttpStatusCode.Conflict, delete.StatusCode);
+        Assert.Contains("workflow_in_use", await delete.Content.ReadAsStringAsync());
+        var stillThere = await Client.GetAsync($"/api/workflow-execution/workflows/{workflowId}");
+        Assert.Equal(HttpStatusCode.OK, stillThere.StatusCode);
+    }
+
+    [Fact]
     public async Task Post_three_details_with_shared_pickup_persists_all_details_atomically()
     {
         var scenario = await SeedScenarioAsync();

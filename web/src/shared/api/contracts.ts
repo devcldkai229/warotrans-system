@@ -471,25 +471,96 @@ export interface Endpoint {
 
 /* ---------------------------------------------------------------- Dashboard */
 
-/** TODO(backend): no reporting endpoint exists yet; shape is a proposal for the Task summary screen. */
-export interface TaskSummaryRow {
-  taskType: string
+/** GET /api/workflow-execution/statistics/jobs. Finished-job numbers cover the window; `active` is right now. */
+export interface JobStatistics {
+  from: string
+  to: string
+  created: number
   completed: number
-  cancelled: number
   failed: number
-  timeouts: number
+  previousCompleted: number
+  avgDurationSeconds: number | null
+  avgQueueWaitSeconds: number | null
+  active: { status: JobStatus; count: number }[]
+  byWorkflow: {
+    workflowId: string
+    workflowCode: string
+    workflowName: string
+    completed: number
+    failed: number
+    avgDurationSeconds: number | null
+  }[]
+  daily: { date: string; completed: number; failed: number }[]
+  topFailureCodes: { code: string; count: number }[]
 }
 
-export interface TaskSummary {
-  completed: number
-  completedDeltaPercent: number
-  cancelled: number
-  failed: number
-  reassigned: number
-  belowTargetTime: number
-  aboveTargetTime: number
-  timeouts: number
-  rows: TaskSummaryRow[]
+/** GET /api/fleet/statistics/robots. Robot counts are right now; assignment outcomes cover the window. */
+export interface RobotStatistics {
+  from: string
+  to: string
+  total: number
+  enabled: number
+  online: number
+  lowBattery: number
+  averageBatteryPercent: number | null
+  byStatus: { status: RobotStatus; count: number }[]
+  assignments: {
+    completed: number
+    reassigned: number
+    ackTimeouts: number
+    robotOffline: number
+    robotRejected: number
+    cancelled: number
+    failed: number
+  }
+  robots: {
+    id: string
+    code: string
+    name: string
+    status: RobotStatus
+    isEnabled: boolean
+    isOnline: boolean
+    batteryPercent: number
+    jobsCompleted: number
+    interrupted: number
+  }[]
+}
+
+/** GET /api/transportation/statistics/requests. Submitted / byStatus / daily cover the window; `open` is right now. */
+export interface RequestStatistics {
+  from: string
+  to: string
+  submitted: number
+  previousSubmitted: number
+  open: number
+  avgLeadTimeSeconds: number | null
+  byStatus: { status: TransportRequestStatus; count: number }[]
+  daily: { date: string; submitted: number; completed: number }[]
+}
+
+/* ------------------------------------------------------------ Notifications */
+
+/** One item of the admin notification bell (GET /api/operations/notifications). */
+export interface AdminNotification {
+  id: string
+  type: 'INFO' | 'WARNING' | 'ALERT' | 'ASSIGNMENT' | 'SYSTEM'
+  /** Machine name of the situation: JOB_FAILED, JOB_PAUSED, ROBOT_OFFLINE, ROBOT_BATTERY_LOW … */
+  kind: string
+  title: string
+  content: string
+  /** What it is about (JOB, ROBOT) and its id, for the link the bell offers. */
+  entityType: string | null
+  entityId: string | null
+  createdAt: string
+  isRead: boolean
+  readAt: string | null
+  /** Set when the situation is over (the robot came back, the job moved on). */
+  resolvedAt: string | null
+}
+
+export interface NotificationInbox {
+  unreadCount: number
+  items: AdminNotification[]
 }
 
 /* ---------------------------------------------------------------- Warehouse */

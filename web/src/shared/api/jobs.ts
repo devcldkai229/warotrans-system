@@ -87,6 +87,17 @@ export function startJob(id: string, robotId?: string) {
   })
 }
 
+/**
+ * Continues a PAUSED / REASSIGNING Job from the step that stopped it. Without a robot id: the Job's robot.
+ * 409 when the robot is offline, not localized, busy, or (another robot) the Job has containers on board.
+ */
+export function resumeJob(id: string, robotId?: string) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/jobs/${id}/resume`, {
+    method: 'POST',
+    body: JSON.stringify({ robotId: robotId ?? null }),
+  })
+}
+
 /** Staff confirms a WAITING PICKUP_CONFIRM / DROPOFF_CONFIRM step with the scanned container. */
 export function confirmJobStep(stepId: string, containerId: string | null, note?: string) {
   return apiRequest<JobDetailDto>(`/api/workflow-execution/job-steps/${stepId}/confirm`, {

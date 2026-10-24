@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Features.ArchiveMapVersion;
+using WaroTrans.Navigation.Features.CloneMapVersion;
 using WaroTrans.Navigation.Features.CreateEdge;
 using WaroTrans.Navigation.Features.CreateEndpoint;
 using WaroTrans.Navigation.Features.CreateMapVersion;
@@ -18,6 +19,7 @@ using WaroTrans.Navigation.Features.GetActiveMapVersion;
 using WaroTrans.Navigation.Features.GetEdge;
 using WaroTrans.Navigation.Features.GetEndpoint;
 using WaroTrans.Navigation.Features.GetMapVersion;
+using WaroTrans.Navigation.Features.GetRouteGraph;
 using WaroTrans.Navigation.Features.GetZone;
 using WaroTrans.Navigation.Features.ImportMapVersion;
 using WaroTrans.Navigation.Features.PublishMapVersion;
@@ -45,6 +47,7 @@ public static class NavigationModule
         services.AddScoped<CreateMapVersionHandler>();
         services.AddScoped<UpdateMapVersionHandler>();
         services.AddScoped<GetMapVersionHandler>();
+        services.AddScoped<GetRouteGraphHandler>();
         services.AddScoped<GetActiveMapVersionHandler>();
         services.AddScoped<PublishMapVersionHandler>();
         services.AddScoped<ArchiveMapVersionHandler>();
@@ -61,6 +64,7 @@ public static class NavigationModule
         services.AddScoped<UpdateZoneHandler>();
         services.AddScoped<DeleteZoneHandler>();
         services.AddScoped<ImportMapVersionHandler>();
+        services.AddScoped<CloneMapVersionHandler>();
         RegisterMapAssetStore(services, configuration);
 
         services.AddScoped<INavigationModule, NavigationModuleApi>();
@@ -92,10 +96,12 @@ public static class NavigationModule
         CreateMapVersionEndpoint.Map(group);
         UpdateMapVersionEndpoint.Map(group);
         GetMapVersionEndpoint.Map(group);
+        GetRouteGraphEndpoint.Map(group);
         GetActiveMapVersionEndpoint.Map(group);
         PublishMapVersionEndpoint.Map(group);
         ArchiveMapVersionEndpoint.Map(group);
         ImportMapVersionEndpoint.Map(group);
+        CloneMapVersionEndpoint.Map(group);
         CreateEndpointEndpoint.Map(group);
         GetEndpointEndpoint.Map(group);
         UpdateEndpointEndpoint.Map(group);
