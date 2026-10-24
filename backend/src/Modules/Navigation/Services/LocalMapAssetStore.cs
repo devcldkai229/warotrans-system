@@ -34,4 +34,24 @@ public sealed class LocalMapAssetStore(IHostEnvironment environment) : IMapAsset
             $"{baseUrl}/map.yaml",
             $"{baseUrl}/map-preview.png");
     }
+
+    public async Task<byte[]?> TryReadMapPgmAsync(
+        string mapUri,
+        Guid warehouseId,
+        Guid mapVersionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (PendingMapAssetUris.IsPending(mapUri))
+        {
+            return null;
+        }
+
+        var pgmPath = Path.Combine(RootPath, warehouseId.ToString("D"), mapVersionId.ToString("D"), "map.pgm");
+        if (!File.Exists(pgmPath))
+        {
+            return null;
+        }
+
+        return await File.ReadAllBytesAsync(pgmPath, cancellationToken);
+    }
 }

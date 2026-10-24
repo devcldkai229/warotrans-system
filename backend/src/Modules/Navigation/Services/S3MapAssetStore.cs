@@ -99,5 +99,32 @@ public sealed class S3MapAssetStore : IMapAssetStore, IDisposable
         return $"https://{_options.BucketName}.s3.{_options.Region}.amazonaws.com/{key}";
     }
 
+    public async Task<byte[]?> TryReadMapPgmAsync(
+        string mapUri,
+        Guid warehouseId,
+        Guid mapVersionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (PendingMapAssetUris.IsPending(mapUri) || string.IsNullOrWhiteSpace(_options.BucketName))
+        {
+            return null;
+        }
+
+        var prefix = string.IsNullOrWhiteSpace(_options.KeyPrefix) ? "maps" : _options.KeyPrefix.Trim().Trim('/');
+        var key = $"{prefix}/{warehouseId:D}/{mapVersionId:D}/map.pgm";
+        try
+        {
+            using var response = await _client.GetObjectAsync(_options.BucketName, key, cancellationToken);
+            await using var stream = response.ResponseStream;
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, cancellationToken);
+            return ms.ToArray();
+        }
+        catch (AmazonS3Exception)
+        {
+            return null;
+        }
+    }
+
     public void Dispose() => _client.Dispose();
 }

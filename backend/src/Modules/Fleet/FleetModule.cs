@@ -24,6 +24,7 @@ using WaroTrans.Fleet.Features.TeleopRobot;
 using WaroTrans.Fleet.Mqtt;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Services;
+using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.Fleet;
 
@@ -52,8 +53,10 @@ public static class FleetModule
         services.AddScoped<IssueCancelCommandHandler>();
         services.AddScoped<TeleopRobotHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();
+        services.AddSingleton<ITrafficCoordinator, TrafficCoordinator>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
+        services.AddHostedService<TrafficGrantHostedService>();
 
         return services;
     }

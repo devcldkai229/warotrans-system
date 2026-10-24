@@ -20,6 +20,8 @@ using WaroTrans.Navigation.Features.GetEdge;
 using WaroTrans.Navigation.Features.GetEndpoint;
 using WaroTrans.Navigation.Features.GetMapVersion;
 using WaroTrans.Navigation.Features.GetRouteGraph;
+using WaroTrans.Navigation.Features.GetTrafficGraphDebugSvg;
+using WaroTrans.Navigation.Features.GetTrafficGraphValidation;
 using WaroTrans.Navigation.Features.GetZone;
 using WaroTrans.Navigation.Features.ImportMapVersion;
 using WaroTrans.Navigation.Features.PublishMapVersion;
@@ -29,6 +31,7 @@ using WaroTrans.Navigation.Features.UpdateMapVersion;
 using WaroTrans.Navigation.Features.UpdateZone;
 using WaroTrans.Navigation.Persistence;
 using WaroTrans.Navigation.Services;
+using WaroTrans.Navigation.Traffic;
 
 namespace WaroTrans.Navigation;
 
@@ -42,12 +45,21 @@ public static class NavigationModule
         services.Configure<MapAssetStorageOptions>(
             configuration.GetSection(MapAssetStorageOptions.SectionName));
 
+        // Footprint defaults match Nav2 0.32×0.26 + 0.02 padding (see calibration / geometry.yaml).
+        services.Configure<TrafficFootprintOptions>(
+            configuration.GetSection(TrafficFootprintOptions.SectionName));
+
         services.AddValidatorsFromAssembly(typeof(NavigationModule).Assembly);
+
+        services.AddSingleton<CompiledTrafficGraphCache>();
+        services.AddScoped<TrafficGraphCompileService>();
 
         services.AddScoped<CreateMapVersionHandler>();
         services.AddScoped<UpdateMapVersionHandler>();
         services.AddScoped<GetMapVersionHandler>();
         services.AddScoped<GetRouteGraphHandler>();
+        services.AddScoped<GetTrafficGraphValidationHandler>();
+        services.AddScoped<GetTrafficGraphDebugSvgHandler>();
         services.AddScoped<GetActiveMapVersionHandler>();
         services.AddScoped<PublishMapVersionHandler>();
         services.AddScoped<ArchiveMapVersionHandler>();
@@ -97,6 +109,8 @@ public static class NavigationModule
         UpdateMapVersionEndpoint.Map(group);
         GetMapVersionEndpoint.Map(group);
         GetRouteGraphEndpoint.Map(group);
+        GetTrafficGraphValidationEndpoint.Map(group);
+        GetTrafficGraphDebugSvgEndpoint.Map(group);
         GetActiveMapVersionEndpoint.Map(group);
         PublishMapVersionEndpoint.Map(group);
         ArchiveMapVersionEndpoint.Map(group);

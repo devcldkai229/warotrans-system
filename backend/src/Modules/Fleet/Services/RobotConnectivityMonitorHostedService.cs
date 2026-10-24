@@ -10,6 +10,7 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.Fleet.Services;
 
@@ -128,6 +129,10 @@ public sealed class RobotConnectivityMonitorHostedService(
             {
                 robot.ClearCurrentCommand(utcNow);
             }
+
+            // Drop any in-memory traffic grant / wait so other robots can proceed.
+            var traffic = scope.ServiceProvider.GetRequiredService<ITrafficCoordinator>();
+            traffic.ReleaseAllForOfflineRobot(robot.Id);
 
             // Persist before fan-out so API polls and SignalR subscribers see the same offline snapshot.
             await db.SaveChangesAsync(cancellationToken);

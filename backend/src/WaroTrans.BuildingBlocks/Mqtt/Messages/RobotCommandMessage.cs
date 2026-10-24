@@ -27,6 +27,16 @@ public sealed class NavigateToPosePayload
     public double X { get; set; }
     public double Y { get; set; }
     public double Yaw { get; set; }
+
+    /// <summary>Optional fleet route grant — robot closes all other graph edges before navigating.</summary>
+    public RouteGrantPayload? Route { get; set; }
+}
+
+/// <summary>Authorized edge set for a NAVIGATE_TO_POSE under traffic coordination.</summary>
+public sealed class RouteGrantPayload
+{
+    public string GraphHash { get; set; } = string.Empty;
+    public List<int> EdgeIds { get; set; } = [];
 }
 
 public sealed class CancelCommandPayload

@@ -360,7 +360,15 @@ public sealed class RobotInteractionConfirmedHandlerTests
         public Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RobotSnapshot>>(Robots.Values.Where(r => r.CurrentMapVersionId == mapVersionId).ToList());
 
-        public Task<Guid> NavigateAsync(Guid robotId, double x, double y, double yaw, Guid jobId, Guid jobStepId, CancellationToken cancellationToken = default)
+        public Task<Guid> NavigateAsync(
+            Guid robotId,
+            double x,
+            double y,
+            double yaw,
+            Guid jobId,
+            Guid jobStepId,
+            CancellationToken cancellationToken = default,
+            RouteGrantSnapshot? route = null)
         {
             var commandId = Guid.NewGuid();
             Commands.Add((robotId, x, y, jobStepId, commandId));

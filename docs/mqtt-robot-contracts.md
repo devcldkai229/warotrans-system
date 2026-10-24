@@ -81,9 +81,31 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
   "issuedAt": "2026-10-07T05:00:00.000Z",
   "jobAssignmentId": null,
   "jobStepId": null,
-  "payload": { "frameId": "map", "x": 1.0, "y": 2.0, "yaw": 0.0 }
+  "payload": {
+    "frameId": "map",
+    "x": 1.0,
+    "y": 2.0,
+    "yaw": 0.0,
+    "route": {
+      "graphHash": "sha256-hex",
+      "edgeIds": [12, 15, 18]
+    }
+  }
 }
 ```
+
+`payload.route` is **optional** for backward compatibility (legacy free NavigateToPose).
+When the robot gateway is launched with `route_graph:=…` (route mode):
+
+- `route` is **required**; missing → ACK `accepted=false`, `reasonCode=ROUTE_REQUIRED`.
+- `graphHash` must match the loaded Route Server graph; mismatch → `ROUTE_GRAPH_MISMATCH`.
+- Gateway closes all non-granted edges via `DynamicEdgesScorer/adjust_edges`, then
+  verifies `ComputeRoute` returns exactly `edgeIds` (order matters). Mismatch →
+  `ROUTE_NOT_AUTHORIZED` (no goal sent).
+- Leaving the authorized corridor → cancel goal, result `CORRIDOR_VIOLATION`.
+- MQTT loss beyond `grant_loss_timeout_sec` → cancel goal (safe stop).
+
+Protocol decision: [adr/0007-traffic-route-ownership.md](adr/0007-traffic-route-ownership.md).
 
 ### CANCEL
 

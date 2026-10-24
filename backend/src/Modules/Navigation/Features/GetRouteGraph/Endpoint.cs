@@ -8,6 +8,7 @@ namespace WaroTrans.Navigation.Features.GetRouteGraph;
 public static class GetRouteGraphEndpoint
 {
     public const string WarningsHeader = "X-Route-Graph-Warnings";
+    public const string GraphHashHeader = "X-Route-Graph-Hash";
 
     public static void Map(IEndpointRouteBuilder endpoints)
     {
@@ -17,7 +18,8 @@ public static class GetRouteGraphEndpoint
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            var result = await handler.HandleAsync(id, cancellationToken);
+            var export = await handler.HandleAsync(id, cancellationToken);
+            var result = export.Result;
             var issues = result.Issues.Select(i => new
             {
                 code = i.Code,
@@ -37,6 +39,7 @@ public static class GetRouteGraphEndpoint
                     {
                         ["code"] = "route_graph_invalid",
                         ["traceId"] = httpContext.TraceIdentifier,
+                        ["graphHash"] = export.GraphHash,
                         ["issues"] = issues
                     });
             }
@@ -47,15 +50,17 @@ public static class GetRouteGraphEndpoint
                 httpContext.Response.Headers[WarningsHeader] = warnings.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
 
-            return Results.Text(RouteGraphGeoJsonWriter.Write(result.Graph), RouteGraphGeoJsonWriter.ContentType);
+            httpContext.Response.Headers[GraphHashHeader] = export.GraphHash;
+            return Results.Text(
+                RouteGraphGeoJsonWriter.Write(result.Graph, export.GraphHash),
+                RouteGraphGeoJsonWriter.ContentType);
         })
         .WithName("GetRouteGraph")
         .WithSummary("Nav2 Route Server graph (GeoJSON) built from the map's Edges and Endpoints")
         .WithDescription(
-            "Directed graph for nav2_route GeoJsonGraphFileLoader: lane polylines become straight directed segments " +
-            "(BIDIRECTIONAL → both ways), Endpoints become nodes (joined by connectors when ≤ 0.5 m from a lane). " +
-            "200 application/geo+json (header X-Route-Graph-Warnings when there are warnings); 422 route_graph_invalid " +
-            "with the issues (ENDPOINT_TOO_FAR, ENDPOINT_UNREACHABLE, ENDPOINT_IN_KEEP_OUT, GRAPH_EMPTY); 404 map_version_not_found. " +
-            "Zones: KEEP_OUT removes the lane pieces inside, SPEED lowers their abs_speed_limit, NO_STOP / SINGLE_OCCUPANCY label them.");
+            "Directed graph for nav2_route GeoJsonGraphFileLoader via CompiledTrafficGraph: lane polylines become " +
+            "straight directed segments (BIDIRECTIONAL → both ways), Endpoints become nodes. Response includes " +
+            "properties.graphHash and header X-Route-Graph-Hash. 200 application/geo+json; 422 route_graph_invalid; " +
+            "404 map_version_not_found. Zones: KEEP_OUT removes lane pieces; JUNCTION / SINGLE_OCCUPANCY / NO_STOP connect branches.");
     }
 }

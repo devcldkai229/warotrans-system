@@ -1,3 +1,5 @@
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
+
 namespace WaroTrans.Fleet.Features.IssueNavigateCommand;
 
 public sealed record IssueNavigateCommandRequest(
@@ -7,4 +9,5 @@ public sealed record IssueNavigateCommandRequest(
     string? FrameId,
     Guid? JobId,
     Guid? JobAssignmentId,
-    Guid? JobStepId);
+    Guid? JobStepId,
+    RouteGrantPayload? Route = null);

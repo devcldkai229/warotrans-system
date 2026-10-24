@@ -5,7 +5,9 @@ using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Traffic;
 using WaroTrans.Navigation.Contracts;
+using WaroTrans.Navigation.Traffic;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
@@ -36,7 +38,10 @@ public sealed class JobExecutionEngine(
     ITransportRequestActivityQuery requestActivity,
     StepInputResolver inputResolver,
     IIntegrationEventPublisher events,
-    ILogger<JobExecutionEngine> logger)
+    ILogger<JobExecutionEngine> logger,
+    ITrafficCoordinator? trafficCoordinator = null,
+    TrafficGraphCompileService? trafficCompile = null,
+    CompiledTrafficGraphCache? trafficGraphCache = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -45,6 +50,7 @@ public sealed class JobExecutionEngine(
 
     private const string RobotCommandIdKey = "robotCommandId";
     private const string SupersededCommandIdsKey = "supersededRobotCommandIds";
+    private const string PendingTrafficKey = "pendingTraffic";
 
     /// <summary>Resume needs a pose this fresh: a robot that came back online may be somewhere else.</summary>
     private static readonly TimeSpan ResumeTelemetryMaxAge = TimeSpan.FromSeconds(15);
@@ -587,12 +593,80 @@ public sealed class JobExecutionEngine(
 
         try
         {
-            var commandId = await fleet.NavigateAsync(robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken);
+            RouteGrantSnapshot? routeGrant = null;
+            if (trafficCoordinator is not null)
+            {
+                var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
+                if (graph is not null)
+                {
+                    var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+                    var startNode = robot is null
+                        ? null
+                        : TrafficGraphQueries.FindNearestNodeId(graph, robot.PoseX, robot.PoseY);
+                    var goalNode = TrafficGraphQueries.ResolveEndpointNodeId(graph, pose.Code, pose.X, pose.Y);
+                    if (startNode is null || goalNode is null)
+                    {
+                        Fail(job, task, step, stepKey, "traffic_nodes_unresolved",
+                            "Could not resolve start/goal traffic nodes for MOVE.", DateTimeOffset.UtcNow);
+                        return true;
+                    }
+
+                    var grant = trafficCoordinator.TryAcquireRouteGrant(
+                        robotId,
+                        job.MapVersionId,
+                        graph,
+                        startNode.Value,
+                        goalNode.Value,
+                        step.Id,
+                        new PendingNavigateContext(job.Id, pose.X, pose.Y, pose.Yaw));
+
+                    if (grant.WaitQueued)
+                    {
+                        var pendingOutputs = new Dictionary<string, JsonElement>
+                        {
+                            ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                            [PendingTrafficKey] = JsonSerializer.SerializeToElement(true),
+                            ["trafficGraphHash"] = JsonSerializer.SerializeToElement(grant.GraphHash ?? graph.GraphHash),
+                            ["trafficEdgeIds"] = JsonSerializer.SerializeToElement(grant.EdgeIds)
+                        };
+                        if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var supersededPending))
+                        {
+                            pendingOutputs[SupersededCommandIdsKey] = supersededPending;
+                        }
+
+                        step.OutputValues = pendingOutputs;
+                        logger.LogInformation(
+                            "Job {JobNo} {StepKey} waiting for traffic grant (robot {RobotId})",
+                            job.JobNo,
+                            stepKey,
+                            robotId);
+                        return false;
+                    }
+
+                    if (!grant.Granted || grant.GraphHash is null)
+                    {
+                        Fail(job, task, step, stepKey, "traffic_path_unavailable",
+                            "No traffic path between robot pose and target endpoint.", DateTimeOffset.UtcNow);
+                        return true;
+                    }
+
+                    routeGrant = new RouteGrantSnapshot(grant.GraphHash, grant.EdgeIds);
+                }
+            }
+
+            var commandId = await fleet.NavigateAsync(
+                robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, routeGrant);
             var outputs = new Dictionary<string, JsonElement>
             {
                 ["startedAt"] = JsonSerializer.SerializeToElement(now),
                 [RobotCommandIdKey] = JsonSerializer.SerializeToElement(commandId)
             };
+            if (routeGrant is not null)
+            {
+                outputs["trafficGraphHash"] = JsonSerializer.SerializeToElement(routeGrant.GraphHash);
+                outputs["trafficEdgeIds"] = JsonSerializer.SerializeToElement(routeGrant.EdgeIds);
+            }
+
             if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var superseded))
             {
                 outputs[SupersededCommandIdsKey] = superseded; // commands of earlier attempts (resume)
@@ -604,8 +678,37 @@ public sealed class JobExecutionEngine(
         }
         catch (AppException ex)
         {
+            trafficCoordinator?.ReleaseByJobStep(step.Id);
             Fail(job, task, step, stepKey, ex.Code ?? "navigate_rejected", ex.Message, DateTimeOffset.UtcNow);
             return true;
+        }
+    }
+
+    private async Task<CompiledTrafficGraph?> TryResolveTrafficGraphAsync(
+        Guid mapVersionId,
+        CancellationToken cancellationToken)
+    {
+        if (trafficGraphCache is not null &&
+            trafficGraphCache.TryGetForMap(mapVersionId, out var cached) &&
+            cached is not null)
+        {
+            return cached;
+        }
+
+        if (trafficCompile is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bundle = await trafficCompile.CompileAsync(mapVersionId, includeOccupancy: false, cancellationToken);
+            return bundle.Result.HasErrors ? null : bundle.Result.Graph;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Traffic graph unavailable for map {MapVersionId}; MOVE without route grant", mapVersionId);
+            return null;
         }
     }
 

@@ -19,6 +19,7 @@ public interface IFleetModule
     /// Sends NAVIGATE_TO_POSE to the robot for one Job step. Progress comes back asynchronously as
     /// <c>RobotCommandLifecycleChanged</c> (ACK / RESULT) carrying <paramref name="jobStepId"/>.
     /// Throws an AppException when the robot cannot take the command (offline, disabled, busy).
+    /// Optional <paramref name="route"/> attaches a traffic route grant (graph hash + authorized edge ids).
     /// </summary>
     Task<Guid> NavigateAsync(
         Guid robotId,
@@ -27,7 +28,8 @@ public interface IFleetModule
         double yaw,
         Guid jobId,
         Guid jobStepId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        RouteGrantSnapshot? route = null);
 
     /// <summary>
     /// Arms the physical HUMAN_INTERACTION confirm button on the robot (MQTT interaction_request).
@@ -69,3 +71,6 @@ public sealed record RobotSnapshot(
     double PoseX,
     double PoseY,
     double PoseYaw);
+
+/// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
+public sealed record RouteGrantSnapshot(string GraphHash, IReadOnlyList<int> EdgeIds);

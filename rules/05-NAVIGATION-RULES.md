@@ -152,18 +152,27 @@ V1 does not persist:
 - TrafficResource
 - TrafficReservation
 
-Use an in-memory `TrafficCoordinator` for a single backend instance.
+Use an in-memory `TrafficCoordinator` for a single backend instance
+(ADR 0007 / 0008).
 
 It may maintain runtime:
 - Zone occupancy
-- Edge occupancy
+- Edge / lane resource occupancy
+- junction conflict groups / critical corridors
 - capacity
-- waiting queues
+- waiting queues (FIFO)
 
-MOVE execution may consult it before entering constrained geometry.
+MOVE execution consults it before issuing `NAVIGATE_TO_POSE` and attaches a
+`route { graphHash, edgeIds[] }` grant when route mode is active.
 
-Nav2 owns local planning/obstacle avoidance.
-Backend TrafficCoordinator is high-level fleet coordination.
+Compiled topology lives in `CompiledTrafficGraph` (immutable, hashed, cached
+per PUBLISHED MapVersion). Export to Nav2 Route Server uses the same edge ids.
+
+`JUNCTION` is the primary single-robot free-motion junction zone.
+`SINGLE_OCCUPANCY` / `NO_STOP` may still form junction links (legacy warning).
+
+Nav2 owns local tracking/`FollowPath` inside the granted corridor.
+Backend TrafficCoordinator is the only authority that grants Edge/Zone use.
 
 ## WAIT rule
 Traffic waiting is execution control around MOVE/navigation, not a business WAIT WorkflowStep.

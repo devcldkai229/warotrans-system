@@ -51,14 +51,22 @@ public sealed class FleetModuleApi(
         double yaw,
         Guid jobId,
         Guid jobStepId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        RouteGrantSnapshot? route = null)
     {
         // JobId without JobAssignmentId: Fleet records one assignment per navigate command
         // (ended by its RESULT). The Job keeps its robot in WorkflowExecution (assignedRobotId).
         // The handler retries the telemetry/command race on the robot row itself.
+        RouteGrantPayload? routePayload = route is null
+            ? null
+            : new RouteGrantPayload
+            {
+                GraphHash = route.GraphHash,
+                EdgeIds = route.EdgeIds.ToList()
+            };
         var response = await issueNavigateCommandHandler.HandleAsync(
             robotId,
-            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId),
+            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload),
             cancellationToken);
         return response.CommandId;
     }
