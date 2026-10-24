@@ -6,7 +6,7 @@ public sealed class UpdateWorkflowValidator : AbstractValidator<UpdateWorkflowRe
 {
     public UpdateWorkflowValidator()
     {
-        RuleFor(x => x.Code).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Code).MaximumLength(100);   // optional: a blank code keeps the workflow's current one
         RuleFor(x => x.Name).NotEmpty().MaximumLength(255);
         RuleFor(x => x.Description).MaximumLength(500).When(x => x.Description is not null);
     }

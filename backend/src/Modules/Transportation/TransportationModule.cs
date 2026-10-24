@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.Transportation.Features.CreateTransportRequest;
+using WaroTrans.Transportation.Features.GetRequestStatistics;
 using WaroTrans.Transportation.Features.GetTransportRequest;
 using WaroTrans.Transportation.Features.ListTransportRequests;
 using WaroTrans.Transportation.Features.QueueTransportRequest;
@@ -26,9 +27,11 @@ public static class TransportationModule
         services.AddScoped<ListTransportRequestsHandler>();
         services.AddScoped<GetTransportRequestHandler>();
         services.AddScoped<QueueTransportRequestHandler>();
+        services.AddScoped<GetRequestStatisticsHandler>();
 
         // Job execution feedback (WorkflowExecution → Transportation)
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.ITransportRequestActivityQuery, Services.TransportRequestActivityQuery>();
+        services.AddScoped<WaroTrans.WorkflowExecution.Contracts.IWorkflowUsageQuery, Services.WorkflowUsageQuery>();
         services.AddScoped<
             WaroTrans.BuildingBlocks.Abstractions.IIntegrationEventHandler<WaroTrans.WorkflowExecution.Contracts.JobContainerStatusChanged>,
             IntegrationEventHandlers.JobContainerStatusChangedHandler>();
@@ -45,6 +48,7 @@ public static class TransportationModule
         ListTransportRequestsEndpoint.Map(group);
         GetTransportRequestEndpoint.Map(group);
         QueueTransportRequestEndpoint.Map(group);
+        group.MapGetRequestStatistics();
 
         return endpoints;
     }

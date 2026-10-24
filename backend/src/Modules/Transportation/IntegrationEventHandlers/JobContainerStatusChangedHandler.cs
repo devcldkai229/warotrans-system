@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.Transportation.Enums;
+using WaroTrans.Transportation.IntegrationEvents;
 using WaroTrans.Transportation.Persistence;
 using WaroTrans.WorkflowExecution.Contracts;
 
@@ -13,6 +14,7 @@ namespace WaroTrans.Transportation.IntegrationEventHandlers;
 /// </summary>
 public sealed class JobContainerStatusChangedHandler(
     TransportationDbContext db,
+    IIntegrationEventPublisher events,
     ILogger<JobContainerStatusChangedHandler> logger) : IIntegrationEventHandler<JobContainerStatusChanged>
 {
     public async Task HandleAsync(JobContainerStatusChanged integrationEvent, CancellationToken cancellationToken = default)
@@ -55,5 +57,15 @@ public sealed class JobContainerStatusChangedHandler(
             detail.ContainerId,
             detail.Status,
             request.Status);
+
+        await events.PublishAsync(
+            new TransportRequestProgressed(
+                request.Id,
+                request.RequestCode,
+                request.Status,
+                request.Details.Count,
+                request.Details.Count(d => d.Status == TransportRequestDetailStatus.COMPLETED),
+                request.Details.Count(d => d.Status == TransportRequestDetailStatus.FAILED)),
+            cancellationToken);
     }
 }

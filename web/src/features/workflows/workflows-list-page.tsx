@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import type { WorkflowListItem, WorkflowStatus } from '@/shared/api/types'
-import { listWorkflows } from '@/shared/api/workflows'
+import { deleteWorkflow, listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
 import { formatDateTimeWithYear } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
@@ -16,7 +16,15 @@ const WORKFLOW_STATUS_TONE: Record<WorkflowStatus, Tone> = {
   PUBLISHED: 'green',
 }
 
-function WorkflowCard({ workflow }: { workflow: WorkflowListItem }) {
+function WorkflowCard({
+  workflow,
+  deleting,
+  onDelete,
+}: {
+  workflow: WorkflowListItem
+  deleting: boolean
+  onDelete: () => void
+}) {
   const navigate = useNavigate()
   const href = `/configure/workflows/${workflow.id}`
   const tone = WORKFLOW_STATUS_TONE[workflow.status]
@@ -87,6 +95,9 @@ function WorkflowCard({ workflow }: { workflow: WorkflowListItem }) {
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
+        <Button variant="dangerGhost" size="sm" disabled={deleting} onClick={onDelete}>
+          <Icon name="trash" size={14} /> {deleting ? 'Deleting…' : 'Delete'}
+        </Button>
         <Button variant="surface" size="sm" onClick={() => navigate(href)}>
           {workflow.status === 'PUBLISHED' ? 'View' : 'Edit'}
         </Button>
@@ -106,6 +117,21 @@ export function WorkflowsListPage() {
     queryKey: ['workflows'],
     queryFn: () => listWorkflows(),
   })
+
+  const queryClient = useQueryClient()
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteWorkflow(id),
+    onMutate: () => setDeleteError(null),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+    onError: (err: Error) => setDeleteError(err.message),
+  })
+
+  function confirmDelete(workflow: WorkflowListItem) {
+    const label = `${workflow.code} v${workflow.versionNo}`
+    const note = workflow.status === 'PUBLISHED' ? ' It is published: transport requests can no longer pick it.' : ''
+    if (window.confirm(`Delete workflow ${label}?${note} This cannot be undone.`)) deleteMutation.mutate(workflow.id)
+  }
 
   const items = data?.items ?? []
   const stats = useMemo(() => {
@@ -155,6 +181,18 @@ export function WorkflowsListPage() {
           <p className="mt-10 text-sm text-muted">Loading workflow templates…</p>
         )}
 
+        {deleteError && (
+          <div
+            role="alert"
+            className="mt-10 flex items-start justify-between gap-4 rounded-lg border border-red/30 bg-red-soft/50 px-5 py-4 text-sm text-red-ink"
+          >
+            <span>{deleteError}</span>
+            <button type="button" className="shrink-0 underline" onClick={() => setDeleteError(null)}>
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="mt-10 rounded-lg border border-red/30 bg-red-soft/50 px-5 py-4 text-sm text-red-ink">
             {(error as Error).message}
@@ -192,7 +230,12 @@ export function WorkflowsListPage() {
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {items.map((workflow) => (
-                <WorkflowCard key={workflow.id} workflow={workflow} />
+                <WorkflowCard
+                  key={workflow.id}
+                  workflow={workflow}
+                  deleting={deleteMutation.isPending && deleteMutation.variables === workflow.id}
+                  onDelete={() => confirmDelete(workflow)}
+                />
               ))}
             </div>
           </section>

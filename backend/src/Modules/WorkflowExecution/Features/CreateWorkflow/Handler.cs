@@ -18,6 +18,21 @@ public sealed class CreateWorkflowHandler(
         CancellationToken cancellationToken)
     {
         var model = WorkflowMapping.ToDefinitionModel(request);
+        // Code and keys are not typed by the user: a blank one is made from the name, then checked like any other.
+        if (string.IsNullOrWhiteSpace(model.Code) && !string.IsNullOrWhiteSpace(model.Name))
+        {
+            var prefix = WorkflowKeyGenerator.Slug(model.Name, WorkflowKeyGenerator.MaxCodeLength);
+            prefix = prefix.Length == 0 ? WorkflowKeyGenerator.CodeFallback : prefix;
+            var used = (await db.Workflows.AsNoTracking()
+                    .Where(w => w.Code.StartsWith(prefix))
+                    .Select(w => w.Code)
+                    .Distinct()
+                    .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.Ordinal);
+            model.Code = WorkflowKeyGenerator.GenerateCode(model.Name, used.Contains);
+        }
+
+        WorkflowKeyGenerator.FillMissingKeys(model);
         WorkflowMapping.ThrowIfInvalid(WorkflowDefinitionValidator.ValidateDraft(model));
 
         var exists = await db.Workflows.AnyAsync(

@@ -39,7 +39,7 @@ import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { MAP_STATUS_TONE } from '@/shared/ui/statusTones'
 import { pointsToLineString, pointsToPolygon } from '@/shared/map/geoJson'
-import type { PixelCoord, WorldCoord } from '@/shared/map/mapCoordinateTransform'
+import { worldToPixel, type PixelCoord, type WorldCoord } from '@/shared/map/mapCoordinateTransform'
 import { WorkflowEditor } from '@/features/workflows/workflow-editor-page'
 import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
@@ -236,6 +236,24 @@ export function MapEditorPage() {
     mode.kind === 'endpoint' ? endpoints.find((e) => e.id === mode.endpointId) : undefined
   const selectedEdge = mode.kind === 'edge' ? edges.find((e) => e.id === mode.edgeId) : undefined
   const selectedZone = mode.kind === 'zone' ? zones.find((z) => z.id === mode.zoneId) : undefined
+  // The selected endpoint is drawn from its unsaved panel values, so editing X, Y, Yaw or the name moves it on the map
+  // at once (and a drag on the map fills those fields back in); Save is what stores them.
+  const canvasEndpoints = useMemo(() => {
+    if (!selectedEndpoint || epDraft?.id !== selectedEndpoint.id) return endpoints
+    const finite = (value: number | undefined, fallback: number) =>
+      typeof value === 'number' && Number.isFinite(value) ? value : fallback
+    return endpoints.map((e) =>
+      e.id === selectedEndpoint.id
+        ? {
+            ...e,
+            name: epDraft.name ?? e.name,
+            x: finite(epDraft.x, e.x),
+            y: finite(epDraft.y, e.y),
+            yaw: finite(epDraft.yaw, e.yaw),
+          }
+        : e,
+    )
+  }, [endpoints, selectedEndpoint, epDraft])
   const workflowOpen = mode.kind === 'workflow'
   const panelOpen = Boolean(selectedZone ?? selectedEndpoint ?? selectedEdge ?? workflowOpen)
   const openPanelWidth = workflowOpen
@@ -463,6 +481,56 @@ export function MapEditorPage() {
       setActionOk('Edge deleted')
     } catch (err) {
       setActionError(errMessage(err))
+    }
+  }
+
+  // A vertex was dragged on the selected edge/zone. The outline is saved on release together with the shape's saved
+  // fields (not unsaved panel edits), and shown at once so it does not jump back while the request is in flight.
+  async function moveShapeVertices(shape: { kind: 'edge' | 'zone'; id: string }, points: Point[]) {
+    if (!version || !isDraft) return
+    setActionError(null)
+    const rounded = points.map((p) => ({ x: snap(p.x), y: snap(p.y) }))
+    const detailKey = ['navigation', 'map-detail', mapId]
+    try {
+      if (shape.kind === 'edge') {
+        const edge = edges.find((e) => e.id === shape.id)
+        if (!edge) return
+        const geometry = pointsToLineString(rounded)
+        queryClient.setQueryData<typeof version>(detailKey, (old) =>
+          old && { ...old, edges: old.edges.map((e) => (e.id === edge.id ? { ...e, geometry } : e)) },
+        )
+        await updateEdge(edge.id, {
+          geometry,
+          widthMeters: edge.widthMeters ?? 1,
+          direction: edge.direction,
+          capacity: edge.capacity,
+          maxSpeed: edge.maxSpeed,
+          isActive: edge.isActive,
+        })
+        setActionOk('Edge saved')
+      } else {
+        const zone = zones.find((z) => z.id === shape.id)
+        if (!zone) return
+        const geometry = pointsToPolygon(rounded)
+        queryClient.setQueryData<typeof version>(detailKey, (old) =>
+          old && { ...old, zones: old.zones.map((z) => (z.id === zone.id ? { ...z, geometry } : z)) },
+        )
+        await updateZone(zone.id, {
+          name: zone.name,
+          zoneType: zone.zoneType,
+          geometry,
+          capacity: zone.capacity,
+          maxSpeed: zone.maxSpeed,
+          isActive: zone.isActive,
+          policy: zone.policy ?? null,
+          policySchemaVersion: zone.policySchemaVersion ?? 1,
+        })
+        setActionOk('Zone saved')
+      }
+      await invalidate()
+    } catch (err) {
+      setActionError(errMessage(err))
+      await invalidate()
     }
   }
 
@@ -729,7 +797,7 @@ export function MapEditorPage() {
           <MapEditorCanvas
             transform={transform}
             previewUrl={occupancyUrl}
-            endpoints={endpoints}
+            endpoints={canvasEndpoints}
             edges={edges}
             zones={zones}
             tool={tool}
@@ -746,12 +814,34 @@ export function MapEditorPage() {
             onEndpointClick={isDraft ? selectEndpoint : undefined}
             onEdgeClick={isDraft ? selectEdge : undefined}
             onZoneClick={isDraft ? selectZone : undefined}
+            onShapeVerticesChange={moveShapeVertices}
+            onEndpointMove={
+              isDraft
+                ? (id, at) =>
+                    setEpDraft((draft) => (draft?.id === id ? { ...draft, x: snap(at.x), y: snap(at.y) } : draft))
+                : undefined
+            }
+            pendingEndpoint={
+              mode.kind === 'placing' ? { at: mode.at, yaw: degToRad(mode.yawDeg) } : null
+            }
+            onPendingEndpointMove={(at) =>
+              setMode((current) =>
+                current.kind === 'placing' ? { ...current, at: { x: snap(at.x), y: snap(at.y) } } : current,
+              )
+            }
           />
 
           {mode.kind === 'placing' ? (
-            <div className="absolute top-3 left-1/2 z-20 w-72 -translate-x-1/2 rounded-md bg-surface p-3.5 text-xs shadow-float">
+            // Kept to the side of the map the marker is not on, so the dialog never covers the spot being placed.
+            <div
+              className={cx(
+                'absolute top-3 z-20 w-72 rounded-md bg-surface p-3.5 text-xs shadow-float',
+                worldToPixel(transform, mode.at).u < transform.imageWidthPixels / 2 ? 'right-3' : 'left-3',
+              )}
+            >
               <p className="text-ink-2">
-                Click the map to move. Set heading ({mode.yawDeg}°). Yaw is sent as radians to the API.
+                Click the map or drag the marker to move it. Set heading ({mode.yawDeg}°). Yaw is sent as radians to
+                the API.
               </p>
               <HeadingDial
                 variant="panel"
