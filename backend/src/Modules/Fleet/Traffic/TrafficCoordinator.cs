@@ -4,11 +4,12 @@ using WaroTrans.Navigation.Traffic;
 namespace WaroTrans.Fleet.Traffic;
 
 /// <summary>
-/// Thread-safe singleton coordinator: atomic multi-resource locks with FIFO waiters.
+/// Thread-safe singleton coordinator: atomic multi-resource locks with FIFO waiters (V1 active dispatcher).
 /// </summary>
 public sealed class TrafficCoordinator : ITrafficCoordinator
 {
     private readonly object _gate = new();
+    private readonly TrafficReadySignal? _readySignal;
 
     // resourceId → holders (robot ids); capacity checked against graph resource definition at acquire time
     private readonly Dictionary<string, HashSet<Guid>> _holders = new(StringComparer.Ordinal);
@@ -20,6 +21,11 @@ public sealed class TrafficCoordinator : ITrafficCoordinator
     private readonly LinkedList<WaitEntry> _waitQueue = new();
 
     private readonly List<ReadyNavigateGrant> _ready = [];
+
+    public TrafficCoordinator(TrafficReadySignal? readySignal = null)
+    {
+        _readySignal = readySignal;
+    }
 
     public RouteGrantResult TryAcquireRouteGrant(
         Guid robotId,
@@ -253,6 +259,7 @@ public sealed class TrafficCoordinator : ITrafficCoordinator
                         pending.FrameId,
                         wait.GraphHash,
                         wait.EdgeIds));
+                    _readySignal?.Notify();
                 }
             }
 

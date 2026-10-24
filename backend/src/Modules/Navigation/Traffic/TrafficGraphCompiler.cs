@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Security.Cryptography;
@@ -19,6 +20,9 @@ public static class TrafficGraphCompiler
     public const string FrameMismatch = "FRAME_MISMATCH";
     public const string InsufficientClearance = "INSUFFICIENT_CLEARANCE";
     public const string TurnClearance = "TURN_CLEARANCE";
+    public const string CriticalNoExit = "CRITICAL_NO_EXIT";
+    public const string SafeStopInCritical = "SAFE_STOP_IN_CRITICAL";
+    public const string OverlapAsymmetric = "OVERLAP_ASYMMETRIC";
 
     public static TrafficCompileResult Compile(TrafficCompileInput input, RouteGraphOptions? routeOptions = null)
     {
@@ -130,9 +134,12 @@ public static class TrafficGraphCompiler
 
         var resources = new List<TrafficResource>();
         BuildLaneResources(trafficEdges, laneMeta, resources);
+        BuildNarrowBidirectionalResources(trafficEdges, laneMeta, resources);
         BuildZoneResources(trafficEdges, input.Zones, zoneMeta, resources);
         BuildJunctionConflictGroups(trafficEdges, input.Zones, zoneMeta, resources);
 
+        // Only critical edges that are NOT already covered by a junction conflict get a corridor resource
+        // (avoids duplicating junction groups as CriticalCorridor).
         var (corridors, corridorResourceIds) = BuildCriticalCorridors(trafficEdges, resources);
         foreach (var (corridor, resourceId) in corridors.Zip(corridorResourceIds))
         {
@@ -144,8 +151,12 @@ public static class TrafficGraphCompiler
                 [$"corridor:{corridor.Id}"]));
         }
 
-        var serviceStops = input.ServiceStopEndpointCodes ?? (IReadOnlySet<string>)new HashSet<string>(StringComparer.Ordinal);
-        var recoveryStops = input.RecoveryEndpointCodes ?? (IReadOnlySet<string>)new HashSet<string>(StringComparer.Ordinal);
+        var stationMeta = (input.StationMeta ?? Array.Empty<TrafficStationMeta>())
+            .ToDictionary(m => m.EndpointCode, m => m.BayKind, StringComparer.Ordinal);
+        var serviceStops = input.ServiceStopEndpointCodes ??
+                           DeriveServiceStops(stationMeta);
+        var recoveryStops = input.RecoveryEndpointCodes ??
+                            DeriveRecoveryStops(stationMeta);
 
         var stations = new List<TrafficStation>();
         var stationNodeIds = new HashSet<int>();
@@ -157,22 +168,44 @@ public static class TrafficGraphCompiler
                     .Where(e => e.IsConnector && (e.StartId == node.Id || e.EndId == node.Id))
                     .Select(e => (int?)e.Id)
                     .FirstOrDefault();
+                var bayKind = ResolveBayKind(code, stationMeta, serviceStops, recoveryStops);
+                var isService = serviceStops.Contains(code) || bayKind == TrafficStationBayKind.Service;
+                var isRecovery = recoveryStops.Contains(code) || bayKind == TrafficStationBayKind.Recovery;
                 stations.Add(new TrafficStation(
                     code,
                     node.Id,
                     access,
-                    serviceStops.Contains(code),
-                    recoveryStops.Contains(code)));
+                    isService,
+                    isRecovery,
+                    bayKind));
                 stationNodeIds.Add(node.Id);
+
+                if (access is int accessEdgeId)
+                {
+                    var bayResourceKind = isRecovery || bayKind is TrafficStationBayKind.Holding
+                        ? TrafficResourceKind.HoldingBay
+                        : isService || bayKind is TrafficStationBayKind.Service
+                            ? TrafficResourceKind.ServiceCorridor
+                            : TrafficResourceKind.StationBay;
+                    resources.Add(new TrafficResource(
+                        $"bay:{code}",
+                        bayResourceKind,
+                        1,
+                        ImmutableArray.Create(accessEdgeId),
+                        [code]));
+                }
             }
         }
+
+        var criticalNodeIds = trafficEdges
+            .Where(e => e.InCriticalCorridor || e.NoStop || e.IsJunction || e.SingleOccupancy)
+            .SelectMany(e => new[] { e.StartId, e.EndId })
+            .ToHashSet();
 
         var holding = new HashSet<int>();
         foreach (var node in route.Nodes)
         {
-            var inCritical = trafficEdges.Any(e =>
-                (e.StartId == node.Id || e.EndId == node.Id) && e.InCriticalCorridor);
-            if (inCritical || stationNodeIds.Contains(node.Id))
+            if (criticalNodeIds.Contains(node.Id) || stationNodeIds.Contains(node.Id))
             {
                 continue;
             }
@@ -242,14 +275,54 @@ public static class TrafficGraphCompiler
             }
         }
 
+        var stoplineNodeIds = stoplines.Select(s => s.NodeId).ToHashSet();
+
+        // Safe-stop candidates: holding, stopline entry, or station — but never inside critical/NO_STOP/junction.
+        var safeStopCandidates = new HashSet<int>(holding);
+        foreach (var id in stoplineNodeIds)
+        {
+            safeStopCandidates.Add(id);
+        }
+
+        foreach (var id in stationNodeIds)
+        {
+            safeStopCandidates.Add(id);
+        }
+
+        var safeStops = new HashSet<int>();
+        foreach (var nodeId in safeStopCandidates)
+        {
+            // Stopline nodes sit at corridor boundary — always safe waits.
+            if (stoplineNodeIds.Contains(nodeId))
+            {
+                safeStops.Add(nodeId);
+                holding.Add(nodeId);
+                continue;
+            }
+
+            if (criticalNodeIds.Contains(nodeId))
+            {
+                issues.Add(new TrafficIssue(
+                    SafeStopInCritical,
+                    TrafficIssueSeverity.Error,
+                    $"Candidate safe-stop node {nodeId} lies inside a critical/NO_STOP/junction resource.",
+                    [$"node:{nodeId}"]));
+                continue;
+            }
+
+            safeStops.Add(nodeId);
+            holding.Add(nodeId);
+        }
+
         var trafficNodes = route.Nodes
             .Select(n => new TrafficNode(
                 n.Id,
                 n.X,
                 n.Y,
                 [.. n.EndpointCodes],
-                holding.Contains(n.Id),
-                stationNodeIds.Contains(n.Id)))
+                holding.Contains(n.Id) || safeStops.Contains(n.Id),
+                stationNodeIds.Contains(n.Id),
+                safeStops.Contains(n.Id)))
             .ToImmutableArray();
 
         var (csrOffsets, csrEdgeIds) = BuildCsr(trafficNodes, trafficEdges);
@@ -264,13 +337,39 @@ public static class TrafficGraphCompiler
             .ToList();
         var swept = SweptConflictIndex.Build(sweptSegments, footprint.TurnRadius);
 
+        BuildPhysicalOverlapResources(trafficEdges, resources, swept, issues);
+        ValidateOverlapSymmetry(trafficEdges, swept, issues);
+
+        var edgeIdsImmutable = trafficEdges.ToImmutableArray();
+        var resourcesImmutable = resources
+            .GroupBy(r => r.Id, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .OrderBy(r => r.Id, StringComparer.Ordinal)
+            .ToImmutableArray();
+
+        var resourcesByEdge = BuildResourcesByEdgeIndex(resourcesImmutable);
+        var exitSafeStops = BuildExitSafeStops(
+            resourcesImmutable, edgeIdsImmutable, trafficNodes, safeStops);
+
+        foreach (var resource in resourcesImmutable.Where(IsCriticalKind))
+        {
+            if (!exitSafeStops.TryGetValue(resource.Id, out var exits) || exits.Length == 0)
+            {
+                issues.Add(new TrafficIssue(
+                    CriticalNoExit,
+                    TrafficIssueSeverity.Error,
+                    $"Critical resource {resource.Id} has no reachable safe-stop exit.",
+                    resource.RelatedCodes.Length > 0 ? resource.RelatedCodes.ToArray() : [resource.Id]));
+            }
+        }
+
         var graph = new CompiledTrafficGraph(
             route.Name,
             route.FrameId,
             graphHash,
             trafficNodes,
-            trafficEdges.ToImmutableArray(),
-            resources.ToImmutableArray(),
+            edgeIdsImmutable,
+            resourcesImmutable,
             corridors.ToImmutableArray(),
             stoplines.DistinctBy(s => (s.NodeId, s.CorridorId, s.EntryEdgeId)).ToImmutableArray(),
             stations.ToImmutableArray(),
@@ -279,7 +378,10 @@ public static class TrafficGraphCompiler
             csrEdgeIds,
             footprint,
             route,
-            swept);
+            swept,
+            resourcesByEdge,
+            exitSafeStops,
+            safeStops.OrderBy(id => id).ToImmutableArray());
 
         return new TrafficCompileResult(graph, issues);
     }
@@ -399,11 +501,9 @@ public static class TrafficGraphCompiler
                      .Where(z => z.IsActive && z.ZoneType is ZoneType.JUNCTION or ZoneType.SINGLE_OCCUPANCY or ZoneType.NO_STOP)
                      .OrderBy(z => z.Code, StringComparer.Ordinal))
         {
+            // Restrict to edges that belong to THIS zone — never pull every IsJunction edge into every group.
             var edgeIds = edges
-                .Where(e => e.IsJunction || e.ZoneCodes.Contains(zone.Code, StringComparer.Ordinal) ||
-                            (zone.ZoneType == ZoneType.NO_STOP && e.NoStop) ||
-                            (zone.ZoneType != ZoneType.NO_STOP && e.SingleOccupancy &&
-                             e.ZoneCodes.Contains(zone.Code, StringComparer.Ordinal)))
+                .Where(e => e.ZoneCodes.Contains(zone.Code, StringComparer.Ordinal))
                 .Select(e => e.Id)
                 .Distinct()
                 .OrderBy(id => id)
@@ -423,6 +523,238 @@ public static class TrafficGraphCompiler
         }
     }
 
+    private static void BuildNarrowBidirectionalResources(
+        List<TrafficEdge> edges,
+        Dictionary<string, TrafficLaneMeta> laneMeta,
+        List<TrafficResource> resources)
+    {
+        foreach (var group in edges
+                     .Where(e => e.EdgeCodes.Length > 0 && !e.IsConnector)
+                     .SelectMany(e => e.EdgeCodes.Select(c => (Code: c, Edge: e)))
+                     .GroupBy(x => x.Code, StringComparer.Ordinal)
+                     .OrderBy(g => g.Key, StringComparer.Ordinal))
+        {
+            if (!laneMeta.TryGetValue(group.Key, out var meta) || meta.Direction != EdgeDirection.BIDIRECTIONAL)
+            {
+                continue;
+            }
+
+            // Narrow = capacity 1 and width tight relative to footprint (already capacity 1 default).
+            if (meta.Capacity != 1)
+            {
+                continue;
+            }
+
+            var edgeIds = group.Select(x => x.Edge.Id).Distinct().OrderBy(id => id).ToImmutableArray();
+            if (edgeIds.Length < 2)
+            {
+                continue; // need both directions
+            }
+
+            resources.Add(new TrafficResource(
+                $"narrow:{group.Key}",
+                TrafficResourceKind.NarrowBidirectional,
+                1,
+                edgeIds,
+                [group.Key]));
+        }
+    }
+
+    private static void BuildPhysicalOverlapResources(
+        List<TrafficEdge> edges,
+        List<TrafficResource> resources,
+        SweptConflictIndex swept,
+        List<TrafficIssue> issues)
+    {
+        _ = issues;
+        var edgeById = edges.ToDictionary(e => e.Id);
+        var coveredPairs = new HashSet<(int, int)>();
+        foreach (var resource in resources)
+        {
+            var ids = resource.EdgeIds.OrderBy(id => id).ToArray();
+            for (var i = 0; i < ids.Length; i++)
+            {
+                for (var j = i + 1; j < ids.Length; j++)
+                {
+                    coveredPairs.Add((ids[i], ids[j]));
+                }
+            }
+        }
+
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var edge in edges.OrderBy(e => e.Id))
+        {
+            foreach (var otherId in swept.ConflictsWith(edge.Id).Where(id => id > edge.Id))
+            {
+                if (!edgeById.ContainsKey(otherId))
+                {
+                    continue;
+                }
+
+                if (coveredPairs.Contains((edge.Id, otherId)))
+                {
+                    continue;
+                }
+
+                var id = $"overlap:{edge.Id}:{otherId}";
+                if (!emitted.Add(id))
+                {
+                    continue;
+                }
+
+                resources.Add(new TrafficResource(
+                    id,
+                    TrafficResourceKind.PhysicalOverlap,
+                    1,
+                    ImmutableArray.Create(edge.Id, otherId),
+                    [$"edge:{edge.Id}", $"edge:{otherId}"]));
+            }
+        }
+    }
+
+    private static void ValidateOverlapSymmetry(
+        List<TrafficEdge> edges,
+        SweptConflictIndex swept,
+        List<TrafficIssue> issues)
+    {
+        foreach (var edge in edges)
+        {
+            foreach (var otherId in swept.ConflictsWith(edge.Id))
+            {
+                if (!swept.Conflicts(otherId, edge.Id))
+                {
+                    issues.Add(new TrafficIssue(
+                        OverlapAsymmetric,
+                        TrafficIssueSeverity.Error,
+                        $"Swept overlap asymmetric between edges {edge.Id} and {otherId}.",
+                        [$"edge:{edge.Id}", $"edge:{otherId}"]));
+                }
+            }
+        }
+    }
+
+    /// <summary>Resources that require a reachable safe-stop exit (occupancy corridors, not pairwise overlap locks).</summary>
+    private static bool IsCriticalKind(TrafficResource r) =>
+        r.Kind is TrafficResourceKind.JunctionConflict
+            or TrafficResourceKind.CriticalCorridor
+            or TrafficResourceKind.NarrowBidirectional;
+
+    private static FrozenDictionary<int, ImmutableArray<string>> BuildResourcesByEdgeIndex(
+        ImmutableArray<TrafficResource> resources)
+    {
+        var map = new Dictionary<int, List<string>>();
+        foreach (var resource in resources)
+        {
+            foreach (var edgeId in resource.EdgeIds)
+            {
+                if (!map.TryGetValue(edgeId, out var list))
+                {
+                    list = [];
+                    map[edgeId] = list;
+                }
+
+                list.Add(resource.Id);
+            }
+        }
+
+        return map.ToFrozenDictionary(
+            kv => kv.Key,
+            kv => kv.Value.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToImmutableArray());
+    }
+
+    private static FrozenDictionary<string, ImmutableArray<int>> BuildExitSafeStops(
+        ImmutableArray<TrafficResource> resources,
+        ImmutableArray<TrafficEdge> edges,
+        ImmutableArray<TrafficNode> nodes,
+        HashSet<int> safeStops)
+    {
+        var edgeById = edges.ToFrozenDictionary(e => e.Id);
+        var result = new Dictionary<string, ImmutableArray<int>>(StringComparer.Ordinal);
+
+        foreach (var resource in resources)
+        {
+            var resourceEdges = resource.EdgeIds.ToHashSet();
+            var boundaryNodes = new HashSet<int>();
+            foreach (var edgeId in resource.EdgeIds)
+            {
+                if (!edgeById.TryGetValue(edgeId, out var edge))
+                {
+                    continue;
+                }
+
+                boundaryNodes.Add(edge.StartId);
+                boundaryNodes.Add(edge.EndId);
+            }
+
+            var exits = new HashSet<int>();
+            foreach (var nodeId in boundaryNodes)
+            {
+                // Boundary node that is itself a safe stop is always a valid exit/terminal.
+                if (safeStops.Contains(nodeId))
+                {
+                    exits.Add(nodeId);
+                }
+
+                // External outgoing edges that leave the resource toward a safe stop.
+                foreach (var edge in edges.Where(e => e.StartId == nodeId && !resourceEdges.Contains(e.Id)))
+                {
+                    if (safeStops.Contains(edge.EndId))
+                    {
+                        exits.Add(edge.EndId);
+                    }
+                }
+            }
+
+            result[resource.Id] = exits.OrderBy(id => id).ToImmutableArray();
+        }
+
+        _ = nodes;
+        return result.ToFrozenDictionary(StringComparer.Ordinal);
+    }
+
+    private static IReadOnlySet<string> DeriveServiceStops(
+        Dictionary<string, TrafficStationBayKind> stationMeta) =>
+        stationMeta
+            .Where(kv => kv.Value is TrafficStationBayKind.Service)
+            .Select(kv => kv.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static IReadOnlySet<string> DeriveRecoveryStops(
+        Dictionary<string, TrafficStationBayKind> stationMeta) =>
+        stationMeta
+            .Where(kv => kv.Value is TrafficStationBayKind.Recovery or TrafficStationBayKind.Holding)
+            .Select(kv => kv.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static TrafficStationBayKind ResolveBayKind(
+        string code,
+        Dictionary<string, TrafficStationBayKind> stationMeta,
+        IReadOnlySet<string> serviceStops,
+        IReadOnlySet<string> recoveryStops)
+    {
+        if (stationMeta.TryGetValue(code, out var kind) && kind != TrafficStationBayKind.Unspecified)
+        {
+            return kind;
+        }
+
+        if (serviceStops.Contains(code))
+        {
+            return TrafficStationBayKind.Service;
+        }
+
+        if (recoveryStops.Contains(code))
+        {
+            return TrafficStationBayKind.Recovery;
+        }
+
+        return TrafficStationBayKind.Unspecified;
+    }
+
+    /// <summary>
+    /// Corridors for visualization / stoplines. Junction conflict resources already own capacity —
+    /// we still emit corridor metadata for stoplines but do NOT add duplicate CriticalCorridor resources
+    /// for edges already in a JunctionConflict.
+    /// </summary>
     private static (List<TrafficCorridor> Corridors, List<string> ResourceIds) BuildCriticalCorridors(
         List<TrafficEdge> edges,
         List<TrafficResource> resources)
@@ -435,15 +767,18 @@ public static class TrafficGraphCompiler
             return (corridors, resourceIds);
         }
 
-        // One corridor per junction conflict group (edges already grouped).
-        var junctionResources = resources
+        var junctionCovered = resources
             .Where(r => r.Kind == TrafficResourceKind.JunctionConflict)
-            .OrderBy(r => r.Id, StringComparer.Ordinal)
-            .ToList();
+            .SelectMany(r => r.EdgeIds)
+            .ToHashSet();
 
         var used = new HashSet<int>();
         var nextId = 1;
-        foreach (var junction in junctionResources)
+
+        // Emit corridor metadata (stoplines) for junction groups without duplicating capacity resources.
+        foreach (var junction in resources
+                     .Where(r => r.Kind == TrafficResourceKind.JunctionConflict)
+                     .OrderBy(r => r.Id, StringComparer.Ordinal))
         {
             var edgeIds = junction.EdgeIds.Where(id => critical.Any(e => e.Id == id)).OrderBy(id => id).ToImmutableArray();
             if (edgeIds.Length == 0)
@@ -463,14 +798,13 @@ public static class TrafficGraphCompiler
                 .OrderBy(id => id)
                 .ToImmutableArray();
 
-            var resourceId = $"corridor:{nextId}";
-            corridors.Add(new TrafficCorridor(nextId, resourceId, edgeIds, entryNodes));
-            resourceIds.Add(resourceId);
+            // ResourceId points at the existing junction resource — no extra CriticalCorridor capacity.
+            corridors.Add(new TrafficCorridor(nextId, junction.Id, edgeIds, entryNodes));
             nextId++;
         }
 
-        // Remaining critical edges (e.g. labeled without matching zone resource) → singleton corridors.
-        foreach (var edge in critical.Where(e => !used.Contains(e.Id)).OrderBy(e => e.Id))
+        // Remaining critical edges not in any junction → real CriticalCorridor resources.
+        foreach (var edge in critical.Where(e => !used.Contains(e.Id) && !junctionCovered.Contains(e.Id)).OrderBy(e => e.Id))
         {
             var edgeIds = ImmutableArray.Create(edge.Id);
             var resourceId = $"corridor:{nextId}";

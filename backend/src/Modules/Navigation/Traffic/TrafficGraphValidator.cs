@@ -23,6 +23,9 @@ public static class TrafficGraphValidator
     public const string ServiceStopInvalid = "SERVICE_STOP_INVALID";
     public const string OccupancyMissing = TrafficGraphCompiler.OccupancyMissing;
     public const string LegacyJunctionZone = TrafficGraphCompiler.LegacyJunctionZone;
+    public const string CriticalNoExit = TrafficGraphCompiler.CriticalNoExit;
+    public const string SafeStopInCritical = TrafficGraphCompiler.SafeStopInCritical;
+    public const string OverlapAsymmetric = TrafficGraphCompiler.OverlapAsymmetric;
 
     public static TrafficValidationReport Validate(
         Guid mapVersionId,
@@ -263,6 +266,63 @@ public static class TrafficGraphValidator
                         TrafficIssueSeverity.Error,
                         $"Required station {code} is missing from the compiled graph.",
                         [code]));
+                }
+            }
+        }
+
+        // Safe stops must not lie inside NO_STOP / junction resources (except corridor entry stoplines).
+        var stoplineNodes = graph.Stoplines.Select(s => s.NodeId).ToHashSet();
+        var criticalEdgeIds = graph.Resources
+            .Where(r => r.Kind is TrafficResourceKind.JunctionConflict or TrafficResourceKind.CriticalCorridor)
+            .SelectMany(r => r.EdgeIds)
+            .ToHashSet();
+        var criticalInteriorNodes = graph.Edges
+            .Where(e => criticalEdgeIds.Contains(e.Id) && (e.NoStop || e.IsJunction || e.SingleOccupancy))
+            .SelectMany(e => new[] { e.StartId, e.EndId })
+            .Where(nid => !stoplineNodes.Contains(nid))
+            .ToHashSet();
+
+        foreach (var node in graph.Nodes.Where(n => n.IsSafeStop))
+        {
+            if (criticalInteriorNodes.Contains(node.Id) && !stoplineNodes.Contains(node.Id))
+            {
+                issues.Add(new TrafficIssue(
+                    SafeStopInCritical,
+                    TrafficIssueSeverity.Error,
+                    $"Safe-stop node {node.Id} lies inside a NO_STOP/junction resource.",
+                    node.EndpointCodes.Length > 0 ? node.EndpointCodes.ToArray() : [$"node:{node.Id}"]));
+            }
+        }
+
+        foreach (var resource in graph.Resources.Where(r =>
+                     r.Kind is TrafficResourceKind.JunctionConflict
+                         or TrafficResourceKind.CriticalCorridor
+                         or TrafficResourceKind.NarrowBidirectional))
+        {
+            if (!graph.ExitSafeStopsByResourceId.TryGetValue(resource.Id, out var exits) || exits.Length == 0)
+            {
+                issues.Add(new TrafficIssue(
+                    CriticalNoExit,
+                    TrafficIssueSeverity.Error,
+                    $"Critical resource {resource.Id} has no reachable safe-stop exit.",
+                    resource.RelatedCodes.Length > 0 ? resource.RelatedCodes.ToArray() : [resource.Id]));
+            }
+        }
+
+        if (graph.SweptConflicts is { } swept)
+        {
+            foreach (var edge in graph.Edges)
+            {
+                foreach (var otherId in swept.ConflictsWith(edge.Id))
+                {
+                    if (!swept.Conflicts(otherId, edge.Id))
+                    {
+                        issues.Add(new TrafficIssue(
+                            OverlapAsymmetric,
+                            TrafficIssueSeverity.Error,
+                            $"Swept overlap asymmetric between edges {edge.Id} and {otherId}.",
+                            [$"edge:{edge.Id}", $"edge:{otherId}"]));
+                    }
                 }
             }
         }

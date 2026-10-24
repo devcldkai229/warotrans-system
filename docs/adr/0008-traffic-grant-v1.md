@@ -1,8 +1,8 @@
 # ADR 0008 — Traffic grant V1 (atomic whole-route)
 
-**Status:** Accepted  
+**Status:** Superseded in part by ADR 0009 (segments + release rules). V1 whole-route grant remains the **active dispatcher** while Shadow Mode runs.  
 **Date:** 2026-10-24  
-**Related:** ADR 0007
+**Related:** ADR 0007, ADR 0009
 
 ## Context
 

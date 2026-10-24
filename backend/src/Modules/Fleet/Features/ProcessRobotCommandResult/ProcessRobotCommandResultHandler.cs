@@ -16,6 +16,7 @@ public sealed class ProcessRobotCommandResultHandler(
     FleetDbContext db,
     IIntegrationEventPublisher events,
     ITrafficCoordinator trafficCoordinator,
+    ShadowSingleMoverGuard? shadowMoverGuard,
     ILogger<ProcessRobotCommandResultHandler> logger)
 {
     public async Task HandleAsync(RobotCommandResultMessage message, CancellationToken cancellationToken)
@@ -96,6 +97,11 @@ public sealed class ProcessRobotCommandResultHandler(
             else
             {
                 trafficCoordinator.ReleaseGrant(command.RobotId);
+            }
+
+            if (robot is not null)
+            {
+                shadowMoverGuard?.Exit(robot.CurrentMapVersionId, robot.Id);
             }
         }
         else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } targetCommandId)

@@ -19,12 +19,15 @@ using WaroTrans.Fleet.Features.ProcessRobotCommandResult;
 using WaroTrans.Fleet.Features.ProcessRobotHeartbeat;
 using WaroTrans.Fleet.Features.ProcessRobotInteractionConfirm;
 using WaroTrans.Fleet.Features.ProcessRobotTelemetry;
+using WaroTrans.Fleet.Features.GetTrafficSnapshot;
+using WaroTrans.Fleet.Features.ReconcileTrafficRobot;
 using WaroTrans.Fleet.Features.RegisterRobot;
 using WaroTrans.Fleet.Features.TeleopRobot;
 using WaroTrans.Fleet.Mqtt;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Services;
 using WaroTrans.Fleet.Traffic;
+using WaroTrans.Navigation.Traffic;
 
 namespace WaroTrans.Fleet;
 
@@ -34,6 +37,9 @@ public static class FleetModule
     {
         services.AddDbContext<FleetDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("PostgreSQL")));
+
+        services.Configure<TrafficOptions>(configuration.GetSection(TrafficOptions.SectionName));
+        services.Configure<TrafficFootprintOptions>(configuration.GetSection(TrafficFootprintOptions.SectionName));
 
         services.AddValidatorsFromAssembly(typeof(FleetModule).Assembly);
 
@@ -53,7 +59,17 @@ public static class FleetModule
         services.AddScoped<IssueCancelCommandHandler>();
         services.AddScoped<TeleopRobotHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();
-        services.AddSingleton<ITrafficCoordinator, TrafficCoordinator>();
+
+        services.AddSingleton<TrafficReadySignal>();
+        services.AddSingleton<ShadowSingleMoverGuard>();
+        services.AddSingleton<ITrafficCoordinator>(sp =>
+            new TrafficCoordinator(sp.GetRequiredService<TrafficReadySignal>()));
+        services.AddSingleton<RoutePlanner>();
+        services.AddSingleton<SegmentedTrafficCoordinator>();
+        services.AddSingleton<ISegmentedTrafficCoordinator>(sp => sp.GetRequiredService<SegmentedTrafficCoordinator>());
+        services.AddSingleton<TrafficShadowObserver>();
+        services.AddHostedService(sp => sp.GetRequiredService<SegmentedTrafficCoordinator>());
+        services.AddHostedService<TrafficReconciliationHostedService>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();
@@ -74,6 +90,8 @@ public static class FleetModule
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();
         group.MapTeleopRobot();
+        group.MapGetTrafficSnapshot();
+        group.MapTrafficOperatorEndpoints();
         return endpoints;
     }
 }

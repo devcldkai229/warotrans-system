@@ -47,7 +47,31 @@ public enum TrafficResourceKind
     Lane,
     Zone,
     JunctionConflict,
-    CriticalCorridor
+    CriticalCorridor,
+    /// <summary>Both directions of a narrow bidirectional corridor share one capacity slot.</summary>
+    NarrowBidirectional,
+    /// <summary>Swept-footprint overlap between edges that do not already share a resource.</summary>
+    PhysicalOverlap,
+    /// <summary>Shelf / service-stop access corridor held through HUMAN/handover.</summary>
+    ServiceCorridor,
+    /// <summary>Inbound / outbound / QC / charger / parking bay.</summary>
+    StationBay,
+    /// <summary>Holding or recovery bay where a robot may wait safely.</summary>
+    HoldingBay
+}
+
+/// <summary>Semantic bay kind for stations (configured via Traffic:Stations).</summary>
+public enum TrafficStationBayKind
+{
+    Unspecified,
+    Inbound,
+    Outbound,
+    Qc,
+    Charger,
+    Parking,
+    Holding,
+    Recovery,
+    Service
 }
 
 /// <param name="Code">Stable issue code (ENDPOINT_DISCONNECTED, …).</param>
@@ -63,7 +87,12 @@ public sealed record TrafficNode(
     double Y,
     ImmutableArray<string> EndpointCodes,
     bool IsHoldingPoint,
-    bool IsStation);
+    bool IsStation,
+    /// <summary>
+    /// True when the robot may wait here (holding / stopline / station) and the node is outside
+    /// every critical / NO_STOP / junction resource.
+    /// </summary>
+    bool IsSafeStop = false);
 
 public sealed record TrafficEdge(
     int Id,
@@ -102,7 +131,8 @@ public sealed record TrafficStation(
     int NodeId,
     int? AccessEdgeId,
     bool IsServiceStop,
-    bool IsRecovery);
+    bool IsRecovery,
+    TrafficStationBayKind BayKind = TrafficStationBayKind.Unspecified);
 
 /// <summary>
 /// Immutable compiled traffic graph: topology (shared ids with Nav2 route-graph GeoJSON) plus
@@ -127,7 +157,10 @@ public sealed class CompiledTrafficGraph
         ImmutableArray<int> csrEdgeIds,
         TrafficFootprintOptions footprint,
         RouteGraphModel routeGraph,
-        SweptConflictIndex? sweptConflicts = null)
+        SweptConflictIndex? sweptConflicts = null,
+        FrozenDictionary<int, ImmutableArray<string>>? resourcesByEdgeId = null,
+        FrozenDictionary<string, ImmutableArray<int>>? exitSafeStopsByResourceId = null,
+        ImmutableArray<int>? safeStopNodeIds = null)
     {
         Name = name;
         FrameId = frameId;
@@ -146,7 +179,14 @@ public sealed class CompiledTrafficGraph
         SweptConflicts = sweptConflicts;
         NodeById = nodes.ToFrozenDictionary(n => n.Id);
         EdgeById = edges.ToFrozenDictionary(e => e.Id);
+        ResourceById = resources.ToFrozenDictionary(r => r.Id, StringComparer.Ordinal);
         _nodeIndexById = Enumerable.Range(0, nodes.Length).ToFrozenDictionary(i => nodes[i].Id, i => i);
+        ResourcesByEdgeId = resourcesByEdgeId ?? BuildResourcesByEdge(resources);
+        ExitSafeStopsByResourceId = exitSafeStopsByResourceId ??
+            FrozenDictionary<string, ImmutableArray<int>>.Empty;
+        SafeStopNodeIds = safeStopNodeIds ??
+            nodes.Where(n => n.IsSafeStop).Select(n => n.Id).OrderBy(id => id).ToImmutableArray();
+        SafeStopNodeIdSet = SafeStopNodeIds.ToFrozenSet();
     }
 
     public string Name { get; }
@@ -166,6 +206,55 @@ public sealed class CompiledTrafficGraph
     public SweptConflictIndex? SweptConflicts { get; }
     public FrozenDictionary<int, TrafficNode> NodeById { get; }
     public FrozenDictionary<int, TrafficEdge> EdgeById { get; }
+    public FrozenDictionary<string, TrafficResource> ResourceById { get; }
+    /// <summary>Edge id → resource ids covering that edge.</summary>
+    public FrozenDictionary<int, ImmutableArray<string>> ResourcesByEdgeId { get; }
+    /// <summary>Resource id → safe-stop node ids reachable immediately after leaving the resource.</summary>
+    public FrozenDictionary<string, ImmutableArray<int>> ExitSafeStopsByResourceId { get; }
+    public ImmutableArray<int> SafeStopNodeIds { get; }
+    public FrozenSet<int> SafeStopNodeIdSet { get; }
+
+    public ImmutableArray<string> ResourcesCovering(IEnumerable<int> edgeIds)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var edgeId in edgeIds)
+        {
+            if (ResourcesByEdgeId.TryGetValue(edgeId, out var ids))
+            {
+                foreach (var id in ids)
+                {
+                    set.Add(id);
+                }
+            }
+        }
+
+        return set.Order(StringComparer.Ordinal).ToImmutableArray();
+    }
+
+    public bool IsSafeStop(int nodeId) => SafeStopNodeIdSet.Contains(nodeId);
+
+    private static FrozenDictionary<int, ImmutableArray<string>> BuildResourcesByEdge(
+        ImmutableArray<TrafficResource> resources)
+    {
+        var map = new Dictionary<int, List<string>>();
+        foreach (var resource in resources)
+        {
+            foreach (var edgeId in resource.EdgeIds)
+            {
+                if (!map.TryGetValue(edgeId, out var list))
+                {
+                    list = [];
+                    map[edgeId] = list;
+                }
+
+                list.Add(resource.Id);
+            }
+        }
+
+        return map.ToFrozenDictionary(
+            kv => kv.Key,
+            kv => kv.Value.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToImmutableArray());
+    }
 
     public IEnumerable<(int EdgeId, TrafficEdge Edge)> Outgoing(int nodeId)
     {
@@ -266,6 +355,9 @@ public sealed record TrafficLaneMeta(string Code, double WidthMeters, int Capaci
 /// <summary>Per Zone capacity for in-memory resources.</summary>
 public sealed record TrafficZoneMeta(string Code, ZoneType ZoneType, int Capacity);
 
+/// <summary>Endpoint code → bay kind (from Traffic:Stations config).</summary>
+public sealed record TrafficStationMeta(string EndpointCode, TrafficStationBayKind BayKind);
+
 /// <summary>Input to <see cref="TrafficGraphCompiler"/>.</summary>
 public sealed record TrafficCompileInput(
     string Name,
@@ -279,6 +371,7 @@ public sealed record TrafficCompileInput(
     OccupancyGrid? Occupancy = null,
     IReadOnlySet<string>? ServiceStopEndpointCodes = null,
     IReadOnlySet<string>? RecoveryEndpointCodes = null,
+    IReadOnlyList<TrafficStationMeta>? StationMeta = null,
     string ExpectedFrameId = "map");
 
 public sealed record TrafficCompileResult(

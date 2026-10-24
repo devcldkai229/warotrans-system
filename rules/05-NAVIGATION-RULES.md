@@ -148,31 +148,35 @@ Only **DRAFT** MapVersions accept Endpoint / Edge / Zone create, update, or dele
 PUBLISHED and ARCHIVED geometry is immutable at the API.
 
 ## Traffic coordination
-V1 does not persist:
+Do not persist:
 - TrafficResource
 - TrafficReservation
 
-Use an in-memory `TrafficCoordinator` for a single backend instance
-(ADR 0007 / 0008).
+Single Host uses in-memory coordinators (ADR 0007 / 0008 / 0009):
 
-It may maintain runtime:
-- Zone occupancy
-- Edge / lane resource occupancy
-- junction conflict groups / critical corridors
-- capacity
-- waiting queues (FIFO)
+| Mode | Dispatcher | Segmented actor |
+|------|------------|-----------------|
+| `Traffic:Mode=Shadow` (default) | V1 whole-route `TrafficCoordinator` issues `NAVIGATE_TO_POSE` | Observes + compares; no motion; one mover/map |
+| `Traffic:Mode=Active` (deferred) | Segmented safe-stop authority only | Sole motion authority |
 
-MOVE execution consults it before issuing `NAVIGATE_TO_POSE` and attaches a
-`route { graphHash, edgeIds[] }` grant when route mode is active.
+Segmented runtime (Shadow implemented):
+- Occupancy vs MotionAuthority
+- Safe-stop → safe-stop atomic grants
+- Verified-exit / operator release only (no heartbeat auto-release)
+- Quarantine on offline / cancel-while-occupied / localization loss
+- Priority + aging queues, wait-for cycle rejection, epoch fencing
+- Station bay kinds from `Traffic:Stations` config (no new EndpointType)
 
 Compiled topology lives in `CompiledTrafficGraph` (immutable, hashed, cached
-per PUBLISHED MapVersion). Export to Nav2 Route Server uses the same edge ids.
+per PUBLISHED MapVersion) with resource kinds including NarrowBidirectional,
+PhysicalOverlap, ServiceCorridor, StationBay, HoldingBay, and precomputed
+safe-stop / exit indexes.
 
 `JUNCTION` is the primary single-robot free-motion junction zone.
 `SINGLE_OCCUPANCY` / `NO_STOP` may still form junction links (legacy warning).
 
 Nav2 owns local tracking/`FollowPath` inside the granted corridor.
-Backend TrafficCoordinator is the only authority that grants Edge/Zone use.
+Backend Traffic Coordinator is the only authority that grants Edge/Zone use.
 
 ## WAIT rule
 Traffic waiting is execution control around MOVE/navigation, not a business WAIT WorkflowStep.

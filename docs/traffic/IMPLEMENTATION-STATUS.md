@@ -1,70 +1,76 @@
 # Traffic Management — Implementation status
 
-**Date:** 2026-10-24  
-**Branches:** `warotrans-system/feature/traffic-graph`, `warotrans/feature/traffic-route-grant`  
-**Physical robot motion:** not executed (by design)
+**Date:** 2026-10-25  
+**Branches:** `warotrans-system/feature/traffic-coordinator`, `warotrans/feature/traffic-coordinator`  
+**Physical robot motion:** not executed (by design)  
+**Coordinator mode:** Shadow (`Traffic:Mode=Shadow`)
 
-## Acceptance matrix
+## Acceptance matrix (Shadow phase)
 
 | Acceptance | Result | Evidence |
 |------------|--------|----------|
-| Deterministic graph compilation | **PASS** | `TrafficGraphCompilerTests` + benchmark (same hash twice) |
-| Directed routes respect geometry + zone rules | **PASS** (synthetic) | Unit tests; KEEP_OUT cut / JUNCTION / ONE_WAY |
-| Invalid map elements detected | **PASS** (synthetic) | Validator issue codes; real maps BLOCKED until lanes/PGM |
-| Required stations routable or BLOCKED with reason | **PASS** (API) | `GET .../traffic-graph/validation`; sim/map3 reports BLOCKED reasons |
-| Graph immutable during traffic execution | **PASS** | ImmutableArray / FrozenDictionary; cache keyed by GraphHash |
-| Relevant unit tests pass | **PASS** | See commands below |
-| Existing Navigation/Workflow tests remain passing | **PASS** | 165 filtered unit tests (Navigation+Traffic+JobExecution+Fleet.Traffic) |
-| Nav2 cannot drive ungranted edge | **NOT_RUN** | WSL `nav2_route` **NOT_INSTALLED**; gateway unit mocks DynamicEdges/ComputeRoute **PASS** |
-| Pi nav2_route + physical route E2E | **NOT_RUN** | No deploy / no motion |
+| Deterministic graph compilation | **PASS** | `TrafficGraphCompilerTests` |
+| Junction groups do not cross-include edges | **PASS** | `Two_junction_zones_do_not_cross_include_edges` |
+| Swept overlaps → PhysicalOverlap resources | **PASS** | `Physical_overlap_resources_exist_when_edges_conflict` |
+| Safe-stop indexes + exit validation | **PASS** | Compiler + `TrafficGraphValidator` rules |
+| Single-writer Channel actor | **PASS** | `SegmentedTrafficCoordinator` |
+| Verified-exit only / quarantine on offline | **PASS** | `Release_without_verified_exit_rejected`, `Offline_uncertain_location_quarantines` |
+| No conflicting grants under stress | **PASS** | `Parallel_stress_no_conflicting_grants` |
+| Deadlock-risk / fairness / cancel / restart | **PASS** | Segmented scenario tests |
+| Shadow observes, no motion from actor | **PASS** | `TrafficShadowObserver` + V1 still dispatches |
+| Shadow single-mover guard | **PASS** | `ShadowSingleMoverGuard` in `StartMoveAsync` |
+| Event-driven V1 grant pump (no 200 ms poll) | **PASS** | `TrafficReadySignal` + `TrafficGrantHostedService` |
+| Full backend unit suite | **PASS** | 402 passed, 0 failed |
+| Benchmark numbers recorded | **PASS** | See below |
+| Active Mode robot authority client | **NOT_RUN** | Deferred (ADR 0009) |
+| Pi / physical E2E | **NOT_RUN** | No deploy / no motion |
+
+## Benchmark (local, 2026-10-25)
+
+```text
+grid=32x32 robots=10 route_p50=4.843ms route_p95=18.744ms route_p99=18.744ms acq_p50=0.038ms acq_p95=6.437ms acq_p99=6.437ms throughput=144.7/s alloc=8868872B ws=101888000
+grid=32x32 robots=25 route_p50=3.417ms route_p95=5.147ms route_p99=6.845ms acq_p50=0.035ms acq_p95=0.047ms acq_p99=0.049ms throughput=292.2/s alloc=16139088B ws=103538688
+grid=32x32 robots=50 route_p50=3.409ms route_p95=6.755ms route_p99=9.136ms acq_p50=0.036ms acq_p95=0.103ms acq_p99=1.281ms throughput=286.9/s alloc=30834040B ws=107380736
+grid=64x64 robots=10 route_p50=7.680ms route_p95=14.068ms route_p99=14.068ms acq_p50=0.030ms acq_p95=0.065ms acq_p99=0.065ms throughput=119.3/s alloc=33193688B ws=137801728
+grid=64x64 robots=25 route_p50=7.108ms route_p95=14.638ms route_p99=15.020ms acq_p50=0.031ms acq_p95=0.043ms acq_p99=0.052ms throughput=128.2/s alloc=70569520B ws=146362368
+grid=64x64 robots=50 route_p50=5.671ms route_p95=8.077ms route_p99=16.154ms acq_p50=0.020ms acq_p95=0.031ms acq_p99=0.041ms throughput=180.5/s alloc=114036152B ws=132038656
+```
+
+Command: `dotnet test ... --filter FullyQualifiedName~SegmentedTrafficBenchmark`
 
 ## Test commands / results
 
 ```text
-# Backend
-dotnet test backend/tests/WaroTrans.UnitTests/WaroTrans.UnitTests.csproj `
-  --filter "FullyQualifiedName~Navigation|FullyQualifiedName~Traffic|FullyQualifiedName~JobExecution|FullyQualifiedName~Fleet.Traffic"
-→ Passed: 165, Failed: 0
+dotnet test backend/tests/WaroTrans.UnitTests/WaroTrans.UnitTests.csproj
+→ Passed: 402, Failed: 0
 
-dotnet test ... --filter "FullyQualifiedName~TrafficGraphBenchmark"
-→ PASS (Benchmark trait)
-
-# Robot gateway
-cd ros2_ws/src/warotrans_fleet
-$env:PYTHONPATH=(Get-Location).Path
-python -m pytest test/test_route_grant.py test/test_move_command.py -q
-→ 44 passed
-
-# WSL Route Server integration
-ros2 pkg prefix nav2_route
-→ NOT_INSTALLED  ⇒ launch_testing NOT_RUN
+dotnet test ... --filter FullyQualifiedName~SegmentedTraffic
+→ scenario + property + stress + overload PASS
 ```
 
 ## Deliverables
 
 | Deliverable | Path |
 |-------------|------|
-| Architecture audit | [ARCHITECTURE-AUDIT.md](ARCHITECTURE-AUDIT.md) |
-| ADR route ownership | [../adr/0007-traffic-route-ownership.md](../adr/0007-traffic-route-ownership.md) |
-| ADR grant V1 | [../adr/0008-traffic-grant-v1.md](../adr/0008-traffic-grant-v1.md) |
-| CompiledTrafficGraph | `backend/src/Modules/Navigation/Traffic/*` |
-| Validation + debug SVG | `GET .../traffic-graph/validation`, `.../debug.svg` |
-| Real map report | [REAL-MAP-VALIDATION.md](REAL-MAP-VALIDATION.md) |
-| TrafficCoordinator | `backend/src/Modules/Fleet/Traffic/*` |
-| Gateway enforcement | `warotrans_fleet/route_grant.py`, `route_enforcer.py`, `nav2_route_client.py` |
-| MQTT contract `route` | `docs/mqtt-robot-contracts.md` |
-| Rules update | `rules/05-NAVIGATION-RULES.md` |
+| ADR segmented authority | [../adr/0009-segmented-traffic-authority.md](../adr/0009-segmented-traffic-authority.md) |
+| Segmented actor + state | `backend/src/Modules/Fleet/Traffic/SegmentedTrafficCoordinator.cs`, `TrafficState.cs` |
+| Route planner | `RoutePlanner.cs` |
+| Shadow observer / guard | `TrafficShadowObserver.cs`, `ShadowSingleMoverGuard.cs` |
+| Ops API | `GET /api/fleet/traffic/snapshot`, `/diagnostics`, reconcile / release-after-clearance |
+| Graph fixes | `TrafficGraphCompiler` resource kinds + indexes |
+| Fake robot tests | `backend/tests/.../Fleet/Traffic/SegmentedTrafficCoordinatorTests.cs` |
 
-## Known blockers
+## Risks
 
-1. **MAP-WHSIM-V002:** no Edges in local DB → empty graph until Map Editor lanes exist.
-2. **warotrans_map3.pgm** missing locally → occupancy clearance cannot run.
-3. **WSL/Pi `nav2_route`:** not verified in this session → DynamicEdges live integration NOT_RUN.
-4. **Service-stop ↔ StorageLocation** wiring optional/incomplete (PARK used for recovery).
-5. Container overhang clearance out of scope (user: empty robot only).
+1. Shadow vs V1 comparison may diverge on segment boundaries (V1 grants whole route).
+2. Exit clearance uses turn-radius distance to resource edges; needs real-map validation.
+3. Active Mode still requires robot Traffic Client + MQTT authority fields.
+4. V1 still auto-releases on offline (active dispatcher); segmented path quarantines instead.
+5. Real maps (MAP-WHSIM / map3) still BLOCKED for empty Edges / missing PGM.
 
-## Changed areas (summary)
+## Known blockers (unchanged from graph phase)
 
-**Backend:** Navigation Traffic/*, GetRouteGraph(+hash), GetTrafficGraphValidation/DebugSvg, Fleet TrafficCoordinator + grant pump, Navigate payload route, JobExecutionEngine MOVE grant, mqtt contract, rules/05, ADRs.
-
-**Robot:** route enforcement modules + gateway/move wiring + pytest.
+1. MAP-WHSIM-V002: no Edges in local DB.
+2. warotrans_map3.pgm missing locally.
+3. WSL/Pi `nav2_route` not verified in this session.
+4. Service-stop ↔ StorageLocation wiring incomplete.

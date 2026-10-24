@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Contracts;
@@ -41,7 +42,10 @@ public sealed class JobExecutionEngine(
     ILogger<JobExecutionEngine> logger,
     ITrafficCoordinator? trafficCoordinator = null,
     TrafficGraphCompileService? trafficCompile = null,
-    CompiledTrafficGraphCache? trafficGraphCache = null)
+    CompiledTrafficGraphCache? trafficGraphCache = null,
+    IOptions<TrafficOptions>? trafficOptions = null,
+    TrafficShadowObserver? trafficShadow = null,
+    ShadowSingleMoverGuard? shadowMoverGuard = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -594,6 +598,17 @@ public sealed class JobExecutionEngine(
         try
         {
             RouteGrantSnapshot? routeGrant = null;
+            var mode = trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow;
+            if (mode == TrafficCoordinatorMode.Shadow && shadowMoverGuard is not null)
+            {
+                if (!shadowMoverGuard.TryEnter(job.MapVersionId, robotId, out var blocker))
+                {
+                    Fail(job, task, step, stepKey, "shadow_single_mover",
+                        $"Shadow Mode allows only one moving robot per map; blocked by {blocker}.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+            }
+
             if (trafficCoordinator is not null)
             {
                 var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
@@ -606,6 +621,7 @@ public sealed class JobExecutionEngine(
                     var goalNode = TrafficGraphQueries.ResolveEndpointNodeId(graph, pose.Code, pose.X, pose.Y);
                     if (startNode is null || goalNode is null)
                     {
+                        shadowMoverGuard?.Exit(job.MapVersionId, robotId);
                         Fail(job, task, step, stepKey, "traffic_nodes_unresolved",
                             "Could not resolve start/goal traffic nodes for MOVE.", DateTimeOffset.UtcNow);
                         return true;
@@ -619,6 +635,29 @@ public sealed class JobExecutionEngine(
                         goalNode.Value,
                         step.Id,
                         new PendingNavigateContext(job.Id, pose.X, pose.Y, pose.Yaw));
+
+                    if (trafficShadow is not null && robot is not null)
+                    {
+                        try
+                        {
+                            await trafficShadow.OnMoveRequestedAsync(
+                                robotId,
+                                job.MapVersionId,
+                                graph,
+                                robot.PoseX,
+                                robot.PoseY,
+                                startNode.Value,
+                                goalNode.Value,
+                                step.Id,
+                                job.Id,
+                                grant,
+                                cancellationToken);
+                        }
+                        catch (Exception shadowEx)
+                        {
+                            logger.LogDebug(shadowEx, "Traffic shadow observe failed for job {JobNo}", job.JobNo);
+                        }
+                    }
 
                     if (grant.WaitQueued)
                     {
@@ -645,6 +684,7 @@ public sealed class JobExecutionEngine(
 
                     if (!grant.Granted || grant.GraphHash is null)
                     {
+                        shadowMoverGuard?.Exit(job.MapVersionId, robotId);
                         Fail(job, task, step, stepKey, "traffic_path_unavailable",
                             "No traffic path between robot pose and target endpoint.", DateTimeOffset.UtcNow);
                         return true;
@@ -679,6 +719,7 @@ public sealed class JobExecutionEngine(
         catch (AppException ex)
         {
             trafficCoordinator?.ReleaseByJobStep(step.Id);
+            shadowMoverGuard?.Exit(job.MapVersionId, robotId);
             Fail(job, task, step, stepKey, ex.Code ?? "navigate_rejected", ex.Message, DateTimeOffset.UtcNow);
             return true;
         }

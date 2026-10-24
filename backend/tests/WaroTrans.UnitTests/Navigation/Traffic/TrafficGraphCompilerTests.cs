@@ -98,6 +98,66 @@ public class TrafficGraphCompilerTests
         Assert.NotEmpty(result.Graph.Corridors);
         Assert.DoesNotContain(result.Issues, i => i.Code == TrafficGraphCompiler.LegacyJunctionZone);
         Assert.Contains(result.Graph.Edges, e => e.IsJunction || e.InCriticalCorridor);
+        // Junction capacity is owned by JunctionConflict — no duplicate CriticalCorridor for those edges.
+        var junction = Assert.Single(result.Graph.Resources, r => r.Kind == TrafficResourceKind.JunctionConflict);
+        Assert.DoesNotContain(result.Graph.Resources, r =>
+            r.Kind == TrafficResourceKind.CriticalCorridor &&
+            r.EdgeIds.Any(id => junction.EdgeIds.Contains(id)));
+    }
+
+    [Fact]
+    public void Two_junction_zones_do_not_cross_include_edges()
+    {
+        RouteGraphEdgeInput[] edges =
+        [
+            Lane("E-A", EdgeDirection.BIDIRECTIONAL, (0, 0), (1, 0)),
+            Lane("E-B", EdgeDirection.BIDIRECTIONAL, (3, 0), (4, 0)),
+            Lane("E-MID", EdgeDirection.BIDIRECTIONAL, (1.2, 0), (2.8, 0))
+        ];
+        var zones = new[]
+        {
+            Zone("Z-J1", ZoneType.JUNCTION, -0.1, -0.2, 1.1, 0.2),
+            Zone("Z-J2", ZoneType.JUNCTION, 2.9, -0.2, 4.1, 0.2)
+        };
+
+        var result = TrafficGraphCompiler.Compile(Input(
+            edges,
+            [Stop("EP-A", 0, 0), Stop("EP-B", 4, 0)],
+            zones));
+
+        var j1 = Assert.Single(result.Graph.Resources, r => r.Id == "junction:Z-J1");
+        var j2 = Assert.Single(result.Graph.Resources, r => r.Id == "junction:Z-J2");
+        Assert.Empty(j1.EdgeIds.Intersect(j2.EdgeIds));
+        Assert.All(j1.EdgeIds, id =>
+        {
+            var edge = result.Graph.EdgeById[id];
+            Assert.Contains("Z-J1", edge.ZoneCodes);
+        });
+    }
+
+    [Fact]
+    public void Bidirectional_lane_emits_narrow_resource_and_safe_stops()
+    {
+        var result = TrafficGraphCompiler.Compile(Input(
+            [Lane("E-BW", EdgeDirection.BIDIRECTIONAL, (0, 0), (3, 0))],
+            [Stop("EP-A", 0, 0), Stop("EP-B", 3, 0)]));
+
+        Assert.Contains(result.Graph.Resources, r =>
+            r.Kind == TrafficResourceKind.NarrowBidirectional && r.RelatedCodes.Contains("E-BW"));
+        Assert.NotEmpty(result.Graph.SafeStopNodeIds);
+        Assert.All(result.Graph.SafeStopNodeIds, id => Assert.True(result.Graph.IsSafeStop(id)));
+        Assert.NotEmpty(result.Graph.ResourcesByEdgeId);
+    }
+
+    [Fact]
+    public void Sample_bidirectional_lane_validates_without_errors()
+    {
+        var result = TrafficGraphCompiler.Compile(Input(
+            [Lane("E-1", EdgeDirection.BIDIRECTIONAL, (0, 0), (2, 0))],
+            [Stop("EP-A", 0, 0), Stop("EP-B", 2, 0)]));
+        var report = TrafficGraphValidator.Validate(Guid.NewGuid(), result.Graph, result.Issues);
+        Assert.DoesNotContain(report.Issues, i => i.Severity == TrafficIssueSeverity.Error);
+        Assert.True(report.IsValid);
     }
 
     [Fact]

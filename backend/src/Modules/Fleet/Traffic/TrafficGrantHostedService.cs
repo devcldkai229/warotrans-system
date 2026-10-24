@@ -7,23 +7,24 @@ using WaroTrans.Fleet.Features.IssueNavigateCommand;
 namespace WaroTrans.Fleet.Traffic;
 
 /// <summary>
-/// Polls the traffic coordinator for waiters that obtained a grant and issues NAVIGATE_TO_POSE
-/// (MOVE steps stay EXECUTING with pendingTraffic until then).
+/// Event-driven pump: waits on <see cref="TrafficReadySignal"/> when V1 waiters obtain a grant,
+/// then issues NAVIGATE_TO_POSE (MOVE steps stay EXECUTING with pendingTraffic until then).
 /// </summary>
 public sealed class TrafficGrantHostedService(
     ITrafficCoordinator coordinator,
+    TrafficReadySignal readySignal,
     IServiceScopeFactory scopeFactory,
     ILogger<TrafficGrantHostedService> logger) : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Drain any ready items that arrived before the loop started, then wait for signals.
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await TickAsync(stoppingToken).ConfigureAwait(false);
+                await readySignal.WaitAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -32,15 +33,14 @@ public sealed class TrafficGrantHostedService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Traffic grant pump tick failed");
-            }
-
-            try
-            {
-                await Task.Delay(PollInterval, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
+                try
+                {
+                    await Task.Delay(200, stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
             }
         }
     }

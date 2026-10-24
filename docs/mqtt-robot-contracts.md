@@ -107,6 +107,13 @@ When the robot gateway is launched with `route_graph:=…` (route mode):
 
 Protocol decision: [adr/0007-traffic-route-ownership.md](adr/0007-traffic-route-ownership.md).
 
+#### Reserved (Active Mode — not on the wire yet)
+
+Segmented motion authority (ADR 0009) will extend the robot contract with fields
+such as `authorityId`, `epoch`, `seq`, and `segmentEdgeIds` without chaining
+multiple `NAVIGATE_TO_POSE` commands. **Shadow Mode does not change the wire
+format.** Do not invent client payloads until Active cutover.
+
 ### CANCEL
 
 ```json
