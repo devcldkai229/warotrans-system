@@ -28,6 +28,30 @@ public interface IFleetModule
         Guid jobId,
         Guid jobStepId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Arms the physical HUMAN_INTERACTION confirm button on the robot (MQTT interaction_request).
+    /// Not a RobotCommand.
+    /// </summary>
+    Task RequestHumanInteractionAsync(
+        Guid robotId,
+        Guid jobId,
+        Guid jobStepId,
+        string interactionType,
+        Guid containerId,
+        Guid endpointId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publishes business acceptance/rejection of an interaction_confirm (MQTT interaction_result).
+    /// </summary>
+    Task PublishInteractionResultAsync(
+        Guid robotId,
+        Guid jobStepId,
+        Guid confirmMessageId,
+        bool accepted,
+        string? reasonCode,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record RobotSnapshot(
@@ -40,7 +64,7 @@ public sealed record RobotSnapshot(
     bool IsOnline,
     LocalizationStatus? LocalizationStatus,
     NavigationStatus? NavigationStatus,
-    decimal BatteryPercent,
+    decimal? BatteryPercent,
     DateTimeOffset? LastTelemetryAt,
     double PoseX,
     double PoseY,

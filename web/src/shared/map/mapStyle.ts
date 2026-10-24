@@ -18,6 +18,7 @@ export const ZONE_LABEL: Record<ZoneType, string> = {
   SPEED: 'Speed zone',
   NO_STOP: 'No-stop',
   SINGLE_OCCUPANCY: 'Single-occupancy',
+  JUNCTION: 'Junction',
 }
 
 export const ZONE_COLOR: Record<ZoneType, string> = {
@@ -25,6 +26,7 @@ export const ZONE_COLOR: Record<ZoneType, string> = {
   SPEED: '#3279f9',
   NO_STOP: '#e37400',
   SINGLE_OCCUPANCY: '#d81b60',
+  JUNCTION: '#8430ce',
 }
 
 export const ENDPOINT_COLOR: Record<EndpointType, string> = {
@@ -52,7 +54,7 @@ export const ROBOT_COLOR: Record<RobotStatus, string> = {
 
 export const EDGE_COLOR: Record<EdgeDirection, string> = { BIDIRECTIONAL: '#3279f9', ONE_WAY: '#8430ce' }
 
-export const ZONE_ORDER: ZoneType[] = ['SPEED', 'NO_STOP', 'SINGLE_OCCUPANCY', 'KEEP_OUT']
+export const ZONE_ORDER: ZoneType[] = ['SPEED', 'NO_STOP', 'SINGLE_OCCUPANCY', 'JUNCTION', 'KEEP_OUT']
 
 /** Guide swatch of a Zone type: the same tint as on the map, hatched for keep-out. */
 export function zoneSwatchStyle(type: ZoneType): CSSProperties {

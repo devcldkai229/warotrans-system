@@ -16,6 +16,7 @@ using WaroTrans.Fleet.Features.ListRobots;
 using WaroTrans.Fleet.Features.ProcessRobotCommandAck;
 using WaroTrans.Fleet.Features.ProcessRobotCommandResult;
 using WaroTrans.Fleet.Features.ProcessRobotHeartbeat;
+using WaroTrans.Fleet.Features.ProcessRobotInteractionConfirm;
 using WaroTrans.Fleet.Features.ProcessRobotTelemetry;
 using WaroTrans.Fleet.Features.RegisterRobot;
 using WaroTrans.Fleet.Features.TeleopRobot;
@@ -43,6 +44,7 @@ public static class FleetModule
         services.AddScoped<ProcessRobotTelemetryHandler>();
         services.AddScoped<ProcessRobotCommandAckHandler>();
         services.AddScoped<ProcessRobotCommandResultHandler>();
+        services.AddScoped<ProcessRobotInteractionConfirmHandler>();
         services.AddScoped<IssueNavigateCommandHandler>();
         services.AddScoped<IFleetModule, WaroTrans.Fleet.Services.FleetModuleApi>();
         services.AddScoped<IssueCancelCommandHandler>();

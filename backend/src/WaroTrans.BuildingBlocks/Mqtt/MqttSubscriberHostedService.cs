@@ -53,11 +53,12 @@ public sealed class MqttSubscriberHostedService(
                     .WithTopicFilter(RobotMqttTopics.TelemetryFilter(mqtt.TopicPrefix))
                     .WithTopicFilter(RobotMqttTopics.CommandAckFilter(mqtt.TopicPrefix))
                     .WithTopicFilter(RobotMqttTopics.CommandResultFilter(mqtt.TopicPrefix))
+                    .WithTopicFilter(RobotMqttTopics.InteractionConfirmFilter(mqtt.TopicPrefix))
                     .Build();
 
                 await client.SubscribeAsync(subscribeOptions, stoppingToken).ConfigureAwait(false);
                 logger.LogInformation(
-                    "MQTT subscribed to robot heartbeat/telemetry/command_ack/command_result on {Host}:{Port}",
+                    "MQTT subscribed to robot heartbeat/telemetry/command_ack/command_result/interaction_confirm on {Host}:{Port}",
                     mqtt.Host,
                     mqtt.Port);
 
@@ -115,8 +116,10 @@ public sealed class MqttSubscriberHostedService(
             return;
         }
 
-        // Backend never consumes its own downlink command topic.
-        if (kind == RobotMqttTopics.CommandSuffix)
+        // Backend never consumes its own downlink topics.
+        if (kind is RobotMqttTopics.CommandSuffix
+            or RobotMqttTopics.InteractionRequestSuffix
+            or RobotMqttTopics.InteractionResultSuffix)
         {
             return;
         }
@@ -154,6 +157,10 @@ public sealed class MqttSubscriberHostedService(
                     break;
                 case RobotMqttTopics.CommandResultSuffix:
                     await HandleCommandResultAsync(scope, ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.InteractionConfirmSuffix:
+                    await HandleInteractionConfirmAsync(scope, ingress, payload, topic, robotCodeFromTopic, cancellationToken)
                         .ConfigureAwait(false);
                     break;
             }
@@ -265,5 +272,39 @@ public sealed class MqttSubscriberHostedService(
         var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotCommandResultMessage>>();
         await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
         await ingress.HandleCommandResultAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleInteractionConfirmAsync(
+        AsyncServiceScope scope,
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<RobotInteractionConfirmMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid interaction_confirm JSON on {topic}");
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RobotCode))
+        {
+            message.RobotCode = robotCodeFromTopic;
+        }
+        else if (!string.Equals(message.RobotCode, robotCodeFromTopic, StringComparison.Ordinal))
+        {
+            throw new ValidationException(
+                "RobotCode in payload must match the topic robotCode.",
+                [
+                    new FluentValidation.Results.ValidationFailure(
+                        nameof(message.RobotCode),
+                        $"Topic robotCode '{robotCodeFromTopic}' != payload '{message.RobotCode}'.")
+                ]);
+        }
+
+        var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotInteractionConfirmMessage>>();
+        await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
+        await ingress.HandleInteractionConfirmAsync(message, cancellationToken).ConfigureAwait(false);
     }
 }

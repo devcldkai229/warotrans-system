@@ -158,6 +158,36 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
     }
 
     [Fact]
+    public async Task Post_junction_requires_capacity_one()
+    {
+        var mapId = await CreateDraftMapAsync();
+
+        var bad = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/zones", new
+        {
+            name = "Cross",
+            zoneType = "JUNCTION",
+            geometry = ClosedSquare(2),
+            capacity = 2,
+            isActive = true
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+
+        var ok = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/zones", new
+        {
+            name = "Cross",
+            zoneType = "JUNCTION",
+            geometry = ClosedSquare(2),
+            capacity = 1,
+            isActive = true
+        });
+        Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+        var created = await ok.Content.ReadFromJsonAsync<ZoneDto>();
+        Assert.NotNull(created);
+        Assert.Equal("JUNCTION", created.ZoneType);
+        Assert.Equal(1, created.Capacity);
+    }
+
+    [Fact]
     public async Task Post_speed_zone_requires_max_speed()
     {
         var mapId = await CreateDraftMapAsync();

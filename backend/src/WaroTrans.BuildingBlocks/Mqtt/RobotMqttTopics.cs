@@ -7,6 +7,9 @@ public static class RobotMqttTopics
     public const string CommandSuffix = "command";
     public const string CommandAckSuffix = "command_ack";
     public const string CommandResultSuffix = "command_result";
+    public const string InteractionRequestSuffix = "interaction_request";
+    public const string InteractionConfirmSuffix = "interaction_confirm";
+    public const string InteractionResultSuffix = "interaction_result";
 
     public static string HeartbeatFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/heartbeat";
@@ -19,6 +22,9 @@ public static class RobotMqttTopics
 
     public static string CommandResultFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/command_result";
+
+    public static string InteractionConfirmFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/interaction_confirm";
 
     public static string Heartbeat(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/heartbeat";
@@ -38,6 +44,18 @@ public static class RobotMqttTopics
     /// <summary>Backend → robot only (manual drive); the backend never subscribes to it.</summary>
     public static string Teleop(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/teleop";
+
+    /// <summary>Backend → robot: arm physical HUMAN_INTERACTION confirm button.</summary>
+    public static string InteractionRequest(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/interaction_request";
+
+    /// <summary>Robot → backend: physical button confirmation.</summary>
+    public static string InteractionConfirm(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/interaction_confirm";
+
+    /// <summary>Backend → robot: business acceptance of interaction_confirm.</summary>
+    public static string InteractionResult(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/interaction_result";
 
     public static bool TryParse(string topic, string topicPrefix, out string robotCode, out string kind)
     {
@@ -63,7 +81,10 @@ public static class RobotMqttTopics
             or TelemetrySuffix
             or CommandSuffix
             or CommandAckSuffix
-            or CommandResultSuffix;
+            or CommandResultSuffix
+            or InteractionRequestSuffix
+            or InteractionConfirmSuffix
+            or InteractionResultSuffix;
     }
 
     public static string NormalizePrefix(string topicPrefix) =>

@@ -1,0 +1,68 @@
+{
+  "warehouseId": "44444444-4444-4444-4444-444444444444",
+  "mapVersionId": "959e46d1-7212-4bce-9976-ed522c54ed8c",
+  "mapVersionCode": "MAP-WHREAL-V001",
+  "robotId": "97c93189-ae03-4b27-b846-760f8d18d27c",
+  "robotCode": "RBT-001",
+  "mqttHostForRobot": "10.3.69.168",
+  "endpoints": [
+    {
+      "alias": "SRC",
+      "endpointId": "182e90a6-3435-4969-8835-d6f861257e49",
+      "code": "EP-PHYSICAL-SRC",
+      "x": 0.512,
+      "y": -0.79,
+      "yaw": -0.028
+    },
+    {
+      "alias": "DST",
+      "endpointId": "d889c11f-4d74-4358-8442-55f2bc88cde5",
+      "code": "EP-PHYSICAL-DST",
+      "x": 2.312,
+      "y": -0.84,
+      "yaw": -0.028
+    }
+  ],
+  "containerId": "e7000000-0000-4000-8000-000000000007",
+  "containerBarcode": "CTN-REAL-000001",
+  "proposed": {
+    "map": "warotrans_map2",
+    "resolution": 0.05,
+    "origin": [
+      -0.388,
+      -1.64
+    ],
+    "size_px": [
+      102,
+      41
+    ],
+    "src": {
+      "name": "SRC",
+      "endpointType": "INBOUND",
+      "x": 0.512,
+      "y": -0.79,
+      "yaw": -0.028,
+      "px": [
+        18,
+        23
+      ],
+      "clearance_m": 0.776,
+      "color": "green"
+    },
+    "dst": {
+      "name": "DST",
+      "endpointType": "STORAGE",
+      "x": 2.312,
+      "y": -0.84,
+      "yaw": -0.028,
+      "px": [
+        54,
+        24
+      ],
+      "clearance_m": 0.585,
+      "color": "red"
+    },
+    "distance_m": 1.801,
+    "png": "E:\\programming\\my_project\\warotrans-system\\samples\\physical-e2e\\proposed-src-dst.png"
+  }
+}

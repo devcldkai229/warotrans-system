@@ -88,6 +88,7 @@ KEEP_OUT
 SPEED
 NO_STOP
 SINGLE_OCCUPANCY
+JUNCTION
 ```
 
 Zone columns:
@@ -108,6 +109,7 @@ Typed common fields stay on columns; `policy` only holds type-specific extras.
 | `SPEED` | Capacity ≥ 1; MaxSpeed required (m/s) |
 | `NO_STOP` | empty/null policy OK; Capacity ≥ 1 |
 | `SINGLE_OCCUPANCY` | Capacity must be 1; MaxSpeed optional |
+| `JUNCTION` | Capacity must be 1; MaxSpeed optional; free movement inside to transition toward the next point |
 
 Do not invent ZoneType values beyond the enum above.
 

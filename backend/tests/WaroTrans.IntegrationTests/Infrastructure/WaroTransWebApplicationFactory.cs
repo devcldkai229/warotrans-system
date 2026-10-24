@@ -50,6 +50,8 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
                 sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
             services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotTeleopPublisher>(
                 sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
+            services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotInteractionPublisher>(
+                sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
         });
     }
 }

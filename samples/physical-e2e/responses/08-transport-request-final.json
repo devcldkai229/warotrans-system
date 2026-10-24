@@ -1,0 +1,40 @@
+﻿{
+    "id":  "e709bf33-2261-4b55-ae57-616dc6aaa422",
+    "requestCode":  "REQ-20261021-000001",
+    "status":  "COMPLETED",
+    "warehouseId":  "44444444-4444-4444-4444-444444444444",
+    "mapVersionId":  "959e46d1-7212-4bce-9976-ed522c54ed8c",
+    "workflowId":  "2e284570-a1e4-41d2-9cd0-19cbbf811b0b",
+    "planSchemaVersion":  1,
+    "requestedBy":  "a0000000-0000-4000-8000-000000000002",
+    "note":  "Physical E2E",
+    "workflowInputs":  {
+
+                       },
+    "submittedAt":  "2026-10-21T07:09:48.39942+00:00",
+    "queuedAt":  "2026-10-21T07:10:06.062807+00:00",
+    "completedAt":  "2026-10-21T07:16:28.158203+00:00",
+    "failureCode":  null,
+    "failureMessage":  null,
+    "details":  [
+                    {
+                        "id":  "fd128837-9445-4a45-a1f8-2d4144ef64a3",
+                        "sequenceNo":  1,
+                        "containerId":  "e7000000-0000-4000-8000-000000000007",
+                        "containerBarcode":  "CTN-REAL-000001",
+                        "sourceStorageLocationId":  null,
+                        "sourceStorageLocationCode":  null,
+                        "sourceEndpointId":  "182e90a6-3435-4969-8835-d6f861257e49",
+                        "sourceEndpointCode":  "EP-PHYSICAL-SRC",
+                        "sourceEndpointName":  "Physical SRC",
+                        "sourceLevelNo":  null,
+                        "destinationStorageLocationId":  null,
+                        "destinationStorageLocationCode":  null,
+                        "destinationEndpointId":  "d889c11f-4d74-4358-8442-55f2bc88cde5",
+                        "destinationEndpointCode":  "EP-PHYSICAL-DST",
+                        "destinationEndpointName":  "Physical DST",
+                        "destinationLevelNo":  null,
+                        "status":  "COMPLETED"
+                    }
+                ]
+}

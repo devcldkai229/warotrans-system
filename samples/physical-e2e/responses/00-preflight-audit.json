@@ -1,0 +1,65 @@
+﻿{
+    "workflowCode":  "INBOUND_PUTAWAY",
+    "robotOnline":  true,
+    "hasCheckBattery":  false,
+    "workflowId":  "2e284570-a1e4-41d2-9cd0-19cbbf811b0b",
+    "poseNearSrc":  true,
+    "steps":  [
+                  {
+                      "task":  "RECEIVE",
+                      "step":  "CHECK_ROBOT_READY",
+                      "type":  "CHECK",
+                      "op":  "ROBOT_READY"
+                  },
+                  {
+                      "task":  "RECEIVE",
+                      "step":  "CHECK_BATTERY",
+                      "type":  "CHECK",
+                      "op":  "BATTERY_MIN"
+                  },
+                  {
+                      "task":  "RECEIVE",
+                      "step":  "CHECK_REQUEST_ACTIVE",
+                      "type":  "CHECK",
+                      "op":  "REQUEST_ACTIVE"
+                  },
+                  {
+                      "task":  "RECEIVE",
+                      "step":  "CHECK_DOCK_AVAILABLE",
+                      "type":  "CHECK",
+                      "op":  "ENDPOINT_AVAILABLE"
+                  },
+                  {
+                      "task":  "RECEIVE",
+                      "step":  "MOVE_TO_DOCK",
+                      "type":  "MOVE",
+                      "op":  "PICKUP"
+                  },
+                  {
+                      "task":  "RECEIVE",
+                      "step":  "RECEIVE_CONFIRM",
+                      "type":  "HUMAN_INTERACTION",
+                      "op":  "PICKUP_CONFIRM"
+                  },
+                  {
+                      "task":  "PUTAWAY",
+                      "step":  "CHECK_RACK_AVAILABLE",
+                      "type":  "CHECK",
+                      "op":  "ENDPOINT_AVAILABLE"
+                  },
+                  {
+                      "task":  "PUTAWAY",
+                      "step":  "MOVE_TO_RACK",
+                      "type":  "MOVE",
+                      "op":  "DROPOFF"
+                  },
+                  {
+                      "task":  "PUTAWAY",
+                      "step":  "PUTAWAY_CONFIRM",
+                      "type":  "HUMAN_INTERACTION",
+                      "op":  "DROPOFF_CONFIRM"
+                  }
+              ],
+    "note":  "BATTERY_MIN present; gateway simulated_battery_percent=85",
+    "batterySimulated":  85
+}

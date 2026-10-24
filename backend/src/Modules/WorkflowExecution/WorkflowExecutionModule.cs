@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
+using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.ConfirmJobStep;
 using WaroTrans.WorkflowExecution.Features.CreateWorkflow;
@@ -61,6 +62,8 @@ public static class WorkflowExecutionModule
         services.AddScoped<ConfirmJobStepHandler>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
+        services.AddScoped<IIntegrationEventHandler<RobotInteractionConfirmed>, RobotInteractionConfirmedHandler>();
+        services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, RobotConnectivityRearmHandler>();
 
         return services;
     }

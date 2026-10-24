@@ -100,7 +100,7 @@ export type WorkflowStatus = 'DRAFT' | 'PUBLISHED'
 
 export type MapStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 
-export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY'
+export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY' | 'JUNCTION'
 
 export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK'
 

@@ -20,12 +20,14 @@ namespace WaroTrans.WorkflowExecution.Execution;
 ///   CHECK              evaluated immediately (Fleet / Navigation / Transportation contracts)
 ///   MOVE               NAVIGATE_TO_POSE through Fleet → step EXECUTING; finished by the robot RESULT
 ///                      (RobotCommandLifecycleJobStepHandler → AdvanceAsync)
-///   HUMAN_INTERACTION  step WAITING; finished by ConfirmHumanStepAsync (Staff API)
+///   HUMAN_INTERACTION  step WAITING; finished by ConfirmHumanStepAsync (Staff App or robot button)
 ///   WAIT               not supported in V1 → step FAILED
 ///
 /// The engine is event driven: it advances until it reaches a step that waits for something
 /// external, then returns. It never assigns robots itself except in StartAsync.
 /// JSON columns have no EF value comparer, so dictionaries are always replaced, never mutated.
+/// After a PICKUP/DROPOFF WAITING step is committed, the engine arms the assigned robot via
+/// <see cref="IFleetModule.RequestHumanInteractionAsync"/>.
 /// </summary>
 public sealed class JobExecutionEngine(
     WorkflowExecutionDbContext db,
@@ -131,6 +133,8 @@ public sealed class JobExecutionEngine(
             await SaveAndPublishAsync(cancellationToken);
             if (!finished)
             {
+                // Arm only after commit so a button press cannot race a not-yet-persisted WAITING step.
+                await TryArmHumanInteractionAsync(job, step, workflowSteps[step.WorkflowStepId], cancellationToken);
                 return;
             }
 
@@ -149,14 +153,13 @@ public sealed class JobExecutionEngine(
     // ------------------------------------------------------------------ human confirmation
 
     /// <summary>
-    /// Staff confirms a waiting HUMAN_INTERACTION step. For PICKUP/DROPOFF the scanned container must be the
-    /// container of that step (V1 validates container identity, not quantities).
+    /// Confirms a waiting HUMAN_INTERACTION step (Staff App or robot button).
+    /// For PICKUP/DROPOFF the container must match ResolvedInputs (V1: identity, not quantities).
     /// </summary>
     public async Task<JobStep> ConfirmHumanStepAsync(
         Guid jobStepId,
         Guid? containerId,
-        Guid confirmedBy,
-        string? note,
+        HumanConfirmationSource source,
         CancellationToken cancellationToken = default)
     {
         var stepRef = await db.JobSteps.AsNoTracking()
@@ -182,7 +185,20 @@ public sealed class JobExecutionEngine(
                 "job_step_not_waiting");
         }
 
+        if (source.Channel == ConfirmationSource.STAFF_APP && source.UserId is null)
+        {
+            throw new AppException("Staff confirmation requires an account id.", 401, "unauthenticated");
+        }
+
+        if (source.Channel == ConfirmationSource.ROBOT_BUTTON && (source.RobotId is null || source.MessageId is null))
+        {
+            throw new DomainValidationException(
+                "Robot button confirmation requires robotId and messageId.",
+                "interaction_source_incomplete");
+        }
+
         var now = DateTimeOffset.UtcNow;
+        var note = source.Note;
         var handoverType = operation switch
         {
             nameof(HumanActionCode.PICKUP_CONFIRM) => HandoverType.PICKUP,
@@ -205,7 +221,10 @@ public sealed class JobExecutionEngine(
                 Id = Guid.NewGuid(),
                 JobStepId = step.Id,
                 ContainerId = expected,
-                ConfirmedBy = confirmedBy,
+                ConfirmedBy = source.UserId,
+                ConfirmationSource = source.Channel,
+                ConfirmedByRobotId = source.RobotId,
+                SourceMessageId = source.MessageId,
                 HandoverType = type,
                 ConfirmedAt = now,
                 Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
@@ -222,7 +241,13 @@ public sealed class JobExecutionEngine(
         step.OutputValues = new Dictionary<string, JsonElement>
         {
             ["confirmed"] = JsonSerializer.SerializeToElement(true),
-            ["confirmedBy"] = JsonSerializer.SerializeToElement(confirmedBy),
+            ["confirmedBy"] = source.UserId is { } uid
+                ? JsonSerializer.SerializeToElement(uid)
+                : JsonSerializer.SerializeToElement((object?)null),
+            ["confirmationSource"] = JsonSerializer.SerializeToElement(source.Channel.ToString()),
+            ["confirmedByRobotId"] = source.RobotId is { } rid
+                ? JsonSerializer.SerializeToElement(rid)
+                : JsonSerializer.SerializeToElement((object?)null),
             ["confirmedAt"] = JsonSerializer.SerializeToElement(now),
             ["note"] = JsonSerializer.SerializeToElement(note ?? string.Empty)
         };
@@ -232,6 +257,61 @@ public sealed class JobExecutionEngine(
 
         await AdvanceAsync(job.Id, cancellationToken);
         return step;
+    }
+
+    /// <summary>
+    /// Publishes interaction_request for a WAITING PICKUP/DROPOFF step on the assigned robot.
+    /// </summary>
+    public async Task TryArmHumanInteractionAsync(
+        Job job,
+        JobStep step,
+        WorkflowStep workflowStep,
+        CancellationToken cancellationToken = default)
+    {
+        if (step.Status != JobStepStatus.WAITING || step.StepType != StepType.HUMAN_INTERACTION)
+        {
+            return;
+        }
+
+        var operation = workflowStep.Config.OperationCode;
+        if (operation is not (nameof(HumanActionCode.PICKUP_CONFIRM) or nameof(HumanActionCode.DROPOFF_CONFIRM)))
+        {
+            return;
+        }
+
+        var robotId = AssignedRobot(job);
+        if (robotId is null)
+        {
+            logger.LogWarning("Job {JobNo} WAITING handover but has no assignedRobotId; cannot arm button", job.JobNo);
+            return;
+        }
+
+        if (!step.ResolvedInputs.TryGetValue("containerId", out var containerEl)
+            || !step.ResolvedInputs.TryGetValue("endpointId", out var endpointEl))
+        {
+            logger.LogWarning(
+                "Job {JobNo} step {StepKey} missing containerId/endpointId; cannot arm button",
+                job.JobNo,
+                workflowStep.StepKey);
+            return;
+        }
+
+        try
+        {
+            await fleet.RequestHumanInteractionAsync(
+                robotId.Value,
+                job.Id,
+                step.Id,
+                operation,
+                containerEl.GetGuid(),
+                endpointEl.GetGuid(),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Arming failure must not fail the Job; Staff App can still confirm, and reconnect re-arms.
+            logger.LogError(ex, "Failed to arm HUMAN_INTERACTION on robot for Job {JobNo} step {StepKey}", job.JobNo, workflowStep.StepKey);
+        }
     }
 
     // ------------------------------------------------------------------ step execution
@@ -454,7 +534,8 @@ public sealed class JobExecutionEngine(
 
     private static void CompleteTaskIfDone(JobTask task)
     {
-        if (task.Status != JobTaskStatus.COMPLETED && task.JobSteps.All(s => s.Status == JobStepStatus.COMPLETED))
+        var allDone = task.JobSteps.All(s => s.Status == JobStepStatus.COMPLETED);
+        if (task.Status != JobTaskStatus.COMPLETED && allDone)
         {
             task.Status = JobTaskStatus.COMPLETED;
             task.CompletedAt = DateTimeOffset.UtcNow;

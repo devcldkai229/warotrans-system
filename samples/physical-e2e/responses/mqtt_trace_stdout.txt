@@ -1,0 +1,31 @@
+subscribed warotrans/v1/robots/RBT-001/# on 127.0.0.1:1883
+[2026-10-21T07:10:06.267632+00:00] command: {"schemaVersion": 1, "messageId": "bfe6b709-972b-462b-852c-b3b1d8a6b8ea", "commandId": "6dcdd6c8-8a7e-4813-a64a-31c476c623fb", "robotCode": "RBT-001", "type": "NAVIGATE_TO_POSE", "issuedAt": "2026-10-21T07:10:06.259187+00:00", "jobAssignmen
+[2026-10-21T07:10:06.320443+00:00] command_ack: {"schemaVersion": 1, "messageId": "59005337-50a0-4812-9b45-10c52a141d2d", "commandId": "6dcdd6c8-8a7e-4813-a64a-31c476c623fb", "robotCode": "RBT-001", "accepted": true, "reasonCode": null, "reasonMessage": null, "jobAssignmentId": "2d30fcee
+[2026-10-21T07:10:06.359939+00:00] command_result: {"schemaVersion": 1, "messageId": "b597527b-77ee-48a2-92ff-6dc8977efedc", "commandId": "6dcdd6c8-8a7e-4813-a64a-31c476c623fb", "robotCode": "RBT-001", "outcome": "SUCCEEDED", "errorCode": null, "errorMessage": null, "jobAssignmentId": "2d30
+[2026-10-21T07:10:06.400200+00:00] interaction_request: {"schemaVersion": 1, "messageId": "57dc6575-079d-4a0f-b8c7-4d1e28a68920", "robotCode": "RBT-001", "jobId": "39155e08-62db-4f80-a482-a5fa55a30a36", "jobStepId": "a4057de7-fdc2-44ed-8f43-342f3c4d8976", "interactionType": "PICKUP_CONFIRM", "co
+
+*** ROBOT ARMED — nhấn nút BCM12 1 lần khi sẵn sàng ***
+
+[2026-10-21T07:10:36.252109+00:00] interaction_confirm: {"schemaVersion": 1, "messageId": "98aab601-f37a-43ec-96e3-c8ef324f2405", "robotCode": "RBT-001", "bootId": "7b8ad237-5522-47a7-9031-df33bb04431b", "sequence": 1, "sentAt": "2026-10-21T07:10:35.709Z", "jobId": "39155e08-62db-4f80-a482-a5fa5
+
+*** ĐÃ NHẬN TÍN HIỆU NÚT (interaction_confirm) messageId=98aab601-f37a-43ec-96e3-c8ef324f2405 ***
+
+[2026-10-21T07:10:36.359188+00:00] command: {"schemaVersion": 1, "messageId": "907a0e27-7bd2-46bc-bd5a-e5272b0c4281", "commandId": "0ddc5c98-771c-47a0-b0c0-20a5672230ab", "robotCode": "RBT-001", "type": "NAVIGATE_TO_POSE", "issuedAt": "2026-10-21T07:10:36.3575556+00:00", "jobAssignme
+[2026-10-21T07:10:36.364380+00:00] interaction_result: {"schemaVersion": 1, "messageId": "495d7f7c-ac50-4034-a4f9-ca6b0809bf20", "robotCode": "RBT-001", "jobStepId": "a4057de7-fdc2-44ed-8f43-342f3c4d8976", "confirmMessageId": "98aab601-f37a-43ec-96e3-c8ef324f2405", "accepted": true, "processedA
+
+*** interaction_result status=None ***
+
+[2026-10-21T07:10:36.419233+00:00] command_ack: {"schemaVersion": 1, "messageId": "946d337d-247f-4162-a659-725debf7b32c", "commandId": "0ddc5c98-771c-47a0-b0c0-20a5672230ab", "robotCode": "RBT-001", "accepted": true, "reasonCode": null, "reasonMessage": null, "jobAssignmentId": "04c77688
+[2026-10-21T07:10:51.801331+00:00] command_result: {"schemaVersion": 1, "messageId": "c6f82e7c-0987-43b3-a13c-fe835b85179c", "commandId": "0ddc5c98-771c-47a0-b0c0-20a5672230ab", "robotCode": "RBT-001", "outcome": "SUCCEEDED", "errorCode": null, "errorMessage": null, "jobAssignmentId": "04c7
+[2026-10-21T07:10:51.815856+00:00] interaction_request: {"schemaVersion": 1, "messageId": "5648a2ee-0b54-4e95-8903-af06cb7a7ca0", "robotCode": "RBT-001", "jobId": "39155e08-62db-4f80-a482-a5fa55a30a36", "jobStepId": "5b318613-e265-4ce1-b50c-0aa564189e62", "interactionType": "DROPOFF_CONFIRM", "c
+
+*** ROBOT ARMED — nhấn nút BCM12 1 lần khi sẵn sàng ***
+
+[2026-10-21T07:16:28.138395+00:00] interaction_confirm: {"schemaVersion": 1, "messageId": "443efd5f-59b6-4e02-ac0d-4d6ea4605634", "robotCode": "RBT-001", "bootId": "7b8ad237-5522-47a7-9031-df33bb04431b", "sequence": 2, "sentAt": "2026-10-21T07:16:27.599Z", "jobId": "39155e08-62db-4f80-a482-a5fa5
+
+*** ĐÃ NHẬN TÍN HIỆU NÚT (interaction_confirm) messageId=443efd5f-59b6-4e02-ac0d-4d6ea4605634 ***
+
+[2026-10-21T07:16:28.168799+00:00] interaction_result: {"schemaVersion": 1, "messageId": "562d0e01-2658-46d1-8b77-581243f4dfa6", "robotCode": "RBT-001", "jobStepId": "5b318613-e265-4ce1-b50c-0aa564189e62", "confirmMessageId": "443efd5f-59b6-4e02-ac0d-4d6ea4605634", "accepted": true, "processedA
+
+*** interaction_result status=None ***
+

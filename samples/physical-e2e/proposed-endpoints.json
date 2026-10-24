@@ -1,0 +1,40 @@
+{
+  "map": "warotrans_map2",
+  "resolution": 0.05,
+  "origin": [
+    -0.388,
+    -1.64
+  ],
+  "size_px": [
+    102,
+    41
+  ],
+  "src": {
+    "name": "SRC",
+    "endpointType": "INBOUND",
+    "x": 0.512,
+    "y": -0.79,
+    "yaw": -0.028,
+    "px": [
+      18,
+      23
+    ],
+    "clearance_m": 0.776,
+    "color": "green"
+  },
+  "dst": {
+    "name": "DST",
+    "endpointType": "STORAGE",
+    "x": 2.312,
+    "y": -0.84,
+    "yaw": -0.028,
+    "px": [
+      54,
+      24
+    ],
+    "clearance_m": 0.585,
+    "color": "red"
+  },
+  "distance_m": 1.801,
+  "png": "E:\\programming\\my_project\\warotrans-system\\samples\\physical-e2e\\proposed-src-dst.png"
+}

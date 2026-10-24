@@ -13,6 +13,10 @@ public sealed class HandoverConfirmationConfiguration : IEntityTypeConfiguration
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.HandoverType).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder.Property(x => x.ConfirmationSource).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(x => x.ConfirmedBy).IsRequired(false);
+        builder.Property(x => x.ConfirmedByRobotId).IsRequired(false);
+        builder.Property(x => x.SourceMessageId).IsRequired(false);
         builder.Property(x => x.Note).HasMaxLength(500);
 
         builder.Property(x => x.Evidence)
@@ -24,5 +28,8 @@ public sealed class HandoverConfirmationConfiguration : IEntityTypeConfiguration
                     : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
 
         builder.HasIndex(x => x.JobStepId).IsUnique();
+        builder.HasIndex(x => x.SourceMessageId)
+            .IsUnique()
+            .HasFilter("\"source_message_id\" IS NOT NULL");
     }
 }

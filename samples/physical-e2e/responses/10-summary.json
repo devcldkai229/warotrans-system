@@ -1,0 +1,107 @@
+{
+  "overall": "PASS",
+  "generatedAt": "2026-10-21T07:18:16.249894+00:00",
+  "jobId": "39155e08-62db-4f80-a482-a5fa55a30a36",
+  "jobNo": "JOB-20261021-000001",
+  "jobStatus": "COMPLETED",
+  "transportRequestStatus": "COMPLETED",
+  "checks": {
+    "transportRequestToJob": true,
+    "robotAssigned": true,
+    "realtimeTelemetryOnMap": true,
+    "moveToSourceCommand": true,
+    "moveToSourceSucceeded": true,
+    "pickupInteractionRequest": true,
+    "pickupButtonConfirm": true,
+    "pickupAccepted": true,
+    "moveToDestinationSucceeded": true,
+    "dropoffButtonConfirm": true,
+    "dropoffAccepted": true,
+    "handoverRowsRobotButton": true,
+    "jobCompleted": true
+  },
+  "buttonEvents": [
+    {
+      "type": "PICKUP_CONFIRM",
+      "messageId": "98aab601-f37a-43ec-96e3-c8ef324f2405",
+      "ts": "2026-10-21T07:10:36.252109+00:00",
+      "source": "ROBOT_BUTTON"
+    },
+    {
+      "type": "DROPOFF_CONFIRM",
+      "messageId": "443efd5f-59b6-4e02-ac0d-4d6ea4605634",
+      "ts": "2026-10-21T07:16:28.138395+00:00",
+      "source": "ROBOT_BUTTON"
+    }
+  ],
+  "navResults": [
+    {
+      "commandId": "6dcdd6c8-8a7e-4813-a64a-31c476c623fb",
+      "jobStepId": "fc3f9d16-8d5e-45e1-a016-28275cf43720",
+      "outcome": "SUCCEEDED",
+      "elapsedSec": 0.076,
+      "ts": "2026-10-21T07:10:06.359939+00:00"
+    },
+    {
+      "commandId": "0ddc5c98-771c-47a0-b0c0-20a5672230ab",
+      "jobStepId": "59f729f4-6946-4df8-bceb-42d723b768b0",
+      "outcome": "SUCCEEDED",
+      "elapsedSec": 15.426,
+      "ts": "2026-10-21T07:10:51.801331+00:00"
+    }
+  ],
+  "handoverConfirmations": [
+    {
+      "id": "3ce72784-b507-4d50-ac10-e5b561300638",
+      "jobId": "39155e08-62db-4f80-a482-a5fa55a30a36",
+      "jobStepId": "a4057de7-fdc2-44ed-8f43-342f3c4d8976",
+      "containerId": "e7000000-0000-4000-8000-000000000007",
+      "handoverType": "PICKUP",
+      "confirmedBy": null,
+      "confirmationSource": "ROBOT_BUTTON",
+      "confirmedByRobotId": "97c93189-ae03-4b27-b846-760f8d18d27c",
+      "sourceMessageId": "98aab601-f37a-43ec-96e3-c8ef324f2405",
+      "confirmedAt": "2026-10-21T07:10:36.314973+00:00",
+      "note": null
+    },
+    {
+      "id": "033061a5-acba-46b7-90cc-9166da0110a4",
+      "jobId": "39155e08-62db-4f80-a482-a5fa55a30a36",
+      "jobStepId": "5b318613-e265-4ce1-b50c-0aa564189e62",
+      "containerId": "e7000000-0000-4000-8000-000000000007",
+      "handoverType": "DROPOFF",
+      "confirmedBy": null,
+      "confirmationSource": "ROBOT_BUTTON",
+      "confirmedByRobotId": "97c93189-ae03-4b27-b846-760f8d18d27c",
+      "sourceMessageId": "443efd5f-59b6-4e02-ac0d-4d6ea4605634",
+      "confirmedAt": "2026-10-21T07:16:28.150949+00:00",
+      "note": null
+    }
+  ],
+  "endpoints": {
+    "SRC": {
+      "x": 0.512,
+      "y": -0.79
+    },
+    "DST": {
+      "x": 2.312,
+      "y": -0.84
+    }
+  },
+  "mqttByKind": {
+    "telemetry": 2762,
+    "heartbeat": 552,
+    "command": 2,
+    "command_ack": 2,
+    "command_result": 2,
+    "interaction_request": 2,
+    "interaction_confirm": 2,
+    "interaction_result": 2
+  },
+  "notes": [
+    "MOVE to SRC SUCCEEDED in ~0.08s (robot already near SRC).",
+    "MOVE to DST SUCCEEDED in ~15.4s; telemetry shows path progress.",
+    "Both HUMAN_INTERACTION confirms via ROBOT_BUTTON (BCM12).",
+    "Battery CHECK passed via simulated_battery_percent=85 on gateway."
+  ]
+}

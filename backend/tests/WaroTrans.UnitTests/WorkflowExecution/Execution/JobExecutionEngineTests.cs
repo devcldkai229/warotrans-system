@@ -121,20 +121,20 @@ public sealed class JobExecutionEngineTests
 
         // Robot arrives at A → two PICKUP_CONFIRM (C1, C2) wait for Staff.
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
-        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, _staff, "scan C1");
-        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, _staff, null);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff, "scan C1"));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
 
         // Both on board → robot sent to D.
         Assert.Equal(2, _fleet.Commands.Count);
         Assert.Equal(9.0, _fleet.Commands[^1].X);
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
-        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, _staff, null);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
 
         // → E
         Assert.Equal(3, _fleet.Commands.Count);
         Assert.Equal(9.5, _fleet.Commands[^1].X);
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
-        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, _staff, null);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
 
         var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
         Assert.Equal(JobStatus.COMPLETED, job.Status);
@@ -163,7 +163,7 @@ public sealed class JobExecutionEngineTests
         var waiting = await CurrentStepIdAsync(jobId);
 
         var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
-            Engine().ConfirmHumanStepAsync(waiting, C2, _staff, null));
+            Engine().ConfirmHumanStepAsync(waiting, C2, HumanConfirmationSource.StaffApp(_staff)));
 
         Assert.Equal("handover_container_mismatch", ex.Code);
         Assert.Equal(JobStepStatus.WAITING, (await _db.JobSteps.FindAsync(waiting))!.Status);
@@ -177,7 +177,7 @@ public sealed class JobExecutionEngineTests
 
         var current = await CurrentStepIdAsync(jobId);
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
-            Engine().ConfirmHumanStepAsync(current, C1, _staff, null));
+            Engine().ConfirmHumanStepAsync(current, C1, HumanConfirmationSource.StaffApp(_staff)));
 
         Assert.Equal("job_step_not_waiting", ex.Code);
     }
@@ -251,6 +251,8 @@ public sealed class JobExecutionEngineTests
     {
         public Dictionary<Guid, RobotSnapshot> Robots { get; } = [];
         public List<(Guid RobotId, double X, double Y, Guid JobStepId)> Commands { get; } = [];
+        public List<(Guid RobotId, Guid JobStepId, string InteractionType, Guid ContainerId, Guid EndpointId)> InteractionRequests { get; } = [];
+        public List<(Guid RobotId, Guid JobStepId, Guid ConfirmMessageId, bool Accepted, string? ReasonCode)> InteractionResults { get; } = [];
         public Guid RobotId { get; private set; }
         public decimal Battery { get; set; } = 90m;
 
@@ -258,7 +260,7 @@ public sealed class JobExecutionEngineTests
         {
             var id = Guid.NewGuid();
             Robots[id] = new RobotSnapshot(id, "RBT-SIM-01", Guid.NewGuid(), mapVersionId, RobotStatus.AVAILABLE, true, true,
-                LocalizationStatus.LOCALIZED, NavigationStatus.IDLE, 0m, DateTimeOffset.UtcNow, 0, 0, 0);
+                LocalizationStatus.LOCALIZED, NavigationStatus.IDLE, 90m, DateTimeOffset.UtcNow, 0, 0, 0);
             if (RobotId == Guid.Empty)
             {
                 RobotId = id;
@@ -277,6 +279,31 @@ public sealed class JobExecutionEngineTests
         {
             Commands.Add((robotId, x, y, jobStepId));
             return Task.FromResult(Guid.NewGuid());
+        }
+
+        public Task RequestHumanInteractionAsync(
+            Guid robotId,
+            Guid jobId,
+            Guid jobStepId,
+            string interactionType,
+            Guid containerId,
+            Guid endpointId,
+            CancellationToken cancellationToken = default)
+        {
+            InteractionRequests.Add((robotId, jobStepId, interactionType, containerId, endpointId));
+            return Task.CompletedTask;
+        }
+
+        public Task PublishInteractionResultAsync(
+            Guid robotId,
+            Guid jobStepId,
+            Guid confirmMessageId,
+            bool accepted,
+            string? reasonCode,
+            CancellationToken cancellationToken = default)
+        {
+            InteractionResults.Add((robotId, jobStepId, confirmMessageId, accepted, reasonCode));
+            return Task.CompletedTask;
         }
     }
 

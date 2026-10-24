@@ -10,9 +10,11 @@ using WaroTrans.BuildingBlocks.Options;
 namespace WaroTrans.BuildingBlocks.Mqtt;
 
 /// <summary>
-/// Publishes robot commands over MQTT (QoS1) and manual drive setpoints (QoS0) on one reconnecting client.
+/// Publishes robot commands (QoS1), teleop (QoS0), and HUMAN_INTERACTION arming/result (QoS1)
+/// on one reconnecting client.
 /// </summary>
-public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IAsyncDisposable
+public sealed class MqttRobotCommandPublisher
+    : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IMqttRobotInteractionPublisher, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -85,6 +87,67 @@ public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IMqt
                 message.RobotCode,
                 message.Linear,
                 message.Angular);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task PublishRequestAsync(
+        RobotInteractionRequestMessage message,
+        CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.InteractionRequest(_options.Value.TopicPrefix, message.RobotCode);
+        var json = JsonSerializer.Serialize(message, JsonOptions);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .Build();
+
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Published MQTT interaction_request {InteractionType} jobStepId={JobStepId} robot={RobotCode}",
+                message.InteractionType,
+                message.JobStepId,
+                message.RobotCode);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task PublishResultAsync(
+        RobotInteractionResultMessage message,
+        CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.InteractionResult(_options.Value.TopicPrefix, message.RobotCode);
+        var json = JsonSerializer.Serialize(message, JsonOptions);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .Build();
+
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Published MQTT interaction_result accepted={Accepted} reason={ReasonCode} jobStepId={JobStepId} robot={RobotCode}",
+                message.Accepted,
+                message.ReasonCode,
+                message.JobStepId,
+                message.RobotCode);
         }
         finally
         {

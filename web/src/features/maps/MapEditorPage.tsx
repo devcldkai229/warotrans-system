@@ -469,7 +469,7 @@ export function MapEditorPage() {
         name,
         zoneType: type,
         geometry: pointsToPolygon(points),
-        capacity: type === 'SINGLE_OCCUPANCY' ? 1 : 2,
+        capacity: type === 'SINGLE_OCCUPANCY' || type === 'JUNCTION' ? 1 : 2,
         maxSpeed: type === 'SPEED' ? 0.5 : null,
         isActive: true,
       })
@@ -1027,7 +1027,7 @@ export function MapEditorPage() {
                   setZoneDraft({
                     ...zoneDraft,
                     zoneType: next,
-                    capacity: next === 'SINGLE_OCCUPANCY' ? 1 : zoneDraft.capacity,
+                    capacity: next === 'SINGLE_OCCUPANCY' || next === 'JUNCTION' ? 1 : zoneDraft.capacity,
                     maxSpeed: next === 'SPEED' && zoneDraft.maxSpeed === '' ? '0.5' : zoneDraft.maxSpeed,
                   })
                 }}
@@ -1042,8 +1042,8 @@ export function MapEditorPage() {
             {zoneDraft.zoneType === 'SPEED' ? (
               <p className="text-xs text-amber-ink">SPEED requires MaxSpeed (m/s).</p>
             ) : null}
-            {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' ? (
-              <p className="text-xs text-amber-ink">SINGLE_OCCUPANCY requires Capacity = 1.</p>
+            {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' || zoneDraft.zoneType === 'JUNCTION' ? (
+              <p className="text-xs text-amber-ink">{zoneDraft.zoneType} requires Capacity = 1.</p>
             ) : null}
             <FieldRow>
               <Field label="Capacity">
