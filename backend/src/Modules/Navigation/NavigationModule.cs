@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Features.ArchiveMapVersion;
+using WaroTrans.Navigation.Features.CloneMapVersion;
 using WaroTrans.Navigation.Features.CreateEdge;
 using WaroTrans.Navigation.Features.CreateEndpoint;
 using WaroTrans.Navigation.Features.CreateMapVersion;
@@ -61,6 +62,7 @@ public static class NavigationModule
         services.AddScoped<UpdateZoneHandler>();
         services.AddScoped<DeleteZoneHandler>();
         services.AddScoped<ImportMapVersionHandler>();
+        services.AddScoped<CloneMapVersionHandler>();
         RegisterMapAssetStore(services, configuration);
 
         services.AddScoped<INavigationModule, NavigationModuleApi>();
@@ -96,6 +98,7 @@ public static class NavigationModule
         PublishMapVersionEndpoint.Map(group);
         ArchiveMapVersionEndpoint.Map(group);
         ImportMapVersionEndpoint.Map(group);
+        CloneMapVersionEndpoint.Map(group);
         CreateEndpointEndpoint.Map(group);
         GetEndpointEndpoint.Map(group);
         UpdateEndpointEndpoint.Map(group);

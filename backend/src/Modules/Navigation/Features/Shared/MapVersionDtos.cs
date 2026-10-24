@@ -25,7 +25,8 @@ public sealed record MapVersionResponse(
     double FreeThreshold,
     string? ContentHash,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? PublishedAt)
+    DateTimeOffset? PublishedAt,
+    Guid? SourceMapVersionId = null)
 {
     public static MapVersionResponse From(MapVersion m) => new(
         m.Id,
@@ -49,7 +50,8 @@ public sealed record MapVersionResponse(
         m.FreeThreshold,
         m.ContentHash,
         m.CreatedAt,
-        m.PublishedAt);
+        m.PublishedAt,
+        m.SourceMapVersionId);
 }
 
 public sealed record MapVersionDetailResponse(
@@ -77,7 +79,9 @@ public sealed record MapVersionDetailResponse(
     DateTimeOffset? PublishedAt,
     IReadOnlyList<EndpointListItemDto> Endpoints,
     IReadOnlyList<EdgeListItemDto> Edges,
-    IReadOnlyList<ZoneListItemDto> Zones);
+    IReadOnlyList<ZoneListItemDto> Zones,
+    Guid? SourceMapVersionId = null,
+    string? SourceMapVersionCode = null);
 
 public sealed record EndpointListItemDto(
     Guid Id,

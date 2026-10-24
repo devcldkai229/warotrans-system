@@ -33,6 +33,8 @@ export interface MapVersionDto {
   contentHash: string | null
   createdAt: string
   publishedAt: string | null
+  /** Set when this version was cloned from another one (POST /maps/{id}/clone). */
+  sourceMapVersionId?: string | null
 }
 
 export interface EndpointDto {
@@ -79,6 +81,7 @@ export interface MapVersionDetailDto extends MapVersionDto {
   endpoints: EndpointDto[]
   edges: EdgeDto[]
   zones: ZoneDto[]
+  sourceMapVersionCode?: string | null
 }
 
 export function listMapVersionsForWarehouse(warehouseId: string) {
@@ -152,6 +155,17 @@ export function updateMapVersion(
 
 export function publishMapVersion(id: string) {
   return apiRequest<MapVersionDto>(`/api/navigation/maps/${id}/publish`, { method: 'POST' })
+}
+
+/**
+ * Copies a map version (published, archived or draft) into a new editable DRAFT: same image, copies of its
+ * endpoints / zones / edges (new ids, codes from the system generator). Publishing the copy moves storage locations.
+ */
+export function cloneMapVersion(id: string, name?: string) {
+  return apiRequest<MapVersionDto>(`/api/navigation/maps/${id}/clone`, {
+    method: 'POST',
+    body: JSON.stringify({ name: name?.trim() || null }),
+  })
 }
 
 export function archiveMapVersion(id: string) {

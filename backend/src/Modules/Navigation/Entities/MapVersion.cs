@@ -40,6 +40,9 @@ public sealed class MapVersion
 
     public string? ContentHash { get; set; }
 
+    /// <summary>Version this one was cloned from (POST /maps/{id}/clone); null for imported / created maps.</summary>
+    public Guid? SourceMapVersionId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
 }

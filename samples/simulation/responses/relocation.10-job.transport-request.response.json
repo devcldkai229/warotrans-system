@@ -1,0 +1,51 @@
+{
+  "id": "ce12835a-e93b-4715-83dd-6997243b3186",
+  "requestCode": "REQ-20261017-000002",
+  "status": "SUBMITTED",
+  "warehouseId": "33333333-3333-3333-3333-333333333333",
+  "mapVersionId": "31639ef4-35b3-49ff-9255-8f79c3af349a",
+  "workflowId": "15a7f3f5-cdfb-4fc3-a896-37dc1d9d5ccf",
+  "planSchemaVersion": 1,
+  "requestedBy": "a0000000-0000-4000-8000-000000000002",
+  "note": "Simulation demo (relocation): Gazebo robot runs the full workflow",
+  "workflowInputs": {},
+  "submittedAt": "2026-10-17T06:09:32.0219859+00:00",
+  "details": [
+    {
+      "id": "fe801d51-28ae-4d10-a545-7a93a05247e3",
+      "sequenceNo": 1,
+      "containerId": "e7000000-0000-4000-8000-000000000007",
+      "sourceStorageLocationId": "f0000000-0000-4000-8000-000000000001",
+      "sourceEndpointId": "ef799401-db31-4b0d-95e2-00f47e6ad124",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": "f0000000-0000-4000-8000-000000000003",
+      "destinationEndpointId": "63ea01f3-41ac-40f2-ae2e-fa9b2dace47f",
+      "destinationLevelNo": null,
+      "status": "PENDING"
+    },
+    {
+      "id": "22df1ef0-d494-4682-8210-7f4cbb761800",
+      "sequenceNo": 2,
+      "containerId": "e8000000-0000-4000-8000-000000000008",
+      "sourceStorageLocationId": "f0000000-0000-4000-8000-000000000001",
+      "sourceEndpointId": "ef799401-db31-4b0d-95e2-00f47e6ad124",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": "f0000000-0000-4000-8000-000000000003",
+      "destinationEndpointId": "63ea01f3-41ac-40f2-ae2e-fa9b2dace47f",
+      "destinationLevelNo": null,
+      "status": "PENDING"
+    },
+    {
+      "id": "86352012-3e73-48d8-880f-abf85fffb40c",
+      "sequenceNo": 3,
+      "containerId": "e9000000-0000-4000-8000-000000000009",
+      "sourceStorageLocationId": "f0000000-0000-4000-8000-000000000002",
+      "sourceEndpointId": "39866c77-920a-4856-a013-a65d4ac8acda",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": "f0000000-0000-4000-8000-000000000001",
+      "destinationEndpointId": "ef799401-db31-4b0d-95e2-00f47e6ad124",
+      "destinationLevelNo": null,
+      "status": "PENDING"
+    }
+  ]
+}

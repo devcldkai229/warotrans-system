@@ -15,6 +15,7 @@ powershell -ExecutionPolicy Bypass -File samples/simulation/navigate-sim.ps1 -To
 | `run-backend-sim.ps1` | Chạy backend :5090 với `Mqtt__Host=127.0.0.1` (tránh treo 21 s do `localhost` → IPv6) |
 | `seed-sim.ps1` | Warehouse `WH-SIM`, import map sim, 9 endpoint + 5 zone, publish, robot `RBT-SIM-01` → `sim-config.json` |
 | `navigate-sim.ps1 -To X,Y` | `POST /api/fleet/robots/{id}/commands/navigate` tới từng endpoint, theo dõi tới khi `COMPLETED` |
-| `run-job-sim.ps1` | **GĐ 3**: tạo TransportRequest: mặc định `-Scenario inbound` (workflow `INBOUND_PUTAWAY`, CTN-IN-000001..3 IN1→A, IN1→B, IN2→C); `-Scenario relocation` (workflow `INTERNAL_RELOCATION`) → queue → start Job → robot tự chạy, script xác nhận như Staff → Job/Request `COMPLETED` (`-ManualConfirm` để tự xác nhận) |
+| `run-job-sim.ps1` | **GĐ 3**: tạo TransportRequest: mặc định `-Scenario inbound` (workflow `INBOUND_PUTAWAY`, CTN-IN-000001..3 IN1→A, IN1→B, IN2→C); `-Scenario relocation` (workflow `INTERNAL_RELOCATION`, kệ → kệ: CTN-RL-000001..2 A→C, CTN-RL-000003 B→A) → queue → start Job → robot tự chạy, script xác nhận như Staff → Job/Request `COMPLETED` (`-ManualConfirm` để tự xác nhận) |
 
 Giải thích GĐ 3: [docs/simulation/03-job-engine-robot-ao.md](../../docs/simulation/03-job-engine-robot-ao.md).
+Internal relocation (kệ → kệ): [docs/simulation/06-internal-relocation.md](../../docs/simulation/06-internal-relocation.md).

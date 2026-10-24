@@ -18,6 +18,7 @@ using WaroTrans.WorkflowExecution.Features.GetWorkflowRequestInputSchema;
 using WaroTrans.WorkflowExecution.Features.ListJobs;
 using WaroTrans.WorkflowExecution.Features.ListWorkflows;
 using WaroTrans.WorkflowExecution.Features.Shared;
+using WaroTrans.WorkflowExecution.Features.ResumeJob;
 using WaroTrans.WorkflowExecution.Features.StartJob;
 using WaroTrans.WorkflowExecution.Features.PublishWorkflow;
 using WaroTrans.WorkflowExecution.Features.UpdateWorkflow;
@@ -58,6 +59,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<JobExecutionEngine>();
         services.AddScoped<JobQueries>();
         services.AddScoped<StartJobHandler>();
+        services.AddScoped<ResumeJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
@@ -84,6 +86,7 @@ public static class WorkflowExecutionModule
         group.MapListJobs();
         group.MapGetJob();
         group.MapStartJob();
+        group.MapResumeJob();
         group.MapConfirmJobStep();
         
         return endpoints;
