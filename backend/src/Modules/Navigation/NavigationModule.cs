@@ -19,6 +19,7 @@ using WaroTrans.Navigation.Features.GetActiveMapVersion;
 using WaroTrans.Navigation.Features.GetEdge;
 using WaroTrans.Navigation.Features.GetEndpoint;
 using WaroTrans.Navigation.Features.GetMapVersion;
+using WaroTrans.Navigation.Features.GetRouteGraph;
 using WaroTrans.Navigation.Features.GetZone;
 using WaroTrans.Navigation.Features.ImportMapVersion;
 using WaroTrans.Navigation.Features.PublishMapVersion;
@@ -46,6 +47,7 @@ public static class NavigationModule
         services.AddScoped<CreateMapVersionHandler>();
         services.AddScoped<UpdateMapVersionHandler>();
         services.AddScoped<GetMapVersionHandler>();
+        services.AddScoped<GetRouteGraphHandler>();
         services.AddScoped<GetActiveMapVersionHandler>();
         services.AddScoped<PublishMapVersionHandler>();
         services.AddScoped<ArchiveMapVersionHandler>();
@@ -94,6 +96,7 @@ public static class NavigationModule
         CreateMapVersionEndpoint.Map(group);
         UpdateMapVersionEndpoint.Map(group);
         GetMapVersionEndpoint.Map(group);
+        GetRouteGraphEndpoint.Map(group);
         GetActiveMapVersionEndpoint.Map(group);
         PublishMapVersionEndpoint.Map(group);
         ArchiveMapVersionEndpoint.Map(group);
