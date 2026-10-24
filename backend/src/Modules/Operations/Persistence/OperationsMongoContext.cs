@@ -50,6 +50,11 @@ public sealed class OperationsMongoContext
                     .Descending(x => x.CreatedAt)),
             cancellationToken: cancellationToken);
 
+        await Notifications.Indexes.CreateOneAsync(
+            new CreateIndexModel<Notification>(
+                Builders<Notification>.IndexKeys.Ascending(x => x.DedupeKey).Descending(x => x.CreatedAt)),
+            cancellationToken: cancellationToken);
+
         await AuditLogs.Indexes.CreateManyAsync(
             [
                 new CreateIndexModel<AuditLog>(

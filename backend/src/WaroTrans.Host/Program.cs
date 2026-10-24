@@ -12,7 +12,11 @@ using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Fleet;
+using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.Abstractions;
+using WaroTrans.Fleet.IntegrationEvents;
+using WaroTrans.Operations.Contracts;
+using WaroTrans.Transportation.IntegrationEvents;
 using WaroTrans.Host.Extensions;
 using WaroTrans.Host.Hubs;
 using WaroTrans.Host.Realtime;
@@ -111,6 +115,16 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRobotRealtimeNotifier, SignalRRobotRealtimeNotifier>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStatusChanged>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, SignalRJobRealtimeForwarder>();
+builder.Services.AddScoped<IIntegrationEventHandler<NotificationCreated>, SignalRNotificationForwarder>();
+builder.Services.AddScoped<IIntegrationEventHandler<JobStatusChanged>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotBatteryLow>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotErrorReported>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<JobWaitingToStart>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<JobStepWaitingForPerson>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, AdminNotificationProducer>();
 builder.Services.AddOpenApi();
 
 var postgresConnection = builder.Configuration.GetConnectionString("PostgreSQL")

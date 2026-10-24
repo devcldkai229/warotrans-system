@@ -21,6 +21,7 @@ import type {
 import {
   createWorkflow,
   createWorkflowVersion,
+  deleteWorkflow,
   fetchWorkflowMetadata,
   getWorkflow,
   publishWorkflow,
@@ -37,7 +38,6 @@ import {
   emptyVariable,
   emptyWorkflow,
   reorderItem,
-  workflowCodeFromName,
 } from './workflow-defaults'
 import './workflows.css'
 
@@ -170,6 +170,11 @@ function isAutoSyncedOperationField(
   return Boolean(stepTypeMeta?.operationFieldName && stepTypeMeta.operationFieldName === inputKey)
 }
 
+/** How a step is named in a warning: the name the user typed (the key is generated and not shown). */
+function stepLabel(step: { name: string; stepKey: string }) {
+  return step.name || step.stepKey || '?'
+}
+
 /** Lightweight pre-publish checks mirroring metadata + scope rules (backend remains authority). */
 function collectClientWarnings(
   draft: WorkflowUpsert,
@@ -177,7 +182,6 @@ function collectClientWarnings(
 ): string[] {
   const warnings: string[] = []
 
-  if (!draft.code.trim()) warnings.push('Workflow code is required.')
   if (!draft.name.trim()) warnings.push('Workflow name is required.')
   if (draft.tasks.length === 0) warnings.push('Add at least one task before publish.')
 
@@ -202,13 +206,13 @@ function collectClientWarnings(
   for (const task of draft.tasks) {
     for (const step of task.steps) {
       if (!step.operationCode) {
-        warnings.push(`Step '${step.stepKey || step.name || '?'}' has no operation selected.`)
+        warnings.push(`Step '${stepLabel(step)}' has no operation selected.`)
         continue
       }
       const op = findOperation(metadata, step.stepType, step.operationCode)
       if (!op) {
         warnings.push(
-          `Step '${step.stepKey}' operation ${step.stepType}.${step.operationCode} is unknown.`,
+          `Step '${stepLabel(step)}' operation ${step.stepType}.${step.operationCode} is unknown.`,
         )
         continue
       }
@@ -216,7 +220,7 @@ function collectClientWarnings(
       for (const input of op.inputs) {
         const binding = step.inputBindings[input.key]
         if (input.required && !binding) {
-          warnings.push(`Step '${step.stepKey}' missing required binding for '${input.key}'.`)
+          warnings.push(`Step '${stepLabel(step)}' missing required binding for '${input.key}'.`)
           continue
         }
         if (!binding) continue
@@ -225,18 +229,18 @@ function collectClientWarnings(
           const field = metadata.currentMovementFields.find((f) => f.key === binding.sourceReference)
           if (!field) {
             warnings.push(
-              `Step '${step.stepKey}' CURRENT_MOVEMENT path '${binding.sourceReference}' is unknown.`,
+              `Step '${stepLabel(step)}' CURRENT_MOVEMENT path '${binding.sourceReference}' is unknown.`,
             )
           } else if (
             !isMovementFieldAvailable(field, op.executionScope, op.stopActionFilter)
           ) {
             warnings.push(
-              `Step '${step.stepKey}' CURRENT_MOVEMENT '${binding.sourceReference}' is not available at ${op.executionScope}${op.stopActionFilter ? `/${op.stopActionFilter}` : ''}.`,
+              `Step '${stepLabel(step)}' CURRENT_MOVEMENT '${binding.sourceReference}' is not available at ${op.executionScope}${op.stopActionFilter ? `/${op.stopActionFilter}` : ''}.`,
             )
           }
           if (op.executionScope === 'ONCE_PER_JOB') {
             warnings.push(
-              `Step '${step.stepKey}' is ONCE_PER_JOB and cannot use CURRENT_MOVEMENT.`,
+              `Step '${stepLabel(step)}' is ONCE_PER_JOB and cannot use CURRENT_MOVEMENT.`,
             )
           }
         }
@@ -245,14 +249,14 @@ function collectClientWarnings(
           const variable = draft.variables.find((v) => v.key === binding.sourceReference)
           if (!variable) {
             warnings.push(
-              `Step '${step.stepKey}' WORKFLOW_VAR '${binding.sourceReference}' does not exist.`,
+              `Step '${stepLabel(step)}' WORKFLOW_VAR '${binding.sourceReference}' does not exist.`,
             )
           } else if (
             variable.dataType !== input.dataType &&
             !(variable.dataType === 'INTEGER' && input.dataType === 'DECIMAL')
           ) {
             warnings.push(
-              `Step '${step.stepKey}' '${input.key}' type mismatch: variable ${variable.dataType} vs input ${input.dataType}.`,
+              `Step '${stepLabel(step)}' '${input.key}' type mismatch: variable ${variable.dataType} vs input ${input.dataType}.`,
             )
           }
         }
@@ -261,7 +265,7 @@ function collectClientWarnings(
           const value = String(binding.constantValue ?? '')
           if (value && !input.allowedValues.includes(value)) {
             warnings.push(
-              `Step '${step.stepKey}' CONSTANT '${input.key}'="${value}" is not an allowed value.`,
+              `Step '${stepLabel(step)}' CONSTANT '${input.key}'="${value}" is not an allowed value.`,
             )
           }
         }
@@ -270,7 +274,7 @@ function collectClientWarnings(
           const typeMeta = metadata.stepTypes.find((s) => s.stepType === step.stepType)
           // Existence of earlier output is checked loosely; backend validates order.
           if (!binding.sourceReference || !binding.outputKey) {
-            warnings.push(`Step '${step.stepKey}' STEP_OUTPUT for '${input.key}' is incomplete.`)
+            warnings.push(`Step '${stepLabel(step)}' STEP_OUTPUT for '${input.key}' is incomplete.`)
           } else {
             void typeMeta
           }
@@ -282,7 +286,7 @@ function collectClientWarnings(
         const containerBinding = step.inputBindings.containerId
         if (!containerBinding) {
           warnings.push(
-            `CHECK INVENTORY_AVAILABLE ('${step.stepKey}') requires containerId. CURRENT_MOVEMENT is not allowed at ONCE_PER_JOB scope — use WORKFLOW_VAR/CONSTANT/STEP_OUTPUT, or omit this step until backend scope is redesigned.`,
+            `CHECK INVENTORY_AVAILABLE ('${stepLabel(step)}') requires containerId. CURRENT_MOVEMENT is not allowed at ONCE_PER_JOB scope — use WORKFLOW_VAR/CONSTANT/STEP_OUTPUT, or omit this step until backend scope is redesigned.`,
           )
         }
       }
@@ -424,6 +428,23 @@ export function WorkflowEditor({
     },
     onError: (err) => setServerErrors([(err as Error).message]),
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteWorkflow(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      // Not onSaved: the map editor host would reopen the id that was just deleted.
+      if (isPanel) onClose?.()
+      else navigate('/configure/workflows', { replace: true })
+    },
+    onError: (err) => setServerErrors([(err as Error).message]),
+  })
+
+  function runDelete() {
+    const label = `${draft.code} v${detailQuery.data?.versionNo ?? ''}`.trim()
+    const note = status === 'PUBLISHED' ? ' It is published: transport requests can no longer pick it.' : ''
+    if (window.confirm(`Delete workflow ${label}?${note} This cannot be undone.`)) deleteMutation.mutate()
+  }
 
   const metadata = metadataQuery.data
   const task = draft.tasks[selectedTask]
@@ -569,6 +590,12 @@ export function WorkflowEditor({
           New version
         </Button>
       )}
+      {!isNew && (
+        <Button variant="dangerGhost" disabled={deleteMutation.isPending} onClick={runDelete}>
+          <Icon name="trash" size={15} />
+          {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+        </Button>
+      )}
       {isPanel && onClose && (
         <Button variant="surface" onClick={onClose}>
           Done
@@ -689,17 +716,17 @@ export function WorkflowEditor({
               placeholder="e.g. Inbound Putaway"
               onChange={(e) => {
                 const name = e.target.value
-                setDraft({
-                  ...draft,
-                  name,
-                  code: readOnly ? draft.code : workflowCodeFromName(name),
-                })
+                setDraft({ ...draft, name })
               }}
             />
             <span className="muted wf-code-preview">
-              Code:{' '}
-              <code>{draft.code || '—'}</code>
-              {!readOnly ? ' (from name)' : null}
+              {draft.code ? (
+                <>
+                  Code: <code>{draft.code}</code>
+                </>
+              ) : (
+                'The code is generated when you save.'
+              )}
             </span>
           </label>
           <label>
@@ -920,12 +947,9 @@ export function WorkflowEditor({
                     </span>
                     <span className="wf-task-block__title">
                       Task {taskIndex + 1}
-                      {t.taskKey || t.name ? (
+                      {t.name ? (
                         <>
-                          : <strong>{t.name || t.taskKey}</strong>
-                          {t.taskKey && t.name && t.taskKey !== t.name ? (
-                            <span className="muted"> ({t.taskKey})</span>
-                          ) : null}
+                          : <strong>{t.name}</strong>
                         </>
                       ) : null}
                     </span>
@@ -953,13 +977,6 @@ export function WorkflowEditor({
                 {taskOpen && (
                   <div className="wf-task-block__body">
                     <div className="grid-2">
-                      <label>
-                        Task key
-                        <input
-                          value={t.taskKey}
-                          onChange={(e) => updateTask(taskIndex, { taskKey: e.target.value })}
-                        />
-                      </label>
                       <label>
                         Name
                         <input
@@ -1066,7 +1083,7 @@ export function WorkflowEditor({
                                 >
                                   <span className="wf-step-list__index">Step {stepIndex + 1}</span>
                                   <span className="wf-step-list__label">
-                                    {s.stepKey || s.name || 'Untitled step'}
+                                    {s.name || 'Untitled step'}
                                   </span>
                                   <span className="wf-step-list__meta muted">
                                     {s.stepType}
@@ -1095,17 +1112,6 @@ export function WorkflowEditor({
                               {stepOpen && step && (
                                 <div className="step-form">
                                   <div className="grid-2">
-                                    <label>
-                                      Step key
-                                      <input
-                                        value={step.stepKey}
-                                        onChange={(e) =>
-                                          updateStep(taskIndex, stepIndex, {
-                                            stepKey: e.target.value,
-                                          })
-                                        }
-                                      />
-                                    </label>
                                     <label>
                                       Name
                                       <input

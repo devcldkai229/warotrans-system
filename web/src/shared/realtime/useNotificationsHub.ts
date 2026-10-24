@@ -27,9 +27,22 @@ export interface JobUpdatedMessage {
   jobNo?: string
 }
 
+/** A new item for the admin notification bell (pushed to admins only). */
+export interface NotificationCreatedMessage {
+  id: string
+  type: 'INFO' | 'WARNING' | 'ALERT' | 'ASSIGNMENT' | 'SYSTEM'
+  kind: string
+  title: string
+  content: string
+  entityType: string | null
+  entityId: string | null
+  createdAt: string
+}
+
 export interface HubHandlers {
   robotTelemetryUpdated?: (message: RobotTelemetryMessage) => void
   jobUpdated?: (message: JobUpdatedMessage) => void
+  notificationCreated?: (message: NotificationCreatedMessage) => void
 }
 
 // One shared connection for the whole app; pages only add/remove handlers.
@@ -67,13 +80,14 @@ function ensureStarted(): Promise<void> {
  */
 export function useNotificationsHub(handlers: HubHandlers): boolean {
   const [connected, setConnected] = useState(false)
-  const { robotTelemetryUpdated, jobUpdated } = handlers
+  const { robotTelemetryUpdated, jobUpdated, notificationCreated } = handlers
 
   useEffect(() => {
     const hub = getConnection()
     let cancelled = false
     if (robotTelemetryUpdated) hub.on('robotTelemetryUpdated', robotTelemetryUpdated)
     if (jobUpdated) hub.on('jobUpdated', jobUpdated)
+    if (notificationCreated) hub.on('notificationCreated', notificationCreated)
 
     const sync = () => !cancelled && setConnected(hub.state === HubConnectionState.Connected)
     hub.onreconnected(sync)
@@ -85,8 +99,9 @@ export function useNotificationsHub(handlers: HubHandlers): boolean {
       cancelled = true
       if (robotTelemetryUpdated) hub.off('robotTelemetryUpdated', robotTelemetryUpdated)
       if (jobUpdated) hub.off('jobUpdated', jobUpdated)
+      if (notificationCreated) hub.off('notificationCreated', notificationCreated)
     }
-  }, [robotTelemetryUpdated, jobUpdated])
+  }, [robotTelemetryUpdated, jobUpdated, notificationCreated])
 
   return connected
 }
