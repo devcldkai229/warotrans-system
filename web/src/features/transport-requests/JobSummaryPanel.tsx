@@ -11,10 +11,11 @@ import { Drawer, DrawerHeading, FailureNote, LineItem, MetaList, MetaRow } from 
 interface JobSummaryPanelProps {
   jobRef: TransportRequestView['jobs'][number]
   onClose: () => void
-  onOpenFull: () => void
+  /** Opens the Job detail page; absent while the job's id is not known yet. */
+  onOpenFull?: () => void
 }
 
-/** Third column: one Job of the selected Request, with its steps. "Open full detail" goes to Job Detail. */
+/** Third column: one Job of the selected Request, with a button to its detail page. */
 export function JobSummaryPanel({ jobRef, onClose, onOpenFull }: JobSummaryPanelProps) {
   const job = JOBS.find((item) => item.jobNo === jobRef.jobNo)
   const progress = job ? stepProgress(job) : null
@@ -64,14 +65,14 @@ export function JobSummaryPanel({ jobRef, onClose, onOpenFull }: JobSummaryPanel
               />
             ))}
           </ol>
-
-          <Button variant="primary" block className="mt-6" onClick={onOpenFull}>
-            Open full detail <Icon name="arrowRight" size={14} />
-          </Button>
         </>
-      ) : (
-        <p className="mt-5 text-xs text-muted">Step detail for this job is not available yet.</p>
-      )}
+      ) : null}
+
+      {onOpenFull ? (
+        <Button variant="primary" block className="mt-6" onClick={onOpenFull}>
+          View job detail <Icon name="arrowRight" size={14} />
+        </Button>
+      ) : null}
     </Drawer>
   )
 }

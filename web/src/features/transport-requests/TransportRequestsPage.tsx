@@ -107,7 +107,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     onSuccess: async (jobId) => {
       setError(null)
       await refresh()
-      navigate(`/monitor/live/${jobId}`)
+      navigate(`/monitor/jobs/${jobId}`)
     },
     onError: async (err: Error) => {
       setError(err.message)
@@ -120,7 +120,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     onSuccess: async ({ jobId }) => {
       setError(null)
       await refresh()
-      navigate(`/monitor/live/${jobId}`)
+      navigate(`/monitor/jobs/${jobId}`)
     },
     onError: async (err: Error) => {
       setError(err.message)
@@ -133,7 +133,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     onSuccess: async (jobId) => {
       setError(null)
       await refresh()
-      navigate(`/monitor/live/${jobId}`)
+      navigate(`/monitor/jobs/${jobId}`)
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -143,7 +143,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     onSuccess: async (jobId) => {
       setError(null)
       await refresh()
-      navigate(`/monitor/live/${jobId}`)
+      navigate(`/monitor/jobs/${jobId}`)
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -174,8 +174,8 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
             <Icon name="play" size={14} /> {resume.isPending ? 'Resuming…' : `Resume ${job.jobNo} on robot`}
           </Button>
         ) : (
-          <Button key={job.id} variant="outline" size="sm" onClick={() => navigate(`/monitor/live/${job.id}`)}>
-            <Icon name="target" size={14} /> Watch {job.jobNo} live
+          <Button key={job.id} variant="outline" size="sm" onClick={() => navigate(`/monitor/jobs/${job.id}`)}>
+            <Icon name="target" size={14} /> View {job.jobNo}
           </Button>
         ),
       )}
@@ -290,6 +290,8 @@ export function TransportRequestsPage() {
   }, [selectedBase, requestJobs, robotsQuery.data])
 
   const selectedJob = selected?.jobs.find((job) => job.jobNo === selectedJobNo) ?? null
+  // The request view only carries job numbers; the detail page is addressed by the job's id.
+  const selectedJobId = requestJobs.find((job) => job.jobNo === selectedJobNo)?.id ?? null
 
   function selectRequest(id: string) {
     setSelectedId(selectedId === id ? null : id)
@@ -533,7 +535,7 @@ export function TransportRequestsPage() {
                   <JobSummaryPanel
                     jobRef={selectedJob}
                     onClose={() => setSelectedJobNo(null)}
-                    onOpenFull={() => navigate(`/monitor/jobs/${selectedJob.jobNo}`)}
+                    onOpenFull={selectedJobId ? () => navigate(`/monitor/jobs/${selectedJobId}`) : undefined}
                   />
                 ) : null}
               </>
