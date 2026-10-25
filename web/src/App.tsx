@@ -5,7 +5,6 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { JobDetailPage } from '@/features/jobs/JobDetailPage'
-import { JobLivePage } from '@/features/jobs/JobLivePage'
 import { ManagementPage } from '@/features/management/ManagementPage'
 import { FacilityPage } from '@/features/maps/FacilityPage'
 import { MapEditorPage } from '@/features/maps/MapEditorPage'
@@ -36,9 +35,8 @@ function App() {
             <Route path="/monitor/fleet/:robotCode" element={<FleetPage />} />
             <Route path="/monitor/requests" element={<TransportRequestsPage />} />
             <Route path="/monitor/jobs" element={<Navigate to="/monitor/requests" replace />} />
-            <Route path="/monitor/jobs/:jobNo" element={<JobDetailPage />} />
-            <Route path="/monitor/live" element={<JobLivePage />} />
-            <Route path="/monitor/live/:jobId" element={<JobLivePage />} />
+            <Route path="/monitor/jobs/:jobId" element={<JobDetailPage />} />
+            <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/configure/facility" element={<FacilityPage />} />
             <Route path="/configure/workflows" element={<WorkflowsListPage />} />

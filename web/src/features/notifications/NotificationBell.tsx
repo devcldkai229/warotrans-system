@@ -19,9 +19,9 @@ const TYPE_TONE: Record<AdminNotification['type'], Tone> = {
   SYSTEM: 'grey',
 }
 
-/** Where a notification leads: the live page of its job, the fleet for a robot, the request list for a request. */
+/** Where a notification leads: the detail page of its job, the fleet for a robot, the request list for a request. */
 function targetOf(notification: AdminNotification): string | null {
-  if (notification.entityType === 'JOB' && notification.entityId) return `/monitor/live/${notification.entityId}`
+  if (notification.entityType === 'JOB' && notification.entityId) return `/monitor/jobs/${notification.entityId}`
   if (notification.entityType === 'ROBOT') return '/monitor/fleet'
   if (notification.entityType === 'REQUEST') return '/monitor/requests'
   return null

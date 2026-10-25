@@ -153,7 +153,7 @@ public sealed class AdminNotificationProducer(
                 NotificationType.WARNING,
                 "JOB_NOT_STARTED",
                 $"Job {e.JobNo} has not been started",
-                $"It has been waiting {Waited(e.WaitingSince)} for a robot. Run it on a robot from its Live job page.",
+                $"It has been waiting {Waited(e.WaitingSince)} for a robot. Run it on a robot from its job page.",
                 Job,
                 e.JobId,
                 $"job:{e.JobId}:unstarted",
