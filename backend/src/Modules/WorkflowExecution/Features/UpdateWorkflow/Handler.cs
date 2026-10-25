@@ -29,6 +29,14 @@ public sealed class UpdateWorkflowHandler(WorkflowExecutionDbContext db)
         }
 
         var model = WorkflowMapping.ToDefinitionModel(request);
+        // A workflow keeps its code; only a caller that sends one explicitly can change it. Blank keys are generated,
+        // keys the caller sent back stay as they are so the bindings that point at them keep working.
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            model.Code = workflow.Code;
+        }
+
+        WorkflowKeyGenerator.FillMissingKeys(model);
         WorkflowMapping.ThrowIfInvalid(WorkflowDefinitionValidator.ValidateDraft(model));
 
         if (!string.Equals(workflow.Code, model.Code, StringComparison.Ordinal))

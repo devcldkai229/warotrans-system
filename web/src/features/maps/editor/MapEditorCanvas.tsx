@@ -37,12 +37,46 @@ export interface MapEditorCanvasProps {
   onEndpointClick?: (id: string) => void
   onEdgeClick?: (id: string) => void
   onZoneClick?: (id: string) => void
+  /** A vertex of the selected edge or zone was dragged to a new place; `points` is the whole new outline. */
+  onShapeVerticesChange?: (shape: { kind: 'edge' | 'zone'; id: string }, points: Point[]) => void
+  /** The selected endpoint was dragged to a new place (not saved: the page keeps it as an unsaved edit). */
+  onEndpointMove?: (id: string, at: Point) => void
+  /** The endpoint being placed (not saved yet): drawn as a marker with its heading, `yaw` in radians. */
+  pendingEndpoint?: { at: Point; yaw: number } | null
+  /** The pending endpoint's marker was dragged to a new place. */
+  onPendingEndpointMove?: (at: Point) => void
   className?: string
   children?: ReactNode
 }
 
 function polyline(points: PixelCoord[]): string {
   return points.map((p) => `${p.u},${p.v}`).join(' ')
+}
+
+function pointInPolygon(point: Point, ring: Point[]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]
+    const b = ring[j]
+    if (a.y > point.y !== b.y > point.y && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+const SHIFT_SNAP_STEP = Math.PI / 4
+
+// Shift while drawing: put `to` on the nearest 45° ray from `from` (horizontal, vertical or diagonal on screen).
+// The point is projected onto that ray, so it stays as far along it as the pointer is.
+function constrainTo45(from: PixelCoord, to: PixelCoord): PixelCoord {
+  const du = to.u - from.u
+  const dv = to.v - from.v
+  const angle = Math.round(Math.atan2(dv, du) / SHIFT_SNAP_STEP) * SHIFT_SNAP_STEP
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const length = du * cos + dv * sin
+  return { u: from.u + length * cos, v: from.v + length * sin }
 }
 
 export function MapEditorCanvas({
@@ -61,6 +95,10 @@ export function MapEditorCanvas({
   onEndpointClick,
   onEdgeClick,
   onZoneClick,
+  onShapeVerticesChange,
+  onEndpointMove,
+  pendingEndpoint = null,
+  onPendingEndpointMove,
   className,
   children,
 }: MapEditorCanvasProps) {
@@ -69,6 +107,14 @@ export function MapEditorCanvas({
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [cursor, setCursor] = useState<{ image: PixelCoord; world: WorldCoord } | null>(null)
+  const [shiftHeld, setShiftHeld] = useState(false)
+  // A vertex of the selected edge/zone being dragged: only that vertex moves, every other one stays where it is.
+  const [vertexDrag, setVertexDrag] = useState<{
+    kind: 'edge' | 'zone'
+    id: string
+    index: number
+    image: PixelCoord
+  } | null>(null)
   const dragged = useRef(false)
   // Screen px per image px at zoom 1 (the SVG is fitted into its box). A small PGM (e.g. 82 x 103 px for a
   // 3.5 x 4.55 m floor) is drawn ~5x larger, so marks sized in image px would cover the whole floor.
@@ -110,6 +156,123 @@ export function MapEditorCanvas({
     [draftWorldPoints, transform],
   )
 
+  // Tracked on the window so the preview follows Shift even when the pointer is not moving.
+  useEffect(() => {
+    const sync = (event: KeyboardEvent) => setShiftHeld(event.shiftKey)
+    const release = () => setShiftHeld(false)
+    window.addEventListener('keydown', sync)
+    window.addEventListener('keyup', sync)
+    window.addEventListener('blur', release)
+    return () => {
+      window.removeEventListener('keydown', sync)
+      window.removeEventListener('keyup', sync)
+      window.removeEventListener('blur', release)
+    }
+  }, [])
+
+  // The last drawn point is where the next segment starts; Shift only applies once there is one.
+  const lastDraftPixel = draftKind ? draftPixels[draftPixels.length - 1] : undefined
+  const aim = (image: PixelCoord, shift: boolean): PixelCoord =>
+    shift && lastDraftPixel ? constrainTo45(lastDraftPixel, image) : image
+  const aimedImage = cursor ? aim(cursor.image, shiftHeld) : null
+  const aimedWorld = aimedImage ? pixelToWorld(transform, aimedImage) : null
+
+  // Outline in image pixels, with the vertex being dragged shown at the pointer instead of where it was saved.
+  function outlinePixels(kind: 'edge' | 'zone', id: string, world: Point[]): PixelCoord[] {
+    return world.map((p, i) =>
+      vertexDrag && vertexDrag.kind === kind && vertexDrag.id === id && vertexDrag.index === i
+        ? vertexDrag.image
+        : worldToPixel(transform, p),
+    )
+  }
+
+  function startVertexDrag(
+    event: ReactPointerEvent,
+    kind: 'edge' | 'zone',
+    id: string,
+    index: number,
+    world: Point[],
+  ) {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    event.preventDefault()
+    dragged.current = false
+    const pixels = world.map((p) => worldToPixel(transform, p))
+    // Shift locks the dragged vertex to a 45° ray from the neighbour before it (the one after it for an edge's first
+    // vertex); that neighbour and every other vertex stay fixed.
+    const anchor =
+      kind === 'zone' ? pixels[(index - 1 + pixels.length) % pixels.length] : index > 0 ? pixels[index - 1] : pixels[1]
+    const startX = event.clientX
+    const startY = event.clientY
+    let latest: PixelCoord | null = null
+    const move = (moveEvent: PointerEvent) => {
+      if (!dragged.current && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) <= 4) return
+      dragged.current = true
+      const raw = toImage(moveEvent.clientX, moveEvent.clientY)
+      if (!raw) return
+      latest = moveEvent.shiftKey && anchor ? constrainTo45(anchor, raw) : raw
+      setVertexDrag({ kind, id, index, image: latest })
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      setVertexDrag(null)
+      if (!dragged.current || !latest) return
+      const moved = pixelToWorld(transform, latest)
+      onShapeVerticesChange?.({ kind, id }, world.map((p, i) => (i === index ? { x: moved.x, y: moved.y } : p)))
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
+  // Zones may overlap and the top one takes the click, so a zone underneath could never be picked. Clicking the same
+  // spot again walks down through every zone there (top first, then back to the top).
+  const [zoneStack, setZoneStack] = useState<{ zoneId: string; position: number; count: number } | null>(null)
+  function pickZoneAt(clientX: number, clientY: number, hitId: string): string {
+    const image = toImage(clientX, clientY)
+    if (!image) return hitId
+    const world = pixelToWorld(transform, image)
+    // `zones` is in drawing order, so the last one is the one on top.
+    const stack = zones.filter((z) => pointInPolygon(world, polygonToPoints(z.geometry))).reverse()
+    if (stack.length === 0) return hitId
+    const current = stack.findIndex((z) => z.id === selected.zoneId)
+    const position = current === -1 ? 0 : (current + 1) % stack.length
+    const picked = stack[position].id
+    setZoneStack(stack.length > 1 ? { zoneId: picked, position: position + 1, count: stack.length } : null)
+    return picked
+  }
+
+  // Drags a point marker (the endpoint being placed, or the selected endpoint) and reports where it is as it moves.
+  function startPointDrag(event: ReactPointerEvent, onMove: ((at: Point) => void) | undefined) {
+    if (event.button !== 0 || readOnly) return
+    event.stopPropagation()
+    event.preventDefault()
+    dragged.current = false
+    const startX = event.clientX
+    const startY = event.clientY
+    const move = (moveEvent: PointerEvent) => {
+      if (!dragged.current && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) <= 4) return
+      dragged.current = true
+      const image = toImage(moveEvent.clientX, moveEvent.clientY)
+      if (image) onMove?.(pixelToWorld(transform, image))
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
+  const vertexEditable = !readOnly && tool === 'select' && !draftKind
+  const editedEdge = vertexEditable ? edges.find((e) => e.id === selected.edgeId) : undefined
+  const editedZone = vertexEditable && !editedEdge ? zones.find((z) => z.id === selected.zoneId) : undefined
+  const vertexShape = editedEdge
+    ? { kind: 'edge' as const, id: editedEdge.id, world: lineStringToPoints(editedEdge.geometry) }
+    : editedZone
+      ? { kind: 'zone' as const, id: editedZone.id, world: polygonToPoints(editedZone.geometry) }
+      : null
+
   function changeZoom(next: number) {
     const clamped = Math.min(8, Math.max(0.25, next))
     setZoom(clamped)
@@ -141,10 +304,11 @@ export function MapEditorCanvas({
     window.addEventListener('pointerup', stop)
   }
 
-  function emitClick(clientX: number, clientY: number, double: boolean) {
+  function emitClick(clientX: number, clientY: number, double: boolean, shift: boolean) {
     if (dragged.current || readOnly) return
-    const image = toImage(clientX, clientY)
-    if (!image) return
+    const rawImage = toImage(clientX, clientY)
+    if (!rawImage) return
+    const image = aim(rawImage, shift)
     const world = pixelToWorld(transform, image)
     if (double) onWorldDoubleClick?.(world, image)
     else onWorldClick?.(world, image)
@@ -177,10 +341,10 @@ export function MapEditorCanvas({
             setCursor({ image, world: pixelToWorld(transform, image) })
           }}
           onPointerLeave={() => setCursor(null)}
-          onClick={(event) => emitClick(event.clientX, event.clientY, false)}
+          onClick={(event) => emitClick(event.clientX, event.clientY, false, event.shiftKey)}
           onDoubleClick={(event) => {
             event.preventDefault()
-            emitClick(event.clientX, event.clientY, true)
+            emitClick(event.clientX, event.clientY, true, event.shiftKey)
           }}
           style={{
             cursor: tool === 'pan' ? 'grab' : readOnly ? 'default' : 'crosshair',
@@ -191,8 +355,9 @@ export function MapEditorCanvas({
             <image href={previewUrl} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />
           ) : null}
 
-          {zones.map((zone) => {
-            const pts = polygonToPoints(zone.geometry).map((p) => worldToPixel(transform, p))
+          {/* the selected zone is drawn last so it stays visible when another zone covers it */}
+          {[...zones.filter((z) => z.id !== selected.zoneId), ...zones.filter((z) => z.id === selected.zoneId)].map((zone) => {
+            const pts = outlinePixels('zone', zone.id, polygonToPoints(zone.geometry))
             const isSel = selected.zoneId === zone.id
             return (
               <polygon
@@ -206,7 +371,7 @@ export function MapEditorCanvas({
                   shapesSelectable
                     ? (e) => {
                         e.stopPropagation()
-                        onZoneClick?.(zone.id)
+                        onZoneClick?.(pickZoneAt(e.clientX, e.clientY, zone.id))
                       }
                     : undefined
                 }
@@ -215,7 +380,7 @@ export function MapEditorCanvas({
           })}
 
           {edges.map((edge) => {
-            const pts = lineStringToPoints(edge.geometry).map((p) => worldToPixel(transform, p))
+            const pts = outlinePixels('edge', edge.id, lineStringToPoints(edge.geometry))
             const isSel = selected.edgeId === edge.id
             const widthPx = Math.max(1, (edge.widthMeters ?? 1) / resolution)
             return (
@@ -258,11 +423,18 @@ export function MapEditorCanvas({
               <g
                 key={ep.id}
                 transform={`translate(${at.u} ${at.v})`}
+                onPointerDown={
+                  isSel && tool === 'select' && onEndpointMove
+                    ? (e) => startPointDrag(e, (at) => onEndpointMove(ep.id, at))
+                    : undefined
+                }
                 onClick={(e) => {
                   e.stopPropagation()
+                  // the click that ends a drag must not re-select the endpoint, that would drop the unsaved move
+                  if (dragged.current) return
                   onEndpointClick?.(ep.id)
                 }}
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: isSel && tool === 'select' && onEndpointMove ? 'move' : 'pointer' }}
               >
                 {/* invisible hit area: the dot is small, the click target is not */}
                 <circle r={px(9)} fill="transparent" />
@@ -294,6 +466,49 @@ export function MapEditorCanvas({
             )
           })}
 
+          {pendingEndpoint
+            ? (() => {
+                const at = worldToPixel(transform, pendingEndpoint.at)
+                return (
+                  <g
+                    transform={`translate(${at.u} ${at.v})`}
+                    style={{ cursor: readOnly ? 'default' : 'move' }}
+                    onPointerDown={(e) => startPointDrag(e, onPendingEndpointMove)}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <circle r={px(14)} fill="rgba(37,99,235,0.12)" stroke="#2563eb" strokeWidth={px(1.25)} strokeDasharray={`${px(4)} ${px(3)}`} />
+                    <line
+                      x1={0}
+                      y1={0}
+                      x2={px(20)}
+                      y2={0}
+                      stroke="#2563eb"
+                      strokeWidth={px(2.5)}
+                      strokeLinecap="round"
+                      transform={`rotate(${headingDeg(pendingEndpoint.yaw)})`}
+                    />
+                    <circle r={px(5.5)} fill="#2563eb" stroke="#fff" strokeWidth={px(1.75)} />
+                  </g>
+                )
+              })()
+            : null}
+
+          {vertexShape
+            ? outlinePixels(vertexShape.kind, vertexShape.id, vertexShape.world).map((p, i) => (
+                <g
+                  key={`v-${i}`}
+                  transform={`translate(${p.u} ${p.v})`}
+                  style={{ cursor: 'move' }}
+                  onPointerDown={(e) => startVertexDrag(e, vertexShape.kind, vertexShape.id, i, vertexShape.world)}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* invisible hit area: the handle is small, the grab target is not */}
+                  <circle r={px(9)} fill="transparent" />
+                  <circle r={px(4.5)} fill="#fff" stroke="#2563eb" strokeWidth={px(1.75)} />
+                </g>
+              ))
+            : null}
+
           {draftPixels.length > 0 && draftKind ? (
             draftKind === 'zone' && draftPixels.length >= 2 ? (
               <polygon
@@ -314,6 +529,20 @@ export function MapEditorCanvas({
                 vectorEffect="non-scaling-stroke"
               />
             )
+          ) : null}
+          {lastDraftPixel && aimedImage && !readOnly ? (
+            <line
+              x1={lastDraftPixel.u}
+              y1={lastDraftPixel.v}
+              x2={aimedImage.u}
+              y2={aimedImage.v}
+              stroke="#2563eb"
+              strokeOpacity={shiftHeld ? 1 : 0.55}
+              strokeWidth={1.5 / zoom}
+              strokeDasharray={shiftHeld ? undefined : `${6 / zoom} ${4 / zoom}`}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
           ) : null}
           {draftPixels.map((p, i) => (
             <circle key={`d-${i}`} cx={p.u} cy={p.v} r={px(3)} fill="#2563eb" />
@@ -339,13 +568,26 @@ export function MapEditorCanvas({
         </button>
       </div>
 
-      {import.meta.env.DEV && cursor ? (
+      {zoneStack && selected.zoneId === zoneStack.zoneId && tool === 'select' ? (
+        <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-ink-2 shadow-float">
+          Zone {zoneStack.position} of {zoneStack.count} here. Click again for the next one
+        </div>
+      ) : null}
+
+      {(draftKind && !readOnly) || vertexShape ? (
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-ink-2 shadow-float">
+          {vertexShape ? 'Drag a point to move it. ' : null}Hold{' '}
+          <kbd className="rounded bg-container-high px-1 font-mono">Shift</kbd> to keep the line straight (45° steps)
+        </div>
+      ) : null}
+
+      {import.meta.env.DEV && aimedImage && aimedWorld ? (
         <div className="absolute bottom-3 left-3 z-10 rounded-md bg-surface/95 px-3 py-2 font-mono text-[11px] text-ink-2 shadow-float">
           <div>
-            Image u={cursor.image.u.toFixed(2)} v={cursor.image.v.toFixed(2)}
+            Image u={aimedImage.u.toFixed(2)} v={aimedImage.v.toFixed(2)}
           </div>
           <div>
-            World x={cursor.world.x.toFixed(3)} m · y={cursor.world.y.toFixed(3)} m
+            World x={aimedWorld.x.toFixed(3)} m · y={aimedWorld.y.toFixed(3)} m
           </div>
           <div>Frame = {frameId}</div>
         </div>

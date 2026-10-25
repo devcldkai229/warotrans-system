@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { cx } from '@/shared/lib/cx'
-import { IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { initialsOf, useAuth } from '@/features/auth/authContext'
+import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { Wordmark } from './Wordmark'
 
 interface NavGroup {
@@ -86,10 +86,7 @@ export function AppShell() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <IconButton aria-label="Notifications" className="relative">
-            <Icon name="bell" size={18} />
-            <span className="absolute top-2 right-2 size-2 rounded-full bg-blue ring-2 ring-surface" />
-          </IconButton>
+          <NotificationBell />
 
           <div className="relative">
             <button

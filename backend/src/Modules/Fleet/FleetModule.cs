@@ -10,6 +10,7 @@ using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Features.DisableRobot;
 using WaroTrans.Fleet.Features.EnableRobot;
 using WaroTrans.Fleet.Features.GetRobot;
+using WaroTrans.Fleet.Features.GetRobotStatistics;
 using WaroTrans.Fleet.Features.IssueCancelCommand;
 using WaroTrans.Fleet.Features.IssueNavigateCommand;
 using WaroTrans.Fleet.Features.ListRobots;
@@ -37,6 +38,7 @@ public static class FleetModule
         services.AddScoped<RegisterRobotHandler>();
         services.AddScoped<GetRobotHandler>();
         services.AddScoped<ListRobotsHandler>();
+        services.AddScoped<GetRobotStatisticsHandler>();
         services.AddScoped<EnableRobotHandler>();
         services.AddScoped<DisableRobotHandler>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
@@ -61,6 +63,7 @@ public static class FleetModule
         group.MapRegisterRobot();
         group.MapGetRobot();
         group.MapListRobots();
+        group.MapGetRobotStatistics();
         group.MapEnableRobot();
         group.MapDisableRobot();
         group.MapIssueNavigateCommand();
