@@ -464,7 +464,8 @@ public static class RouteGraphBuilder
                 {
                     ZoneType.SPEED when zone.MaxSpeed is { } limit => segment with { Speed = segment.Speed is { } s ? Math.Min(s, limit) : limit },
                     ZoneType.NO_STOP => segment with { NoStop = true },
-                    ZoneType.SINGLE_OCCUPANCY or ZoneType.JUNCTION => segment with { SingleOccupancy = true },
+                    ZoneType.SINGLE_OCCUPANCY => segment with { SingleOccupancy = true },
+                    // JUNCTION: connectivity via IsJunction links only — do not set SingleOccupancy/NoStop labels.
                     _ => segment
                 };
             }

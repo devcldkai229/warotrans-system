@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,9 +11,11 @@ using WaroTrans.BuildingBlocks.Options;
 namespace WaroTrans.BuildingBlocks.Mqtt;
 
 /// <summary>
-/// Publishes robot commands over MQTT (QoS1) and manual drive setpoints (QoS0) on one reconnecting client.
+/// Publishes robot commands (QoS1), teleop (QoS0), and HUMAN_INTERACTION arming/result (QoS1)
+/// on one reconnecting client.
 /// </summary>
-public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IAsyncDisposable
+public sealed class MqttRobotCommandPublisher
+    : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IMqttRobotInteractionPublisher, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

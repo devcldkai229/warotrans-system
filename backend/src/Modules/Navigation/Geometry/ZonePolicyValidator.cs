@@ -44,7 +44,6 @@ public static class ZonePolicyValidator
         {
             case ZoneType.KEEP_OUT:
             case ZoneType.NO_STOP:
-            case ZoneType.JUNCTION:
                 // No extra policy required.
                 break;
 
