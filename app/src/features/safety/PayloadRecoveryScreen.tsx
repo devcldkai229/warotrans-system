@@ -1,3 +1,5 @@
+import { getContainer, type ContainerListItem } from '../../shared/api';
+import { toast } from '../../shared/context/ToastContext';
 import React, { useEffect, useState } from 'react';
 import {
   Pressable,
@@ -34,31 +36,30 @@ export function PayloadRecoveryScreen() {
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const jobId = params?.jobId || 'JOB-2026-0819';
-  const robotId = params?.robotId || params?.robot || 'AMR-02';
+  const jobId = params?.jobId || '';
+  const robotId = params?.robotId || params?.robot || 'Unassigned';
   const [displayJobNo, setDisplayJobNo] = useState(jobId);
   const [displayRobotId, setDisplayRobotId] = useState(robotId);
-  const [displayContainer, setDisplayContainer] = useState('CTN-DEMO-000001');
-  const [displayLocation, setDisplayLocation] = useState('EP-A ➔ EP-D (Active Corridor)');
-  const [displayTarget, setDisplayTarget] = useState('EP-D');
+  const [displayContainer, setDisplayContainer] = useState('Unknown Container');
+  const [displayLocation, setDisplayLocation] = useState('Unknown Location');
+  const [displayTarget, setDisplayTarget] = useState('Unknown Destination');
   const [resolvedJobId, setResolvedJobId] = useState(jobId);
   const faultedRobot = displayRobotId;
-  const rescueRobot = faultedRobot === 'AMR-01' ? 'AMR-02' : 'AMR-01';
+  const rescueRobot = 'Not Assigned';
   const targetContainer = displayContainer;
 
   useEffect(() => {
     let mounted = true;
     const loadRecoveryContext = async () => {
       const loadJob = async () => {
-        const requested = await getJobDetail(jobId).catch(() => null);
-        if (requested && (requested.id === jobId || requested.jobNo === jobId)) return requested;
-        const jobs = await listJobs({ take: 5 });
-        return jobs.find((job) => job.id === jobId || job.jobNo === jobId) || jobs[0] || requested;
+        if (jobId) return getJobDetail(jobId);
+        const jobs = await listJobs({ status: 'RECOVERY_REQUIRED', take: 50 });
+        return jobs[0] || null;
       };
       const [jobResult, robotResult, containerResult] = await Promise.allSettled([
         loadJob(),
         listRobots(),
-        listContainers({ warehouseId: '11111111-1111-1111-1111-111111111111', take: 50 }),
+        Promise.resolve<{ items: ContainerListItem[] }>({ items: [] }),
       ]);
       for (const result of [jobResult, robotResult, containerResult]) {
         if (result.status === 'rejected') console.warn('Recovery context lookup unavailable:', result.reason);
@@ -74,10 +75,10 @@ export function PayloadRecoveryScreen() {
         || robots.find((robot) => robot.code === context.assignedRobotCode)
         || robots.find((robot) => robot.id === robotId || robot.code === robotId);
       if (assignedRobot) setDisplayRobotId(assignedRobot.code);
-      if (!job) return;
+      if (!job) { setFeedback('No job currently requires recovery.'); return; }
       setResolvedJobId(job.id);
       setDisplayJobNo(job.jobNo);
-      const container = containers.find((item) => item.id === job.containers[0]?.containerId);
+      const container = job.containers[0] ? await getContainer(job.containers[0].containerId).catch(() => null) : null;
       if (container) setDisplayContainer(container.barcode);
       const resolveEndpoint = (value: unknown) => {
         const code = map?.endpoints.find((endpoint) => endpoint.id === value || endpoint.code === value)?.code;
@@ -102,35 +103,16 @@ export function PayloadRecoveryScreen() {
     return () => { mounted = false; };
   }, [jobId, robotId]);
 
-  const handleDispatchRescue = () => {
-    triggerHaptic('success');
-    setPhase('rendezvous');
-    setFeedback(`Emergency rescue: ${rescueRobot} dispatched to rendezvous coordinates (X: 12.4m, Y: 8.2m).`);
-  };
-
-  const handleConfirmArrival = () => {
-    triggerHaptic('tap');
-    setPhase('transfer');
-    setFeedback(`${rescueRobot} arrived at scene. Parked 1.0m from stalled ${faultedRobot}.`);
-  };
-
-  const handleScanStrandedTote = () => {
-    triggerHaptic('success');
-    setScannedBarcode(targetContainer);
-    setFeedback(`Barcode ${targetContainer} verified against stranded cargo manifest.`);
-  };
-
-  const handleResumeMission = () => {
-    triggerHaptic('success');
-    completePayloadRecoveryJob(resolvedJobId, rescueRobot);
-    setPhase('completed');
-    setFeedback(`Job ${displayJobNo} successfully transferred to ${rescueRobot}. Resuming dropoff.`);
-  };
+  const recoveryUnavailable = () => toast.warning('Recovery execution is not supported by this server. Contact the supervisor; no robot command has been sent.');
+  const handleDispatchRescue = recoveryUnavailable;
+  const handleConfirmArrival = recoveryUnavailable;
+  const handleScanStrandedTote = recoveryUnavailable;
+  const handleResumeMission = recoveryUnavailable;
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Payload recovery · Sim Aid"
+        label="Recovery Inspection · Read Only"
         title="Emergency Cargo Rescue"
         onBack={goBack}
       />
@@ -159,7 +141,7 @@ export function PayloadRecoveryScreen() {
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Rescued container</Text>
-                <Text style={styles.receiptHighlight}>{targetContainer} (45 units)</Text>
+                <Text style={styles.receiptHighlight}>{targetContainer} (1 Container)</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Active carrier</Text>
@@ -340,6 +322,7 @@ export function PayloadRecoveryScreen() {
                   label={`Dispatch Rescue (${rescueRobot})`}
                   icon={<Navigation size={18} color="#ffffff" />}
                   onPress={handleDispatchRescue}
+                  disabled={true}
                   variant="primary"
                   size="lg"
                   style={{ marginTop: 12 }}
@@ -360,6 +343,7 @@ export function PayloadRecoveryScreen() {
                   label={`Confirm ${rescueRobot} Arrived & Parked`}
                   icon={<Check size={18} color="#ffffff" />}
                   onPress={handleConfirmArrival}
+                  disabled={true}
                   variant="primary"
                   size="lg"
                   style={{ marginTop: 12 }}
@@ -384,6 +368,7 @@ export function PayloadRecoveryScreen() {
                     label={`Simulate scan barcode (${targetContainer})`}
                     icon={<ScanLine size={16} color={colors.textPrimary} />}
                     onPress={handleScanStrandedTote}
+                  disabled={true}
                     variant="outline"
                     size="md"
                     style={{ marginTop: 10 }}
@@ -394,7 +379,7 @@ export function PayloadRecoveryScreen() {
                   label="Confirm Transfer & Resume Mission"
                   icon={<Check size={18} color="#ffffff" />}
                   onPress={handleResumeMission}
-                  disabled={!scannedBarcode}
+                  disabled={true}
                   variant="primary"
                   size="lg"
                   style={{ marginTop: 12 }}

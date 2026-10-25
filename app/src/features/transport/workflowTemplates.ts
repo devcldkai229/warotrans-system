@@ -1,6 +1,7 @@
 import { colors } from '../../shared/theme/colors';
 
 export interface WorkflowItem {
+  backendId?: string;
   id: string;
   code: string;
   name: string;

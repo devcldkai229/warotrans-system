@@ -7,3 +7,4 @@ export * from './workflowApi';
 export * from './navigationApi';
 export * from './executionApi';
 export * from './secureStore';
+export * from './capabilities';

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import {
@@ -32,10 +34,29 @@ export function BarcodeScannerHUD({
   visible,
   onClose,
   onScanResult,
-  targetBarcode = 'BOX-101',
+  targetBarcode = '',
 }: BarcodeScannerHUDProps) {
   const topInset = useTopInset();
   const [torchOn, setTorchOn] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [cameraActive, setCameraActive] = useState(false);
+  const [manualBarcode, setManualBarcode] = useState('');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const scanned = useRef(false);
+  const manualInput = useRef<TextInput>(null);
+  useEffect(() => { scanned.current = false; setManualBarcode(''); setCameraActive(false); setCameraError(null); }, [visible]);
+  const submitBarcode = (value: string) => {
+    const barcode = value.trim();
+    if (!barcode || scanned.current) return;
+    scanned.current = true; onScanResult(barcode);
+  };
+  const enableCamera = async () => {
+    try {
+      const result = permission?.granted ? permission : await requestPermission();
+      if (result.granted) { setCameraActive(true); setCameraError(null); }
+      else setCameraError('Camera access denied. Enter the barcode below.');
+    } catch { setCameraError('Camera unavailable. Enter the barcode below.'); }
+  };
 
   if (!visible) return null;
 
@@ -85,6 +106,11 @@ export function BarcodeScannerHUD({
           {/* Viewfinder Center Reticle */}
           <View style={styles.reticleContainer}>
             <View style={styles.reticleBox}>
+              {cameraActive && permission?.granted && <CameraView style={StyleSheet.absoluteFill}
+                facing="back" enableTorch={torchOn} barcodeScannerSettings={{ barcodeTypes: ['code128', 'qr', 'ean13', 'ean8', 'code39', 'upc_a', 'upc_e'] }}
+                onMountError={error => { setCameraError(error.message); setCameraActive(false); }}
+                onBarcodeScanned={result => submitBarcode(result.data)} />}
+
               <View style={[styles.corner, styles.cornerTL]} />
               <View style={[styles.corner, styles.cornerTR]} />
               <View style={[styles.corner, styles.cornerBL]} />
@@ -102,16 +128,22 @@ export function BarcodeScannerHUD({
               Align 1D Code 128 or 2D QR code within frame
             </Text>
             <View style={styles.fpsBadge}>
-              <Text style={styles.fpsText}>Auto-focus active · 60 FPS</Text>
+              <Text style={styles.fpsText}>{cameraError || (cameraActive ? 'Camera Ready' : 'Camera Off · Manual Entry Available')}</Text>
             </View>
           </View>
 
-          {/* Bottom Simulation Buttons with Calm Operations Warm Dark Gray */}
+          {/* Manual entry remains available when the camera is unavailable. */}
           <View style={styles.actionsBox}>
+            <TextInput ref={manualInput} value={manualBarcode} onChangeText={setManualBarcode}
+              placeholder="Enter Or Scan Container Barcode" placeholderTextColor="#c4c8d0"
+              autoCapitalize="none" autoCorrect={false} accessibilityLabel="Container barcode"
+              onSubmitEditing={() => submitBarcode(manualBarcode)}
+              style={{ minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#c4c8d0', paddingHorizontal: 12, color: '#ffffff', fontSize: 14 }} />
+
             <Pressable
               onPress={() => {
                 triggerHaptic('success');
-                onScanResult(targetBarcode);
+                submitBarcode(manualBarcode);
               }}
               style={({ pressed }) => [
                 styles.actionBtn,
@@ -122,14 +154,14 @@ export function BarcodeScannerHUD({
             >
               <QrCode size={18} color="#ffffff" />
               <Text style={styles.btnMatchText}>
-                Simulate match ({targetBarcode})
+                Use Entered Barcode
               </Text>
             </Pressable>
 
             <Pressable
               onPress={() => {
                 triggerHaptic('error');
-                onScanResult('BOX-999');
+                void enableCamera();
               }}
               style={({ pressed }) => [
                 styles.actionBtn,
@@ -139,14 +171,14 @@ export function BarcodeScannerHUD({
               accessibilityRole="button"
             >
               <Text style={styles.btnMismatchText}>
-                Simulate mismatch (BOX-999)
+                Enable Camera
               </Text>
             </Pressable>
 
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
-                onClose();
+                setCameraActive(false); manualInput.current?.focus();
               }}
               style={({ pressed }) => [
                 styles.cancelBtn,

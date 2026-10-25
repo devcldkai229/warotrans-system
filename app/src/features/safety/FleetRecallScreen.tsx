@@ -41,6 +41,7 @@ import { cancelRobotCommand, listRobots, RobotDto } from '../../shared/api';
 interface RobotUiItem extends Omit<RobotDto, 'status'> {
   status: string;
   recalledAt?: string;
+  pendingTargetCommandId?: string | null;
 }
 
 interface RecallAuditEntry {
@@ -48,7 +49,7 @@ interface RecallAuditEntry {
   robotCode: string;
   reason: string;
   timestamp: string;
-  status: 'ACK_STOPPED' | 'CANCEL_REQUESTED_202' | 'SIM_AID_DRILL' | 'ALREADY_IDLE';
+  status: 'CANCEL_REQUESTED_202';
 }
 
 const nowTimeLabel = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -64,15 +65,7 @@ export function FleetRecallScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [recallingMap, setRecallingMap] = useState<Record<string, boolean>>({});
   const [isRecallingAll, setIsRecallingAll] = useState(false);
-  const [auditLog, setAuditLog] = useState<RecallAuditEntry[]>([
-    {
-      id: 'REC-001',
-      robotCode: 'AMR-02',
-      reason: 'Safety zone clearance drill',
-      timestamp: 'Today, 08:30 AM',
-      status: 'SIM_AID_DRILL',
-    },
-  ]);
+  const [auditLog, setAuditLog] = useState<RecallAuditEntry[]>([]);
 
   const [selectedRobotForRecall, setSelectedRobotForRecall] = useState<RobotUiItem | null>(null);
 
@@ -81,7 +74,13 @@ export function FleetRecallScreen() {
     try {
       const res = await listRobots();
       if (res && res.items) {
-        setRobots(res.items.map((r) => ({ ...r, currentCommandId: r.currentCommandId ?? null })));
+        setRobots(previous => res.items.map(robot => {
+          const pending = previous.find(item => item.id === robot.id);
+          const stillPending = Boolean(pending?.pendingTargetCommandId && pending.pendingTargetCommandId === robot.currentCommandId);
+          return { ...robot, currentCommandId: robot.currentCommandId ?? null,
+            recalledAt: stillPending ? pending?.recalledAt : undefined,
+            pendingTargetCommandId: stillPending ? pending?.pendingTargetCommandId : null };
+        }));
       }
     } catch (err: any) {
       console.warn('Failed to load fleet robots:', err);
@@ -92,6 +91,8 @@ export function FleetRecallScreen() {
 
   useEffect(() => {
     fetchFleet();
+    const poll = setInterval(fetchFleet, 10000);
+    return () => clearInterval(poll);
   }, []);
 
   // Merge backend robot entities with live SignalR telemetry and connectivity updates
@@ -104,9 +105,7 @@ export function FleetRecallScreen() {
         ...robot,
         isOnline: liveConn ? liveConn.isOnline : robot.isOnline,
         // A cancel acceptance is pending until a later fleet refresh confirms robot state.
-        status: robot.recalledAt
-          ? robot.status
-          : liveConn?.status || (hasActiveRobotCommand(robot) ? robot.status : liveTelem?.navigationStatus) || robot.status,
+        status: liveConn?.status || robot.status,
         batteryPercent:
           liveTelem && typeof liveTelem.batteryPercent === 'number'
             ? liveTelem.batteryPercent
@@ -135,18 +134,14 @@ export function FleetRecallScreen() {
     const selectedReason = reasonText || 'Operator manual emergency recall from mobile console';
     const reason = `Operator recall from Mobile App (${selectedReason})`;
     const hasActiveCommand = hasActiveRobotCommand(robot);
+    if (!hasActiveCommand || !robot.isOnline) { showToastError('There is no active online command to cancel.'); return; }
     triggerHaptic('warning');
     setRecallingMap((prev) => ({ ...prev, [robot.id]: true }));
 
     try {
-      await cancelRobotCommand(robot.id, reason, robot.currentCommandId).catch((err: unknown) => {
-        if (hasActiveCommand) throw err;
-        // Idle units complete a Sim Aid drill even without an online hardware daemon.
-      });
+      const response = await cancelRobotCommand(robot.id, reason, robot.currentCommandId);
       triggerHaptic('success');
-      showToastSuccess(hasActiveCommand
-        ? `Cancel Requested (202 Accepted) for ${robot.code} · Awaiting Robot ACK`
-        : `Standby Recall Drill logged for ${robot.code} · Sim Aid`);
+      showToastSuccess(`Cancel Requested (202 Accepted) for ${robot.code} · Awaiting Robot ACK`);
 
       // Add to audit trail
       setAuditLog((prev) => [
@@ -155,7 +150,7 @@ export function FleetRecallScreen() {
           robotCode: robot.code,
           reason,
           timestamp: nowTimeLabel(),
-          status: hasActiveCommand ? 'CANCEL_REQUESTED_202' : 'SIM_AID_DRILL',
+          status: 'CANCEL_REQUESTED_202',
         },
         ...prev,
       ]);
@@ -164,7 +159,7 @@ export function FleetRecallScreen() {
       setRobots((prev) =>
         prev.map((r) =>
           r.id === robot.id
-            ? { ...r, status: hasActiveCommand ? 'CANCEL_REQUESTED' : 'RECALLED_SIM', recalledAt: nowTimeLabel() }
+            ? { ...r, pendingTargetCommandId: response.targetCommandId, recalledAt: nowTimeLabel() }
             : r,
         ),
       );
@@ -182,7 +177,8 @@ export function FleetRecallScreen() {
     setIsRecallingAll(true);
 
     try {
-      const targets = mergedRobots;
+      const targets = mergedRobots.filter(robot => robot.isOnline && hasActiveRobotCommand(robot) && !robot.recalledAt);
+      if (!targets.length) { showToastSuccess('No active online commands require cancellation.'); return; }
 
       const results = await Promise.allSettled(
         targets.map((r) =>
@@ -190,13 +186,13 @@ export function FleetRecallScreen() {
         ),
       );
 
-      const accepted = targets.filter((robot, index) => results[index].status === 'fulfilled' || !hasActiveRobotCommand(robot));
-      const failed = targets.filter((robot, index) => results[index].status === 'rejected' && hasActiveRobotCommand(robot));
+      const accepted = targets.filter((robot, index) => results[index].status === 'fulfilled');
+      const failed = targets.filter((robot, index) => results[index].status === 'rejected');
       if (failed.length) showToastError(`Recall failed for ${failed.map((r) => r.code).join(', ')} · Retry Required`);
       if (!accepted.length) return;
 
       triggerHaptic('success');
-      showToastSuccess(`Emergency Fleet Recall sent (${accepted.length} units · 202 Accepted / Sim Aid)`);
+      showToastSuccess(`Emergency Fleet Recall sent (${accepted.length} commands · 202 Accepted · Awaiting ACK)`);
 
       setAuditLog((prev) => [
         ...accepted.map((robot): RecallAuditEntry => ({
@@ -204,18 +200,18 @@ export function FleetRecallScreen() {
           robotCode: robot.code,
           reason: 'Global emergency stop / recall all',
           timestamp: nowTimeLabel(),
-          status: hasActiveRobotCommand(robot) ? 'CANCEL_REQUESTED_202' : 'SIM_AID_DRILL',
+          status: 'CANCEL_REQUESTED_202',
         })),
         ...prev,
       ]);
 
-      // Accepted active requests and standby drills enter their respective pending/drill states.
+      // Keep accepted cancellations pending until fleet state is refreshed.
       setRobots((prev) =>
         prev.map((r) => {
           const target = accepted.find((robot) => robot.id === r.id);
           return target ? {
             ...r,
-            status: hasActiveRobotCommand(target) ? 'CANCEL_REQUESTED' : 'RECALLED_SIM',
+            pendingTargetCommandId: target.currentCommandId,
             recalledAt: nowTimeLabel(),
           } : r;
         }),
@@ -231,7 +227,7 @@ export function FleetRecallScreen() {
     <View style={styles.container}>
       <SubScreenHeader
         label="Safety & Fleet Controls"
-        title="Fleet Recall & E-Stop"
+        title="Fleet Command Cancellation"
         onBack={goBack}
         rightAction={
           <Pressable
@@ -260,7 +256,7 @@ export function FleetRecallScreen() {
                 Facility Emergency Recall
               </Text>
               <Text variant="caption" style={styles.emergencySubtitle}>
-                Request cancellation of active commands across the fleet. Await robot ACK; idle units log a Sim Aid drill.
+                Request cancellation of active commands across the fleet. Await robot ACK; idle units are skipped.
               </Text>
             </View>
           </View>
@@ -279,7 +275,7 @@ export function FleetRecallScreen() {
               } else {
                 Alert.alert(
                   'Emergency Recall All Robots',
-                  'This requests cancellation of active robot commands. Robot ACK is required to confirm a stop; idle robots log a Sim Aid drill. Continue?',
+                  'This requests cancellation of active robot commands. Robot ACK is required to confirm a stop; idle robots are skipped. Continue?',
                   [
                     { text: 'Cancel', style: 'cancel' },
                     { text: 'Issue Recall All', style: 'destructive', onPress: handleRecallAllRobots },
@@ -344,7 +340,7 @@ export function FleetRecallScreen() {
                           {isOnline ? 'ONLINE' : 'OFFLINE'}
                         </Text>
                       </View>
-                      <StatusPill status={robot.status} label={robot.status === 'CANCEL_REQUESTED' ? '202 CANCEL SENT' : robot.status === 'RECALLED_SIM' ? 'STANDBY · SIM AID' : robot.status} size="sm" dot />
+                      <StatusPill status={robot.status} label={robot.recalledAt ? 'Cancel Requested · Awaiting ACK' : robot.status} size="sm" dot />
                     </View>
                   </View>
 
@@ -393,11 +389,11 @@ export function FleetRecallScreen() {
                   {/* Individual Emergency Action */}
                   <View style={styles.robotActionRow}>
                     <Button
-                      label={isRecallingThis ? 'Canceling...' : `Emergency Recall ${robot.code}`}
+                      label={isRecallingThis ? 'Canceling...' : `Cancel Command · ${robot.code}`}
                       variant={robot.status === 'PAUSED' ? 'secondary' : 'danger'}
                       size="md"
                       loading={isRecallingThis}
-                      disabled={isRecallingThis}
+                      disabled={isRecallingThis || !isOnline || !hasActiveRobotCommand(robot) || Boolean(robot.recalledAt)}
                       icon={<AlertTriangle size={16} color={robot.status === 'PAUSED' ? colors.textPrimary : '#ffffff'} />}
                       onPress={() => handleRecallSingle(robot)}
                       style={styles.singleRecallBtn}
@@ -431,7 +427,7 @@ export function FleetRecallScreen() {
                   <Text style={styles.auditRobotCode}>{log.robotCode}</Text>
                   <View style={styles.auditStatusBadge}>
                     <CheckCircle2 size={12} color="#16a34a" />
-                    <Text style={styles.auditStatusText}>{log.status === 'CANCEL_REQUESTED_202' ? '202 CANCEL SENT' : log.status === 'SIM_AID_DRILL' ? 'SIM AID DRILL' : log.status}</Text>
+                    <Text style={styles.auditStatusText}>202 CANCEL SENT</Text>
                   </View>
                 </View>
                 <Text variant="caption" color={colors.textSecondary} style={styles.auditReason}>

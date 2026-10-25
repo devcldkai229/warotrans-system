@@ -1,3 +1,4 @@
+import { mobileCapabilities } from '../../shared/api/capabilities';
 import React, { useState } from 'react';
 import {
   Modal,
@@ -41,7 +42,7 @@ export type IncidentCategory =
 interface IssueReportingModalProps {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (category: IncidentCategory, notes: string) => void;
+  onSubmit: (category: IncidentCategory, notes: string) => Promise<void>;
   robotCode?: string;
   jobId?: string;
 }
@@ -88,24 +89,30 @@ export function IssueReportingModal({
   visible,
   onClose,
   onSubmit,
-  robotCode = 'AMR-01',
-  jobId = 'JOB-2026-0812',
+  robotCode = 'Unassigned',
+  jobId = '',
 }: IssueReportingModalProps) {
   const [selectedCat, setSelectedCat] = useState<IncidentCategory>('CONTAINER_DAMAGED');
   const [notes, setNotes] = useState('');
   const [photoAttached, setPhotoAttached] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
 
-  const handleSubmit = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
     triggerHaptic('warning');
-    onSubmit(selectedCat, notes);
-    onClose();
-    toast.error(`Exception submitted for ${jobId}. Task paused and supervisor notified.`);
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try { await onSubmit(selectedCat, notes); onClose(); }
+    catch (error: unknown) { setSubmitError(error instanceof Error ? error.message : 'Incident could not be recorded.'); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleSnapPhoto = () => {
     triggerHaptic('success');
-    setPhotoAttached(true);
+    toast.info('Photo capture and attachment are not configured.');
+    setPhotoAttached(false);
     setCameraActive(false);
   };
 
@@ -120,7 +127,7 @@ export function IssueReportingModal({
     >
       <View style={styles.fullScreenContainer}>
         <SubScreenHeader
-          label={`Incident report · ${robotCode} · Sim Aid`}
+          label={`Incident report · ${robotCode}`}
           title="Report Exception"
           onBack={onClose}
         />
@@ -132,7 +139,7 @@ export function IssueReportingModal({
             <View style={styles.safetyTextWrap}>
               <Text style={styles.safetyBold}>Safety protocol active</Text>
               <Text style={styles.safetyDesc}>
-                Submitting this report will place <Text style={{ fontWeight: '700' }}>{robotCode}</Text> in emergency hold status. Dispatcher and supervisor will be alerted immediately.
+                Report the issue to your supervisor. Submitting a report does not confirm that the robot has stopped.
               </Text>
             </View>
           </View>
@@ -279,12 +286,15 @@ export function IssueReportingModal({
           </View>
         </ScrollView>
 
+        {!mobileCapabilities.reportIssue && <Text style={{ color: colors.textSecondary, padding: 16 }}>Reporting is unavailable on this backend. Contact the supervisor directly.</Text>}
+        {submitError && <Text style={{ color: colors.danger, padding: 16 }}>{submitError}</Text>}
         {/* Bottom Fixed Action in Warm Dark Gray */}
         <View style={styles.footer}>
           <Button
-            label="Submit Exception & Pause Task"
+            label="Submit Exception"
             icon={<AlertTriangle size={18} color="#ffffff" />}
             onPress={handleSubmit}
+            disabled={isSubmitting || !mobileCapabilities.reportIssue}
             variant="primary"
             size="lg"
             style={{ width: '100%' }}

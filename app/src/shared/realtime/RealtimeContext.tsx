@@ -27,55 +27,14 @@ interface RealtimeContextValue {
   lastJobUpdate: JobUpdatedRealtimeEvent | null;
 }
 
-const INITIAL_NOTIFICATIONS: LiveNotificationEvent[] = [
-  {
-    id: 'notif-1',
-    category: 'ROBOT_ARRIVED',
-    title: 'Carrier AMR-01 at Dock 01',
-    message: 'Chassis ready for tote loading. Slot 1 awaiting barcode scan.',
-    timeLabel: '2m ago',
-    robotId: 'AMR-01',
-    jobId: 'JOB-2026-0812',
-    isRead: false,
-  },
-  {
-    id: 'notif-2',
-    category: 'HAZARD',
-    title: 'AMR-02 Stalled in Corridor B2',
-    message: 'Drive motor torque fault. 2 totes (BOX-401, BOX-402) require payload rescue.',
-    timeLabel: '14m ago',
-    robotId: 'AMR-02',
-    jobId: 'JOB-2026-0819',
-    isRead: false,
-  },
-  {
-    id: 'notif-3',
-    category: 'JOB_ASSIGNED',
-    title: 'New Handover Task Assigned',
-    message: 'Outbound Retrieval TR-2046 allocated to your shift zone.',
-    timeLabel: '25m ago',
-    robotId: 'AMR-02',
-    jobId: 'JOB-2026-0813',
-    isRead: false,
-  },
-  {
-    id: 'notif-4',
-    category: 'BATTERY_LOW',
-    title: 'AMR-01 Scheduled for Fast Top-Up',
-    message: 'Battery level at 85%. Scheduled for auto-charge after current putaway batch.',
-    timeLabel: '1h ago',
-    robotId: 'AMR-01',
-    jobId: 'JOB-2026-0812',
-    isRead: true,
-  },
-];
+const INITIAL_NOTIFICATIONS: LiveNotificationEvent[] = [];
 
 const RealtimeContext = createContext<RealtimeContextValue>({
   isConnected: false,
   robotTelemetry: {},
   robotConnectivity: {},
   notifications: INITIAL_NOTIFICATIONS,
-  unreadCount: 3,
+  unreadCount: 0,
   markAllNotificationsRead: () => {},
   markNotificationRead: () => {},
   lastTransportStatus: null,
@@ -85,7 +44,7 @@ const RealtimeContext = createContext<RealtimeContextValue>({
 function notificationFromJob(job: JobDetailResponse, robots: RobotResponse[]): LiveNotificationEvent | null {
   const context = job.contextValues;
   const robotCode = (context?.assignedRobotCode as string) ||
-    robots.find((robot) => robot.id === context?.assignedRobotId)?.code || 'AMR-01';
+    robots.find((robot) => robot.id === context?.assignedRobotId)?.code || 'Unassigned';
   const firstMeta = Array.isArray(context?.containerMeta) ? context.containerMeta[0] : null;
   const firstContainerCode = firstMeta?.code || job.containers?.[0]?.containerId || 'tote';
   const base: LiveNotificationEvent = {
@@ -98,7 +57,7 @@ function notificationFromJob(job: JobDetailResponse, robots: RobotResponse[]): L
     robotId: robotCode,
     isRead: false,
   };
-  if (context?.hasWaitingHandover || job.status === 'ASSIGNED') {
+  if (context?.hasWaitingHandover) {
     return { ...base, category: 'ROBOT_ARRIVED', title: `Carrier ${robotCode} Awaiting Handover`,
       message: `${job.jobNo}: Confirm container ${firstContainerCode} at ${context?.currentStop || context?.sourceEndpointCode || 'station'}.` };
   }
@@ -123,47 +82,8 @@ function notificationFromJob(job: JobDetailResponse, robots: RobotResponse[]): L
 
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
-  const [robotTelemetry, setRobotTelemetry] = useState<Record<string, RobotTelemetryEvent>>({
-    'AMR-01': {
-      robotId: 'rbt-001',
-      robotCode: 'AMR-01',
-      poseX: 18.5,
-      poseY: 12.2,
-      poseYaw: 1.57,
-      batteryPercent: 88,
-      navigationStatus: 'NAVIGATING',
-      localizationStatus: 'TRACKED',
-      lastTelemetryAt: new Date().toISOString(),
-    },
-    'AMR-02': {
-      robotId: 'rbt-002',
-      robotCode: 'AMR-02',
-      poseX: 32.1,
-      poseY: 8.4,
-      poseYaw: 0.0,
-      batteryPercent: 94,
-      navigationStatus: 'STANDBY',
-      localizationStatus: 'TRACKED',
-      lastTelemetryAt: new Date().toISOString(),
-    },
-  });
-
-  const [robotConnectivity, setRobotConnectivity] = useState<Record<string, RobotConnectivityEvent>>({
-    'AMR-01': {
-      robotId: 'rbt-001',
-      robotCode: 'AMR-01',
-      isOnline: true,
-      status: 'AVAILABLE',
-      lastHeartbeatAt: new Date().toISOString(),
-    },
-    'AMR-02': {
-      robotId: 'rbt-002',
-      robotCode: 'AMR-02',
-      isOnline: true,
-      status: 'AVAILABLE',
-      lastHeartbeatAt: new Date().toISOString(),
-    },
-  });
+  const [robotTelemetry, setRobotTelemetry] = useState<Record<string, RobotTelemetryEvent>>({});
+  const [robotConnectivity, setRobotConnectivity] = useState<Record<string, RobotConnectivityEvent>>({});
 
   const [notifications, setNotifications] = useState<LiveNotificationEvent[]>(INITIAL_NOTIFICATIONS);
   const [lastTransportStatus, setLastTransportStatus] = useState<TransportStatusEvent | null>(null);
@@ -204,7 +124,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         });
       }
       if (!jobs) return;
-      const realJobs = jobs.filter((job) => !['JOB-2026-0812', 'JOB-2026-0819'].includes(job.id));
+      const realJobs = jobs;
       const derived = realJobs.map((job) => notificationFromJob(job, fleet?.items || []))
         .filter((n): n is LiveNotificationEvent => n !== null);
       setNotifications((prev) => {
@@ -218,8 +138,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       });
     }
     hydrateLiveState().catch(() => {});
-    return () => { cancelled = true; };
-  }, [accessToken, lastJobUpdate]);
+    const poll = setInterval(() => { void hydrateLiveState().catch(() => {}); }, 15000);
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [accessToken, lastJobUpdate, isConnected]);
 
   useEffect(() => {
     realtimeClient.start().catch(() => {});
@@ -274,6 +195,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       realtimeClient.stop();
     };
   }, []);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const retry = setInterval(() => { if (!realtimeClient.isConnected) void realtimeClient.start(); }, 10000);
+    return () => clearInterval(retry);
+  }, [accessToken]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 

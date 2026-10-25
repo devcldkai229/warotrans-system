@@ -1,153 +1,38 @@
-# WaroTrans Mobile Staff App — Agent Guidelines & Design Standards
+# WaroTrans Mobile — Agent Rules
 
-This is the **WaroTrans Mobile Staff App** (`warotrans-system/app`), a mission-critical warehouse execution handheld application connecting warehouse operators, Autonomous Mobile Robots (AMRs), and Warehouse Execution Systems (WES).
+## Phạm vi và cách bắt đầu
 
----
+- Chỉ sửa `app/`. Đọc BE/Web/rules để đối chiếu; không sửa endpoint, DTO BE, quyền, migration, DB, robot, infrastructure hoặc source của role khác.
+- Đọc [README](README.md), [rules/README](../rules/README.md), rồi rules 00–06, 09, 99 và rule liên quan trước khi code. Đọc source feature/API đang dùng, không quét mọi tài liệu cho mỗi task.
+- Quyết định mới của người dùng ưu tiên theo rules/README. README ghi nghiệp vụ đích; route/DTO/handler đang chạy là bằng chứng triển khai. Nếu khác nhau, nêu gap và phối hợp BE, không tự đổi nghiệp vụ.
+- Giữ thay đổi đang có của người dùng. Không chạy seed/reset/demo hoặc BE integration tests vào DB dùng chung.
 
-## 0.0 MANDATORY Visual UI & Component Preservation Rule (HARD LOCK FOR ALL AGENTS & CLI TOOLS)
+## Nghiệp vụ và API
 
-- **NEVER strip, flatten, or replace existing screen JSX layouts, `StyleSheet.create` styles, `lucide-react-native` icons, `BrandMark`, custom cards, steppers, modals, or visual micro-interactions** with generic/barebones form wrappers (such as unstyled `<Card>` + `<TextField>` lists).
-- When aligning API contracts, fixing business logic, or implementing operational refinements (`P0` / `P1` / `P2`), you MUST **surgically edit state, hooks, API calls, and targeted sub-sections** inside the existing rich screen components while **preserving 100% of the visual design, layout structure, spacing, icons, and styling** from the baseline screens (`86d453f`).
-- Any subagent (`invoke_subagent`) or external CLI agent (`codex exec`, `opencode`) that deletes large blocks of `StyleSheet.create` or replaces a custom-designed screen with a simplified text form violates this repository's primary constraint and its changes must be rejected immediately.
+- V1 chở Container, mỗi Container gắn một Product; InventoryStock.ContainerCount đếm container, không phải số món bên trong.
+- TransportRequestDetail là movement plan; JobContainer nối Request/Job/Container. Queue, Start Job, nhận human task và confirm handover là thao tác riêng.
+- Staff chọn kho/điểm và nhận task từ queue chung. Không suy ASSIGNED của Job là Staff đã nhận việc; actor/owner/trạng thái do BE quyết định.
+- Lấy workflow publish và render STAFF_INPUT từ schema; không thay workflow/UUID/đích để né validation, không cho Staff sửa ADMIN_INPUT/SYSTEM_VALUE.
+- Phân biệt job/task/step/container UUID. `contracts.ts` còn DTO/projection legacy; đối chiếu wire contract, không sửa BE cho khớp type FE cũ.
+- Không dùng seed fallback, fake success, giả ACK, tồn kho, claim, offline sync hoặc robot state để che lỗi API. Giữ đúng empty/error/loading và input khi thất bại.
+- `src/shared/api/capabilities.ts` đang khóa API thiếu. Chỉ bật sau khi contract/quyền/response được kiểm chứng; không coi nó là giới hạn nghiệp vụ mong muốn.
+- Cancel command không phải pause/resume/E-stop. Accepted 202, robot ACK và hoàn tất nghiệp vụ là ba mốc khác nhau.
+- Các rule broadcast/claim/batch/retry/recovery trong README là yêu cầu đích; không thêm enum/API giả hoặc timer frontend để thay orchestration BE.
 
----
+## Giữ UI và cấu trúc
 
-## 0. Current Design Language — "Calm Operations"
+- Sửa logic phải giữ layout, StyleSheet, icon, BrandMark, card, stepper, modal và tương tác hiện có. Chỉ sửa subsection cần thiết; không thay rich screen bằng form generic hoặc tự redesign.
+- UI mới ưu tiên `src/shared/ui`; giữ legacy primitive còn consumer. Shell ở `src/app/shell`; shared component mới nhận data/callback, tránh phụ thuộc navigation của app.
+- Đọc token từ `src/shared/theme`, không chép palette cũ: UI mới dùng Text variants (sàn 12pt), Title Case, hairline/shadow nhẹ, touch target tối thiểu 44pt (Button md48/lg52).
+- Dùng `useTopInset()` và `dockReservedSpace(dockHeight)` khi có dock. Giữ SafeAreaProvider + root View; không hardcode inset theo iPhone hoặc bọc root SafeAreaView gây letterbox.
+- Browser globals chỉ dùng trong nhánh web có guard. CSS web không đưa vào native StyleSheet; đặt pointerEvents trên JSX prop.
+- Dùng haptics helper; tap/tick không rung. Lỗi trong modal phải thấy được, không trông chờ toast dưới RN Modal.
+- Map dùng calibration/world coordinates và pose thật. Không hardcode marker, quỹ đạo Nav2 hoặc vị trí Staff; thiếu dữ liệu phải thể hiện thiếu.
 
-The app follows **"Calm Operations"** (Apple / Linear / Google Workspace clean minimal).
-Phase 1 landed the foundation (tokens, contracts, the `src/shared/ui` primitive
-library). Phase 2 landed the **shell** (`AppHeader`, `BottomTabBar`,
-`SafetyActionSheet`) and the **pilot screens** (`Home`, `Jobs`, `JobCard`).
+## Kiểm chứng và tài liệu
 
-- **Foundation doc**: [`docs/CALM_OPERATIONS_FOUNDATION.md`](./docs/CALM_OPERATIONS_FOUNDATION.md).
-- **Shell + pilot doc**: [`docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md`](./docs/CALM_OPERATIONS_SHELL_AND_PILOTS.md).
-- The shell lives in **`src/app/shell/`** (`AppHeader`, `SafetyActionSheet`), not `src/shared/components/*`:
-  it navigates, so it sits above the feature layer and may import `NavigationContext`. `src/shared/**`
-  stays a leaf layer that never imports from `src/app/**`.
-- **New screens and migrated screens import primitives from the barrel**, never from `shared/components/*`:
-  ```tsx
-  import { Button, Card, Text, StatusPill, SegmentedControl, TextField, ProgressMeter, EmptyState } from '../../shared/ui';
-  ```
-- **Overriding rules for anything that uses `src/shared/ui`:**
-  - `Text` is the only text element. No inline `fontSize`; the scale bottoms out at **12pt** (never below 11pt anywhere).
-  - Flat surfaces: 1px hairline + one of `shadows.sm | md | lg`. **No 3D bevels** (`borderBottomWidth` keys) in new UI.
-  - Touch floor is 44pt (`sm`), 48pt (`md`, every primary action) and 52pt (`lg`).
-  - Status colour is derived, never hand-picked: pass the status to `StatusPill` (`RECOVERY_REQUIRED` -> danger).
-  - **Copy is Title Case.** Never `textTransform: 'uppercase'` in new UI — it reads as shouting on a screen an operator glances at while walking.
-  - Header insets still come from `useTopInset()` — see §2.3, which is unchanged.
-- **Contracts**: `src/shared/types/contracts.ts` mirrors the C# backend 1:1 (camelCase, string enums). The Phase 0 view models (`UserSession`, `JobSummary`, `RobotSummary`, ...) remain for un-migrated screens and are deleted per-screen as DTOs land.
-- The legacy rules in §2 below still govern **un-migrated** screens. When the two conflict for a migrated screen, this section wins.
-
----
-
-## 1. Source of Truth & Design Philosophy
-
-- **Prototype Source of Truth**: `/mnt/Data/Capstone Project - WaroTrans/ui-design-prototype/prototype-staff-web/src/routes/index.tsx`
-- **Master Design System Document**: See [`docs/DESIGN_SYSTEM_AND_RULES.md`](./docs/DESIGN_SYSTEM_AND_RULES.md) for full token details, layout proportions, and component specifications.
-- **Aesthetic Standard**: Industrial Silicon Valley / Apple-grade UX. High contrast, tactile 3D button mechanics, crisp typography, and fluid micro-interactions.
-
----
-
-## 2. Mandatory Design & Ergonomic Rules
-
-### 2.1 Palette & Contrast (Never use faded gray)
-- **Background**: `#eef1f6` (`colors.background`).
-- **Surface**: `#ffffff` (`colors.surface`) — Card, Sheet, Modal, Header.
-- **Inset**: `#f4f6fa` (`colors.surfaceSubtle`) — route rows and detail blocks inside a card.
-- **Borders**: `rgba(33, 34, 38, 0.08)` (`colors.border`), heavier `colors.borderStrong` `#c4c8d0`.
-- **Text Primary**: `#121317` (`colors.textPrimary`).
-- **Text Secondary**: `#45474d` (`colors.textSecondary`) — never `#6a6a71` (`textMuted`) for readable content.
-- **Primary Accent**: `#1557d0` (`colors.primary`, and `colors.primaryText` for accent text); white on that fill is 6.35:1. Pressed/darker tone is `primaryDark` (`#0f3f9e`); `danger`/`warning` text comes from the `*Text` companions.
-- **Status Tones** (from `src/shared/theme/colors.ts`): Success `#059669`, Warning `#d97706`, Danger `#dc2626`, Info `#0284c7`.
-  Each also has `*Bg`, `*Border` and `*Text` companions. Read the real token from `colors.ts` before using one.
-
-### 2.2 Typography Hierarchy
-Type scale lives in `src/shared/theme/typography.ts` and bottoms out at **12pt**: Display 24 · Title 20 · Headline 16 · Body 14 · Label 13 · Caption 12 · Code 12 (mono).
-- **Protocol Codes, IDs, Telemetry**: `variant="code"` (JetBrains Mono / Menlo, 12pt, weight 500-700). No ALL-CAPS transform — the uppercase was the Phase 0 look and it is gone from new UI.
-- **Card Headings & Titles**: `variant="headline"` (16pt, weight 600). Important info must not be skimmed past.
-- **Labels & Subtext**: `variant="label"` (13pt) and `variant="caption"` (12pt), `colors.textSecondary`.
-
-### 2.3 Edge-to-Edge Layout & Mobile Safe Insets (iPhone 12 / Modern Smartphones)
-- **NO root `<SafeAreaView>`**:
-  - The root in `App.tsx` must be a plain `<View style={{ flex: 1, backgroundColor: colors.background }}>`. Wrapping the whole app in `SafeAreaView` causes letterbox gaps on physical iPhones.
-- **Header Top Inset — dùng `useTopInset()`, KHÔNG hardcode số**:
-  ```tsx
-  import { useTopInset } from '../theme/layout';
-  const topInset = useTopInset();
-  <View style={[styles.header, { paddingTop: topInset }]} />
-  ```
-  `useTopInset()` (`src/shared/theme/layout.ts`) trả về:
-  - **web** → `SIMULATED_STATUS_BAR (44) + 4 = 48`, chừa chỗ cho status bar giả mà `App.tsx` vẽ trong khung điện thoại (mô phỏng tai thỏ / nối ruồi).
-  - **native** → `insets.top` thật của thiết bị, dao động **20pt (SE) → 47pt (iPhone 12/13) → 59pt (Dynamic Island 14/15/16 Pro)**.
-
-  Trước đây cả hai trường hợp dùng chung một hằng số `48`, chỉ đúng ở iPhone 12/13. **Đừng viết lại `Platform.OS === 'ios' ? 48 : 12`** — đó chính là lỗi lệch inset mà `useTopInset` sinh ra để tránh.
-- **SafeAreaProvider**: root trong `App.tsx` đã bọc `<SafeAreaProvider>` (bắt buộc cho `useSafeAreaInsets`), nhưng root vẫn là plain `<View>` — **không** dùng `SafeAreaView`.
-- **Bottom Tab Bar (`src/app/navigation/BottomTabBar.tsx`)**:
-  - The bar is **flat and edge to edge**: white surface, a single 1px top hairline, no floating pill,
-    no floating shadow. **3 core tabs** — `Home`, `Jobs`, `Transport` — minimalist icon-only for
-    maximum touch focus and elegance (touch targets >= 72pt width x 44pt height).
-  - Active tab: soft rounded-full pill highlight (`rgba(21, 87, 208, 0.08)`) with `colors.primaryText` (`#1a5cd6`) icon. Inactive: `colors.textMuted`.
-  - Tab job count badge sits at `top: -6, right: -13`, filled with **bright warm Amber-400 (`#fbbf24`)**,
-    a crisp **1.5px white border (`#ffffff`)**, and high-contrast **deep amber text (`#78350f`)** (WCAG AAA >= 7:1),
-    ensuring it is light, friendly, and never muddy or burnt-dark.
-  - It is `position: 'absolute'` (content scrolls underneath it, the Google-console pattern) and
-    carries a safe-area sibling strip:
-    ```tsx
-    const insets = useSafeAreaInsets();
-    const bottomInset = insets.bottom || 10;
-    <View style={[styles.safeArea, { height: bottomInset }]} pointerEvents="none" />
-    ```
-  - **Never hardcode a bottom `paddingBottom` to clear the bar.** Use the measured height:
-    ```tsx
-    const { dockHeight } = useNavigation();
-    const bottomInset = dockReservedSpace(dockHeight); // height + bottomOffset(0) + gutter(16)
-    ```
-- **App Header (`src/app/shell/AppHeader.tsx`)**:
-  - Content row is **56px** (`minHeight: 56`, `paddingTop: topInset + 4`, `paddingBottom: 10`) for a solid,
-    executive feel with ample vertical breathing room.
-  - **Left**: Monochrome `BrandMark` (40px) paired directly with Work Zone selector pill (`📍 Inbound Dock 01 ▾`, 40px height, rounded full) with NO redundant "WaroTrans" text, providing maximum horizontal breathing room.
-  - **Right**: Notification Bell (`Bell`, 40px with badge count `3` and compact anchored dropdown `NotificationSheet` 320px width in 100% English) + Operator Avatar (`Avatar`, 40px, solid black `#121317`). Search button removed to eliminate header clutter (inventory/lookup accessible via Transport Hub).
-- **Live Map Screen (`src/features/monitoring/JobLiveMapScreen.tsx`)**:
-  - Uses `SubScreenHeader` with safe-area insets, Back button (`goBack`), Title, and Recenter button (`LocateFixed`).
-  - True vector SVG Nav2 waypoints (`<Path>`, `<Circle>`) connecting Dock 01 exit to the central aisle and Rack A,
-    with zero arbitrary rotated CSS cuts through Loading Docks.
-  - Collision-free robot markers (`AMR-01` in aisle at `left: 46%, top: 28%`, `AMR-02` in standby bay at `left: 72%, top: 16%`)
-    with single-line non-wrapping pills (`● AMR-01 1.2 m/s`, `● AMR-02 Standby`) leaving Rack B title 100% visible.
-- **Sonner Toast Banner**:
-  - Position below the iOS notch: `top: Platform.OS === 'ios' ? 54 : 14`.
-  - Support custom icons (e.g. `MapPin` for "Locate Me"). Tap to dismiss, no close `X` button.
-- **Header overlays & modals**:
-  - `AppHeader` does not anchor dropdowns to a measured header height. The zone picker, the
-    account sheet and the safety sheet are all `Modal`s — occasional actions do not earn a
-    permanently mounted popover.
-  - A screen that floats its own chrome over scrolling content (the Live Map telemetry sheet)
-    must offset itself by `dockReservedSpace(dockHeight)`, not by a constant.
-
-### 2.4 Haptic Vibration Policy (`src/shared/utils/haptics.ts`)
-- **Zero Motor Spam**: Routine taps (`'tap'`), ticks (`'tick'`), tab switching, and opening standard dialogs MUST be silenced.
-- **Micro-Pulse Intensity**:
-  - `'success'`: Single 10ms micro-pulse (crisp Apple Watch-like feel).
-  - `'warning'`: Single 15ms tap.
-  - `'error'`: Double 20ms pulse `[0, 20, 30, 20]` (never harsh 80ms buzzes).
-
-### 2.5 Hermes Native Crash Prevention
-- **Web vs Native Isolation**: Never call browser globals (`window.location`, `window.history`, `document`) on native! Always guard with `if (Platform.OS === 'web' && typeof window !== 'undefined')`.
-- **StyleSheet Constraints**: Never put `pointerEvents: 'none'` in `StyleSheet.create`. Use the JSX prop `<View pointerEvents="none">`.
-
----
-
-## 3. Essential Commands & Verification
-
-Always run validation before concluding any task:
-
-```bash
-# Typecheck (MANDATORY — must be 0 errors)
-npm run typecheck
-
-# Check Expo status
-npx expo start
-```
-
-## 4. Scope, Boundaries & Documentation Maintenance Rule
-- **Consolidated Workspace**: All work focuses strictly inside `warotrans-system/` (`warotrans-system/app/` and `warotrans-system/backend/`). Do NOT consult external directories (e.g. `../WaroTrans-specs/`).
-- **MANDATORY Documentation Updates**: After every code change, feature calibration, or design decision, the agent MUST immediately update the living `.md` documentation in `warotrans-system/app/docs/` (`CALM_OPERATIONS_SHELL_AND_PILOTS.md`, `DESIGN_SYSTEM_AND_RULES.md`, `progress.md`) and `AGENTS.md`. Never let documentation drift behind code changes.
+- Sau sửa code: chạy `npm run typecheck` trong app và test liên quan (`npm test`); build web khi ảnh hưởng bundle. Không coi web pass là native/robot E2E pass.
+- Sửa docs/comment: kiểm tra link, tham chiếu và diff; không cần tạo test cho văn bản. Chỉ ghi kết quả đã chạy và giới hạn còn lại.
+- Git theo [rules/11](../rules/11-GIT-CICD-RULES.md): dùng `feature/*`, không push trực tiếp main/develop; chỉ stage phạm vi app và commit theo mẫu đang có trong repo.
+- Chỉ duy trì hai file: AGENTS cho instruction ổn định; README cho context, cách chạy và gap BE. Cập nhật đúng mục bị ảnh hưởng.
+- Không tạo thêm plan/progress/findings/audit/history/backup Markdown trừ khi người dùng yêu cầu. Không copy transcript/artifact vào repo, không nhân bản rules hoặc bảng token từ source.

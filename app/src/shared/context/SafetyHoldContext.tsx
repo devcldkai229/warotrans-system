@@ -1,3 +1,4 @@
+import { toast } from './ToastContext';
 import React, { createContext, useCallback, useContext, useMemo, useState, ReactNode } from 'react';
 
 interface SafetyHoldContextType {
@@ -26,7 +27,7 @@ const SafetyHoldContext = createContext<SafetyHoldContextType | undefined>(undef
 export function SafetyHoldProvider({ children }: { children: ReactNode }) {
   const [isHolding, setIsHolding] = useState(false);
 
-  const toggleHold = useCallback(() => setIsHolding((prev) => !prev), []);
+  const toggleHold = useCallback(() => toast.warning('Pause and resume are unavailable on this backend. No robot command was sent.'), []);
   const releaseHold = useCallback(() => setIsHolding(false), []);
 
   const value = useMemo(

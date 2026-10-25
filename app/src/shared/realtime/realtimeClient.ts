@@ -35,6 +35,8 @@ export interface RobotTelemetryEvent {
   poseY: number;
   poseYaw: number;
   batteryPercent: number;
+  linearVelocity?: number | null;
+  angularVelocity?: number | null;
   navigationStatus: string | null;
   localizationStatus: string | null;
   lastTelemetryAt: string | null;
