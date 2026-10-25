@@ -1,95 +1,103 @@
 @import 'tailwindcss';
 
 /*
+ * Two themes. The tokens below are the dark one (the default); `[data-theme='light']` in the base layer swaps the
+ * colours, shadows and the map filter for the light one. Components only ever use the tokens, so nothing else changes.
+ *
  * Design tokens. Every colour, type size, radius and shadow used by the console is named here, and the default
  * Tailwind palettes are switched off so a screen cannot drift away from them.
+ *
+ * Look: a dark, calm "social app" console. Page grey #18191a, cards #242526, raised / hover #3a3b3c, one blue accent,
+ * system sans-serif, small radii, soft shadows.
  */
 @theme {
-  --font-sans: 'Google Sans Flex', 'Google Sans', system-ui, sans-serif;
-  --font-mono: 'Google Sans Code', ui-monospace, 'Cascadia Code', monospace;
+  --font-sans: 'Segoe UI Historic', 'Segoe UI', system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 
   --color-*: initial;
   --color-white: #fff;
-  /* Surface ladder: each step must read as a separate layer next to the one before it, not just in theory. */
-  --color-surface: #fff;
-  --color-container: #eef1f6;
-  --color-container-high: #e3e8ef;
-  --color-container-higher: #d6dce6;
-  --color-container-highest: #bcc5d1;
-  --color-ink: #121317;
-  --color-ink-soft: #2f3034;
-  --color-ink-2: #45474d;
-  --color-muted: #6a6a71;
-  --color-outline: rgb(33 34 38 / 0.18);
-  --color-outline-soft: rgb(33 34 38 / 0.1);
+  --color-black: #000;
+  /* The dim layer behind a dialog. */
+  --color-scrim: rgb(0 0 0 / 0.65);
+  /*
+   * Surface ladder, dark: `surface` is a card, bar or menu (the lightest layer a reader sees as a "card"), `container`
+   * the page grey behind cards, the `container-high…` steps are raised: hovers, inputs, pills, selected rows.
+   * Each step must read as a separate layer next to the one before it.
+   */
+  --color-surface: #242526;
+  --color-container: #18191a;
+  --color-container-high: #3a3b3c;
+  --color-container-higher: #4e4f50;
+  --color-container-highest: #6b6d70;
+  --color-ink: #e4e6eb;
+  --color-ink-soft: #cfd1d6;
+  --color-ink-2: #b0b3b8;
+  --color-muted: #8a8d91;
+  --color-outline: rgb(255 255 255 / 0.2);
+  --color-outline-soft: rgb(255 255 255 / 0.1);
+
+  /* The accent for primary buttons, selected tools and links. */
+  --color-primary: #2374e1;
+  --color-primary-hover: #3982e4;
 
   /* Status tones: `soft` is the fill, `ink` the text on it, the plain name the dot / bar / map marker. */
-  --color-blue: #3279f9;
-  --color-blue-ink: #1a5cd6;
-  --color-blue-soft: #e9f1ff;
-  --color-green: #1e8e3e;
-  --color-green-ink: #137333;
-  --color-green-soft: #e4f4e8;
-  --color-amber: #e37400;
-  --color-amber-ink: #9a4b00;
-  --color-amber-soft: #fdf1d8;
-  --color-red: #d93025;
-  --color-red-ink: #b3261e;
-  --color-red-soft: #fce8e6;
-  --color-purple: #8430ce;
-  --color-purple-ink: #6b21b8;
-  --color-purple-soft: #f3e8fd;
-  --color-teal: #0f766e;
-  --color-teal-ink: #0f5f59;
-  --color-teal-soft: #e0f5f2;
-  --color-rose: #c2185b;
-  --color-rose-ink: #9f1449;
-  --color-rose-soft: #fce4ec;
+  --color-blue: #2d88ff;
+  --color-blue-ink: #6cb0ff;
+  --color-blue-soft: rgb(45 136 255 / 0.2);
+  --color-green: #45bd62;
+  --color-green-ink: #6fd98a;
+  --color-green-soft: rgb(69 189 98 / 0.2);
+  --color-amber: #f7b928;
+  --color-amber-ink: #fbd062;
+  --color-amber-soft: rgb(247 185 40 / 0.2);
+  --color-red: #f02849;
+  --color-red-ink: #ff7a8e;
+  --color-red-soft: rgb(240 40 73 / 0.2);
+  --color-purple: #a66cff;
+  --color-purple-ink: #c7a4ff;
+  --color-purple-soft: rgb(166 108 255 / 0.2);
+  --color-teal: #2dc7b4;
+  --color-teal-ink: #6fe0d2;
+  --color-teal-soft: rgb(45 199 180 / 0.2);
+  --color-rose: #ec5b9a;
+  --color-rose-ink: #f58cba;
+  --color-rose-soft: rgb(236 91 154 / 0.2);
 
   --text-*: initial;
   --text-xs: 0.78125rem;
   --text-xs--line-height: 1.3;
-  --text-xs--letter-spacing: 0.009em;
   --text-sm: 0.90625rem;
-  --text-sm--line-height: 1.45;
-  --text-sm--letter-spacing: 0.011em;
-  --text-base: 1.09375rem;
-  --text-base--line-height: 1.45;
-  --text-base--letter-spacing: 0.01em;
+  --text-sm--line-height: 1.4;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.4;
   --text-md: 1.25rem;
   --text-md--line-height: 1.3;
-  --text-md--letter-spacing: -0.0025em;
   --text-xl: 1.5rem;
-  --text-xl--line-height: 1.15;
-  --text-xl--letter-spacing: -0.003em;
-  --text-2xl: 1.75rem;
-  --text-2xl--line-height: 1.1;
-  --text-2xl--letter-spacing: -0.004em;
-  --text-3xl: 2rem;
-  --text-3xl--line-height: 1.08;
-  --text-3xl--letter-spacing: -0.005em;
-  --text-4xl: 2.625rem;
-  --text-4xl--line-height: 1.04;
-  --text-4xl--letter-spacing: -0.017em;
-  --text-5xl: 3.375rem;
-  --text-5xl--line-height: 1.04;
-  --text-5xl--letter-spacing: -0.018em;
-  --text-7xl: 6.125rem;
-  --text-7xl--line-height: 0.9;
-  --text-7xl--letter-spacing: -0.02em;
+  --text-xl--line-height: 1.2;
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 1.15;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 1.12;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 1.1;
+  --text-5xl: 2.875rem;
+  --text-5xl--line-height: 1.08;
+  --text-7xl: 4.75rem;
+  --text-7xl--line-height: 0.95;
 
-  --font-weight-book: 450;
+  /* Headings are semi-bold, not light. */
+  --font-weight-book: 600;
 
   --radius-*: initial;
   --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  --radius-xl: 36px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
   --shadow-*: initial;
-  --shadow-float: 0 0 0 1px rgb(33 34 38 / 0.1), 0 4px 12px rgb(0 0 0 / 0.06), 0 16px 32px -12px rgb(18 19 23 / 0.16);
-  --shadow-modal: 0 0 0 1px rgb(33 34 38 / 0.1), 0 24px 64px -16px rgb(18 19 23 / 0.3);
+  --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.2), 0 12px 28px rgb(0 0 0 / 0.35);
+  --shadow-modal: 0 0 0 1px rgb(255 255 255 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.7);
 
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
 
@@ -112,14 +120,66 @@
 }
 
 @layer base {
+  :root {
+    /* Occupancy images are black walls on a white floor: in the dark theme they are flipped to light walls on dark. */
+    --map-image-filter: invert(0.88) brightness(0.62);
+  }
+
+  /* Light theme: Facebook-style white cards on a light grey page. */
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --color-surface: #ffffff;
+    --color-container: #f0f2f5;
+    --color-container-high: #e4e6eb;
+    --color-container-higher: #d8dadf;
+    --color-container-highest: #bcc0c4;
+    --color-ink: #1c1e21;
+    --color-ink-soft: #2c2f33;
+    --color-ink-2: #5b5e63;
+    --color-muted: #7a7d82;
+    --color-outline: rgb(0 0 0 / 0.2);
+    --color-outline-soft: rgb(0 0 0 / 0.1);
+    --color-scrim: rgb(20 22 26 / 0.45);
+
+    --color-primary: #1877f2;
+    --color-primary-hover: #166fe5;
+
+    --color-blue: #1877f2;
+    --color-blue-ink: #0a5bd1;
+    --color-blue-soft: rgb(24 119 242 / 0.12);
+    --color-green: #31a24c;
+    --color-green-ink: #1b7a33;
+    --color-green-soft: rgb(49 162 76 / 0.14);
+    --color-amber: #f7b928;
+    --color-amber-ink: #8f5b00;
+    --color-amber-soft: rgb(247 185 40 / 0.2);
+    --color-red: #e41e3f;
+    --color-red-ink: #c01130;
+    --color-red-soft: rgb(228 30 63 / 0.1);
+    --color-purple: #8a4bdb;
+    --color-purple-ink: #6a2fb8;
+    --color-purple-soft: rgb(138 75 219 / 0.12);
+    --color-teal: #0f9d8c;
+    --color-teal-ink: #0b6f63;
+    --color-teal-soft: rgb(15 157 140 / 0.12);
+    --color-rose: #d6336c;
+    --color-rose-ink: #a61e4d;
+    --color-rose-soft: rgb(214 51 108 / 0.12);
+
+    --shadow-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 4px rgb(0 0 0 / 0.08), 0 12px 28px rgb(0 0 0 / 0.12);
+    --shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 24px 64px -16px rgb(0 0 0 / 0.35);
+    --map-image-filter: none;
+  }
+
   html {
-    font-optical-sizing: auto;
+    /* Native controls (select lists, scrollbars, date pickers) follow the dark theme. */
+    color-scheme: dark;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scrollbar-width: thin;
-    scrollbar-color: var(--color-container-highest) transparent;
+    scrollbar-color: var(--color-container-higher) transparent;
   }
 
   body {
@@ -127,7 +187,6 @@
     color: var(--color-ink);
     font-size: var(--text-sm);
     line-height: var(--text-sm--line-height);
-    letter-spacing: var(--text-sm--letter-spacing);
   }
 
   button:not(:disabled),
@@ -141,6 +200,6 @@
   }
 
   ::selection {
-    background: rgb(50 121 249 / 0.2);
+    background: color-mix(in srgb, var(--color-blue) 35%, transparent);
   }
 }

@@ -9,6 +9,7 @@ import {
 } from 'react'
 import type { Edge, Endpoint, Point, Zone } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
+import { MAP_CARD, MAP_HALO, MAP_IMAGE_FILTER, MAP_PAPER } from '@/shared/map/mapStyle'
 import { Icon } from '@/shared/ui/Icon'
 import { lineStringToPoints, polygonToPoints } from '@/shared/map/geoJson'
 import {
@@ -350,9 +351,9 @@ export function MapEditorCanvas({
             cursor: tool === 'pan' ? 'grab' : readOnly ? 'default' : 'crosshair',
           }}
         >
-          <rect x={0} y={0} width={W} height={H} fill="#1a1a1a" />
+          <rect x={0} y={0} width={W} height={H} fill={MAP_PAPER} />
           {previewUrl ? (
-            <image href={previewUrl} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />
+            <image href={previewUrl} x={0} y={0} width={W} height={H} preserveAspectRatio="none" style={{ filter: MAP_IMAGE_FILTER }} />
           ) : null}
 
           {/* the selected zone is drawn last so it stays visible when another zone covers it */}
@@ -363,8 +364,8 @@ export function MapEditorCanvas({
               <polygon
                 key={zone.id}
                 points={polyline(pts)}
-                fill={isSel ? 'rgba(59,130,246,0.28)' : 'rgba(234,179,8,0.18)'}
-                stroke={isSel ? '#2563eb' : '#ca8a04'}
+                fill={isSel ? 'rgba(45,136,255,0.28)' : 'rgba(247,185,40,0.18)'}
+                stroke={isSel ? '#2d88ff' : '#f7b928'}
                 strokeWidth={isSel ? 2 / zoom : 1 / zoom}
                 vectorEffect="non-scaling-stroke"
                 onClick={
@@ -398,7 +399,7 @@ export function MapEditorCanvas({
                 <polyline
                   points={polyline(pts)}
                   fill="none"
-                  stroke={isSel ? 'rgba(37,99,235,0.35)' : 'rgba(100,116,139,0.35)'}
+                  stroke={isSel ? 'rgba(45,136,255,0.35)' : 'rgba(176,179,184,0.35)'}
                   strokeWidth={widthPx}
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -406,7 +407,7 @@ export function MapEditorCanvas({
                 <polyline
                   points={polyline(pts)}
                   fill="none"
-                  stroke={isSel ? '#2563eb' : '#334155'}
+                  stroke={isSel ? '#2d88ff' : 'var(--color-ink-2)'}
                   strokeWidth={isSel ? 2 / zoom : 1.25 / zoom}
                   vectorEffect="non-scaling-stroke"
                   markerEnd={edge.direction === 'ONE_WAY' ? 'url(#edge-arrow)' : undefined}
@@ -418,7 +419,7 @@ export function MapEditorCanvas({
           {endpoints.map((ep) => {
             const at = worldToPixel(transform, { x: ep.x, y: ep.y })
             const isSel = selected.endpointId === ep.id
-            const color = isSel ? '#2563eb' : '#0f172a'
+            const color = isSel ? '#2d88ff' : 'var(--color-ink)'
             return (
               <g
                 key={ep.id}
@@ -443,19 +444,19 @@ export function MapEditorCanvas({
                   y1={0}
                   x2={px(11)}
                   y2={0}
-                  stroke={isSel ? '#2563eb' : '#f59e0b'}
+                  stroke={isSel ? '#2d88ff' : '#f59e0b'}
                   strokeWidth={px(2)}
                   strokeLinecap="round"
                   transform={`rotate(${headingDeg(ep.yaw)})`}
                 />
-                <circle r={px(isSel ? 5 : 4)} fill={color} stroke="#fff" strokeWidth={px(1.5)} />
+                <circle r={px(isSel ? 5 : 4)} fill={color} stroke={MAP_HALO} strokeWidth={px(1.5)} />
                 <text
                   y={px(15)}
                   textAnchor="middle"
                   fontSize={px(10)}
                   fontWeight={600}
                   fill={color}
-                  stroke="#fff"
+                  stroke={MAP_HALO}
                   strokeWidth={px(3)}
                   paintOrder="stroke"
                   pointerEvents="none"
@@ -476,18 +477,18 @@ export function MapEditorCanvas({
                     onPointerDown={(e) => startPointDrag(e, onPendingEndpointMove)}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <circle r={px(14)} fill="rgba(37,99,235,0.12)" stroke="#2563eb" strokeWidth={px(1.25)} strokeDasharray={`${px(4)} ${px(3)}`} />
+                    <circle r={px(14)} fill="rgba(45,136,255,0.12)" stroke="#2d88ff" strokeWidth={px(1.25)} strokeDasharray={`${px(4)} ${px(3)}`} />
                     <line
                       x1={0}
                       y1={0}
                       x2={px(20)}
                       y2={0}
-                      stroke="#2563eb"
+                      stroke="#2d88ff"
                       strokeWidth={px(2.5)}
                       strokeLinecap="round"
                       transform={`rotate(${headingDeg(pendingEndpoint.yaw)})`}
                     />
-                    <circle r={px(5.5)} fill="#2563eb" stroke="#fff" strokeWidth={px(1.75)} />
+                    <circle r={px(5.5)} fill="#2d88ff" stroke={MAP_HALO} strokeWidth={px(1.75)} />
                   </g>
                 )
               })()
@@ -504,7 +505,7 @@ export function MapEditorCanvas({
                 >
                   {/* invisible hit area: the handle is small, the grab target is not */}
                   <circle r={px(9)} fill="transparent" />
-                  <circle r={px(4.5)} fill="#fff" stroke="#2563eb" strokeWidth={px(1.75)} />
+                  <circle r={px(4.5)} fill={MAP_CARD} stroke="#2d88ff" strokeWidth={px(1.75)} />
                 </g>
               ))
             : null}
@@ -513,8 +514,8 @@ export function MapEditorCanvas({
             draftKind === 'zone' && draftPixels.length >= 2 ? (
               <polygon
                 points={polyline(draftPixels)}
-                fill="rgba(37,99,235,0.15)"
-                stroke="#2563eb"
+                fill="rgba(45,136,255,0.15)"
+                stroke="#2d88ff"
                 strokeWidth={1.5 / zoom}
                 strokeDasharray={`${6 / zoom} ${4 / zoom}`}
                 vectorEffect="non-scaling-stroke"
@@ -523,7 +524,7 @@ export function MapEditorCanvas({
               <polyline
                 points={polyline(draftPixels)}
                 fill="none"
-                stroke="#2563eb"
+                stroke="#2d88ff"
                 strokeWidth={1.5 / zoom}
                 strokeDasharray={`${6 / zoom} ${4 / zoom}`}
                 vectorEffect="non-scaling-stroke"
@@ -536,7 +537,7 @@ export function MapEditorCanvas({
               y1={lastDraftPixel.v}
               x2={aimedImage.u}
               y2={aimedImage.v}
-              stroke="#2563eb"
+              stroke="#2d88ff"
               strokeOpacity={shiftHeld ? 1 : 0.55}
               strokeWidth={1.5 / zoom}
               strokeDasharray={shiftHeld ? undefined : `${6 / zoom} ${4 / zoom}`}
@@ -545,12 +546,12 @@ export function MapEditorCanvas({
             />
           ) : null}
           {draftPixels.map((p, i) => (
-            <circle key={`d-${i}`} cx={p.u} cy={p.v} r={px(3)} fill="#2563eb" />
+            <circle key={`d-${i}`} cx={p.u} cy={p.v} r={px(3)} fill="#2d88ff" />
           ))}
 
           <defs>
             <marker id="edge-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M1 1 9 5 1 9Z" fill="#334155" />
+              <path d="M1 1 9 5 1 9Z" fill="#b0b3b8" />
             </marker>
           </defs>
         </svg>

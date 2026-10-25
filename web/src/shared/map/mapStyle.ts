@@ -4,14 +4,22 @@ import { DEFAULT_MAP_BOUNDS, type MapBounds } from '@/shared/lib/mapView'
 
 // Map paint. The map is drawn in metres inside an SVG, so its colours are SVG attributes rather than utility classes;
 // the values follow the tokens in index.css.
-export const MAP_INK = '#121317'
-export const MAP_INK_2 = '#45474d'
-export const MAP_MUTED = '#6a6a71'
-export const MAP_LINE = '#bcc5d1'
-export const MAP_LANE = '#e3e8ef'
-export const MAP_OFF = '#a3adb9'
-export const MAP_RED = '#d93025'
-export const MAP_AMBER = '#e37400'
+// The neutrals follow the theme (they are CSS variables, which SVG attributes accept), so the map is light or dark
+// with the rest of the console. Only the saturated status colours below are fixed.
+export const MAP_INK = 'var(--color-ink)'
+export const MAP_INK_2 = 'var(--color-ink-2)'
+export const MAP_MUTED = 'var(--color-muted)'
+export const MAP_LINE = 'var(--color-container-higher)'
+export const MAP_LANE = 'var(--color-container-high)'
+export const MAP_OFF = 'var(--color-container-highest)'
+export const MAP_RED = 'var(--color-red)'
+export const MAP_AMBER = 'var(--color-amber)'
+/** The floor, the body of a marker or label chip, and the halo that keeps a label readable over walls and lanes. */
+export const MAP_PAPER = 'var(--color-container)'
+export const MAP_CARD = 'var(--color-surface)'
+export const MAP_HALO = 'var(--color-container)'
+/** Walls are black on a white floor in the occupancy image; the dark theme flips it to light walls on a dark floor. */
+export const MAP_IMAGE_FILTER = 'var(--map-image-filter)'
 
 export const ZONE_LABEL: Record<ZoneType, string> = {
   KEEP_OUT: 'Keep-out',
@@ -21,16 +29,16 @@ export const ZONE_LABEL: Record<ZoneType, string> = {
 }
 
 export const ZONE_COLOR: Record<ZoneType, string> = {
-  KEEP_OUT: '#d93025',
-  SPEED: '#3279f9',
-  NO_STOP: '#e37400',
-  SINGLE_OCCUPANCY: '#d81b60',
+  KEEP_OUT: '#f02849',
+  SPEED: '#2d88ff',
+  NO_STOP: '#f7b928',
+  SINGLE_OCCUPANCY: '#ec5b9a',
 }
 
 export const ENDPOINT_COLOR: Record<EndpointType, string> = {
-  WAYPOINT: '#45474d',
-  CHARGER: '#0f8a99',
-  PARK: '#6a6a71',
+  WAYPOINT: 'var(--color-ink-2)',
+  CHARGER: 'var(--color-teal)',
+  PARK: 'var(--color-muted)',
 }
 
 export const ENDPOINT_NAME: Record<EndpointType, string> = {
@@ -40,17 +48,17 @@ export const ENDPOINT_NAME: Record<EndpointType, string> = {
 }
 
 export const ROBOT_COLOR: Record<RobotStatus, string> = {
-  EXECUTING: '#3279f9',
-  AVAILABLE: '#1e8e3e',
-  RESERVED: '#0b9bd7',
-  PAUSED: '#e37400',
-  CHARGING: '#0f8a99',
-  MAINTENANCE: '#8430ce',
-  ERROR: '#d93025',
-  OFFLINE: '#6a6a71',
+  EXECUTING: '#2d88ff',
+  AVAILABLE: '#45bd62',
+  RESERVED: '#37b6ee',
+  PAUSED: '#f7b928',
+  CHARGING: '#2dc7b4',
+  MAINTENANCE: '#a66cff',
+  ERROR: '#f02849',
+  OFFLINE: 'var(--color-muted)',
 }
 
-export const EDGE_COLOR: Record<EdgeDirection, string> = { BIDIRECTIONAL: '#3279f9', ONE_WAY: '#8430ce' }
+export const EDGE_COLOR: Record<EdgeDirection, string> = { BIDIRECTIONAL: '#2d88ff', ONE_WAY: '#a66cff' }
 
 export const ZONE_ORDER: ZoneType[] = ['SPEED', 'NO_STOP', 'SINGLE_OCCUPANCY', 'KEEP_OUT']
 
