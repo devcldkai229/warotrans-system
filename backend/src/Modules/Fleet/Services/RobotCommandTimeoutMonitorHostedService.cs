@@ -47,15 +47,22 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
 
     private async Task TickAsync(CancellationToken cancellationToken)
     {
-        var timeout = TimeSpan.FromSeconds(Math.Max(1, mqttOptions.Value.CommandAckTimeoutSeconds));
+        var options = mqttOptions.Value;
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, options.CommandAckTimeoutSeconds));
         var cutoff = DateTimeOffset.UtcNow - timeout;
+        // Never published (PublishedAt null): the issuing request is still connecting (bounded by the connect timeout)
+        // or died before publishing (host crash). Only the latter is cleaned up, well after any connect could finish.
+        var unpublishedCutoff = DateTimeOffset.UtcNow - timeout - TimeSpan.FromSeconds(Math.Max(1, options.ConnectTimeoutSeconds) * 3);
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
         var events = scope.ServiceProvider.GetRequiredService<IIntegrationEventPublisher>();
 
+        // The robot has `timeout` to ACK from when the broker took the command, not from when the row was saved.
         var stale = await db.RobotCommands
-            .Where(c => c.Status == RobotCommandStatus.SENT && c.IssuedAt < cutoff)
+            .Where(c => c.Status == RobotCommandStatus.SENT
+                        && ((c.PublishedAt != null && c.PublishedAt < cutoff)
+                            || (c.PublishedAt == null && c.IssuedAt < unpublishedCutoff)))
             .ToListAsync(cancellationToken);
 
         if (stale.Count == 0)

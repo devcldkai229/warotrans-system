@@ -42,6 +42,7 @@ public static class BuildingBlocksServiceCollectionExtensions
         services.AddSingleton<IMqttRobotCommandPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
         services.AddSingleton<IMqttRobotTeleopPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
         services.AddHostedService<MqttSubscriberHostedService>();
+        services.AddHostedService<MqttCommandPublisherWarmupHostedService>();
 
         return services;
     }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Protocol;
+using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.BuildingBlocks.Options;
 
@@ -92,6 +93,23 @@ public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IMqt
         }
     }
 
+    /// <summary>
+    /// Opens the connection ahead of the first command (called at startup), so a command never pays for it while its
+    /// ACK timeout runs. Throws when the broker cannot be reached within ConnectTimeoutSeconds.
+    /// </summary>
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private async Task<IMqttClient> EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         if (_client is { IsConnected: true })
@@ -106,10 +124,12 @@ public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IMqt
         }
 
         var mqtt = _options.Value;
+        var connectTimeout = TimeSpan.FromSeconds(Math.Max(1, mqtt.ConnectTimeoutSeconds));
         var client = _factory.CreateMqttClient();
         var builder = new MqttClientOptionsBuilder()
             .WithTcpServer(mqtt.Host, mqtt.Port)
             .WithClientId($"{mqtt.ClientId}-cmd-pub-{Environment.ProcessId}")
+            .WithTimeout(connectTimeout)
             .WithCleanSession();
 
         if (!string.IsNullOrWhiteSpace(mqtt.Username))
@@ -117,8 +137,24 @@ public sealed class MqttRobotCommandPublisher : IMqttRobotCommandPublisher, IMqt
             builder.WithCredentials(mqtt.Username, mqtt.Password);
         }
 
-        await client.ConnectAsync(builder.Build(), cancellationToken).ConfigureAwait(false);
+        // Bounded: a broker that does not answer (e.g. "localhost" → ::1 while it listens on IPv4 only) fails the
+        // publish after connectTimeout instead of holding every queued command for ~21 s.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(connectTimeout);
+        try
+        {
+            await client.ConnectAsync(builder.Build(), timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            client.Dispose();
+            _logger.LogWarning(ex, "MQTT command publisher could not connect to {Host}:{Port}", mqtt.Host, mqtt.Port);
+            throw new MqttBrokerUnavailableException(
+                $"MQTT broker {mqtt.Host}:{mqtt.Port} did not accept a connection within {connectTimeout.TotalSeconds:0} s.");
+        }
+
         _client = client;
+        _logger.LogInformation("MQTT command publisher connected to {Host}:{Port}", mqtt.Host, mqtt.Port);
         return client;
     }
 

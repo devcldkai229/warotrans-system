@@ -302,6 +302,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("payload_json");
 
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
                     b.Property<string>("RejectReasonCode")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
