@@ -1,0 +1,28 @@
+[
+  {
+    "id": "3ce72784-b507-4d50-ac10-e5b561300638",
+    "jobId": "39155e08-62db-4f80-a482-a5fa55a30a36",
+    "jobStepId": "a4057de7-fdc2-44ed-8f43-342f3c4d8976",
+    "containerId": "e7000000-0000-4000-8000-000000000007",
+    "handoverType": "PICKUP",
+    "confirmedBy": null,
+    "confirmationSource": "ROBOT_BUTTON",
+    "confirmedByRobotId": "97c93189-ae03-4b27-b846-760f8d18d27c",
+    "sourceMessageId": "98aab601-f37a-43ec-96e3-c8ef324f2405",
+    "confirmedAt": "2026-10-21T07:10:36.314973+00:00",
+    "note": null
+  },
+  {
+    "id": "033061a5-acba-46b7-90cc-9166da0110a4",
+    "jobId": "39155e08-62db-4f80-a482-a5fa55a30a36",
+    "jobStepId": "5b318613-e265-4ce1-b50c-0aa564189e62",
+    "containerId": "e7000000-0000-4000-8000-000000000007",
+    "handoverType": "DROPOFF",
+    "confirmedBy": null,
+    "confirmationSource": "ROBOT_BUTTON",
+    "confirmedByRobotId": "97c93189-ae03-4b27-b846-760f8d18d27c",
+    "sourceMessageId": "443efd5f-59b6-4e02-ac0d-4d6ea4605634",
+    "confirmedAt": "2026-10-21T07:16:28.150949+00:00",
+    "note": null
+  }
+]

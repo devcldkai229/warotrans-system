@@ -83,7 +83,15 @@ public sealed class IssueNavigateCommandHandler(
             FrameId = frameId,
             X = request.X,
             Y = request.Y,
-            Yaw = request.Yaw
+            Yaw = request.Yaw,
+            Route = request.Route is { } route && !string.IsNullOrWhiteSpace(route.GraphHash)
+                ? new RouteGrantPayload
+                {
+                    GraphHash = route.GraphHash.Trim(),
+                    EdgeIds = route.EdgeIds?.ToList() ?? []
+                }
+                : null,
+            Authority = request.Authority
         };
         var payloadJson = JsonSerializer.Serialize(posePayload, JsonOptions);
 

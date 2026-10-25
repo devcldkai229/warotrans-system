@@ -1,0 +1,1782 @@
+﻿[
+    {
+        "ts":  "2026-10-21T07:10:28.4260688Z",
+        "poseX":  0.4917652588803277,
+        "poseY":  -0.8144201649652577,
+        "poseYaw":  -0.05005178633415174,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  5
+    },
+    {
+        "ts":  "2026-10-21T07:10:30.4983189Z",
+        "poseX":  0.4917652588803277,
+        "poseY":  -0.8144201649652577,
+        "poseYaw":  -0.05005178633415174,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  5
+    },
+    {
+        "ts":  "2026-10-21T07:10:32.5460338Z",
+        "poseX":  0.4917652588803277,
+        "poseY":  -0.8144201649652577,
+        "poseYaw":  -0.05005178633415174,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  5
+    },
+    {
+        "ts":  "2026-10-21T07:10:34.5792598Z",
+        "poseX":  0.4917652588803277,
+        "poseY":  -0.8144201649652577,
+        "poseYaw":  -0.05005178633415174,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  5
+    },
+    {
+        "ts":  "2026-10-21T07:10:36.6190827Z",
+        "poseX":  0.4917652588803277,
+        "poseY":  -0.8144201649652577,
+        "poseYaw":  -0.05005178633415174,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:38.6739646Z",
+        "poseX":  0.7206772572288139,
+        "poseY":  -0.9069277125667298,
+        "poseYaw":  -0.571405450998207,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:40.7081694Z",
+        "poseX":  0.9562689075219368,
+        "poseY":  -1.1338765866192992,
+        "poseYaw":  -0.4313474206449242,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:42.7365492Z",
+        "poseX":  1.1022214694911079,
+        "poseY":  -1.1107506449761066,
+        "poseYaw":  -0.4317531395130355,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:44.7606813Z",
+        "poseX":  1.1237407555485694,
+        "poseY":  -1.1206803675921233,
+        "poseYaw":  -0.43374580147244535,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:46.7897661Z",
+        "poseX":  1.4969691053270178,
+        "poseY":  -1.1819546497897377,
+        "poseYaw":  -0.33283589858910806,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:48.8352911Z",
+        "poseX":  2.0721119570379214,
+        "poseY":  -1.0935472561340982,
+        "poseYaw":  0.23124790211341184,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:50.8678570Z",
+        "poseX":  2.25594235255325,
+        "poseY":  -0.9158403241885655,
+        "poseYaw":  1.0894718548750053,
+        "nav":  "NAVIGATING",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  7
+    },
+    {
+        "ts":  "2026-10-21T07:10:52.9003941Z",
+        "poseX":  2.4294236486647676,
+        "poseY":  -0.9906761736750662,
+        "poseYaw":  2.9893742839794664,
+        "nav":  "SUCCEEDED",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:10:54.9320103Z",
+        "poseX":  2.5032086518696826,
+        "poseY":  -0.9627118421608291,
+        "poseYaw":  2.993420737321507,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:10:56.9741859Z",
+        "poseX":  2.5032086518696826,
+        "poseY":  -0.9627118421608291,
+        "poseYaw":  2.993420737321507,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:10:59.0174044Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:01.0598784Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:03.0974265Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:05.1270449Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:07.1546323Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:09.1943822Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:11.2207093Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:13.2749015Z",
+        "poseX":  2.5030846761708867,
+        "poseY":  -0.9626933017838191,
+        "poseYaw":  2.992867906552038,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:15.3171124Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:17.3461966Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:19.3735459Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:21.4159169Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:23.4558178Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:25.4910029Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:27.5268910Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:29.5572987Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:31.5906605Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:33.6262136Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:35.6537118Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:37.6932090Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:39.7207450Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:41.7610882Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:43.7876717Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:45.8160357Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:47.8621480Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:49.9002321Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:51.9370703Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:53.9790972Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:56.0149953Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:11:58.0690085Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:00.1070351Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:02.1397120Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:04.1699430Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:06.2100557Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:08.2511286Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:10.2915739Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:12.3320525Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:14.3777576Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:16.4153294Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:18.4654587Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:20.4985745Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:22.5364445Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:24.5783958Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:26.6141159Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:28.6684901Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:30.6968329Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:32.7292239Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:34.7655578Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:36.8071438Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:38.8579287Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:40.8968482Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:42.9339182Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:44.9745656Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:47.0202837Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:49.0580834Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:51.1019964Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:53.1403877Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:55.1681217Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:57.2137261Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:12:59.2684760Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:01.3138922Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:03.3560075Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:05.3959287Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:07.4313477Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:09.4770508Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:11.5177401Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:13.5582224Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:15.5979004Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:17.6314371Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:19.6693689Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:21.7057725Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:23.7375201Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:25.7804265Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:27.8179142Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:29.8608772Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:31.8926323Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:33.9324005Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:35.9773588Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:38.0116706Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:40.0664760Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:42.1028263Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:44.1330177Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:46.1709391Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:48.2086278Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:50.2678807Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:52.3177470Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:54.3776774Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:56.4253079Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:13:58.4626982Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:00.5073252Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:02.5588088Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:04.5991697Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:06.6364437Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:08.6884891Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:10.7220425Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:12.7684488Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:14.8121456Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:16.8726146Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:18.9246879Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:20.9811052Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:23.0210806Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:25.0668323Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:27.1164105Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:29.1526112Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:31.1997902Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:33.2592832Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:35.3167960Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:37.3629058Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:39.4070222Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:41.4663551Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:43.5168101Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:45.5722639Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:47.6214816Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:49.6831267Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:51.7286222Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:53.7877615Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:55.8419178Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:57.8998300Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:14:59.9496087Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:01.9915164Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:04.0412730Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:06.0837887Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:08.1353050Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:10.1932360Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:12.2314137Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:14.2865710Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:16.3341548Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:18.3724986Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:20.4141515Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:22.4718359Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:24.5138939Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:26.5675401Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:28.6036336Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:30.6607659Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:32.7100030Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:34.7598836Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:36.8121124Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:38.8540562Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:40.9013730Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:42.9461371Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:44.9921587Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:47.0404417Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:49.0877472Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:51.1374522Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:53.1960472Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:55.2456654Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:57.2990783Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:15:59.3630094Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:01.4127310Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:03.4738261Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:05.5227702Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:07.5735301Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:09.6093720Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:11.6673979Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:13.7047642Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:15.7581918Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:17.7990347Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:19.8370483Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:21.8920620Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:23.9401673Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:25.9884236Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:28.0389242Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "RUNNING",
+        "completed":  8
+    },
+    {
+        "ts":  "2026-10-21T07:16:30.0739445Z",
+        "poseX":  2.5026346011623524,
+        "poseY":  -0.9626263282192455,
+        "poseYaw":  2.994874657645135,
+        "nav":  "IDLE",
+        "loc":  "LOCALIZED",
+        "jobStatus":  "COMPLETED",
+        "completed":  9
+    }
+]

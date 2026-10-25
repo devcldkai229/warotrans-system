@@ -30,13 +30,23 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ConfirmationSource")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("confirmation_source");
+
                     b.Property<DateTimeOffset>("ConfirmedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("confirmed_at");
 
-                    b.Property<Guid>("ConfirmedBy")
+                    b.Property<Guid?>("ConfirmedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("confirmed_by");
+
+                    b.Property<Guid?>("ConfirmedByRobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by_robot_id");
 
                     b.Property<Guid>("ContainerId")
                         .HasColumnType("uuid")
@@ -61,12 +71,21 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("note");
 
+                    b.Property<Guid?>("SourceMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_message_id");
+
                     b.HasKey("Id")
                         .HasName("p_k_handover_confirmations");
 
                     b.HasIndex("JobStepId")
                         .IsUnique()
                         .HasDatabaseName("i_x_handover_confirmations_job_step_id");
+
+                    b.HasIndex("SourceMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_handover_confirmations_source_message_id")
+                        .HasFilter("\"source_message_id\" IS NOT NULL");
 
                     b.ToTable("handover_confirmations", "execution");
                 });

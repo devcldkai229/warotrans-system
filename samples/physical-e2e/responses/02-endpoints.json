@@ -1,0 +1,28 @@
+[
+  {
+    "id": "d889c11f-4d74-4358-8442-55f2bc88cde5",
+    "mapVersionId": "959e46d1-7212-4bce-9976-ed522c54ed8c",
+    "code": "EP-PHYSICAL-DST",
+    "name": "Physical DST",
+    "endpointType": "WAYPOINT",
+    "x": 2.312,
+    "y": -0.84,
+    "yaw": -0.028,
+    "positionTolerance": 0.2,
+    "yawTolerance": 0.35,
+    "isEnabled": true
+  },
+  {
+    "id": "182e90a6-3435-4969-8835-d6f861257e49",
+    "mapVersionId": "959e46d1-7212-4bce-9976-ed522c54ed8c",
+    "code": "EP-PHYSICAL-SRC",
+    "name": "Physical SRC",
+    "endpointType": "WAYPOINT",
+    "x": 0.512,
+    "y": -0.79,
+    "yaw": -0.028,
+    "positionTolerance": 0.2,
+    "yawTolerance": 0.35,
+    "isEnabled": true
+  }
+]

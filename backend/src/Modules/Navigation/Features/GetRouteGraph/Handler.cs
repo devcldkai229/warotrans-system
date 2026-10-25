@@ -1,60 +1,59 @@
-using Microsoft.EntityFrameworkCore;
-using WaroTrans.BuildingBlocks.Exceptions;
-using WaroTrans.Navigation.Geometry;
-using WaroTrans.Navigation.Persistence;
 using WaroTrans.Navigation.RouteGraph;
+using WaroTrans.Navigation.Traffic;
 
 namespace WaroTrans.Navigation.Features.GetRouteGraph;
 
-/// <summary>Builds the Nav2 Route Server graph of a map version from its Edges, Endpoints and Zones (generated per call, not stored).</summary>
-public sealed class GetRouteGraphHandler(NavigationDbContext dbContext)
+/// <summary>
+/// Builds the Nav2 Route Server graph of a map version via <see cref="TrafficGraphCompiler"/>
+/// (stable ids + graphHash). Generated per call / cache; not stored in DB.
+/// </summary>
+public sealed class GetRouteGraphHandler(TrafficGraphCompileService compileService)
 {
-    public async Task<RouteGraphResult> HandleAsync(Guid mapVersionId, CancellationToken cancellationToken = default)
+    public async Task<RouteGraphExportResult> HandleAsync(Guid mapVersionId, CancellationToken cancellationToken = default)
     {
-        var mapVersion = await dbContext.MapVersions
-            .AsNoTracking()
-            .Where(m => m.Id == mapVersionId)
-            .Select(m => new { m.Code, m.FrameId })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException($"MapVersion with ID '{mapVersionId}' was not found.", "map_version_not_found");
-
-        var edges = await dbContext.Edges
-            .AsNoTracking()
-            .Where(e => e.MapVersionId == mapVersionId)
-            .ToListAsync(cancellationToken);
-
-        var endpoints = await dbContext.Endpoints
-            .AsNoTracking()
-            .Where(e => e.MapVersionId == mapVersionId)
-            .Select(e => new RouteGraphEndpointInput(e.Code, e.X, e.Y, e.IsEnabled))
-            .ToListAsync(cancellationToken);
-
-        var edgeInputs = edges
-            .Select(e => new RouteGraphEdgeInput(
-                e.Code,
-                GeoJsonGeometry.ParseLineStringCoordinates(e.Geometry.RootElement)
-                    .Select(p => new RoutePoint(p[0], p[1]))
-                    .ToList(),
-                e.Direction,
-                e.MaxSpeed,
-                e.IsActive))
+        // Topology export does not require occupancy (clearance warnings are for validation endpoint).
+        var bundle = await compileService.CompileAsync(mapVersionId, includeOccupancy: false, cancellationToken);
+        var result = bundle.Result;
+        var routeIssues = result.Issues
+            .Where(i => i.Code is not (
+                TrafficGraphCompiler.OccupancyMissing or
+                TrafficGraphCompiler.InsufficientClearance or
+                TrafficGraphCompiler.TurnClearance))
+            .Select(i => new RouteGraphIssue(
+                i.Code,
+                i.Severity == TrafficIssueSeverity.Error ? RouteGraphIssueSeverity.Error : RouteGraphIssueSeverity.Warning,
+                i.Message,
+                i.RelatedCodes))
             .ToList();
 
-        var zones = (await dbContext.Zones
-                .AsNoTracking()
-                .Where(z => z.MapVersionId == mapVersionId)
-                .ToListAsync(cancellationToken))
-            .Select(z => new RouteGraphZoneInput(
-                z.Code,
-                z.ZoneType,
-                GeoJsonGeometry.ParsePolygonRing(z.Geometry.RootElement)
-                    .Select(p => new RoutePoint(p[0], p[1]))
-                    .ToList(),
-                z.MaxSpeed,
-                z.IsActive))
+        // Prefer route-topology errors from the underlying builder codes.
+        var topologyCodes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            RouteGraphBuilder.GraphEmpty,
+            RouteGraphBuilder.EndpointTooFar,
+            RouteGraphBuilder.EndpointUnreachable,
+            RouteGraphBuilder.EndpointInKeepOut,
+            RouteGraphBuilder.DeadEndNode,
+            RouteGraphBuilder.LaneInKeepOut,
+            TrafficGraphCompiler.LegacyJunctionZone,
+            TrafficGraphCompiler.FrameMismatch
+        };
+        routeIssues = routeIssues.Where(i => topologyCodes.Contains(i.Code) ||
+                                             i.Code.StartsWith("ENDPOINT_", StringComparison.Ordinal) ||
+                                             i.Code.StartsWith("GRAPH_", StringComparison.Ordinal) ||
+                                             i.Code.StartsWith("DEAD_", StringComparison.Ordinal) ||
+                                             i.Code.StartsWith("LANE_", StringComparison.Ordinal) ||
+                                             i.Code.StartsWith("LEGACY_", StringComparison.Ordinal) ||
+                                             i.Code.StartsWith("FRAME_", StringComparison.Ordinal))
             .ToList();
 
-        var frame = string.IsNullOrWhiteSpace(mapVersion.FrameId) ? "map" : mapVersion.FrameId;
-        return RouteGraphBuilder.Build(new RouteGraphInput(mapVersion.Code, frame, edgeInputs, endpoints, zones));
+        return new RouteGraphExportResult(
+            new RouteGraphResult(result.Graph.RouteGraph, routeIssues),
+            result.Graph.GraphHash);
     }
+}
+
+public sealed record RouteGraphExportResult(RouteGraphResult Result, string GraphHash)
+{
+    public bool HasErrors => Result.HasErrors;
 }

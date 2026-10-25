@@ -9,6 +9,7 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.Fleet.Services;
 
@@ -88,6 +89,16 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
                         a => a.Id == assignmentId,
                         cancellationToken);
                     assignment?.TryEnd(AssignmentEndReason.ACK_TIMEOUT, utcNow);
+                }
+
+                var traffic = scope.ServiceProvider.GetRequiredService<ITrafficCoordinator>();
+                if (command.JobStepId is { } stepId)
+                {
+                    traffic.ReleaseByJobStep(stepId);
+                }
+                else
+                {
+                    traffic.ReleaseGrant(command.RobotId);
                 }
             }
 

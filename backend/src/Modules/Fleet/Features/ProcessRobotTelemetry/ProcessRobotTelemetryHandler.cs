@@ -7,6 +7,7 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Features.GetRobotStatistics;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.Fleet.Features.ProcessRobotTelemetry;
 
@@ -14,6 +15,7 @@ public sealed class ProcessRobotTelemetryHandler(
     FleetDbContext db,
     IRobotRealtimeNotifier realtimeNotifier,
     IIntegrationEventPublisher events,
+    TrafficShadowObserver? trafficShadow,
     ILogger<ProcessRobotTelemetryHandler> logger)
 {
     public async Task HandleAsync(RobotTelemetryMessage message, CancellationToken cancellationToken)
@@ -103,5 +105,22 @@ public sealed class ProcessRobotTelemetryHandler(
             cancellationToken,
             robot.LinearVelocity,
             robot.AngularVelocity);
+
+        if (trafficShadow is not null)
+        {
+            try
+            {
+                await trafficShadow.OnTelemetryAsync(
+                    robot.Id,
+                    robot.PoseX,
+                    robot.PoseY,
+                    localizationStatus == LocalizationStatus.LOCALIZED,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Traffic shadow telemetry observe failed for {RobotCode}", robot.Code);
+            }
+        }
     }
 }

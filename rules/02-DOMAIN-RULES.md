@@ -180,6 +180,10 @@ CANCELLED
 Handover is Container-level.
 `HandoverConfirmation` records who confirmed, what Container was confirmed, and when.
 
+Confirmation source may be:
+- `STAFF_APP` — authenticated Staff/Admin (`ConfirmedBy` = account id).
+- `ROBOT_BUTTON` — physical HUMAN_CONFIRM button on the assigned robot (`ConfirmedByRobotId` = robot id; `ConfirmedBy` is null). Do not invent a fake Staff identity for the button.
+
 V1 validates Container identity, not product-unit quantity.
 Legacy examples using `expectedItems` or quantity confirmation do not redefine the V1 physical model.
 

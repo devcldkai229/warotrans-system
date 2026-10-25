@@ -13,9 +13,10 @@ namespace WaroTrans.Navigation.RouteGraph;
 /// <item>Every polyline step is a straight directed segment: ONE_WAY → 1, BIDIRECTIONAL → 2 opposite segments.</item>
 /// <item>Segments are split where they cross a zone boundary; a piece is "in" a zone when its midpoint is strictly
 /// inside the polygon (a lane running along the boundary is outside). KEEP_OUT pieces are removed.</item>
-/// <item>JUNCTION, SINGLE_OCCUPANCY and NO_STOP zones are junctions: every lane end that arrives at the zone is linked
+/// <item>JUNCTION / SINGLE_OCCUPANCY / NO_STOP zones are junctions: every lane end that arrives at the zone is linked
 /// straight to every lane end that leaves it (arrival → departure only, so one-way lanes keep their direction), as long
-/// as the link stays inside the zone and out of KEEP_OUT zones. Lanes therefore need not be drawn across an intersection.</item>
+/// as the link stays inside the zone and out of KEEP_OUT zones. Lanes therefore need not be drawn across an
+/// intersection. Prefer JUNCTION; SINGLE_OCCUPANCY / NO_STOP remain for backward compatibility.</item>
 /// <item>An Endpoint on a node is attached to it; one at most <see cref="RouteGraphOptions.EndpointSnapDistance"/>
 /// from a lane gets its own node, joined to the lane by two connector segments at the perpendicular foot. Farther from
 /// every lane but inside a junction zone, or at most that distance from its edge, it is reached through the zone: an exit
@@ -463,7 +464,7 @@ public static class RouteGraphBuilder
                 {
                     ZoneType.SPEED when zone.MaxSpeed is { } limit => segment with { Speed = segment.Speed is { } s ? Math.Min(s, limit) : limit },
                     ZoneType.NO_STOP => segment with { NoStop = true },
-                    ZoneType.SINGLE_OCCUPANCY => segment with { SingleOccupancy = true },
+                    ZoneType.SINGLE_OCCUPANCY or ZoneType.JUNCTION => segment with { SingleOccupancy = true },
                     _ => segment
                 };
             }

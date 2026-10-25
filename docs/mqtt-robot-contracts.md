@@ -6,15 +6,20 @@ Protocol decision: [adr/0005-fleet-mqtt-command-protocol.md](adr/0005-fleet-mqtt
 ## Topics
 
 ```text
-warotrans/v1/robots/{robotCode}/heartbeat          # robot → backend (QoS0)
-warotrans/v1/robots/{robotCode}/telemetry          # robot → backend (QoS0)
-warotrans/v1/robots/{robotCode}/command            # backend → robot (QoS1)
-warotrans/v1/robots/{robotCode}/command_ack        # robot → backend (QoS1)
-warotrans/v1/robots/{robotCode}/command_result     # robot → backend (QoS1)
-warotrans/v1/robots/{robotCode}/teleop             # backend → robot (QoS0), manual drive — see "Teleop"
+warotrans/v1/robots/{robotCode}/heartbeat              # robot → backend (QoS0)
+warotrans/v1/robots/{robotCode}/telemetry              # robot → backend (QoS0)
+warotrans/v1/robots/{robotCode}/command                # backend → robot (QoS1)
+warotrans/v1/robots/{robotCode}/command_ack            # robot → backend (QoS1)
+warotrans/v1/robots/{robotCode}/command_result         # robot → backend (QoS1)
+warotrans/v1/robots/{robotCode}/teleop                 # backend → robot (QoS0), manual drive — see "Teleop"
+warotrans/v1/robots/{robotCode}/interaction_request    # backend → robot (QoS1), arm HUMAN_CONFIRM button
+warotrans/v1/robots/{robotCode}/interaction_confirm    # robot → backend (QoS1), button confirmation
+warotrans/v1/robots/{robotCode}/interaction_result     # backend → robot (QoS1), business accept/reject
 ```
 
 `robotCode` example: `RBT-001`.
+
+HUMAN_INTERACTION is **not** a RobotCommand. The physical button is a confirmation input for a waiting JobStep.
 
 ## Heartbeat (~1 Hz)
 
@@ -76,9 +81,56 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
   "issuedAt": "2026-10-07T05:00:00.000Z",
   "jobAssignmentId": null,
   "jobStepId": null,
-  "payload": { "frameId": "map", "x": 1.0, "y": 2.0, "yaw": 0.0 }
+  "payload": {
+    "frameId": "map",
+    "x": 1.0,
+    "y": 2.0,
+    "yaw": 0.0,
+    "route": {
+      "graphHash": "sha256-hex",
+      "edgeIds": [12, 15, 18]
+    }
+  }
 }
 ```
+
+`payload.route` is **optional** for backward compatibility (legacy free NavigateToPose).
+When the robot gateway is launched with `route_graph:=…` (route mode):
+
+- `route` is **required**; missing → ACK `accepted=false`, `reasonCode=ROUTE_REQUIRED`.
+- `graphHash` must match the loaded Route Server graph; mismatch → `ROUTE_GRAPH_MISMATCH`.
+- Gateway closes all non-granted edges via `DynamicEdgesScorer/adjust_edges`, then
+  verifies `ComputeRoute` returns exactly `edgeIds` (order matters). Mismatch →
+  `ROUTE_NOT_AUTHORIZED` (no goal sent).
+- Leaving the authorized corridor → cancel goal, result `CORRIDOR_VIOLATION`.
+- MQTT loss beyond `grant_loss_timeout_sec` → cancel goal (safe stop).
+
+Protocol decision: [adr/0007-traffic-route-ownership.md](adr/0007-traffic-route-ownership.md).
+
+#### Active Mode — `payload.authority` (optional; required when robot `traffic_mode=active`)
+
+```json
+"authority": {
+  "authorityId": "uuid",
+  "epoch": 1,
+  "seq": 3,
+  "mapVersionId": "uuid",
+  "mapVersionCode": "v1",
+  "graphHash": "sha256-hex",
+  "routeId": "optional",
+  "routeVersion": 1,
+  "segmentEdgeIds": [12, 15],
+  "pathHash": "sha256(graphHash|12,15)",
+  "goalSafeStopNodeId": 42,
+  "finalGoal": { "x": 1.0, "y": 2.0, "yaw": 0.0 },
+  "expiresAt": "2026-10-25T05:00:30.000Z",
+  "speedLimits": { "12": 0.4 }
+}
+```
+
+Schema version stays **1**. Shadow Mode may omit `authority` and keep using `route`.
+See ADR 0010. New commands: `EXTEND_AUTHORITY`, `RENEW_AUTHORITY`, `REVOKE_AUTHORITY`.
+Uplink topics: `…/traffic_progress`, `…/authority_state` (QoS1).
 
 ### CANCEL
 
@@ -137,6 +189,70 @@ When `accepted=true`, `reasonCode` is usually `null` (or `ALREADY_ACCEPTED` for 
 
 `outcome`: `SUCCEEDED|FAILED|CANCELED`  
 Sent when Nav2 finishes (or cancel completes). Backend correlates by `commandId` (idempotent: duplicate result ignored).
+
+## Interaction request (backend → robot)
+
+Arms the physical HUMAN_CONFIRM button for one waiting PICKUP_CONFIRM / DROPOFF_CONFIRM JobStep.
+Published only after the JobStep is committed as WAITING. Not a RobotCommand.
+
+```json
+{
+  "schemaVersion": 1,
+  "messageId": "uuid",
+  "robotCode": "RBT-001",
+  "jobId": "uuid",
+  "jobStepId": "uuid",
+  "interactionType": "PICKUP_CONFIRM",
+  "containerId": "uuid",
+  "endpointId": "uuid",
+  "sentAt": "2026-10-20T08:00:00.000Z"
+}
+```
+
+`interactionType` V1: `PICKUP_CONFIRM` | `DROPOFF_CONFIRM` only.
+
+## Interaction confirm (robot → backend)
+
+One QoS1 message per debounced button press while armed. Backend validates robot assignment,
+current WAITING step, interactionType, containerId, endpointId. Completes through the same
+`ConfirmHumanStepAsync` path as Staff App (`confirmationSource=ROBOT_BUTTON`).
+
+```json
+{
+  "schemaVersion": 1,
+  "messageId": "uuid",
+  "robotCode": "RBT-001",
+  "bootId": "uuid",
+  "sequence": 42,
+  "sentAt": "2026-10-20T08:00:05.000Z",
+  "jobId": "uuid",
+  "jobStepId": "uuid",
+  "interactionType": "PICKUP_CONFIRM",
+  "containerId": "uuid",
+  "endpointId": "uuid",
+  "source": "ROBOT_BUTTON"
+}
+```
+
+Idempotent on `messageId` / already-completed step with ROBOT_BUTTON evidence.
+
+## Interaction result (backend → robot)
+
+Business acceptance (separate from MQTT QoS). Robot clears armed state on `accepted=true`
+or terminal `reasonCode` (`interaction_not_current`, `interaction_wrong_robot`, …, `ALREADY_CONFIRMED`).
+
+```json
+{
+  "schemaVersion": 1,
+  "messageId": "uuid",
+  "robotCode": "RBT-001",
+  "jobStepId": "uuid",
+  "confirmMessageId": "uuid",
+  "accepted": true,
+  "reasonCode": null,
+  "processedAt": "2026-10-20T08:00:05.100Z"
+}
+```
 
 ## Teleop (backend → robot, manual drive)
 

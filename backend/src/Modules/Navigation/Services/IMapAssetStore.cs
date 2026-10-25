@@ -16,6 +16,15 @@ public interface IMapAssetStore
         string yamlText,
         byte[] previewPngBytes,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads occupancy PGM bytes for a map version when available; returns null if missing or unsupported.
+    /// </summary>
+    Task<byte[]?> TryReadMapPgmAsync(
+        string mapUri,
+        Guid warehouseId,
+        Guid mapVersionId,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record MapAssetUris(string MapUri, string MapYamlUri, string PreviewImageUri);

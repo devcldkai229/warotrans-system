@@ -1,4 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using WaroTrans.BuildingBlocks.Exceptions;
+using WaroTrans.BuildingBlocks.Mqtt;
+using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Features.DispatchRobot;
@@ -9,7 +13,9 @@ namespace WaroTrans.Fleet.Services;
 
 public sealed class FleetModuleApi(
     FleetDbContext db,
-    IssueNavigateCommandHandler issueNavigateCommandHandler) : IFleetModule
+    IssueNavigateCommandHandler issueNavigateCommandHandler,
+    IMqttRobotInteractionPublisher interactionPublisher,
+    ILogger<FleetModuleApi> logger) : IFleetModule
 {
     public async Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default)
     {
@@ -45,16 +51,84 @@ public sealed class FleetModuleApi(
         double yaw,
         Guid jobId,
         Guid jobStepId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        RouteGrantSnapshot? route = null)
     {
         // JobId without JobAssignmentId: Fleet records one assignment per navigate command
         // (ended by its RESULT). The Job keeps its robot in WorkflowExecution (assignedRobotId).
         // The handler retries the telemetry/command race on the robot row itself.
+        RouteGrantPayload? routePayload = route is null
+            ? null
+            : new RouteGrantPayload
+            {
+                GraphHash = route.GraphHash,
+                EdgeIds = route.EdgeIds.ToList()
+            };
         var response = await issueNavigateCommandHandler.HandleAsync(
             robotId,
-            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId),
+            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload),
             cancellationToken);
         return response.CommandId;
+    }
+
+    public async Task RequestHumanInteractionAsync(
+        Guid robotId,
+        Guid jobId,
+        Guid jobStepId,
+        string interactionType,
+        Guid containerId,
+        Guid endpointId,
+        CancellationToken cancellationToken = default)
+    {
+        var robot = await db.Robots.AsNoTracking().FirstOrDefaultAsync(r => r.Id == robotId, cancellationToken)
+            ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
+
+        await interactionPublisher.PublishRequestAsync(
+            new RobotInteractionRequestMessage
+            {
+                SchemaVersion = 1,
+                MessageId = Guid.NewGuid(),
+                RobotCode = robot.Code,
+                JobId = jobId,
+                JobStepId = jobStepId,
+                InteractionType = interactionType,
+                ContainerId = containerId,
+                EndpointId = endpointId,
+                SentAt = DateTimeOffset.UtcNow
+            },
+            cancellationToken);
+
+        logger.LogInformation(
+            "Armed HUMAN_INTERACTION {InteractionType} on robot {RobotCode} for jobStepId={JobStepId}",
+            interactionType,
+            robot.Code,
+            jobStepId);
+    }
+
+    public async Task PublishInteractionResultAsync(
+        Guid robotId,
+        Guid jobStepId,
+        Guid confirmMessageId,
+        bool accepted,
+        string? reasonCode,
+        CancellationToken cancellationToken = default)
+    {
+        var robot = await db.Robots.AsNoTracking().FirstOrDefaultAsync(r => r.Id == robotId, cancellationToken)
+            ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
+
+        await interactionPublisher.PublishResultAsync(
+            new RobotInteractionResultMessage
+            {
+                SchemaVersion = 1,
+                MessageId = Guid.NewGuid(),
+                RobotCode = robot.Code,
+                JobStepId = jobStepId,
+                ConfirmMessageId = confirmMessageId,
+                Accepted = accepted,
+                ReasonCode = reasonCode,
+                ProcessedAt = DateTimeOffset.UtcNow
+            },
+            cancellationToken);
     }
 
     private static RobotSnapshot ToSnapshot(Robot r) => new(

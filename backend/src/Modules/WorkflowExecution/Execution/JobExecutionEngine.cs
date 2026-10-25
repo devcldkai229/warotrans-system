@@ -1,11 +1,14 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Traffic;
 using WaroTrans.Navigation.Contracts;
+using WaroTrans.Navigation.Traffic;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
@@ -20,12 +23,14 @@ namespace WaroTrans.WorkflowExecution.Execution;
 ///   CHECK              evaluated immediately (Fleet / Navigation / Transportation contracts)
 ///   MOVE               NAVIGATE_TO_POSE through Fleet → step EXECUTING; finished by the robot RESULT
 ///                      (RobotCommandLifecycleJobStepHandler → AdvanceAsync)
-///   HUMAN_INTERACTION  step WAITING; finished by ConfirmHumanStepAsync (Staff API)
+///   HUMAN_INTERACTION  step WAITING; finished by ConfirmHumanStepAsync (Staff App or robot button)
 ///   WAIT               not supported in V1 → step FAILED
 ///
 /// The engine is event driven: it advances until it reaches a step that waits for something
 /// external, then returns. It never assigns robots itself except in StartAsync.
 /// JSON columns have no EF value comparer, so dictionaries are always replaced, never mutated.
+/// After a PICKUP/DROPOFF WAITING step is committed, the engine arms the assigned robot via
+/// <see cref="IFleetModule.RequestHumanInteractionAsync"/>.
 /// </summary>
 public sealed class JobExecutionEngine(
     WorkflowExecutionDbContext db,
@@ -34,7 +39,14 @@ public sealed class JobExecutionEngine(
     ITransportRequestActivityQuery requestActivity,
     StepInputResolver inputResolver,
     IIntegrationEventPublisher events,
-    ILogger<JobExecutionEngine> logger)
+    ILogger<JobExecutionEngine> logger,
+    ITrafficCoordinator? trafficCoordinator = null,
+    TrafficGraphCompileService? trafficCompile = null,
+    CompiledTrafficGraphCache? trafficGraphCache = null,
+    IOptions<TrafficOptions>? trafficOptions = null,
+    TrafficShadowObserver? trafficShadow = null,
+    ShadowSingleMoverGuard? shadowMoverGuard = null,
+    ISegmentedTrafficCoordinator? segmentedTraffic = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -43,6 +55,7 @@ public sealed class JobExecutionEngine(
 
     private const string RobotCommandIdKey = "robotCommandId";
     private const string SupersededCommandIdsKey = "supersededRobotCommandIds";
+    private const string PendingTrafficKey = "pendingTraffic";
 
     /// <summary>Resume needs a pose this fresh: a robot that came back online may be somewhere else.</summary>
     private static readonly TimeSpan ResumeTelemetryMaxAge = TimeSpan.FromSeconds(15);
@@ -317,6 +330,8 @@ public sealed class JobExecutionEngine(
             await SaveAndPublishAsync(cancellationToken);
             if (!finished)
             {
+                // Arm only after commit so a button press cannot race a not-yet-persisted WAITING step.
+                await TryArmHumanInteractionAsync(job, step, workflowSteps[step.WorkflowStepId], cancellationToken);
                 return;
             }
 
@@ -335,14 +350,13 @@ public sealed class JobExecutionEngine(
     // ------------------------------------------------------------------ human confirmation
 
     /// <summary>
-    /// Staff confirms a waiting HUMAN_INTERACTION step. For PICKUP/DROPOFF the scanned container must be the
-    /// container of that step (V1 validates container identity, not quantities).
+    /// Confirms a waiting HUMAN_INTERACTION step (Staff App or robot button).
+    /// For PICKUP/DROPOFF the container must match ResolvedInputs (V1: identity, not quantities).
     /// </summary>
     public async Task<JobStep> ConfirmHumanStepAsync(
         Guid jobStepId,
         Guid? containerId,
-        Guid confirmedBy,
-        string? note,
+        HumanConfirmationSource source,
         CancellationToken cancellationToken = default)
     {
         var stepRef = await db.JobSteps.AsNoTracking()
@@ -368,7 +382,20 @@ public sealed class JobExecutionEngine(
                 "job_step_not_waiting");
         }
 
+        if (source.Channel == ConfirmationSource.STAFF_APP && source.UserId is null)
+        {
+            throw new AppException("Staff confirmation requires an account id.", 401, "unauthenticated");
+        }
+
+        if (source.Channel == ConfirmationSource.ROBOT_BUTTON && (source.RobotId is null || source.MessageId is null))
+        {
+            throw new DomainValidationException(
+                "Robot button confirmation requires robotId and messageId.",
+                "interaction_source_incomplete");
+        }
+
         var now = DateTimeOffset.UtcNow;
+        var note = source.Note;
         var handoverType = operation switch
         {
             nameof(HumanActionCode.PICKUP_CONFIRM) => HandoverType.PICKUP,
@@ -391,7 +418,10 @@ public sealed class JobExecutionEngine(
                 Id = Guid.NewGuid(),
                 JobStepId = step.Id,
                 ContainerId = expected,
-                ConfirmedBy = confirmedBy,
+                ConfirmedBy = source.UserId,
+                ConfirmationSource = source.Channel,
+                ConfirmedByRobotId = source.RobotId,
+                SourceMessageId = source.MessageId,
                 HandoverType = type,
                 ConfirmedAt = now,
                 Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
@@ -408,7 +438,13 @@ public sealed class JobExecutionEngine(
         step.OutputValues = new Dictionary<string, JsonElement>
         {
             ["confirmed"] = JsonSerializer.SerializeToElement(true),
-            ["confirmedBy"] = JsonSerializer.SerializeToElement(confirmedBy),
+            ["confirmedBy"] = source.UserId is { } uid
+                ? JsonSerializer.SerializeToElement(uid)
+                : JsonSerializer.SerializeToElement((object?)null),
+            ["confirmationSource"] = JsonSerializer.SerializeToElement(source.Channel.ToString()),
+            ["confirmedByRobotId"] = source.RobotId is { } rid
+                ? JsonSerializer.SerializeToElement(rid)
+                : JsonSerializer.SerializeToElement((object?)null),
             ["confirmedAt"] = JsonSerializer.SerializeToElement(now),
             ["note"] = JsonSerializer.SerializeToElement(note ?? string.Empty)
         };
@@ -418,6 +454,61 @@ public sealed class JobExecutionEngine(
 
         await AdvanceAsync(job.Id, cancellationToken);
         return step;
+    }
+
+    /// <summary>
+    /// Publishes interaction_request for a WAITING PICKUP/DROPOFF step on the assigned robot.
+    /// </summary>
+    public async Task TryArmHumanInteractionAsync(
+        Job job,
+        JobStep step,
+        WorkflowStep workflowStep,
+        CancellationToken cancellationToken = default)
+    {
+        if (step.Status != JobStepStatus.WAITING || step.StepType != StepType.HUMAN_INTERACTION)
+        {
+            return;
+        }
+
+        var operation = workflowStep.Config.OperationCode;
+        if (operation is not (nameof(HumanActionCode.PICKUP_CONFIRM) or nameof(HumanActionCode.DROPOFF_CONFIRM)))
+        {
+            return;
+        }
+
+        var robotId = AssignedRobot(job);
+        if (robotId is null)
+        {
+            logger.LogWarning("Job {JobNo} WAITING handover but has no assignedRobotId; cannot arm button", job.JobNo);
+            return;
+        }
+
+        if (!step.ResolvedInputs.TryGetValue("containerId", out var containerEl)
+            || !step.ResolvedInputs.TryGetValue("endpointId", out var endpointEl))
+        {
+            logger.LogWarning(
+                "Job {JobNo} step {StepKey} missing containerId/endpointId; cannot arm button",
+                job.JobNo,
+                workflowStep.StepKey);
+            return;
+        }
+
+        try
+        {
+            await fleet.RequestHumanInteractionAsync(
+                robotId.Value,
+                job.Id,
+                step.Id,
+                operation,
+                containerEl.GetGuid(),
+                endpointEl.GetGuid(),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Arming failure must not fail the Job; Staff App can still confirm, and reconnect re-arms.
+            logger.LogError(ex, "Failed to arm HUMAN_INTERACTION on robot for Job {JobNo} step {StepKey}", job.JobNo, workflowStep.StepKey);
+        }
     }
 
     // ------------------------------------------------------------------ step execution
@@ -477,6 +568,18 @@ public sealed class JobExecutionEngine(
                 return await StartMoveAsync(job, task, step, workflowStep.StepKey, cancellationToken);
 
             case StepType.HUMAN_INTERACTION:
+                if ((trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) == TrafficCoordinatorMode.Active
+                    && segmentedTraffic is not null
+                    && step.ResolvedInputs.TryGetValue("robotId", out var humanRobotEl))
+                {
+                    var humanRobotId = humanRobotEl.GetGuid();
+                    // Hold current service resource while waiting for HUMAN_CONFIRM (no release).
+                    await segmentedTraffic.HoldServiceResourceAsync(
+                        humanRobotId,
+                        $"service:{job.MapVersionId}:{workflowStep.StepKey}",
+                        cancellationToken);
+                }
+
                 SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.WAITING, now);
                 return false;
 
@@ -507,12 +610,195 @@ public sealed class JobExecutionEngine(
 
         try
         {
-            var commandId = await fleet.NavigateAsync(robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken);
+            RouteGrantSnapshot? routeGrant = null;
+            var mode = trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow;
+
+            // Active Mode: segmented coordinator is sole motion authority (publisher issues MQTT).
+            if (mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
+            {
+                var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
+                if (graph is null)
+                {
+                    Fail(job, task, step, stepKey, "traffic_graph_unavailable",
+                        "Active Mode requires a compiled traffic graph.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+                if (robot is null)
+                {
+                    Fail(job, task, step, stepKey, "robot_not_found", "Robot missing for Active MOVE.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                await segmentedTraffic.BindGraphAsync(job.MapVersionId, graph, cancellationToken);
+                var plan = await segmentedTraffic.RequestSegmentAsync(new RoutePlanRequest(
+                    Guid.NewGuid(),
+                    robotId,
+                    job.MapVersionId,
+                    graph,
+                    robot.PoseX,
+                    robot.PoseY,
+                    pose.Code,
+                    null,
+                    Priority: 0,
+                    JobStepId: step.Id,
+                    JobId: job.Id), cancellationToken);
+
+                if (!plan.Ok || plan.Segments.Length == 0)
+                {
+                    Fail(job, task, step, stepKey, "traffic_path_unavailable",
+                        plan.Reason ?? "No traffic path for Active MOVE.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                var acquire = await segmentedTraffic.AcquireAtomicAsync(
+                    plan.Segments[0], segmentedTraffic.Epoch, null, cancellationToken);
+                if (acquire.Queued)
+                {
+                    step.OutputValues = new Dictionary<string, JsonElement>
+                    {
+                        ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                        [PendingTrafficKey] = JsonSerializer.SerializeToElement(true),
+                        ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
+                        ["trafficWaitingReason"] = JsonSerializer.SerializeToElement(acquire.WaitingReason.ToString())
+                    };
+                    logger.LogInformation(
+                        "Job {JobNo} {StepKey} Active Mode waiting for segment grant (robot {RobotId})",
+                        job.JobNo, stepKey, robotId);
+                    return false;
+                }
+
+                if (!acquire.Granted || acquire.Authority is null)
+                {
+                    Fail(job, task, step, stepKey, "traffic_grant_rejected",
+                        acquire.Reason ?? "Segment grant rejected.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                // AuthorityPublisher emits NAVIGATE+authority; do not call fleet.NavigateAsync here.
+                step.OutputValues = new Dictionary<string, JsonElement>
+                {
+                    ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                    ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
+                    ["trafficAuthorityId"] = JsonSerializer.SerializeToElement(acquire.Authority.AuthorityId),
+                    ["trafficGraphHash"] = JsonSerializer.SerializeToElement(acquire.Authority.GraphHash),
+                    ["trafficEdgeIds"] = JsonSerializer.SerializeToElement(acquire.Authority.EdgeIds)
+                };
+                logger.LogInformation(
+                    "Job {JobNo} {StepKey} Active Mode segment granted auth={AuthorityId} edges={Count}",
+                    job.JobNo, stepKey, acquire.Authority.AuthorityId, acquire.Authority.EdgeIds.Length);
+                return false;
+            }
+
+            if (mode == TrafficCoordinatorMode.Shadow && shadowMoverGuard is not null)
+            {
+                if (!shadowMoverGuard.TryEnter(job.MapVersionId, robotId, out var blocker))
+                {
+                    Fail(job, task, step, stepKey, "shadow_single_mover",
+                        $"Shadow Mode allows only one moving robot per map; blocked by {blocker}.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+            }
+
+            if (trafficCoordinator is not null)
+            {
+                var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
+                if (graph is not null)
+                {
+                    var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+                    var startNode = robot is null
+                        ? null
+                        : TrafficGraphQueries.FindNearestNodeId(graph, robot.PoseX, robot.PoseY);
+                    var goalNode = TrafficGraphQueries.ResolveEndpointNodeId(graph, pose.Code, pose.X, pose.Y);
+                    if (startNode is null || goalNode is null)
+                    {
+                        shadowMoverGuard?.Exit(job.MapVersionId, robotId);
+                        Fail(job, task, step, stepKey, "traffic_nodes_unresolved",
+                            "Could not resolve start/goal traffic nodes for MOVE.", DateTimeOffset.UtcNow);
+                        return true;
+                    }
+
+                    var grant = trafficCoordinator.TryAcquireRouteGrant(
+                        robotId,
+                        job.MapVersionId,
+                        graph,
+                        startNode.Value,
+                        goalNode.Value,
+                        step.Id,
+                        new PendingNavigateContext(job.Id, pose.X, pose.Y, pose.Yaw));
+
+                    if (trafficShadow is not null && robot is not null)
+                    {
+                        try
+                        {
+                            await trafficShadow.OnMoveRequestedAsync(
+                                robotId,
+                                job.MapVersionId,
+                                graph,
+                                robot.PoseX,
+                                robot.PoseY,
+                                startNode.Value,
+                                goalNode.Value,
+                                step.Id,
+                                job.Id,
+                                grant,
+                                cancellationToken);
+                        }
+                        catch (Exception shadowEx)
+                        {
+                            logger.LogDebug(shadowEx, "Traffic shadow observe failed for job {JobNo}", job.JobNo);
+                        }
+                    }
+
+                    if (grant.WaitQueued)
+                    {
+                        var pendingOutputs = new Dictionary<string, JsonElement>
+                        {
+                            ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                            [PendingTrafficKey] = JsonSerializer.SerializeToElement(true),
+                            ["trafficGraphHash"] = JsonSerializer.SerializeToElement(grant.GraphHash ?? graph.GraphHash),
+                            ["trafficEdgeIds"] = JsonSerializer.SerializeToElement(grant.EdgeIds)
+                        };
+                        if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var supersededPending))
+                        {
+                            pendingOutputs[SupersededCommandIdsKey] = supersededPending;
+                        }
+
+                        step.OutputValues = pendingOutputs;
+                        logger.LogInformation(
+                            "Job {JobNo} {StepKey} waiting for traffic grant (robot {RobotId})",
+                            job.JobNo,
+                            stepKey,
+                            robotId);
+                        return false;
+                    }
+
+                    if (!grant.Granted || grant.GraphHash is null)
+                    {
+                        shadowMoverGuard?.Exit(job.MapVersionId, robotId);
+                        Fail(job, task, step, stepKey, "traffic_path_unavailable",
+                            "No traffic path between robot pose and target endpoint.", DateTimeOffset.UtcNow);
+                        return true;
+                    }
+
+                    routeGrant = new RouteGrantSnapshot(grant.GraphHash, grant.EdgeIds);
+                }
+            }
+
+            var commandId = await fleet.NavigateAsync(
+                robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, routeGrant);
             var outputs = new Dictionary<string, JsonElement>
             {
                 ["startedAt"] = JsonSerializer.SerializeToElement(now),
                 [RobotCommandIdKey] = JsonSerializer.SerializeToElement(commandId)
             };
+            if (routeGrant is not null)
+            {
+                outputs["trafficGraphHash"] = JsonSerializer.SerializeToElement(routeGrant.GraphHash);
+                outputs["trafficEdgeIds"] = JsonSerializer.SerializeToElement(routeGrant.EdgeIds);
+            }
+
             if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var superseded))
             {
                 outputs[SupersededCommandIdsKey] = superseded; // commands of earlier attempts (resume)
@@ -524,8 +810,38 @@ public sealed class JobExecutionEngine(
         }
         catch (AppException ex)
         {
+            trafficCoordinator?.ReleaseByJobStep(step.Id);
+            shadowMoverGuard?.Exit(job.MapVersionId, robotId);
             Fail(job, task, step, stepKey, ex.Code ?? "navigate_rejected", ex.Message, DateTimeOffset.UtcNow);
             return true;
+        }
+    }
+
+    private async Task<CompiledTrafficGraph?> TryResolveTrafficGraphAsync(
+        Guid mapVersionId,
+        CancellationToken cancellationToken)
+    {
+        if (trafficGraphCache is not null &&
+            trafficGraphCache.TryGetForMap(mapVersionId, out var cached) &&
+            cached is not null)
+        {
+            return cached;
+        }
+
+        if (trafficCompile is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bundle = await trafficCompile.CompileAsync(mapVersionId, includeOccupancy: false, cancellationToken);
+            return bundle.Result.HasErrors ? null : bundle.Result.Graph;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Traffic graph unavailable for map {MapVersionId}; MOVE without route grant", mapVersionId);
+            return null;
         }
     }
 
@@ -647,7 +963,8 @@ public sealed class JobExecutionEngine(
 
     private static void CompleteTaskIfDone(JobTask task)
     {
-        if (task.Status != JobTaskStatus.COMPLETED && task.JobSteps.All(s => s.Status == JobStepStatus.COMPLETED))
+        var allDone = task.JobSteps.All(s => s.Status == JobStepStatus.COMPLETED);
+        if (task.Status != JobTaskStatus.COMPLETED && allDone)
         {
             task.Status = JobTaskStatus.COMPLETED;
             task.CompletedAt = DateTimeOffset.UtcNow;

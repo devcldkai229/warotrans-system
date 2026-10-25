@@ -13,7 +13,7 @@ public static class RouteGraphGeoJsonWriter
 {
     public const string ContentType = "application/geo+json";
 
-    public static string Write(RouteGraph graph)
+    public static string Write(RouteGraph graph, string? graphHash = null)
     {
         using var buffer = new MemoryStream();
         using (var json = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
@@ -21,6 +21,13 @@ public static class RouteGraphGeoJsonWriter
             json.WriteStartObject();
             json.WriteString("type", "FeatureCollection");
             json.WriteString("name", graph.Name);
+            if (!string.IsNullOrWhiteSpace(graphHash))
+            {
+                json.WriteStartObject("properties");
+                json.WriteString("graphHash", graphHash);
+                json.WriteEndObject();
+            }
+
             json.WriteStartArray("features");
 
             var nodes = graph.Nodes.ToDictionary(n => n.Id);

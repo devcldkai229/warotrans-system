@@ -78,6 +78,16 @@ public class ZonePolicyAndCrudTests
     }
 
     [Fact]
+    public void Junction_RequiresCapacityOne()
+    {
+        Assert.Throws<DomainValidationException>(() =>
+            ZonePolicyValidator.Validate(ZoneType.JUNCTION, 2, null, null, 1));
+
+        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 1, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 1, 0.5, null, 1);
+    }
+
+    [Fact]
     public void Speed_RequiresMaxSpeed()
     {
         Assert.Throws<DomainValidationException>(() =>

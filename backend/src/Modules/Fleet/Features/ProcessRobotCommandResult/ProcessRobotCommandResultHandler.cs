@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
@@ -7,12 +8,15 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.Fleet.Features.ProcessRobotCommandResult;
 
 public sealed class ProcessRobotCommandResultHandler(
     FleetDbContext db,
     IIntegrationEventPublisher events,
+    ITrafficCoordinator trafficCoordinator,
+    ShadowSingleMoverGuard? shadowMoverGuard,
     ILogger<ProcessRobotCommandResultHandler> logger)
 {
     public async Task HandleAsync(RobotCommandResultMessage message, CancellationToken cancellationToken)
@@ -83,6 +87,36 @@ public sealed class ProcessRobotCommandResultHandler(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        if (command.Type == RobotCommandType.NAVIGATE_TO_POSE)
+        {
+            if (command.JobStepId is { } stepId)
+            {
+                trafficCoordinator.ReleaseByJobStep(stepId);
+            }
+            else
+            {
+                trafficCoordinator.ReleaseGrant(command.RobotId);
+            }
+
+            if (robot is not null)
+            {
+                shadowMoverGuard?.Exit(robot.CurrentMapVersionId, robot.Id);
+            }
+        }
+        else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } targetCommandId)
+        {
+            var target = await db.RobotCommands.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == targetCommandId, cancellationToken);
+            if (target?.JobStepId is { } targetStepId)
+            {
+                trafficCoordinator.ReleaseByJobStep(targetStepId);
+            }
+            else if (target is not null)
+            {
+                trafficCoordinator.ReleaseGrant(target.RobotId);
+            }
+        }
 
         await events.PublishAsync(
             new RobotCommandLifecycleChanged(

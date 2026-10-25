@@ -10,6 +10,7 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Traffic;
 
 namespace WaroTrans.Fleet.Services;
 
@@ -128,6 +129,19 @@ public sealed class RobotConnectivityMonitorHostedService(
             {
                 robot.ClearCurrentCommand(utcNow);
             }
+
+            // V1 active dispatcher still releases so queued navigates can proceed.
+            // Segmented coordinator quarantines (no auto-release on heartbeat loss).
+            var traffic = scope.ServiceProvider.GetRequiredService<ITrafficCoordinator>();
+            traffic.ReleaseAllForOfflineRobot(robot.Id);
+            var segmented = scope.ServiceProvider.GetService<ISegmentedTrafficCoordinator>();
+            if (segmented is not null)
+            {
+                await segmented.MarkOfflineAsync(robot.Id, cancellationToken);
+            }
+
+            var shadowGuard = scope.ServiceProvider.GetService<ShadowSingleMoverGuard>();
+            shadowGuard?.Exit(robot.CurrentMapVersionId, robot.Id);
 
             // Persist before fan-out so API polls and SignalR subscribers see the same offline snapshot.
             await db.SaveChangesAsync(cancellationToken);
