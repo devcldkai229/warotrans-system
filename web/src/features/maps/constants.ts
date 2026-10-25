@@ -25,6 +25,7 @@ export const ZONE_TEMPLATES: ZoneTemplate[] = [
   { type: 'SPEED', title: 'Speed zone', description: 'Area with a required speed limit' },
   { type: 'NO_STOP', title: 'No-stop', description: 'Robots must not stop in this area' },
   { type: 'SINGLE_OCCUPANCY', title: 'Single-occupancy', description: 'Only one Robot may occupy this area' },
+  { type: 'JUNCTION', title: 'Junction', description: 'Connects the lanes that end at this area' },
 ]
 
 export interface EdgeTemplate {

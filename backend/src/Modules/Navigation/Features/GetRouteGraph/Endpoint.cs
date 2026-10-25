@@ -56,6 +56,7 @@ public static class GetRouteGraphEndpoint
             "(BIDIRECTIONAL → both ways), Endpoints become nodes (joined by connectors when ≤ 0.5 m from a lane). " +
             "200 application/geo+json (header X-Route-Graph-Warnings when there are warnings); 422 route_graph_invalid " +
             "with the issues (ENDPOINT_TOO_FAR, ENDPOINT_UNREACHABLE, ENDPOINT_IN_KEEP_OUT, GRAPH_EMPTY); 404 map_version_not_found. " +
-            "Zones: KEEP_OUT removes the lane pieces inside, SPEED lowers their abs_speed_limit, NO_STOP / SINGLE_OCCUPANCY label them.");
+            "Zones: KEEP_OUT removes the lane pieces inside, SPEED lowers their abs_speed_limit; JUNCTION / SINGLE_OCCUPANCY / " +
+            "NO_STOP link the lane ends that meet in them (and Endpoints within 0.5 m of them) and label the pieces inside.");
     }
 }

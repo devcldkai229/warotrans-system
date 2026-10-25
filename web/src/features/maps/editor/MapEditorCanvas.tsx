@@ -11,6 +11,15 @@ import type { Edge, Endpoint, Point, Zone } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
 import { Icon } from '@/shared/ui/Icon'
 import { lineStringToPoints, polygonToPoints } from '@/shared/map/geoJson'
+import { CHEVRON_PATH, laneGlyphs } from '@/shared/map/laneGlyphs'
+import {
+  EDGE_COLOR,
+  LANE_BAND_OPACITY,
+  LANE_CHEVRON_OPACITY,
+  MAP_OFF,
+  ZONE_COLOR,
+  ZONE_FILL_OPACITY,
+} from '@/shared/map/mapStyle'
 import {
   pixelToWorld,
   worldToPixel,
@@ -39,6 +48,8 @@ export interface MapEditorCanvasProps {
   onZoneClick?: (id: string) => void
   /** A vertex of the selected edge or zone was dragged to a new place; `points` is the whole new outline. */
   onShapeVerticesChange?: (shape: { kind: 'edge' | 'zone'; id: string }, points: Point[]) => void
+  /** A side of the selected edge's corridor was dragged: the new corridor width in meters (on release). */
+  onEdgeWidthChange?: (id: string, widthMeters: number) => void
   /** The selected endpoint was dragged to a new place (not saved: the page keeps it as an unsaved edit). */
   onEndpointMove?: (id: string, at: Point) => void
   /** The endpoint being placed (not saved yet): drawn as a marker with its heading, `yaw` in radians. */
@@ -64,6 +75,23 @@ function pointInPolygon(point: Point, ring: Point[]): boolean {
   }
   return inside
 }
+
+function distanceToPolyline(point: Point, line: Point[]): number {
+  let best = Infinity
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1]
+    const b = line[i]
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const lengthSquared = dx * dx + dy * dy
+    const t = lengthSquared === 0 ? 0 : Math.min(1, Math.max(0, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared))
+    best = Math.min(best, Math.hypot(a.x + t * dx - point.x, a.y + t * dy - point.y))
+  }
+  return best
+}
+
+const MIN_EDGE_WIDTH = 0.1
+const EDGE_WIDTH_STEP = 0.05
 
 const SHIFT_SNAP_STEP = Math.PI / 4
 
@@ -96,6 +124,7 @@ export function MapEditorCanvas({
   onEdgeClick,
   onZoneClick,
   onShapeVerticesChange,
+  onEdgeWidthChange,
   onEndpointMove,
   pendingEndpoint = null,
   onPendingEndpointMove,
@@ -115,6 +144,10 @@ export function MapEditorCanvas({
     index: number
     image: PixelCoord
   } | null>(null)
+  // The whole selected edge/zone being moved by its grip: every vertex is shifted by (du, dv) image px.
+  const [shapeDrag, setShapeDrag] = useState<{ kind: 'edge' | 'zone'; id: string; du: number; dv: number } | null>(null)
+  // A side of the selected edge's corridor being dragged: the width it would get, shown live until release.
+  const [widthDrag, setWidthDrag] = useState<{ id: string; widthMeters: number } | null>(null)
   const dragged = useRef(false)
   // Screen px per image px at zoom 1 (the SVG is fitted into its box). A small PGM (e.g. 82 x 103 px for a
   // 3.5 x 4.55 m floor) is drawn ~5x larger, so marks sized in image px would cover the whole floor.
@@ -177,13 +210,74 @@ export function MapEditorCanvas({
   const aimedImage = cursor ? aim(cursor.image, shiftHeld) : null
   const aimedWorld = aimedImage ? pixelToWorld(transform, aimedImage) : null
 
-  // Outline in image pixels, with the vertex being dragged shown at the pointer instead of where it was saved.
+  // Outline in image pixels, with the vertex being dragged shown at the pointer instead of where it was saved, and
+  // the whole shape shifted while its move grip is dragged.
   function outlinePixels(kind: 'edge' | 'zone', id: string, world: Point[]): PixelCoord[] {
-    return world.map((p, i) =>
-      vertexDrag && vertexDrag.kind === kind && vertexDrag.id === id && vertexDrag.index === i
-        ? vertexDrag.image
-        : worldToPixel(transform, p),
-    )
+    const shift = shapeDrag && shapeDrag.kind === kind && shapeDrag.id === id ? shapeDrag : null
+    return world.map((p, i) => {
+      if (vertexDrag && vertexDrag.kind === kind && vertexDrag.id === id && vertexDrag.index === i) return vertexDrag.image
+      const at = worldToPixel(transform, p)
+      return shift ? { u: at.u + shift.du, v: at.v + shift.dv } : at
+    })
+  }
+
+  // Where the move grip sits: halfway along an edge, at the vertex average of a zone.
+  function gripPixel(kind: 'edge' | 'zone', pixels: PixelCoord[]): PixelCoord {
+    if (kind === 'zone') {
+      return {
+        u: pixels.reduce((s, p) => s + p.u, 0) / pixels.length,
+        v: pixels.reduce((s, p) => s + p.v, 0) / pixels.length,
+      }
+    }
+    const lengths = pixels.slice(1).map((b, i) => Math.hypot(b.u - pixels[i].u, b.v - pixels[i].v))
+    let remaining = lengths.reduce((s, l) => s + l, 0) / 2
+    for (let i = 0; i < lengths.length; i++) {
+      if (remaining <= lengths[i] && lengths[i] > 0) {
+        const t = remaining / lengths[i]
+        return { u: pixels[i].u + t * (pixels[i + 1].u - pixels[i].u), v: pixels[i].v + t * (pixels[i + 1].v - pixels[i].v) }
+      }
+      remaining -= lengths[i]
+    }
+    return pixels[0]
+  }
+
+  // Drag the grip: the whole outline follows the pointer (Shift: 45° steps from where it started) and is saved on
+  // release through onShapeVerticesChange, like a vertex move.
+  function startShapeDrag(event: ReactPointerEvent, kind: 'edge' | 'zone', id: string, world: Point[]) {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    event.preventDefault()
+    dragged.current = false
+    const start = toImage(event.clientX, event.clientY)
+    if (!start) return
+    const startX = event.clientX
+    const startY = event.clientY
+    let latest = { du: 0, dv: 0 }
+    const move = (moveEvent: PointerEvent) => {
+      if (!dragged.current && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) <= 4) return
+      dragged.current = true
+      const raw = toImage(moveEvent.clientX, moveEvent.clientY)
+      if (!raw) return
+      const to = moveEvent.shiftKey ? constrainTo45(start, raw) : raw
+      latest = { du: to.u - start.u, dv: to.v - start.v }
+      setShapeDrag({ kind, id, ...latest })
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      setShapeDrag(null)
+      if (!dragged.current || (latest.du === 0 && latest.dv === 0)) return
+      onShapeVerticesChange?.(
+        { kind, id },
+        world.map((p) => {
+          const at = worldToPixel(transform, p)
+          const moved = pixelToWorld(transform, { u: at.u + latest.du, v: at.v + latest.dv })
+          return { x: moved.x, y: moved.y }
+        }),
+      )
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
   }
 
   function startVertexDrag(
@@ -220,6 +314,34 @@ export function MapEditorCanvas({
       if (!dragged.current || !latest) return
       const moved = pixelToWorld(transform, latest)
       onShapeVerticesChange?.({ kind, id }, world.map((p, i) => (i === index ? { x: moved.x, y: moved.y } : p)))
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
+  // Width = twice the distance from the pointer to the lane centre line, so either side can be pulled out or in.
+  function startWidthDrag(event: ReactPointerEvent, id: string, line: Point[], current: number) {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    event.preventDefault()
+    dragged.current = false
+    const startX = event.clientX
+    const startY = event.clientY
+    let latest = current
+    const move = (moveEvent: PointerEvent) => {
+      if (!dragged.current && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) <= 4) return
+      dragged.current = true
+      const image = toImage(moveEvent.clientX, moveEvent.clientY)
+      if (!image) return
+      const width = 2 * distanceToPolyline(pixelToWorld(transform, image), line)
+      latest = Math.max(MIN_EDGE_WIDTH, Math.round(width / EDGE_WIDTH_STEP) * EDGE_WIDTH_STEP)
+      setWidthDrag({ id, widthMeters: latest })
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      setWidthDrag(null)
+      if (dragged.current && Math.abs(latest - current) > 1e-9) onEdgeWidthChange?.(id, Number(latest.toFixed(2)))
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', stop)
@@ -359,14 +481,10 @@ export function MapEditorCanvas({
           {[...zones.filter((z) => z.id !== selected.zoneId), ...zones.filter((z) => z.id === selected.zoneId)].map((zone) => {
             const pts = outlinePixels('zone', zone.id, polygonToPoints(zone.geometry))
             const isSel = selected.zoneId === zone.id
+            const color = zone.isActive ? ZONE_COLOR[zone.zoneType] : MAP_OFF
             return (
-              <polygon
+              <g
                 key={zone.id}
-                points={polyline(pts)}
-                fill={isSel ? 'rgba(59,130,246,0.28)' : 'rgba(234,179,8,0.18)'}
-                stroke={isSel ? '#2563eb' : '#ca8a04'}
-                strokeWidth={isSel ? 2 / zoom : 1 / zoom}
-                vectorEffect="non-scaling-stroke"
                 onClick={
                   shapesSelectable
                     ? (e) => {
@@ -375,14 +493,36 @@ export function MapEditorCanvas({
                       }
                     : undefined
                 }
-              />
+              >
+                <polygon
+                  points={polyline(pts)}
+                  fill={color}
+                  fillOpacity={ZONE_FILL_OPACITY[zone.zoneType] * (isSel ? 1.8 : 1.2)}
+                  stroke={color}
+                  strokeOpacity={isSel ? 1 : 0.8}
+                  strokeWidth={isSel ? 2.5 / zoom : 1.25 / zoom}
+                  strokeDasharray={zone.isActive ? undefined : `${6 / zoom} ${4 / zoom}`}
+                  vectorEffect="non-scaling-stroke"
+                />
+                {zone.zoneType === 'KEEP_OUT' ? (
+                  <polygon points={polyline(pts)} fill="url(#editor-hatch)" stroke="none" pointerEvents="none" />
+                ) : null}
+              </g>
             )
           })}
 
           {edges.map((edge) => {
             const pts = outlinePixels('edge', edge.id, lineStringToPoints(edge.geometry))
             const isSel = selected.edgeId === edge.id
-            const widthPx = Math.max(1, (edge.widthMeters ?? 1) / resolution)
+            const widthMeters = widthDrag?.id === edge.id ? widthDrag.widthMeters : (edge.widthMeters ?? 1)
+            const widthPx = Math.max(1, widthMeters / resolution)
+            const glyphs = laneGlyphs(
+              pts.map((p) => ({ x: p.u, y: p.v })),
+              widthPx,
+              edge.direction,
+            )
+            const laneColor = edge.isActive ? EDGE_COLOR[edge.direction] : MAP_OFF
+            const toPoints = (line: { x: number; y: number }[]) => line.map((p) => `${p.x},${p.y}`).join(' ')
             return (
               <g
                 key={edge.id}
@@ -395,22 +535,63 @@ export function MapEditorCanvas({
                     : undefined
                 }
               >
+                {/* OTTO style: lane band + chevrons (two opposite rows and a dashed divider when two-way) */}
                 <polyline
                   points={polyline(pts)}
                   fill="none"
-                  stroke={isSel ? 'rgba(37,99,235,0.35)' : 'rgba(100,116,139,0.35)'}
+                  stroke={laneColor}
+                  strokeOpacity={isSel ? LANE_BAND_OPACITY * 2 : LANE_BAND_OPACITY * 1.4}
                   strokeWidth={widthPx}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  strokeLinecap="butt"
+                  strokeLinejoin="miter"
                 />
-                <polyline
-                  points={polyline(pts)}
-                  fill="none"
-                  stroke={isSel ? '#2563eb' : '#334155'}
-                  strokeWidth={isSel ? 2 / zoom : 1.25 / zoom}
-                  vectorEffect="non-scaling-stroke"
-                  markerEnd={edge.direction === 'ONE_WAY' ? 'url(#edge-arrow)' : undefined}
-                />
+                {glyphs.sides.map((side, i) => (
+                  <polyline
+                    key={i}
+                    points={toPoints(side)}
+                    fill="none"
+                    stroke={laneColor}
+                    strokeOpacity={isSel ? 1 : 0.55}
+                    strokeWidth={isSel ? 1.5 / zoom : 1 / zoom}
+                    strokeDasharray={edge.isActive ? undefined : `${6 / zoom} ${4 / zoom}`}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+                {glyphs.divider ? (
+                  <polyline
+                    points={toPoints(glyphs.divider)}
+                    fill="none"
+                    stroke={laneColor}
+                    strokeOpacity={0.7}
+                    strokeWidth={1 / zoom}
+                    strokeDasharray={`${5 / zoom} ${4 / zoom}`}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null}
+                {glyphs.chevrons.map((c, i) => (
+                  <path
+                    key={i}
+                    d={CHEVRON_PATH}
+                    fill="none"
+                    stroke={laneColor}
+                    strokeOpacity={LANE_CHEVRON_OPACITY}
+                    strokeWidth={0.16}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    pointerEvents="none"
+                    transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`}
+                  />
+                ))}
+                {/* the centre line stays visible while the lane is selected: it is what the vertex handles move */}
+                {isSel ? (
+                  <polyline
+                    points={polyline(pts)}
+                    fill="none"
+                    stroke={laneColor}
+                    strokeWidth={1.5 / zoom}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null}
               </g>
             )
           })}
@@ -493,6 +674,84 @@ export function MapEditorCanvas({
               })()
             : null}
 
+          {editedEdge
+            ? (() => {
+                const line = lineStringToPoints(editedEdge.geometry)
+                const saved = editedEdge.widthMeters ?? 1
+                const half = (widthDrag?.id === editedEdge.id ? widthDrag.widthMeters : saved) / resolution / 2
+                const pts = outlinePixels('edge', editedEdge.id, line)
+                // Both sides of every segment of the corridor: a dashed outline with a wide invisible grab area and a
+                // square grip in the middle. The cursor follows the side's direction on screen.
+                return pts.slice(1).flatMap((b, i) => {
+                  const a = pts[i]
+                  const length = Math.hypot(b.u - a.u, b.v - a.v)
+                  if (length === 0) return []
+                  const nu = (-(b.v - a.v) / length) * half
+                  const nv = ((b.u - a.u) / length) * half
+                  const cursor = Math.abs(b.u - a.u) >= Math.abs(b.v - a.v) ? 'ns-resize' : 'ew-resize'
+                  return [1, -1].map((side) => {
+                    const x1 = a.u + side * nu
+                    const y1 = a.v + side * nv
+                    const x2 = b.u + side * nu
+                    const y2 = b.v + side * nv
+                    return (
+                      <g
+                        key={`w-${i}-${side}`}
+                        style={{ cursor }}
+                        onPointerDown={(e) => startWidthDrag(e, editedEdge.id, line, saved)}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={px(12)} />
+                        <line
+                          x1={x1}
+                          y1={y1}
+                          x2={x2}
+                          y2={y2}
+                          stroke="#2563eb"
+                          strokeWidth={px(1.25)}
+                          strokeDasharray={`${px(5)} ${px(3)}`}
+                        />
+                        <rect
+                          x={(x1 + x2) / 2 - px(4)}
+                          y={(y1 + y2) / 2 - px(4)}
+                          width={px(8)}
+                          height={px(8)}
+                          fill="#fff"
+                          stroke="#2563eb"
+                          strokeWidth={px(1.5)}
+                        />
+                      </g>
+                    )
+                  })
+                })
+              })()
+            : null}
+
+          {widthDrag ? (
+            (() => {
+              const edge = edges.find((e) => e.id === widthDrag.id)
+              const line = edge ? lineStringToPoints(edge.geometry) : []
+              if (line.length < 2) return null
+              const mid = worldToPixel(transform, { x: (line[0].x + line[1].x) / 2, y: (line[0].y + line[1].y) / 2 })
+              return (
+                <text
+                  x={mid.u}
+                  y={mid.v - px(10)}
+                  textAnchor="middle"
+                  fontSize={px(12)}
+                  fontWeight={600}
+                  fill="#2563eb"
+                  stroke="#fff"
+                  strokeWidth={px(3)}
+                  paintOrder="stroke"
+                  pointerEvents="none"
+                >
+                  {widthDrag.widthMeters.toFixed(2)} m
+                </text>
+              )
+            })()
+          ) : null}
+
           {vertexShape
             ? outlinePixels(vertexShape.kind, vertexShape.id, vertexShape.world).map((p, i) => (
                 <g
@@ -507,6 +766,35 @@ export function MapEditorCanvas({
                   <circle r={px(4.5)} fill="#fff" stroke="#2563eb" strokeWidth={px(1.75)} />
                 </g>
               ))
+            : null}
+
+          {vertexShape
+            ? (() => {
+                const at = gripPixel(vertexShape.kind, outlinePixels(vertexShape.kind, vertexShape.id, vertexShape.world))
+                const s = px(1)
+                return (
+                  <g
+                    transform={`translate(${at.u} ${at.v})`}
+                    style={{ cursor: shapeDrag ? 'grabbing' : 'grab' }}
+                    onPointerDown={(e) => startShapeDrag(e, vertexShape.kind, vertexShape.id, vertexShape.world)}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <title>Drag to move the whole {vertexShape.kind}</title>
+                    <circle r={px(14)} fill="transparent" />
+                    <circle r={px(10)} fill="#2563eb" stroke="#fff" strokeWidth={px(2)} />
+                    {/* four-way arrow, sized in screen px around the grip centre */}
+                    <g fill="none" stroke="#fff" strokeWidth={px(1.6)} strokeLinecap="round" strokeLinejoin="round">
+                      {[0, 90, 180, 270].map((deg) => (
+                        <path
+                          key={deg}
+                          transform={`rotate(${deg})`}
+                          d={`M0 0 L${6 * s} 0 M${4 * s} ${-2 * s} L${7 * s} 0 L${4 * s} ${2 * s}`}
+                        />
+                      ))}
+                    </g>
+                  </g>
+                )
+              })()
             : null}
 
           {draftPixels.length > 0 && draftKind ? (
@@ -549,9 +837,9 @@ export function MapEditorCanvas({
           ))}
 
           <defs>
-            <marker id="edge-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M1 1 9 5 1 9Z" fill="#334155" />
-            </marker>
+            <pattern id="editor-hatch" width={px(8)} height={px(8)} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2={px(8)} stroke={ZONE_COLOR.KEEP_OUT} strokeOpacity={0.45} strokeWidth={px(2)} />
+            </pattern>
           </defs>
         </svg>
       </div>
@@ -576,7 +864,8 @@ export function MapEditorCanvas({
 
       {(draftKind && !readOnly) || vertexShape ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-ink-2 shadow-float">
-          {vertexShape ? 'Drag a point to move it. ' : null}Hold{' '}
+          {vertexShape ? 'Drag a point to move it, the blue grip to move the whole shape. ' : null}
+          {editedEdge ? 'Drag a side of the lane to change its width. ' : null}Hold{' '}
           <kbd className="rounded bg-container-high px-1 font-mono">Shift</kbd> to keep the line straight (45° steps)
         </div>
       ) : null}

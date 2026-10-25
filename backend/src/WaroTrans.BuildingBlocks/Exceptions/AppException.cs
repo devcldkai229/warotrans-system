@@ -22,9 +22,14 @@ public sealed class ConflictException(string message, string? code = "conflict")
 public sealed class DomainValidationException(string message, string? code = "validation_failed")
     : AppException(message, StatusCodes.Status400BadRequest, code);
 
+/// <summary>A robot command could not be handed to the MQTT broker (not reachable within the connect timeout).</summary>
+public sealed class MqttBrokerUnavailableException(string message, string? code = "mqtt_broker_unavailable")
+    : AppException(message, StatusCodes.Status503ServiceUnavailable, code);
+
 file static class StatusCodes
 {
     public const int Status404NotFound = 404;
     public const int Status409Conflict = 409;
     public const int Status400BadRequest = 400;
+    public const int Status503ServiceUnavailable = 503;
 }

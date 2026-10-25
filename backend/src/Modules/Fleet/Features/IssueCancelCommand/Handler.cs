@@ -9,6 +9,7 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Services;
 
 namespace WaroTrans.Fleet.Features.IssueCancelCommand;
 
@@ -82,7 +83,8 @@ public sealed class IssueCancelCommandHandler(
             Payload = JsonSerializer.SerializeToElement(cancelPayload, JsonOptions)
         };
 
-        await publisher.PublishAsync(mqttMessage, cancellationToken);
+        // A CANCEL that cannot be sent leaves the navigate command (and the robot) as they are.
+        await db.PublishAndStampAsync(publisher, mqttMessage, robot.Id, releasesRobot: false, cancellationToken);
 
         await events.PublishAsync(
             new RobotCommandLifecycleChanged(

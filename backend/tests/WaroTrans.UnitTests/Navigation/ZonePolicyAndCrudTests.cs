@@ -87,10 +87,12 @@ public class ZonePolicyAndCrudTests
     }
 
     [Fact]
-    public void KeepOut_AndNoStop_AcceptEmptyPolicy()
+    public void KeepOut_NoStop_AndJunction_AcceptEmptyPolicy()
     {
         ZonePolicyValidator.Validate(ZoneType.KEEP_OUT, 1, null, null, 1);
         ZonePolicyValidator.Validate(ZoneType.NO_STOP, 2, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 1, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 2, null, null, 1);
     }
 
     [Fact]

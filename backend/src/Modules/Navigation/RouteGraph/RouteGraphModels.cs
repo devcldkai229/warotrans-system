@@ -33,8 +33,9 @@ public sealed record RouteGraphInput(
     IReadOnlyList<RouteGraphZoneInput>? Zones = null);
 
 /// <param name="VertexSnapTolerance">Points closer than this (m) are one node; a node this close to a segment splits it.</param>
-/// <param name="EndpointSnapDistance">An Endpoint at most this far (m) from a lane is joined to it by a connector.</param>
-/// <param name="JunctionCaptureDistance">A lane end this far (m) outside a junction zone (SINGLE_OCCUPANCY / NO_STOP)
+/// <param name="EndpointSnapDistance">An Endpoint at most this far (m) from a lane is joined to it by a connector; farther
+/// from every lane, at most this far from a junction zone, it is reached through that zone.</param>
+/// <param name="JunctionCaptureDistance">A lane end this far (m) outside a junction zone (JUNCTION / SINGLE_OCCUPANCY / NO_STOP)
 /// still counts as reaching it (hand-drawn lanes stop a little short of the zone edge).</param>
 public sealed record RouteGraphOptions(
     double VertexSnapTolerance = 0.05,
@@ -50,10 +51,11 @@ public sealed record RouteGraphNode(int Id, double X, double Y, IReadOnlyList<st
 /// <param name="EdgeCodes">Codes of the drawn Edges this segment comes from (empty for a connector).</param>
 /// <param name="AbsSpeedLimit">Lowest of the Edges' MaxSpeed and the MaxSpeed of SPEED zones the segment lies in (m/s).</param>
 /// <param name="IsConnector">Short link added between a lane and an Endpoint that is not on it.</param>
-/// <param name="ZoneCodes">SPEED / NO_STOP / SINGLE_OCCUPANCY zones the segment lies in.</param>
+/// <param name="ZoneCodes">SPEED / NO_STOP / SINGLE_OCCUPANCY / JUNCTION zones the segment lies in.</param>
 /// <param name="NoStop">Inside a NO_STOP zone (label only: multi-robot coordination is not implemented).</param>
 /// <param name="SingleOccupancy">Inside a SINGLE_OCCUPANCY zone (label only).</param>
-/// <param name="IsJunction">Link generated inside a SINGLE_OCCUPANCY / NO_STOP zone between lanes that end at it.</param>
+/// <param name="IsJunction">Link generated inside a JUNCTION / SINGLE_OCCUPANCY / NO_STOP zone between lanes that end at
+/// it, or to the exit point of an Endpoint reached through the zone.</param>
 public sealed record RouteGraphEdge(
     int Id,
     int StartId,

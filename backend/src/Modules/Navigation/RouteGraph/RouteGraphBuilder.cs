@@ -13,12 +13,15 @@ namespace WaroTrans.Navigation.RouteGraph;
 /// <item>Every polyline step is a straight directed segment: ONE_WAY → 1, BIDIRECTIONAL → 2 opposite segments.</item>
 /// <item>Segments are split where they cross a zone boundary; a piece is "in" a zone when its midpoint is strictly
 /// inside the polygon (a lane running along the boundary is outside). KEEP_OUT pieces are removed.</item>
-/// <item>SINGLE_OCCUPANCY / NO_STOP zones are junctions: every lane end that arrives at the zone is linked straight to
-/// every lane end that leaves it (arrival → departure only, so one-way lanes keep their direction), as long as the link
-/// stays inside the zone and out of KEEP_OUT zones. Lanes therefore need not be drawn across an intersection.</item>
+/// <item>JUNCTION, SINGLE_OCCUPANCY and NO_STOP zones are junctions: every lane end that arrives at the zone is linked
+/// straight to every lane end that leaves it (arrival → departure only, so one-way lanes keep their direction), as long
+/// as the link stays inside the zone and out of KEEP_OUT zones. Lanes therefore need not be drawn across an intersection.</item>
 /// <item>An Endpoint on a node is attached to it; one at most <see cref="RouteGraphOptions.EndpointSnapDistance"/>
-/// from a lane gets its own node, joined to the lane by two connector segments at the perpendicular foot.</item>
-/// <item>SPEED zones lower the speed limit of the pieces inside; NO_STOP / SINGLE_OCCUPANCY only label them.</item>
+/// from a lane gets its own node, joined to the lane by two connector segments at the perpendicular foot. Farther from
+/// every lane but inside a junction zone, or at most that distance from its edge, it is reached through the zone: an exit
+/// point on the zone edge (the Endpoint itself when inside) joins the junction both ways and a two-way connector runs
+/// from it to the Endpoint.</item>
+/// <item>SPEED zones lower the speed limit of the pieces inside; NO_STOP / SINGLE_OCCUPANCY / JUNCTION only label them.</item>
 /// <item>Identical segments are merged (lowest speed limit, all Edge / Zone codes).</item>
 /// <item>Every Endpoint must reach every other one; non-Endpoint nodes without an outgoing segment are reported.</item>
 /// </list>
@@ -70,9 +73,9 @@ public static class RouteGraphBuilder
         }
 
         var keepOutRings = zones.Where(z => z.ZoneType == ZoneType.KEEP_OUT).Select(z => z.Ring).ToList();
-        foreach (var zone in zones.Where(z => z.ZoneType is ZoneType.SINGLE_OCCUPANCY or ZoneType.NO_STOP))
+        foreach (var zone in zones.Where(z => IsJunctionZone(z.ZoneType)))
         {
-            work.ConnectJunction(zone.Ring, keepOutRings);
+            work.ConnectJunction(zone.Code, zone.Ring, keepOutRings);
         }
 
         var endpoints = input.Endpoints.Where(e => e.IsEnabled).OrderBy(e => e.Code, StringComparer.Ordinal).ToList();
@@ -120,6 +123,10 @@ public static class RouteGraphBuilder
 
         return new RouteGraphResult(graph, issues);
     }
+
+    /// <summary>Zone types that link the lane ends meeting at them.</summary>
+    public static bool IsJunctionZone(ZoneType type) =>
+        type is ZoneType.JUNCTION or ZoneType.SINGLE_OCCUPANCY or ZoneType.NO_STOP;
 
     private static void Validate(RouteGraph graph, List<RouteGraphIssue> issues)
     {
@@ -211,6 +218,7 @@ public static class RouteGraphBuilder
     private sealed class Work(RouteGraphOptions options)
     {
         private readonly double _tolerance = options.VertexSnapTolerance;
+        private readonly List<Junction> _junctions = [];
 
         public List<WorkNode> Nodes { get; } = [];
         public List<WorkSegment> Segments { get; } = [];
@@ -297,7 +305,7 @@ public static class RouteGraphBuilder
         /// two-way lane is both. Lanes passing through the zone and nodes already joined to other lanes take no part,
         /// so a link never runs against a lane. A link must stay inside the zone (checked every 5 cm) and out of KEEP_OUT.
         /// </summary>
-        public void ConnectJunction(IReadOnlyList<RoutePoint> ring, IReadOnlyList<IReadOnlyList<RoutePoint>> keepOut)
+        public void ConnectJunction(string code, IReadOnlyList<RoutePoint> ring, IReadOnlyList<IReadOnlyList<RoutePoint>> keepOut)
         {
             var capture = options.JunctionCaptureDistance;
             bool InZone(WorkNode n) => Inside(ring, n.X, n.Y, 0) || DistanceToRing(ring, n.X, n.Y) <= capture;
@@ -333,41 +341,111 @@ public static class RouteGraphBuilder
                 }
             }
 
+            var junction = new Junction(code, ring, keepOut, arrivals, departures);
+            _junctions.Add(junction);
             foreach (var from in arrivals)
             {
                 foreach (var to in departures.Where(to => to != from))
                 {
-                    if (Segments.Any(s => s.Start == from && s.End == to) || !LinkStaysInside(Nodes[from], Nodes[to]))
-                    {
-                        continue;
-                    }
-
-                    Segments.Add(new WorkSegment(from, to, new HashSet<string>(StringComparer.Ordinal), null, false,
-                        new HashSet<string>(StringComparer.Ordinal), false, false, IsJunction: true));
+                    AddJunctionLink(junction, from, to);
                 }
             }
+        }
 
-            bool LinkStaysInside(WorkNode a, WorkNode b)
+        /// <summary>Junction link from → to unless it already exists or leaves the zone / enters KEEP_OUT.</summary>
+        private bool AddJunctionLink(Junction junction, int from, int to)
+        {
+            if (Segments.Any(s => s.Start == from && s.End == to) || !LinkStaysInside(junction, Nodes[from], Nodes[to]))
             {
-                var length = Math.Sqrt(Square(b.X - a.X) + Square(b.Y - a.Y));
-                if (length <= _tolerance)
+                return false;
+            }
+
+            Segments.Add(new WorkSegment(from, to, new HashSet<string>(StringComparer.Ordinal), null, false,
+                new HashSet<string>(StringComparer.Ordinal), false, false, IsJunction: true));
+            return true;
+        }
+
+        private bool LinkStaysInside(Junction junction, WorkNode a, WorkNode b)
+        {
+            var capture = options.JunctionCaptureDistance;
+            var length = Math.Sqrt(Square(b.X - a.X) + Square(b.Y - a.Y));
+            if (length <= _tolerance)
+            {
+                return false;
+            }
+
+            // The ends may sit up to `capture` outside the zone; everything in between must be inside it.
+            for (var d = Math.Min(capture, length / 2); d <= length - Math.Min(capture, length / 2) + 1e-9; d += 0.05)
+            {
+                var (x, y) = (a.X + (b.X - a.X) * d / length, a.Y + (b.Y - a.Y) * d / length);
+                var inZone = Inside(junction.Ring, x, y, 0) || DistanceToRing(junction.Ring, x, y) <= _tolerance;
+                if (!inZone || junction.KeepOut.Any(k => Inside(k, x, y, _tolerance)))
                 {
                     return false;
                 }
+            }
 
-                // The ends may sit up to `capture` outside the zone; everything in between must be inside it.
-                for (var d = Math.Min(capture, length / 2); d <= length - Math.Min(capture, length / 2) + 1e-9; d += 0.05)
+            return true;
+        }
+
+        /// <summary>
+        /// Endpoint too far from every lane: reach it through the nearest junction zone it lies in or at most
+        /// EndpointSnapDistance from. Exit point P = the Endpoint when inside, else the closest point of the zone edge;
+        /// every arrival of the zone links to P and P to every departure, then a two-way connector P ↔ Endpoint.
+        /// </summary>
+        private bool AttachThroughJunction(RouteGraphEndpointInput endpoint)
+        {
+            var candidates = _junctions
+                .Select(j => (Junction: j, Distance: Inside(j.Ring, endpoint.X, endpoint.Y, 0) ? 0 : DistanceToRing(j.Ring, endpoint.X, endpoint.Y)))
+                .Where(c => c.Distance <= options.EndpointSnapDistance)
+                .OrderBy(c => c.Distance)
+                .ThenBy(c => c.Junction.Code, StringComparer.Ordinal);
+            foreach (var (junction, distance) in candidates)
+            {
+                var (px, py) = distance <= _tolerance ? (endpoint.X, endpoint.Y) : ClosestOnRing(junction.Ring, endpoint.X, endpoint.Y);
+                var added = Nodes.Count;
+                var exit = FindOrAddNode(px, py); // may be a lane end already on the zone edge
+                var linked = junction.Arrivals.Count(from => AddJunctionLink(junction, from, exit))
+                    + junction.Departures.Count(to => AddJunctionLink(junction, exit, to));
+                if (exit == added && linked == 0)
                 {
-                    var (x, y) = (a.X + (b.X - a.X) * d / length, a.Y + (b.Y - a.Y) * d / length);
-                    var inZone = Inside(ring, x, y, 0) || DistanceToRing(ring, x, y) <= _tolerance;
-                    if (!inZone || keepOut.Any(k => Inside(k, x, y, _tolerance)))
-                    {
-                        return false;
-                    }
+                    Nodes.RemoveAt(exit); // no lane end of this zone can reach the exit point
+                    continue;
                 }
 
+                if (distance <= _tolerance)
+                {
+                    Nodes[exit].EndpointCodes.Add(endpoint.Code);
+                    return true;
+                }
+
+                var stop = AddNode(endpoint.X, endpoint.Y);
+                Nodes[stop].EndpointCodes.Add(endpoint.Code);
+                Segments.Add(WorkSegment.Connector(exit, stop));
+                Segments.Add(WorkSegment.Connector(stop, exit));
                 return true;
             }
+
+            return false;
+        }
+
+        private static (double X, double Y) ClosestOnRing(IReadOnlyList<RoutePoint> ring, double x, double y)
+        {
+            var best = (X: ring[0].X, Y: ring[0].Y, D: double.MaxValue);
+            for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+            {
+                var (dx, dy) = (ring[i].X - ring[j].X, ring[i].Y - ring[j].Y);
+                var lengthSquared = dx * dx + dy * dy;
+                var t = lengthSquared == 0 ? 0 : Math.Clamp(((x - ring[j].X) * dx + (y - ring[j].Y) * dy) / lengthSquared, 0, 1);
+                var (fx, fy) = (ring[j].X + t * dx, ring[j].Y + t * dy);
+                var d = Math.Sqrt(Square(fx - x) + Square(fy - y));
+                if (d < best.D)
+                {
+                    best = (fx, fy, d);
+                }
+            }
+
+            return (best.X, best.Y);
         }
 
         public void Label(RouteGraphZoneInput zone)
@@ -403,11 +481,16 @@ public static class RouteGraphBuilder
             var (segment, footX, footY, distance) = NearestFoot(endpoint.X, endpoint.Y);
             if (segment < 0 || distance > options.EndpointSnapDistance)
             {
+                if (AttachThroughJunction(endpoint))
+                {
+                    return;
+                }
+
                 issues.Add(new RouteGraphIssue(
                     EndpointTooFar,
                     RouteGraphIssueSeverity.Error,
                     string.Create(CultureInfo.InvariantCulture,
-                        $"Endpoint {endpoint.Code} is {distance:0.00} m from the nearest lane (max {options.EndpointSnapDistance:0.00} m): draw a lane to it or move it."),
+                        $"Endpoint {endpoint.Code} is {distance:0.00} m from the nearest lane (max {options.EndpointSnapDistance:0.00} m) and not within that distance of a junction zone: draw a lane to it, move it, or extend a junction zone to it."),
                     [endpoint.Code]));
                 return;
             }
@@ -624,6 +707,14 @@ public static class RouteGraphBuilder
     }
 
     private sealed record WorkNode(double X, double Y, HashSet<string> EndpointCodes);
+
+    /// <summary>A junction zone and its lane ends (node indexes), kept to reach Endpoints through the zone.</summary>
+    private sealed record Junction(
+        string Code,
+        IReadOnlyList<RoutePoint> Ring,
+        IReadOnlyList<IReadOnlyList<RoutePoint>> KeepOut,
+        IReadOnlyCollection<int> Arrivals,
+        IReadOnlyCollection<int> Departures);
 
     private sealed record WorkSegment(
         int Start,
