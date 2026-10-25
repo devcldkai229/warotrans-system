@@ -7,6 +7,7 @@ using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Traffic;
+using WaroTrans.Fleet.Traffic.StationPolicies;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Traffic;
 using WaroTrans.WorkflowExecution.Contracts;
@@ -46,7 +47,8 @@ public sealed class JobExecutionEngine(
     IOptions<TrafficOptions>? trafficOptions = null,
     TrafficShadowObserver? trafficShadow = null,
     ShadowSingleMoverGuard? shadowMoverGuard = null,
-    ISegmentedTrafficCoordinator? segmentedTraffic = null)
+    ISegmentedTrafficCoordinator? segmentedTraffic = null,
+    ITrafficOpsLog? trafficOpsLog = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -568,19 +570,16 @@ public sealed class JobExecutionEngine(
                 return await StartMoveAsync(job, task, step, workflowStep.StepKey, cancellationToken);
 
             case StepType.HUMAN_INTERACTION:
-                if ((trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) == TrafficCoordinatorMode.Active
-                    && segmentedTraffic is not null
-                    && step.ResolvedInputs.TryGetValue("robotId", out var humanRobotEl))
-                {
-                    var humanRobotId = humanRobotEl.GetGuid();
-                    // Hold current service resource while waiting for HUMAN_CONFIRM (no release).
-                    await segmentedTraffic.HoldServiceResourceAsync(
-                        humanRobotId,
-                        $"service:{job.MapVersionId}:{workflowStep.StepKey}",
-                        cancellationToken);
-                }
-
+                await HoldStationForHumanAsync(job, task, step, workflowStep, now, cancellationToken);
                 SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.WAITING, now);
+                // Arm timeout clock — keep hold on miss (no release).
+                var timeoutOutputs = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    ["humanWaitingSince"] = JsonSerializer.SerializeToElement(now),
+                    ["humanConfirmTimeoutSec"] = JsonSerializer.SerializeToElement(
+                        trafficOptions?.Value.HumanConfirmTimeoutSec ?? 300)
+                };
+                step.OutputValues = timeoutOutputs;
                 return false;
 
             default:
@@ -632,6 +631,49 @@ public sealed class JobExecutionEngine(
                 }
 
                 await segmentedTraffic.BindGraphAsync(job.MapVersionId, graph, cancellationToken);
+
+                var purpose = step.ResolvedInputs.TryGetValue("purpose", out var purposeEl)
+                    ? purposeEl.GetString()
+                    : "TRANSIT";
+                var policy = StationPolicyResolver.Resolve(graph, pose.Code, purpose);
+                if (policy.Intent is { HoldResourceIds.Length: > 0 } intent)
+                {
+                    foreach (var rid in intent.HoldResourceIds)
+                    {
+                        var hold = await segmentedTraffic.HoldServiceResourceAsync(robotId, rid, cancellationToken);
+                        if (!hold.Ok)
+                        {
+                            trafficOpsLog?.Write(new TrafficOpsEvent(
+                                Guid.NewGuid(), TrafficOpsEventType.Wait, DateTimeOffset.UtcNow,
+                                robotId, job.Id, step.Id, job.MapVersionId, null, rid, null, null,
+                                segmentedTraffic.Epoch, null, hold.Reason ?? "STATION_BUSY"));
+                            step.OutputValues = new Dictionary<string, JsonElement>
+                            {
+                                ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                                [PendingTrafficKey] = JsonSerializer.SerializeToElement(true),
+                                ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
+                                ["trafficWaitingReason"] = JsonSerializer.SerializeToElement("StationBay"),
+                                ["stationPolicy"] = JsonSerializer.SerializeToElement(intent.PolicyKind.ToString()),
+                                ["stationResourceId"] = JsonSerializer.SerializeToElement(rid)
+                            };
+                            logger.LogInformation(
+                                "Job {JobNo} {StepKey} waiting for station resource {ResourceId}",
+                                job.JobNo, stepKey, rid);
+                            return false;
+                        }
+
+                        trafficOpsLog?.Write(new TrafficOpsEvent(
+                            Guid.NewGuid(), TrafficOpsEventType.Service, DateTimeOffset.UtcNow,
+                            robotId, job.Id, step.Id, job.MapVersionId, null, rid, null, null,
+                            segmentedTraffic.Epoch, null, intent.PolicyKind.ToString()));
+                    }
+                }
+
+                trafficOpsLog?.Write(new TrafficOpsEvent(
+                    Guid.NewGuid(), TrafficOpsEventType.Request, DateTimeOffset.UtcNow,
+                    robotId, job.Id, step.Id, job.MapVersionId, null, policy.Intent?.BayResourceId,
+                    null, null, segmentedTraffic.Epoch, null, purpose));
+
                 var plan = await segmentedTraffic.RequestSegmentAsync(new RoutePlanRequest(
                     Guid.NewGuid(),
                     robotId,
@@ -656,12 +698,18 @@ public sealed class JobExecutionEngine(
                     plan.Segments[0], segmentedTraffic.Epoch, null, cancellationToken);
                 if (acquire.Queued)
                 {
+                    trafficOpsLog?.Write(new TrafficOpsEvent(
+                        Guid.NewGuid(), TrafficOpsEventType.Wait, DateTimeOffset.UtcNow,
+                        robotId, job.Id, step.Id, job.MapVersionId, null, null,
+                        plan.Segments[0].EdgeIds.ToArray(), null, segmentedTraffic.Epoch, null,
+                        acquire.WaitingReason.ToString()));
                     step.OutputValues = new Dictionary<string, JsonElement>
                     {
                         ["startedAt"] = JsonSerializer.SerializeToElement(now),
                         [PendingTrafficKey] = JsonSerializer.SerializeToElement(true),
                         ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
-                        ["trafficWaitingReason"] = JsonSerializer.SerializeToElement(acquire.WaitingReason.ToString())
+                        ["trafficWaitingReason"] = JsonSerializer.SerializeToElement(acquire.WaitingReason.ToString()),
+                        ["stationPolicy"] = JsonSerializer.SerializeToElement(policy.Intent?.PolicyKind.ToString() ?? "Transit")
                     };
                     logger.LogInformation(
                         "Job {JobNo} {StepKey} Active Mode waiting for segment grant (robot {RobotId})",
@@ -676,6 +724,12 @@ public sealed class JobExecutionEngine(
                     return true;
                 }
 
+                trafficOpsLog?.Write(new TrafficOpsEvent(
+                    Guid.NewGuid(), TrafficOpsEventType.Grant, DateTimeOffset.UtcNow,
+                    robotId, job.Id, step.Id, job.MapVersionId, acquire.Authority.AuthorityId,
+                    policy.Intent?.BayResourceId, acquire.Authority.EdgeIds.ToArray(), null,
+                    acquire.Authority.Epoch, acquire.Authority.Seq, null));
+
                 // AuthorityPublisher emits NAVIGATE+authority; do not call fleet.NavigateAsync here.
                 step.OutputValues = new Dictionary<string, JsonElement>
                 {
@@ -683,7 +737,10 @@ public sealed class JobExecutionEngine(
                     ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
                     ["trafficAuthorityId"] = JsonSerializer.SerializeToElement(acquire.Authority.AuthorityId),
                     ["trafficGraphHash"] = JsonSerializer.SerializeToElement(acquire.Authority.GraphHash),
-                    ["trafficEdgeIds"] = JsonSerializer.SerializeToElement(acquire.Authority.EdgeIds)
+                    ["trafficEdgeIds"] = JsonSerializer.SerializeToElement(acquire.Authority.EdgeIds),
+                    ["stationPolicy"] = JsonSerializer.SerializeToElement(policy.Intent?.PolicyKind.ToString() ?? "Transit"),
+                    ["stationResourceIds"] = JsonSerializer.SerializeToElement(
+                        policy.Intent?.HoldResourceIds.ToArray() ?? [])
                 };
                 logger.LogInformation(
                     "Job {JobNo} {StepKey} Active Mode segment granted auth={AuthorityId} edges={Count}",
@@ -1089,5 +1146,205 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException($"Robot {robot.Code} is already running another Job.", "robot_assigned_to_other_job");
         }
+    }
+
+    /// <summary>
+    /// Operator cancel: job → CANCELLED; traffic CancelRequest (quarantine if occupied — no silent release).
+    /// </summary>
+    public async Task<Job> CancelJobAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        if (job.Status is JobStatus.COMPLETED or JobStatus.CANCELLED or JobStatus.FAILED)
+        {
+            throw new ConflictException($"Job {job.JobNo} is already terminal ({job.Status}).", "job_already_terminal");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var robotId = AssignedRobot(job);
+        if (robotId is Guid rid && segmentedTraffic is not null
+            && (trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) == TrafficCoordinatorMode.Active)
+        {
+            await segmentedTraffic.CancelRequestAsync(rid, null, cancellationToken);
+            trafficOpsLog?.Write(new TrafficOpsEvent(
+                Guid.NewGuid(), TrafficOpsEventType.Cancel, now,
+                rid, job.Id, null, job.MapVersionId, null, null, null, null,
+                segmentedTraffic.Epoch, null, reason ?? "OPERATOR_CANCEL"));
+        }
+
+        var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+            .ToDictionaryAsync(s => s.Id, cancellationToken);
+
+        foreach (var (task, step) in OrderedSteps(job)
+                     .Where(x => x.Step.Status is JobStepStatus.PENDING or JobStepStatus.EXECUTING or JobStepStatus.WAITING))
+        {
+            step.ErrorCode = "job_cancelled";
+            step.ErrorMessage = reason ?? "Cancelled by operator.";
+            var stepKey = workflowSteps.TryGetValue(step.WorkflowStepId, out var ws) ? ws.StepKey : step.Id.ToString("N");
+            SetStepStatus(job, task, step, stepKey, JobStepStatus.CANCELLED, now);
+        }
+
+        foreach (var task in job.JobTasks.Where(t => t.Status is JobTaskStatus.PENDING or JobTaskStatus.RUNNING))
+        {
+            task.Status = JobTaskStatus.CANCELLED;
+            task.CompletedAt ??= now;
+            task.FailureCode = "job_cancelled";
+        }
+
+        job.Status = JobStatus.CANCELLED;
+        job.CompletedAt = now;
+        job.FailureCode = "job_cancelled";
+        job.FailureMessage = reason ?? "Cancelled by operator.";
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
+        await SaveAndPublishAsync(cancellationToken);
+        return job;
+    }
+
+    /// <summary>
+    /// Escalate HUMAN_INTERACTION waits past timeout. Keeps station hold; does not release occupancy.
+    /// </summary>
+    public async Task<int> EscalateHumanConfirmTimeoutsAsync(CancellationToken cancellationToken = default)
+    {
+        var defaultTimeout = trafficOptions?.Value.HumanConfirmTimeoutSec ?? 300;
+        var now = DateTimeOffset.UtcNow;
+        var waiting = await db.Jobs
+            .Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)
+            .Where(j => j.Status == JobStatus.RUNNING)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
+
+        var escalated = 0;
+        foreach (var job in waiting)
+        {
+            foreach (var (task, step) in OrderedSteps(job)
+                         .Where(x => x.Step.Status == JobStepStatus.WAITING && x.Step.StepType == StepType.HUMAN_INTERACTION))
+            {
+                if (step.OutputValues.TryGetValue("humanTimeoutEscalated", out var done) && done.ValueKind == JsonValueKind.True)
+                {
+                    continue;
+                }
+
+                DateTimeOffset since = step.StartedAt ?? now;
+                if (step.OutputValues.TryGetValue("humanWaitingSince", out var sinceEl)
+                    && sinceEl.ValueKind == JsonValueKind.String
+                    && DateTimeOffset.TryParse(sinceEl.GetString(), out var sinceDto))
+                {
+                    since = sinceDto;
+                }
+                var timeoutSec = step.OutputValues.TryGetValue("humanConfirmTimeoutSec", out var tEl)
+                    && tEl.TryGetInt32(out var t)
+                    ? t
+                    : defaultTimeout;
+                if ((now - since).TotalSeconds < timeoutSec)
+                {
+                    continue;
+                }
+
+                var outputs = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    ["humanTimeoutEscalated"] = JsonSerializer.SerializeToElement(true),
+                    ["humanTimeoutAt"] = JsonSerializer.SerializeToElement(now)
+                };
+                step.OutputValues = outputs;
+                trafficOpsLog?.Write(new TrafficOpsEvent(
+                    Guid.NewGuid(), TrafficOpsEventType.Timeout, now,
+                    AssignedRobot(job), job.Id, step.Id, job.MapVersionId, null,
+                    step.OutputValues.TryGetValue("stationResourceId", out var ridEl) ? ridEl.GetString() : null,
+                    null, null, segmentedTraffic?.Epoch, null, "HUMAN_CONFIRM_TIMEOUT"));
+                logger.LogWarning(
+                    "Job {JobNo} step {StepId} HUMAN confirm timeout — hold kept, operator escalation",
+                    job.JobNo, step.Id);
+                escalated++;
+            }
+        }
+
+        if (escalated > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return escalated;
+    }
+
+    private async Task HoldStationForHumanAsync(
+        Job job,
+        JobTask task,
+        JobStep step,
+        WorkflowStep workflowStep,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        _ = task;
+        if ((trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) != TrafficCoordinatorMode.Active
+            || segmentedTraffic is null
+            || !step.ResolvedInputs.TryGetValue("robotId", out var humanRobotEl))
+        {
+            return;
+        }
+
+        var humanRobotId = humanRobotEl.GetGuid();
+        var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
+        string? endpointCode = null;
+        if (step.TargetEndpointId is Guid epId)
+        {
+            var pose = await navigation.GetEndpointPoseAsync(epId, cancellationToken);
+            endpointCode = pose?.Code;
+        }
+
+        endpointCode ??= step.ResolvedInputs.TryGetValue("endpointCode", out var codeEl)
+            ? codeEl.GetString()
+            : null;
+
+        // Infer purpose from prior MOVE or action code.
+        var purpose = "PICKUP";
+        if (step.ResolvedInputs.TryGetValue("actionCode", out var actionEl))
+        {
+            var action = actionEl.GetString() ?? "";
+            if (action.Contains("DROPOFF", StringComparison.OrdinalIgnoreCase))
+            {
+                purpose = "DROPOFF";
+            }
+            else if (action.Contains("INSPECTION", StringComparison.OrdinalIgnoreCase))
+            {
+                purpose = "TRANSIT";
+            }
+            else if (action.Contains("CHARGE", StringComparison.OrdinalIgnoreCase))
+            {
+                purpose = "CHARGE";
+            }
+        }
+
+        if (graph is not null && !string.IsNullOrWhiteSpace(endpointCode))
+        {
+            var policy = StationPolicyResolver.Resolve(graph, endpointCode, purpose);
+            if (policy.Intent is { HoldResourceIds.Length: > 0 } intent)
+            {
+                foreach (var rid in intent.HoldResourceIds)
+                {
+                    await segmentedTraffic.HoldServiceResourceAsync(humanRobotId, rid, cancellationToken);
+                    trafficOpsLog?.Write(new TrafficOpsEvent(
+                        Guid.NewGuid(), TrafficOpsEventType.Service, now,
+                        humanRobotId, job.Id, step.Id, job.MapVersionId, null, rid, null, null,
+                        segmentedTraffic.Epoch, null, $"HUMAN:{intent.PolicyKind}"));
+                }
+
+                var outs = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    ["stationPolicy"] = JsonSerializer.SerializeToElement(intent.PolicyKind.ToString()),
+                    ["stationResourceIds"] = JsonSerializer.SerializeToElement(intent.HoldResourceIds.ToArray()),
+                    ["stationResourceId"] = JsonSerializer.SerializeToElement(intent.BayResourceId ?? intent.HoldResourceIds[0])
+                };
+                step.OutputValues = outs;
+                return;
+            }
+        }
+
+        // Fallback: keep synthetic hold only when no compiled bay (legacy Active path).
+        var fallback = $"service:{job.MapVersionId}:{workflowStep.StepKey}";
+        await segmentedTraffic.HoldServiceResourceAsync(humanRobotId, fallback, cancellationToken);
+        trafficOpsLog?.Write(new TrafficOpsEvent(
+            Guid.NewGuid(), TrafficOpsEventType.Service, now,
+            humanRobotId, job.Id, step.Id, job.MapVersionId, null, fallback, null, null,
+            segmentedTraffic.Epoch, null, "HUMAN:FALLBACK"));
     }
 }

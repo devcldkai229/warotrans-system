@@ -54,6 +54,16 @@ export interface MapMovement {
   label?: string
 }
 
+/** Traffic coordinator overlay (authorized edges + quarantine markers). */
+export interface MapTrafficOverlay {
+  /** Graph edge numeric ids currently under motion authority. */
+  authorizedEdgeIds?: number[]
+  /** Resource ids that are full / held (bay:CODE, corridor ids). */
+  occupiedResourceIds?: string[]
+  /** Robots in Quarantined phase — drawn as alert markers. */
+  quarantinedRobotCodes?: string[]
+}
+
 export type MapEmphasis = 'zones' | 'edges' | 'endpoints'
 
 interface MapLayers {
@@ -88,6 +98,7 @@ export interface WarehouseMapProps {
   /** When given, every other Robot fades back. */
   focusRobotCodes?: string[]
   movements?: MapMovement[]
+  trafficOverlay?: MapTrafficOverlay | null
   callouts?: MapCallout[]
   selected?: { zoneId?: string; edgeId?: string; endpointId?: string; robotCode?: string }
   onRobotClick?: (code: string) => void
@@ -141,6 +152,7 @@ export function WarehouseMap({
   focusEndpointIds = [],
   focusRobotCodes,
   movements = [],
+  trafficOverlay = null,
   callouts = [],
   selected = {},
   onRobotClick,
@@ -514,6 +526,33 @@ export function WarehouseMap({
               {drawing.points.map((point, index) => (
                 <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill="#fff" stroke="currentColor" strokeWidth={0.16 * mark} />
               ))}
+            </g>
+          ) : null}
+
+          {/* Traffic authority: granted Nav2 edge ids (matched by Edge.code when numeric). */}
+          {trafficOverlay?.authorizedEdgeIds && trafficOverlay.authorizedEdgeIds.length > 0 ? (
+            <g>
+              {edges
+                .filter((edge) => {
+                  const n = Number(edge.code)
+                  return Number.isFinite(n) && trafficOverlay.authorizedEdgeIds!.includes(n)
+                })
+                .map((edge) => {
+                  const pts = lineStringToPoints(edge.geometry)
+                  if (pts.length < 2) return null
+                  return (
+                    <polyline
+                      key={`auth-${edge.id}`}
+                      points={stagePoints(pts)}
+                      fill="none"
+                      stroke={MAP_AMBER}
+                      strokeWidth={0.45 * mark}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={0.85}
+                    />
+                  )
+                })}
             </g>
           ) : null}
 

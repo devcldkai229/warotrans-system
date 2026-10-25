@@ -5,7 +5,8 @@
 **Physical robot motion:** not executed (by design)  
 **Coordinator mode:** Shadow default (`Traffic:Mode=Shadow`); Active opt-in  
 **Robot mode:** legacy default (`traffic_mode:=legacy`); Active opt-in  
-**Git tag:** `pre-traffic-active` (both repos)
+**Git tag:** `pre-traffic-active` (both repos)  
+**Branch:** `feature/traffic-operations`
 
 ## Acceptance matrix (Active integration)
 
@@ -32,6 +33,11 @@
 | Gazebo six scenarios | **NOT_RUN** | [SIM-RESULTS.md](SIM-RESULTS.md) |
 | Pi / physical E2E | **NOT_RUN** | SSH blocked; [PHYSICAL-RESULTS.md](PHYSICAL-RESULTS.md) |
 | Operator motion tests | **BLOCKED** | Need explicit approval |
+| Station policies (Inbound/Outbound/Shelf/…) | **PASS** | `StationPolicyResolver` + Active MOVE/HUMAN hold |
+| Job cancel + HUMAN timeout keep-hold | **PASS** | `CancelJob` API + `HumanConfirmTimeoutHostedService` |
+| Traffic ops structured log | **PASS** | `ITrafficOpsLog` + `/traffic/ops-log` |
+| Fleet map traffic overlay | **PASS** | `FleetMap` polls snapshot |
+| ADR 0011 Traffic Operations | **PASS** | `docs/adr/0011-traffic-operations.md` |
 
 ## Benchmark (local, 2026-10-25)
 
@@ -60,6 +66,7 @@ dotnet test ... --filter FullyQualifiedName~SegmentedTraffic
 
 | Deliverable | Path |
 |-------------|------|
+| ADR traffic operations | [../adr/0011-traffic-operations.md](../adr/0011-traffic-operations.md) |
 | ADR robot traffic client | [../adr/0010-robot-traffic-client.md](../adr/0010-robot-traffic-client.md) |
 | Robot integration + rollback | [ROBOT-INTEGRATION.md](ROBOT-INTEGRATION.md) |
 | Runtime audit | [ROBOT-RUNTIME-AUDIT.md](ROBOT-RUNTIME-AUDIT.md) |

@@ -63,6 +63,7 @@ public static class FleetModule
         services.AddSingleton<TrafficReadySignal>();
         services.AddSingleton<ShadowSingleMoverGuard>();
         services.AddSingleton<TrafficEventOutbox>();
+        services.AddSingleton<ITrafficOpsLog, TrafficOpsLog>();
         services.AddSingleton<ITrafficCoordinator>(sp =>
             new TrafficCoordinator(sp.GetRequiredService<TrafficReadySignal>()));
         services.AddSingleton<RoutePlanner>();
