@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type {
   Edge,
@@ -38,7 +38,7 @@ import { controlClass } from '@/shared/ui/controlClass'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { MAP_STATUS_TONE } from '@/shared/ui/statusTones'
-import { pointsToLineString, pointsToPolygon } from '@/shared/map/geoJson'
+import { lineStringToPoints, pointsToLineString, pointsToPolygon, polygonToPoints } from '@/shared/map/geoJson'
 import { worldToPixel, type PixelCoord, type WorldCoord } from '@/shared/map/mapCoordinateTransform'
 import { WorkflowEditor } from '@/features/workflows/workflow-editor-page'
 import { HeadingDial } from './HeadingDial'
@@ -86,6 +86,24 @@ const MAP_TOOLS: { tool: EditorTool; label: string; icon: IconName }[] = [
 
 function snap(value: number) {
   return Math.round(value * 1000) / 1000
+}
+
+// A duplicate lands this far right and down of the original (metres) so both stay visible and clickable.
+const DUPLICATE_OFFSET = { x: 0.5, y: -0.5 }
+
+function offsetPoints(points: Point[]): Point[] {
+  return points.map((p) => ({ x: snap(p.x + DUPLICATE_OFFSET.x), y: snap(p.y + DUPLICATE_OFFSET.y) }))
+}
+
+// Endpoint / zone codes come from the name on the backend (EP-{NAME} / ZONE-{NAME}: trimmed, upper case, spaces → '-')
+// and must be unique on the map, so the copy's name is "<name> copy", then "<name> copy 2", ... whose code is free.
+function duplicateName(name: string, prefix: 'EP' | 'ZONE', takenCodes: string[]): string {
+  const taken = new Set(takenCodes.map((c) => c.toUpperCase()))
+  const codeOf = (n: string) => `${prefix}-${n.trim().toUpperCase().replaceAll(' ', '-')}`
+  for (let i = 1; ; i++) {
+    const candidate = i === 1 ? `${name} copy` : `${name} copy ${i}`
+    if (!taken.has(codeOf(candidate))) return candidate
+  }
 }
 
 function toEndpoint(e: EndpointDto): Endpoint {
@@ -484,6 +502,34 @@ export function MapEditorPage() {
     }
   }
 
+  // A side of the selected edge's corridor was dragged: the width is saved on release with the edge's saved fields,
+  // and the panel shows it (other unsaved panel edits are kept).
+  async function resizeEdgeWidth(id: string, widthMeters: number) {
+    if (!version || !isDraft) return
+    const edge = edges.find((e) => e.id === id)
+    if (!edge) return
+    setActionError(null)
+    queryClient.setQueryData<typeof version>(['navigation', 'map-detail', mapId], (old) =>
+      old && { ...old, edges: old.edges.map((e) => (e.id === id ? { ...e, widthMeters } : e)) },
+    )
+    setEdgeDraft((draft) => (draft && mode.kind === 'edge' && mode.edgeId === id ? { ...draft, widthMeters } : draft))
+    try {
+      await updateEdge(id, {
+        geometry: edge.geometry,
+        widthMeters,
+        direction: edge.direction,
+        capacity: edge.capacity,
+        maxSpeed: edge.maxSpeed,
+        isActive: edge.isActive,
+      })
+      setActionOk(`Edge width ${widthMeters.toFixed(2)} m saved`)
+      await invalidate()
+    } catch (err) {
+      setActionError(errMessage(err))
+      await invalidate()
+    }
+  }
+
   // A vertex was dragged on the selected edge/zone. The outline is saved on release together with the shape's saved
   // fields (not unsaved panel edits), and shown at once so it does not jump back while the request is in flight.
   async function moveShapeVertices(shape: { kind: 'edge' | 'zone'; id: string }, points: Point[]) {
@@ -549,7 +595,7 @@ export function MapEditorPage() {
         name,
         zoneType: type,
         geometry: pointsToPolygon(points),
-        capacity: type === 'SINGLE_OCCUPANCY' ? 1 : 2,
+        capacity: type === 'SINGLE_OCCUPANCY' || type === 'JUNCTION' ? 1 : 2,
         maxSpeed: type === 'SPEED' ? 0.5 : null,
         isActive: true,
       })
@@ -604,6 +650,94 @@ export function MapEditorPage() {
       setActionError(errMessage(err))
     }
   }
+
+  // Duplicate the selected endpoint / edge / zone from its saved values (not unsaved panel edits), shifted by
+  // DUPLICATE_OFFSET; the backend gives it a new id and code, and the copy becomes the selection.
+  async function duplicateSelected() {
+    if (!version || !isDraft) return
+    setActionError(null)
+    try {
+      if (mode.kind === 'endpoint') {
+        const ep = endpoints.find((e) => e.id === mode.endpointId)
+        if (!ep) return
+        const [at] = offsetPoints([{ x: ep.x, y: ep.y }])
+        const created = await createEndpoint(version.id, {
+          name: duplicateName(ep.name, 'EP', endpoints.map((e) => e.code)),
+          endpointType: ep.endpointType,
+          x: at.x,
+          y: at.y,
+          yaw: ep.yaw,
+          positionTolerance: ep.positionTolerance,
+          yawTolerance: ep.yawTolerance,
+        })
+        await invalidate()
+        setActionOk(`Duplicated ${ep.code} as ${created.code}`)
+        setMode({ kind: 'endpoint', endpointId: created.id })
+        setEpDraft(toEndpoint(created))
+      } else if (mode.kind === 'edge') {
+        const edge = edges.find((e) => e.id === mode.edgeId)
+        if (!edge) return
+        const created = await createEdge(version.id, {
+          geometry: pointsToLineString(offsetPoints(lineStringToPoints(edge.geometry))),
+          widthMeters: edge.widthMeters ?? 1,
+          direction: edge.direction,
+          capacity: edge.capacity,
+          maxSpeed: edge.maxSpeed,
+          isActive: edge.isActive,
+        })
+        await invalidate()
+        setActionOk(`Duplicated ${edge.code} as ${created.code}`)
+        setEdgeDraft({
+          direction: created.direction as EdgeDirection,
+          capacity: created.capacity,
+          widthMeters: created.widthMeters,
+          maxSpeed: created.maxSpeed?.toString() ?? '',
+          isActive: created.isActive,
+        })
+        setMode({ kind: 'edge', edgeId: created.id })
+      } else if (mode.kind === 'zone') {
+        const zone = zones.find((z) => z.id === mode.zoneId)
+        if (!zone) return
+        const created = await createZone(version.id, {
+          name: duplicateName(zone.name, 'ZONE', zones.map((z) => z.code)),
+          zoneType: zone.zoneType,
+          geometry: pointsToPolygon(offsetPoints(polygonToPoints(zone.geometry))),
+          capacity: zone.capacity,
+          maxSpeed: zone.maxSpeed,
+          isActive: zone.isActive,
+          policy: zone.policy ?? null,
+          policySchemaVersion: zone.policySchemaVersion ?? 1,
+        })
+        await invalidate()
+        setActionOk(`Duplicated ${zone.code} as ${created.code}`)
+        setZoneDraft({
+          name: created.name,
+          zoneType: created.zoneType as ZoneType,
+          capacity: created.capacity,
+          maxSpeed: created.maxSpeed?.toString() ?? '',
+          isActive: created.isActive,
+        })
+        setMode({ kind: 'zone', zoneId: created.id })
+      }
+      setTool('select')
+    } catch (err) {
+      setActionError(errMessage(err))
+    }
+  }
+
+  // Ctrl+D (Cmd+D) duplicates the selection, unless the user is typing in a field.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'd') return
+      if (mode.kind !== 'endpoint' && mode.kind !== 'edge' && mode.kind !== 'zone') return
+      const target = event.target as HTMLElement | null
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+      event.preventDefault() // the browser's "bookmark this page"
+      void duplicateSelected()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   function startEdge(direction: EdgeDirection) {
     if (!isDraft) return
@@ -815,6 +949,7 @@ export function MapEditorPage() {
             onEdgeClick={isDraft ? selectEdge : undefined}
             onZoneClick={isDraft ? selectZone : undefined}
             onShapeVerticesChange={moveShapeVertices}
+            onEdgeWidthChange={resizeEdgeWidth}
             onEndpointMove={
               isDraft
                 ? (id, at) =>
@@ -1034,6 +1169,9 @@ export function MapEditorPage() {
                 <Button variant="primary" onClick={() => void saveEndpoint()}>
                   Save
                 </Button>
+                <Button variant="ghost" onClick={() => void duplicateSelected()} title="Duplicate (Ctrl+D)">
+                  Duplicate
+                </Button>
                 <Button variant="ghost" onClick={() => void removeEndpoint(selectedEndpoint.id)}>
                   Delete
                 </Button>
@@ -1108,6 +1246,9 @@ export function MapEditorPage() {
                 <Button variant="primary" onClick={() => void saveEdge()}>
                   Save
                 </Button>
+                <Button variant="ghost" onClick={() => void duplicateSelected()} title="Duplicate (Ctrl+D)">
+                  Duplicate
+                </Button>
                 <Button variant="ghost" onClick={() => void removeEdge(selectedEdge.id)}>
                   Delete
                 </Button>
@@ -1157,6 +1298,11 @@ export function MapEditorPage() {
             {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' ? (
               <p className="text-xs text-amber-ink">SINGLE_OCCUPANCY requires Capacity = 1.</p>
             ) : null}
+            {zoneDraft.zoneType === 'JUNCTION' ? (
+              <p className="text-xs text-muted">
+                Lanes that end at this zone are connected; an Endpoint within 0.5 m of it is reached through it.
+              </p>
+            ) : null}
             <FieldRow>
               <Field label="Capacity">
                 <input
@@ -1190,6 +1336,9 @@ export function MapEditorPage() {
               <div className="mt-4 flex gap-2">
                 <Button variant="primary" onClick={() => void saveZone()}>
                   Save
+                </Button>
+                <Button variant="ghost" onClick={() => void duplicateSelected()} title="Duplicate (Ctrl+D)">
+                  Duplicate
                 </Button>
                 <Button variant="ghost" onClick={() => void removeZone(selectedZone.id)}>
                   Delete

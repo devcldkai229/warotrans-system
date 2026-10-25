@@ -9,20 +9,23 @@ import {
   EDGE_COLOR,
   ENDPOINT_COLOR,
   ENDPOINT_NAME,
+  LANE_BAND_OPACITY,
+  LANE_CHEVRON_OPACITY,
   MAP_AMBER,
   MAP_INK,
-  MAP_LANE,
   MAP_LINE,
   MAP_OFF,
   MAP_RED,
   ROBOT_COLOR,
   ZONE_COLOR,
+  ZONE_FILL_OPACITY,
   ZONE_LABEL,
   ZONE_ORDER,
   toPercent,
   zoneSwatchStyle,
 } from './mapStyle'
 import { lineStringToPoints, polygonToPoints } from './geoJson'
+import { CHEVRON_PATH, laneGlyphs } from './laneGlyphs'
 import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES, distanceToPolyline, pointInPolygon } from './scene'
 
 /** A Robot as the map draws it: pose from fleet.robots, status for the colour. */
@@ -310,9 +313,6 @@ export function WarehouseMap({
             <pattern id="wmap-dots" width="5" height="5" patternUnits="userSpaceOnUse">
               <circle cx="0" cy="0" r="0.09" fill={MAP_LINE} />
             </pattern>
-            <marker id="wmap-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth={0.75 * mark} markerHeight={0.75 * mark} orient="auto-start-reverse">
-              <path d="M1 1.2 8.6 5 1 8.8Z" fill="context-stroke" />
-            </marker>
             <marker id="wmap-move" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth={0.9 * mark} markerHeight={0.9 * mark} orient="auto">
               <path d="M1 1 9 5 1 9Z" fill={MAP_INK} />
             </marker>
@@ -353,9 +353,9 @@ export function WarehouseMap({
                       ? { fill: MAP_OFF, fillOpacity: 0.08, stroke: MAP_OFF, strokeOpacity: 1, strokeWidth: 0.1 * mark }
                       : {
                           fill: 'currentColor',
-                          fillOpacity: zone.zoneType === 'NO_STOP' ? 0.11 : 0.07,
+                          fillOpacity: ZONE_FILL_OPACITY[zone.zoneType],
                           stroke: 'currentColor',
-                          strokeOpacity: 0.55,
+                          strokeOpacity: 0.7,
                           strokeWidth: 0.1 * mark,
                         }
                 return (
@@ -396,7 +396,8 @@ export function WarehouseMap({
             </g>
           ) : null}
 
-          {/* Edges: a pale lane with a thin coloured centre line. */}
+          {/* Edges (OTTO style): a translucent band as wide as the lane with chevrons along it, one row for a one-way
+              lane, two opposite rows split by a dashed centre line for a two-way lane. */}
           {show.edges ? (
             <g opacity={layerOpacity('edges')}>
               {edges.map((edge) => {
@@ -404,54 +405,60 @@ export function WarehouseMap({
                 const mid = points[Math.floor(points.length / 2)]
                 const lane = stagePoints(points)
                 const isSelected = selected.edgeId === edge.id
+                const stage = points.map((p) => ({ x: X(p.x), y: Y(p.y) }))
+                const width = edge.widthMeters ?? 1
+                const glyphs = laneGlyphs(stage, width, edge.direction)
+                const toPoints = (line: { x: number; y: number }[]) => line.map((p) => `${p.x},${p.y}`).join(' ')
                 return (
                   <g
                     key={edge.id}
-                    color={EDGE_COLOR[edge.direction]}
+                    color={edge.isActive ? EDGE_COLOR[edge.direction] : MAP_OFF}
                     onPointerEnter={() => setHoveredEdgeId(edge.id)}
                     onPointerLeave={() => setHoveredEdgeId((id) => (id === edge.id ? null : id))}
                   >
                     <polyline
                       points={lane}
                       fill="none"
-                      stroke={isSelected ? 'currentColor' : MAP_LANE}
-                      strokeOpacity={isSelected ? 0.22 : 1}
-                      strokeWidth={1.2 * mark}
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
+                      stroke="currentColor"
+                      strokeOpacity={isSelected ? LANE_BAND_OPACITY * 1.6 : LANE_BAND_OPACITY}
+                      strokeWidth={width}
+                      strokeLinejoin="miter"
+                      strokeLinecap="butt"
                     />
-                    <polyline
-                      points={lane}
-                      fill="none"
-                      stroke={edge.isActive ? 'currentColor' : MAP_OFF}
-                      strokeWidth={(isSelected ? 0.3 : 0.15) * mark}
-                      strokeDasharray={edge.isActive ? undefined : `${0.6 * mark} ${0.5 * mark}`}
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                      opacity={isSelected ? 1 : 0.8}
-                      markerEnd="url(#wmap-arrow)"
-                      markerStart={edge.direction === 'BIDIRECTIONAL' ? 'url(#wmap-arrow)' : undefined}
-                    />
-                    {edge.direction === 'ONE_WAY'
-                      ? points.slice(0, -1).map((a, index) => {
-                          const b = points[index + 1]
-                          const length = Math.hypot(b.x - a.x, b.y - a.y)
-                          if (length < 4 * mark) return null
-                          const angle = (Math.atan2(Y(b.y) - Y(a.y), X(b.x) - X(a.x)) * 180) / Math.PI
-                          return (
-                            <path
-                              key={index}
-                              d="M-0.3 -0.3 0.2 0 -0.3 0.3"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={0.14}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              transform={`translate(${(X(a.x) + X(b.x)) / 2} ${(Y(a.y) + Y(b.y)) / 2}) rotate(${angle}) scale(${mark})`}
-                            />
-                          )
-                        })
-                      : null}
+                    {glyphs.sides.map((side, index) => (
+                      <polyline
+                        key={index}
+                        points={toPoints(side)}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity={isSelected ? 1 : 0.45}
+                        strokeWidth={(isSelected ? 0.12 : 0.05) * mark}
+                        strokeDasharray={edge.isActive ? undefined : `${0.6 * mark} ${0.5 * mark}`}
+                      />
+                    ))}
+                    {glyphs.divider ? (
+                      <polyline
+                        points={toPoints(glyphs.divider)}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity={0.6}
+                        strokeWidth={0.05 * mark}
+                        strokeDasharray={`${0.35 * mark} ${0.25 * mark}`}
+                      />
+                    ) : null}
+                    {glyphs.chevrons.map((c, index) => (
+                      <path
+                        key={index}
+                        d={CHEVRON_PATH}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity={LANE_CHEVRON_OPACITY}
+                        strokeWidth={0.16}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`}
+                      />
+                    ))}
                     {/* Wide hit stroke so hover/click work on thin paths */}
                     <polyline
                       className="cursor-pointer"
@@ -799,7 +806,18 @@ export function WarehouseMap({
             <GuideSection title="Paths">
               {present.edges.map((direction) => (
                 <GuideItem key={direction} label={direction === 'ONE_WAY' ? 'One-way edge' : 'Two-way edge'}>
-                  <i className="h-1 w-4 shrink-0 rounded-full" style={{ background: EDGE_COLOR[direction] }} />
+                  <svg className="shrink-0" width="22" height="12" viewBox="0 0 22 12" color={EDGE_COLOR[direction]}>
+                    <rect x={0} y={0} width={22} height={12} fill="currentColor" fillOpacity={LANE_BAND_OPACITY * 1.5} />
+                    {direction === 'ONE_WAY' ? (
+                      <path d="M8 2 L13 6 L8 10" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+                    ) : (
+                      <>
+                        <line x1={0} y1={6} x2={22} y2={6} stroke="currentColor" strokeWidth={0.8} strokeDasharray="2 1.5" />
+                        <path d="M13 1.2 L10 3.2 L13 5" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M9 7 L12 8.8 L9 10.8" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+                      </>
+                    )}
+                  </svg>
                 </GuideItem>
               ))}
             </GuideSection>

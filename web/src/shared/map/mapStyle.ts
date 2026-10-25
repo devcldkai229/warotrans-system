@@ -18,14 +18,33 @@ export const ZONE_LABEL: Record<ZoneType, string> = {
   SPEED: 'Speed zone',
   NO_STOP: 'No-stop',
   SINGLE_OCCUPANCY: 'Single-occupancy',
+  JUNCTION: 'Junction',
 }
+
+// OTTO-like: lanes and junctions share one blue so a junction reads as part of the lane network; no-stop is red,
+// single-occupancy yellow. Keep-out stays red but is always hatched, which tells it apart from no-stop.
+export const LANE_BLUE = '#3279f9'
 
 export const ZONE_COLOR: Record<ZoneType, string> = {
   KEEP_OUT: '#d93025',
-  SPEED: '#3279f9',
-  NO_STOP: '#e37400',
-  SINGLE_OCCUPANCY: '#d81b60',
+  SPEED: '#8430ce',
+  NO_STOP: '#e53935',
+  SINGLE_OCCUPANCY: '#f9ab00',
+  JUNCTION: LANE_BLUE,
 }
+
+/** Fill strength of a zone: junctions as strong as a lane band, the others a light tint. */
+export const ZONE_FILL_OPACITY: Record<ZoneType, number> = {
+  KEEP_OUT: 0.1,
+  SPEED: 0.1,
+  NO_STOP: 0.16,
+  SINGLE_OCCUPANCY: 0.2,
+  JUNCTION: 0.22,
+}
+
+/** Lane band and chevron strength (monitor map and Map Editor). */
+export const LANE_BAND_OPACITY = 0.22
+export const LANE_CHEVRON_OPACITY = 0.8
 
 export const ENDPOINT_COLOR: Record<EndpointType, string> = {
   WAYPOINT: '#45474d',
@@ -50,9 +69,10 @@ export const ROBOT_COLOR: Record<RobotStatus, string> = {
   OFFLINE: '#6a6a71',
 }
 
-export const EDGE_COLOR: Record<EdgeDirection, string> = { BIDIRECTIONAL: '#3279f9', ONE_WAY: '#8430ce' }
+// Both directions are lane blue: the chevrons (one row vs. two opposite rows) tell them apart.
+export const EDGE_COLOR: Record<EdgeDirection, string> = { BIDIRECTIONAL: LANE_BLUE, ONE_WAY: LANE_BLUE }
 
-export const ZONE_ORDER: ZoneType[] = ['SPEED', 'NO_STOP', 'SINGLE_OCCUPANCY', 'KEEP_OUT']
+export const ZONE_ORDER: ZoneType[] = ['JUNCTION', 'SPEED', 'NO_STOP', 'SINGLE_OCCUPANCY', 'KEEP_OUT']
 
 /** Guide swatch of a Zone type: the same tint as on the map, hatched for keep-out. */
 export function zoneSwatchStyle(type: ZoneType): CSSProperties {
