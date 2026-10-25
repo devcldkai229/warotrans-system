@@ -34,6 +34,9 @@ public sealed class TrafficOptions
 
     public int InboxOfferTimeoutMs { get; set; } = 50;
 
+    /// <summary>Seconds a HUMAN_INTERACTION may wait before ops escalation (hold is kept).</summary>
+    public int HumanConfirmTimeoutSec { get; set; } = 300;
+
     public IReadOnlyList<TrafficStationMeta> ResolveStationMeta()
     {
         var list = new List<TrafficStationMeta>();
