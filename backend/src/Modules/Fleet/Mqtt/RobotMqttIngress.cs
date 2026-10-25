@@ -13,7 +13,8 @@ public sealed class RobotMqttIngress(
     ProcessRobotTelemetryHandler telemetryHandler,
     ProcessRobotCommandAckHandler commandAckHandler,
     ProcessRobotCommandResultHandler commandResultHandler,
-    ProcessRobotInteractionConfirmHandler interactionConfirmHandler) : IRobotMqttIngress
+    ProcessRobotInteractionConfirmHandler interactionConfirmHandler,
+    Traffic.TrafficProgressIngress? trafficProgressIngress = null) : IRobotMqttIngress
 {
     public Task HandleHeartbeatAsync(RobotHeartbeatMessage message, CancellationToken cancellationToken) =>
         heartbeatHandler.HandleAsync(message, cancellationToken);
@@ -29,4 +30,10 @@ public sealed class RobotMqttIngress(
 
     public Task HandleInteractionConfirmAsync(RobotInteractionConfirmMessage message, CancellationToken cancellationToken) =>
         interactionConfirmHandler.HandleAsync(message, cancellationToken);
+
+    public Task HandleTrafficProgressAsync(TrafficProgressMessage message, CancellationToken cancellationToken) =>
+        trafficProgressIngress?.HandleProgressAsync(message, cancellationToken) ?? Task.CompletedTask;
+
+    public Task HandleAuthorityStateAsync(AuthorityStateMessage message, CancellationToken cancellationToken) =>
+        trafficProgressIngress?.HandleAuthorityStateAsync(message, cancellationToken) ?? Task.CompletedTask;
 }

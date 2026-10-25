@@ -10,6 +10,8 @@ public static class RobotMqttTopics
     public const string InteractionRequestSuffix = "interaction_request";
     public const string InteractionConfirmSuffix = "interaction_confirm";
     public const string InteractionResultSuffix = "interaction_result";
+    public const string TrafficProgressSuffix = "traffic_progress";
+    public const string AuthorityStateSuffix = "authority_state";
 
     public static string HeartbeatFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/heartbeat";
@@ -25,6 +27,12 @@ public static class RobotMqttTopics
 
     public static string InteractionConfirmFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/interaction_confirm";
+
+    public static string TrafficProgressFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/traffic_progress";
+
+    public static string AuthorityStateFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/authority_state";
 
     public static string Heartbeat(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/heartbeat";
@@ -57,6 +65,12 @@ public static class RobotMqttTopics
     public static string InteractionResult(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/interaction_result";
 
+    public static string TrafficProgress(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/traffic_progress";
+
+    public static string AuthorityState(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/authority_state";
+
     public static bool TryParse(string topic, string topicPrefix, out string robotCode, out string kind)
     {
         robotCode = string.Empty;
@@ -84,7 +98,9 @@ public static class RobotMqttTopics
             or CommandResultSuffix
             or InteractionRequestSuffix
             or InteractionConfirmSuffix
-            or InteractionResultSuffix;
+            or InteractionResultSuffix
+            or TrafficProgressSuffix
+            or AuthorityStateSuffix;
     }
 
     public static string NormalizePrefix(string topicPrefix) =>

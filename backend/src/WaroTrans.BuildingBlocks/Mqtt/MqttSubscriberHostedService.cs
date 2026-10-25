@@ -54,11 +54,13 @@ public sealed class MqttSubscriberHostedService(
                     .WithTopicFilter(RobotMqttTopics.CommandAckFilter(mqtt.TopicPrefix))
                     .WithTopicFilter(RobotMqttTopics.CommandResultFilter(mqtt.TopicPrefix))
                     .WithTopicFilter(RobotMqttTopics.InteractionConfirmFilter(mqtt.TopicPrefix))
+                    .WithTopicFilter(RobotMqttTopics.TrafficProgressFilter(mqtt.TopicPrefix))
+                    .WithTopicFilter(RobotMqttTopics.AuthorityStateFilter(mqtt.TopicPrefix))
                     .Build();
 
                 await client.SubscribeAsync(subscribeOptions, stoppingToken).ConfigureAwait(false);
                 logger.LogInformation(
-                    "MQTT subscribed to robot heartbeat/telemetry/command_ack/command_result/interaction_confirm on {Host}:{Port}",
+                    "MQTT subscribed to robot uplink topics (incl. traffic_progress/authority_state) on {Host}:{Port}",
                     mqtt.Host,
                     mqtt.Port);
 
@@ -161,6 +163,14 @@ public sealed class MqttSubscriberHostedService(
                     break;
                 case RobotMqttTopics.InteractionConfirmSuffix:
                     await HandleInteractionConfirmAsync(scope, ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.TrafficProgressSuffix:
+                    await HandleTrafficProgressAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.AuthorityStateSuffix:
+                    await HandleAuthorityStateAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)
                         .ConfigureAwait(false);
                     break;
             }
@@ -306,5 +316,47 @@ public sealed class MqttSubscriberHostedService(
         var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotInteractionConfirmMessage>>();
         await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
         await ingress.HandleInteractionConfirmAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleTrafficProgressAsync(
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<TrafficProgressMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid traffic_progress JSON on {topic}");
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RobotCode))
+        {
+            message.RobotCode = robotCodeFromTopic;
+        }
+
+        await ingress.HandleTrafficProgressAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleAuthorityStateAsync(
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<AuthorityStateMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid authority_state JSON on {topic}");
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RobotCode))
+        {
+            message.RobotCode = robotCodeFromTopic;
+        }
+
+        await ingress.HandleAuthorityStateAsync(message, cancellationToken).ConfigureAwait(false);
     }
 }

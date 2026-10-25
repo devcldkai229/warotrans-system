@@ -89,7 +89,8 @@ public sealed class IssueNavigateCommandHandler(
                     GraphHash = route.GraphHash.Trim(),
                     EdgeIds = route.EdgeIds?.ToList() ?? []
                 }
-                : null
+                : null,
+            Authority = request.Authority
         };
         var payloadJson = JsonSerializer.Serialize(posePayload, JsonOptions);
 

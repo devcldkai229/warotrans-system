@@ -173,6 +173,9 @@ public static class SegmentedCoordinatorFactory
     public static SegmentedTrafficCoordinator Create(TrafficOptions? options = null)
     {
         var opts = Options.Create(options ?? new TrafficOptions { Mode = TrafficCoordinatorMode.Active });
-        return new SegmentedTrafficCoordinator(opts, NullLogger<SegmentedTrafficCoordinator>.Instance);
+        return new SegmentedTrafficCoordinator(
+            opts,
+            new TrafficEventOutbox(),
+            NullLogger<SegmentedTrafficCoordinator>.Instance);
     }
 }

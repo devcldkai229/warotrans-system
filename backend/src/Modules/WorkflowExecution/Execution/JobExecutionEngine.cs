@@ -45,7 +45,8 @@ public sealed class JobExecutionEngine(
     CompiledTrafficGraphCache? trafficGraphCache = null,
     IOptions<TrafficOptions>? trafficOptions = null,
     TrafficShadowObserver? trafficShadow = null,
-    ShadowSingleMoverGuard? shadowMoverGuard = null)
+    ShadowSingleMoverGuard? shadowMoverGuard = null,
+    ISegmentedTrafficCoordinator? segmentedTraffic = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -567,6 +568,18 @@ public sealed class JobExecutionEngine(
                 return await StartMoveAsync(job, task, step, workflowStep.StepKey, cancellationToken);
 
             case StepType.HUMAN_INTERACTION:
+                if ((trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) == TrafficCoordinatorMode.Active
+                    && segmentedTraffic is not null
+                    && step.ResolvedInputs.TryGetValue("robotId", out var humanRobotEl))
+                {
+                    var humanRobotId = humanRobotEl.GetGuid();
+                    // Hold current service resource while waiting for HUMAN_CONFIRM (no release).
+                    await segmentedTraffic.HoldServiceResourceAsync(
+                        humanRobotId,
+                        $"service:{job.MapVersionId}:{workflowStep.StepKey}",
+                        cancellationToken);
+                }
+
                 SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.WAITING, now);
                 return false;
 
@@ -599,6 +612,85 @@ public sealed class JobExecutionEngine(
         {
             RouteGrantSnapshot? routeGrant = null;
             var mode = trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow;
+
+            // Active Mode: segmented coordinator is sole motion authority (publisher issues MQTT).
+            if (mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
+            {
+                var graph = await TryResolveTrafficGraphAsync(job.MapVersionId, cancellationToken);
+                if (graph is null)
+                {
+                    Fail(job, task, step, stepKey, "traffic_graph_unavailable",
+                        "Active Mode requires a compiled traffic graph.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+                if (robot is null)
+                {
+                    Fail(job, task, step, stepKey, "robot_not_found", "Robot missing for Active MOVE.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                await segmentedTraffic.BindGraphAsync(job.MapVersionId, graph, cancellationToken);
+                var plan = await segmentedTraffic.RequestSegmentAsync(new RoutePlanRequest(
+                    Guid.NewGuid(),
+                    robotId,
+                    job.MapVersionId,
+                    graph,
+                    robot.PoseX,
+                    robot.PoseY,
+                    pose.Code,
+                    null,
+                    Priority: 0,
+                    JobStepId: step.Id,
+                    JobId: job.Id), cancellationToken);
+
+                if (!plan.Ok || plan.Segments.Length == 0)
+                {
+                    Fail(job, task, step, stepKey, "traffic_path_unavailable",
+                        plan.Reason ?? "No traffic path for Active MOVE.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                var acquire = await segmentedTraffic.AcquireAtomicAsync(
+                    plan.Segments[0], segmentedTraffic.Epoch, null, cancellationToken);
+                if (acquire.Queued)
+                {
+                    step.OutputValues = new Dictionary<string, JsonElement>
+                    {
+                        ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                        [PendingTrafficKey] = JsonSerializer.SerializeToElement(true),
+                        ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
+                        ["trafficWaitingReason"] = JsonSerializer.SerializeToElement(acquire.WaitingReason.ToString())
+                    };
+                    logger.LogInformation(
+                        "Job {JobNo} {StepKey} Active Mode waiting for segment grant (robot {RobotId})",
+                        job.JobNo, stepKey, robotId);
+                    return false;
+                }
+
+                if (!acquire.Granted || acquire.Authority is null)
+                {
+                    Fail(job, task, step, stepKey, "traffic_grant_rejected",
+                        acquire.Reason ?? "Segment grant rejected.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                // AuthorityPublisher emits NAVIGATE+authority; do not call fleet.NavigateAsync here.
+                step.OutputValues = new Dictionary<string, JsonElement>
+                {
+                    ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                    ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
+                    ["trafficAuthorityId"] = JsonSerializer.SerializeToElement(acquire.Authority.AuthorityId),
+                    ["trafficGraphHash"] = JsonSerializer.SerializeToElement(acquire.Authority.GraphHash),
+                    ["trafficEdgeIds"] = JsonSerializer.SerializeToElement(acquire.Authority.EdgeIds)
+                };
+                logger.LogInformation(
+                    "Job {JobNo} {StepKey} Active Mode segment granted auth={AuthorityId} edges={Count}",
+                    job.JobNo, stepKey, acquire.Authority.AuthorityId, acquire.Authority.EdgeIds.Length);
+                return false;
+            }
+
             if (mode == TrafficCoordinatorMode.Shadow && shadowMoverGuard is not null)
             {
                 if (!shadowMoverGuard.TryEnter(job.MapVersionId, robotId, out var blocker))

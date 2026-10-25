@@ -19,6 +19,8 @@ public interface ISegmentedTrafficCoordinator
 
     Task<AcquireResult> AcquireAtomicAsync(RouteSegmentCandidate candidate, long? epoch = null, long? seq = null, CancellationToken ct = default);
 
+    Task<AcquireResult> ExtendAtomicAsync(RouteSegmentCandidate candidate, long? epoch = null, CancellationToken ct = default);
+
     Task<RoutePlanResult> RequestSegmentAsync(RoutePlanRequest request, CancellationToken ct = default);
 
     Task<TrafficOpResult> RenewAuthorityAsync(Guid robotId, Guid authorityId, long seq, long epoch, CancellationToken ct = default);

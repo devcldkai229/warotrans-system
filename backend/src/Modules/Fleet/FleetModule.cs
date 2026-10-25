@@ -62,14 +62,17 @@ public static class FleetModule
 
         services.AddSingleton<TrafficReadySignal>();
         services.AddSingleton<ShadowSingleMoverGuard>();
+        services.AddSingleton<TrafficEventOutbox>();
         services.AddSingleton<ITrafficCoordinator>(sp =>
             new TrafficCoordinator(sp.GetRequiredService<TrafficReadySignal>()));
         services.AddSingleton<RoutePlanner>();
         services.AddSingleton<SegmentedTrafficCoordinator>();
         services.AddSingleton<ISegmentedTrafficCoordinator>(sp => sp.GetRequiredService<SegmentedTrafficCoordinator>());
         services.AddSingleton<TrafficShadowObserver>();
+        services.AddScoped<TrafficProgressIngress>();
         services.AddHostedService(sp => sp.GetRequiredService<SegmentedTrafficCoordinator>());
         services.AddHostedService<TrafficReconciliationHostedService>();
+        services.AddHostedService<TrafficAuthorityPublisher>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();

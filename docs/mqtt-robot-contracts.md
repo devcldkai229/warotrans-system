@@ -107,12 +107,30 @@ When the robot gateway is launched with `route_graph:=…` (route mode):
 
 Protocol decision: [adr/0007-traffic-route-ownership.md](adr/0007-traffic-route-ownership.md).
 
-#### Reserved (Active Mode — not on the wire yet)
+#### Active Mode — `payload.authority` (optional; required when robot `traffic_mode=active`)
 
-Segmented motion authority (ADR 0009) will extend the robot contract with fields
-such as `authorityId`, `epoch`, `seq`, and `segmentEdgeIds` without chaining
-multiple `NAVIGATE_TO_POSE` commands. **Shadow Mode does not change the wire
-format.** Do not invent client payloads until Active cutover.
+```json
+"authority": {
+  "authorityId": "uuid",
+  "epoch": 1,
+  "seq": 3,
+  "mapVersionId": "uuid",
+  "mapVersionCode": "v1",
+  "graphHash": "sha256-hex",
+  "routeId": "optional",
+  "routeVersion": 1,
+  "segmentEdgeIds": [12, 15],
+  "pathHash": "sha256(graphHash|12,15)",
+  "goalSafeStopNodeId": 42,
+  "finalGoal": { "x": 1.0, "y": 2.0, "yaw": 0.0 },
+  "expiresAt": "2026-10-25T05:00:30.000Z",
+  "speedLimits": { "12": 0.4 }
+}
+```
+
+Schema version stays **1**. Shadow Mode may omit `authority` and keep using `route`.
+See ADR 0010. New commands: `EXTEND_AUTHORITY`, `RENEW_AUTHORITY`, `REVOKE_AUTHORITY`.
+Uplink topics: `…/traffic_progress`, `…/authority_state` (QoS1).
 
 ### CANCEL
 

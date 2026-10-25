@@ -16,6 +16,7 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
     private readonly TrafficState _state;
     private readonly RoutePlanner _planner;
     private readonly TrafficOptions _options;
+    private readonly TrafficEventOutbox _outbox;
     private readonly ILogger<SegmentedTrafficCoordinator> _logger;
     private readonly TimeProvider _clock;
     private Task? _loop;
@@ -24,10 +25,12 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public SegmentedTrafficCoordinator(
         IOptions<TrafficOptions> options,
+        TrafficEventOutbox outbox,
         ILogger<SegmentedTrafficCoordinator> logger,
         TimeProvider? clock = null)
     {
         _options = options.Value;
+        _outbox = outbox;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
         _state = new TrafficState(_options, _clock);
@@ -127,7 +130,32 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         long? epoch = null,
         long? seq = null,
         CancellationToken ct = default) =>
-        EnqueueAsync(s => s.AcquireAtomic(candidate, epoch, seq), ct);
+        EnqueueAsync(s =>
+        {
+            var result = s.AcquireAtomic(candidate, epoch, seq);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
+    public Task<AcquireResult> ExtendAtomicAsync(
+        RouteSegmentCandidate candidate,
+        long? epoch = null,
+        CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.ExtendAtomic(candidate, epoch);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
+    private void PublishGranted(TrafficState state)
+    {
+        if (state.LastGrantedEvent is { } evt)
+        {
+            _outbox.Publish(evt);
+            state.ClearLastGrantedEvent();
+        }
+    }
 
     public Task<TrafficOpResult> RenewAuthorityAsync(
         Guid robotId, Guid authorityId, long seq, long epoch, CancellationToken ct = default) =>

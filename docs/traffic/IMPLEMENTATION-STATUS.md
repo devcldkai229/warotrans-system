@@ -3,9 +3,11 @@
 **Date:** 2026-10-25  
 **Branches:** `warotrans-system/feature/traffic-coordinator`, `warotrans/feature/traffic-coordinator`  
 **Physical robot motion:** not executed (by design)  
-**Coordinator mode:** Shadow (`Traffic:Mode=Shadow`)
+**Coordinator mode:** Shadow default (`Traffic:Mode=Shadow`); Active opt-in  
+**Robot mode:** legacy default (`traffic_mode:=legacy`); Active opt-in  
+**Git tag:** `pre-traffic-active` (both repos)
 
-## Acceptance matrix (Shadow phase)
+## Acceptance matrix (Active integration)
 
 | Acceptance | Result | Evidence |
 |------------|--------|----------|
@@ -22,8 +24,14 @@
 | Event-driven V1 grant pump (no 200 ms poll) | **PASS** | `TrafficReadySignal` + `TrafficGrantHostedService` |
 | Full backend unit suite | **PASS** | 402 passed, 0 failed |
 | Benchmark numbers recorded | **PASS** | See below |
-| Active Mode robot authority client | **NOT_RUN** | Deferred (ADR 0009) |
-| Pi / physical E2E | **NOT_RUN** | No deploy / no motion |
+| MQTT authority + EXTEND/RENEW/REVOKE contract | **PASS** | `mqtt-robot-contracts.md`, DTOs, topics |
+| TrafficAuthorityPublisher + ProgressIngress | **PASS** | Fleet Traffic + unit smoke |
+| Active MOVE branch (JobExecutionEngine) | **PASS** | Skips V1 when `Mode=Active` |
+| Robot TrafficClient / AuthorityStore / Supervisor | **PASS** | pytest warotrans_fleet |
+| cmd_vel_authority_gate (default off) | **PASS** | unit + launch flag |
+| Gazebo six scenarios | **NOT_RUN** | [SIM-RESULTS.md](SIM-RESULTS.md) |
+| Pi / physical E2E | **NOT_RUN** | SSH blocked; [PHYSICAL-RESULTS.md](PHYSICAL-RESULTS.md) |
+| Operator motion tests | **BLOCKED** | Need explicit approval |
 
 ## Benchmark (local, 2026-10-25)
 
@@ -52,6 +60,9 @@ dotnet test ... --filter FullyQualifiedName~SegmentedTraffic
 
 | Deliverable | Path |
 |-------------|------|
+| ADR robot traffic client | [../adr/0010-robot-traffic-client.md](../adr/0010-robot-traffic-client.md) |
+| Robot integration + rollback | [ROBOT-INTEGRATION.md](ROBOT-INTEGRATION.md) |
+| Runtime audit | [ROBOT-RUNTIME-AUDIT.md](ROBOT-RUNTIME-AUDIT.md) |
 | ADR segmented authority | [../adr/0009-segmented-traffic-authority.md](../adr/0009-segmented-traffic-authority.md) |
 | Segmented actor + state | `backend/src/Modules/Fleet/Traffic/SegmentedTrafficCoordinator.cs`, `TrafficState.cs` |
 | Route planner | `RoutePlanner.cs` |

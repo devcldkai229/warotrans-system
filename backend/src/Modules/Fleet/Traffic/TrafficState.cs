@@ -193,6 +193,103 @@ public sealed class TrafficState
         RemoveFromAllQueues(robot.RobotId);
         StateVersion++;
         Log($"grant:{robot.RobotId}:auth:{authority.AuthorityId}");
+        LastGrantedEvent = new TrafficEvent(
+            TrafficEventKind.AuthorityGranted,
+            robot.RobotId,
+            string.Empty,
+            authority,
+            null,
+            candidate.JobId,
+            candidate.JobStepId,
+            null,
+            null,
+            null,
+            null,
+            IsFirstSegment: true);
+        return Cache(candidate.RequestId, AcquireResult.Grant(authority));
+    }
+
+    /// <summary>Last grant/extend event produced by a mutation (consumed by actor outbox).</summary>
+    public TrafficEvent? LastGrantedEvent { get; private set; }
+
+    public void ClearLastGrantedEvent() => LastGrantedEvent = null;
+
+    /// <summary>
+    /// Extends an existing authority with the next safe-stop segment (lookahead). Cumulative edges.
+    /// </summary>
+    public AcquireResult ExtendAtomic(RouteSegmentCandidate candidate, long? clientEpoch)
+    {
+        if (_idempotency.TryGetValue(candidate.RequestId, out var cached))
+        {
+            return cached;
+        }
+
+        if (!_ready || Phase != "Ready" || _graph is null)
+        {
+            return Cache(candidate.RequestId, AcquireResult.Reject("RECONCILING", TrafficWaitingReason.Reconciling));
+        }
+
+        if (clientEpoch is long e && e != Epoch)
+        {
+            return Cache(candidate.RequestId, AcquireResult.Reject("STALE_EPOCH"));
+        }
+
+        var robot = GetOrCreate(candidate.RobotId);
+        if (robot.Authority is null)
+        {
+            return Cache(candidate.RequestId, AcquireResult.Reject("NO_AUTHORITY"));
+        }
+
+        if (robot.Phase == TrafficRobotPhase.Quarantined)
+        {
+            return Cache(candidate.RequestId, AcquireResult.Reject("QUARANTINED"));
+        }
+
+        if (!CanAcquire(candidate.ResourceIds, robot.RobotId, out var blocker, out var waitReason))
+        {
+            return Cache(candidate.RequestId, AcquireResult.Queue(waitReason, blocker));
+        }
+
+        if (!ReserveExits(candidate.ExitSafeStops, robot.RobotId, out var exitBlocker))
+        {
+            return Cache(candidate.RequestId,
+                AcquireResult.Queue(TrafficWaitingReason.ExitBlocked, exitBlocker, "EXIT_BLOCKED"));
+        }
+
+        Occupy(robot, candidate.ResourceIds);
+        var prev = robot.Authority;
+        var cumulativeEdges = prev.EdgeIds.Concat(candidate.EdgeIds).Distinct().ToImmutableArray();
+        var cumulativeResources = prev.ResourceIds.Concat(candidate.ResourceIds)
+            .Distinct(StringComparer.Ordinal).ToImmutableArray();
+        robot.LastSeq++;
+        var authority = new MotionAuthority(
+            prev.AuthorityId,
+            robot.RobotId,
+            prev.StartSafeStopNodeId,
+            candidate.GoalSafeStopNodeId,
+            cumulativeEdges,
+            cumulativeResources,
+            candidate.ExitSafeStops,
+            robot.LastSeq,
+            Epoch,
+            candidate.GraphHash);
+        robot.Authority = authority;
+        robot.Phase = TrafficRobotPhase.Authorized;
+        StateVersion++;
+        Log($"extend:{robot.RobotId}:auth:{authority.AuthorityId}:seq:{authority.Seq}");
+        LastGrantedEvent = new TrafficEvent(
+            TrafficEventKind.AuthorityExtended,
+            robot.RobotId,
+            string.Empty,
+            authority,
+            null,
+            candidate.JobId,
+            candidate.JobStepId,
+            null,
+            null,
+            null,
+            null,
+            IsFirstSegment: false);
         return Cache(candidate.RequestId, AcquireResult.Grant(authority));
     }
 
