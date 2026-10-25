@@ -402,6 +402,101 @@ public class RouteGraphBuilderTests
             f => f.GetProperty("properties").GetProperty("metadata").TryGetProperty("junction", out var j) && j.GetBoolean());
     }
 
+    // ------------------------------------------------------------------ JUNCTION zones and Endpoints reached through a junction
+
+    [Fact]
+    public void Junction_zone_links_the_lanes_without_no_stop_or_single_occupancy_labels()
+    {
+        var result = BuildWithZones(
+            [Lane("L-IN", OneWay, (3, 0), (2, 0)), Lane("L-OUT", OneWay, (1, 0), (0, 0))],
+            [Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 0.5)]);
+
+        var link = EdgeBetween(result.Graph, (2, 0), (1, 0));
+        Assert.NotNull(link);
+        Assert.True(link.IsJunction);
+        Assert.False(link.NoStop);
+        Assert.False(link.SingleOccupancy);
+        Assert.Equal(["Z-J"], link.ZoneCodes);
+        Assert.Null(EdgeBetween(result.Graph, (1, 0), (2, 0)));
+    }
+
+    [Fact]
+    public void A_speed_zone_over_a_junction_limits_the_link_too()
+    {
+        var result = BuildWithZones(
+            [Lane("L-IN", OneWay, (3, 0), (2, 0)), Lane("L-OUT", OneWay, (1, 0), (0, 0))],
+            [Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 0.5), Zone("Z-SLOW", ZoneType.SPEED, 0.9, -0.6, 2.1, 0.6, maxSpeed: 0.2)]);
+
+        var link = Assert.Single(result.Graph.Edges, e => e.IsJunction);
+        Assert.Equal(0.2, link.AbsSpeedLimit);
+        Assert.Equal(["Z-J", "Z-SLOW"], link.ZoneCodes);
+    }
+
+    [Fact]
+    public void Endpoint_beside_a_junction_zone_is_reached_through_an_exit_point_on_its_edge()
+    {
+        // EP-IN is 0.94 m from both lanes but 0.30 m below the junction zone.
+        var result = BuildWithZones(
+            [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (2, 0), (3, 0))],
+            [Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 0.5)],
+            Stop("EP-A", 0, 0), Stop("EP-B", 3, 0), Stop("EP-IN", 1.5, -0.8));
+
+        Assert.Empty(result.Issues);
+        var connector = EdgeBetween(result.Graph, (1.5, -0.5), (1.5, -0.8));
+        Assert.True(connector is { IsConnector: true });
+        Assert.True(EdgeBetween(result.Graph, (1.5, -0.8), (1.5, -0.5)) is { IsConnector: true });
+        foreach (var laneEnd in new[] { (1.0, 0.0), (2.0, 0.0) })
+        {
+            Assert.True(EdgeBetween(result.Graph, laneEnd, (1.5, -0.5)) is { IsJunction: true });  // into the zone exit
+            Assert.True(EdgeBetween(result.Graph, (1.5, -0.5), laneEnd) is { IsJunction: true });  // and back out
+        }
+        Assert.True(EdgeBetween(result.Graph, (1, 0), (2, 0)) is { IsJunction: true });          // lanes still linked
+    }
+
+    [Fact]
+    public void Endpoint_inside_a_junction_zone_becomes_a_junction_node()
+    {
+        var result = BuildWithZones(
+            [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (2, 0), (3, 0))],
+            [Zone("Z-J", ZoneType.SINGLE_OCCUPANCY, 1, -0.5, 2, 1.0)],
+            Stop("EP-A", 0, 0), Stop("EP-B", 3, 0), Stop("EP-MID", 1.5, 0.7));
+
+        Assert.Empty(result.Issues);
+        Assert.Equal(["EP-MID"], NodeAt(result.Graph, 1.5, 0.7).EndpointCodes);
+        Assert.True(EdgeBetween(result.Graph, (1, 0), (1.5, 0.7)) is { IsJunction: true, SingleOccupancy: true });
+        Assert.True(EdgeBetween(result.Graph, (1.5, 0.7), (2, 0)) is { IsJunction: true });
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+    }
+
+    [Fact]
+    public void Exit_point_keeps_the_one_way_lane_directions()
+    {
+        var result = BuildWithZones(
+            [Lane("L-IN", OneWay, (3, 0), (2, 0)), Lane("L-OUT", OneWay, (1, 0), (0, 0))],
+            [Zone("Z-J", ZoneType.NO_STOP, 1, -0.5, 2, 0.5)],
+            Stop("EP-X", 1.5, -0.8));
+
+        Assert.NotNull(EdgeBetween(result.Graph, (2, 0), (1.5, -0.5)));        // arrive from the incoming lane
+        Assert.NotNull(EdgeBetween(result.Graph, (1.5, -0.5), (1, 0)));        // leave by the outgoing lane
+        Assert.Null(EdgeBetween(result.Graph, (1.5, -0.5), (2, 0)));           // never against a one-way lane
+        Assert.Null(EdgeBetween(result.Graph, (1, 0), (1.5, -0.5)));
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+    }
+
+    [Theory]
+    [InlineData(ZoneType.JUNCTION, 1.5, -1.2)]   // 0.70 m below the junction zone
+    [InlineData(ZoneType.SPEED, 1.5, -0.8)]      // close, but a SPEED zone is not a junction
+    public void Endpoint_far_from_lanes_and_junction_zones_is_still_too_far(ZoneType type, double x, double y)
+    {
+        var result = BuildWithZones(
+            [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (2, 0), (3, 0))],
+            [Zone("Z", type, 1, -0.5, 2, 0.5, maxSpeed: 0.2)],
+            Stop("EP-FAR", x, y));
+
+        var issue = Assert.Single(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.Equal(["EP-FAR"], issue.RelatedCodes);
+    }
+
     // ------------------------------------------------------------------ demo map v7 (3.50 x 4.55 m)
 
     /// <summary>Lane centre lines of the demo map v7 drawing (metres, origin = south-west corner).</summary>
