@@ -1,4 +1,4 @@
-import type { ContainerSlot, JobDetailResponse, JobStatus, JobStepSummary, JobSummary, WorkflowCode } from '../../shared/types/contracts';
+import type { ContainerSlot, JobDetailResponse, JobStatus, JobStepResponse, JobStepSummary, JobSummary, JobTaskResponse, WorkflowCode } from '../../shared/types/contracts';
 import type { SemanticTone } from '../../shared/theme/colors';
 export interface JobStopStep { type: string; label: string; status: 'done' | 'waiting' | 'running' | 'future'; timeRemaining?: string }
 export interface JobStopItem { id: number; name: string; description: string; state: 'done' | 'active' | 'future'; current?: boolean; steps?: JobStopStep[] }
@@ -7,11 +7,30 @@ export interface JobContainerItem {
   action: 'UNLOAD' | 'KEEP ONBOARD' | 'PICKUP' | 'DELIVERED'; location: string; product: string; qty: number;
 }
 export interface AppJobItem extends JobSummary {
+  tasks: AppJobTaskItem[];
   activeTaskId?: string; assignedStaffId?: string; activeStepId?: string; activeStepOperation?: string;
   hasWaitingHandover?: boolean; assignedRobotId?: string; target: string; route: string; robot: string; isMine: boolean;
   battery: string; speed: string; distanceRemaining?: string; progressPercent?: number; completedAt?: string;
   duration?: string; operator?: string; currentStop: string; stopsCount: number; routeText: string;
   payloadSummary: string; containers: JobContainerItem[]; stopsList: JobStopItem[];
+}
+export interface AppJobTaskItem extends JobTaskResponse {
+  title: string;
+  endpointCode?: string;
+  containerCodes: string[];
+}
+export function jobStepTitle(step: JobStepResponse): string {
+  return step.name || readableKey(step.workflowStepKey || step.operationCode || 'Step');
+}
+function readableKey(key: string): string {
+  return key.replace(/[_-]+/g, ' ').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+}
+export function jobTaskFocus(task: AppJobTaskItem): JobStepResponse | undefined {
+  return task.steps.find(step => step.status === 'FAILED')
+    || task.steps.find(step => step.status === 'PAUSED')
+    || task.steps.find(step => step.status === 'EXECUTING' || step.status === 'WAITING')
+    || task.steps.find(step => step.status === 'READY')
+    || task.steps.find(step => step.status === 'PENDING');
 }
 export function isTerminalJobStatus(status: JobStatus) { return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status); }
 export interface JobStatusPresentation { label: string; tone: SemanticTone }
@@ -26,7 +45,7 @@ export const EMPTY_JOB: AppJobItem = {
   id: '', jobNo: '', workflowCode: '' as WorkflowCode, workflowName: '', status: 'CREATED',
   sourceEndpointCode: '', destinationEndpointCode: '', containerCount: 0, slots: [], steps: [], createdAtUtc: '',
   target: '', route: '', robot: '', isMine: false, battery: '—', speed: '—', currentStop: '',
-  stopsCount: 0, routeText: '', payloadSummary: '', containers: [], stopsList: [],
+  stopsCount: 0, routeText: '', payloadSummary: '', containers: [], stopsList: [], tasks: [],
 };
 export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaffId?: string): AppJobItem {
   const context = detail.contextValues || {};
@@ -40,6 +59,21 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
       location: 'Unknown Location', product: 'Unknown Product', qty: 1,
     }));
   const orderedTasks = [...detail.tasks].sort((a, b) => a.sequenceNo - b.sequenceNo);
+  const tasks: AppJobTaskItem[] = orderedTasks.map(task => {
+    const context = task.contextValues;
+    const endpointCode = typeof context?.stopEndpointCode === 'string' && context.stopEndpointCode !== 'Unknown Endpoint'
+      ? context.stopEndpointCode : undefined;
+    const containerIds = typeof context?.containerId === 'string' ? [context.containerId]
+      : Array.isArray(context?.containerIds) ? context.containerIds : [];
+    const action = context?.stopAction === 'PICKUP' ? 'Pickup' : context?.stopAction === 'DROPOFF' ? 'Dropoff' : undefined;
+    return {
+      ...task,
+      title: task.taskKey ? readableKey(task.taskKey) : action ? `${action}${endpointCode ? ` At ${endpointCode}` : ''}` : `Task ${task.sequenceNo}`,
+      endpointCode,
+      containerCodes: containerIds.map(id => containers.find(container => container.containerId === id)?.code || id),
+      steps: [...task.steps].sort((a, b) => a.sequenceNo - b.sequenceNo),
+    };
+  });
   const allSteps = orderedTasks.flatMap(task => [...task.steps].sort((a, b) => a.sequenceNo - b.sequenceNo).map(step => ({ task, step })));
   const steps: JobStepSummary[] = allSteps.map(({ task, step }, index) => ({
     sequenceNo: index + 1, type: step.stepType, title: step.workflowStepKey || step.operationCode,
@@ -82,7 +116,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
     assignedRobotId: typeof context.assignedRobotId === 'string' ? context.assignedRobotId : undefined,
     assignedRobotCode: robot, sourceEndpointCode: source, destinationEndpointCode: destination,
     activeStepTitle: detail.failureMessage || allSteps.find(({ step }) => step.id === context.activeStepId)?.step.operationCode || 'Job Progress',
-    containerCount: detail.containers.length, slots, steps, createdAtUtc: detail.createdAt,
+    containerCount: detail.containers.length, slots, steps, tasks, createdAtUtc: detail.createdAt,
     target: destination, route: `${source} ➔ ${destination}`, robot,
     isMine: Boolean(currentStaffId && assignedStaffId === currentStaffId && !isTerminalJobStatus(detail.status)),
     battery: typeof context.batteryPercent === 'number' ? `${Math.round(context.batteryPercent)}%` : '—',

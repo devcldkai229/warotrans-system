@@ -1,5 +1,4 @@
-import { apiFetch } from './client';
-import { listJobs } from './executionApi';
+import { apiFetch, ApiError } from './client';
 import { listPublishedWorkflows } from './workflowApi';
 import { listContainers } from './warehouseApi';
 import type { TransportRequestStatus } from '../types/contracts';
@@ -62,6 +61,23 @@ export interface CreateTransportRequestResponse {
   details: TransportRequestDetailResponse[];
 }
 
+export interface TransportRequestDetailItem extends TransportRequestDetailResponse {
+  containerBarcode: string | null;
+  sourceStorageLocationCode: string | null;
+  sourceEndpointCode: string | null;
+  sourceEndpointName: string | null;
+  destinationStorageLocationCode: string | null;
+  destinationEndpointCode: string | null;
+  destinationEndpointName: string | null;
+}
+export interface TransportRequestResponse extends CreateTransportRequestResponse {
+  queuedAt: string | null;
+  completedAt: string | null;
+  failureCode: string | null;
+  failureMessage: string | null;
+  details: TransportRequestDetailItem[];
+}
+
 export interface TransportRequestListDetail {
   id: string;
   sequenceNo: number;
@@ -90,8 +106,6 @@ export interface TransportRequestListItem {
   workflowId: string;
   workflowCode: string | null;
   workflowName?: string | null;
-  assignedRobotCode?: string | null;
-  linkedJobId?: string | null;
   note: string | null;
   submittedAt: string;
   details: TransportRequestListDetail[];
@@ -136,27 +150,26 @@ export function createTransportRequest(body: CreateTransportRequestBody) {
 export function queueTransportRequest(id: string) {
   return apiFetch<QueueTransportRequestResponse>(`/api/transportation/transport-requests/${id}/queue`, { method: 'POST' });
 }
-export function getTransportRequest(id: string) {
-  return apiFetch<CreateTransportRequestResponse>(`/api/transportation/transport-requests/${id}`);
+export async function getTransportRequest(id: string) {
+  const response = await apiFetch<TransportRequestResponse>(`/api/transportation/transport-requests/${id}`);
+  if (response.id !== id) throw new ApiError(502, 'request_identity_mismatch', 'The server returned a different transport request.');
+  return response;
 }
 export async function listTransportRequests(params: { warehouseId?: string; status?: string; search?: string; take?: number } = {}): Promise<ListTransportRequestsResponse> {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => { if (value !== undefined) query.set(key, String(value)); });
   const response = await apiFetch<ListTransportRequestsResponse>(`/api/transportation/transport-requests${query.size ? `?${query}` : ''}`);
   if (!response.items.length) return response;
-  const [jobs, workflows, containerLists] = await Promise.all([
-    listJobs().catch(() => []), listPublishedWorkflows().catch(() => ({ items: [] })),
+  const [workflows, containerLists] = await Promise.all([
+    listPublishedWorkflows().catch(() => ({ items: [] })),
     Promise.all([...new Set(response.items.map(item => item.warehouseId))].map(warehouseId =>
       listContainers({ warehouseId, take: 100 }).then(result => result.items).catch(() => []))),
   ]);
   return { ...response, items: response.items.map(item => {
     const workflow = workflows.items.find(candidate => candidate.id === item.workflowId);
-    const job = jobs.find(candidate => candidate.containers.some(container => container.transportRequestId === item.id));
     return { ...item,
       workflowCode: workflow?.code || item.workflowCode,
       workflowName: workflow?.name || item.workflowName || item.workflowCode || 'Workflow',
-      linkedJobId: job?.id || item.linkedJobId || null,
-      assignedRobotCode: String(job?.contextValues?.assignedRobotCode || item.assignedRobotCode || 'Unassigned'),
       details: item.details.map(detail => {
         const container = containerLists.flat().find(candidate => candidate.id === detail.containerId);
         return { ...detail, containerBarcode: container?.barcode || detail.containerBarcode,

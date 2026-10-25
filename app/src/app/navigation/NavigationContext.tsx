@@ -4,7 +4,7 @@ import { BackHandler, Linking, Platform } from 'react-native';
 export type MainTab = 'home' | 'jobs' | 'transport';
 export type AppScreen = MainTab | 'job_detail' | 'job_monitoring' | 'transport_create' | 'create_container'
   | 'inventory_lookup' | 'live_map' | 'payload_recovery' | 'fleet_recall' | 'replenishment'
-  | 'point_to_point' | 'block_path' | 'transport_history' | 'offline_hud' | 'scanner_hud' | 'scanner';
+  | 'point_to_point' | 'block_path' | 'transport_history' | 'transport_detail' | 'offline_hud' | 'scanner_hud' | 'scanner';
 type Entry = { screen: AppScreen; params: Record<string, any> };
 export interface NavigationState { currentScreen: AppScreen; activeTab: MainTab; params: Record<string, any> }
 interface NavigationContextType extends NavigationState {
@@ -16,7 +16,7 @@ interface NavigationContextType extends NavigationState {
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 const screens = new Set<AppScreen>(['home','jobs','transport','job_detail','job_monitoring','transport_create',
   'create_container','inventory_lookup','live_map','payload_recovery','fleet_recall','replenishment','point_to_point',
-  'block_path','transport_history','offline_hud','scanner_hud','scanner']);
+  'block_path','transport_history','transport_detail','offline_hud','scanner_hud','scanner']);
 export function isMainTabScreen(screen: string): screen is MainTab { return ['home','jobs','transport'].includes(screen); }
 function tabFor(screen: AppScreen): MainTab {
   return isMainTabScreen(screen) ? screen : ['job_detail','job_monitoring','live_map'].includes(screen) ? 'jobs' : 'transport';
@@ -35,11 +35,11 @@ function parseUrl(url: string): Entry {
     'job-monitoring':'job_monitoring','transport-new':'transport_create','dispatch':'transport_create',
     'create-container':'create_container','inventory-lookup':'inventory_lookup','live-map':'live_map','rescue':'payload_recovery',
     'payload-recovery':'payload_recovery','maintenance':'fleet_recall','fleet-recall':'fleet_recall','point-to-point':'point_to_point',
-    'block-path':'block_path','transport-history':'transport_history','offline-hud':'offline_hud','scanner-hud':'scanner_hud',
+    'block-path':'block_path','transport-history':'transport_history','transport-detail':'transport_detail','offline-hud':'offline_hud','scanner-hud':'scanner_hud',
   };
   const screen = aliases[raw] || (screens.has(raw as AppScreen) ? raw as AppScreen : 'home');
   const params: Record<string, any> = {};
-  for (const key of ['modal','view','workflow','container','robotId','target','route','source','destination','qty','repeatRequestId']) {
+  for (const key of ['modal','view','workflow','container','robotId','requestId','target','route','source','destination','qty','repeatRequestId']) {
     const value = query.get(key); if (value !== null) params[key] = value;
   }
   if (query.get('job') || query.get('jobId')) params.jobId = query.get('job') || query.get('jobId');

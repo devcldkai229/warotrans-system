@@ -453,6 +453,7 @@ export interface HandoverConfirmationBody {
 }
 
 export interface JobStepResponse {
+  name?: string;
   id: string;
   jobTaskId: string;
   workflowStepId: string;
@@ -464,6 +465,8 @@ export interface JobStepResponse {
   resolvedInputs?: Record<string, unknown>;
   outputValues?: Record<string, unknown>;
   targetEndpointId?: string | null;
+  /** Endpoint label resolved by the mobile API adapter. */
+  targetEndpointCode?: string;
   startedAt?: UtcDateTime | null;
   completedAt?: UtcDateTime | null;
   errorCode?: string | null;
@@ -484,6 +487,7 @@ export interface JobTaskContextValues {
 }
 
 export interface JobTaskResponse {
+  taskKey?: string;
   id: string;
   jobId: string;
   workflowTaskId: string;

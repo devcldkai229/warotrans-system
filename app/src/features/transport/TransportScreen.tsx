@@ -40,14 +40,14 @@ import { cancelRobotCommand, listRobots, listTransportRequests, type RobotDto } 
 
 export interface RecentDispatchItem {
   id: string;
+  requestId: string;
   type: string;
   status: string;
   statusLabel?: string;
   route: string;
   container: string;
-  robot: string;
+  containerCount: number;
   time: string;
-  jobId: string;
 }
 
 function PulsingBeaconDot() {
@@ -139,6 +139,7 @@ export function TransportScreen() {
 
             return {
               id: item.requestCode,
+              requestId: item.id,
               type:
                 item.workflowName ||
                 (item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Movement'),
@@ -146,14 +147,13 @@ export function TransportScreen() {
               statusLabel: requestStatusLabel(item.status),
               route,
               container: containerSummary,
-              robot: item.assignedRobotCode || 'Unassigned',
+              containerCount: details.length,
               time: item.submittedAt
                 ? new Date(item.submittedAt).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })
                 : 'Just now',
-              jobId: item.linkedJobId || '',
             };
           });
           setDispatches(mapped);
@@ -398,11 +398,7 @@ export function TransportScreen() {
                   key={dispatch.id}
                   onPress={() => {
                     triggerHaptic('tap');
-                    if (dispatch.jobId) {
-                      navigate('job_detail', { jobId: dispatch.jobId });
-                    } else {
-                      navigate('transport_history');
-                    }
+                    navigate('transport_detail', { requestId: dispatch.requestId });
                   }}
                   style={({ pressed }) => [
                     styles.dispatchCard,
@@ -441,7 +437,7 @@ export function TransportScreen() {
                         numberOfLines={1}
                         style={[styles.boldText, { flexShrink: 0 }]}
                       >
-                        {dispatch.robot}
+                        {dispatch.containerCount} Containers
                       </Text>
                       <Text variant="caption" color={colors.textMuted}>·</Text>
                       <Text variant="caption" color={colors.textPrimary} numberOfLines={1} style={[styles.boldMono, { flexShrink: 1 }]}>

@@ -53,10 +53,16 @@ async function hydrateJobs(rawJobs: RuntimeJob[]): Promise<JobDetailResponse[]> 
         containerId: task.containerId || task.contextValues?.containerId,
         assignedStaffId: task.assignedStaffId || task.contextValues?.assignedStaffId,
       } as JobTaskResponse['contextValues'],
-      steps: task.steps.map(step => ({ ...step, jobTaskId: task.id, workflowStepKey: step.stepKey || step.workflowStepKey })),
+      steps: task.steps.map(step => ({
+        ...step, jobTaskId: task.id, workflowStepKey: step.stepKey || step.workflowStepKey,
+        targetEndpointCode: step.targetEndpointId ? endpointCode(step.targetEndpointId) : undefined,
+      })),
     }));
     const waitingTask = tasks.find(task => task.steps.some(step => step.status === 'WAITING' && step.stepType === 'HUMAN_INTERACTION'));
     const waitingStep = waitingTask?.steps.find(step => step.status === 'WAITING' && step.stepType === 'HUMAN_INTERACTION');
+    const currentTask = tasks.find(task => task.steps.some(step => step.id === raw.currentStepId));
+    const currentStep = currentTask?.steps.find(step => step.id === raw.currentStepId);
+    const currentEndpointId = currentStep?.targetEndpointId || currentTask?.contextValues?.stopEndpointId;
     const operation = waitingStep?.operationCode;
     const waitingContainerId = text(waitingStep?.resolvedInputs?.containerId || waitingTask?.contextValues?.containerId);
     const pickup = tasks.find(task => task.contextValues?.stopAction === 'PICKUP');
@@ -83,8 +89,8 @@ async function hydrateJobs(rawJobs: RuntimeJob[]): Promise<JobDetailResponse[]> 
         assignedRobotId: raw.assignedRobotId, assignedRobotCode: robot?.code || 'Unassigned',
         batteryPercent: robot?.batteryPercent, linearVelocity: robot?.linearVelocity,
         sourceEndpointCode: source, destinationEndpointCode: destination, routeText: `${source} ➔ ${destination}`,
-        currentStop: waitingTask ? endpointCode(waitingTask.contextValues?.stopEndpointId) : endpointCode(
-          tasks.flatMap(task => task.steps).find(step => step.id === raw.currentStepId)?.targetEndpointId),
+        currentStop: waitingTask ? endpointCode(waitingTask.contextValues?.stopEndpointId)
+          : currentEndpointId ? endpointCode(currentEndpointId) : '',
         transportRequestId: raw.transportRequestIds?.[0], containerMeta,
         activeTaskId: waitingTask?.id, activeStepId: waitingStep?.id, activeStepOperation: operation,
         assignedStaffId: waitingTask?.contextValues?.assignedStaffId,
@@ -94,12 +100,32 @@ async function hydrateJobs(rawJobs: RuntimeJob[]): Promise<JobDetailResponse[]> 
     };
   });
 }
-export async function listJobs(filter: { status?: JobStatus; zone?: string; warehouseId?: string; transportRequestId?: string; take?: number } = {}) {
+export interface JobListItem {
+  id: string;
+  jobNo: string;
+  status: JobStatus;
+  workflowId: string;
+  mapVersionId: string;
+  assignedRobotId: string | null;
+  transportRequestIds: string[];
+  containerCount: number;
+  completedSteps: number;
+  totalSteps: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureCode: string | null;
+}
+export interface JobListResponse { items: JobListItem[]; total: number }
+export async function listJobSummaries(filter: { status?: JobStatus; transportRequestId?: string; take?: number } = {}): Promise<JobListResponse> {
   const query = new URLSearchParams();
   if (filter.status) query.set('status', filter.status);
   if (filter.transportRequestId) query.set('transportRequestId', filter.transportRequestId);
-  query.set('take', String(filter.take || 50));
-  const response = await apiFetch<{ items: RuntimeJob[]; total: number }>(`/api/workflow-execution/jobs?${query}`);
+  query.set('take', String(Math.min(200, Math.max(1, filter.take ?? 50))));
+  return apiFetch<JobListResponse>(`/api/workflow-execution/jobs?${query}`);
+}
+export async function listJobs(filter: { status?: JobStatus; zone?: string; warehouseId?: string; transportRequestId?: string; take?: number } = {}) {
+  const response = await listJobSummaries(filter);
   const details = await Promise.all(response.items.map(item => apiFetch<RuntimeJob>(`/api/workflow-execution/jobs/${item.id}`)));
   const jobs = await hydrateJobs(details);
   return filter.warehouseId ? jobs.filter(job => job.contextValues?.warehouseId === filter.warehouseId) : jobs;

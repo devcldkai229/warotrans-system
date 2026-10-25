@@ -33,13 +33,14 @@ import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
-import { useTopInset } from '../../shared/theme/layout';
+import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { Button, Card, ProgressMeter, StatusPill, Text } from '../../shared/ui';
 import { AmrCargoBayVisualizer } from './AmrCargoBayVisualizer';
-import { JobStepper } from './JobStepper';
+import { JobTaskPlan } from './JobTaskPlan';
+import { JobTaskDetailSheet } from './JobTaskDetailSheet';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
@@ -65,6 +66,9 @@ export function JobDetailScreen() {
   const [isMismatch, setIsMismatch] = useState(isInitialMismatch);
   const [isIssueOpen, setIsIssueOpen] = useState(isInitialIssue);
   const [showMenu, setShowMenu] = useState(false);
+  const [showFullJobNo, setShowFullJobNo] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showOtherContainers, setShowOtherContainers] = useState(false);
   const [showNudgeControls, setShowNudgeControls] = useState(false);
   const [availableRobots, setAvailableRobots] = useState<RobotDto[]>(FALLBACK_ROBOTS);
@@ -92,6 +96,7 @@ export function JobDetailScreen() {
   useEffect(() => {
     let isMounted = true;
     setIsLoadingJob(true); setJobError(null); setJob(EMPTY_JOB);
+    setSelectedTaskId(null); setShowFullJobNo(false);
     if (!jobId) { setJobError('No job was selected.'); setIsLoadingJob(false); return; }
     getJobDetail(jobId)
       .then((res) => {
@@ -144,6 +149,7 @@ export function JobDetailScreen() {
   const isCompleted = job.status === 'COMPLETED';
   const selectedRobotCode = availableRobots.find((robot) => robot.id === selectedRobotId)?.code || 'Unassigned';
   const selectedRobotUuid = job.assignedRobotId || availableRobots.find((robot) => robot.code === job.robot)?.id;
+  const selectedTask = job.tasks.find(task => task.id === selectedTaskId);
 
   useEffect(() => {
     setTargetContainer(primaryTarget?.code || '');
@@ -210,7 +216,7 @@ export function JobDetailScreen() {
   return (
     <View style={styles.root}>
       {/* Top Navigation Bar */}
-      <View style={[styles.header, { paddingTop: topInset + 8 }]}>
+      <View style={[styles.header, { paddingTop: topInset + 8 }]} onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
         <Pressable
           onPress={goBack}
           style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
@@ -221,47 +227,38 @@ export function JobDetailScreen() {
         </Pressable>
 
         <View style={styles.headerTitleCol}>
-          <View style={styles.headerTitleRow}>
-            <Text variant="headline" style={styles.jobIdText}>
+          <Pressable
+            onPress={() => setShowFullJobNo(value => !value)}
+            accessibilityRole="button"
+            accessibilityLabel={`Job ${job.jobNo || job.id}`}
+            accessibilityHint="Tap to show or collapse the full job number"
+            accessibilityState={{ expanded: showFullJobNo }}
+            style={styles.headerTitleTarget}
+          >
+            <Text variant="headline" style={styles.jobIdText} numberOfLines={showFullJobNo ? undefined : 1} ellipsizeMode="middle">
               {job.jobNo || job.id}
             </Text>
-            <View style={styles.robotPill}>
-              <Text variant="caption" color={colors.primary} style={styles.robotPillText}>
-                {job.robot}
-              </Text>
-            </View>
-          </View>
+          </Pressable>
           <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
             {job.workflowName}
           </Text>
         </View>
 
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
-            style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="View on map"
-          >
-            <Maximize2 size={18} color={colors.primary} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => setShowMenu((prev) => !prev)}
-            style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="More options"
-          >
-            <MoreVertical size={18} color={colors.textSecondary} />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={() => setShowMenu((prev) => !prev)}
+          style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="More options"
+        >
+          <MoreVertical size={18} color={colors.textSecondary} />
+        </Pressable>
       </View>
 
       {/* Context Menu Dropdown */}
       {showMenu && (
         <>
           <Pressable style={styles.menuDismiss} onPress={() => setShowMenu(false)} />
-          <View style={[styles.menuDropdown, { top: topInset + 56 }]}>
+          <View style={[styles.menuDropdown, { top: headerHeight + 4 }]}>
             <Pressable
               style={styles.menuItem}
               onPress={() => {
@@ -308,7 +305,7 @@ export function JobDetailScreen() {
       {/* Main Content Body */}
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomConsoleHeight + 16 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: dockReservedSpace(bottomConsoleHeight) }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -338,7 +335,7 @@ export function JobDetailScreen() {
               <MapPin size={16} color={colors.primary} style={{ marginTop: 2 }} />
               <View style={{ flex: 1 }}>
                 <Text variant="headline" style={styles.currentStopText}>
-                  {job.currentStop}
+                  {job.currentStop || 'Current Location Unavailable'}
                 </Text>
                 <Text variant="caption" color={colors.textSecondary} style={{ marginTop: 2 }}>
                   Route: {job.route}
@@ -347,14 +344,22 @@ export function JobDetailScreen() {
             </View>
           </View>
 
+          <View style={styles.robotContextRow}>
+            <View style={styles.robotPill}>
+              <Truck size={14} color={colors.primaryText} />
+              <Text variant="caption" color={colors.primaryText} style={styles.robotPillText} numberOfLines={1}>{job.robot}</Text>
+            </View>
+            <Button title="View Map" variant="ghost" size="sm" icon={Maximize2} onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })} />
+          </View>
+
           {/* Telemetry Strip */}
           <View style={styles.telemetryStrip}>
             <View style={styles.telemetryItem}>
               <Text variant="caption" color={colors.textSecondary} style={styles.telemetryLabel}>
-                Carrier
+                Speed
               </Text>
               <Text variant="caption" color={colors.textPrimary} style={styles.telemetryValueMono}>
-                {job.robot}
+                {job.speed}
               </Text>
             </View>
 
@@ -544,10 +549,7 @@ export function JobDetailScreen() {
           onSelectContainer={(code) => { if (isWaiting && code === primaryTarget?.code) handleOpenVerify(code); }}
         />
 
-        {/* Stepper Itinerary */}
-        {job.steps && job.steps.length > 0 ? (
-          <JobStepper steps={job.steps} />
-        ) : null}
+        <JobTaskPlan tasks={job.tasks} jobStatus={job.status} onSelectTask={setSelectedTaskId} />
       </ScrollView>
 
       {/* Sticky Bottom Action Console */}
@@ -706,6 +708,14 @@ export function JobDetailScreen() {
         </View>
       </View>
 
+      {selectedTask && <JobTaskDetailSheet
+        key={selectedTask.id}
+        task={selectedTask}
+        jobNo={job.jobNo || job.id}
+        jobStatus={job.status}
+        onClose={() => setSelectedTaskId(null)}
+      />}
+
       {/* Verification Modal Sheet */}
       <VerifyModal
         visible={isVerifyOpen}
@@ -764,8 +774,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    flexShrink: 0,
     borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -775,18 +786,21 @@ const styles = StyleSheet.create({
   },
   headerTitleCol: {
     flex: 1,
+    minWidth: 0,
     paddingHorizontal: 8,
     gap: 2,
   },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  headerTitleTarget: { minHeight: 44, justifyContent: 'center' },
   jobIdText: {
     fontWeight: '700',
+    flexShrink: 1,
   },
   robotPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 6,
     backgroundColor: colors.primaryLight,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -794,12 +808,13 @@ const styles = StyleSheet.create({
   },
   robotPillText: {
     fontWeight: '700',
-    fontSize: 11,
+    flexShrink: 1,
   },
-  headerActions: {
+  robotContextRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    gap: 8,
   },
   menuDismiss: {
     ...StyleSheet.absoluteFill,

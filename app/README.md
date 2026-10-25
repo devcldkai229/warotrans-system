@@ -30,6 +30,8 @@ Các thời gian trên là tham số đã thảo luận, chưa chứng minh engi
 - Robot chở **Container**, mỗi Container gắn một Product type; InventoryStock.ContainerCount đếm container theo Product + StorageLocation + LevelNo, không đếm sản phẩm bên trong. Không lấy mô tả Multi-SKU cũ trong overview làm thay đổi mô hình V1.
 - StorageLocation là vị trí lưu hàng logic liên kết Endpoint qua UUID. Endpoint/Edge/Zone là đích/đường/vùng điều hướng, geometry theo world meters; work-zone Staff không tự đồng nghĩa Navigation Zone. Không thêm entity Aisle/Bay/Bin để khớp nhãn UI.
 - Workflow/Task/Step là định nghĩa có version; Job/JobTask/JobStep là instance thực thi. TransportRequestDetail lưu movement plan, JobContainer nối Request/Job/Container.
+- Job Detail hiển thị timeline theo từng JobTask instance; bấm task mở bottom sheet có thể kéo mở rộng để xem JobStep, trạng thái và lỗi. Sheet lấy task mới nhất từ dữ liệu Job, không gộp các task chỉ vì cùng điểm dừng hoặc tự đổi trạng thái thực thi.
+- Transport History và Recent Dispatches mở Transport Request Detail theo request UUID. Trang này hiển thị từng movement/container, tiến độ từ trạng thái Detail và danh sách Job lọc theo request; chọn Job mới mở Job Detail. API Job hiện giới hạn 200 bản ghi/lần, chưa có phân trang; UI báo rõ nếu tổng vượt số Job trả về.
 - Luồng BE đang có: tạo TR SUBMITTED → Queue mới provision Job → Start gán robot → CHECK/MOVE/HUMAN confirm → JobContainer và RequestDetail/Request đổi tiến độ. Claim human task khác Start Job; Job ASSIGNED không chứng minh Staff đã nhận task.
 - Catalog chính: INBOUND_PUTAWAY, OUTBOUND_RETRIEVAL, INTERNAL_RELOCATION, POINT_TO_POINT_TRANSPORT, PAYLOAD_RECOVERY, REPLENISHMENT, MAINTENANCE_ALL_ROBOTS. Catalog không bảo đảm từng workflow/version chạy trọn vẹn.
 

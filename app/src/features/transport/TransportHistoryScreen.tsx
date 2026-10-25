@@ -1,5 +1,6 @@
 import { useRealtime } from '../../shared/realtime';
 import { requestStatusLabel } from './dispatchData';
+import { transportRequestProgress, transportRouteSummary } from './transportRequestData';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
@@ -16,15 +17,12 @@ import {
   Box,
   CheckCircle2,
   Clock,
-  Filter,
   MapPin,
-  Navigation,
   Printer,
   RefreshCw,
   Rocket,
   Search,
   SlidersHorizontal,
-  Truck,
   X,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
@@ -35,6 +33,7 @@ import { typography } from '../../shared/theme/typography';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { ProgressMeter } from '../../shared/ui';
 import {
   listTransportRequests,
   queueTransportRequest,
@@ -55,8 +54,8 @@ export interface TransportOrder {
   container: string;
   product: string;
   qty: number;
-  robot: string;
-  linkedJobId?: string;
+  containerCount: number;
+  completedDetailCount: number;
   timeLabel: string;
   duration?: string;
   cancelReason?: string;
@@ -98,13 +97,7 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
       : firstBarcode;
 
   const totalQty = details.reduce((acc, d) => acc + (d.qty || 1), 0);
-  const destinations = Array.from(
-    new Set(details.map((d) => d.destinationEndpointCode).filter(Boolean))
-  );
-  const destinationLabel =
-    destinations.length > 1
-      ? `${destinations[0]} (+${destinations.length - 1} racks)`
-      : destinations[0] || first?.destinationEndpointId || 'Unknown Destination';
+  const progress = transportRequestProgress(details);
 
   return {
     id: item.requestCode,
@@ -117,13 +110,13 @@ function mapRequestToOrder(item: TransportRequestListItem): TransportOrder {
     category,
     status: isInProgress ? 'IN_PROGRESS' : isCompleted ? 'COMPLETED' : 'CANCELLED',
     statusText,
-    source: first?.sourceEndpointCode || first?.sourceEndpointId || 'Unknown Pickup',
-    destination: destinationLabel,
+    source: transportRouteSummary(details, 'source'),
+    destination: transportRouteSummary(details, 'destination'),
     container: containerLabel,
     product: first?.productName || 'Unknown Product',
     qty: totalQty || 1,
-    robot: item.assignedRobotCode || 'Unassigned',
-    linkedJobId: item.linkedJobId || undefined,
+    containerCount: progress.total,
+    completedDetailCount: progress.completed,
     timeLabel: item.submittedAt
       ? new Date(item.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : 'Just now',
@@ -166,7 +159,7 @@ export function TransportHistoryScreen() {
     try {
       const res = await queueTransportRequest(order.rawId);
       toast.success(
-        `Request ${order.requestCode} queued! Job: ${res?.jobs?.[0]?.jobNo || 'Assigned'}`
+        `Request ${order.requestCode} queued. ${res.jobs.length} jobs created.`
       );
       await fetchHistory();
     } catch (err: any) {
@@ -225,15 +218,14 @@ export function TransportHistoryScreen() {
       order.source.toLowerCase().includes(q) ||
       order.destination.toLowerCase().includes(q) ||
       order.container.toLowerCase().includes(q) ||
-      order.product.toLowerCase().includes(q) ||
-      order.robot.toLowerCase().includes(q)
+      order.product.toLowerCase().includes(q)
     );
   });
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Fleet audit trail"
+        label="Transport Request Records"
         title="Transport History"
         onBack={goBack}
       />
@@ -346,7 +338,7 @@ export function TransportHistoryScreen() {
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search TR, route, container, robot..."
+                placeholder="Search TR, route or container..."
                 placeholderTextColor={colors.textMuted}
                 style={styles.searchInput}
               />
@@ -461,11 +453,10 @@ export function TransportHistoryScreen() {
                 order.rawStatus === 'FAILED';
 
               return (
-                <Pressable
-                  key={order.id}
-                  style={styles.orderCard}
+                <View key={order.id} style={styles.orderCard}>
+                  <Pressable
                   onPress={() => {
-                    if (order.linkedJobId) navigate('job_detail', { jobId: order.linkedJobId });
+                    navigate('transport_detail', { requestId: order.rawId });
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={`Transport request ${order.requestCode}`}
@@ -525,17 +516,16 @@ export function TransportHistoryScreen() {
                     <Text style={styles.cargoContainer} numberOfLines={1}>{formatContainerDisplay(order.container)}</Text>
                     <Text style={styles.cargoDot}>·</Text>
                     <Text style={styles.cargoDetails} numberOfLines={1}>
-                      <Text style={styles.cargoQty}>{order.qty} × </Text>
-                      {order.product}
+                      {order.containerCount} Containers
                     </Text>
                   </View>
 
                   {/* Metadata Row */}
                   <View style={styles.metaRow}>
                     <View style={styles.assignedCol}>
-                      <Truck size={13} color={colors.textSecondary} style={{ marginRight: 5 }} />
+                      <Box size={13} color={colors.textSecondary} style={{ marginRight: 5 }} />
                       <Text style={styles.assignedLabel}>
-                        AMR: <Text style={styles.assignedRobot}>{order.robot}</Text>
+                        {order.completedDetailCount}/{order.containerCount} Movements Completed
                       </Text>
                     </View>
                     <View style={styles.timeCol}>
@@ -545,6 +535,8 @@ export function TransportHistoryScreen() {
                       </Text>
                     </View>
                   </View>
+
+                  <ProgressMeter value={order.containerCount ? order.completedDetailCount / order.containerCount * 100 : 0} accessibilityLabel={`${order.requestCode} movement completion`} style={{ marginBottom: 12 }} />
 
                   {/* Cancellation Reason Alert if Cancelled */}
                   {isCancelled && order.cancelReason && (
@@ -556,12 +548,13 @@ export function TransportHistoryScreen() {
                       </Text>
                     </View>
                   )}
+                  </Pressable>
 
                   {/* Action Buttons with Warm Dark Gray CTAs */}
                   <View style={styles.actionsRow}>
                     {order.rawStatus === 'SUBMITTED' ? (
                       <Pressable
-                        onPress={() => handleQueueNow(order)}
+                        onPress={event => { event.stopPropagation(); void handleQueueNow(order); }}
                         disabled={queueingId === order.rawId}
                         style={[
                           styles.actionBtnPrimary,
@@ -577,40 +570,20 @@ export function TransportHistoryScreen() {
                         </Text>
                       </Pressable>
                     ) : (isInProgress || isQueued) ? (
-                      <>
-                        <Pressable
-                          onPress={() => {
-                            triggerHaptic('tap');
-                            if (!order.linkedJobId) { toast.warning('No job is linked to this request yet. Refresh after queueing.'); return; }
-                            navigate('live_map', {
-                              jobId: order.linkedJobId,
-                              robotId: order.robot,
-                            });
-                          }}
-                          style={styles.actionBtnPrimary}
-                          accessibilityRole="button"
-                        >
-                          <Navigation size={14} color="#ffffff" style={{ marginRight: 6 }} />
-                          <Text style={styles.actionBtnPrimaryText}>Track on live map</Text>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => {
-                            triggerHaptic('tap');
-                            if (order.linkedJobId) {
-                              navigate('job_detail', { jobId: order.linkedJobId });
-                            }
-                          }}
-                          style={styles.actionBtnOutline}
-                          accessibilityRole="button"
-                        >
-                          <Text style={styles.actionBtnOutlineText}>View job</Text>
-                        </Pressable>
-                      </>
+                      <Pressable
+                        onPress={event => { event.stopPropagation(); navigate('transport_detail', { requestId: order.rawId }); }}
+                        style={[styles.actionBtnPrimary, { flex: 1 }]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View request ${order.requestCode}`}
+                      >
+                        <Text style={styles.actionBtnPrimaryText}>View Request</Text>
+                        <ArrowRight size={14} color={colors.textInverse} style={{ marginLeft: 8 }} />
+                      </Pressable>
                     ) : isCompleted ? (
                       <>
                         <Pressable
-                          onPress={() => {
+                          onPress={event => {
+                            event.stopPropagation();
                             triggerHaptic('tap');
                             toast.info('Printer integration is not configured.');
                           }}
@@ -622,7 +595,8 @@ export function TransportHistoryScreen() {
                         </Pressable>
 
                         <Pressable
-                          onPress={() => {
+                          onPress={event => {
+                            event.stopPropagation();
                             triggerHaptic('tap');
                             navigate('transport_create', {
                               workflow: order.workflowName,
@@ -642,7 +616,8 @@ export function TransportHistoryScreen() {
                       </>
                     ) : isCancelled ? (
                       <Pressable
-                        onPress={() => {
+                        onPress={event => {
+                          event.stopPropagation();
                           triggerHaptic('tap');
                           navigate('transport_create', {
                             workflow: order.workflowName,
@@ -663,7 +638,7 @@ export function TransportHistoryScreen() {
                       </Pressable>
                     ) : null}
                   </View>
-                </Pressable>
+                </View>
               );
             })
           )}
