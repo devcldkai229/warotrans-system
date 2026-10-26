@@ -12,6 +12,7 @@ import {
   getStoredRefreshToken,
   saveStoredAccessToken,
   saveStoredRefreshToken,
+  clearAllStoredAuth,
 } from './secureStore';
 
 const DEFAULT_API_URL = 'http://localhost:5090';
@@ -100,6 +101,20 @@ export class ApiError extends Error {
 let inMemoryToken: string | null = null;
 type TokenChangeListener = (token: string | null) => void;
 const tokenListeners = new Set<TokenChangeListener>();
+let tokenVersion = 0;
+const expiredListeners = new Set<() => void>();
+
+export function onSessionExpired(listener: () => void): () => void {
+  expiredListeners.add(listener);
+  return () => expiredListeners.delete(listener);
+}
+
+function expireSession(expectedVersion: number) {
+  if (tokenVersion !== expectedVersion) return;
+  setAccessToken(null);
+  void clearAllStoredAuth();
+  expiredListeners.forEach(listener => listener());
+}
 
 export function onAccessTokenChange(listener: TokenChangeListener): () => void {
   tokenListeners.add(listener);
@@ -110,6 +125,7 @@ export function setAccessToken(token: string | null) {
   const changed = inMemoryToken !== token;
   inMemoryToken = token;
   if (changed) {
+    tokenVersion += 1;
     tokenListeners.forEach((fn) => {
       try {
         fn(token);
@@ -138,6 +154,10 @@ async function parseApiError(response: Response): Promise<ApiError> {
       message = data.detail || data.title || data.message || message;
       if (Array.isArray(data.errors)) {
         errors = data.errors;
+      } else if (data.errors && typeof data.errors === 'object') {
+        errors = Object.entries(data.errors).flatMap(([property, messages]) =>
+          (Array.isArray(messages) ? messages : [messages]).map(message => ({ property, code: 'validation', message: String(message) })));
+        if (errors.length) message = errors.map(error => error.message).join('\n');
       }
     }
   } catch {
@@ -150,9 +170,11 @@ async function parseApiError(response: Response): Promise<ApiError> {
 let refreshPromise: Promise<string | null> | null = null;
 
 async function performTokenRefresh(): Promise<string | null> {
+  const version = tokenVersion;
   try {
     const refreshToken = await getStoredRefreshToken();
     if (!refreshToken) {
+      expireSession(version);
       return null;
     }
 
@@ -172,16 +194,20 @@ async function performTokenRefresh(): Promise<string | null> {
     });
 
     if (!res.ok) {
+      if ([400, 401, 403].includes(res.status)) expireSession(version);
       return null;
     }
 
     const data = await res.json();
+    // A logout or another login must not be undone by an old refresh response.
+    if (version !== tokenVersion) return null;
     if (data && data.accessToken) {
-      setAccessToken(data.accessToken);
       await saveStoredAccessToken(data.accessToken);
       if (data.refreshToken) {
         await saveStoredRefreshToken(data.refreshToken);
       }
+      if (version !== tokenVersion) return null;
+      setAccessToken(data.accessToken);
       return data.accessToken;
     }
     return null;
@@ -207,6 +233,7 @@ export async function apiFetch<T>(
   }
 
   const token = overrideToken !== undefined ? overrideToken : inMemoryToken;
+  const requestVersion = tokenVersion;
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -228,14 +255,16 @@ export async function apiFetch<T>(
       path.includes('/api/identity/logout');
 
     if (response.status === 401 && !isAuthEndpoint && overrideToken === undefined) {
-      if (!refreshPromise) {
+      if (tokenVersion !== requestVersion && !inMemoryToken) throw await parseApiError(response);
+      if (!refreshPromise && tokenVersion === requestVersion) {
         refreshPromise = performTokenRefresh().finally(() => {
           refreshPromise = null;
         });
       }
 
-      const freshToken = await refreshPromise;
+      const freshToken = tokenVersion !== requestVersion ? inMemoryToken : await refreshPromise;
       if (freshToken) {
+        const retryVersion = tokenVersion;
         // Retry the request once with fresh access token
         const retryHeaders = new Headers(init.headers);
         retryHeaders.set('Accept', 'application/json');
@@ -261,6 +290,7 @@ export async function apiFetch<T>(
           return (await retryResponse.json()) as T;
         }
 
+        if (retryResponse.status === 401) expireSession(retryVersion);
         throw await parseApiError(retryResponse);
       }
     }

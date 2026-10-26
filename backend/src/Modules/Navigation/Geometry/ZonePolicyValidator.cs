@@ -58,10 +58,11 @@ public static class ZonePolicyValidator
                 break;
 
             case ZoneType.SINGLE_OCCUPANCY:
+            case ZoneType.JUNCTION:
                 if (capacity != 1)
                 {
                     throw new DomainValidationException(
-                        "SINGLE_OCCUPANCY zones require Capacity = 1.",
+                        $"{zoneType} zones require Capacity = 1.",
                         "zone_policy_invalid");
                 }
 

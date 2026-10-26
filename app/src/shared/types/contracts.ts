@@ -453,6 +453,7 @@ export interface HandoverConfirmationBody {
 }
 
 export interface JobStepResponse {
+  name?: string;
   id: string;
   jobTaskId: string;
   workflowStepId: string;
@@ -464,6 +465,8 @@ export interface JobStepResponse {
   resolvedInputs?: Record<string, unknown>;
   outputValues?: Record<string, unknown>;
   targetEndpointId?: string | null;
+  /** Endpoint label resolved by the mobile API adapter. */
+  targetEndpointCode?: string;
   startedAt?: UtcDateTime | null;
   completedAt?: UtcDateTime | null;
   errorCode?: string | null;
@@ -484,6 +487,7 @@ export interface JobTaskContextValues {
 }
 
 export interface JobTaskResponse {
+  taskKey?: string;
   id: string;
   jobId: string;
   workflowTaskId: string;
@@ -638,7 +642,7 @@ export interface QueueTransportRequestResponse {
 /*                                                                             */
 /* Still consumed by the existing screens (jobs, transport, auth). Kept so the  */
 /* migration onto the DTOs above can land screen by screen instead of in one   */
-/* breaking sweep. See docs/CALM_OPERATIONS_FOUNDATION.md.                      */
+/* breaking sweep. See README.md (Source cần đọc theo task).                   */
 /* -------------------------------------------------------------------------- */
 
 /** Prototype workflow catalogue. Distinct from `WorkflowListItemDto`, which is server-owned. */

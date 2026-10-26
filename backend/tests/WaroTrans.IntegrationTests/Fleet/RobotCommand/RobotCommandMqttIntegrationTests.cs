@@ -1,9 +1,14 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Services;
 using WaroTrans.Fleet.Features.ProcessRobotCommandAck;
 using WaroTrans.Fleet.Features.ProcessRobotCommandResult;
 using WaroTrans.Fleet.Features.ProcessRobotHeartbeat;
@@ -75,6 +80,55 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
             r => r.Status == RobotStatus.AVAILABLE && r.CurrentCommandId == null,
             () => ForceOnlineAsync(robot.Code, boot, () => ++seq));
         Assert.Equal(RobotStatus.AVAILABLE, after.Status);
+    }
+
+    [Fact]
+    public async Task Navigate_stamps_published_at_once_the_broker_has_the_command()
+    {
+        var robot = await RegisterAsync("Stamp Bot");
+        long seq = 0;
+        await ForceOnlineAsync(robot.Code, Guid.NewGuid(), () => ++seq);
+
+        var issue = await Client.PostAsJsonAsync(
+            $"/api/fleet/robots/{robot.Id}/commands/navigate",
+            new { x = 1.0, y = 1.0, yaw = 0.0 });
+        issue.EnsureSuccessStatusCode();
+        var issued = (await issue.Content.ReadFromJsonAsync<IssueDto>(JsonOptions))!;
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var command = await scope.ServiceProvider.GetRequiredService<FleetDbContext>().RobotCommands
+            .AsNoTracking()
+            .SingleAsync(c => c.Id == issued.CommandId);
+        Assert.Equal(RobotCommandStatus.SENT, command.Status);
+        Assert.NotNull(command.PublishedAt);                       // the ACK timeout counts from here
+        Assert.True(command.PublishedAt >= command.IssuedAt);
+    }
+
+    [Fact]
+    public async Task Navigate_with_an_unreachable_broker_fails_the_command_and_frees_the_robot()
+    {
+        var robot = await RegisterAsync("Broker Down Bot");
+        long seq = 0;
+        await ForceOnlineAsync(robot.Code, Guid.NewGuid(), () => ++seq);
+        var mqtt = Factory.Services.GetRequiredService<CapturingMqttRobotCommandPublisher>();
+        mqtt.FailNextCommandWith(new MqttBrokerUnavailableException("MQTT broker 127.0.0.1:1883 did not accept a connection within 5 s."));
+
+        var issue = await Client.PostAsJsonAsync(
+            $"/api/fleet/robots/{robot.Id}/commands/navigate",
+            new { x = 1.0, y = 1.0, yaw = 0.0 });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, issue.StatusCode);
+        Assert.Contains("mqtt_broker_unavailable", await issue.Content.ReadAsStringAsync());
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var command = await scope.ServiceProvider.GetRequiredService<FleetDbContext>().RobotCommands
+            .AsNoTracking()
+            .SingleAsync(c => c.RobotId == robot.Id);
+        Assert.Equal(RobotCommandStatus.FAILED, command.Status);
+        Assert.Equal(RobotCommandPublishing.PublishFailedErrorCode, command.ErrorCode);
+        Assert.Null(command.PublishedAt);
+        var after = await GetRobotAsync(robot.Id);
+        Assert.Equal(RobotStatus.AVAILABLE, after.Status);         // not stuck RESERVED on a command never sent
+        Assert.Null(after.CurrentCommandId);
     }
 
     [Fact]

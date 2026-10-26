@@ -1,292 +1,77 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Check, Clock, User, Navigation } from 'lucide-react-native';
+import { Check, Clock, Navigation, ShieldCheck, User } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { JobStepSummary } from '../../shared/types/contracts';
-import { Text } from '../../shared/ui';
+import type { JobStepResponse, StepType } from '../../shared/types/contracts';
+import { StatusPill, Text } from '../../shared/ui';
+import { jobStepTitle } from './jobData';
 
-interface JobStepperProps {
-  steps: JobStepSummary[];
-}
+const STEP_TYPES: Record<StepType, { label: string; icon: typeof Check }> = {
+  CHECK: { label: 'Check', icon: ShieldCheck },
+  MOVE: { label: 'Move', icon: Navigation },
+  HUMAN_INTERACTION: { label: 'Human Interaction', icon: User },
+  WAIT: { label: 'Wait', icon: Clock },
+};
 
-export function JobStepper({ steps }: JobStepperProps) {
-  const completedCount = steps.filter((s) => s.status === 'COMPLETED').length;
-
+export function JobStepper({ steps, endpointCode }: { steps: JobStepResponse[]; endpointCode?: string }) {
+  if (!steps.length) return <Text variant="body" color={colors.textSecondary}>No steps are available for this task.</Text>;
   return (
-    <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text variant="headline" style={styles.headerTitle}>
-            Workflow Execution Plan
-          </Text>
-          <Text variant="caption" color={colors.textSecondary}>
-            Step-by-step task itinerary
-          </Text>
-        </View>
-        <View style={styles.progressBadge}>
-          <Text variant="caption" color={colors.textSecondary} style={styles.badgeText}>
-            {completedCount} of {steps.length} Steps
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.stepsList}>
-        {steps.map((step, idx) => {
-          const isCompleted = step.status === 'COMPLETED';
-          const isExecuting = step.status === 'EXECUTING' || step.status === 'WAITING';
-          const isLast = idx === steps.length - 1;
-          const isHuman =
-            step.type === 'HUMAN_INTERACTION' ||
-            String(step.type) === 'MANUAL_CONFIRM' ||
-            String(step.title).toUpperCase().includes('CONFIRM') ||
-            String(step.title).toUpperCase().includes('VERIFICATION') ||
-            String(step.title).toUpperCase().includes('HANDOVER');
-
-          return (
-            <View key={`${step.sequenceNo}-${idx}`} style={styles.stepItem}>
-              {/* Vertical timeline spine */}
-              <View style={styles.indicatorCol}>
-                <View
-                  style={[
-                    styles.circle,
-                    isCompleted && styles.circleCompleted,
-                    isExecuting && styles.circleExecuting,
-                  ]}
-                >
-                  {isCompleted ? (
-                    <Check size={14} color="#ffffff" strokeWidth={2.8} />
-                  ) : isExecuting ? (
-                    <View style={styles.executingDot} />
-                  ) : (
-                    <Text variant="caption" color={colors.textMuted} style={styles.circleNumber}>
-                      {step.sequenceNo}
-                    </Text>
-                  )}
-                </View>
-                {!isLast && (
-                  <View
-                    style={[
-                      styles.verticalLine,
-                      isCompleted && styles.lineCompleted,
-                    ]}
-                  />
-                )}
+    <View>
+      {steps.map((step, index) => {
+        const completed = step.status === 'COMPLETED';
+        const active = step.status === 'EXECUTING' || step.status === 'WAITING';
+        const failed = step.status === 'FAILED';
+        const type = STEP_TYPES[step.stepType];
+        const Icon = type?.icon || ShieldCheck;
+        return (
+          <View key={step.id} style={styles.step}>
+            <View style={styles.spine}>
+              <View style={[styles.circle, completed && styles.completedCircle, active && styles.activeCircle, failed && styles.failedCircle]}>
+                {completed ? <Check size={14} color={colors.textInverse} /> : <Text variant="caption" color={failed ? colors.dangerText : active ? colors.primaryText : colors.textSecondary}>{index + 1}</Text>}
               </View>
-
-              {/* Step content */}
-              <View style={styles.contentCol}>
-                <View style={styles.titleRow}>
-                  <Text
-                    variant="bodyMedium"
-                    style={[
-                      styles.stepTitle,
-                      isExecuting && styles.stepTitleExecuting,
-                      isCompleted && styles.stepTitleCompleted,
-                    ]}
-                  >
-                    {step.title}
-                  </Text>
-
-                  <View style={[styles.typeBadge, isHuman ? styles.typeBadgeHuman : styles.typeBadgeMove]}>
-                    {isHuman ? (
-                      <User size={12} color={colors.warning} style={{ marginRight: 4 }} />
-                    ) : (
-                      <Navigation size={12} color={colors.primary} style={{ marginRight: 4 }} />
-                    )}
-                    <Text
-                      variant="caption"
-                      color={isHuman ? colors.warning : colors.primary}
-                      style={styles.typeBadgeText}
-                    >
-                      {isHuman ? 'Handover' : 'Move'}
-                    </Text>
-                  </View>
-                </View>
-
-                {step.description ? (
-                  <Text variant="caption" color={colors.textSecondary} style={styles.stepDesc}>
-                    {step.description}
-                  </Text>
-                ) : null}
-
-                {step.targetEndpointCode ? (
-                  <View style={styles.endpointRow}>
-                    <Text variant="caption" color={colors.textMuted} style={styles.endpointLabel}>
-                      Location:
-                    </Text>
-                    <Text variant="caption" color={colors.textPrimary} style={styles.endpointCode}>
-                      {step.targetEndpointCode}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {isExecuting && (
-                  <View style={styles.executingPill}>
-                    <Clock size={12} color={colors.primaryDark} />
-                    <Text variant="caption" color={colors.primaryDark} style={styles.executingText}>
-                      {isHuman ? 'Active Step · Awaiting Operator Handover' : 'Active Step · AMR Executing'}
-                    </Text>
-                  </View>
-                )}
-              </View>
+              {index < steps.length - 1 && <View style={[styles.line, completed && styles.completedLine]} />}
             </View>
-          );
-        })}
-      </View>
+            <View style={styles.content}>
+              <View style={styles.typeRow}>
+                <Icon size={14} color={colors.textSecondary} />
+                <Text variant="caption">{type?.label || step.stepType}</Text>
+              </View>
+              <Text variant="bodyMedium" color={completed ? colors.textSecondary : colors.textPrimary}>{jobStepTitle(step)}</Text>
+              <StatusPill status={step.status} size="sm" dot />
+              {step.stepType === 'MOVE' && (step.targetEndpointId || endpointCode) ? <Text variant="caption">Target: {step.targetEndpointCode || step.targetEndpointId || endpointCode}</Text> : null}
+              {step.status === 'WAITING' && step.stepType === 'HUMAN_INTERACTION' && <Text variant="caption" color={colors.warningText}>Waiting For Operator</Text>}
+              {step.errorCode || step.errorMessage ? (
+                <View style={styles.error}>
+                  {step.errorCode ? <Text variant="caption" color={colors.dangerText} fontWeight="600">{step.errorCode}</Text> : null}
+                  {step.errorMessage ? <Text variant="body" color={colors.dangerText}>{step.errorMessage}</Text> : null}
+                </View>
+              ) : null}
+              {step.startedAt ? <Text variant="caption">Started: {formatJobTime(step.startedAt)}</Text> : null}
+              {step.completedAt ? <Text variant="caption">Completed: {formatJobTime(step.completedAt)}</Text> : null}
+            </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
 
+export function formatJobTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    gap: 14,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    fontWeight: '700',
-  },
-  progressBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  badgeText: {
-    fontWeight: '600',
-  },
-  stepsList: {
-    gap: 0,
-  },
-  stepItem: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  indicatorCol: {
-    alignItems: 'center',
-    width: 28,
-  },
-  circle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  circleCompleted: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-  },
-  circleExecuting: {
-    backgroundColor: '#ffffff',
-    borderColor: colors.darkAction,
-    borderWidth: 2,
-  },
-  executingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.darkAction,
-  },
-  circleNumber: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  verticalLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: colors.border,
-    marginVertical: 4,
-  },
-  lineCompleted: {
-    backgroundColor: colors.success,
-  },
-  contentCol: {
-    flex: 1,
-    paddingBottom: 20,
-    gap: 4,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  stepTitle: {
-    fontWeight: '600',
-    flex: 1,
-  },
-  stepTitleExecuting: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-  },
-  stepTitleCompleted: {
-    color: colors.textSecondary,
-  },
-  typeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-  },
-  typeBadgeMove: {
-    backgroundColor: colors.primaryLight,
-  },
-  typeBadgeHuman: {
-    backgroundColor: colors.warningBg,
-  },
-  typeBadgeText: {
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  stepDesc: {
-    lineHeight: 18,
-  },
-  endpointRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  endpointLabel: {
-    fontSize: 12,
-  },
-  endpointCode: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  executingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.sm,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  executingText: {
-    fontWeight: '700',
-    fontSize: 11,
-  },
+  step: { flexDirection: 'row', gap: 12 },
+  spine: { width: 28, alignItems: 'center' },
+  circle: { width: 26, height: 26, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  completedCircle: { backgroundColor: colors.success, borderColor: colors.success },
+  activeCircle: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+  failedCircle: { backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder },
+  line: { flex: 1, width: 2, backgroundColor: colors.border, marginVertical: 4 },
+  completedLine: { backgroundColor: colors.successBorder },
+  content: { flex: 1, minWidth: 0, gap: 6, paddingBottom: 24 },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  error: { backgroundColor: colors.dangerBg, borderRadius: radii.sm, padding: 10, gap: 4 },
 });

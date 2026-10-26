@@ -1,3 +1,4 @@
+import { useRealtime } from '../../shared/realtime';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -23,7 +24,8 @@ import {
   ShieldAlert,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { JOB_STATUS_PRESENTATION, MOCK_JOBS } from '../jobs/jobData';
+import { JOB_STATUS_PRESENTATION } from '../jobs/jobData';
+import { requestStatusLabel } from './dispatchData';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { colors } from '../../shared/theme/colors';
 import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
@@ -38,51 +40,15 @@ import { cancelRobotCommand, listRobots, listTransportRequests, type RobotDto } 
 
 export interface RecentDispatchItem {
   id: string;
+  requestId: string;
   type: string;
   status: string;
   statusLabel?: string;
   route: string;
   container: string;
-  robot: string;
+  containerCount: number;
   time: string;
-  jobId: string;
 }
-
-const RECENT_DISPATCHES: RecentDispatchItem[] = [
-  {
-    id: 'TR-2048',
-    type: 'Inbound Putaway',
-    status: 'ASSIGNED',
-    statusLabel: 'Waiting Handover',
-    route: 'DOCK-IN-01 ➔ RACK-A-02 · Level 1',
-    container: 'BOX-101, BOX-102 (2 Totes)',
-    robot: 'AMR-01',
-    time: '2m ago',
-    jobId: 'JOB-2026-0812',
-  },
-  {
-    id: 'TR-2047',
-    type: 'Replenishment',
-    status: 'RECOVERY_REQUIRED',
-    statusLabel: 'Needs Recovery',
-    route: 'RACK-D-01 ➔ RACK-A-01 · Level 1',
-    container: 'BOX-401, BOX-402 (2 Totes)',
-    robot: 'AMR-02',
-    time: '14m ago',
-    jobId: 'JOB-2026-0819',
-  },
-  {
-    id: 'TR-2046',
-    type: 'Outbound Retrieval',
-    status: 'RUNNING',
-    statusLabel: 'En Route',
-    route: 'RACK-B-04 · Level 2 ➔ DOCK-OUT-04',
-    container: 'BOX-204 (16 pcs)',
-    robot: 'AMR-02',
-    time: '25m ago',
-    jobId: 'JOB-2026-0813',
-  },
-];
 
 function PulsingBeaconDot() {
   const pingAnim = useRef(new Animated.Value(0)).current;
@@ -136,11 +102,12 @@ function PulsingBeaconDot() {
  */
 export function TransportScreen() {
   const { navigate, dockHeight } = useNavigation();
+  const { lastJobUpdate } = useRealtime();
   const { isHolding, toggleHold: toggleFleetHold } = useSafetyHold();
   const [hasActiveAlert, setHasActiveAlert] = useState(false);
   const [showIncidentDetails, setShowIncidentDetails] = useState(false);
-  const [dispatches, setDispatches] = useState<RecentDispatchItem[]>(RECENT_DISPATCHES.slice(0, 3));
-  const [totalRecords, setTotalRecords] = useState<number>(RECENT_DISPATCHES.length);
+  const [dispatches, setDispatches] = useState<RecentDispatchItem[]>([]);
+  const [totalRecords, setTotalRecords] = useState<number>(0);
   const [isLoadingDispatches, setIsLoadingDispatches] = useState(false);
   const [availableRobots, setAvailableRobots] = useState<RobotDto[]>([]);
 
@@ -162,95 +129,51 @@ export function TransportScreen() {
             const details = item.details || [];
             const first = details[0];
             const route = first
-              ? `${first.sourceEndpointCode || 'DOCK-IN-01'} ➔ ${first.destinationEndpointCode || 'RACK-A-01'}`
+              ? `${first.sourceEndpointCode || first.sourceEndpointId || 'Unknown Pickup'} ➔ ${first.destinationEndpointCode || first.destinationEndpointId || 'Unknown Destination'}`
               : 'Multi-stop movement';
-            const firstBarcode = first?.containerBarcode || 'TOTE-01';
+            const firstBarcode = first?.containerBarcode || first?.containerId || 'Unknown Container';
             const containerSummary =
               details.length > 1
                 ? `${firstBarcode} (+${details.length - 1})`
                 : firstBarcode;
 
-            let mappedStatus: any = item.status;
-            let statusLabel: string = item.status;
-
-            if (item.status === 'SUBMITTED') {
-              mappedStatus = 'SUBMITTED';
-              statusLabel = 'Submitted';
-            } else if (item.status === 'QUEUED') {
-              mappedStatus = 'QUEUED';
-              statusLabel = 'Queued';
-            } else if (item.requestCode === 'TR-2047') {
-              mappedStatus = 'RECOVERY_REQUIRED';
-              statusLabel = 'Needs Recovery';
-            } else if (item.status === 'IN_PROGRESS') {
-              mappedStatus = 'ASSIGNED';
-              statusLabel = 'Waiting Handover';
-            } else if (item.status === 'COMPLETED') {
-              mappedStatus = 'COMPLETED';
-              statusLabel = 'Completed';
-            } else if (item.status === 'CANCELLED' || item.status === 'REJECTED') {
-              mappedStatus = 'CANCELLED';
-              statusLabel = 'Cancelled';
-            } else if (item.status === 'FAILED') {
-              mappedStatus = 'FAILED';
-              statusLabel = 'Failed';
-            }
-
             return {
               id: item.requestCode,
+              requestId: item.id,
               type:
                 item.workflowName ||
                 (item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Movement'),
-              status: mappedStatus,
-              statusLabel,
+              status: item.status,
+              statusLabel: requestStatusLabel(item.status),
               route,
               container: containerSummary,
-              robot: item.assignedRobotCode || 'AMR-01',
+              containerCount: details.length,
               time: item.submittedAt
                 ? new Date(item.submittedAt).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })
                 : 'Just now',
-              jobId: item.linkedJobId || '',
             };
           });
           setDispatches(mapped);
         }
       } catch {
-        // Graceful fallback to static demo dispatches
+        toast.error('Recent dispatches could not be refreshed.');
       } finally {
         if (isMounted) setIsLoadingDispatches(false);
       }
     }
     loadRecent();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    const poll = setInterval(loadRecent, 15000);
+    return () => { isMounted = false; clearInterval(poll); };
+  }, [lastJobUpdate]);
 
   const bottomInset = dockReservedSpace(dockHeight);
   const topInset = useTopInset();
 
   const toggleHold = () => {
-    triggerHaptic('tap');
-    toggleFleetHold();
-    if (isHolding) {
-      toast.success(
-        'Nearby AMR soft-pause released. Normal Nav2 navigation resumed.'
-      );
-    } else {
-      const activeRobot = availableRobots.find((robot) =>
-        robot.currentCommandId || ['BUSY', 'RUNNING', 'EXECUTING'].includes(robot.status) ||
-        robot.navigationStatus === 'NAVIGATING');
-      const selectedRobotUuid = activeRobot?.id;
-      if (selectedRobotUuid) {
-        void cancelRobotCommand(selectedRobotUuid, 'Operator soft-hold from mobile console').catch(() => {});
-      }
-      toast.warning(
-        'HOLD ROBOT ACTIVE: Nearby AMRs within 3m perimeter soft-paused.'
-      );
-    }
+    toast.warning('Pause and resume are not supported. Open Fleet Recall to request command cancellation.');
   };
 
   return (
@@ -475,11 +398,7 @@ export function TransportScreen() {
                   key={dispatch.id}
                   onPress={() => {
                     triggerHaptic('tap');
-                    if (dispatch.jobId) {
-                      navigate('job_detail', { jobId: dispatch.jobId });
-                    } else {
-                      navigate('transport_history');
-                    }
+                    navigate('transport_detail', { requestId: dispatch.requestId });
                   }}
                   style={({ pressed }) => [
                     styles.dispatchCard,
@@ -518,7 +437,7 @@ export function TransportScreen() {
                         numberOfLines={1}
                         style={[styles.boldText, { flexShrink: 0 }]}
                       >
-                        {dispatch.robot}
+                        {dispatch.containerCount} Containers
                       </Text>
                       <Text variant="caption" color={colors.textMuted}>·</Text>
                       <Text variant="caption" color={colors.textPrimary} numberOfLines={1} style={[styles.boldMono, { flexShrink: 1 }]}>

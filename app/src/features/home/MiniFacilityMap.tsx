@@ -1,3 +1,6 @@
+import { WarehouseMapLayer } from '../../shared/components/WarehouseMapLayer';
+import type { MapVersionDetailDto, RobotDto } from '../../shared/api';
+import type { RobotTelemetryEvent } from '../../shared/realtime/realtimeClient';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -19,19 +22,17 @@ import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
-export const ROBOT_HEADING_ARROW_PATH = 'M12 1.5 L20.75 18.25 L12 16.25 L3.25 18.25 Z';
-
 export interface MapRobot {
   id: string;
-  xPercent: number;
-  yPercent: number;
-  headingDeg: number;
-  status: 'EN_ROUTE' | 'STANDBY' | 'CHARGING';
-  battery: number;
+  status: 'EN_ROUTE' | 'STANDBY' | 'PAUSED' | 'UNKNOWN';
+  battery: number | null;
   speed: string;
 }
 
 interface MiniFacilityMapProps {
+  map?: MapVersionDetailDto | null;
+  fleet?: RobotDto[];
+  telemetry?: Record<string, RobotTelemetryEvent>;
   currentZone: string;
   selectedRobotId: string;
   onSelectRobot: (robotId: string) => void;
@@ -41,54 +42,8 @@ interface MiniFacilityMapProps {
   style?: any;
 }
 
-function RobotSelectionRadarWave({ isSelected }: { isSelected: boolean }) {
-  const waveAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!isSelected) {
-      waveAnim.setValue(0);
-      return;
-    }
-    const a = Animated.loop(
-      Animated.timing(waveAnim, {
-        toValue: 1,
-        duration: 1400,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: Platform.OS !== 'web',
-      })
-    );
-    a.start();
-    return () => a.stop();
-  }, [isSelected, waveAnim]);
-
-  if (!isSelected) {
-    return <View style={styles.robotPulseDefault} />;
-  }
-
-  const scale = waveAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 2.2],
-  });
-  const opacity = waveAnim.interpolate({
-    inputRange: [0, 0.7, 1],
-    outputRange: [0.7, 0.25, 0],
-  });
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.robotPulseWave,
-        {
-          transform: [{ scale }],
-          opacity,
-        },
-      ]}
-    />
-  );
-}
-
 export function MiniFacilityMap({
+  map = null, fleet = [], telemetry = {},
   currentZone,
   selectedRobotId,
   onSelectRobot,
@@ -119,21 +74,6 @@ export function MiniFacilityMap({
   });
 
   const selectedRobot = robots.find((r) => r.id === selectedRobotId) || robots[0];
-
-  const getWorkerPosition = () => {
-    if (currentZone.includes('Inbound') || currentZone.includes('Dock 01')) {
-      return { left: '24%', top: '78%', name: 'Dock 01' };
-    }
-    if (currentZone.includes('Zone B')) {
-      return { left: '65%', top: '34%', name: 'Zone B' };
-    }
-    if (currentZone.includes('Outbound') || currentZone.includes('Shipping') || currentZone.includes('Dock 04')) {
-      return { left: '76%', top: '78%', name: 'Dock Out' };
-    }
-    return { left: '26%', top: '30%', name: 'Zone A' };
-  };
-
-  const workerPos = getWorkerPosition();
 
   const handleLocateMe = () => {
     triggerHaptic('tap');
@@ -181,15 +121,15 @@ export function MiniFacilityMap({
 
       {/* 4. Active Robot Telemetry Badge */}
       {selectedRobot && (
-        <View style={styles.telemetryBadge}>
+        <View style={[styles.telemetryBadge, { zIndex: 2 }]}>
           <View style={styles.telemetryDot} />
           <Text style={styles.telemetryId}>{selectedRobot.id}</Text>
           <View style={styles.onlinePill}>
-            <Text style={styles.onlinePillText}>Online</Text>
+            <Text style={styles.onlinePillText}>{fleet.find(robot => robot.code === selectedRobot.id)?.isOnline ? 'Online' : 'Offline'}</Text>
           </View>
           <View style={styles.batteryGroup}>
             <BatteryMedium size={14} color={colors.textSecondary} />
-            <Text style={styles.batteryText}>{selectedRobot.battery}%</Text>
+            <Text style={styles.batteryText}>{selectedRobot.battery == null ? '—' : `${selectedRobot.battery}%`}</Text>
           </View>
         </View>
       )}
@@ -198,7 +138,7 @@ export function MiniFacilityMap({
       <Pressable
         onPress={handleLocateMe}
         style={({ pressed }) => [
-          styles.locateButton,
+          styles.locateButton, { zIndex: 2 },
           pressed && styles.locateButtonPressed,
         ]}
         accessibilityRole="button"
@@ -207,133 +147,9 @@ export function MiniFacilityMap({
         <LocateFixed size={18} color={colors.primaryText} />
       </Pressable>
 
-      {/* 6. Storage Zone A Card */}
-      <View style={styles.zoneCardA}>
-        <Text style={styles.zoneTitle}>Zone A · EP-A..C / RACK-A</Text>
-        <View style={styles.rackGridA}>
-          {Array.from({ length: 12 }).map((_, i) => (
-            <View key={i} style={styles.rackPill} />
-          ))}
-        </View>
+      <View style={[StyleSheet.absoluteFill, { zIndex: 0 }]}>
+        <WarehouseMapLayer map={map} robots={fleet} telemetry={telemetry} selectedRobot={selectedRobotId} onSelectRobot={onSelectRobot} />
       </View>
-
-      {/* 7. Storage Zone B Card */}
-      <View style={styles.zoneCardB}>
-        <Text style={styles.zoneTitle}>Zone B · EP-D..F / RACK-B</Text>
-        <View style={styles.rackGridB}>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <View key={i} style={styles.rackPill} />
-          ))}
-        </View>
-      </View>
-
-      {/* 8. Loading Docks Area */}
-      <View style={styles.docksContainer}>
-        <Text style={styles.zoneTitle}>Loading Docks</Text>
-        <View style={styles.docksRow}>
-          <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>DOCK-IN-01</Text>
-          </View>
-          <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>EP-A / EP-D</Text>
-          </View>
-          <View style={styles.dockSlot}>
-            <Text style={styles.dockSlotText}>DOCK-OUT-04</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* 9. Dynamic Trajectory Wayline */}
-      <View pointerEvents="none" style={styles.trajectoryStrip} />
-
-      {/* 10. Dynamic Worker Position Marker */}
-      <View
-        style={[
-          styles.workerMarker,
-          {
-            left: workerPos.left as any,
-            top: workerPos.top as any,
-          },
-        ]}
-        pointerEvents="none"
-      >
-        <View
-          style={[
-            styles.workerPulse,
-            isLocating && styles.workerPulseActive,
-          ]}
-        />
-        <View style={styles.workerAvatar}>
-          <User size={13} color="#ffffff" />
-        </View>
-        <View style={styles.workerLabelWrap}>
-          <View style={styles.workerBlueDot} />
-          <Text style={styles.workerLabelText} numberOfLines={1}>
-            You ({workerPos.name})
-          </Text>
-        </View>
-      </View>
-
-      {/* 11. AMR Fleet Markers */}
-      {robots.map((robot) => {
-        const isSelected = selectedRobotId === robot.id;
-        const isMoving = robot.status === 'EN_ROUTE';
-
-        return (
-          <Pressable
-            key={robot.id}
-            onPress={() => {
-              triggerHaptic('tap');
-              onSelectRobot(robot.id);
-            }}
-            style={[
-              styles.robotWrapper,
-              {
-                left: `${robot.xPercent}%` as any,
-                top: `${robot.yPercent}%` as any,
-              },
-            ]}
-          >
-            <RobotSelectionRadarWave isSelected={isSelected} />
-
-            <View
-              style={[
-                styles.robotPuck,
-                isSelected && styles.robotPuckSelected,
-                isMoving && styles.robotPuckMoving,
-              ]}
-            >
-              <View
-                style={{
-                  transform: [{ rotate: `${robot.headingDeg}deg` }],
-                  width: 20,
-                  height: 20,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Svg width="18" height="18" viewBox="0 0 24 24">
-                  <Path
-                    d={ROBOT_HEADING_ARROW_PATH}
-                    fill={isMoving ? '#ffffff' : colors.primaryText}
-                  />
-                </Svg>
-              </View>
-            </View>
-
-            <View style={styles.robotLabelPill}>
-              <View
-                style={[
-                  styles.robotDot,
-                  { backgroundColor: isMoving ? colors.primaryText : colors.success },
-                ]}
-              />
-              <Text style={styles.robotLabelText} numberOfLines={1}>{robot.id}</Text>
-              <Text style={styles.robotSpeedText} numberOfLines={1}>{robot.speed}</Text>
-            </View>
-          </Pressable>
-        );
-      })}
     </View>
   );
 }

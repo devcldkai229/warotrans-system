@@ -28,26 +28,7 @@ interface PendingTask {
   status: 'queued' | 'synced';
 }
 
-const INITIAL_TASKS: PendingTask[] = [
-  {
-    id: 'tx-1',
-    label: 'Handover BOX-101 (Dock 01)',
-    timestamp: '19:12:04',
-    status: 'queued',
-  },
-  {
-    id: 'tx-2',
-    label: 'Scan Verify BOX-102',
-    timestamp: '19:12:45',
-    status: 'queued',
-  },
-  {
-    id: 'tx-3',
-    label: 'Incident Report Rack A-02',
-    timestamp: '19:13:10',
-    status: 'queued',
-  },
-];
+const INITIAL_TASKS: PendingTask[] = [];
 
 export function OfflineBannerHUD() {
   const { goBack } = useNavigation();
@@ -65,16 +46,7 @@ export function OfflineBannerHUD() {
   }, [isSyncing]);
 
   const handleSimulateSync = () => {
-    triggerHaptic('success');
-    setIsSyncing(true);
-    setFeedback('Wi-Fi link detected! Flushing offline queue to WMS gateway...');
-
-    setTimeout(() => {
-      setTasks((prev) => prev.map((t) => ({ ...t, status: 'synced' })));
-      setIsSyncing(false);
-      setFeedback('All 3 pending transactions successfully reconciled with WMS.');
-      setTimeout(() => setFeedback(null), 3500);
-    }, 1500);
+    setFeedback('Offline commands are not queued. Reconnect and retry the operation; nothing has been synchronized.');
   };
 
   const pendingCount = tasks.filter((t) => t.status !== 'synced').length;
@@ -83,7 +55,7 @@ export function OfflineBannerHUD() {
     <View style={styles.container}>
       <SubScreenHeader
         label="Network resiliency"
-        title="Offline Operation Mode"
+        title="Connection Status"
         onBack={goBack}
       />
 
@@ -142,7 +114,7 @@ export function OfflineBannerHUD() {
 
         {/* Manual Sync Trigger in Warm Dark Gray */}
         <Button
-          label={isSyncing ? 'Reconnecting to WMS gateway...' : 'Simulate Reconnect & Flush Queue'}
+          label={'Offline Sync Unavailable'}
           icon={
             isSyncing ? (
               <RefreshCw size={18} color="#ffffff" />
@@ -151,7 +123,7 @@ export function OfflineBannerHUD() {
             )
           }
           onPress={handleSimulateSync}
-          disabled={isSyncing || pendingCount === 0}
+          disabled={true}
           variant="primary"
           size="lg"
           style={{ width: '100%', marginTop: 8 }}

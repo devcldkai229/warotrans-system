@@ -1,3 +1,5 @@
+import { listWarehouses } from '../../shared/api';
+import { toast } from '../../shared/context/ToastContext';
 import React, { useEffect, useState } from 'react';
 import {
   Pressable,
@@ -52,7 +54,9 @@ export function BlockPathHazardScreen() {
     let mounted = true;
     const loadCorridors = async () => {
       try {
-        const activeMap = await getActiveMapVersion('11111111-1111-1111-1111-111111111111');
+        const warehouse = (await listWarehouses({ isActive: true })).items[0];
+        if (!warehouse) return;
+        const activeMap = await getActiveMapVersion(warehouse.id);
         if (!activeMap) return;
         const detail = await getMapVersionDetail(activeMap.id);
         const endpoints = detail.endpoints.filter((ep) => ep.isEnabled);
@@ -85,10 +89,9 @@ export function BlockPathHazardScreen() {
     return () => { mounted = false; };
   }, []);
 
+  const isSubmitting = false;
   const handleSubmit = () => {
-    triggerHaptic('success');
-    setIncidentCode(`INC-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-    setSubmitted(true);
+    toast.warning('Hazard reporting is not available on the current backend. Contact the supervisor directly.');
   };
 
   const handleClear = () => {
@@ -101,12 +104,13 @@ export function BlockPathHazardScreen() {
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label="Floor Safety & Exceptions · Sim Aid"
-        title="Report Corridor Hazard"
+        label="Floor Safety & Exceptions"
+        title="Corridor Hazard · Read Only"
         onBack={goBack}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <Text variant="body" color={colors.textSecondary}>Reporting is unavailable on the current backend. No incident or route blockage will be saved. Contact the supervisor directly.</Text>
         {submitted ? (
           <View style={styles.submittedCard}>
             <View style={styles.submittedIconBadge}>
@@ -116,7 +120,7 @@ export function BlockPathHazardScreen() {
               Safety Incident Logged
             </Text>
             <Text variant="caption" color={colors.textSecondary} style={styles.submittedSub}>
-              Incident ticket registered in Operations registry. Fleet supervisors and safety officers have been notified.
+              Incident saved in Operations. Robot routes and safety zones have not been changed.
             </Text>
 
             <View style={styles.receiptBox}>
@@ -150,7 +154,7 @@ export function BlockPathHazardScreen() {
               <View style={styles.receiptRow}>
                 <Text variant="caption" color={colors.textSecondary}>Supervisor Action:</Text>
                 <Text variant="caption" color={colors.primary} style={styles.receiptHighlight}>
-                  Dispatched to Facility Safety Team
+                  Awaiting Review
                 </Text>
               </View>
             </View>
@@ -334,6 +338,7 @@ export function BlockPathHazardScreen() {
               label="Submit Incident Report"
               icon={<AlertTriangle size={18} color="#ffffff" />}
               onPress={handleSubmit}
+              disabled={true}
               variant="danger"
               size="lg"
             />

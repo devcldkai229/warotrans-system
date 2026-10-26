@@ -25,7 +25,7 @@ import { triggerHaptic } from '../../shared/utils/haptics';
  * after an AMR comes past them at 1.4 m/s.
  */
 export const SOFT_HOLD_SIMULATION_NOTICE =
-  'Local Fleet Simulation. The 3m soft pause stays on this device — it is not broadcast to AMRs until /api/fleet/soft-hold is wired.';
+  'Pause/resume is unavailable on the current backend. No robot stop is requested by this control.';
 
 export interface SafetyActionSheetProps {
   visible: boolean;
@@ -72,16 +72,16 @@ export function SafetyActionSheet({
     {
       key: 'hold',
       icon: CirclePause,
-      title: 'Hold Nearby Robot (3m Soft Pause · Sim Aid)',
+      title: 'Pause Nearby Robots · Unavailable',
       description:
-        'Temporarily holds robots within 3m for safe manual crossing. (Local Fleet Simulation)',
+        'Pause/resume requires a backend contract. Contact the supervisor.',
       kind: 'toggle',
       tone: isHolding ? 'warning' : 'neutral',
     },
     {
       key: 'hazard',
       icon: AlertTriangle,
-      title: 'Report Path Hazard · Sim Aid',
+      title: 'Inspect Path Hazard · Reporting Unavailable',
       description: 'Report a blocked corridor, a water leak, or a fallen pallet.',
       kind: 'navigate',
       tone: 'danger',

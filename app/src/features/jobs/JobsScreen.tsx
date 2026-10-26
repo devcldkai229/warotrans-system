@@ -17,7 +17,7 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 import { acceptHumanTask, listJobs, startJob } from '../../shared/api';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { JobCard } from './JobCard';
-import { AppJobItem, countMyActiveJobs, isTerminalJobStatus, mapJobDetailToAppJobItem, MOCK_JOBS } from './jobData';
+import { AppJobItem, isTerminalJobStatus, mapJobDetailToAppJobItem } from './jobData';
 
 type JobScope = 'mine' | 'fleet' | 'history';
 
@@ -163,9 +163,9 @@ function inScope(job: AppJobItem, scope: JobScope): boolean {
 
 const EMPTY_COPY: Record<JobScope, { title: string; message: string }> = {
   mine: {
-    title: 'No tasks assigned to you',
+    title: 'Task Assignment Unavailable',
     message:
-      'Handover tasks in your work zone appear here. Check the fleet queue to pick up work another operator has not started.',
+      'The current backend does not expose staff assignment. Open Fleet Queue to view and confirm waiting handovers.',
   },
   fleet: {
     title: 'The fleet queue is clear',
@@ -190,23 +190,20 @@ export function JobsScreen() {
   const { session } = useAuth();
   const { lastJobUpdate } = useRealtime();
   const deepLinkedScope = scopeFromParams(params?.view);
-  const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'mine');
+  const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'fleet');
   const [query, setQuery] = useState('');
   const [isZoneOnly, setIsZoneOnly] = useState(false);
-  const [jobsList, setJobsList] = useState<AppJobItem[]>(MOCK_JOBS);
+  const [jobsList, setJobsList] = useState<AppJobItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadJobs = React.useCallback(async () => {
     try {
       const res = await listJobs();
-      const realJobs = res.filter((job) => !['JOB-2026-0812', 'JOB-2026-0819'].includes(job.id));
-      const mapped = (realJobs.length > 0 ? realJobs : res).map(mapJobDetailToAppJobItem);
-      const liveIds = new Set(mapped.map((job) => job.id));
-      setJobsList(realJobs.length > 0 ? mapped : [...mapped, ...MOCK_JOBS.filter((job) => !liveIds.has(job.id))]);
+      setJobsList(res.map(detail => mapJobDetailToAppJobItem(detail, session?.id)));
     } catch (err) {
       console.warn('JobsScreen loadJobs error:', err);
     }
-  }, []);
+  }, [session?.id]);
 
   useEffect(() => {
     loadJobs();
@@ -292,7 +289,9 @@ export function JobsScreen() {
         navigate('job_detail', { jobId: job.id });
         return;
       }
-      await acceptHumanTask(job.id, session?.id || 'staff-01');
+      if (!job.activeTaskId) throw new Error('This job has no waiting human task to claim.');
+      await acceptHumanTask(job.activeTaskId);
+      await loadJobs();
       toast.success(`Task ${job.id} accepted! Moved to My Tasks.`);
       setJobsList((prev) =>
         prev.map((j) =>
@@ -410,7 +409,7 @@ export function JobsScreen() {
           <JobCard
             job={item}
             onPress={() => openJob(item)}
-            onAccept={() => handleAcceptTask(item)}
+            onAccept={['CREATED', 'QUEUED'].includes(item.status) ? () => handleAcceptTask(item) : undefined}
           />
         )}
         ItemSeparatorComponent={ListSeparator}

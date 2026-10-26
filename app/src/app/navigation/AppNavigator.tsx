@@ -15,6 +15,7 @@ import { FleetRecallScreen } from '../../features/safety/FleetRecallScreen';
 import { PayloadRecoveryScreen } from '../../features/safety/PayloadRecoveryScreen';
 import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
 import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
+import { TransportRequestDetailScreen } from '../../features/transport/TransportRequestDetailScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
 import { AppHeader } from '../shell/AppHeader';
 import { colors } from '../../shared/theme/colors';
@@ -65,6 +66,8 @@ export function AppNavigator() {
         return <BlockPathHazardScreen />;
       case 'transport_history':
         return <TransportHistoryScreen />;
+      case 'transport_detail':
+        return <TransportRequestDetailScreen />;
       case 'offline_hud':
         return <OfflineBannerHUD />;
       case 'scanner':

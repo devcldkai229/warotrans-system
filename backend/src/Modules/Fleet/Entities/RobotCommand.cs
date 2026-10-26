@@ -15,6 +15,9 @@ public sealed class RobotCommand
     public string PayloadJson { get; set; } = "{}";
     public Guid? TargetCommandId { get; set; }
     public DateTimeOffset IssuedAt { get; set; }
+    /// <summary>When the broker took the message (null until then). The ACK timeout counts from here, not from
+    /// IssuedAt: a slow publish must not make the backend give up on a command the robot has not received yet.</summary>
+    public DateTimeOffset? PublishedAt { get; set; }
     public DateTimeOffset? AckedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? Outcome { get; set; }

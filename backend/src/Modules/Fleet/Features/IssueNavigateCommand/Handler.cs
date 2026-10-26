@@ -9,6 +9,7 @@ using WaroTrans.Fleet.Enums;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Services;
 
 namespace WaroTrans.Fleet.Features.IssueNavigateCommand;
 
@@ -82,7 +83,15 @@ public sealed class IssueNavigateCommandHandler(
             FrameId = frameId,
             X = request.X,
             Y = request.Y,
-            Yaw = request.Yaw
+            Yaw = request.Yaw,
+            Route = request.Route is { } route && !string.IsNullOrWhiteSpace(route.GraphHash)
+                ? new RouteGrantPayload
+                {
+                    GraphHash = route.GraphHash.Trim(),
+                    EdgeIds = route.EdgeIds?.ToList() ?? []
+                }
+                : null,
+            Authority = request.Authority
         };
         var payloadJson = JsonSerializer.Serialize(posePayload, JsonOptions);
 
@@ -132,7 +141,8 @@ public sealed class IssueNavigateCommandHandler(
             Payload = JsonSerializer.SerializeToElement(posePayload, JsonOptions)
         };
 
-        await publisher.PublishAsync(mqttMessage, cancellationToken);
+        // PublishedAt starts the ACK timeout; a broker that cannot be reached fails the command and frees the robot.
+        await db.PublishAndStampAsync(publisher, mqttMessage, robot.Id, releasesRobot: true, cancellationToken);
 
         await events.PublishAsync(
             new RobotCommandLifecycleChanged(

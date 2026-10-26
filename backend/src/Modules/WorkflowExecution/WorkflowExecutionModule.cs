@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
+using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Features.ConfirmJobStep;
 using WaroTrans.WorkflowExecution.Features.CreateWorkflow;
@@ -20,6 +21,7 @@ using WaroTrans.WorkflowExecution.Features.GetWorkflowRequestInputSchema;
 using WaroTrans.WorkflowExecution.Features.ListJobs;
 using WaroTrans.WorkflowExecution.Features.ListWorkflows;
 using WaroTrans.WorkflowExecution.Features.Shared;
+using WaroTrans.WorkflowExecution.Features.CancelJob;
 using WaroTrans.WorkflowExecution.Features.ResumeJob;
 using WaroTrans.WorkflowExecution.Features.StartJob;
 using WaroTrans.WorkflowExecution.Features.PublishWorkflow;
@@ -69,9 +71,13 @@ public static class WorkflowExecutionModule
         services.AddScoped<JobQueries>();
         services.AddScoped<StartJobHandler>();
         services.AddScoped<ResumeJobHandler>();
+        services.AddScoped<CancelJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
+        services.AddHostedService<HumanConfirmTimeoutHostedService>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
+        services.AddScoped<IIntegrationEventHandler<RobotInteractionConfirmed>, RobotInteractionConfirmedHandler>();
+        services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, RobotConnectivityRearmHandler>();
 
         return services;
     }
@@ -98,6 +104,7 @@ public static class WorkflowExecutionModule
         group.MapGetJobStatistics();
         group.MapStartJob();
         group.MapResumeJob();
+        group.MapCancelJob();
         group.MapConfirmJobStep();
         
         return endpoints;

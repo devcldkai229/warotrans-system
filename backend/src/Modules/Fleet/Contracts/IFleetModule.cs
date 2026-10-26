@@ -19,6 +19,7 @@ public interface IFleetModule
     /// Sends NAVIGATE_TO_POSE to the robot for one Job step. Progress comes back asynchronously as
     /// <c>RobotCommandLifecycleChanged</c> (ACK / RESULT) carrying <paramref name="jobStepId"/>.
     /// Throws an AppException when the robot cannot take the command (offline, disabled, busy).
+    /// Optional <paramref name="route"/> attaches a traffic route grant (graph hash + authorized edge ids).
     /// </summary>
     Task<Guid> NavigateAsync(
         Guid robotId,
@@ -27,6 +28,31 @@ public interface IFleetModule
         double yaw,
         Guid jobId,
         Guid jobStepId,
+        CancellationToken cancellationToken = default,
+        RouteGrantSnapshot? route = null);
+
+    /// <summary>
+    /// Arms the physical HUMAN_INTERACTION confirm button on the robot (MQTT interaction_request).
+    /// Not a RobotCommand.
+    /// </summary>
+    Task RequestHumanInteractionAsync(
+        Guid robotId,
+        Guid jobId,
+        Guid jobStepId,
+        string interactionType,
+        Guid containerId,
+        Guid endpointId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publishes business acceptance/rejection of an interaction_confirm (MQTT interaction_result).
+    /// </summary>
+    Task PublishInteractionResultAsync(
+        Guid robotId,
+        Guid jobStepId,
+        Guid confirmMessageId,
+        bool accepted,
+        string? reasonCode,
         CancellationToken cancellationToken = default);
 }
 
@@ -40,8 +66,11 @@ public sealed record RobotSnapshot(
     bool IsOnline,
     LocalizationStatus? LocalizationStatus,
     NavigationStatus? NavigationStatus,
-    decimal BatteryPercent,
+    decimal? BatteryPercent,
     DateTimeOffset? LastTelemetryAt,
     double PoseX,
     double PoseY,
     double PoseYaw);
+
+/// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
+public sealed record RouteGrantSnapshot(string GraphHash, IReadOnlyList<int> EdgeIds);

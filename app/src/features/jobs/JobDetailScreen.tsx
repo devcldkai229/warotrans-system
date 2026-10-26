@@ -1,3 +1,5 @@
+import { useAuth } from '../auth/authContext';
+import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import React, { useEffect, useState } from 'react';
 import {
   Platform,
@@ -31,14 +33,15 @@ import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
-import { useTopInset } from '../../shared/theme/layout';
+import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { Button, Card, ProgressMeter, StatusPill, Text } from '../../shared/ui';
 import { AmrCargoBayVisualizer } from './AmrCargoBayVisualizer';
-import { JobStepper } from './JobStepper';
-import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, MOCK_JOBS } from './jobData';
+import { JobTaskPlan } from './JobTaskPlan';
+import { JobTaskDetailSheet } from './JobTaskDetailSheet';
+import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
 import { cancelRobotCommand, FALLBACK_ROBOTS, getJobDetail, listRobots, reportTaskProblem, startJob, type RobotDto } from '../../shared/api';
@@ -48,6 +51,9 @@ import { useRealtime } from '../../shared/realtime/RealtimeContext';
 export function JobDetailScreen() {
   const { navigate, goBack, params } = useNavigation();
   const topInset = useTopInset();
+  const { session } = useAuth();
+  const [isLoadingJob, setIsLoadingJob] = useState(true);
+  const [jobError, setJobError] = useState<string | null>(null);
   const { lastJobUpdate } = useRealtime();
 
   const initialModal = params?.modal;
@@ -60,10 +66,13 @@ export function JobDetailScreen() {
   const [isMismatch, setIsMismatch] = useState(isInitialMismatch);
   const [isIssueOpen, setIsIssueOpen] = useState(isInitialIssue);
   const [showMenu, setShowMenu] = useState(false);
+  const [showFullJobNo, setShowFullJobNo] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showOtherContainers, setShowOtherContainers] = useState(false);
   const [showNudgeControls, setShowNudgeControls] = useState(false);
   const [availableRobots, setAvailableRobots] = useState<RobotDto[]>(FALLBACK_ROBOTS);
-  const [selectedRobotId, setSelectedRobotId] = useState(FALLBACK_ROBOTS[0].id);
+  const [selectedRobotId, setSelectedRobotId] = useState('');
   const [isStartingJob, setIsStartingJob] = useState(false);
   const [bottomConsoleHeight, setBottomConsoleHeight] = useState(160);
 
@@ -81,26 +90,26 @@ export function JobDetailScreen() {
   /** Shared safety hold context */
   const { isHolding, toggleHold } = useSafetyHold();
 
-  const jobId = params?.jobId || 'JOB-2026-0812';
-  const [job, setJob] = useState<AppJobItem>(() => {
-    return MOCK_JOBS.find((j) => j.id === jobId) || MOCK_JOBS[0];
-  });
+  const jobId = params?.jobId || '';
+  const [job, setJob] = useState<AppJobItem>(EMPTY_JOB);
 
   useEffect(() => {
     let isMounted = true;
+    setIsLoadingJob(true); setJobError(null); setJob(EMPTY_JOB);
+    setSelectedTaskId(null); setShowFullJobNo(false);
+    if (!jobId) { setJobError('No job was selected.'); setIsLoadingJob(false); return; }
     getJobDetail(jobId)
       .then((res) => {
         if (isMounted && res) {
-          setJob(mapJobDetailToAppJobItem(res));
+          setJob(mapJobDetailToAppJobItem(res, session?.id));
         }
       })
       .catch((err) => {
-        console.warn('Failed to fetch job detail:', err);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [jobId]);
+        if (isMounted) setJobError(err.message || 'Job could not be loaded.');
+      })
+    .finally(() => { if (isMounted) setIsLoadingJob(false); });
+    return () => { isMounted = false; };
+  }, [jobId, session?.id]);
 
   useEffect(() => {
     if (
@@ -114,7 +123,7 @@ export function JobDetailScreen() {
       getJobDetail(jobId)
         .then((res) => {
           if (isMounted && res) {
-            setJob(mapJobDetailToAppJobItem(res));
+            setJob(mapJobDetailToAppJobItem(res, session?.id));
           }
         })
         .catch((err) => {
@@ -132,17 +141,18 @@ export function JobDetailScreen() {
     job.containers?.filter((c) => c.action !== 'UNLOAD' && c.action !== 'PICKUP') || [];
   const primaryTarget = job.containers?.find((c) => c.isTarget) || targetContainers[0] || job.containers?.[0];
 
-  const [targetContainer, setTargetContainer] = useState(primaryTarget?.code || 'BOX-101');
+  const [targetContainer, setTargetContainer] = useState(primaryTarget?.code || '');
 
-  const isWaiting = Boolean(job.hasWaitingHandover || job.status === 'ASSIGNED');
+  const isWaiting = Boolean(job.hasWaitingHandover);
   const isQueuedOrCreated = job.status === 'CREATED' || job.status === 'QUEUED';
   const isEnRoute = job.status === 'RUNNING' && !isWaiting;
   const isCompleted = job.status === 'COMPLETED';
-  const selectedRobotCode = availableRobots.find((robot) => robot.id === selectedRobotId)?.code || 'AMR-01';
+  const selectedRobotCode = availableRobots.find((robot) => robot.id === selectedRobotId)?.code || 'Unassigned';
   const selectedRobotUuid = job.assignedRobotId || availableRobots.find((robot) => robot.code === job.robot)?.id;
+  const selectedTask = job.tasks.find(task => task.id === selectedTaskId);
 
   useEffect(() => {
-    setTargetContainer(primaryTarget?.code || 'BOX-101');
+    setTargetContainer(primaryTarget?.code || '');
   }, [job.id, primaryTarget?.code]);
 
   const handleStartJob = async () => {
@@ -151,7 +161,7 @@ export function JobDetailScreen() {
     try {
       const updated = await startJob(job.id, selectedRobotId);
       if (!updated) throw new Error('Job could not be started');
-      setJob(mapJobDetailToAppJobItem(updated));
+      setJob(mapJobDetailToAppJobItem(updated, session?.id));
       toast.success(`Job ${job.jobNo || job.id} started on ${selectedRobotCode}!`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to start job');
@@ -162,23 +172,11 @@ export function JobDetailScreen() {
 
   const statusPresentation = JOB_STATUS_PRESENTATION[isWaiting ? 'ASSIGNED' : job.status];
 
-  const handleNudge = (delta: string) => {
-    triggerHaptic('tap');
-    toast.info(`Nudged ${job.robot} ${delta}. Dock alignment recalibrated.`);
+  const handleNudge = (_delta: string) => {
+    toast.warning('Dock nudging is unavailable during job execution. Use the supervised robot controls.');
   };
-
   const handleToggleSoftHold = () => {
-    triggerHaptic('tap');
-    if (!isHolding) {
-      toggleHold();
-      if (!isQueuedOrCreated && !isCompleted && selectedRobotUuid) {
-        void cancelRobotCommand(selectedRobotUuid, 'Operator soft-hold from mobile console').catch(() => {});
-      }
-      toast.warning(`HOLD ACTIVE: Soft-paused ${job.robot} within 3m safety perimeter.`);
-    } else {
-      toggleHold();
-      toast.success(`HOLD RELEASED: ${job.robot} resumed operation.`);
-    }
+    toast.warning('Pause and resume are not supported by this server. Open Fleet Recall to request cancellation.');
   };
 
   const handleOpenVerify = (containerCode?: string) => {
@@ -190,28 +188,35 @@ export function JobDetailScreen() {
   const handleVerifySuccess = (scannedCode: string, updatedJob?: JobDetailResponse | null) => {
     setIsVerifyOpen(false);
     if (updatedJob) setJob(mapJobDetailToAppJobItem(updatedJob));
-    getJobDetail(jobId).then((updated) => setJob(mapJobDetailToAppJobItem(updated))).catch(() => {});
+    getJobDetail(jobId).then((updated) => setJob(mapJobDetailToAppJobItem(updated, session?.id))).catch(() => {});
     toast.success(`Handover verified for ${scannedCode}. Robot cleared for next waypoint.`);
   };
 
-  const handleIssueSubmit = async (cat: IncidentCategory) => {
-    if (!isHolding) toggleHold();
+  const handleIssueSubmit = async (cat: IncidentCategory, notes: string) => {
     try {
-      await reportTaskProblem(job.id, {
+      if (!job.activeTaskId) throw new Error('This job has no active human task.');
+      await reportTaskProblem(job.activeTaskId, {
         reason: cat,
-        note: `Staff reported ${cat} on AMR ${job.robot} during job ${job.id}`,
-      });
-    } catch (err) {
-      console.warn('Backend report problem returned error, simulated locally:', err);
-    }
-    setIsIssueOpen(false);
-    toast.error(`Incident recorded: ${cat}. Supervisor alerted and robot held.`);
+        note: notes.trim() || `Staff reported ${cat} on job ${job.jobNo}`,
+      }, job.activeStepId);
+      setIsIssueOpen(false);
+      toast.success('Incident recorded. Robot state has not been changed.');
+    } catch (error: any) { toast.error(error.message || 'Incident could not be recorded.'); throw error; }
   };
+
+  if (isLoadingJob || jobError || !job.id) return <View style={styles.root}>
+    <SubScreenHeader title="Job Details" onBack={goBack} />
+    <View style={{ padding: 24, gap: 16 }}>
+      <Text variant="headline">{isLoadingJob ? 'Loading Job…' : 'Job Unavailable'}</Text>
+      {jobError && <Text variant="body" color={colors.danger}>{jobError}</Text>}
+      <Button title="Back To Jobs" onPress={() => navigate('jobs')} />
+    </View>
+  </View>;
 
   return (
     <View style={styles.root}>
       {/* Top Navigation Bar */}
-      <View style={[styles.header, { paddingTop: topInset + 8 }]}>
+      <View style={[styles.header, { paddingTop: topInset + 8 }]} onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
         <Pressable
           onPress={goBack}
           style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
@@ -222,47 +227,38 @@ export function JobDetailScreen() {
         </Pressable>
 
         <View style={styles.headerTitleCol}>
-          <View style={styles.headerTitleRow}>
-            <Text variant="headline" style={styles.jobIdText}>
+          <Pressable
+            onPress={() => setShowFullJobNo(value => !value)}
+            accessibilityRole="button"
+            accessibilityLabel={`Job ${job.jobNo || job.id}`}
+            accessibilityHint="Tap to show or collapse the full job number"
+            accessibilityState={{ expanded: showFullJobNo }}
+            style={styles.headerTitleTarget}
+          >
+            <Text variant="headline" style={styles.jobIdText} numberOfLines={showFullJobNo ? undefined : 1} ellipsizeMode="middle">
               {job.jobNo || job.id}
             </Text>
-            <View style={styles.robotPill}>
-              <Text variant="caption" color={colors.primary} style={styles.robotPillText}>
-                {job.robot}
-              </Text>
-            </View>
-          </View>
+          </Pressable>
           <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
             {job.workflowName}
           </Text>
         </View>
 
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
-            style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="View on map"
-          >
-            <Maximize2 size={18} color={colors.primary} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => setShowMenu((prev) => !prev)}
-            style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="More options"
-          >
-            <MoreVertical size={18} color={colors.textSecondary} />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={() => setShowMenu((prev) => !prev)}
+          style={({ pressed }) => [styles.headerBtn, pressed && styles.btnPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="More options"
+        >
+          <MoreVertical size={18} color={colors.textSecondary} />
+        </Pressable>
       </View>
 
       {/* Context Menu Dropdown */}
       {showMenu && (
         <>
           <Pressable style={styles.menuDismiss} onPress={() => setShowMenu(false)} />
-          <View style={[styles.menuDropdown, { top: topInset + 56 }]}>
+          <View style={[styles.menuDropdown, { top: headerHeight + 4 }]}>
             <Pressable
               style={styles.menuItem}
               onPress={() => {
@@ -309,7 +305,7 @@ export function JobDetailScreen() {
       {/* Main Content Body */}
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomConsoleHeight + 16 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: dockReservedSpace(bottomConsoleHeight) }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -339,7 +335,7 @@ export function JobDetailScreen() {
               <MapPin size={16} color={colors.primary} style={{ marginTop: 2 }} />
               <View style={{ flex: 1 }}>
                 <Text variant="headline" style={styles.currentStopText}>
-                  {job.currentStop}
+                  {job.currentStop || 'Current Location Unavailable'}
                 </Text>
                 <Text variant="caption" color={colors.textSecondary} style={{ marginTop: 2 }}>
                   Route: {job.route}
@@ -348,14 +344,22 @@ export function JobDetailScreen() {
             </View>
           </View>
 
+          <View style={styles.robotContextRow}>
+            <View style={styles.robotPill}>
+              <Truck size={14} color={colors.primaryText} />
+              <Text variant="caption" color={colors.primaryText} style={styles.robotPillText} numberOfLines={1}>{job.robot}</Text>
+            </View>
+            <Button title="View Map" variant="ghost" size="sm" icon={Maximize2} onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })} />
+          </View>
+
           {/* Telemetry Strip */}
           <View style={styles.telemetryStrip}>
             <View style={styles.telemetryItem}>
               <Text variant="caption" color={colors.textSecondary} style={styles.telemetryLabel}>
-                Carrier
+                Speed
               </Text>
               <Text variant="caption" color={colors.textPrimary} style={styles.telemetryValueMono}>
-                {job.robot}
+                {job.speed}
               </Text>
             </View>
 
@@ -545,10 +549,7 @@ export function JobDetailScreen() {
           onSelectContainer={(code) => { if (isWaiting && code === primaryTarget?.code) handleOpenVerify(code); }}
         />
 
-        {/* Stepper Itinerary */}
-        {job.steps && job.steps.length > 0 ? (
-          <JobStepper steps={job.steps} />
-        ) : null}
+        <JobTaskPlan tasks={job.tasks} jobStatus={job.status} onSelectTask={setSelectedTaskId} />
       </ScrollView>
 
       {/* Sticky Bottom Action Console */}
@@ -707,14 +708,22 @@ export function JobDetailScreen() {
         </View>
       </View>
 
+      {selectedTask && <JobTaskDetailSheet
+        key={selectedTask.id}
+        task={selectedTask}
+        jobNo={job.jobNo || job.id}
+        jobStatus={job.status}
+        onClose={() => setSelectedTaskId(null)}
+      />}
+
       {/* Verification Modal Sheet */}
       <VerifyModal
         visible={isVerifyOpen}
-        targetContainer={primaryTarget?.code || 'BOX-101'}
-        targetContainerId={primaryTarget?.containerId}
-        jobStepId={job.activeStepId || `${job.id}-step-02`}
+        targetContainer={targetContainer}
+        targetContainerId={job.containers.find(container => container.code === targetContainer)?.containerId}
+        jobStepId={job.activeStepId}
         handoverType={job.activeStepOperation === 'PICKUP_CONFIRM' || primaryTarget?.action === 'PICKUP' ? 'PICKUP' : 'DROPOFF'}
-        operatorId="staff-01"
+        operatorId={session?.id}
         robotCode={job.robot}
         location={job.currentStop || 'Rack A-02'}
         targetShelf={job.target || 'Rack A · Level 2 · Bin 03'}
@@ -765,8 +774,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    flexShrink: 0,
     borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -776,18 +786,21 @@ const styles = StyleSheet.create({
   },
   headerTitleCol: {
     flex: 1,
+    minWidth: 0,
     paddingHorizontal: 8,
     gap: 2,
   },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  headerTitleTarget: { minHeight: 44, justifyContent: 'center' },
   jobIdText: {
     fontWeight: '700',
+    flexShrink: 1,
   },
   robotPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 6,
     backgroundColor: colors.primaryLight,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -795,12 +808,13 @@ const styles = StyleSheet.create({
   },
   robotPillText: {
     fontWeight: '700',
-    fontSize: 11,
+    flexShrink: 1,
   },
-  headerActions: {
+  robotContextRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    gap: 8,
   },
   menuDismiss: {
     ...StyleSheet.absoluteFill,

@@ -86,3 +86,48 @@ export function teleopRobot(id: string, linear: number, angular: number, assist 
     { method: 'POST', body: JSON.stringify({ linear, angular, assist }) },
   )
 }
+
+/** Authoritative SegmentedTrafficCoordinator snapshot (Admin). */
+export interface TrafficRobotView {
+  robotId: string
+  phase: string
+  x?: number | null
+  y?: number | null
+  localizationOk: boolean
+  occupiedResourceIds: string[]
+  authority?: { authorityId: string; edgeIds: number[]; graphHash: string; seq: number; epoch: number } | null
+  waitingReason: string
+  quarantineReason?: string | null
+  jobStepId?: string | null
+}
+
+export interface TrafficResourceView {
+  resourceId: string
+  kind: string
+  capacity: number
+  holders: string[]
+  waiters: string[]
+  queueLength: number
+}
+
+export interface TrafficSnapshot {
+  epoch: number
+  stateVersion: number
+  phase: string
+  robots: TrafficRobotView[]
+  resources: TrafficResourceView[]
+  waits: { robotId: string; resourceId: string; reason: string; blockingOwner?: string | null }[]
+  recentEvents: string[]
+}
+
+export function getTrafficSnapshot() {
+  return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot')
+}
+
+/** Operator clearance after physical verification — audited on backend. */
+export function releaseTrafficAfterClearance(robotId: string, operatorId: string, resourceIds?: string[]) {
+  return apiFetch(`/api/fleet/traffic/robots/${robotId}/release-after-clearance`, {
+    method: 'POST',
+    body: JSON.stringify({ operatorId, resourceIds: resourceIds ?? null }),
+  })
+}

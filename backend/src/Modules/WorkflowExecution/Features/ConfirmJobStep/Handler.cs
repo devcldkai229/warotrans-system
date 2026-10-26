@@ -18,7 +18,11 @@ public sealed class ConfirmJobStepHandler(
         var userId = currentUser.AccountId
             ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
 
-        await engine.ConfirmHumanStepAsync(jobStepId, request.ContainerId, userId, request.Note, cancellationToken);
+        await engine.ConfirmHumanStepAsync(
+            jobStepId,
+            request.ContainerId,
+            HumanConfirmationSource.StaffApp(userId, request.Note),
+            cancellationToken);
 
         var jobId = await db.JobSteps.AsNoTracking()
             .Where(s => s.Id == jobStepId)

@@ -88,6 +88,7 @@ KEEP_OUT
 SPEED
 NO_STOP
 SINGLE_OCCUPANCY
+JUNCTION
 ```
 
 Zone columns:
@@ -108,6 +109,7 @@ Typed common fields stay on columns; `policy` only holds type-specific extras.
 | `SPEED` | Capacity ≥ 1; MaxSpeed required (m/s) |
 | `NO_STOP` | empty/null policy OK; Capacity ≥ 1 |
 | `SINGLE_OCCUPANCY` | Capacity must be 1; MaxSpeed optional |
+| `JUNCTION` | Capacity must be 1; MaxSpeed optional; free movement inside to transition toward the next point |
 
 Do not invent ZoneType values beyond the enum above.
 
@@ -146,22 +148,35 @@ Only **DRAFT** MapVersions accept Endpoint / Edge / Zone create, update, or dele
 PUBLISHED and ARCHIVED geometry is immutable at the API.
 
 ## Traffic coordination
-V1 does not persist:
+Do not persist:
 - TrafficResource
 - TrafficReservation
 
-Use an in-memory `TrafficCoordinator` for a single backend instance.
+Single Host uses in-memory coordinators (ADR 0007 / 0008 / 0009):
 
-It may maintain runtime:
-- Zone occupancy
-- Edge occupancy
-- capacity
-- waiting queues
+| Mode | Dispatcher | Segmented actor |
+|------|------------|-----------------|
+| `Traffic:Mode=Shadow` (default) | V1 whole-route `TrafficCoordinator` issues `NAVIGATE_TO_POSE` | Observes + compares; no motion; one mover/map |
+| `Traffic:Mode=Active` (deferred) | Segmented safe-stop authority only | Sole motion authority |
 
-MOVE execution may consult it before entering constrained geometry.
+Segmented runtime (Shadow implemented):
+- Occupancy vs MotionAuthority
+- Safe-stop → safe-stop atomic grants
+- Verified-exit / operator release only (no heartbeat auto-release)
+- Quarantine on offline / cancel-while-occupied / localization loss
+- Priority + aging queues, wait-for cycle rejection, epoch fencing
+- Station bay kinds from `Traffic:Stations` config (no new EndpointType)
 
-Nav2 owns local planning/obstacle avoidance.
-Backend TrafficCoordinator is high-level fleet coordination.
+Compiled topology lives in `CompiledTrafficGraph` (immutable, hashed, cached
+per PUBLISHED MapVersion) with resource kinds including NarrowBidirectional,
+PhysicalOverlap, ServiceCorridor, StationBay, HoldingBay, and precomputed
+safe-stop / exit indexes.
+
+`JUNCTION` is the primary single-robot free-motion junction zone.
+`SINGLE_OCCUPANCY` / `NO_STOP` may still form junction links (legacy warning).
+
+Nav2 owns local tracking/`FollowPath` inside the granted corridor.
+Backend Traffic Coordinator is the only authority that grants Edge/Zone use.
 
 ## WAIT rule
 Traffic waiting is execution control around MOVE/navigation, not a business WAIT WorkflowStep.

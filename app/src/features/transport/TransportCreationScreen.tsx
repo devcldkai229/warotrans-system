@@ -1,3 +1,4 @@
+import { parseStaffInputs } from './dispatchData';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -52,6 +53,8 @@ import {
   listRobots,
   RobotDto,
   FALLBACK_ROBOTS,
+  getWorkflowRequestInputSchema, getContainerByBarcode, getTransportRequest,
+  type WorkflowRequestInputSchema, type TransportRequestDetailResponse,
 } from '../../shared/api';
 import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
 import { WorkflowTemplateCard } from './WorkflowTemplateCard';
@@ -188,12 +191,12 @@ const WORKFLOW_ROUTE_PRESETS: Record<string, WorkflowRoutePreset> = {
 };
 
 function mapContainerToStagedItem(c: ContainerListItem): StagedContainer {
-  const endpointCode = c.currentEndpointCode || c.currentStorageLocationCode || 'EP-A';
+  const endpointCode = c.currentEndpointCode || c.currentStorageLocationCode || 'Pickup Not Set';
   const originDisplayLabel = c.currentStorageLocationCode
     ? `${c.currentStorageLocationCode}${c.currentLevelNo ? ` · Level ${c.currentLevelNo}` : ''}`
     : c.currentEndpointCode
     ? `${c.currentEndpointCode}`
-    : 'Origin Bay (EP-A)';
+    : 'Select Pickup Endpoint';
 
   return {
     id: c.id,
@@ -201,10 +204,10 @@ function mapContainerToStagedItem(c: ContainerListItem): StagedContainer {
     status: c.status,
     productName: c.productName || 'Warehouse Item',
     sku: c.productSku || 'SKU-GEN',
-    qty: c.qty || 20,
+    qty: 1,
     sourceStorageLocationId: c.currentStorageLocationId || null,
     sourceStorageLocationCode: c.currentStorageLocationCode || null,
-    sourceEndpointId: c.currentEndpointId || '00000000-0000-0000-0004-000000000001',
+    sourceEndpointId: c.currentEndpointId || '',
     sourceEndpointCode: endpointCode,
     sourceLevelNo: c.currentLevelNo ?? null,
     originDisplayLabel,
@@ -216,74 +219,7 @@ function buildWorkflowPool(
   allContainers: ContainerListItem[],
   forceIncludeBarcode?: string
 ): StagedContainer[] {
-  const mappedAll = allContainers.map(mapContainerToStagedItem);
-  let filtered: StagedContainer[] = [];
-  const wf = (workflowId || '').toLowerCase();
-  const isRelocation = wf === 'reallocation' || wf.includes('reloc');
-
-  if (wf === 'inbound') {
-    filtered = mappedAll.filter(
-      (c) =>
-        (!c.sourceStorageLocationCode && c.sourceEndpointCode.startsWith('DOCK-IN')) ||
-        (c.status || '').toUpperCase() === 'CREATED' ||
-        (c.status || '').toUpperCase() === 'STAGED'
-    );
-  } else if (wf === 'outbound') {
-    filtered = mappedAll.filter(
-      (c) =>
-        Boolean(c.sourceStorageLocationCode) &&
-        (c.sourceStorageLocationCode?.startsWith('RACK-A') ||
-          c.sourceStorageLocationCode?.startsWith('RACK-B'))
-    );
-  } else if (isRelocation) {
-    // For INTERNAL_RELOCATION / reallocation:
-    // Containers returned by real backend (C1..C8, CTN-DEMO-000001..000008, BOX-101..403 with status STORED or CREATED)
-    // are always visible and selectable!
-    filtered = mappedAll.filter((c) => {
-      const st = (c.status || '').toUpperCase();
-      return (
-        st === 'STORED' ||
-        st === 'CREATED' ||
-        st === 'STAGED' ||
-        !st ||
-        c.barcode.startsWith('CTN-') ||
-        c.barcode.startsWith('C') ||
-        c.barcode.startsWith('BOX-')
-      );
-    });
-  } else if (wf === 'replenishment') {
-    filtered = mappedAll.filter(
-      (c) =>
-        c.sourceStorageLocationCode?.startsWith('RACK-D') ||
-        (c.sourceStorageLocationCode?.includes('D') ?? false)
-    );
-  } else if (wf === 'point-to-point') {
-    filtered = mappedAll.filter(
-      (c) =>
-        c.sourceEndpointCode.includes('QA') ||
-        c.sourceEndpointCode.includes('ASSEMBLY') ||
-        c.sourceEndpointCode.includes('STATION')
-    );
-  }
-
-  if (filtered.length === 0) {
-    filtered = mappedAll.filter((c) => {
-      const st = (c.status || '').toUpperCase();
-      return (st === 'STORED' || st === 'CREATED') &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
-    });
-  }
-
-  if (forceIncludeBarcode) {
-    const clean = forceIncludeBarcode.trim().toUpperCase();
-    const alreadyIn = filtered.some((c) => c.barcode.toUpperCase() === clean);
-    if (!alreadyIn) {
-      const fromAll = mappedAll.find((c) => c.barcode.toUpperCase() === clean);
-      if (fromAll) {
-        filtered = [fromAll, ...filtered];
-      }
-    }
-  }
+  const filtered = allContainers.filter(container => ['CREATED', 'PACKED', 'STORED'].includes(container.status)).map(mapContainerToStagedItem);
 
   return filtered;
 }
@@ -330,12 +266,7 @@ export function TransportCreationScreen() {
   // Tier 1: Target Zone (for Rack workflows) or Target Endpoint (for Station/Dock workflows)
   const [targetZone, setTargetZone] = useState<WarehouseZoneCode>(currentPreset.defaultTargetZone);
   const [selectedEndpointOption, setSelectedEndpointOption] = useState<EndpointTargetOption>(
-    () =>
-      currentPreset.endpointOptions?.[0] || {
-        endpointId: '00000000-0000-0000-0004-000000000004',
-        endpointCode: 'EP-D',
-        label: 'Endpoint D (Dropoff Bay D)',
-      }
+    { endpointId: '', endpointCode: '', label: 'Select Destination' }
   );
 
   // Staged containers pool for current workflow
@@ -366,17 +297,23 @@ export function TransportCreationScreen() {
 
   // Backend metadata - default to demo warehouse ID
   const [activeWarehouseId, setActiveWarehouseId] = useState<string>(
-    '11111111-1111-1111-1111-111111111111'
+    ''
   );
   const [activeMapVersionId, setActiveMapVersionId] = useState<string>(
-    '00000000-0000-0000-0001-000000000001'
+    ''
   );
   const [endpoints, setEndpoints] = useState<EndpointDto[]>([]);
   const [publishedWorkflows, setPublishedWorkflows] = useState<WorkflowListItem[]>([]);
+  const [contextReady, setContextReady] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
+  const [inputSchema, setInputSchema] = useState<WorkflowRequestInputSchema | null>(null);
+  const [staffInputs, setStaffInputs] = useState<Record<string, string>>({});
+  const [sourceOverride, setSourceOverride] = useState('');
+  const [repeatDetails, setRepeatDetails] = useState<TransportRequestDetailResponse[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
   const [availableRobots, setAvailableRobots] = useState<RobotDto[]>(FALLBACK_ROBOTS);
-  const [selectedRobotId, setSelectedRobotId] = useState(FALLBACK_ROBOTS[0].id);
+  const [selectedRobotId, setSelectedRobotId] = useState('');
   const [isStartingJob, setIsStartingJob] = useState(false);
 
   useEffect(() => {
@@ -409,6 +346,30 @@ export function TransportCreationScreen() {
     estimatedMissions: number;
   } | null>(null);
 
+  const availableWorkflows = useMemo(() => publishedWorkflows.map(workflow => {
+    const preset = WORKFLOWS.find(item => item.code === workflow.code) || WORKFLOWS[0];
+    return { ...preset, id: WORKFLOWS.some(item => item.code === workflow.code) ? preset.id : workflow.id,
+      backendId: workflow.id, code: workflow.code, name: workflow.name };
+  }), [publishedWorkflows]);
+  useEffect(() => {
+    if (!availableWorkflows.length) return;
+    setSelectedWorkflow(current => {
+      const wanted = String(params?.workflow || current.backendId || current.code).toLowerCase();
+      const match = availableWorkflows.find(item => [item.backendId, item.id, item.code, item.name].some(value => value?.toLowerCase() === wanted));
+      if (match) return match;
+      if (params?.workflow) { setContextError('The requested workflow is not published. Select an available workflow.'); return { ...current, backendId: undefined }; }
+      return availableWorkflows[0];
+    });
+  }, [availableWorkflows, params?.workflow]);
+  useEffect(() => {
+    let mounted = true;
+    setInputSchema(null); setStaffInputs({});
+    if (selectedWorkflow.backendId) getWorkflowRequestInputSchema(selectedWorkflow.backendId).then(schema => {
+      if (mounted) setInputSchema(schema);
+    }).catch(error => { if (mounted) setContextError(error.message || 'Workflow inputs could not be loaded.'); });
+    return () => { mounted = false; };
+  }, [selectedWorkflow.backendId]);
+
   // Dynamically resolve target endpoint choices from backend map endpoints
   const availableEndpointOptions: EndpointTargetOption[] = useMemo(() => {
     if (endpoints && endpoints.length > 0) {
@@ -418,26 +379,8 @@ export function TransportCreationScreen() {
         label: ep.name ? `${ep.code} (${ep.name})` : ep.code,
       }));
     }
-    return (
-      currentPreset.endpointOptions || [
-        {
-          endpointId: '00000000-0000-0000-0004-000000000004',
-          endpointCode: 'EP-D',
-          label: 'Endpoint D (Dropoff Bay D)',
-        },
-        {
-          endpointId: '00000000-0000-0000-0004-000000000005',
-          endpointCode: 'EP-E',
-          label: 'Endpoint E (Dropoff Bay E)',
-        },
-        {
-          endpointId: '00000000-0000-0000-0004-000000000006',
-          endpointCode: 'EP-F',
-          label: 'Endpoint F (Dropoff Bay F)',
-        },
-      ]
-    );
-  }, [endpoints, currentPreset.endpointOptions]);
+    return [];
+  }, [endpoints]);
 
   useEffect(() => {
     if (availableEndpointOptions.length > 0) {
@@ -454,61 +397,52 @@ export function TransportCreationScreen() {
   }, [availableEndpointOptions]);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
+    setContextReady(false); setContextError(null);
     async function loadBackendContext() {
       try {
-        const [wfRes, whRes] = await Promise.allSettled([
-          listPublishedWorkflows(),
-          listWarehouses({ isActive: true }),
+        const [workflows, warehouses] = await Promise.all([listPublishedWorkflows(), listWarehouses({ isActive: true })]);
+        const warehouse = warehouses.items[0];
+        if (!warehouse) throw new Error('No active warehouse is configured.');
+        const map = await getActiveMapVersion(warehouse.id);
+        if (!map) throw new Error('This warehouse has no published active map.');
+        const [containers, locations, detail] = await Promise.all([
+          listContainers({ warehouseId: warehouse.id, eligibleOnly: true, take: 100 }),
+          listStorageLocations({ warehouseId: warehouse.id, activeOnly: true }), getMapVersionDetail(map.id),
         ]);
-
-        if (!isMounted) return;
-        if (wfRes.status === 'fulfilled' && wfRes.value?.items) {
-          setPublishedWorkflows(wfRes.value.items);
-        }
-
-        let whId = '11111111-1111-1111-1111-111111111111';
-        if (whRes.status === 'fulfilled' && whRes.value?.items?.length) {
-          const matched =
-            whRes.value.items.find((w) => w.id === '11111111-1111-1111-1111-111111111111') ||
-            whRes.value.items[0];
-          whId = matched.id;
-          setActiveWarehouseId(whId);
-        }
-
-        const [activeMap, contRes, locRes] = await Promise.allSettled([
-          getActiveMapVersion(whId),
-          listContainers({ warehouseId: whId, take: 100 }),
-          listStorageLocations({ warehouseId: whId, activeOnly: true }),
-        ]);
-
-        if (!isMounted) return;
-        if (locRes.status === 'fulfilled' && locRes.value?.items?.length) {
-          setStorageLocations(locRes.value.items);
-        }
-        if (contRes.status === 'fulfilled' && contRes.value?.items?.length) {
-          setAllContainers(contRes.value.items);
-          setStagedContainers(
-            buildWorkflowPool(selectedWorkflow.id, contRes.value.items, params?.container)
-          );
-        }
-        if (activeMap.status === 'fulfilled' && activeMap.value?.id) {
-          setActiveMapVersionId(activeMap.value.id);
-          const mapDetail = await getMapVersionDetail(activeMap.value.id).catch(() => null);
-          if (isMounted && mapDetail?.endpoints) {
-            setEndpoints(mapDetail.endpoints);
+        if (!mounted) return;
+        setPublishedWorkflows(workflows.items); setActiveWarehouseId(warehouse.id); setActiveMapVersionId(map.id);
+        setStorageLocations(locations.items); setAllContainers(containers.items);
+        const pool = buildWorkflowPool(selectedWorkflow.id, containers.items, params?.container);
+        setStagedContainers(pool); setEndpoints(detail.endpoints.filter(endpoint => endpoint.isEnabled));
+        if (Array.isArray(params?.containers)) setSelectedBarcodes(params.containers);
+        else if (params?.container) setSelectedBarcodes([params.container]);
+        else setSelectedBarcodes(previous => previous.filter(code => pool.some(container => container.barcode === code)));
+        if (params?.repeatRequestId) {
+          const previous = await getTransportRequest(params.repeatRequestId);
+          if (!mounted) return;
+          setRepeatDetails(previous.details);
+          const repeatOverrides: Record<string, EndpointTargetOption> = {};
+          for (const line of previous.details) {
+            const container = containers.items.find(item => item.id === line.containerId);
+            const endpoint = detail.endpoints.find(item => item.id === line.destinationEndpointId && item.isEnabled);
+            if (!container || !endpoint) throw new Error('A container or destination in the previous request is no longer available.');
+            repeatOverrides[container.barcode] = { endpointId: endpoint.id, endpointCode: endpoint.code, label: endpoint.name || endpoint.code };
           }
+          setPerContainerEndpointOverrides(repeatOverrides);
+          setSelectedBarcodes(previous.details.map(line => containers.items.find(container => container.id === line.containerId)?.barcode).filter((code): code is string => Boolean(code)));
+          setSelectedEndpointOption(current => {
+            const endpoint = detail.endpoints.find(item => item.id === previous.details[0]?.destinationEndpointId);
+            return endpoint ? { endpointId: endpoint.id, endpointCode: endpoint.code, label: endpoint.name } : current;
+          });
+          setStaffInputs(Object.fromEntries(Object.entries(previous.workflowInputs || {}).map(([key, value]) => [key, String(value)])));
         }
-      } catch (err) {
-        console.warn('Backend context loading encountered error, using local store:', err);
-      }
+        setContextReady(true);
+      } catch (error: any) { if (mounted) setContextError(error.message || 'Could not load dispatch context.'); }
     }
-
-    loadBackendContext();
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedWorkflow.id, params?.container]);
+    void loadBackendContext();
+    return () => { mounted = false; };
+  }, [selectedWorkflow.id, params?.container, params?.repeatRequestId]);
 
   // Available slot count in the currently selected Target Zone
   const availableSlotsInTargetZone = useMemo(() => {
@@ -561,22 +495,6 @@ export function TransportCreationScreen() {
       if (nextFree) {
         usedKeys.add(`${nextFree.storageLocationId}:${nextFree.levelNo}`);
         result[barcode] = { ...nextFree, isCustom: false };
-      } else {
-        // Fallback if all slots in zone are filled
-        const fallbackRack =
-          storageLocations.find((l) => l.zone === targetZone) || storageLocations[0];
-        result[barcode] = {
-          storageLocationId: fallbackRack?.id || 'a0000000-0000-0000-0005-000000000001',
-          storageLocationCode: fallbackRack?.code || 'RACK-A-01',
-          storageLocationName: fallbackRack?.name || 'Rack A-01',
-          endpointId: fallbackRack?.endpointId || '00000000-0000-0000-0004-000000000011',
-          endpointCode: fallbackRack?.endpointCode || 'RACK-A-01',
-          levelNo: 1,
-          zone: targetZone,
-          zoneLabel: fallbackRack?.zoneLabel || 'Storage Zone A',
-          displayLabel: `${fallbackRack?.code || 'RACK-A-01'} · Level 1`,
-          isCustom: false,
-        };
       }
     });
 
@@ -674,45 +592,21 @@ export function TransportCreationScreen() {
   };
 
   // Add custom or scanned barcode
-  const handleAddCustomBarcode = () => {
-    const clean = customBarcode.trim().toUpperCase();
-    if (!clean) return;
-
-    triggerHaptic('tap');
-    const existing = stagedContainers.find((c) => c.barcode.toUpperCase() === clean);
-    if (existing) {
-      if (!selectedBarcodes.includes(existing.barcode)) {
-        if (selectedBarcodes.length >= 10) {
-          toast.warning('Maximum 10 containers allowed per dispatch batch.');
-          return;
-        }
-        setSelectedBarcodes([...selectedBarcodes, existing.barcode]);
+  const handleAddCustomBarcode = async () => {
+    const code = customBarcode.trim();
+    if (!code) return;
+    try {
+      const container = await getContainerByBarcode(code);
+      if (!['CREATED', 'PACKED', 'STORED'].includes(container.status)) throw new Error('This container is not eligible for transport.');
+      if (selectedBarcodes.length >= 10) throw new Error('Maximum 10 containers per request.');
+      if (!allContainers.some(item => item.id === container.id)) {
+        setAllContainers(previous => [...previous, container]);
+        setStagedContainers(previous => [...previous, mapContainerToStagedItem(container)]);
       }
-    } else {
-      if (selectedBarcodes.length >= 10) {
-        toast.warning('Maximum 10 containers allowed per dispatch batch.');
-        return;
-      }
-      const newContainer: StagedContainer = {
-        id: `custom-${Date.now()}`,
-        barcode: clean,
-        productName: 'Scanned Tote Payload',
-        sku: 'SCAN-INDUCT',
-        qty: 12,
-        sourceStorageLocationId: null,
-        sourceStorageLocationCode: null,
-        sourceEndpointId: '00000000-0000-0000-0004-000000000001',
-        sourceEndpointCode: 'DOCK-IN-01',
-        sourceLevelNo: null,
-        originDisplayLabel: 'Inbound Dock 01 · Scanned',
-      };
-      setStagedContainers([newContainer, ...stagedContainers]);
-      setSelectedBarcodes([...selectedBarcodes, clean]);
-    }
-
-    setCustomBarcode('');
-    setIsAddingCustom(false);
-    toast.success(`Container ${clean} selected and auto-slotted.`);
+      setSelectedBarcodes(previous => [...new Set([...previous, container.barcode])]);
+      setCustomBarcode(''); setIsAddingCustom(false);
+      toast.success(`Container ${container.barcode} verified.`);
+    } catch (error: any) { toast.error(error.message || 'Container lookup failed.'); }
   };
 
   const selectedContainers = useMemo(() => {
@@ -740,184 +634,45 @@ export function TransportCreationScreen() {
 
     setIsSubmitting(true);
     try {
-      const matchedWf = publishedWorkflows.find(
-        (w) =>
-          w.code.toUpperCase() === selectedWorkflow.code.toUpperCase() ||
-          w.name.toLowerCase() === selectedWorkflow.name.toLowerCase()
-      );
-      // WAIT steps in the inbound/outbound templates are not supported by the runtime.
-      // Execute the supported relocation graph, retaining the operator's intent in note.
-      const relocationWorkflow = publishedWorkflows.find((w) => w.code.toUpperCase() === 'INTERNAL_RELOCATION');
-      const workflowId = relocationWorkflow?.id || matchedWf?.id || 'e86995fe-461a-4329-8724-a7beab6b57ab';
-      const isInternalRelocation = Boolean(relocationWorkflow) || !matchedWf ||
-        matchedWf.code.toUpperCase() === 'INTERNAL_RELOCATION';
-      const whId = activeWarehouseId || '11111111-1111-1111-1111-111111111111';
-      const mvId = activeMapVersionId || '00000000-0000-0000-0001-000000000001';
-
+      if (!contextReady || !activeWarehouseId || !activeMapVersionId) throw new Error('Wait for a valid warehouse and active map.');
+      if (!selectedWorkflow.backendId || !inputSchema || inputSchema.workflowId !== selectedWorkflow.backendId) throw new Error('Select a published workflow and wait for its inputs to load.');
+      const workflowInputs = parseStaffInputs(inputSchema.workflowInputs, staffInputs);
       const containerAssignmentsSummary: Array<{ barcode: string; targetLabel: string }> = [];
-      const isSlotMode = destinationType === 'SLOT';
-
-      const details = selectedContainers.map((s, idx) => {
-        const rawContainer = allContainers.find((c) => c.id === s.id || c.barcode === s.barcode);
-        // Resolve valid source endpoint from backend endpoints
-        const sourceEndpoint = endpoints.find((e) => e.id === rawContainer?.currentEndpointId) || endpoints.find(
-          (e) =>
-            e.id === s.sourceEndpointId ||
-            e.code.toUpperCase() === s.sourceEndpointCode.toUpperCase()
-        ) || endpoints[0];
-
-        const sourceEndpointId =
-          rawContainer?.currentEndpointId || sourceEndpoint?.id || s.sourceEndpointId || '00000000-0000-0000-0004-000000000001';
-
-        const resolveDestination = (requestedId: string) => {
-          if (requestedId && requestedId !== sourceEndpointId) return requestedId;
-          const alternate = endpoints.find((e) => e.id !== sourceEndpointId &&
-            ['EP-D', 'RACK-B-04'].includes(e.code.toUpperCase())) ||
-            endpoints.find((e) => e.id !== sourceEndpointId);
-          if (!alternate) throw new Error(`No distinct destination endpoint available for ${s.barcode}.`);
-          return alternate.id;
+      const details = selectedContainers.map((selected, index) => {
+        const container = allContainers.find(item => item.id === selected.id);
+        if (!container) throw new Error(`Container ${selected.barcode} is no longer available.`);
+        const previous = repeatDetails.find(line => line.containerId === container.id);
+        const sourceLocation = storageLocations.find(location => location.id === container.currentStorageLocationId);
+        const sourceId = container.currentEndpointId || sourceLocation?.endpointId || sourceOverride;
+        const source = endpoints.find(endpoint => endpoint.id === sourceId);
+        if (!source) throw new Error(`Select the pickup endpoint for ${container.barcode}.`);
+        const slot = destinationType === 'SLOT' ? resolvedBatchAssignments[selected.barcode] : undefined;
+        if (destinationType === 'SLOT' && !slot) throw new Error('Storage capacity is not available. Select an endpoint destination.');
+        const requestedDestinationId = slot?.endpointId || perContainerEndpointOverrides[selected.barcode]?.endpointId || selectedEndpointOption.endpointId;
+        const destination = endpoints.find(endpoint => endpoint.id === requestedDestinationId);
+        if (!destination) throw new Error('Select an enabled destination on the active map.');
+        if (destination.id === source.id) throw new Error(`Pickup and dropoff must differ for ${container.barcode}.`);
+        const destinationLocation = slot ? storageLocations.find(location => location.id === slot.storageLocationId && location.endpointId === destination.id) : undefined;
+        const repeatLocation = previous && previous.destinationEndpointId === destination.id
+          ? storageLocations.find(location => location.id === previous.destinationStorageLocationId && location.endpointId === destination.id) : undefined;
+        containerAssignmentsSummary.push({ barcode: container.barcode, targetLabel: destination.code });
+        return {
+          sequenceNo: index + 1, containerId: container.id,
+          sourceStorageLocationId: sourceLocation?.id || null, sourceEndpointId: source.id,
+          sourceLevelNo: sourceLocation ? container.currentLevelNo : null,
+          destinationEndpointId: destination.id,
+          destinationStorageLocationId: destinationLocation?.id || repeatLocation?.id || null,
+          destinationLevelNo: destinationLocation ? slot?.levelNo ?? null : repeatLocation ? previous?.destinationLevelNo ?? null : null,
         };
-
-        // Check if sourceStorageLocation exists in real backend storageLocations and matches endpoint
-        const validSourceLoc = s.sourceStorageLocationId
-          ? storageLocations.find(
-              (l) => l.id === s.sourceStorageLocationId && l.warehouseId === whId
-            )
-          : null;
-        const isSourceLocValidAndMatched =
-          !isInternalRelocation && validSourceLoc && validSourceLoc.endpointId === sourceEndpointId;
-
-        const finalSourceStorageLocationId = isSourceLocValidAndMatched
-          ? validSourceLoc.id
-          : null;
-        const finalSourceLevelNo = isSourceLocValidAndMatched ? s.sourceLevelNo : null;
-
-        if (isSlotMode) {
-          const slot = resolvedBatchAssignments[s.barcode];
-          // Check if slot's storage location exists in real backend storageLocations
-          const validDestLoc = slot?.storageLocationId
-            ? storageLocations.find(
-                (l) => l.id === slot.storageLocationId && l.warehouseId === whId
-              )
-            : null;
-
-          if (validDestLoc) {
-            // Storage location exists in DB! Its endpointId MUST equal destinationEndpointId
-            const destinationEndpointId = resolveDestination(validDestLoc.endpointId);
-            const isDestLocValidAndMatched = !isInternalRelocation && validDestLoc.endpointId === destinationEndpointId;
-            const targetLabel = destinationEndpointId === validDestLoc.endpointId
-              ? `${validDestLoc.code} · Level ${slot?.levelNo ?? 1}`
-              : endpoints.find((e) => e.id === destinationEndpointId)!.code;
-            containerAssignmentsSummary.push({ barcode: s.barcode, targetLabel });
-
-            return {
-              sequenceNo: idx + 1,
-              containerId: s.id,
-              sourceStorageLocationId: finalSourceStorageLocationId,
-              sourceEndpointId,
-              sourceLevelNo: finalSourceLevelNo,
-              destinationStorageLocationId: isDestLocValidAndMatched ? validDestLoc.id : null,
-              destinationEndpointId,
-              destinationLevelNo: isDestLocValidAndMatched ? slot?.levelNo ?? 1 : null,
-              containerBarcode: s.barcode,
-              productName: s.productName,
-              productSku: s.sku,
-              qty: s.qty,
-              sourceEndpointCode: sourceEndpoint?.code || s.originDisplayLabel,
-              destinationEndpointCode: targetLabel,
-              destinationStorageLocationCode: isDestLocValidAndMatched ? validDestLoc.code : null,
-            };
-          } else {
-            // Storage location is NOT in backend DB; fallback to endpoint movement
-            const foundDst =
-              endpoints.find(
-                (e) =>
-                  e.code.toUpperCase() === (slot?.endpointCode || '').toUpperCase() ||
-                  e.code.toUpperCase().includes('D') ||
-                  e.name.toUpperCase().includes('D')
-              ) ||
-              endpoints[1] ||
-              endpoints[0];
-
-            const destinationEndpointId =
-              resolveDestination(foundDst?.id || slot?.endpointId || '00000000-0000-0000-0004-000000000011');
-            const targetLabel = endpoints.find((e) => e.id === destinationEndpointId)?.code || slot?.displayLabel || 'EP-D';
-            containerAssignmentsSummary.push({ barcode: s.barcode, targetLabel });
-
-            return {
-              sequenceNo: idx + 1,
-              containerId: s.id,
-              sourceStorageLocationId: null,
-              sourceEndpointId,
-              sourceLevelNo: null,
-              destinationStorageLocationId: null,
-              destinationEndpointId,
-              destinationLevelNo: null,
-              containerBarcode: s.barcode,
-              productName: s.productName,
-              productSku: s.sku,
-              qty: s.qty,
-              sourceEndpointCode: sourceEndpoint?.code || s.originDisplayLabel,
-              destinationEndpointCode: targetLabel,
-              destinationStorageLocationCode: null,
-            };
-          }
-        } else {
-          // Endpoint-only target mode (e.g. EP-D, EP-E, EP-F)
-          const epOption = perContainerEndpointOverrides[s.barcode] || selectedEndpointOption;
-          const foundDst =
-            endpoints.find(
-              (e) =>
-                e.id === epOption.endpointId ||
-                e.code.toUpperCase() === epOption.endpointCode.toUpperCase()
-            ) ||
-            endpoints.find((e) => e.code.includes('D')) ||
-            endpoints[0];
-
-          const destinationEndpointId = resolveDestination(foundDst?.id || epOption.endpointId);
-          const targetLabel = endpoints.find((e) => e.id === destinationEndpointId)?.code || epOption.endpointCode;
-          containerAssignmentsSummary.push({ barcode: s.barcode, targetLabel });
-
-          return {
-            sequenceNo: idx + 1,
-            containerId: s.id,
-            sourceStorageLocationId: null,
-            sourceEndpointId,
-            sourceLevelNo: null,
-            destinationStorageLocationId: null,
-            destinationEndpointId,
-            destinationLevelNo: null,
-            containerBarcode: s.barcode,
-            productName: s.productName,
-            productSku: s.sku,
-            qty: s.qty,
-            sourceEndpointCode: sourceEndpoint?.code || s.originDisplayLabel,
-            destinationEndpointCode: targetLabel,
-            destinationStorageLocationCode: null,
-          };
-        }
       });
-
-      const createPayload = {
-        warehouseId: whId,
-        mapVersionId: mvId,
-        workflowId,
-        workflowCode: selectedWorkflow.code,
-        workflowName: selectedWorkflow.name,
-        workflowInputs: {
-          operator: session?.username || 'Staff Operator',
-          priority: 'NORMAL',
-        },
-        note: `${selectedWorkflow.name}: ${selectedContainers.length} tote(s) (${containerAssignmentsSummary
-          .map((a) => `${a.barcode} ➔ ${a.targetLabel}`)
-          .join(', ')})`,
-        details,
-      };
+      const createPayload = { warehouseId: activeWarehouseId, mapVersionId: activeMapVersionId,
+        workflowId: selectedWorkflow.backendId, workflowInputs, details,
+        note: `${selectedWorkflow.name}: ${containerAssignmentsSummary.map(item => `${item.barcode} ➔ ${item.targetLabel}`).join(', ')}` };
 
       const created = await createTransportRequest(createPayload);
 
       // Refresh local storage locations snapshot after reservation
-      setStorageLocations([...getStorageLocationsSnapshot()]);
+
 
       if (autoQueue) {
         // One-tap Submit & Auto-Queue execution
@@ -930,8 +685,8 @@ export function TransportCreationScreen() {
           jobs: queued.jobs || [],
           carrier:
             (queued.jobs?.length || 1) > 1
-              ? 'AMR-01 & AMR-02 (Dual-Carrier Split)'
-              : `${queued.jobs?.[0]?.assignedRobotCode || 'AMR-01'} (Online · 2-Bay Deck)`,
+              ? 'Awaiting Robot Assignment'
+              : queued.jobs?.[0]?.assignedRobotCode || 'Awaiting Robot Assignment',
           containerCount: selectedContainers.length,
           containerAssignments: containerAssignmentsSummary,
           estimatedMissions: queued.jobs?.length || estimatedMissions,
@@ -974,8 +729,8 @@ export function TransportCreationScreen() {
               jobs: queued.jobs || [],
               carrier:
                 (queued.jobs?.length || 1) > 1
-                  ? 'AMR-01 & AMR-02 (Dual-Carrier Split)'
-                  : `${queued.jobs?.[0]?.assignedRobotCode || 'AMR-01'} (Online · 2-Bay Deck)`,
+                  ? 'Awaiting Robot Assignment'
+                  : queued.jobs?.[0]?.assignedRobotCode || 'Awaiting Robot Assignment',
               estimatedMissions: queued.jobs?.length || prev.estimatedMissions,
             }
           : null
@@ -1018,6 +773,26 @@ export function TransportCreationScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {contextError && <Text variant="body" color={colors.danger}>{contextError}</Text>}
+        {!contextReady && !contextError && <Text variant="body">Loading Dispatch Context…</Text>}
+        {step === 2 && <View style={styles.routeContextCard}>
+          {inputSchema?.workflowInputs.map(field => <Input key={field.key}
+            label={`${field.label || field.key}${field.required ? ' *' : ''}`}
+            value={staffInputs[field.key] || ''} placeholder={field.dataType === 'BOOLEAN' ? 'true / false' : field.dataType}
+            hint={field.description || undefined}
+            onChangeText={value => setStaffInputs(previous => ({ ...previous, [field.key]: value }))} />)}
+          {selectedContainers.some(selected => {
+            const container = allContainers.find(item => item.id === selected.id);
+            return container && !container.currentEndpointId && !storageLocations.some(location => location.id === container.currentStorageLocationId);
+          }) && <View><Text variant="label">Pickup Endpoint For Unlocated Containers</Text>
+            {endpoints.map(endpoint => <Pressable key={endpoint.id} onPress={() => setSourceOverride(endpoint.id)}
+              accessibilityRole="button" accessibilityLabel={`Pickup at ${endpoint.code}`}>
+              <Text variant="body" color={sourceOverride === endpoint.id ? colors.primary : colors.textSecondary}>
+                {sourceOverride === endpoint.id ? '● ' : '○ '}{endpoint.code} · {endpoint.name}
+              </Text>
+            </Pressable>)}
+          </View>}
+        </View>}
         {/* Step 1: Workflow Template Selection Grid */}
         {step === 1 && (
           <View style={{ gap: 14 }}>
@@ -1028,7 +803,7 @@ export function TransportCreationScreen() {
             </View>
 
             <View style={styles.workflowGrid}>
-              {WORKFLOWS.map((wf) => (
+              {availableWorkflows.map((wf) => (
                 <View key={wf.id} style={styles.workflowGridItem}>
                   <WorkflowTemplateCard workflow={wf} onSelect={handleSelectWorkflow} />
                 </View>
@@ -1325,7 +1100,7 @@ export function TransportCreationScreen() {
                               : `${container.productName} (${container.sku})`}{' '}
                             ·{' '}
                             <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
-                              {container.qty} pcs
+                              {container.qty} containers
                             </Text>
                           </Text>
                         </View>
@@ -1497,7 +1272,7 @@ export function TransportCreationScreen() {
                       ? 'Tap checkboxes above to select containers and auto-assign slots.'
                       : `Fleet Split: ${estimatedMissions} AMR ${
                           estimatedMissions === 1 ? 'Mission' : 'Missions'
-                        } (Max 2 Totes/AMR across AMR-01 & AMR-02)`}
+                        } (Estimate · Confirmed After Queue)`}
                   </Text>
                 </View>
                 {selectedContainers.length > 2 && (
@@ -1507,7 +1282,7 @@ export function TransportCreationScreen() {
                       color={colors.textPrimary}
                       style={{ fontWeight: '700', fontSize: 11 }}
                     >
-                      Dual-AMR Split
+                      Multiple Missions
                     </Text>
                   </View>
                 )}
@@ -1522,7 +1297,7 @@ export function TransportCreationScreen() {
                           selectedContainers.length === 1 ? 'Tote' : 'Totes'
                         })`
                   }
-                  disabled={selectedContainers.length === 0 || isSubmitting}
+                  disabled={selectedContainers.length === 0 || isSubmitting || !contextReady || !inputSchema || !selectedWorkflow.backendId}
                   loading={isSubmitting}
                   rightIcon={<ArrowRight size={18} color="#ffffff" />}
                   variant="primary"
@@ -1532,7 +1307,7 @@ export function TransportCreationScreen() {
                 />
                 <Button
                   label="Submit & Auto-Queue (One-Tap Dispatch)"
-                  disabled={selectedContainers.length === 0 || isSubmitting}
+                  disabled={selectedContainers.length === 0 || isSubmitting || !contextReady || !inputSchema || !selectedWorkflow.backendId}
                   rightIcon={<Rocket size={16} color={colors.textPrimary} />}
                   variant="outline"
                   size="md"
@@ -1575,7 +1350,7 @@ export function TransportCreationScreen() {
             {dispatchedOrder?.status === 'SUBMITTED' && (
               <View style={styles.queueCtaSection}>
                 <Button
-                  label="Queue Request for Execution (POST .../queue)"
+                  label="Queue Request for Execution"
                   icon={<Rocket size={18} color="#ffffff" />}
                   onPress={handleQueueSubmittedRequest}
                   loading={isQueueing}
@@ -1592,7 +1367,7 @@ export function TransportCreationScreen() {
                   Request Code:
                 </Text>
                 <Text variant="caption" color={colors.textPrimary} style={styles.receiptVal}>
-                  {dispatchedOrder?.requestCode || 'REQ-20261016-000001'}
+                  {dispatchedOrder?.requestCode || '—'}
                 </Text>
               </View>
 
@@ -1636,7 +1411,7 @@ export function TransportCreationScreen() {
                   Assigned Carrier:
                 </Text>
                 <Text variant="caption" color={colors.success} style={styles.receiptSuccess}>
-                  {dispatchedOrder?.carrier || 'AMR-01 (Online)'}
+                  {dispatchedOrder?.carrier || 'Awaiting Robot Assignment'}
                 </Text>
               </View>
 
@@ -1660,7 +1435,7 @@ export function TransportCreationScreen() {
                 ))}
               </View>
 
-              {dispatchedOrder?.status === 'QUEUED' && (
+              {dispatchedOrder?.status === 'QUEUED' && dispatchedOrder.jobs.length > 0 && (
                 <View style={[styles.receiptRow, styles.receiptBorderTop]}>
                   <Text variant="caption" color={colors.textSecondary}>
                     Provisioned Jobs:
@@ -1767,7 +1542,7 @@ export function TransportCreationScreen() {
                   icon={<MapPin size={16} color={colors.primary} />}
                   onPress={() =>
                     navigate('job_detail', {
-                      jobId: dispatchedOrder?.jobs?.[0]?.jobId || 'JOB-2026-0812',
+                      jobId: dispatchedOrder.jobs[0].jobId,
                     })
                   }
                   variant="outline"

@@ -281,7 +281,12 @@ CHARGE_CONNECT_CONFIRM
 CHARGE_DISCONNECT_CONFIRM
 ```
 
-Common outputs: `confirmed`, `confirmedBy`, `confirmedAt`, `note`.
+Common outputs: `confirmed`, `confirmedBy`, `confirmationSource`, `confirmedByRobotId`, `confirmedAt`, `note`.
+
+- `confirmationSource` is `STAFF_APP` or `ROBOT_BUTTON`.
+- For `ROBOT_BUTTON`, `confirmedBy` is null and `confirmedByRobotId` is the assigned robot.
+- For `STAFF_APP`, `confirmedBy` is the Staff account and `confirmedByRobotId` is null.
+- PICKUP_CONFIRM / DROPOFF_CONFIRM may be completed by either channel; both call the same runtime confirmation path.
 
 ## WAIT
 Modes:

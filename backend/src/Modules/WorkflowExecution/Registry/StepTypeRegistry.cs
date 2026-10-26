@@ -175,14 +175,16 @@ public static class StepTypeRegistry
         var commonOutputs = new List<OutputDefinition>
         {
             Out("confirmed", WorkflowDataType.BOOLEAN, "Whether the action was confirmed."),
-            Out("confirmedBy", WorkflowDataType.UUID, "User who confirmed."),
+            Out("confirmedBy", WorkflowDataType.UUID, "Staff account who confirmed (null for ROBOT_BUTTON)."),
+            Out("confirmationSource", WorkflowDataType.STRING, "STAFF_APP or ROBOT_BUTTON."),
+            Out("confirmedByRobotId", WorkflowDataType.UUID, "Robot that pressed the button (null for STAFF_APP)."),
             Out("confirmedAt", WorkflowDataType.DATETIME, "Confirmation timestamp."),
             Out("note", WorkflowDataType.STRING, "Optional note.")
         };
 
         return new(
             StepType.HUMAN_INTERACTION,
-            "Block until Staff/Admin completes a physical/business action.",
+            "Block until Staff/Admin or the robot physical confirm button completes a physical/business action.",
             "actionCode",
             [
                 Human(
