@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { ArrowRight, Boxes, Truck } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { colors } from '../../shared/theme/colors';
@@ -103,74 +103,73 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
   return (
     <Card
       padding="md"
-      onPress={onPress}
-      /**
-       * Announced instead of the generic "Open job …": the card is a single
-       * accessibility element, so this label is the only thing a screen-reader
-       * user hears, and it should name the action the visible button offers —
-       * "Inspect Issue" on a failed job, not "Open".
-       */
-      accessibilityLabel={`${action.title} · ${job.id}`}
       gap={12}
     >
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text variant="bodyMedium" style={styles.jobId} numberOfLines={1}>
-            {job.jobNo || job.id}
-          </Text>
-          <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-            {workflowTag(job.workflowName)}
-          </Text>
-        </View>
-        <StatusPill
-          status={effectiveStatus}
-          label={status.label}
-          tone={status.tone}
-          size="sm"
-          dot
-        />
-      </View>
-
-      <View style={styles.inset}>
-        <View style={styles.insetRow}>
-          <Truck size={15} color={colors.textMuted} style={styles.insetIcon} />
-          <Text variant="caption" color={colors.textSecondary}>
-            Route
-          </Text>
-          <Text variant="body" numberOfLines={1} style={[styles.insetValue, styles.routeValue]}>
-            {job.route}
-          </Text>
-        </View>
-
-        <View style={styles.insetRow}>
-          <Boxes size={15} color={colors.textMuted} style={styles.insetIcon} />
-          <Text variant="caption" color={colors.textSecondary}>
-            Details
-          </Text>
-          <Text variant="body" numberOfLines={1} style={styles.insetValue}>
-            <Text style={styles.boldMono}>{containerCode}</Text>
-            {job.robot ? (
-              <>
-                <Text style={styles.dotSeparator}> · </Text>
-                <Text style={styles.boldRobot}>{job.robot}</Text>
-              </>
-            ) : null}
-          </Text>
-        </View>
-      </View>
-
-      {!isUnstarted && (
-        <View style={styles.progressBlock}>
-          <ProgressMeter
-            value={job.progressPercent ?? 0}
-            tone={METER_BY_STATUS[job.status]}
-            accessibilityLabel={`${job.id} progress ${job.progressPercent ?? 0} percent`}
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${action.title} · ${job.id}`}
+        style={styles.cardDetails}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text variant="bodyMedium" style={styles.jobId} numberOfLines={1}>
+              {job.jobNo || job.id}
+            </Text>
+            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              {workflowTag(job.workflowName)}
+            </Text>
+          </View>
+          <StatusPill
+            status={effectiveStatus}
+            label={status.label}
+            tone={status.tone}
+            size="sm"
+            dot
           />
-          <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-            {job.currentStop}
-          </Text>
         </View>
-      )}
+
+        <View style={styles.inset}>
+          <View style={styles.insetRow}>
+            <Truck size={15} color={colors.textMuted} style={styles.insetIcon} />
+            <Text variant="caption" color={colors.textSecondary}>
+              Route
+            </Text>
+            <Text variant="body" numberOfLines={1} style={[styles.insetValue, styles.routeValue]}>
+              {job.route}
+            </Text>
+          </View>
+
+          <View style={styles.insetRow}>
+            <Boxes size={15} color={colors.textMuted} style={styles.insetIcon} />
+            <Text variant="caption" color={colors.textSecondary}>
+              Details
+            </Text>
+            <Text variant="body" numberOfLines={1} style={styles.insetValue}>
+              <Text style={styles.boldMono}>{containerCode}</Text>
+              {job.robot ? (
+                <>
+                  <Text style={styles.dotSeparator}> · </Text>
+                  <Text style={styles.boldRobot}>{job.robot}</Text>
+                </>
+              ) : null}
+            </Text>
+          </View>
+        </View>
+
+        {!isUnstarted && (
+          <View style={styles.progressBlock}>
+            <ProgressMeter
+              value={job.progressPercent ?? 0}
+              tone={METER_BY_STATUS[job.status]}
+              accessibilityLabel={`${job.id} progress ${job.progressPercent ?? 0} percent`}
+            />
+            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              {job.currentStop}
+            </Text>
+          </View>
+        )}
+      </Pressable>
 
       {onAccept && (isUnstarted || (!job.isMine && (job.status === 'ASSIGNED' || job.status === 'PAUSED'))) ? (
         <Button
@@ -200,6 +199,7 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
 }
 
 const styles = StyleSheet.create({
+  cardDetails: { gap: 12, minHeight: 44 },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',

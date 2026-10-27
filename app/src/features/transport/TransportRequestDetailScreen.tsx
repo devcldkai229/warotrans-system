@@ -19,11 +19,12 @@ export function TransportRequestDetailScreen() {
   const queryClient = useQueryClient();
   const requestKey = ['transport-request', requestId];
   const jobsKey = ['transport-request-jobs', requestId];
-  const request = useQuery({ queryKey: requestKey, queryFn: () => getTransportRequest(requestId), enabled: !!requestId });
+  const request = useQuery({ queryKey: requestKey, queryFn: () => getTransportRequest(requestId), enabled: !!requestId, refetchInterval: 5_000 });
   const jobs = useQuery({
     queryKey: jobsKey,
     queryFn: () => listJobSummaries({ transportRequestId: requestId, take: 200 }),
     enabled: !!request.data,
+    refetchInterval: 5_000,
   });
   const workflow = useQuery({
     queryKey: ['workflow', request.data?.workflowId],

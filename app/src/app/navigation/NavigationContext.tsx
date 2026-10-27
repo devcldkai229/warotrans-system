@@ -39,7 +39,7 @@ function parseUrl(url: string): Entry {
   };
   const screen = aliases[raw] || (screens.has(raw as AppScreen) ? raw as AppScreen : 'home');
   const params: Record<string, any> = {};
-  for (const key of ['modal','view','workflow','container','robotId','requestId','target','route','source','destination','qty','repeatRequestId']) {
+  for (const key of ['modal','view','workflow','container','robotId','requestId','warehouseId','target','route','source','destination','qty','repeatRequestId']) {
     const value = query.get(key); if (value !== null) params[key] = value;
   }
   if (query.get('job') || query.get('jobId')) params.jobId = query.get('job') || query.get('jobId');

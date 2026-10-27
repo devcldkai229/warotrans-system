@@ -1,5 +1,5 @@
 import { apiFetch, ApiError } from './client';
-import type { MapStatus, EndpointType } from '../types/contracts';
+import type { MapStatus, EndpointType, ZoneType } from '../types/contracts';
 
 export interface MapVersionDto {
   id: string;
@@ -9,6 +9,7 @@ export interface MapVersionDto {
   name: string;
   status: MapStatus | string;
   mapUri: string;
+  mapYamlUri?: string | null;
   previewImageUri?: string | null;
   imageWidthPixels: number;
   imageHeightPixels: number;
@@ -17,6 +18,10 @@ export interface MapVersionDto {
   originY: number;
   originYaw: number;
   frameId: string;
+  negate?: boolean;
+  occupiedThreshold?: number;
+  freeThreshold?: number;
+  contentHash?: string | null;
   createdAt: string;
   publishedAt: string | null;
 }
@@ -35,7 +40,32 @@ export interface EndpointDto {
 
 export interface MapVersionDetailDto extends MapVersionDto {
   endpoints: EndpointDto[];
-  edges?: { id: string; isActive: boolean; geometry: { type: string; coordinates: number[][] } }[];
+  edges?: EdgeDto[];
+  zones?: ZoneDto[];
+}
+
+export interface EdgeDto {
+  id: string;
+  mapVersionId: string;
+  code: string;
+  geometry: { type: string; coordinates: number[][] };
+  widthMeters: number;
+  direction: 'ONE_WAY' | 'BIDIRECTIONAL' | string;
+  capacity: number;
+  maxSpeed?: number | null;
+  isActive: boolean;
+}
+
+export interface ZoneDto {
+  id: string;
+  mapVersionId: string;
+  code: string;
+  name: string;
+  zoneType: ZoneType | string;
+  geometry: { type: string; coordinates: number[][][] };
+  capacity: number;
+  maxSpeed?: number | null;
+  isActive: boolean;
 }
 
 export function listMapVersionsForWarehouse(warehouseId: string) {

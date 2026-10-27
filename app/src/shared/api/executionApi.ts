@@ -6,7 +6,7 @@ import { listRobots } from './fleetApi';
 import { requireMobileCapability } from './capabilities';
 import type {
   JobContainerResponse, JobDetailResponse, JobStatus, JobStepResponse, JobTaskResponse,
-  HandoverConfirmationBody, HandoverConfirmationResponse, HandoverType, ReportTaskProblemBody,
+  HandoverConfirmationBody, HandoverConfirmationResponse, ReportTaskProblemBody,
 } from '../types/contracts';
 
 interface RuntimeStep extends JobStepResponse { stepKey?: string; name?: string }
@@ -20,8 +20,7 @@ interface RuntimeJob extends JobDetailResponse {
 }
 export interface HandoverConfirmRequest {
   jobStepId: string; scannedContainerBarcode?: string | null; containerId?: string | null;
-  notes?: string | null; note?: string | null; confirmedBy?: string; handoverType?: HandoverType;
-  evidence?: Record<string, unknown>;
+  notes?: string | null; note?: string | null;
 }
 export type ConfirmHandoverBody = HandoverConfirmationBody;
 export type ConfirmHandoverResponse = HandoverConfirmationResponse;
@@ -94,7 +93,7 @@ async function hydrateJobs(rawJobs: RuntimeJob[]): Promise<JobDetailResponse[]> 
         transportRequestId: raw.transportRequestIds?.[0], containerMeta,
         activeTaskId: waitingTask?.id, activeStepId: waitingStep?.id, activeStepOperation: operation,
         assignedStaffId: waitingTask?.contextValues?.assignedStaffId,
-        hasWaitingHandover: Boolean(waitingStep && ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(operation || '')),
+        hasWaitingHandover: Boolean(raw.status === 'RUNNING' && waitingStep && ['PICKUP_CONFIRM', 'DROPOFF_CONFIRM'].includes(operation || '')),
         waitingContainerId, completedSteps: raw.completedSteps, totalSteps: raw.totalSteps,
       },
     };
@@ -137,6 +136,13 @@ export async function getJobDetail(jobId: string): Promise<JobDetailResponse> {
 }
 export async function startJob(jobId: string, robotId?: string | null): Promise<JobDetailResponse> {
   const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/jobs/${jobId}/start`, {
+    method: 'POST', body: JSON.stringify({ robotId: robotId || null }),
+  });
+  return (await hydrateJobs([response]))[0];
+}
+export async function resumeJob(jobId: string, robotId?: string | null): Promise<JobDetailResponse> {
+  requireMobileCapability('resumeJob');
+  const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/jobs/${jobId}/resume`, {
     method: 'POST', body: JSON.stringify({ robotId: robotId || null }),
   });
   return (await hydrateJobs([response]))[0];

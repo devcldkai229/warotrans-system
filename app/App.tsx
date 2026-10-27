@@ -11,6 +11,7 @@ if (__DEV__) {
 }
 import { Wifi } from 'lucide-react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppNavigator } from './src/app/navigation/AppNavigator';
 import { NavigationProvider } from './src/app/navigation/NavigationContext';
 import { QueryProvider } from './src/app/providers/QueryProvider';
@@ -266,12 +267,12 @@ export default function App() {
   const content = (
     <SafeAreaProvider>
       <QueryProvider>
-        <View style={styles.appContainer}>
+        <GestureHandlerRootView style={styles.appContainer}>
           <StatusBar style="dark" />
           <AuthProvider>
             <AuthenticatedShell />
           </AuthProvider>
-        </View>
+        </GestureHandlerRootView>
       </QueryProvider>
     </SafeAreaProvider>
   );

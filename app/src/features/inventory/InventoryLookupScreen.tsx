@@ -1,7 +1,10 @@
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
+  ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +25,8 @@ import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { SegmentedControl } from '../../shared/ui/SegmentedControl';
+import { Text as StatusText } from '../../shared/ui/Text';
+import { containerLocationFilters, getContainerLocation, groupInventoryByProduct } from './inventoryData';
 import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
@@ -31,190 +36,91 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 import {
   ContainerListItem,
   getContainerByBarcode,
-  getSeedContainersSnapshot,
   listContainers,
-  listWarehouses,
+  listInventory,
+  ApiError,
+  getOperatingContext,
 } from '../../shared/api';
 
-export interface CatalogStartpoint {
-  id: string;
-  label: string;
-  zone: string;
-  qty: number;
-  container: string;
-  status: string;
-  recommendedWorkflow: string;
-}
-
-export interface CatalogProductItem {
-  id: string;
-  name: string;
-  category: string;
-  sku: string;
-  totalStock: number;
-  startpoints: CatalogStartpoint[];
-}
-
-export type ZoneFilterKey = 'ALL' | 'INBOUND' | 'ZONE_A' | 'ZONE_B' | 'ZONE_D';
-export type LevelFilterKey = 'ALL' | 1 | 2 | 3;
-
-const ZONE_OPTIONS: { key: ZoneFilterKey; label: string }[] = [
-  { key: 'ALL', label: 'All' },
-  { key: 'INBOUND', label: 'Inbound' },
-  { key: 'ZONE_A', label: 'Zone A' },
-  { key: 'ZONE_B', label: 'Zone B' },
-  { key: 'ZONE_D', label: 'Zone D' },
-];
-
-const LEVEL_OPTIONS: { value: LevelFilterKey; label: string }[] = [
-  { value: 'ALL', label: 'All Levels' },
-  { value: 1, label: 'Level 1' },
-  { value: 2, label: 'Level 2' },
-  { value: 3, label: 'Level 3' },
-];
-
-function getContainerZone(c: ContainerListItem): 'INBOUND' | 'ZONE_A' | 'ZONE_B' | 'ZONE_D' | 'OTHER' {
-  const zoneLabel = (c.zoneLabel || '').toLowerCase();
-  const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toUpperCase();
-
-  if (zoneLabel.includes('zone a') || loc.startsWith('RACK-A')) {
-    return 'ZONE_A';
-  }
-  if (zoneLabel.includes('zone b') || loc.startsWith('RACK-B')) {
-    return 'ZONE_B';
-  }
-  if (zoneLabel.includes('zone d') || loc.startsWith('RACK-D')) {
-    return 'ZONE_D';
-  }
-  if (
-    zoneLabel.includes('dock') ||
-    zoneLabel.includes('inbound') ||
-    loc.startsWith('DOCK-IN') ||
-    loc.startsWith('EP-DOCK') ||
-    loc.includes('DOCK')
-  ) {
-    return 'INBOUND';
-  }
-  return 'OTHER';
-}
-
-function resolveRecommendedWorkflow(c: ContainerListItem): string {
-  const loc = (c.currentStorageLocationCode || c.currentEndpointCode || 'Location Unavailable').toUpperCase();
-  if (loc.startsWith('DOCK-IN')) return 'Inbound Putaway';
-  if (loc.startsWith('RACK-D')) return 'Replenishment';
-  if (loc.startsWith('QA-') || loc.startsWith('ASSEMBLY')) return 'Point-to-Point';
-  if (loc === 'RACK-A-08') return 'Reallocation';
-  return 'Outbound Retrieval';
-}
-
-function buildCatalogFromContainers(containers: ContainerListItem[]): CatalogProductItem[] {
-  const bySku = new Map<string, CatalogProductItem>();
-
-  containers.forEach((c) => {
-    const sku = c.productSku || 'SKU-GEN';
-    const qty = 1;
-    const locCode = c.currentStorageLocationCode
-      ? `${c.currentStorageLocationCode}${c.currentLevelNo ? ` · L${c.currentLevelNo}` : ''}`
-      : c.currentEndpointCode || 'Location Unavailable';
-    const zone =
-      c.zoneLabel ||
-      (locCode.startsWith('RACK-A')
-        ? 'Zone A'
-        : locCode.startsWith('RACK-B')
-        ? 'Zone B'
-        : locCode.startsWith('RACK-D')
-        ? 'Zone D'
-        : locCode.startsWith('QA')
-        ? 'QA Bay'
-        : 'Unclassified Location');
-
-    const startpoint: CatalogStartpoint = {
-      id: locCode,
-      label: zone,
-      zone,
-      qty,
-      container: c.barcode,
-      status: String(c.status || 'STORED'),
-      recommendedWorkflow: resolveRecommendedWorkflow(c),
-    };
-
-    const existing = bySku.get(sku);
-    if (existing) {
-      existing.totalStock += qty;
-      existing.startpoints.push(startpoint);
-    } else {
-      bySku.set(sku, {
-        id: `${c.productId}-${sku}`,
-        name: c.productName || 'Warehouse Item',
-        category: c.category || 'Uncategorized',
-        sku,
-        totalStock: qty,
-        startpoints: [startpoint],
-      });
-    }
-  });
-
-  return Array.from(bySku.values());
-}
+export type LevelFilterKey = 'ALL' | number;
 
 export function InventoryLookupScreen() {
   const { goBack, navigate } = useNavigation();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [inventoryTab, setInventoryTab] = useState<'containers' | 'skus'>('containers');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedZone, setSelectedZone] = useState<ZoneFilterKey>('ALL');
+  const [selectedLocation, setSelectedLocation] = useState('ALL');
   const [selectedLevel, setSelectedLevel] = useState<LevelFilterKey>('ALL');
-  const [containers, setContainers] = useState<ContainerListItem[]>(() =>
-    getSeedContainersSnapshot()
-  );
   const [verifiedContainer, setVerifiedContainer] = useState<ContainerListItem | null>(null);
   const [isVerifyingBarcode, setIsVerifyingBarcode] = useState(false);
-  const [, setActiveWarehouseId] = useState('11111111-1111-1111-1111-111111111111');
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [serverSearch, setServerSearch] = useState('');
+  const verificationRequest = useRef(0);
+  const operatingQuery = useQuery({
+    queryKey: ['operating-context'],
+    queryFn: () => getOperatingContext(),
+    refetchInterval: 30_000,
+  });
+  const activeWarehouseId = operatingQuery.data?.warehouse.id || '';
+  const containersQuery = useQuery({
+    queryKey: ['inventory-containers', activeWarehouseId, serverSearch],
+    queryFn: () => listContainers({ warehouseId: activeWarehouseId, search: serverSearch || undefined, eligibleOnly: false, take: 500 }),
+    enabled: Boolean(activeWarehouseId),
+  });
+  const inventoryQuery = useInfiniteQuery({
+    queryKey: ['inventory-stock', activeWarehouseId, serverSearch],
+    queryFn: ({ pageParam }) => listInventory({ warehouseId: activeWarehouseId, search: serverSearch || undefined, skip: pageParam, take: 200 }),
+    initialPageParam: 0,
+    getNextPageParam: (page, pages) => {
+      const loaded = pages.reduce((count, item) => count + item.items.length, 0);
+      return page.items.length > 0 && loaded < page.total ? loaded : undefined;
+    },
+    enabled: Boolean(activeWarehouseId) && inventoryTab === 'skus',
+  });
+  const containers = containersQuery.data?.items || [];
+  const containerTotal = containersQuery.data?.total || 0;
+  const stockRows = inventoryQuery.data?.pages.flatMap(page => page.items) || [];
+  const stockTotal = inventoryQuery.data?.pages[0]?.total || 0;
+  const catalogProducts = useMemo(() => groupInventoryByProduct(inventoryQuery.data?.pages.flatMap(page => page.items) || []), [inventoryQuery.data]);
+  const levelOptions: { value: LevelFilterKey; label: string }[] = [
+    { value: 'ALL', label: 'All Levels' },
+    ...[...new Set(containers.flatMap(container => container.currentLevelNo == null ? [] : [container.currentLevelNo]))]
+      .sort((a, b) => a - b).map(value => ({ value, label: `Level ${value}` })),
+  ];
+  const activeQuery = inventoryTab === 'containers' ? containersQuery : inventoryQuery;
+  const loading = operatingQuery.isPending || (Boolean(activeWarehouseId) && activeQuery.isPending);
+  const loadError = operatingQuery.error || (activeWarehouseId ? activeQuery.error : null);
 
   useEffect(() => {
-    let isMounted = true;
-    async function loadInventory() {
-      let whId = '11111111-1111-1111-1111-111111111111';
-      try {
-        const whRes = await listWarehouses({ isActive: true });
-        if (whRes?.items?.length) {
-          const match =
-            whRes.items.find((w) => w.id === '11111111-1111-1111-1111-111111111111') ||
-            whRes.items[0];
-          whId = match.id;
-          if (isMounted) setActiveWarehouseId(whId);
-        }
-      } catch {}
-
-      try {
-        const res = await listContainers({
-          warehouseId: whId,
-          take: 100,
-        });
-        if (isMounted && res?.items) {
-          setContainers(res.items);
-        }
-      } catch {}
-    }
-
-    loadInventory();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    const timer = setTimeout(() => setServerSearch(searchTerm.trim().slice(0, 100)), 250);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+  useEffect(() => {
+    verificationRequest.current++;
+    setVerifiedContainer(null);
+    setVerificationError(null);
+    setSelectedLocation('ALL');
+    setSelectedLevel('ALL');
+    setIsVerifyingBarcode(false);
+    return () => { verificationRequest.current++; };
+  }, [activeWarehouseId]);
 
   const handleVerifyBarcode = async (codeToVerify?: string) => {
     const raw = (codeToVerify ?? searchTerm).trim();
     if (!raw) {
-      toast.warning('Enter a container code (e.g. C1, CTN-DEMO-000001, BOX-101) to verify.');
+      setVerificationError('Enter a container barcode to verify.');
       return;
     }
 
+    if (isVerifyingBarcode) return;
     triggerHaptic('tap');
+    setVerifiedContainer(null);
+    setVerificationError(null);
     setIsVerifyingBarcode(true);
+    const request = ++verificationRequest.current;
     try {
       const res = await getContainerByBarcode(raw);
+      if (request !== verificationRequest.current) return;
       if (res && res.barcode) {
         setVerifiedContainer(res);
         triggerHaptic('success');
@@ -222,128 +128,36 @@ export function InventoryLookupScreen() {
         return;
       }
       throw new Error('Not found in by-barcode');
-    } catch {
-      // Fallback: look up in containers list
-      const clean = raw.toUpperCase();
-      const localMatch = containers.find(
-        (c) =>
-          c.barcode.toUpperCase() === clean
-      );
-      if (localMatch) {
-        setVerifiedContainer(localMatch);
-        triggerHaptic('success');
-        toast.success(`Container ${localMatch.barcode} found in inventory!`);
-      } else {
-        toast.warning(`Container "${raw}" not found in warehouse registry.`);
-      }
+    } catch (error) {
+      if (request !== verificationRequest.current) return;
+      setVerificationError(error instanceof ApiError && error.status === 404
+        ? `Container "${raw}" was not found in the registry.`
+        : error instanceof Error ? error.message : 'Container could not be verified. Try again.');
     } finally {
-      setIsVerifyingBarcode(false);
+      if (request === verificationRequest.current) setIsVerifyingBarcode(false);
     }
   };
 
-  const catalogProducts = useMemo(
-    () => buildCatalogFromContainers(containers),
-    [containers]
-  );
-
-  const uniqueLocationsCount = useMemo(() => {
-    const locs = new Set<string>();
-    containers.forEach((c) => {
-      const code = c.currentStorageLocationCode || c.currentEndpointCode;
-      if (code) locs.add(code);
-    });
-    return locs.size || 1;
-  }, [containers]);
-
-  const categories = ['All', 'Electronics', 'Sensors', 'Mechanical', 'Packaging'];
-
-  const zoneCounts = useMemo(() => {
-    const q = searchTerm.toLowerCase().trim();
-    const base = q
-      ? containers.filter((c) => {
-          const barcode = (c.barcode || '').toLowerCase();
-          const sku = (c.productSku || '').toLowerCase();
-          const name = (c.productName || '').toLowerCase();
-          const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toLowerCase();
-          return (
-            barcode.includes(q) ||
-            sku.includes(q) ||
-            name.includes(q) ||
-            loc.includes(q)
-          );
-        })
-      : containers;
-
-    const counts: Record<ZoneFilterKey, number> = {
-      ALL: base.length,
-      INBOUND: 0,
-      ZONE_A: 0,
-      ZONE_B: 0,
-      ZONE_D: 0,
-    };
-
-    base.forEach((c) => {
-      const z = getContainerZone(c);
-      if (z === 'INBOUND') counts.INBOUND += 1;
-      else if (z === 'ZONE_A') counts.ZONE_A += 1;
-      else if (z === 'ZONE_B') counts.ZONE_B += 1;
-      else if (z === 'ZONE_D') counts.ZONE_D += 1;
-    });
-
-    return counts;
-  }, [containers, searchTerm]);
+  const locationOptions = useMemo(() => containerLocationFilters(containers), [containers]);
+  const uniqueLocationsCount = locationOptions.filter(location => location.key !== 'ALL' && location.key !== 'UNLOCATED').length;
+  const activeLocationFilter = locationOptions.some(location => location.key === selectedLocation) ? selectedLocation : 'ALL';
 
   const filteredContainers = useMemo(() => {
-    const q = searchTerm.toLowerCase().trim();
     return containers.filter((c) => {
-      if (selectedZone !== 'ALL') {
-        const zone = getContainerZone(c);
-        if (zone !== selectedZone) return false;
-      }
+      if (activeLocationFilter !== 'ALL' && getContainerLocation(c).key !== activeLocationFilter) return false;
 
       if (selectedLevel !== 'ALL') {
         if (c.currentLevelNo !== selectedLevel) return false;
       }
 
-      if (!q) return true;
-      const barcode = (c.barcode || '').toLowerCase();
-      const sku = (c.productSku || '').toLowerCase();
-      const name = (c.productName || '').toLowerCase();
-      const loc = (c.currentStorageLocationCode || c.currentEndpointCode || '').toLowerCase();
-      return (
-        barcode.includes(q) ||
-        sku.includes(q) ||
-        name.includes(q) ||
-        loc.includes(q)
-      );
+      return true;
     });
-  }, [containers, selectedZone, selectedLevel, searchTerm]);
-
-  const filteredProducts = useMemo(() => {
-    return catalogProducts.filter((p) => {
-      const matchesCategory =
-        selectedCategory === 'All' ||
-        p.category.toLowerCase() === selectedCategory.toLowerCase();
-      const q = searchTerm.toLowerCase().trim();
-      if (!q) return matchesCategory;
-      const matchesSearch =
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        p.startpoints.some(
-          (sp) =>
-            sp.id.toLowerCase().includes(q) ||
-            sp.container.toLowerCase().includes(q) ||
-            sp.zone.toLowerCase().includes(q)
-        );
-      return matchesCategory && matchesSearch;
-    });
-  }, [catalogProducts, selectedCategory, searchTerm]);
+  }, [containers, activeLocationFilter, selectedLevel]);
 
   return (
     <View style={styles.container}>
       <SubScreenHeader
-        label={`${containers.length} Containers · ${uniqueLocationsCount} Locations`}
+        label={activeWarehouseId ? `${containers.length} Containers Loaded · ${uniqueLocationsCount} Locations` : 'Loading Inventory…'}
         title="Inventory Catalog"
         onBack={goBack}
       />
@@ -354,7 +168,8 @@ export function InventoryLookupScreen() {
           value={searchTerm}
           onChangeText={setSearchTerm}
           onSubmitEditing={() => handleVerifyBarcode()}
-          placeholder="Search container, SKU, or rack..."
+          placeholder={inventoryTab === 'containers' ? 'Search container or SKU...' : 'Search product, SKU, or location...'}
+          maxLength={100}
           containerStyle={styles.inputContainer}
           leftIcon={<Search size={16} color={colors.textMuted} />}
           rightIcon={
@@ -385,6 +200,18 @@ export function InventoryLookupScreen() {
         />
       </View>
 
+      {isVerifyingBarcode && <StatusText variant="caption" style={{ paddingHorizontal: 16, paddingVertical: 8 }}>Verifying Container…</StatusText>}
+      {verificationError && <StatusText variant="body" color="danger" accessibilityRole="alert" style={{ paddingHorizontal: 16, paddingVertical: 8 }}>{verificationError}</StatusText>}
+      {loading && <ActivityIndicator color={colors.primary} style={{ padding: 16 }} />}
+      {loadError && (
+        <View style={{ padding: 16, gap: 8 }}>
+          <StatusText color="danger" accessibilityRole="alert">{loadError.message}</StatusText>
+          <Button label="Retry" variant="outline" onPress={() => { void operatingQuery.refetch(); if (activeWarehouseId) void activeQuery.refetch(); }} />
+        </View>
+      )}
+      {Boolean(activeWarehouseId) && inventoryTab === 'containers' && containerTotal > containers.length && (
+        <StatusText variant="caption" style={{ padding: 16 }}>Showing {containers.length} of {containerTotal} matching containers. Narrow the search to find other containers.</StatusText>
+      )}
       {/* Prominent Verified Container Details Card (if verified) */}
       {verifiedContainer && (
         <View style={styles.verifiedCard}>
@@ -395,7 +222,7 @@ export function InventoryLookupScreen() {
             </View>
             <View style={styles.verifiedStatusBadge}>
               <Text style={styles.verifiedStatusText}>
-                {verifiedContainer.status || 'STORED'}
+                {verifiedContainer.status || 'Status Unavailable'}
               </Text>
             </View>
             <Pressable
@@ -435,7 +262,7 @@ export function InventoryLookupScreen() {
             <View style={styles.verifiedRow}>
               <Text style={styles.verifiedLabel}>Inventory Status:</Text>
               <Text style={styles.verifiedValue}>
-                {verifiedContainer.status || 'STORED'} · 1 container
+                {verifiedContainer.status || 'Status Unavailable'} · 1 container
               </Text>
             </View>
           </View>
@@ -450,6 +277,7 @@ export function InventoryLookupScreen() {
               navigate('transport_create', {
                 workflow: 'INTERNAL_RELOCATION',
                 container: verifiedContainer.barcode,
+                warehouseId: activeWarehouseId || undefined,
               });
             }}
             style={{ marginTop: 8 }}
@@ -462,7 +290,7 @@ export function InventoryLookupScreen() {
         <SegmentedControl
           options={[
             { label: `Containers (${filteredContainers.length})`, value: 'containers' },
-            { label: `By SKU (${filteredProducts.length})`, value: 'skus' },
+            { label: `By SKU (${catalogProducts.length})`, value: 'skus' },
           ]}
           value={inventoryTab}
           onChange={(val) => {
@@ -474,35 +302,35 @@ export function InventoryLookupScreen() {
       </View>
 
       {/* Tab 1: Containers List */}
-      {inventoryTab === 'containers' && (
+      {inventoryTab === 'containers' && Boolean(activeWarehouseId) && (
         <>
-          {/* Spatial Warehouse Zone & Level Filter Section */}
+          {/* Storage Location & Level Filters */}
           <View style={styles.spatialFilterSection}>
-            {/* Zone Filter Row */}
+            {/* Actual locations from the container response */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRowScroll}
             >
-              {ZONE_OPTIONS.map((opt) => {
-                const isSelected = selectedZone === opt.key;
-                const count = zoneCounts[opt.key];
+              {locationOptions.map((opt) => {
+                const isSelected = activeLocationFilter === opt.key;
                 return (
                   <Pressable
                     key={opt.key}
                     onPress={() => {
                       triggerHaptic('tap');
-                      setSelectedZone(opt.key);
+                      setSelectedLocation(opt.key);
                     }}
                     style={[styles.filterChip, isSelected && styles.filterChipActive]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Filter by zone ${opt.label}`}
+                    accessibilityLabel={`Filter by location ${opt.label}`}
+                    accessibilityState={{ selected: isSelected }}
                   >
                     <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
                       {opt.label}
                     </Text>
                     <Text style={[styles.filterChipCount, isSelected && styles.filterChipCountActive]}>
-                      ({count})
+                      ({opt.count})
                     </Text>
                   </Pressable>
                 );
@@ -516,7 +344,7 @@ export function InventoryLookupScreen() {
               contentContainerStyle={styles.filterRowScroll}
               style={styles.levelFilterRow}
             >
-              {LEVEL_OPTIONS.map((lvl) => {
+              {levelOptions.map((lvl) => {
                 const isSelected = selectedLevel === lvl.value;
                 return (
                   <Pressable
@@ -552,9 +380,10 @@ export function InventoryLookupScreen() {
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={containersQuery.isRefetching} onRefresh={() => { void containersQuery.refetch(); }} tintColor={colors.primary} />}
           >
           {filteredContainers.map((c) => {
-            const statusText = String(c.status || 'STORED');
+            const statusText = String(c.status || 'Status Unavailable');
             const isStored = statusText === 'STORED';
 
             return (
@@ -592,6 +421,7 @@ export function InventoryLookupScreen() {
                       navigate('transport_create', {
                         workflow: 'INTERNAL_RELOCATION',
                         container: c.barcode,
+                        warehouseId: activeWarehouseId,
                       });
                     }}
                     style={({ pressed }) => [styles.relocateBtn, pressed && styles.btnPressed]}
@@ -607,7 +437,7 @@ export function InventoryLookupScreen() {
                 <View style={styles.locationRow}>
                   <MapPin size={13} color={colors.primaryText} style={{ marginRight: 6 }} />
                   <Text style={styles.locationText} numberOfLines={1}>
-                    {c.currentStorageLocationCode || c.currentEndpointCode || 'EP-A'}
+                    {c.currentStorageLocationCode || c.currentEndpointCode || 'Location Unavailable'}
                     {c.currentLevelNo ? ' · Level ' + c.currentLevelNo : ''}
                     {c.zoneLabel ? ' (' + c.zoneLabel + ')' : ''}
                   </Text>
@@ -616,22 +446,22 @@ export function InventoryLookupScreen() {
                 {/* Cargo Row (QUANTITY FIRST, NEVER TRUNCATE QUANTITY!) */}
                 <View style={styles.cargoRow}>
                   <Box size={13} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                  <Text style={styles.cargoQty}>{1} containers</Text>
+                  <Text style={styles.cargoQty}>1 container</Text>
                   <Text style={styles.cargoDot}>·</Text>
                   <Text style={styles.cargoProduct} numberOfLines={1}>
-                    {c.productName || 'Warehouse Item'} ({c.productSku || 'SKU-GEN'})
+                    {c.productName || 'Product Unavailable'} ({c.productSku || 'SKU Unavailable'})
                   </Text>
                 </View>
               </View>
             );
           })}
 
-          {filteredContainers.length === 0 && (
+          {filteredContainers.length === 0 && !loading && !loadError && (
             <View style={styles.emptyState}>
               <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
               <Text style={styles.emptyTitle}>No matching containers found</Text>
               <Text style={styles.emptySub}>
-                Try searching with a different container barcode, SKU, or rack.
+                Try searching with a different container barcode or SKU.
               </Text>
             </View>
           )}
@@ -640,101 +470,55 @@ export function InventoryLookupScreen() {
     )}
 
       {/* Tab 2: By SKU List */}
-      {inventoryTab === 'skus' && (
+      {inventoryTab === 'skus' && Boolean(activeWarehouseId) && (
         <>
-          {/* Category Filter Chips */}
           <View style={styles.categoryBar}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryScroll}
-            >
-              {categories.map((cat) => {
-                const isSelected = selectedCategory === cat;
-                return (
-                  <Pressable
-                    key={cat}
-                    onPress={() => {
-                      triggerHaptic('tap');
-                      setSelectedCategory(cat);
-                    }}
-                    style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryChipText,
-                        isSelected && styles.categoryChipTextActive,
-                      ]}
-                    >
-                      {cat}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <StatusText variant="caption">Recorded Inventory · {stockRows.length} of {stockTotal} Stock Rows</StatusText>
+            <StatusText variant="caption">Counts Represent Containers. More Locations May Appear As Rows Load.</StatusText>
           </View>
 
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={inventoryQuery.isRefetching && !inventoryQuery.isFetchingNextPage} onRefresh={() => { void inventoryQuery.refetch(); }} tintColor={colors.primary} />}
           >
-            {filteredProducts.map((prod) => (
+            {catalogProducts.map((prod) => (
               <View key={prod.id} style={styles.productCard}>
                 <View style={styles.cardHeader}>
                   <View style={{ flex: 1, marginRight: 12 }}>
                     <Text style={styles.productName}>{prod.name}</Text>
                     <Text style={styles.productMeta}>
-                      {prod.category} · SKU: <Text style={styles.boldText}>{prod.sku}</Text>
+                      SKU: <Text style={styles.boldText}>{prod.sku}</Text>
                     </Text>
                   </View>
                   <View style={styles.stockBadge}>
-                    <Text style={styles.stockCount}>{prod.totalStock}</Text>
-                    <Text style={styles.stockLabel}>Available</Text>
+                    <Text style={styles.stockCount}>{prod.containerCount}</Text>
+                    <Text style={styles.stockLabel}>Containers</Text>
                   </View>
                 </View>
 
                 {/* Startpoints Locations */}
                 <View style={styles.startpointsList}>
-                  {prod.startpoints.map((sp) => (
+                  {prod.locations.map((sp) => (
                     <View
-                      key={`${sp.container}-${sp.id}`}
+                      key={sp.id}
                       style={styles.startpointRow}
                     >
                       <View style={styles.startpointLeft}>
                         <MapPin size={13} color={colors.textSecondary} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.startpointId} numberOfLines={1}>
-                            {sp.id}
+                            {sp.storageLocationCode} · Level {sp.levelNo}
                           </Text>
                           <Text style={styles.startpointZone} numberOfLines={1}>
-                            {sp.zone} · {sp.recommendedWorkflow}
+                            {sp.storageLocationName}
                           </Text>
                         </View>
                       </View>
 
                       <View style={styles.startpointRightCol}>
-                        <Pressable
-                          onPress={() => {
-                            triggerHaptic('tap');
-                            navigate('transport_create', {
-                              workflow: 'INTERNAL_RELOCATION',
-                              container: sp.container,
-                            });
-                          }}
-                          style={({ pressed }) => [
-                            styles.containerPill,
-                            pressed && styles.btnPressed,
-                          ]}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Relocate container ${sp.container}`}
-                        >
-                          <Text style={styles.containerPillText} numberOfLines={1}>
-                            {sp.container}
-                          </Text>
-                          <ArrowUpRight size={10} color={colors.primary} style={{ marginLeft: 2 }} />
-                        </Pressable>
-                        <Text style={styles.startpointQty}>{sp.qty} containers</Text>
+                        <Text style={styles.startpointQty}>{sp.containerCount} containers</Text>
                       </View>
                     </View>
                   ))}
@@ -742,15 +526,17 @@ export function InventoryLookupScreen() {
               </View>
             ))}
 
-            {filteredProducts.length === 0 && (
+            {catalogProducts.length === 0 && !loading && !loadError && (
               <View style={styles.emptyState}>
                 <PackagePlus size={44} color={colors.textMuted} style={{ opacity: 0.4 }} />
                 <Text style={styles.emptyTitle}>No matching products found</Text>
                 <Text style={styles.emptySub}>
-                  Try searching with a different product name, SKU, or category filter.
+                  Try searching with a different product name, SKU, or storage location.
                 </Text>
               </View>
             )}
+            {inventoryQuery.hasNextPage && <Button label={inventoryQuery.isFetchingNextPage ? 'Loading…' : 'Load More Stock'} variant="outline"
+              disabled={inventoryQuery.isFetchingNextPage} onPress={() => { void inventoryQuery.fetchNextPage(); }} />}
           </ScrollView>
         </>
       )}

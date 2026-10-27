@@ -1,6 +1,7 @@
 import { WarehouseMapLayer } from '../../shared/components/WarehouseMapLayer';
-import { getMapVersionDetail, getActiveMapVersion, listWarehouses, type MapVersionDetailDto } from '../../shared/api';
+import { getMapVersionDetail } from '../../shared/api';
 import React, { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Pressable,
   StyleSheet,
@@ -9,9 +10,8 @@ import {
 } from 'react-native';
 import {
   Clock3,
-  LocateFixed,
+  RefreshCw,
 } from 'lucide-react-native';
-import Svg, { Circle, Defs, G, Line, Path, Pattern, Rect } from 'react-native-svg';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
@@ -22,69 +22,68 @@ import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
 import { useRealtime } from '../../shared/realtime';
-import { getJobDetail, listJobs, listRobots, type RobotDto } from '../../shared/api';
-import { mapJobDetailToAppJobItem, type AppJobItem } from '../jobs/jobData';
+import { getJobDetail } from '../../shared/api';
+import { mapJobDetailToAppJobItem } from '../jobs/jobData';
+import { useAuth } from '../auth/authContext';
+import { useMapFleet } from '../../shared/maps/hooks/useMapFleet';
+import { mapRobotState } from '../../shared/maps/mapTelemetry';
 
 const SHEET_GAP = 8;
 const DOCK_ZONE_GAP = 12;
 const SHEET_FALLBACK_HEIGHT = 174;
 
 export function JobLiveMapScreen() {
+  const { session } = useAuth();
   const { params, dockHeight, goBack } = useNavigation();
-  const { robotTelemetry, lastJobUpdate } = useRealtime();
-  const [activeMap, setActiveMap] = useState<MapVersionDetailDto | null>(null);
-  const [mapError, setMapError] = useState<string | null>(null);
-  const [liveJob, setLiveJob] = useState<AppJobItem | null>(null);
-  const [fleetRobots, setFleetRobots] = useState<RobotDto[]>([]);
+  const { lastJobUpdate } = useRealtime();
   const dockInset = dockReservedSpace(dockHeight);
   const [sheetHeight, setSheetHeight] = useState(0);
   const sheetBottom = SHEET_GAP;
   const dockZoneBottom = sheetBottom + (sheetHeight || SHEET_FALLBACK_HEIGHT) + DOCK_ZONE_GAP;
   const [selectedRobot, setSelectedRobot] = useState<string>(params?.robotId || '');
   const [toastFeedback, setToastFeedback] = useState<string | null>(null);
-
   const jobId = params?.jobId || '';
+  const job = useQuery({ queryKey: ['live-map-job', jobId], queryFn: () => getJobDetail(jobId), enabled: !!jobId, refetchInterval: 5_000 });
+  const fleet = useMapFleet(session?.id || '');
+  const mapId = job.data?.mapVersionId;
+  const mapQuery = useQuery({ queryKey: ['live-map-detail', mapId], queryFn: () => getMapVersionDetail(mapId!), enabled: !!mapId });
+  const activeMap = mapQuery.data && mapQuery.data.id === mapId ? mapQuery.data : null;
+  const fleetRobots = fleet.robots;
+  const liveJob = job.data ? mapJobDetailToAppJobItem(job.data) : null;
+  const mapError = job.error?.message || mapQuery.error?.message || fleet.error?.message || (!jobId ? 'Open a job to view its map.' : null);
   const target = params?.target || 'Unknown Destination';
   const route = params?.route || 'No Job Selected';
   const headerJobNo = liveJob?.jobNo || jobId;
 
   useEffect(() => {
-    setLiveJob(null);
-  }, [params?.jobId]);
+    if (lastJobUpdate?.jobId === jobId) void job.refetch();
+  }, [lastJobUpdate, jobId, job.refetch]);
+
+  useEffect(() => { setSelectedRobot(params?.robotId || ''); }, [jobId, params?.robotId]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadLiveJob() {
-      try {
-        const fleet = await listRobots();
-        const detail = params?.jobId ? await getJobDetail(params.jobId) : null;
-        let mapId = detail?.mapVersionId;
-        if (!mapId) {
-          const warehouse = (await listWarehouses({ isActive: true })).items[0];
-          if (warehouse) mapId = (await getActiveMapVersion(warehouse.id))?.id;
-        }
-        const map = mapId ? await getMapVersionDetail(mapId) : null;
-        if (cancelled) return;
-        setFleetRobots(fleet.items); setActiveMap(map); setMapError(null);
-        const requested = fleet.items.find(robot => robot.id === params?.robotId || robot.code === params?.robotId);
-        const assigned = fleet.items.find(robot => robot.id === detail?.contextValues?.assignedRobotId);
-        setSelectedRobot(current => requested?.code || assigned?.code || (fleet.items.some(robot => robot.code === current) ? current : fleet.items.find(robot => robot.currentMapVersionId === map?.id)?.code || ''));
-        setLiveJob(detail ? mapJobDetailToAppJobItem(detail) : null);
-      } catch (error: any) {
-        if (!cancelled) { setMapError(error.message || 'Map could not be loaded.'); setLiveJob(null); setActiveMap(null); }
-      }
-    }
-    void loadLiveJob();
-    return () => { cancelled = true; };
-  }, [params?.jobId, params?.robotId, lastJobUpdate]);
-  const telemetry = robotTelemetry[selectedRobot] || fleetRobots.find(robot => robot.code === selectedRobot);
+    const robots = fleet.data?.items || [];
+    const requested = robots.find(robot => robot.id === params?.robotId || robot.code === params?.robotId);
+    const assigned = robots.find(robot => robot.id === job.data?.contextValues?.assignedRobotId);
+    setSelectedRobot(current => robots.find(robot => (robot.code === current || robot.id === current) && robot.currentMapVersionId === mapId)?.code
+      || requested?.code || assigned?.code || robots.find(robot => robot.currentMapVersionId === mapId)?.code || '');
+  }, [fleet.data, job.data, params?.robotId, mapId]);
 
-  const handleCenter = () => {
+  // SignalR refreshes the complete snapshot; it never joins an event pose to an older map ID.
+  const telemetry = fleetRobots.find(robot => robot.code === selectedRobot && robot.currentMapVersionId === activeMap?.id && robot.lastTelemetryAt);
+  const telemetryState = telemetry && activeMap ? mapRobotState(telemetry, activeMap, Date.now(), fleet.updateMode) : null;
+  const lastReported = telemetryState?.lastReported;
+  const handleRefresh = async () => {
+    if (!jobId) { setToastFeedback('Open a job to view its map.'); return; }
     triggerHaptic('tap');
-    const coords = telemetry ? `(X: ${telemetry.poseX.toFixed(1)}m, Y: ${telemetry.poseY.toFixed(1)}m)` : '';
-    setToastFeedback(`Centered view on ${selectedRobot} ${coords}`);
-    setTimeout(() => setToastFeedback(null), 3000);
+    const results = await Promise.all([job.refetch(), fleet.refetch(), ...(mapId ? [mapQuery.refetch()] : [])]);
+    setToastFeedback(results.some(result => result.isError) ? 'Map refresh failed. Try again.' : 'Map snapshot refreshed.');
   };
+  useEffect(() => {
+    if (!toastFeedback) return;
+    const timer = setTimeout(() => setToastFeedback(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toastFeedback]);
 
   return (
     <View style={styles.container}>
@@ -95,15 +94,15 @@ export function JobLiveMapScreen() {
         onBack={goBack}
         rightAction={
           <Pressable
-            onPress={handleCenter}
+            onPress={() => { void handleRefresh(); }}
             style={({ pressed }) => [
               styles.headerLocateBtn,
               pressed && styles.headerLocateBtnPressed,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Center viewport"
+            accessibilityLabel="Refresh map snapshot"
           >
-            <LocateFixed size={20} color={colors.textPrimary} />
+            <RefreshCw size={20} color={colors.textPrimary} />
           </Pressable>
         }
       />
@@ -115,8 +114,8 @@ export function JobLiveMapScreen() {
           </View>
         )}
 
-        <WarehouseMapLayer map={activeMap} robots={fleetRobots} telemetry={robotTelemetry}
-          selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} />
+        <WarehouseMapLayer map={activeMap} robots={fleetRobots}
+          selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} updateMode={fleet.updateMode} loading={!!jobId && (job.isPending || mapQuery.isEnabled && mapQuery.isPending)} contentInsets={{ top: 12, bottom: dockZoneBottom }} />
         {mapError && <View style={styles.toast}><Text style={styles.toastText}>{mapError}</Text></View>}
 
         {/* Telemetry Bottom Sheet */}
@@ -132,7 +131,7 @@ export function JobLiveMapScreen() {
               </Text>
             </View>
             <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>{telemetry?.lastTelemetryAt ? 'Telemetry Snapshot' : 'Telemetry Unavailable'}</Text>
+              <Text style={styles.statusBadgeText}>{telemetryState?.label || 'Telemetry Unavailable'}</Text>
             </View>
           </View>
 
@@ -140,21 +139,21 @@ export function JobLiveMapScreen() {
           <View style={styles.metricRow}>
             <View style={styles.metricCol}>
               <Text style={styles.metricVal}>
-                {telemetry ? `${Math.round(Number(telemetry.batteryPercent))}%` : '—'}
+                {telemetry && Number.isFinite(Number(telemetry.batteryPercent)) ? `${Math.round(Number(telemetry.batteryPercent))}%` : '—'}
               </Text>
               <Text style={styles.metricLabel}>Battery</Text>
             </View>
             <View style={styles.metricCol}>
               <Text style={styles.metricVal}>
-                {telemetry ? `${telemetry.poseX.toFixed(1)}m, ${telemetry.poseY.toFixed(1)}m` : '—'}
+                {telemetry && [telemetry.poseX,telemetry.poseY].every(Number.isFinite) ? `${telemetry.poseX.toFixed(1)}m, ${telemetry.poseY.toFixed(1)}m` : '—'}
               </Text>
-              <Text style={styles.metricLabel}>{telemetry ? 'Live Pose' : 'To target'}</Text>
+              <Text style={styles.metricLabel}>{lastReported ? 'Last Pose' : 'Pose Snapshot'}</Text>
             </View>
             <View style={[styles.metricCol, { borderRightWidth: 0 }]}>
               <Text style={[styles.metricVal, { color: colors.darkAction }]}>
                 {telemetry?.navigationStatus || 'Unknown'}
               </Text>
-              <Text style={styles.metricLabel}>{telemetry ? 'Nav State' : 'Est. arrival'}</Text>
+              <Text style={styles.metricLabel}>Nav State</Text>
             </View>
           </View>
 
@@ -177,8 +176,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   headerLocateBtn: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: radii.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
