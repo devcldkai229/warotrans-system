@@ -1,4 +1,4 @@
-import { apiFetch } from './client'
+import { apiFetch, getAccessToken, getApiUrl } from './client'
 import type { Robot, RobotStatus } from './contracts'
 
 export interface ListRobotsParams {
@@ -85,6 +85,19 @@ export function teleopRobot(id: string, linear: number, angular: number, assist 
     `/api/fleet/robots/${id}/teleop`,
     { method: 'POST', body: JSON.stringify({ linear, angular, assist }) },
   )
+}
+
+/**
+ * MJPEG camera stream of the robot, relayed by the backend, for an `<img src>`.
+ * An `<img>` cannot send the Authorization header, so the access token goes in the query (as for SignalR).
+ * `nonce` forces a fresh connection on retry.
+ */
+export function robotCameraStreamUrl(id: string, nonce?: number) {
+  const query = new URLSearchParams()
+  const token = getAccessToken()
+  if (token) query.set('access_token', token)
+  if (nonce !== undefined) query.set('n', String(nonce))
+  return `${getApiUrl()}/api/fleet/robots/${id}/camera/stream?${query}`
 }
 
 /** Authoritative SegmentedTrafficCoordinator snapshot (Admin). */
