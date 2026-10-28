@@ -102,10 +102,8 @@ export function FleetPage() {
   const isLoading = listQuery.isLoading || countsQuery.isLoading
   const error = listQuery.error ?? countsQuery.error
 
-  const preferredWarehouseId =
-    selected?.warehouseId ?? robotsForCounts[0]?.warehouseId ?? null
-  const preferredMapVersionId =
-    selected?.currentMapVersionId ?? robotsForCounts[0]?.currentMapVersionId ?? null
+  const preferredWarehouseId = selected?.warehouseId ?? null
+  const preferredMapVersionId = selected?.currentMapVersionId ?? null
 
   const monitorMap = useMonitorMapVersion({
     preferredWarehouseId,

@@ -246,18 +246,11 @@ export function TransportRequestsPage() {
     return requests.find((request) => request.id === selectedId) ?? null
   }, [selectedId, detailQuery.data, requests, workflowNameById])
 
-  const preferredWarehouseId =
-    selectedBase?.warehouseId ??
-    (requests[0] ? listQuery.data?.items.find((item) => item.id === requests[0]?.id)?.warehouseId : null) ??
-    null
+  const preferredWarehouseId = selectedBase?.warehouseId ?? null
   const preferredMapVersionId =
     (selectedBase && detailQuery.data?.id === selectedBase.id
       ? detailQuery.data.mapVersionId
-      : null) ??
-    (requests[0]
-      ? listQuery.data?.items.find((item) => item.id === requests[0]?.id)?.mapVersionId
-      : null) ??
-    null
+      : null) ?? null
 
   const monitorMap = useMonitorMapVersion({
     preferredWarehouseId,
