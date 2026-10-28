@@ -65,7 +65,7 @@ export function SearchInput({
         'box-border flex h-9 w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-muted',
         'transition-colors duration-200',
         field
-          ? 'rounded-sm border border-outline bg-surface px-2.5 hover:border-ink/30 focus-within:border-blue focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-blue/25'
+          ? 'rounded-sm border border-outline bg-container-high px-2.5 hover:border-ink/30 focus-within:border-blue focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-blue/25'
           : cx(
               'rounded-full px-3.5 focus-within:outline-2 focus-within:outline-blue/60',
               tone === 'surface' ? 'bg-surface' : 'bg-container-high',

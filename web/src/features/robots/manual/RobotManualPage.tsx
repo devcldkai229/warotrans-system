@@ -373,7 +373,7 @@ function ToolButton({ icon, label, active, onClick }: { icon: IconName; label: s
       aria-pressed={active}
       className={cx(
         'grid size-10 place-items-center rounded-lg shadow-float transition-colors duration-200',
-        active ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
+        active ? 'bg-primary text-white' : 'bg-surface text-ink-2 hover:text-ink',
       )}
       onClick={onClick}
     >
@@ -391,7 +391,7 @@ function RoundButton({ icon, label, active, onClick }: { icon: IconName; label: 
       aria-pressed={active}
       className={cx(
         'grid size-12 place-items-center rounded-full shadow-float transition-colors duration-200',
-        active ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
+        active ? 'bg-primary text-white' : 'bg-surface text-ink-2 hover:text-ink',
       )}
       onClick={onClick}
     >

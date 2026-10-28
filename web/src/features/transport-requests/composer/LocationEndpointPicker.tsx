@@ -109,7 +109,7 @@ export function LocationEndpointPicker({
               type="button"
               className={cx(
                 'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                picking ? 'bg-ink text-surface' : 'text-muted hover:bg-container-high',
+                picking ? 'bg-primary text-white' : 'text-muted hover:bg-container-high',
               )}
               onClick={onMapPick}
               title="Pick from map"

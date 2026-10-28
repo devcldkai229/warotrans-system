@@ -2,8 +2,10 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Wordmark } from '@/app/Wordmark'
 import { ApiError } from '@/shared/api/client'
-import { Button } from '@/shared/ui/Button'
+import { useTheme } from '@/shared/theme/theme'
+import { Button, IconButton } from '@/shared/ui/Button'
 import { Field, FormError } from '@/shared/ui/Field'
+import { Icon } from '@/shared/ui/Icon'
 import { controlClass } from '@/shared/ui/controlClass'
 import { ConsoleAccessError, useAuth } from './authContext'
 import { DotField } from './DotField'
@@ -34,6 +36,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { status, signIn } = useAuth()
+  const { theme, toggle: toggleTheme } = useTheme()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -72,9 +75,18 @@ export function LoginPage() {
     <div className="relative grid min-h-svh place-items-center overflow-hidden bg-surface px-6 py-16">
       <DotField />
 
+      <IconButton
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        tone="surface"
+        className="absolute top-5 right-5 z-10"
+        onClick={toggleTheme}
+      >
+        <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
+      </IconButton>
+
       <main className="relative w-full max-w-xl">
-        {/* A soft white pool behind the form keeps the text readable over the dots. */}
-        <div className="pointer-events-none absolute -inset-x-24 -inset-y-20 bg-[radial-gradient(closest-side,#fff_68%,transparent)]" />
+        {/* A soft pool of the card colour behind the form keeps the text readable over the dots. */}
+        <div className="pointer-events-none absolute -inset-x-24 -inset-y-20 bg-[radial-gradient(closest-side,var(--color-surface)_68%,transparent)]" />
 
         <div className="relative flex flex-col items-center text-center">
           <Wordmark size="lg" />

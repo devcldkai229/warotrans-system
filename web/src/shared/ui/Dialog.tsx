@@ -17,7 +17,7 @@ interface ModalProps {
 /** Dimmed backdrop with a centred card. Clicking the backdrop closes it. */
 export function Modal({ title, subtitle, onClose, closeOnBackdrop = true, width = 'w-[480px]', children }: ModalProps) {
   return (
-    <div className="fixed inset-0 z-100 grid place-items-center bg-ink/40 p-4" role="presentation" onClick={closeOnBackdrop ? onClose : undefined}>
+    <div className="fixed inset-0 z-100 grid place-items-center bg-scrim p-4" role="presentation" onClick={closeOnBackdrop ? onClose : undefined}>
       <div
         className={cx('max-h-full max-w-full overflow-auto rounded-lg bg-surface shadow-modal', width)}
         role="dialog"

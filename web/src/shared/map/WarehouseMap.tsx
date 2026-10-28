@@ -12,9 +12,13 @@ import {
   LANE_BAND_OPACITY,
   LANE_CHEVRON_OPACITY,
   MAP_AMBER,
+  MAP_CARD,
+  MAP_HALO,
+  MAP_IMAGE_FILTER,
   MAP_INK,
   MAP_LINE,
   MAP_OFF,
+  MAP_PAPER,
   MAP_RED,
   ROBOT_COLOR,
   ZONE_COLOR,
@@ -128,7 +132,12 @@ export interface WarehouseMapProps {
   children?: ReactNode
 }
 
-const CALLOUT_TONE = { dark: 'bg-ink', warn: 'bg-amber-ink', danger: 'bg-red-ink' }
+// A raised dark tooltip; a warning or an alarm is the same tooltip with a ring in the tone.
+const CALLOUT_TONE = {
+  dark: 'bg-container-higher',
+  warn: 'bg-container-higher ring-2 ring-amber',
+  danger: 'bg-container-higher ring-2 ring-red',
+}
 
 /** Map size (metres) the mark sizes below were designed for (see MAP_BOUNDS in scene.ts). */
 const MARK_REFERENCE_METRES = 50
@@ -330,7 +339,7 @@ export function WarehouseMap({
             </marker>
           </defs>
 
-          <rect x={0} y={0} width={width} height={height} fill="#fff" />
+          <rect x={0} y={0} width={width} height={height} fill={MAP_PAPER} />
           {occupancyImageUrl ? (
             <image
               href={occupancyImageUrl}
@@ -340,7 +349,7 @@ export function WarehouseMap({
               height={height}
               preserveAspectRatio="none"
               opacity={0.85}
-              style={{ pointerEvents: 'none' }}
+              style={{ pointerEvents: 'none', filter: MAP_IMAGE_FILTER }}
             />
           ) : (
             <rect x={0} y={0} width={width} height={height} fill="url(#wmap-dots)" />
@@ -399,7 +408,7 @@ export function WarehouseMap({
                       cy={Y(anchor.y)}
                       r={0.28 * mark}
                       fill="currentColor"
-                      stroke="#fff"
+                      stroke={MAP_HALO}
                       strokeWidth={0.1 * mark}
                     />
                   </g>
@@ -490,7 +499,7 @@ export function WarehouseMap({
                     />
                     {isSelected
                       ? points.map((point, index) => (
-                          <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill="#fff" stroke="currentColor" strokeWidth={0.16 * mark} />
+                          <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill={MAP_CARD} stroke="currentColor" strokeWidth={0.16 * mark} />
                         ))
                       : null}
                     {labels !== 'none' && hoveredEdgeId === edge.id ? (
@@ -499,7 +508,7 @@ export function WarehouseMap({
                         cy={Y(mid.y)}
                         r={0.32 * mark}
                         fill="currentColor"
-                        stroke="#fff"
+                        stroke={MAP_HALO}
                         strokeWidth={0.1 * mark}
                         pointerEvents="none"
                       />
@@ -524,7 +533,7 @@ export function WarehouseMap({
                 />
               ) : null}
               {drawing.points.map((point, index) => (
-                <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill="#fff" stroke="currentColor" strokeWidth={0.16 * mark} />
+                <circle key={index} cx={X(point.x)} cy={Y(point.y)} r={0.38 * mark} fill={MAP_CARD} stroke="currentColor" strokeWidth={0.16 * mark} />
               ))}
             </g>
           ) : null}
@@ -579,7 +588,7 @@ export function WarehouseMap({
                     {movement.sequence != null ? (
                       <g transform={`translate(${X(movement.from.x)} ${Y(movement.from.y) - 1.7 * mark}) scale(${mark})`}>
                         <circle r={0.72} fill={MAP_INK} />
-                        <text textAnchor="middle" y={0.27} fontSize={0.66} fontWeight={600} fill="#fff">
+                        <text textAnchor="middle" y={0.27} fontSize={0.66} fontWeight={600} fill={MAP_PAPER}>
                           {movement.sequence}
                         </text>
                       </g>
@@ -592,7 +601,7 @@ export function WarehouseMap({
                           width={chipWidth(movement.label, 0.75)}
                           height={1.24}
                           rx={0.62}
-                          fill="#fff"
+                          fill={MAP_CARD}
                           stroke={MAP_LINE}
                           strokeWidth={0.07}
                         />
@@ -642,8 +651,8 @@ export function WarehouseMap({
                         width={1.4}
                         height={1.4}
                         rx={0.36}
-                        fill={isFocus ? 'currentColor' : '#fff'}
-                        stroke={isFocus ? '#fff' : 'currentColor'}
+                        fill={isFocus ? 'currentColor' : MAP_CARD}
+                        stroke={isFocus ? MAP_HALO : 'currentColor'}
                         strokeWidth={0.16}
                       />
                       <g color={isFocus ? '#fff' : undefined} pointerEvents="none">
@@ -691,17 +700,17 @@ export function WarehouseMap({
                   <path
                     d="M1.15 -0.42 1.95 0 1.15 0.42Z"
                     fill="currentColor"
-                    stroke="#fff"
+                    stroke={MAP_HALO}
                     strokeWidth={0.12}
                     strokeLinejoin="round"
                     transform={`rotate(${-yawDeg(robot.yaw)})`}
                   />
-                  <circle r={1.1} fill="currentColor" stroke="#fff" strokeWidth={0.2} />
+                  <circle r={1.1} fill="currentColor" stroke={MAP_HALO} strokeWidth={0.2} />
                   <g color="#fff" pointerEvents="none">
                     <MapGlyph icon="robot" size={1.5} />
                   </g>
                   <g transform="translate(0 2.45)">
-                    <rect x={-1.55} y={-0.62} width={3.1} height={1.24} rx={0.62} fill="#fff" stroke={MAP_LINE} strokeWidth={0.07} />
+                    <rect x={-1.55} y={-0.62} width={3.1} height={1.24} rx={0.62} fill={MAP_CARD} stroke={MAP_LINE} strokeWidth={0.07} />
                     <text textAnchor="middle" y={0.27} fontSize={0.68} fontWeight={600} fill={MAP_INK}>
                       {robot.code.replace('RBT-', '')}
                     </text>
@@ -866,7 +875,7 @@ export function WarehouseMap({
               {present.endpointTypes.map((type) => (
                 <GuideItem key={type} label={ENDPOINT_NAME[type]}>
                   <svg className="shrink-0" width="18" height="18" viewBox="-1 -1 2 2" color={ENDPOINT_COLOR[type]}>
-                    <rect x={-0.85} y={-0.85} width={1.7} height={1.7} rx={0.42} fill="#fff" stroke="currentColor" strokeWidth={0.16} />
+                    <rect x={-0.85} y={-0.85} width={1.7} height={1.7} rx={0.42} fill={MAP_CARD} stroke="currentColor" strokeWidth={0.16} />
                     <MapGlyph icon={type} size={1.05} />
                   </svg>
                 </GuideItem>

@@ -910,7 +910,7 @@ export function MapEditorPage() {
                 disabled={!isDraft && item.tool !== 'select' && item.tool !== 'pan'}
                 className={cx(
                   'flex h-8 items-center gap-2 rounded-full px-3.5 text-sm transition-colors duration-200 disabled:opacity-40',
-                  tool === item.tool ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-surface hover:text-ink',
+                  tool === item.tool ? 'bg-primary text-white' : 'text-ink-2 hover:bg-surface hover:text-ink',
                 )}
                 aria-pressed={tool === item.tool}
                 onClick={() => {

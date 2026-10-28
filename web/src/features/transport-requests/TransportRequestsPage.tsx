@@ -50,7 +50,7 @@ function RequestCard({
     <article
       className={cx(
         'cursor-pointer rounded-md bg-surface p-4 transition-shadow duration-200',
-        selected ? 'ring-2 ring-ink' : 'hover:shadow-float',
+        selected ? 'ring-2 ring-blue' : 'hover:shadow-float',
       )}
       onClick={onSelect}
     >
@@ -561,7 +561,7 @@ export function TransportRequestsPage() {
       </section>
 
       {banner ? (
-        <div className="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs text-surface shadow-float">
+        <div className="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-full bg-container-high px-4 py-2 text-xs text-ink shadow-float">
           {banner}
         </div>
       ) : null}

@@ -83,7 +83,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
                 x2={62}
                 y1={0}
                 y2={0}
-                stroke={major ? '#3279f9' : '#b2bbc5'}
+                stroke={major ? 'var(--color-blue)' : 'var(--color-container-higher)'}
                 strokeWidth={major ? 1.5 : 1}
                 strokeLinecap="round"
                 transform={`rotate(${degrees})`}
@@ -128,7 +128,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
             isPanel
               ? 'absolute top-1/2 left-1/2'
               : 'absolute top-0 left-0',
-            yaw === cardinal.degrees ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-blue-ink',
+            yaw === cardinal.degrees ? 'bg-primary text-white' : 'bg-surface text-ink-2 hover:text-blue-ink',
           )}
           style={{
             transform: isPanel
@@ -165,7 +165,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
           </div>
           <span className="pointer-events-none absolute -top-1.5 -left-1.5 size-3 rounded-full bg-surface ring-[3px] ring-blue" />
           <div className="pointer-events-none absolute top-28 -left-32 flex w-64 flex-col items-center">
-            <strong className="rounded-full bg-ink px-2.5 py-0.5 text-xs font-medium text-surface tabular-nums">{yaw}°</strong>
+            <strong className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-white tabular-nums">{yaw}°</strong>
             <span className="mt-1 rounded-full bg-surface/90 px-2 text-xs whitespace-nowrap text-ink-2">
               Drag the knob. Shift snaps to 15°.
             </span>
@@ -179,7 +179,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
     return (
       <div className="flex flex-col items-center gap-2 py-2" onClick={(event) => event.stopPropagation()}>
         <div className="relative grid size-44 place-items-center">{dial}</div>
-        <strong className="rounded-full bg-ink px-2.5 py-0.5 text-xs font-medium text-surface tabular-nums">{yaw}°</strong>
+        <strong className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-white tabular-nums">{yaw}°</strong>
         <span className="text-center text-xs text-ink-2">Drag the knob. Shift snaps to 15°.</span>
       </div>
     )
