@@ -1,6 +1,6 @@
 import { useAuth } from '../auth/authContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -44,9 +44,10 @@ import { JobTaskDetailSheet } from './JobTaskDetailSheet';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
-import { cancelRobotCommand, FALLBACK_ROBOTS, getJobDetail, listRobots, reportTaskProblem, startJob, type RobotDto } from '../../shared/api';
+import { cancelRobotCommand, FALLBACK_ROBOTS, getJobDetail, listRobots, reportTaskProblem, resumeJob, startJob, type RobotDto } from '../../shared/api';
 import type { JobDetailResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
+import { createJobRefresh } from './jobRefresh';
 
 export function JobDetailScreen() {
   const { navigate, goBack, params } = useNavigation();
@@ -54,6 +55,7 @@ export function JobDetailScreen() {
   const { session } = useAuth();
   const [isLoadingJob, setIsLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
+  const [jobRefreshError, setJobRefreshError] = useState<string | null>(null);
   const { lastJobUpdate } = useRealtime();
 
   const initialModal = params?.modal;
@@ -63,6 +65,7 @@ export function JobDetailScreen() {
   const isInitialIssue = initialModal === 'issue' || initialModal === 'exception';
 
   const [isVerifyOpen, setIsVerifyOpen] = useState(isInitialVerify);
+  const [verificationStepId, setVerificationStepId] = useState<string | null>(null);
   const [isMismatch, setIsMismatch] = useState(isInitialMismatch);
   const [isIssueOpen, setIsIssueOpen] = useState(isInitialIssue);
   const [showMenu, setShowMenu] = useState(false);
@@ -92,24 +95,35 @@ export function JobDetailScreen() {
 
   const jobId = params?.jobId || '';
   const [job, setJob] = useState<AppJobItem>(EMPTY_JOB);
+  const [jobReader] = useState(() => createJobRefresh<JobDetailResponse>());
+  const activeJobId = useRef(jobId);
+  activeJobId.current = jobId;
+  const refreshJob = useCallback(() => jobReader.read(jobId, () => getJobDetail(jobId), detail => {
+      if (activeJobId.current === jobId) {
+        setJob(mapJobDetailToAppJobItem(detail, session?.id));
+        setJobError(null); setJobRefreshError(null);
+      }
+    }, error => {
+      if (activeJobId.current === jobId) {
+        setJobRefreshError(error instanceof Error ? error.message : 'Job could not be refreshed.');
+      }
+    }), [jobId, session?.id, jobReader]);
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoadingJob(true); setJobError(null); setJob(EMPTY_JOB);
-    setSelectedTaskId(null); setShowFullJobNo(false);
+    setIsLoadingJob(true); setJobError(null); setJobRefreshError(null); setJob(EMPTY_JOB);
+    setSelectedTaskId(null); setShowFullJobNo(false); setVerificationStepId(null);
+    setIsVerifyOpen(isInitialVerify); setIsIssueOpen(isInitialIssue);
     if (!jobId) { setJobError('No job was selected.'); setIsLoadingJob(false); return; }
-    getJobDetail(jobId)
-      .then((res) => {
-        if (isMounted && res) {
-          setJob(mapJobDetailToAppJobItem(res, session?.id));
-        }
-      })
+    const initialRequestVersion = jobReader.version + 1;
+    refreshJob()
       .catch((err) => {
-        if (isMounted) setJobError(err.message || 'Job could not be loaded.');
+        if (isMounted && initialRequestVersion === jobReader.version) setJobError(err.message || 'Job could not be loaded.');
       })
     .finally(() => { if (isMounted) setIsLoadingJob(false); });
-    return () => { isMounted = false; };
-  }, [jobId, session?.id]);
+    const poll = setInterval(() => { void refreshJob().catch(() => {}); }, 5000);
+    return () => { isMounted = false; clearInterval(poll); jobReader.invalidate(); };
+  }, [jobId, refreshJob]);
 
   useEffect(() => {
     if (
@@ -119,21 +133,16 @@ export function JobDetailScreen() {
         lastJobUpdate.jobId === job.id ||
         lastJobUpdate.jobNo === job.jobNo)
     ) {
-      let isMounted = true;
-      getJobDetail(jobId)
-        .then((res) => {
-          if (isMounted && res) {
-            setJob(mapJobDetailToAppJobItem(res, session?.id));
-          }
-        })
+      refreshJob()
         .catch((err) => {
           console.warn('Failed to refetch job detail on realtime jobUpdated:', err);
         });
-      return () => {
-        isMounted = false;
-      };
     }
-  }, [lastJobUpdate, jobId, job.id, job.jobNo]);
+  }, [lastJobUpdate, jobId, job.id, job.jobNo, refreshJob]);
+
+  useEffect(() => {
+    if (isVerifyOpen && !verificationStepId && job.activeStepId) setVerificationStepId(job.activeStepId);
+  }, [isVerifyOpen, verificationStepId, job.activeStepId]);
 
   const targetContainers =
     job.containers?.filter((c) => c.action === 'UNLOAD' || c.action === 'PICKUP') || [];
@@ -150,6 +159,10 @@ export function JobDetailScreen() {
   const selectedRobotCode = availableRobots.find((robot) => robot.id === selectedRobotId)?.code || 'Unassigned';
   const selectedRobotUuid = job.assignedRobotId || availableRobots.find((robot) => robot.code === job.robot)?.id;
   const selectedTask = job.tasks.find(task => task.id === selectedTaskId);
+  const verificationTask = job.tasks.find(task => task.steps.some(step => step.id === verificationStepId));
+  const verificationStep = verificationTask?.steps.find(step => step.id === verificationStepId);
+  const verificationContainerId = verificationStep?.resolvedInputs?.containerId || verificationTask?.contextValues?.containerId;
+  const verificationContainer = job.containers.find(container => container.containerId === verificationContainerId);
 
   useEffect(() => {
     setTargetContainer(primaryTarget?.code || '');
@@ -161,35 +174,52 @@ export function JobDetailScreen() {
     try {
       const updated = await startJob(job.id, selectedRobotId);
       if (!updated) throw new Error('Job could not be started');
+      if (activeJobId.current !== job.id) return;
+      jobReader.invalidate();
       setJob(mapJobDetailToAppJobItem(updated, session?.id));
       toast.success(`Job ${job.jobNo || job.id} started on ${selectedRobotCode}!`);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to start job');
+      if (activeJobId.current === job.id) toast.error(err?.message || 'Failed to start job');
     } finally {
       setIsStartingJob(false);
     }
   };
 
-  const statusPresentation = JOB_STATUS_PRESENTATION[isWaiting ? 'ASSIGNED' : job.status];
+  const statusPresentation = JOB_STATUS_PRESENTATION[job.status];
 
   const handleNudge = (_delta: string) => {
     toast.warning('Dock nudging is unavailable during job execution. Use the supervised robot controls.');
   };
   const handleToggleSoftHold = () => {
-    toast.warning('Pause and resume are not supported by this server. Open Fleet Recall to request cancellation.');
+    toast.warning('Pausing a job is unavailable. A paused job can be resumed from this screen.');
+  };
+  const handleResumeJob = async () => {
+    if (isStartingJob) return;
+    setIsStartingJob(true);
+    try {
+      const updated = await resumeJob(job.id);
+      if (activeJobId.current !== job.id) return;
+      jobReader.invalidate();
+      setJob(mapJobDetailToAppJobItem(updated, session?.id));
+      toast.success('Job resumed.');
+    } catch (error: unknown) {
+      if (activeJobId.current === job.id) toast.error(error instanceof Error ? error.message : 'Job could not be resumed.');
+    } finally { setIsStartingJob(false); }
   };
 
   const handleOpenVerify = (containerCode?: string) => {
     triggerHaptic('tap');
+    if (!job.activeStepId || !isWaiting) return;
+    setVerificationStepId(job.activeStepId);
     if (containerCode) setTargetContainer(containerCode);
     setIsVerifyOpen(true);
   };
 
   const handleVerifySuccess = (scannedCode: string, updatedJob?: JobDetailResponse | null) => {
     setIsVerifyOpen(false);
-    if (updatedJob) setJob(mapJobDetailToAppJobItem(updatedJob));
-    getJobDetail(jobId).then((updated) => setJob(mapJobDetailToAppJobItem(updated, session?.id))).catch(() => {});
-    toast.success(`Handover verified for ${scannedCode}. Robot cleared for next waypoint.`);
+    if (updatedJob) { jobReader.invalidate(); setJob(mapJobDetailToAppJobItem(updatedJob, session?.id)); }
+    void refreshJob().catch(() => {});
+    toast.success(`Handover verified for ${scannedCode}.`);
   };
 
   const handleIssueSubmit = async (cat: IncidentCategory, notes: string) => {
@@ -289,8 +319,7 @@ export function JobDetailScreen() {
               style={styles.menuItem}
               onPress={() => {
                 setShowMenu(false);
-                toast.info('Task released back to unassigned fleet pool.');
-                goBack();
+                toast.warning('Task release is not available on this server.');
               }}
             >
               <UserMinus size={16} color={colors.danger} />
@@ -309,6 +338,11 @@ export function JobDetailScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {jobRefreshError ? <View style={styles.refreshWarning} accessibilityLiveRegion="polite">
+          <Text variant="body" color={colors.warningText}>Could not refresh this job. Showing the last loaded status.</Text>
+          <Text variant="caption" color={colors.warningText}>{jobRefreshError}</Text>
+          <Button title="Retry Refresh" variant="outline" size="sm" onPress={() => { void refreshJob().catch(() => {}); }} />
+        </View> : null}
         {/* Mission Status Hero Card */}
         <Card padding="md" gap={12}>
           <View style={styles.cardHeaderRow}>
@@ -397,7 +431,7 @@ export function JobDetailScreen() {
                   ? 'At Station'
                   : job.etaSeconds
                   ? `${Math.floor(job.etaSeconds / 60)}m`
-                  : '01m 24s'}
+                  : '—'}
               </Text>
             </View>
           </View>
@@ -407,13 +441,13 @@ export function JobDetailScreen() {
             <View style={styles.enRouteProgressBlock}>
               <View style={styles.progressHeader}>
                 <Text variant="caption" color={colors.textSecondary}>
-                  Nav2 Waypoint Progress
+                  Job Step Progress
                 </Text>
                 <Text variant="caption" color={colors.primary} style={{ fontWeight: '700' }}>
-                  {job.progressPercent || 75}%
+                  {job.progressPercent ?? 0}%
                 </Text>
               </View>
-              <ProgressMeter value={job.progressPercent || 75} tone="primary" />
+              <ProgressMeter value={job.progressPercent ?? 0} tone="primary" />
             </View>
           )}
 
@@ -458,7 +492,7 @@ export function JobDetailScreen() {
                 </Text>
               </View>
               <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                {primaryTarget.slot}
+                1 Container
               </Text>
             </View>
 
@@ -512,7 +546,7 @@ export function JobDetailScreen() {
                       <View key={item.code} style={styles.otherContainerItem}>
                         <View style={{ flex: 1 }}>
                           <Text variant="caption" color={colors.textPrimary} style={styles.otherContainerCode}>
-                            {item.code} ({item.slot})
+                            {item.code}
                           </Text>
                           <Text variant="caption" color={colors.textSecondary}>
                             <Text style={styles.boldQty}>{item.qty} pcs</Text> · {item.product}
@@ -538,7 +572,7 @@ export function JobDetailScreen() {
           containers={job.containers?.map((c, idx) => ({
             code: c.code,
             sequenceNo: idx + 1,
-            status: c.status || (c.action === 'DELIVERED' ? 'DELIVERED' : c.action === 'PICKUP' ? 'ASSIGNED' : 'ONBOARD'),
+            status: c.status,
             action: c.action,
             location: c.location,
             isTarget: c.code === primaryTarget?.code,
@@ -643,6 +677,8 @@ export function JobDetailScreen() {
               loading={isStartingJob}
               onPress={handleStartJob}
             />
+          ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
+            <Button title="Resume Job" variant="primary" size="lg" fullWidth loading={isStartingJob} onPress={handleResumeJob} icon={RefreshCw} />
           ) : job.status === 'RECOVERY_REQUIRED' ? (
             <Button
               title="Initiate Cargo Rescue"
@@ -719,20 +755,18 @@ export function JobDetailScreen() {
       {/* Verification Modal Sheet */}
       <VerifyModal
         visible={isVerifyOpen}
-        targetContainer={targetContainer}
-        targetContainerId={job.containers.find(container => container.code === targetContainer)?.containerId}
-        jobStepId={job.activeStepId}
-        handoverType={job.activeStepOperation === 'PICKUP_CONFIRM' || primaryTarget?.action === 'PICKUP' ? 'PICKUP' : 'DROPOFF'}
-        operatorId={session?.id}
+        targetContainer={verificationContainer?.code || targetContainer}
+        targetContainerId={verificationContainer?.containerId}
+        jobStepId={verificationStepId || undefined}
+        step={verificationStep}
+        jobStatus={job.status}
         robotCode={job.robot}
-        location={job.currentStop || 'Rack A-02'}
-        targetShelf={job.target || 'Rack A · Level 2 · Bin 03'}
+        location={verificationTask?.endpointCode || 'Unknown Location'}
+        targetShelf={verificationTask?.endpointCode || 'Unknown Destination'}
         initialMismatch={isMismatch}
-        otherContainers={job.containers
-          ?.filter((c) => c.code !== targetContainer)
-          .map((c) => ({ code: c.code, slot: c.slot }))}
         onClose={() => setIsVerifyOpen(false)}
         onSuccess={handleVerifySuccess}
+        onRefreshJob={refreshJob}
         onReportIssue={() => {
           setIsVerifyOpen(false);
           setIsIssueOpen(true);
@@ -752,6 +786,7 @@ export function JobDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  refreshWarning: { padding: 12, gap: 8, backgroundColor: colors.warningBg, borderRadius: radii.md },
   robotSelectorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   robotSelectorChip: {
     minHeight: 44, paddingHorizontal: 16, borderRadius: radii.pill,

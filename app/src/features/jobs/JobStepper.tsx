@@ -6,6 +6,7 @@ import { radii } from '../../shared/theme/radii';
 import type { JobStepResponse, StepType } from '../../shared/types/contracts';
 import { StatusPill, Text } from '../../shared/ui';
 import { jobStepTitle } from './jobData';
+import { humanConfirmation } from './handoverData';
 
 const STEP_TYPES: Record<StepType, { label: string; icon: typeof Check }> = {
   CHECK: { label: 'Check', icon: ShieldCheck },
@@ -24,6 +25,7 @@ export function JobStepper({ steps, endpointCode }: { steps: JobStepResponse[]; 
         const failed = step.status === 'FAILED';
         const type = STEP_TYPES[step.stepType];
         const Icon = type?.icon || ShieldCheck;
+        const confirmation = humanConfirmation(step);
         return (
           <View key={step.id} style={styles.step}>
             <View style={styles.spine}>
@@ -41,6 +43,12 @@ export function JobStepper({ steps, endpointCode }: { steps: JobStepResponse[]; 
               <StatusPill status={step.status} size="sm" dot />
               {step.stepType === 'MOVE' && (step.targetEndpointId || endpointCode) ? <Text variant="caption">Target: {step.targetEndpointCode || step.targetEndpointId || endpointCode}</Text> : null}
               {step.status === 'WAITING' && step.stepType === 'HUMAN_INTERACTION' && <Text variant="caption" color={colors.warningText}>Waiting For Operator</Text>}
+              {confirmation ? <View style={styles.confirmation}>
+                <Text variant="body" color={colors.successText}>{confirmation.confirmationSource === 'ROBOT_BUTTON' ? 'Confirmed On Robot' : 'Confirmed In App'}</Text>
+                {confirmation.confirmedByRobotId ? <Text variant="caption">Robot: {confirmation.confirmedByRobotId}</Text> : null}
+                {confirmation.confirmedBy ? <Text variant="caption">Staff: {confirmation.confirmedBy}</Text> : null}
+                {confirmation.confirmedAt ? <Text variant="caption">Confirmed: {formatJobTime(confirmation.confirmedAt)}</Text> : null}
+              </View> : null}
               {step.errorCode || step.errorMessage ? (
                 <View style={styles.error}>
                   {step.errorCode ? <Text variant="caption" color={colors.dangerText} fontWeight="600">{step.errorCode}</Text> : null}
@@ -74,4 +82,5 @@ const styles = StyleSheet.create({
   content: { flex: 1, minWidth: 0, gap: 6, paddingBottom: 24 },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   error: { backgroundColor: colors.dangerBg, borderRadius: radii.sm, padding: 10, gap: 4 },
+  confirmation: { backgroundColor: colors.successBg, borderRadius: radii.sm, padding: 10, gap: 4 },
 });

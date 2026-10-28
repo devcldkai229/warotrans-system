@@ -108,7 +108,7 @@ export type MapStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type EndpointType = 'WAYPOINT' | 'CHARGER' | 'PARK';
 
 /** `Navigation/Enums/ZoneType.cs`. */
-export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY';
+export type ZoneType = 'KEEP_OUT' | 'SPEED' | 'NO_STOP' | 'SINGLE_OCCUPANCY' | 'JUNCTION';
 
 /** `Navigation/Features/GetEndpoint/Response.cs` (also the `EndpointListItemDto` shape). */
 export interface EndpointResponse {
@@ -433,11 +433,25 @@ export interface JobContainerResponse {
   updatedAt?: UtcDateTime;
 }
 
+export type ConfirmationSource = 'STAFF_APP' | 'ROBOT_BUTTON';
+
+/** Confirmation metadata is returned in JobStep.outputValues by the current API. */
+export interface HumanConfirmationOutputs {
+  confirmed: boolean;
+  confirmationSource: ConfirmationSource;
+  confirmedBy: string | null;
+  confirmedByRobotId: string | null;
+  confirmedAt: UtcDateTime;
+  note?: string;
+}
+
 export interface HandoverConfirmationResponse {
   id: string;
   jobStepId: string;
   containerId: string;
-  confirmedBy: string;
+  confirmedBy: string | null;
+  confirmationSource: ConfirmationSource;
+  confirmedByRobotId?: string | null;
   handoverType: HandoverType;
   confirmedAt: UtcDateTime;
   note?: string | null;
@@ -445,11 +459,8 @@ export interface HandoverConfirmationResponse {
 }
 
 export interface HandoverConfirmationBody {
-  containerId: string;
-  confirmedBy: string;
-  handoverType: HandoverType;
-  note?: string;
-  evidence?: Record<string, unknown>;
+  containerId: string | null;
+  note?: string | null;
 }
 
 export interface JobStepResponse {

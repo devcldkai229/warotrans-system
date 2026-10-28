@@ -7,9 +7,10 @@ import { radii } from '../theme/radii';
 interface BottomSheetProps {
   onClose: () => void;
   children: React.ReactNode;
+  accessibilityLabel?: string;
 }
 
-export function BottomSheet({ onClose, children }: BottomSheetProps) {
+export function BottomSheet({ onClose, children, accessibilityLabel = 'task details' }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(false);
   const [availableHeight, setAvailableHeight] = useState(0);
@@ -25,7 +26,7 @@ export function BottomSheet({ onClose, children }: BottomSheetProps) {
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay} onLayout={event => setAvailableHeight(event.nativeEvent.layout.height)}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss task details" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Dismiss ${accessibilityLabel}`} />
         <View
           accessibilityViewIsModal
           onAccessibilityEscape={onClose}
@@ -38,7 +39,7 @@ export function BottomSheet({ onClose, children }: BottomSheetProps) {
             <Pressable
               onPress={() => setExpanded(value => !value)}
               accessibilityRole="button"
-              accessibilityLabel={expanded ? 'Collapse task details' : 'Expand task details'}
+              accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${accessibilityLabel}`}
               accessibilityState={{ expanded }}
               style={styles.handleTarget}
             >

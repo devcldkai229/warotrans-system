@@ -1,5 +1,5 @@
-import { getActiveMapVersion, getMapVersionDetail, listWarehouses, type MapVersionDetailDto, type RobotDto } from '../../shared/api';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   LayoutAnimation,
   Platform,
@@ -30,9 +30,11 @@ import {
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime } from '../../shared/realtime';
-import { listJobs, listRobots } from '../../shared/api';
+import { listJobs } from '../../shared/api';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from '../jobs/jobData';
-import { MapRobot, MiniFacilityMap } from './MiniFacilityMap';
+import { HomeMapPanel } from './HomeMapPanel';
+import { dockReservedSpace } from '../../shared/theme/layout';
+import { useMapFleet } from '../../shared/maps/hooks/useMapFleet';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -40,67 +42,47 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const INITIAL_JOB = EMPTY_JOB;
 
+interface MapRobot {
+  id: string;
+  status: 'EN_ROUTE' | 'STANDBY' | 'PAUSED' | 'UNKNOWN';
+  battery: number | null;
+  speed: string;
+}
+
 /**
  * Modern "Command Center" HomeScreen.
  *
  * Visual Architecture:
  *   - Background: Live Interactive 2D Warehouse Telemetry Map with AMR markers,
- *     racks, docks, and real-time radar sweep.
+ *     published geometry and telemetry from the same map version.
  *   - Foreground Float: Next Handover Task card (peek sheet), with smooth
  *     expand/collapse to inspect the full fleet status.
  */
 export function HomeScreen() {
   const { session } = useAuth();
   const { navigate, dockHeight } = useNavigation();
-  const [activeMap, setActiveMap] = useState<MapVersionDetailDto | null>(null);
-  const [rawFleet, setRawFleet] = useState<RobotDto[]>([]);
+  const [peekSheetHeight, setPeekSheetHeight] = useState(0);
+  const fleetQuery = useMapFleet(session?.id || '');
+  const rawFleet = fleetQuery.robots;
   const [selectedRobotId, setSelectedRobotId] = useState<string>('');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
-  const [activeJob, setActiveJob] = useState<AppJobItem>(INITIAL_JOB);
   const { robotTelemetry, lastJobUpdate } = useRealtime();
+  const jobsQuery = useQuery({ queryKey: ['home-jobs', session?.id], queryFn: () => listJobs(), refetchInterval: 5_000 });
+  const { refetch: refetchJobs } = jobsQuery;
 
   useEffect(() => {
-    let isMounted = true;
-    listJobs()
-      .then((jobs) => {
-        if (isMounted) {
-          const mapped = jobs.filter(job => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(job.status)).map(job => mapJobDetailToAppJobItem(job, session?.id));
-          const priority = (job: AppJobItem) => job.hasWaitingHandover ? 0
-            : ['RECOVERY_REQUIRED', 'PAUSED', 'FAILED'].includes(job.status) ? 1
-            : job.status === 'RUNNING' ? 2
-            : ['QUEUED', 'CREATED'].includes(job.status) ? 3 : 4;
-          setActiveJob(mapped.sort((a, b) => priority(a) - priority(b))[0] || INITIAL_JOB);
-        }
-      })
-      .catch(() => {});
+    if (lastJobUpdate) void refetchJobs();
+  }, [lastJobUpdate, refetchJobs]);
 
-    return () => { isMounted = false; };
-  }, [lastJobUpdate, session?.id]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    listWarehouses({ isActive: true }).then(async response => {
-      const warehouse = response.items[0];
-      if (!warehouse) return;
-      const map = await getActiveMapVersion(warehouse.id);
-      if (map) { const detail = await getMapVersionDetail(map.id); if (isMounted) setActiveMap(detail); }
-    }).catch(() => {});
-    // Fetch initial fleet status from backend so battery/status/pose reflects database on mount
-    listRobots()
-      .then((res) => {
-        if (isMounted && res?.items && res.items.length > 0) {
-          setRawFleet(res.items);
-          setSelectedRobotId(current => res.items.some(robot => robot.code === current) ? current : res.items[0].code);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const activeJob = useMemo(() => {
+    const mapped = (jobsQuery.data || []).filter(job => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(job.status))
+      .map(job => mapJobDetailToAppJobItem(job, session?.id));
+    const priority = (job: AppJobItem) => job.hasWaitingHandover ? 0
+      : ['RECOVERY_REQUIRED', 'PAUSED'].includes(job.status) ? 1
+      : job.status === 'RUNNING' ? 2 : ['QUEUED', 'CREATED'].includes(job.status) ? 3 : 4;
+    return mapped.sort((a, b) => priority(a) - priority(b))[0] || INITIAL_JOB;
+  }, [jobsQuery.data, session?.id]);
 
   const robots = useMemo<MapRobot[]>(() => rawFleet.map(robot => {
     const live = robotTelemetry[robot.code];
@@ -116,7 +98,6 @@ export function HomeScreen() {
     };
   }), [rawFleet, robotTelemetry]);
 
-  const activeZone = session?.zone || 'Inbound Dock 01';
   const isWaitingHandover = Boolean(activeJob.hasWaitingHandover);
   const isQueuedOrCreated = activeJob.status === 'CREATED' || activeJob.status === 'QUEUED';
   const activeStatusLabel = isWaitingHandover ? 'Waiting Handover' : JOB_STATUS_PRESENTATION[activeJob.status]?.label || activeJob.status;
@@ -146,21 +127,14 @@ export function HomeScreen() {
     navigate('job_detail', { jobId: activeJob.id });
   };
 
-  const handleLocateUser = () => {
-    toast.info('Staff station coordinates are not available yet.');
-  };
-
-  const handleSearchOnMap = () => {
-    triggerHaptic('tap');
-    navigate('inventory_lookup');
-  };
-
   return (
     <View style={styles.root}>
       {/* 1. Full-screen Interactive 2D Facility Map */}
-      <MiniFacilityMap
-        map={activeMap} fleet={rawFleet} telemetry={robotTelemetry}
-        currentZone={activeZone}
+      <HomeMapPanel
+        bottomInset={dockReservedSpace(dockHeight) + peekSheetHeight + 10}
+        onOpenJobs={() => navigate('jobs')}
+        fleet={rawFleet}
+        updateMode={fleetQuery.updateMode}
         selectedRobotId={selectedRobotId}
         onSelectRobot={(id) => {
           setSelectedRobotId(id);
@@ -169,14 +143,12 @@ export function HomeScreen() {
             toast.info(`${r.id}: Battery ${r.battery == null ? '—' : `${r.battery}%`}, Speed ${r.speed}`);
           }
         }}
-        onLocateUser={handleLocateUser}
-        onSearch={handleSearchOnMap}
-        robots={robots}
         style={styles.mapCanvas}
       />
 
       {/* 2. Floating Next Handover Task Card (Peek Sheet) */}
       <View
+        onLayout={event => setPeekSheetHeight(event.nativeEvent.layout.height)}
         style={[
           styles.peekSheetContainer,
           { bottom: dockHeight + 10 },
@@ -190,10 +162,12 @@ export function HomeScreen() {
         >
           <View style={styles.dragPill} />
         </Pressable>
+        {fleetQuery.isError ? <Text variant="caption" color={colors.dangerText}>Fleet could not be refreshed. Showing last reported positions.</Text> : null}
 
         {!activeJob.id ? <View style={styles.insetBox}>
-          <Text variant="headline">No Active Jobs</Text>
-          <Button title="View Jobs" onPress={() => navigate('jobs')} />
+          <Text variant="headline">{jobsQuery.isPending ? 'Loading Jobs…' : jobsQuery.isError ? 'Jobs Unavailable' : 'No Active Jobs'}</Text>
+          {jobsQuery.isError ? <Text variant="body" color={colors.dangerText}>{jobsQuery.error.message}</Text> : null}
+          <Button title={jobsQuery.isError ? 'Retry Jobs' : 'View Jobs'} onPress={() => { if (jobsQuery.isError) void refetchJobs(); else navigate('jobs'); }} />
         </View> : !isSheetExpanded ? (
           /* Collapsed Mode (Peek: ~68px, frees up 80% of screen for map) */
           <View style={styles.collapsedRow}>
@@ -201,7 +175,7 @@ export function HomeScreen() {
               onPress={toggleSheetExpand}
               style={styles.collapsedInfo}
               accessibilityRole="button"
-              accessibilityLabel={`Job ${activeJob.id}, waiting handover. Tap to view details.`}
+              accessibilityLabel={`Job ${activeJob.jobNo || activeJob.id}, ${activeStatusLabel}. Tap to view details.`}
             >
               <View style={styles.collapsedTopLine}>
                 <StatusPill status={activeJob.status} label={activeStatusLabel} size="sm" dot />
@@ -282,7 +256,7 @@ export function HomeScreen() {
               <View style={styles.detailRow}>
                 <Text variant="caption" color={colors.textSecondary} style={styles.detailLabel}>Target</Text>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={[styles.detailValue, styles.targetValue]}>
-                  {activeJob.target || 'Rack A · Level 2 · Bin 03'}
+                  {activeJob.target || 'Destination Unavailable'}
                 </Text>
               </View>
 

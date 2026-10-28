@@ -1,5 +1,12 @@
 import type { RequestInputField } from '../../shared/api/workflowApi';
 
+export function staffInputDefaults(fields: RequestInputField[], values: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(fields.flatMap(field => {
+    const value = values[field.key];
+    return ['string', 'boolean', 'number'].includes(typeof value) ? [[field.key, String(value)]] : [];
+  }));
+}
+
 /** Request progress alone does not identify a waiting handover or recovery job. */
 export function requestStatusLabel(status: string): string {
   const labels: Record<string, string> = {
