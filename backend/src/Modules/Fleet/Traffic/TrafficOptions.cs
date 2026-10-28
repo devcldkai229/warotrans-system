@@ -46,6 +46,15 @@ public sealed class TrafficOptions
     /// </summary>
     public double AuthorityRenewIntervalSec { get; set; } = 1.5;
 
+    /// <summary>
+    /// Localization uncertainty added to the footprint turn radius before a resource counts as physically left
+    /// (and around a pose when seeding occupancy). Release is fail-closed: too small releases early.
+    /// </summary>
+    public double LocalizationMarginMeters { get; set; } = 0.05;
+
+    /// <summary>Telemetry older than this is not trusted to seed or reconcile occupancy.</summary>
+    public double PoseMaxAgeSec { get; set; } = 5.0;
+
     public IReadOnlyList<TrafficStationMeta> ResolveStationMeta()
     {
         var list = new List<TrafficStationMeta>();

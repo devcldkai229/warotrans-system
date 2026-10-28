@@ -71,7 +71,7 @@ public static class TrafficGraphCompiler
         }
 
         var route = routeResult.Graph;
-        var graphHash = ComputeGraphHash(input);
+        var graphHash = ComputeGraphHash(input, routeOptions);
         var laneMeta = input.LaneMeta.ToDictionary(m => m.Code, StringComparer.Ordinal);
         var zoneMeta = input.ZoneMeta.ToDictionary(m => m.Code, StringComparer.Ordinal);
         var criticalZoneCodes = input.Zones
@@ -164,10 +164,13 @@ public static class TrafficGraphCompiler
         {
             foreach (var code in node.EndpointCodes)
             {
-                int? access = trafficEdges
+                // Both directions of the stop↔lane connector: a robot leaving the bay must hold it too.
+                var accessEdgeIds = trafficEdges
                     .Where(e => e.IsConnector && (e.StartId == node.Id || e.EndId == node.Id))
-                    .Select(e => (int?)e.Id)
-                    .FirstOrDefault();
+                    .Select(e => e.Id)
+                    .OrderBy(id => id)
+                    .ToImmutableArray();
+                int? access = accessEdgeIds.IsEmpty ? null : accessEdgeIds[0];
                 var bayKind = ResolveBayKind(code, stationMeta, serviceStops, recoveryStops);
                 var isService = serviceStops.Contains(code) || bayKind == TrafficStationBayKind.Service;
                 var isRecovery = recoveryStops.Contains(code) || bayKind == TrafficStationBayKind.Recovery;
@@ -180,7 +183,7 @@ public static class TrafficGraphCompiler
                     bayKind));
                 stationNodeIds.Add(node.Id);
 
-                if (access is int accessEdgeId)
+                if (access is not null)
                 {
                     var bayResourceKind = isRecovery || bayKind is TrafficStationBayKind.Holding
                         ? TrafficResourceKind.HoldingBay
@@ -191,7 +194,7 @@ public static class TrafficGraphCompiler
                         $"bay:{code}",
                         bayResourceKind,
                         1,
-                        ImmutableArray.Create(accessEdgeId),
+                        accessEdgeIds,
                         [code]));
                 }
             }
@@ -325,6 +328,8 @@ public static class TrafficGraphCompiler
                 safeStops.Contains(n.Id)))
             .ToImmutableArray();
 
+        BuildNodeConflictResources(trafficEdges, trafficNodes, resources);
+
         var (csrOffsets, csrEdgeIds) = BuildCsr(trafficNodes, trafficEdges);
 
         var sweptSegments = trafficEdges
@@ -386,10 +391,31 @@ public static class TrafficGraphCompiler
         return new TrafficCompileResult(graph, issues);
     }
 
-    public static string ComputeGraphHash(TrafficCompileInput input)
+    /// <summary>
+    /// Bumped whenever RouteGraphBuilder / this compiler change node, edge or resource output for the same input,
+    /// so a robot holding a graph file from an older build can never accept a grant (edge ids would differ).
+    /// </summary>
+    public const int CompilerVersion = 2;
+
+    public static string ComputeGraphHash(TrafficCompileInput input, RouteGraphOptions? routeOptions = null)
     {
+        var options = routeOptions ?? RouteGraphOptions.Default;
         var canonical = new
         {
+            compilerVersion = CompilerVersion,
+            routeOptions = new
+            {
+                vertexSnap = Round(options.VertexSnapTolerance),
+                endpointSnap = Round(options.EndpointSnapDistance),
+                junctionCapture = Round(options.JunctionCaptureDistance)
+            },
+            // Occupancy changes safe stops / holding nodes; a graph compiled without it must not share the hash.
+            occupancy = input.Occupancy?.Fingerprint,
+            stations = (input.StationMeta ?? [])
+                .OrderBy(s => s.EndpointCode, StringComparer.Ordinal)
+                .Select(s => new { s.EndpointCode, kind = s.BayKind.ToString() }),
+            serviceStops = input.ServiceStopEndpointCodes?.Order(StringComparer.Ordinal).ToList(),
+            recoveryStops = input.RecoveryEndpointCodes?.Order(StringComparer.Ordinal).ToList(),
             name = input.Name,
             frameId = input.FrameId,
             footprint = new
@@ -523,6 +549,36 @@ public static class TrafficGraphCompiler
         }
     }
 
+    /// <summary>
+    /// One mutex per node where robots can meet: intersections (≥ 3 neighbours), safe stops and stations.
+    /// Lanes are split at every crossing, so edges sharing only a vertex are otherwise never in conflict.
+    /// </summary>
+    private static void BuildNodeConflictResources(
+        List<TrafficEdge> edges,
+        ImmutableArray<TrafficNode> nodes,
+        List<TrafficResource> resources)
+    {
+        foreach (var node in nodes.OrderBy(n => n.Id))
+        {
+            var incident = edges.Where(e => e.StartId == node.Id || e.EndId == node.Id).ToList();
+            var neighbours = incident
+                .Select(e => e.StartId == node.Id ? e.EndId : e.StartId)
+                .Distinct()
+                .Count();
+            if (neighbours < 3 && !node.IsSafeStop && !node.IsStation)
+            {
+                continue;
+            }
+
+            resources.Add(new TrafficResource(
+                $"node:{node.Id}",
+                TrafficResourceKind.NodeConflict,
+                1,
+                incident.Select(e => e.Id).Distinct().OrderBy(id => id).ToImmutableArray(),
+                [$"node:{node.Id}", .. node.EndpointCodes]));
+        }
+    }
+
     private static void BuildNarrowBidirectionalResources(
         List<TrafficEdge> edges,
         Dictionary<string, TrafficLaneMeta> laneMeta,
@@ -539,12 +595,8 @@ public static class TrafficGraphCompiler
                 continue;
             }
 
-            // Narrow = capacity 1 and width tight relative to footprint (already capacity 1 default).
-            if (meta.Capacity != 1)
-            {
-                continue;
-            }
-
+            // Both directions drive the same centre line, so opposing robots always collide whatever the lane
+            // capacity: one robot at a time across both directions (same-direction convoys are not modelled).
             var edgeIds = group.Select(x => x.Edge.Id).Distinct().OrderBy(id => id).ToImmutableArray();
             if (edgeIds.Length < 2)
             {

@@ -123,6 +123,36 @@ public sealed class TrafficShadowObserver(
     public Task OnOfflineAsync(Guid robotId, CancellationToken ct = default) =>
         segmented.MarkOfflineAsync(robotId, ct);
 
+    /// <summary>
+    /// Cumulative authority edges: <c>authority.segmentEdgeIds</c> of an Active NAVIGATE, or the top-level
+    /// <c>segmentEdgeIds</c> of an EXTEND_AUTHORITY payload.
+    /// </summary>
+    public static ImmutableArray<int> ParseAuthorityEdgeIds(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("authority", out var authority) && authority.ValueKind == JsonValueKind.Object)
+            {
+                root = authority;
+            }
+
+            return root.TryGetProperty("segmentEdgeIds", out var edges) && edges.ValueKind == JsonValueKind.Array
+                ? edges.EnumerateArray().Select(e => e.GetInt32()).ToImmutableArray()
+                : [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
     public static ImmutableArray<int> ParseRouteEdgeIds(string? payloadJson)
     {
         if (string.IsNullOrWhiteSpace(payloadJson))

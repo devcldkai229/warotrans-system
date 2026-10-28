@@ -62,7 +62,7 @@ public class TrafficActiveRouteTests
 
         for (var i = 1; i < segments.Length; i++)
         {
-            Assert.True(sim.State.AdvanceRoute(robot).Ok);
+            Assert.True(StopAtGoal(sim, robot).Ok);
             var extend = Assert.Single(sim.State.DrainEvents());
             Assert.Equal(TrafficEventKind.AuthorityExtended, extend.Kind);
             Assert.Equal(i == segments.Length - 1, extend.IsFinalSegment);
@@ -70,8 +70,79 @@ public class TrafficActiveRouteTests
 
         var authority = sim.State.Snapshot().Robots.Single(r => r.RobotId == robot).Authority!;
         Assert.Equal(segments.SelectMany(s => s.EdgeIds).Distinct().Count(), authority.EdgeIds.Length);
-        Assert.Equal("NO_PENDING_SEGMENT", sim.State.AdvanceRoute(robot).Reason);
+        Assert.Equal("NO_PENDING_SEGMENT", StopAtGoal(sim, robot).Reason);
     }
+
+    [Fact]
+    public void Advance_without_a_stopped_report_is_refused()
+    {
+        var sim = new FakeRobotSim(BuildLineWithMidStation());
+        var robot = Guid.NewGuid();
+        var (segments, goal) = PlanRoute(sim, robot, 0, 0, "EP-B");
+        Assert.True(sim.State.AcquireRoute(segments, goal, sim.Epoch).Granted);
+
+        Assert.Equal("NOT_AWAITING", sim.State.AdvanceRoute(robot).Reason);
+    }
+
+    [Fact]
+    public void T9_duplicate_stopped_awaiting_does_not_grant_a_second_extension()
+    {
+        var sim = new FakeRobotSim(BuildLineWithMidStation());
+        var robot = Guid.NewGuid();
+        var (segments, goal) = PlanRoute(sim, robot, 0, 0, "EP-B");
+        Assert.True(sim.State.AcquireRoute(segments, goal, sim.Epoch).Granted);
+        var view = sim.State.Snapshot().Robots.Single(r => r.RobotId == robot);
+        var staleSeq = view.Authority!.Seq;
+        var mid = sim.Graph.NodeById[view.Authority.GoalSafeStopNodeId];
+
+        Assert.True(sim.State.ReportStoppedAwaiting(robot, staleSeq, sim.Epoch, mid.X, mid.Y, true).Ok);
+        var edgesAfterFirst = Snapshot(sim, robot).Authority!.EdgeIds.Length;
+
+        // Same message redelivered: below the floor set by the EXTEND it caused.
+        Assert.Equal("STALE_SEQ", sim.State.ReportStoppedAwaiting(robot, staleSeq, sim.Epoch, mid.X, mid.Y, true).Reason);
+        Assert.Equal(edgesAfterFirst, Snapshot(sim, robot).Authority!.EdgeIds.Length);
+    }
+
+    [Fact]
+    public void T9_stopped_report_away_from_the_goal_safe_stop_does_not_extend()
+    {
+        var sim = new FakeRobotSim(BuildLineWithMidStation());
+        var robot = Guid.NewGuid();
+        var (segments, goal) = PlanRoute(sim, robot, 0, 0, "EP-B");
+        Assert.True(sim.State.AcquireRoute(segments, goal, sim.Epoch).Granted);
+        var seq = Snapshot(sim, robot).Authority!.Seq;
+
+        Assert.Equal("NOT_AT_SAFE_STOP", sim.State.ReportStoppedAwaiting(robot, seq, sim.Epoch, 0.5, 0, true).Reason);
+    }
+
+    [Fact]
+    public void T10_late_safe_stop_report_keeps_resources_ahead_of_the_robot()
+    {
+        var sim = new FakeRobotSim(BuildLineWithMidStation());
+        var robot = Guid.NewGuid();
+        var (segments, goal) = PlanRoute(sim, robot, 0, 0, "EP-B");
+        Assert.True(sim.State.AcquireRoute(segments, goal, sim.Epoch).Granted);
+        var seq = Snapshot(sim, robot).Authority!.Seq;
+        Assert.True(StopAtGoal(sim, robot).Ok); // EXTEND to EP-B granted
+        var lastEdge = Snapshot(sim, robot).Authority!.EdgeIds[^1];
+        var ahead = sim.Graph.ResourcesCovering([lastEdge]);
+
+        // The SAFE_STOP_REACHED for the mid stop arrives after the extension, robot still at EP-M (2,0).
+        Assert.True(sim.State.ReportSafeStopReached(robot, Snapshot(sim, robot).Authority!.Seq, sim.Epoch, 2, 0, true).Ok);
+
+        Assert.All(ahead, rid => Assert.Contains(rid, Snapshot(sim, robot).OccupiedResourceIds));
+        _ = seq;
+    }
+
+    private static TrafficOpResult StopAtGoal(FakeRobotSim sim, Guid robot)
+    {
+        var authority = Snapshot(sim, robot).Authority!;
+        var node = sim.Graph.NodeById[authority.GoalSafeStopNodeId];
+        return sim.State.ReportStoppedAwaiting(robot, authority.Seq, sim.Epoch, node.X, node.Y, true);
+    }
+
+    private static RobotTrafficView Snapshot(FakeRobotSim sim, Guid robot) =>
+        sim.State.Snapshot().Robots.Single(r => r.RobotId == robot);
 
     [Fact]
     public void Safe_stop_releases_only_resources_the_robot_has_left()
@@ -82,7 +153,7 @@ public class TrafficActiveRouteTests
         var grant = sim.State.AcquireRoute(segments, goal, sim.Epoch);
         for (var i = 1; i < segments.Length; i++)
         {
-            Assert.True(sim.State.AdvanceRoute(robot).Ok);
+            Assert.True(StopAtGoal(sim, robot).Ok);
         }
 
         var before = Occupied(sim, robot);
@@ -102,7 +173,7 @@ public class TrafficActiveRouteTests
         var sim = new FakeRobotSim(FakeRobotSim.BuildNarrowBidirectional());
         var robot = Guid.NewGuid();
         var (segments, goal) = PlanRoute(sim, robot, 0, 0, "EP-B");
-        const string bay = "bay:EP-B";
+        var bay = $"node:{sim.Graph.Stations.First(s => s.EndpointCode == "EP-B").NodeId}";
         Assert.True(sim.State.HoldServiceResource(robot, bay).Ok);
         Assert.True(sim.State.AcquireRoute(segments, goal, sim.Epoch).Granted);
         Assert.NotEmpty(sim.State.ActiveAuthorityKeys());

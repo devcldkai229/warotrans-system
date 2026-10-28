@@ -21,7 +21,9 @@ public class SegmentedTrafficCoordinatorTests
 
         var g2 = sim.AcquireNextSegment(b, 4, 0, goalA);
         Assert.False(g2.Granted);
-        Assert.True(g2.Queued || g2.Reason is "DEADLOCK_RISK" or "SHADOW_SINGLE_MOVER" or not null);
+        Assert.True(g2.Queued);
+        Assert.Equal(TrafficWaitingReason.Capacity, g2.WaitingReason);
+        Assert.Equal(a, g2.BlockingOwner);
     }
 
     [Fact]
@@ -95,24 +97,17 @@ public class SegmentedTrafficCoordinatorTests
         var r2 = Guid.NewGuid();
         var epA = sim.Graph.Stations.First(s => s.EndpointCode == "EP-A").NodeId;
         var epB = sim.Graph.Stations.First(s => s.EndpointCode == "EP-B").NodeId;
-        var epC = sim.Graph.Stations.First(s => s.EndpointCode == "EP-C").NodeId;
 
-        // Force occupancy of junction by placing both with authority toward crossing goals.
         var g1 = sim.AcquireNextSegment(r1, 0, 0, epB);
-        Assert.True(g1.Granted || g1.Queued);
+        Assert.True(g1.Granted);
 
-        // Seed wait-for edges manually via a second acquire that contends.
+        // Opposite direction through the same exclusive junction: must wait behind r1, never be granted.
         var g2 = sim.AcquireNextSegment(r2, 2, 0, epA);
-        // Either queued or deadlock-rejected — never both granted on same exclusive junction.
-        if (g1.Granted)
-        {
-            Assert.False(g2.Granted);
-        }
-
-        _ = epC;
-        var cycles = sim.State.Snapshot().Cycles;
-        // Diagnostics API is available even when empty.
-        Assert.True(cycles.Length >= 0);
+        Assert.False(g2.Granted);
+        Assert.True(g2.Queued);
+        Assert.Equal(r1, g2.BlockingOwner);
+        // r2 waits for r1, r1 waits for nobody: a wait chain, not a cycle.
+        Assert.Empty(sim.State.Snapshot().Cycles);
     }
 
     [Fact]
@@ -170,6 +165,7 @@ public class SegmentedTrafficCoordinatorTests
         state.BindGraph(Guid.NewGuid(), graph);
 
         var robot = Guid.NewGuid();
+        var parked = Guid.NewGuid();
         var edgeIds = graph.Edges.Select(e => e.Id).Take(1).ToImmutableArray();
         state.CompleteReconciliation(
         [
@@ -177,12 +173,25 @@ public class SegmentedTrafficCoordinatorTests
         ]);
 
         Assert.Equal("Ready", state.Phase);
+        // Driving under a previous-epoch authority: holds its edges + floor and waits for a verified state (T8).
         var view = state.Snapshot().Robots.Single(r => r.RobotId == robot);
-        Assert.Equal(TrafficRobotPhase.Idle, view.Phase);
+        Assert.Equal(TrafficRobotPhase.Quarantined, view.Phase);
+        Assert.Equal("RECONCILE_IN_MOTION", view.QuarantineReason);
         Assert.NotEmpty(view.OccupiedResourceIds);
 
-        // Uncertain seed → quarantine
+        // Parked robot without an open command still occupies the floor under it (T8).
         state.BeginEpoch(2);
+        state.BindGraph(Guid.NewGuid(), graph);
+        state.CompleteReconciliation(
+        [
+            new TrafficReconcileSeed(parked, null, [], 5, 0, LocalizationOk: true, PoseKnown: true)
+        ]);
+        var parkedView = state.Snapshot().Robots.Single(r => r.RobotId == parked);
+        Assert.Equal(TrafficRobotPhase.Idle, parkedView.Phase);
+        Assert.NotEmpty(parkedView.OccupiedResourceIds);
+
+        // Uncertain seed → quarantine
+        state.BeginEpoch(3);
         state.BindGraph(Guid.NewGuid(), graph);
         state.CompleteReconciliation(
         [

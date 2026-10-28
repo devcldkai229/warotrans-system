@@ -49,11 +49,24 @@ public sealed class TrafficState
         Log($"epoch:{Epoch}:reconciling");
     }
 
-    public void BindGraph(Guid mapVersionId, CompiledTrafficGraph graph)
+    /// <summary>
+    /// Binds the graph every resource id refers to. Swapping to a different graph while any robot holds occupancy
+    /// or authority would re-interpret those ids against other geometry, so it is refused (GRAPH_IN_USE).
+    /// </summary>
+    public TrafficOpResult BindGraph(Guid mapVersionId, CompiledTrafficGraph graph)
     {
+        if (_graph is not null
+            && !string.Equals(_graph.GraphHash, graph.GraphHash, StringComparison.Ordinal)
+            && _robots.Values.Any(r => r.OccupiedResourceIds.Count > 0 || r.Authority is not null))
+        {
+            Log($"bind-refused:{graph.GraphHash}:in-use:{_graph.GraphHash}");
+            return TrafficOpResult.Fail("GRAPH_IN_USE");
+        }
+
         _mapVersionId = mapVersionId;
         _graph = graph;
         StateVersion++;
+        return TrafficOpResult.Success();
     }
 
     public void CompleteReconciliation(IReadOnlyList<TrafficReconcileSeed> seeds)
@@ -81,26 +94,30 @@ public sealed class TrafficState
                 continue;
             }
 
-            // Localized with no granted edges (idle / rejected empty grant): ready, not quarantined.
-            if (seed.OccupiedEdgeIds.Length == 0)
+            // The floor under the robot is occupied whatever it was doing (audit T8).
+            var x = seed.PoseX!.Value;
+            var y = seed.PoseY!.Value;
+            robot.NodeId = RoutePlanner.NearestNode(_graph, x, y);
+            var resources = ResourcesAtPose(x, y)
+                .Concat(_graph.ResourcesCovering(seed.OccupiedEdgeIds))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (!TryOccupy(robot, resources, out var reason))
             {
-                robot.Phase = TrafficRobotPhase.Idle;
-                robot.QuarantineReason = null;
-                robot.NodeId = RoutePlanner.NearestNode(_graph, seed.PoseX ?? 0, seed.PoseY ?? 0);
-                Log($"reconcile:idle:{robot.RobotId}");
+                Quarantine(robot, $"RECONCILE_CONFLICT:{reason}");
                 continue;
             }
 
-            var resources = _graph.ResourcesCovering(seed.OccupiedEdgeIds);
-            if (!TryOccupy(robot, resources, out var reason))
+            if (seed.OccupiedEdgeIds.Length > 0)
             {
-                Quarantine(robot, reason ?? "RECONCILE_CONFLICT");
+                // It was driving under an authority of the previous epoch, which no longer exists: it stops on its
+                // authority watchdog. Hold everything it may still be on until it reports a verified state.
+                Quarantine(robot, "RECONCILE_IN_MOTION");
                 continue;
             }
 
             robot.Phase = TrafficRobotPhase.Idle;
             robot.QuarantineReason = null;
-            robot.NodeId = RoutePlanner.NearestNode(_graph, seed.PoseX ?? 0, seed.PoseY ?? 0);
             Log($"reconcile:ok:{robot.RobotId}");
         }
 
@@ -143,7 +160,7 @@ public sealed class TrafficState
             return Cache(candidate.RequestId, AcquireResult.Reject("STALE_SEQ"));
         }
 
-        // No hold-and-wait: may only hold current occupancy + one new segment.
+        // One authority per robot; later segments of a route are added by ExtendAtomic (hold-and-wait, cycle-checked).
         if (robot.Authority is not null)
         {
             return Cache(candidate.RequestId, AcquireResult.Reject("AUTHORITY_ALREADY_HELD"));
@@ -178,7 +195,12 @@ public sealed class TrafficState
         // Exit reservation: segment goal / exits must be free or held by this robot.
         if (!ReserveExits(candidate.ExitSafeStops, robot.RobotId, out var exitBlocker))
         {
-            Enqueue(robot, candidate, TrafficWaitingReason.ExitBlocked, exitBlocker);
+            // Wake up when the robot standing on the exit releases what it holds, not only our own resources
+            // (audit T7: those are usually free, so the waiter was never promoted).
+            var blockerHeld = exitBlocker is Guid b && _robots.TryGetValue(b, out var other)
+                ? other.OccupiedResourceIds.ToImmutableArray()
+                : [];
+            Enqueue(robot, candidate, TrafficWaitingReason.ExitBlocked, exitBlocker, blockerHeld);
             return Cache(candidate.RequestId,
                 AcquireResult.Queue(TrafficWaitingReason.ExitBlocked, exitBlocker, "EXIT_BLOCKED"));
         }
@@ -241,13 +263,69 @@ public sealed class TrafficState
         return result;
     }
 
-    /// <summary>Grants the next pending segment as EXTEND (robot stopped at a safe stop awaiting authority).</summary>
+    /// <summary>
+    /// STOPPED_AWAITING_AUTHORITY (audit T9): only an accepted (non-stale) report from a robot standing at its
+    /// authority's goal safe stop arms the next EXTEND. A duplicate or delayed report carries a seq below the floor
+    /// set by that EXTEND and is rejected, so it can never grant a segment the robot did not ask for.
+    /// </summary>
+    public TrafficOpResult ReportStoppedAwaiting(
+        Guid robotId, long seq, long epoch, double? poseX, double? poseY, bool localizationOk)
+    {
+        if (epoch != Epoch)
+        {
+            return TrafficOpResult.Fail("STALE_EPOCH");
+        }
+
+        var robot = GetOrCreate(robotId);
+        if (!TryAcceptProgressSeq(robot, seq))
+        {
+            return TrafficOpResult.Fail("STALE_SEQ");
+        }
+
+        if (!localizationOk || _graph is null)
+        {
+            Quarantine(robot, "LOCALIZATION_LOSS");
+            return TrafficOpResult.Fail("LOCALIZATION_LOSS");
+        }
+
+        if (robot.Authority is not { } auth)
+        {
+            return TrafficOpResult.Fail("NO_AUTHORITY");
+        }
+
+        if (poseX is double x && poseY is double y)
+        {
+            robot.X = x;
+            robot.Y = y;
+            robot.NodeId = RoutePlanner.NearestNode(_graph, x, y);
+            if (_graph.NodeById.TryGetValue(auth.GoalSafeStopNodeId, out var goal)
+                && Math.Sqrt(Square(goal.X - x) + Square(goal.Y - y)) > ClearRadius)
+            {
+                return TrafficOpResult.Fail("NOT_AT_SAFE_STOP");
+            }
+        }
+
+        robot.AwaitingExtension = true;
+        return AdvanceRoute(robotId);
+    }
+
+    private static double Square(double v) => v * v;
+
+    /// <summary>
+    /// Grants the next pending segment as EXTEND. Only for a robot armed by <see cref="ReportStoppedAwaiting"/>
+    /// (or still waiting from an earlier busy attempt, retried by the renew tick).
+    /// </summary>
     public TrafficOpResult AdvanceRoute(Guid robotId)
     {
         var robot = GetOrCreate(robotId);
         if (robot.Authority is null)
         {
             return TrafficOpResult.Fail("NO_AUTHORITY");
+        }
+
+        if (!robot.AwaitingExtension)
+        {
+            return TrafficOpResult.Fail("NOT_AWAITING");
         }
 
         if (robot.PendingSegments.IsDefaultOrEmpty)
@@ -306,8 +384,12 @@ public sealed class TrafficState
         robot.LocalizationOk = true;
         robot.NodeId = RoutePlanner.NearestNode(_graph, poseX, poseY);
 
+        // A late / duplicated report can arrive after an EXTEND: what lies ahead is far from the pose but is
+        // exactly what the robot is about to drive, so it must stay held.
+        var ahead = ResourcesAhead(robot);
         var cleared = robot.OccupiedResourceIds
-            .Where(rid => !robot.ServiceHoldIds.Contains(rid) && IsPhysicallyClear(robot, rid, poseX, poseY))
+            .Where(rid => !robot.ServiceHoldIds.Contains(rid) && !ahead.Contains(rid)
+                && IsPhysicallyClear(robot, rid, poseX, poseY))
             .ToList();
         foreach (var rid in cleared)
         {
@@ -324,10 +406,16 @@ public sealed class TrafficState
     /// NAVIGATE finished. Success clears authority + route and releases what is physically clear; anything else
     /// quarantines (fail-closed, occupancy kept until verified exit / operator).
     /// </summary>
-    public TrafficOpResult CompleteRoute(Guid robotId, bool succeeded, string? reason)
+    public TrafficOpResult CompleteRoute(Guid robotId, bool succeeded, string? reason, Guid? authorityId = null)
     {
         var robot = GetOrCreate(robotId);
         var previous = robot.Authority;
+        // A late / duplicate result of an older NAVIGATE must not finish (or quarantine) the current route (T12).
+        if (authorityId is Guid id && previous is not null && previous.AuthorityId != id)
+        {
+            Log($"route-complete-ignored:{robotId}:{id}");
+            return TrafficOpResult.Fail("AUTHORITY_MISMATCH");
+        }
         ClearRoute(robot);
         if (!succeeded)
         {
@@ -462,22 +550,43 @@ public sealed class TrafficState
             return Cache(candidate.RequestId, AcquireResult.Reject("NO_AUTHORITY"));
         }
 
+        if (!string.Equals(_graph.GraphHash, candidate.GraphHash, StringComparison.Ordinal)
+            || !string.Equals(robot.Authority.GraphHash, candidate.GraphHash, StringComparison.Ordinal))
+        {
+            return Cache(candidate.RequestId, AcquireResult.Reject("GRAPH_MISMATCH"));
+        }
+
         if (robot.Phase == TrafficRobotPhase.Quarantined)
         {
             return Cache(candidate.RequestId, AcquireResult.Reject("QUARANTINED"));
         }
 
+        // Extension is hold-and-wait: the robot keeps its current segment while asking for the next one, so two
+        // robots facing each other at adjacent safe stops would each hold what the other needs (audit T3).
+        if (WouldCreateWaitForCycle(robot.RobotId, candidate.ResourceIds))
+        {
+            robot.WaitingReason = TrafficWaitingReason.DeadlockRisk;
+            Log($"deadlock-reject-extend:{robot.RobotId}");
+            return Cache(candidate.RequestId, AcquireResult.Reject("DEADLOCK_RISK", TrafficWaitingReason.DeadlockRisk));
+        }
+
         if (!CanAcquire(candidate.ResourceIds, robot.RobotId, out var blocker, out var waitReason))
         {
+            robot.BlockingOwner = blocker;
+            robot.WaitingReason = waitReason;
             return Cache(candidate.RequestId, AcquireResult.Queue(waitReason, blocker));
         }
 
         if (!ReserveExits(candidate.ExitSafeStops, robot.RobotId, out var exitBlocker))
         {
+            robot.BlockingOwner = exitBlocker;
+            robot.WaitingReason = TrafficWaitingReason.ExitBlocked;
             return Cache(candidate.RequestId,
                 AcquireResult.Queue(TrafficWaitingReason.ExitBlocked, exitBlocker, "EXIT_BLOCKED"));
         }
 
+        robot.BlockingOwner = null;
+        robot.WaitingReason = TrafficWaitingReason.None;
         Occupy(robot, candidate.ResourceIds);
         var prev = robot.Authority;
         var cumulativeEdges = prev.EdgeIds.Concat(candidate.EdgeIds).Distinct().ToImmutableArray();
@@ -580,7 +689,9 @@ public sealed class TrafficState
         robot.Y = poseY;
         robot.LocalizationOk = true;
 
-        foreach (var rid in resourceIds)
+        // Station / service holds are released by their workflow step, never by a progress report.
+        var exits = resourceIds.Where(rid => !robot.ServiceHoldIds.Contains(rid)).ToImmutableArray();
+        foreach (var rid in exits)
         {
             if (!robot.OccupiedResourceIds.Contains(rid))
             {
@@ -593,10 +704,12 @@ public sealed class TrafficState
             }
         }
 
-        foreach (var rid in resourceIds)
+        foreach (var rid in exits)
         {
             ReleaseResource(robot, rid);
         }
+
+        resourceIds = exits;
 
         // Clear authority when all granted resources released.
         if (robot.Authority is { } auth &&
@@ -702,7 +815,64 @@ public sealed class TrafficState
         return TrafficOpResult.Success();
     }
 
-    public TrafficOpResult ReconcileRobot(Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges)
+    /// <summary>
+    /// Active MOVE start (audit T1). Never releases occupancy and never lifts a quarantine: what the robot holds
+    /// from its previous move or station hold stays held. A robot the coordinator has not seen yet (host restart,
+    /// first move) is seeded with the resources under its footprint so its physical spot is reserved.
+    /// </summary>
+    public TrafficOpResult EnsureTracked(Guid robotId, double? poseX, double? poseY, bool localizationOk)
+    {
+        if (_graph is null)
+        {
+            return TrafficOpResult.Fail("NO_GRAPH");
+        }
+
+        var robot = GetOrCreate(robotId);
+        if (robot.Phase == TrafficRobotPhase.Quarantined)
+        {
+            return TrafficOpResult.Fail($"QUARANTINED:{robot.QuarantineReason}");
+        }
+
+        if (robot.Authority is not null)
+        {
+            return TrafficOpResult.Fail("AUTHORITY_ALREADY_HELD");
+        }
+
+        if (poseX is not double x || poseY is not double y || !localizationOk)
+        {
+            Quarantine(robot, "POSE_UNCERTAIN");
+            return TrafficOpResult.Fail("POSE_UNCERTAIN");
+        }
+
+        robot.X = x;
+        robot.Y = y;
+        robot.LocalizationOk = true;
+        robot.NodeId = RoutePlanner.NearestNode(_graph, x, y);
+        if (robot.OccupiedResourceIds.Count == 0)
+        {
+            var under = ResourcesAtPose(x, y);
+            if (!TryOccupy(robot, under, out var reason))
+            {
+                Quarantine(robot, $"SEED_CONFLICT:{reason}");
+                return TrafficOpResult.Fail($"SEED_CONFLICT:{reason}");
+            }
+
+            Log($"seed:{robotId}:{string.Join(",", under)}");
+        }
+
+        StateVersion++;
+        return TrafficOpResult.Success();
+    }
+
+    /// <summary>
+    /// Rebuilds a robot's occupancy from a trusted, localized pose (audit T2): resources the footprint (plus
+    /// localization margin) still covers are kept or re-occupied, everything else it held is released only when
+    /// physically clear. The robot's authority/route is dropped only when the robot itself reports idle, and only
+    /// then is a quarantine lifted — the robot has confirmed it is stopped and where it is.
+    /// </summary>
+    public TrafficOpResult ReconcileRobot(
+        Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,
+        bool robotReportsIdle = true)
     {
         if (_graph is null)
         {
@@ -716,35 +886,98 @@ public sealed class TrafficState
             return TrafficOpResult.Fail("LOCALIZATION");
         }
 
-        // Release previous occupancy then re-apply.
-        foreach (var rid in robot.OccupiedResourceIds.ToList())
-        {
-            ReleaseResource(robot, rid);
-        }
-
-        robot.Authority = null;
-        ClearRoute(robot);
         robot.X = poseX;
         robot.Y = poseY;
         robot.LocalizationOk = true;
         robot.NodeId = RoutePlanner.NearestNode(_graph, poseX, poseY);
 
-        var resources = occupiedEdges.Length > 0
-            ? _graph.ResourcesCovering(occupiedEdges)
-            : [];
-
-        if (resources.Length > 0 && !TryOccupy(robot, resources, out var reason))
+        if (!robotReportsIdle && robot.Authority is not null)
         {
-            Quarantine(robot, reason ?? "RECONCILE_CONFLICT");
+            // Robot still executing the authority we granted: nothing to rebuild.
+            StateVersion++;
+            Log($"reconcile-robot:{robotId}:executing");
+            return TrafficOpResult.Success();
+        }
+
+        var keep = ResourcesAtPose(poseX, poseY)
+            .Concat(occupiedEdges.Length > 0 ? _graph.ResourcesCovering(occupiedEdges) : [])
+            .Concat(robot.ServiceHoldIds)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var released = robot.OccupiedResourceIds
+            .Where(rid => !keep.Contains(rid) && IsPhysicallyClear(robot, rid, poseX, poseY))
+            .ToList();
+        foreach (var rid in released)
+        {
+            ReleaseResource(robot, rid);
+        }
+
+        var missing = keep.Where(rid => !robot.OccupiedResourceIds.Contains(rid)).ToList();
+        if (missing.Count > 0 && !TryOccupy(robot, missing, out var reason))
+        {
+            Quarantine(robot, $"RECONCILE_CONFLICT:{reason}");
+            PromoteWaiters(released);
             return TrafficOpResult.Fail(reason ?? "CONFLICT");
         }
 
-        robot.Phase = TrafficRobotPhase.Idle;
+        robot.Authority = null;
+        ClearRoute(robot);
+        robot.Phase = robot.ServiceHoldIds.Count > 0 ? TrafficRobotPhase.HoldingService : TrafficRobotPhase.Idle;
         robot.QuarantineReason = null;
+        robot.WaitingReason = TrafficWaitingReason.None;
+        robot.BlockingOwner = null;
         StateVersion++;
-        Log($"reconcile-robot:{robotId}");
+        Log($"reconcile-robot:{robotId}:released:{string.Join(",", released)}");
+        PromoteWaiters(released);
         return TrafficOpResult.Success();
     }
+
+    /// <summary>
+    /// Resources covering authority edges the robot has not finished yet: every edge after the last one that ends at
+    /// the node the robot stands at. When that node is not on the authority, everything is treated as ahead.
+    /// </summary>
+    private HashSet<string> ResourcesAhead(RobotRuntime robot)
+    {
+        if (_graph is null || robot.Authority is not { } auth || auth.EdgeIds.IsDefaultOrEmpty)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var reached = -1;
+        for (var i = auth.EdgeIds.Length - 1; i >= 0; i--)
+        {
+            if (_graph.EdgeById.TryGetValue(auth.EdgeIds[i], out var e) && e.EndId == robot.NodeId)
+            {
+                reached = i;
+                break;
+            }
+        }
+
+        return _graph.ResourcesCovering(auth.EdgeIds.Skip(reached + 1)).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>Resources whose edges pass within the footprint radius (+ localization margin) of a pose.</summary>
+    private ImmutableArray<string> ResourcesAtPose(double x, double y)
+    {
+        if (_graph is null)
+        {
+            return [];
+        }
+
+        var radius = ClearRadius;
+        var edges = _graph.Edges
+            .Where(e =>
+            {
+                var a = _graph.NodeById[e.StartId];
+                var b = _graph.NodeById[e.EndId];
+                return PointToSegmentDistance(x, y, a.X, a.Y, b.X, b.Y) <= radius;
+            })
+            .Select(e => e.Id)
+            .ToList();
+        return _graph.ResourcesCovering(edges);
+    }
+
+    private double ClearRadius => (_graph?.Footprint.TurnRadius ?? 0) + Math.Max(0, _options.LocalizationMarginMeters);
 
     /// <summary>
     /// Bumps seq and emits <see cref="TrafficEventKind.AuthorityRenewed"/> so the publisher
@@ -927,14 +1160,19 @@ public sealed class TrafficState
         return w.Candidate.Priority + waitedSec * _options.AgingRate;
     }
 
-    private void Enqueue(RobotRuntime robot, RouteSegmentCandidate candidate, TrafficWaitingReason reason, Guid? blocker)
+    private void Enqueue(
+        RobotRuntime robot,
+        RouteSegmentCandidate candidate,
+        TrafficWaitingReason reason,
+        Guid? blocker,
+        ImmutableArray<string> wakeOn = default)
     {
         robot.Phase = TrafficRobotPhase.Waiting;
         robot.WaitingReason = reason;
         robot.BlockingOwner = blocker;
         var waiter = new Waiter(robot.RobotId, candidate, reason, blocker, ++_enqueueSeq, _clock.GetUtcNow());
 
-        foreach (var rid in candidate.ResourceIds)
+        foreach (var rid in candidate.ResourceIds.Concat(wakeOn.IsDefault ? [] : wakeOn).Distinct(StringComparer.Ordinal))
         {
             if (!_queues.TryGetValue(rid, out var q))
             {
@@ -975,7 +1213,9 @@ public sealed class TrafficState
         {
             if (!_graph.ResourceById.TryGetValue(rid, out var res))
             {
-                continue;
+                // Id from another graph (stale candidate after a rebind): never grant what we cannot check.
+                reason = TrafficWaitingReason.Capacity;
+                return false;
             }
 
             _holders.TryGetValue(rid, out var holders);
@@ -1067,8 +1307,8 @@ public sealed class TrafficState
             return false;
         }
 
-        // Clear when pose is farther than turn radius from every edge of the resource.
-        var radius = _graph.Footprint.TurnRadius;
+        // Clear when the footprint circle, grown by the localization margin, touches no edge of the resource.
+        var radius = ClearRadius;
         foreach (var edgeId in res.EdgeIds)
         {
             var edge = _graph.EdgeById[edgeId];
@@ -1252,8 +1492,23 @@ public sealed class TrafficState
         robot.Phase = TrafficRobotPhase.Quarantined;
         robot.QuarantineReason = reason;
         robot.WaitingReason = TrafficWaitingReason.QuarantinedPeer;
-        // Keep occupancy + authority held — no auto-release.
+        // Occupancy stays held — no auto-release.
         RemoveFromAllQueues(robot.RobotId);
+
+        // Stop the robot through the traffic channel (audit T13). Kept only where revoking cannot help:
+        // LOCALIZATION_LOSS recovers in place while the authority is held, OFFLINE cannot be reached (its own
+        // authority watchdog stops it, authority_state reconciles on reconnect).
+        if (robot.Authority is { } authority
+            && !reason.StartsWith("LOCALIZATION_LOSS", StringComparison.Ordinal)
+            && !reason.StartsWith("OFFLINE", StringComparison.Ordinal))
+        {
+            _pendingEvents.Add(new TrafficEvent(
+                TrafficEventKind.AuthorityRevoked, robot.RobotId, string.Empty, authority, null, null,
+                robot.JobStepId, null, null, null, null, IsFirstSegment: false));
+            robot.Authority = null;
+            ClearRoute(robot);
+        }
+
         StateVersion++;
         Log($"quarantine:{robot.RobotId}:{reason}");
     }

@@ -19,6 +19,13 @@ public sealed class TrafficGraphCompileService(
     IMapAssetStore mapAssetStore,
     IOptions<TrafficFootprintOptions> footprintOptions)
 {
+    /// <summary>
+    /// Compile settings shared by every runtime consumer of the graph — the exported route graph the robot loads,
+    /// host-start reconciliation and Active MOVE planning. They must match: the occupancy grid is part of the graph
+    /// hash, so a mismatch makes the robot reject every grant (ROUTE_GRAPH_MISMATCH).
+    /// </summary>
+    public const bool RuntimeIncludesOccupancy = false;
+
     public async Task<TrafficCompileBundle> CompileAsync(
         Guid mapVersionId,
         bool includeOccupancy = true,

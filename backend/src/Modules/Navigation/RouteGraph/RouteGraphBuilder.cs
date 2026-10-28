@@ -74,8 +74,16 @@ public static class RouteGraphBuilder
         }
 
         var keepOutRings = zones.Where(z => z.ZoneType == ZoneType.KEEP_OUT).Select(z => z.Ring).ToList();
+        var junctionRings = zones.Where(z => z.ZoneType == ZoneType.JUNCTION).Select(z => z.Ring).ToList();
         foreach (var zone in zones.Where(z => IsJunctionZone(z.ZoneType)))
         {
+            // A NO_STOP / SINGLE_OCCUPANCY zone over a JUNCTION is a policy label: linking its lane ends as well would
+            // add a second, unchecked set of shortcut chords. Only a legacy zone standing alone connects lanes.
+            if (zone.ZoneType != ZoneType.JUNCTION && junctionRings.Any(ring => RingsOverlap(ring, zone.Ring)))
+            {
+                continue;
+            }
+
             work.ConnectJunction(zone.Code, zone.Ring, keepOutRings);
         }
 
@@ -194,6 +202,10 @@ public static class RouteGraphBuilder
 
         return inside;
     }
+
+    /// <summary>True when the two polygons share area: a vertex of one lies inside the other.</summary>
+    private static bool RingsOverlap(IReadOnlyList<RoutePoint> a, IReadOnlyList<RoutePoint> b) =>
+        a.Any(p => Inside(b, p.X, p.Y, 0)) || b.Any(p => Inside(a, p.X, p.Y, 0));
 
     private static double DistanceToRing(IReadOnlyList<RoutePoint> ring, double x, double y)
     {
@@ -361,8 +373,10 @@ public static class RouteGraphBuilder
                 return false;
             }
 
+            // The link belongs to its zone by construction. Labelling it later by midpoint (5 cm inside) misses links
+            // running along the zone edge, which would then escape the junction lock.
             Segments.Add(new WorkSegment(from, to, new HashSet<string>(StringComparer.Ordinal), null, false,
-                new HashSet<string>(StringComparer.Ordinal), false, false, IsJunction: true));
+                new HashSet<string>(StringComparer.Ordinal) { junction.Code }, false, false, IsJunction: true));
             return true;
         }
 
@@ -497,22 +511,22 @@ public static class RouteGraphBuilder
                 return;
             }
 
-            if (distance <= _tolerance)
-            {
-                // On the lane itself: it becomes a node of that lane.
-                var on = AddNode(endpoint.X, endpoint.Y);
-                SplitSegmentsThrough(on);
-                Nodes[on].EndpointCodes.Add(endpoint.Code);
-                return;
-            }
-
-            // Perpendicular foot on the lane (or the segment end when the foot falls on it) ↔ the Endpoint.
+            // Perpendicular foot on the lane (or the segment end when the foot falls on it).
             var seg = Segments[segment];
             var foot = Distance(Nodes[seg.Start], footX, footY) <= _tolerance ? seg.Start
                 : Distance(Nodes[seg.End], footX, footY) <= _tolerance ? seg.End
                 : AddNode(footX, footY);
             SplitSegmentsThrough(foot);
 
+            if (distance <= _tolerance)
+            {
+                // On the lane itself: the Endpoint is served at the foot, so the lane centre line stays straight.
+                // A node at the Endpoint's own x,y would bend the lane through it (sideways kinks of up to 5 cm).
+                Nodes[foot].EndpointCodes.Add(endpoint.Code);
+                return;
+            }
+
+            // Off the lane: Endpoint ↔ foot connector.
             var stop = AddNode(endpoint.X, endpoint.Y);
             Nodes[stop].EndpointCodes.Add(endpoint.Code);
             Segments.Add(WorkSegment.Connector(foot, stop));
@@ -652,9 +666,9 @@ public static class RouteGraphBuilder
             var best = (Segment: -1, FootX: 0.0, FootY: 0.0, Distance: double.MaxValue);
             for (var i = 0; i < Segments.Count; i++)
             {
-                if (Segments[i].IsConnector)
+                if (Segments[i].IsConnector || Segments[i].IsJunction)
                 {
-                    continue; // attach to lanes, not to another Endpoint's connector
+                    continue; // attach to drawn lanes, not to a connector or a diagonal junction link
                 }
 
                 var (footX, footY, _, _) = Project(Nodes[Segments[i].Start], Nodes[Segments[i].End], x, y);

@@ -57,7 +57,12 @@ public enum TrafficResourceKind
     /// <summary>Inbound / outbound / QC / charger / parking bay.</summary>
     StationBay,
     /// <summary>Holding or recovery bay where a robot may wait safely.</summary>
-    HoldingBay
+    HoldingBay,
+    /// <summary>
+    /// The footprint around a graph node: intersections (degree ≥ 3), safe stops and stations. Covers every edge
+    /// touching the node, so a robot standing there blocks all entries and two grants cannot end on it.
+    /// </summary>
+    NodeConflict
 }
 
 /// <summary>Semantic bay kind for stations (configured via Traffic:Stations).</summary>

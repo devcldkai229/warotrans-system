@@ -114,6 +114,7 @@ public sealed class ProcessRobotCommandResultHandler(
                     command.RobotId,
                     message.Outcome == RobotCommandOutcomes.Succeeded,
                     message.ErrorCode ?? message.Outcome,
+                    NavigateAuthorityId(command.PayloadJson),
                     cancellationToken);
             }
         }
@@ -144,5 +145,24 @@ public sealed class ProcessRobotCommandResultHandler(
                 command.ErrorCode,
                 RobotCommandLifecycleChanged.Phases.Result),
             cancellationToken);
+    }
+
+    /// <summary>Active NAVIGATE payload carries <c>authority.authorityId</c>; null for plain NAVIGATE.</summary>
+    private static Guid? NavigateAuthorityId(string payloadJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            return doc.RootElement.TryGetProperty("authority", out var authority)
+                   && authority.ValueKind == JsonValueKind.Object
+                   && authority.TryGetProperty("authorityId", out var id)
+                   && id.TryGetGuid(out var guid)
+                ? guid
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }

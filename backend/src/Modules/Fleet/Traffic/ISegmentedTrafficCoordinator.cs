@@ -11,7 +11,19 @@ public interface ISegmentedTrafficCoordinator
 {
     long Epoch { get; }
 
-    Task BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default);
+    /// <summary>Fails with GRAPH_IN_USE when switching graphs while any robot holds occupancy or authority.</summary>
+    Task<TrafficOpResult> BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default);
+
+    /// <summary>
+    /// Active MOVE start: makes sure the coordinator tracks the robot. Never releases occupancy and never lifts a
+    /// quarantine; an untracked robot is seeded with the resources under its pose.
+    /// </summary>
+    Task<TrafficOpResult> EnsureTrackedAsync(
+        Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default);
+
+    /// <summary>Accepted STOPPED_AWAITING_AUTHORITY at the authority's goal safe stop arms the next EXTEND.</summary>
+    Task<TrafficOpResult> ReportStoppedAwaitingAsync(
+        Guid robotId, long seq, long epoch, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default);
 
     Task CompleteReconciliationAsync(IReadOnlyList<TrafficReconcileSeed> seeds, CancellationToken ct = default);
 
@@ -33,8 +45,12 @@ public interface ISegmentedTrafficCoordinator
     Task<TrafficOpResult> ReportSafeStopReachedAsync(
         Guid robotId, long seq, long epoch, double poseX, double poseY, bool localizationOk, CancellationToken ct = default);
 
-    /// <summary>NAVIGATE result for an Active route: success clears authority, otherwise quarantine.</summary>
-    Task<TrafficOpResult> CompleteRouteAsync(Guid robotId, bool succeeded, string? reason, CancellationToken ct = default);
+    /// <summary>
+    /// NAVIGATE result for an Active route: success clears authority, otherwise quarantine. A result for another
+    /// authority than the current one (late / duplicate) is ignored.
+    /// </summary>
+    Task<TrafficOpResult> CompleteRouteAsync(
+        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default);
 
     Task<TrafficOpResult> RenewAuthorityAsync(Guid robotId, Guid authorityId, long epoch, CancellationToken ct = default);
 
@@ -60,9 +76,13 @@ public interface ISegmentedTrafficCoordinator
 
     Task<TrafficOpResult> MarkOfflineAsync(Guid robotId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Rebuilds occupancy from a trusted pose: keeps what the robot's footprint (plus margin) still covers, releases
+    /// only what it has physically left. Lifts a quarantine only when the robot reports idle and localized.
+    /// </summary>
     Task<TrafficOpResult> ReconcileRobotAsync(
         Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,
-        CancellationToken ct = default);
+        bool robotReportsIdle = true, CancellationToken ct = default);
 
     Task<TrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken ct = default);
 }

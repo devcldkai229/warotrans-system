@@ -630,17 +630,26 @@ public sealed class JobExecutionEngine(
                     return true;
                 }
 
-                await segmentedTraffic.BindGraphAsync(job.MapVersionId, graph, cancellationToken);
+                var bind = await segmentedTraffic.BindGraphAsync(job.MapVersionId, graph, cancellationToken);
+                if (!bind.Ok)
+                {
+                    Fail(job, task, step, stepKey, "traffic_graph_in_use",
+                        $"Active Mode cannot switch traffic graph while robots hold resources: {bind.Reason}",
+                        DateTimeOffset.UtcNow);
+                    return true;
+                }
 
-                // Lift reconcile/offline quarantine using current telemetry before station hold / grant.
+                // Track the robot without touching what it already holds (station hold, the lane it stands on).
+                // Quarantines are lifted only by a verified robot state or an operator, never by starting a MOVE.
                 var locOk = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
-                await segmentedTraffic.ReconcileRobotAsync(
-                    robotId,
-                    robot.PoseX,
-                    robot.PoseY,
-                    locOk,
-                    System.Collections.Immutable.ImmutableArray<int>.Empty,
-                    cancellationToken);
+                var tracked = await segmentedTraffic.EnsureTrackedAsync(
+                    robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken);
+                if (!tracked.Ok)
+                {
+                    Fail(job, task, step, stepKey, "traffic_robot_unavailable",
+                        $"Active Mode cannot move the robot: {tracked.Reason}", DateTimeOffset.UtcNow);
+                    return true;
+                }
 
                 var purpose = step.ResolvedInputs.TryGetValue("purpose", out var purposeEl)
                     ? purposeEl.GetString()
@@ -926,7 +935,7 @@ public sealed class JobExecutionEngine(
 
         try
         {
-            var bundle = await trafficCompile.CompileAsync(mapVersionId, includeOccupancy: false, cancellationToken);
+            var bundle = await trafficCompile.CompileAsync(mapVersionId, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken);
             if (bundle.Result.HasErrors)
             {
                 // Map editor validation can flag clearance/corridor issues while the compiled graph

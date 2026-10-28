@@ -104,12 +104,16 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
-    public Task BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default) =>
-        EnqueueAsync(s =>
-        {
-            s.BindGraph(mapVersionId, graph);
-            return TrafficOpResult.Success();
-        }, ct);
+    public Task<TrafficOpResult> BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.BindGraph(mapVersionId, graph), ct);
+
+    public Task<TrafficOpResult> EnsureTrackedAsync(
+        Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.EnsureTracked(robotId, poseX, poseY, localizationOk), ct);
+
+    public Task<TrafficOpResult> ReportStoppedAwaitingAsync(
+        Guid robotId, long seq, long epoch, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.ReportStoppedAwaiting(robotId, seq, epoch, poseX, poseY, localizationOk), ct);
 
     public Task CompleteReconciliationAsync(IReadOnlyList<TrafficReconcileSeed> seeds, CancellationToken ct = default) =>
         EnqueueAsync(s =>
@@ -167,10 +171,11 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
             return result;
         }, ct);
 
-    public Task<TrafficOpResult> CompleteRouteAsync(Guid robotId, bool succeeded, string? reason, CancellationToken ct = default) =>
+    public Task<TrafficOpResult> CompleteRouteAsync(
+        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default) =>
         EnqueueAsync(s =>
         {
-            var result = s.CompleteRoute(robotId, succeeded, reason);
+            var result = s.CompleteRoute(robotId, succeeded, reason, authorityId);
             PublishGranted(s);
             return result;
         }, ct);
@@ -282,8 +287,8 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public Task<TrafficOpResult> ReconcileRobotAsync(
         Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,
-        CancellationToken ct = default) =>
-        EnqueueAsync(s => s.ReconcileRobot(robotId, poseX, poseY, localizationOk, occupiedEdges), ct);
+        bool robotReportsIdle = true, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.ReconcileRobot(robotId, poseX, poseY, localizationOk, occupiedEdges, robotReportsIdle), ct);
 
     public Task<TrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken ct = default) =>
         EnqueueAsync(s => s.Snapshot(), ct);
@@ -296,7 +301,10 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         {
             try
             {
-                tcs.TrySetResult(action(state));
+                var result = action(state);
+                // Every mutation may emit grant / revoke / release events (promoted waiters, quarantine, ...).
+                PublishGranted(state);
+                tcs.TrySetResult(result);
             }
             catch (Exception ex)
             {

@@ -73,6 +73,13 @@ public sealed class TrafficAuthorityPublisher(
             return;
         }
 
+        if (evt.Kind == TrafficEventKind.AuthorityRevoked
+            && _activeCommandByRobot.Remove(evt.RobotId, out var revokeTarget))
+        {
+            await PublishRevokeAsync(db, robot.Code, evt, revokeTarget, ct).ConfigureAwait(false);
+            return;
+        }
+
         if (evt.Kind is TrafficEventKind.AuthorityRevoked or TrafficEventKind.Quarantined
             or TrafficEventKind.AuthorityReleased)
         {
@@ -236,5 +243,48 @@ public sealed class TrafficAuthorityPublisher(
                 "Active EXTEND_AUTHORITY robot={RobotCode} target={Target} seq={Seq} final={Final}",
                 robot.Code, targetCommandId, evt.Authority.Seq, evt.IsFinalSegment);
         }
+    }
+
+    /// <summary>Quarantine revoked the authority: stop the robot now through the traffic channel.</summary>
+    private async Task PublishRevokeAsync(
+        FleetDbContext db, string robotCode, TrafficEvent evt, Guid targetCommandId, CancellationToken ct)
+    {
+        var utcNow = DateTimeOffset.UtcNow;
+        var commandId = Guid.NewGuid();
+        var payload = new RevokeAuthorityPayload
+        {
+            TargetCommandId = targetCommandId,
+            AuthorityId = evt.Authority.AuthorityId,
+            Epoch = evt.Authority.Epoch,
+            Seq = evt.Authority.Seq,
+            Mode = "STOP_NOW"
+        };
+        db.RobotCommands.Add(new RobotCommand
+        {
+            Id = commandId,
+            RobotId = evt.RobotId,
+            Type = RobotCommandType.REVOKE_AUTHORITY,
+            Status = RobotCommandStatus.SENT,
+            PayloadJson = JsonSerializer.Serialize(payload, JsonOptions),
+            IssuedAt = utcNow,
+            JobStepId = evt.JobStepId
+        });
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        await db.PublishAndStampAsync(commandPublisher, new RobotCommandMessage
+        {
+            SchemaVersion = 1,
+            MessageId = Guid.NewGuid(),
+            CommandId = commandId,
+            RobotCode = robotCode,
+            Type = RobotCommandTypes.RevokeAuthority,
+            IssuedAt = utcNow,
+            JobStepId = evt.JobStepId,
+            Payload = JsonSerializer.SerializeToElement(payload, JsonOptions)
+        }, evt.RobotId, releasesRobot: false, ct).ConfigureAwait(false);
+
+        logger.LogWarning(
+            "Active REVOKE_AUTHORITY robot={RobotCode} target={Target} auth={AuthorityId}",
+            robotCode, targetCommandId, evt.Authority.AuthorityId);
     }
 }

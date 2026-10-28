@@ -35,10 +35,20 @@ public sealed class TrafficReconciliationHostedService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var robotIds = openCommands.Select(c => c.RobotId).Distinct().ToList();
+        // Every enabled robot occupies the floor under it — parked, holding a bay through HUMAN_CONFIRM, or moving —
+        // not only robots with an open NAVIGATE (audit T8).
+        var openRobotIds = openCommands.Select(c => c.RobotId).Distinct().ToList();
         var robots = await fleetDb.Robots
             .AsNoTracking()
-            .Where(r => robotIds.Contains(r.Id))
+            .Where(r => r.IsEnabled && (r.IsOnline || openRobotIds.Contains(r.Id)))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var openIds = openCommands.Select(c => c.Id).ToList();
+        var extends = await fleetDb.RobotCommands
+            .AsNoTracking()
+            .Where(c => c.Type == RobotCommandType.EXTEND_AUTHORITY && c.TargetCommandId != null
+                        && openIds.Contains(c.TargetCommandId.Value))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -54,7 +64,15 @@ public sealed class TrafficReconciliationHostedService(
                 .OrderByDescending(c => c.IssuedAt)
                 .FirstOrDefault();
 
-            var edges = TrafficShadowObserver.ParseRouteEdgeIds(cmd?.PayloadJson);
+            // Latest cumulative authority: the newest EXTEND of that NAVIGATE, else its first segment.
+            var latestExtend = cmd is null
+                ? null
+                : extends.Where(e => e.TargetCommandId == cmd.Id).MaxBy(e => e.IssuedAt);
+            var edges = TrafficShadowObserver.ParseAuthorityEdgeIds(latestExtend?.PayloadJson) is { Length: > 0 } extended
+                ? extended
+                : TrafficShadowObserver.ParseAuthorityEdgeIds(cmd?.PayloadJson) is { Length: > 0 } granted
+                    ? granted
+                    : TrafficShadowObserver.ParseRouteEdgeIds(cmd?.PayloadJson);
             var locOk = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
             var poseKnown = robot.LastTelemetryAt is not null;
 
@@ -72,7 +90,7 @@ public sealed class TrafficReconciliationHostedService(
         {
             try
             {
-                var compiled = await compile.CompileAsync(mv, includeOccupancy: false, cancellationToken)
+                var compiled = await compile.CompileAsync(mv, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken)
                     .ConfigureAwait(false);
                 graph = compiled.Result.Graph;
                 await segmented.BindGraphAsync(mv, graph, cancellationToken).ConfigureAwait(false);
