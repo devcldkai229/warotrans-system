@@ -1,20 +1,20 @@
 {
   "warehouseId": "33333333-3333-3333-3333-333333333333",
-  "mapVersionId": "7cb001f7-cbf3-4f3e-8400-fddc00d63b19",
-  "mapVersionCode": "MAP-WHSIM-V018",
+  "mapVersionId": "d676f366-6f08-417d-921f-ac89e0b18626",
+  "mapVersionCode": "MAP-WHSIM-V019",
   "robotId": "26a87e79-7e4f-46fb-b815-8c6bcb0f7805",
   "robotCode": "RBT-SIM-01",
   "endpoints": [
-    { "alias": "IN", "endpointId": "42cd2147-bd52-4efd-8c6e-a3a433c5812a", "code": "EP-INBOUND", "x": -0.045, "y": -0.133, "yaw": 0 },
-    { "alias": "S01", "endpointId": "95d7b8b6-f5d7-4ac0-b83b-c04b621fc03d", "code": "EP-SORAGE_SELF_1", "x": 0.492, "y": -0.849, "yaw": 1.5707963267948966 },
-    { "alias": "S02", "endpointId": "f6e86006-61d2-46fb-96fd-52cc75a8267c", "code": "EP-SORAGE_SELF_2", "x": 1.612, "y": -0.883, "yaw": -1.5707963267948966 },
-    { "alias": "S03", "endpointId": "22999183-9ff7-470e-8630-a096e89289fa", "code": "EP-SORAGE_SELF_3", "x": 2.775, "y": -0.866, "yaw": 1.5707963267948966 },
-    { "alias": "S04", "endpointId": "752a0bfe-8db3-4629-aa94-1509d42765e8", "code": "EP-SORAGE_SELF_4", "x": 3.461, "y": -1.944, "yaw": 3.141592653589793 },
-    { "alias": "S05", "endpointId": "db557b43-10fe-4eb6-9f5f-763f9dddcf83", "code": "EP-SORAGE_SELF_5", "x": 0.965, "y": -1.939, "yaw": 3.141592653589793 },
-    { "alias": "OUT", "endpointId": "8209fc50-c72e-42a1-9e3e-e77ba2a5b387", "code": "EP-OUTBOUND", "x": -0.058, "y": -1.782, "yaw": 0 },
-    { "alias": "QC-01", "endpointId": "e45d61f1-7384-4cb4-8200-52e29ae5ed55", "code": "EP-INSPECTION", "x": 1.22, "y": 0.344, "yaw": -1.5707963267948966 },
-    { "alias": "CHG-01", "endpointId": "2e6dc7f0-d900-41d9-9396-ae035df4b062", "code": "EP-CHARGER-1", "x": 2.013, "y": 0.37, "yaw": -1.5707963267948966 },
-    { "alias": "PARK-01", "endpointId": "70fec4ec-412d-4bdf-9032-7ec25a2f53c5", "code": "EP-PARK-1", "x": 2.959, "y": 0.357, "yaw": -1.5707963267948966 },
-    { "alias": "PARK-02", "endpointId": "7c2eb764-83dc-4bb3-8215-ea9f9e561be8", "code": "EP-PARK-2", "x": 3.415, "y": 0.357, "yaw": -1.5707963267948966 }
+    {"alias": "IN", "endpointId": "3f7cb8ee-cb38-478f-8855-380b9a034c23", "code": "EP-INBOUND", "x": 0.045, "y": -0.133, "yaw": 0.0},
+    {"alias": "S01", "endpointId": "9993ab79-ef8e-4078-9e25-4a39ca4fc600", "code": "EP-SORAGE_SELF_1", "x": 0.442, "y": -0.849, "yaw": 1.5707963267948966},
+    {"alias": "S02", "endpointId": "f0bf3ee8-c2c0-4d5e-a52b-af5aba925f3a", "code": "EP-SORAGE_SELF_2", "x": 1.6, "y": -0.883, "yaw": -1.5707963267948966},
+    {"alias": "S03", "endpointId": "2ba737d0-7408-4c30-a542-87fe943495c6", "code": "EP-SORAGE_SELF_3", "x": 2.775, "y": -0.866, "yaw": 1.5707963267948966},
+    {"alias": "S04", "endpointId": "0b46ad35-621b-4cc6-a310-e38a3e4b7ef8", "code": "EP-SORAGE_SELF_4", "x": 3.461, "y": -1.935, "yaw": 3.141592653589793},
+    {"alias": "S05", "endpointId": "d1087d5f-1d9e-43f0-b8a1-206baf16e5f5", "code": "EP-SORAGE_SELF_5", "x": 0.965, "y": -1.929, "yaw": 3.141592653589793},
+    {"alias": "OUT", "endpointId": "9a9e346d-5c3a-4db1-b51d-a9aba97a300a", "code": "EP-OUTBOUND", "x": 0.032, "y": -1.782, "yaw": 0.0},
+    {"alias": "QC-01", "endpointId": "2a63a4d5-0acc-4db1-a17b-48480a23938b", "code": "EP-INSPECTION", "x": 1.22, "y": 0.254, "yaw": -1.5707963267948966},
+    {"alias": "CHG-01", "endpointId": "64e0cc71-1c14-42f6-8802-b7bd16c44c48", "code": "EP-CHARGER-1", "x": 2.013, "y": 0.37, "yaw": -1.5707963267948966},
+    {"alias": "PARK-01", "endpointId": "bc0dcd0b-9b8b-4a87-8a90-f5f473bf4a21", "code": "EP-PARK-1", "x": 2.959, "y": 0.357, "yaw": -1.5707963267948966},
+    {"alias": "PARK-02", "endpointId": "e0438230-4e4c-4ca8-9c12-c4f8cf666242", "code": "EP-PARK-2", "x": 3.415, "y": 0.357, "yaw": -1.5707963267948966}
   ]
 }

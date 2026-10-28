@@ -130,6 +130,32 @@ public class TrafficSafetyRegressionTests
         Assert.Equal(grant.Authority!.AuthorityId, View(sim, robot).Authority?.AuthorityId);
     }
 
+    [Fact]
+    public void T2_booting_robot_without_telemetry_is_not_quarantined_when_it_holds_nothing()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+
+        // authority_state arrives before the first telemetry: pose not trusted, but nothing is at risk.
+        Assert.False(sim.State.ReconcileRobot(robot, 0, 0, localizationOk: false, [], robotReportsIdle: true).Ok);
+
+        Assert.NotEqual(TrafficRobotPhase.Quarantined, View(sim, robot).Phase);
+        Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok); // the next MOVE still works
+    }
+
+    [Fact]
+    public void T2_unlocalized_robot_holding_resources_is_quarantined()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+        Assert.True(StartRoute(sim, robot, 0, 0, "EP-M1").Granted);
+
+        Assert.False(sim.State.ReconcileRobot(robot, 1, 0, localizationOk: false, [], robotReportsIdle: true).Ok);
+
+        Assert.Equal(TrafficRobotPhase.Quarantined, View(sim, robot).Phase);
+        Assert.NotEmpty(View(sim, robot).OccupiedResourceIds);
+    }
+
     // ---------------------------------------------------------------- T3
 
     [Fact]

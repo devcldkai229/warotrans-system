@@ -882,6 +882,13 @@ public sealed class TrafficState
         var robot = GetOrCreate(robotId);
         if (!localizationOk)
         {
+            // Nothing held and nothing granted: there is no occupancy to protect, so an unlocalized robot
+            // (typically one that has just booted and not sent telemetry yet) is simply left untracked.
+            if (robot.OccupiedResourceIds.Count == 0 && robot.Authority is null)
+            {
+                return TrafficOpResult.Fail("LOCALIZATION");
+            }
+
             Quarantine(robot, "RECONCILE_LOCALIZATION");
             return TrafficOpResult.Fail("LOCALIZATION");
         }

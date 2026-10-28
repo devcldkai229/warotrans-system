@@ -128,6 +128,22 @@ public class TrafficGraphSafetyRegressionTests
         Assert.Equal(only, both);
     }
 
+    [Fact]
+    public void G10_station_beside_a_junction_is_served_through_it_not_by_a_connector_across_it()
+    {
+        // Lanes end at the junction; EP-DOCK sits 0.1 m beside the zone and 0.45 m from the nearest lane end.
+        var graph = Compile(
+            [Lane("E-W", Both, (-1, 0), (0, 0)), Lane("E-E", Both, (0.6, 0), (2, 0))],
+            [new("EP-W", -1, 0, true), new("EP-E", 2, 0, true), new("EP-DOCK", 0.3, 0.4, true)],
+            [Zone("Z-J", ZoneType.JUNCTION, -0.1, -0.3, 0.7, 0.3)]);
+
+        var dock = graph.Nodes.Single(n => n.EndpointCodes.Contains("EP-DOCK"));
+        Assert.True(dock.IsSafeStop); // a robot waiting at the station does not sit inside the junction
+        var access = graph.Edges.Where(e => e.IsConnector && (e.StartId == dock.Id || e.EndId == dock.Id)).ToList();
+        Assert.NotEmpty(access);
+        Assert.All(access, e => Assert.DoesNotContain("Z-J", e.ZoneCodes));
+    }
+
     // ---------------------------------------------------------------- T4: crossing without a zone
 
     [Fact]

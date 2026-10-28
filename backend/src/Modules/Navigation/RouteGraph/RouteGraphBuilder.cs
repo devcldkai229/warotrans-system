@@ -444,6 +444,11 @@ public static class RouteGraphBuilder
             return false;
         }
 
+        private double NearestJunctionDistance(double x, double y) =>
+            _junctions.Count == 0
+                ? double.MaxValue
+                : _junctions.Min(j => Inside(j.Ring, x, y, 0) ? 0 : DistanceToRing(j.Ring, x, y));
+
         private static (double X, double Y) ClosestOnRing(IReadOnlyList<RoutePoint> ring, double x, double y)
         {
             var best = (X: ring[0].X, Y: ring[0].Y, D: double.MaxValue);
@@ -495,6 +500,17 @@ public static class RouteGraphBuilder
             }
 
             var (segment, footX, footY, distance) = NearestFoot(endpoint.X, endpoint.Y);
+
+            // Closer to a junction zone than to any drawn lane: serve it through the junction (exit point on the
+            // zone edge). A straight connector to the far lane would cut across the junction and put the station
+            // inside a critical resource.
+            if (segment >= 0 && distance > _tolerance
+                && NearestJunctionDistance(endpoint.X, endpoint.Y) + _tolerance < distance
+                && AttachThroughJunction(endpoint))
+            {
+                return;
+            }
+
             if (segment < 0 || distance > options.EndpointSnapDistance)
             {
                 if (AttachThroughJunction(endpoint))
