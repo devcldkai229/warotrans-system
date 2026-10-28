@@ -632,6 +632,16 @@ public sealed class JobExecutionEngine(
 
                 await segmentedTraffic.BindGraphAsync(job.MapVersionId, graph, cancellationToken);
 
+                // Lift reconcile/offline quarantine using current telemetry before station hold / grant.
+                var locOk = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
+                await segmentedTraffic.ReconcileRobotAsync(
+                    robotId,
+                    robot.PoseX,
+                    robot.PoseY,
+                    locOk,
+                    System.Collections.Immutable.ImmutableArray<int>.Empty,
+                    cancellationToken);
+
                 var purpose = step.ResolvedInputs.TryGetValue("purpose", out var purposeEl)
                     ? purposeEl.GetString()
                     : "TRANSIT";
@@ -647,19 +657,20 @@ public sealed class JobExecutionEngine(
                                 Guid.NewGuid(), TrafficOpsEventType.Wait, DateTimeOffset.UtcNow,
                                 robotId, job.Id, step.Id, job.MapVersionId, null, rid, null, null,
                                 segmentedTraffic.Epoch, null, hold.Reason ?? "STATION_BUSY"));
-                            step.OutputValues = new Dictionary<string, JsonElement>
-                            {
-                                ["startedAt"] = JsonSerializer.SerializeToElement(now),
-                                [PendingTrafficKey] = JsonSerializer.SerializeToElement(true),
-                                ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
-                                ["trafficWaitingReason"] = JsonSerializer.SerializeToElement("StationBay"),
-                                ["stationPolicy"] = JsonSerializer.SerializeToElement(intent.PolicyKind.ToString()),
-                                ["stationResourceId"] = JsonSerializer.SerializeToElement(rid)
-                            };
-                            logger.LogInformation(
-                                "Job {JobNo} {StepKey} waiting for station resource {ResourceId}",
-                                job.JobNo, stepKey, rid);
-                            return false;
+                            // StationBay wait has no wake/promote path yet — surface the hold reason
+                            // instead of parking the MOVE as pendingTraffic forever.
+                            Fail(
+                                job,
+                                task,
+                                step,
+                                stepKey,
+                                "station_bay_unavailable",
+                                $"Active Mode could not hold {rid}: {hold.Reason ?? "STATION_BUSY"}",
+                                DateTimeOffset.UtcNow);
+                            logger.LogWarning(
+                                "Job {JobNo} {StepKey} station hold failed resource={ResourceId} reason={Reason}",
+                                job.JobNo, stepKey, rid, hold.Reason);
+                            return true;
                         }
 
                         trafficOpsLog?.Write(new TrafficOpsEvent(
@@ -674,7 +685,8 @@ public sealed class JobExecutionEngine(
                     robotId, job.Id, step.Id, job.MapVersionId, null, policy.Intent?.BayResourceId,
                     null, null, segmentedTraffic.Epoch, null, purpose));
 
-                var plan = await segmentedTraffic.RequestSegmentAsync(new RoutePlanRequest(
+                // Full route: the coordinator grants segment 1 now and EXTENDs the rest at each safe stop.
+                var plan = await segmentedTraffic.RequestRouteAsync(new RoutePlanRequest(
                     Guid.NewGuid(),
                     robotId,
                     job.MapVersionId,
@@ -694,8 +706,30 @@ public sealed class JobExecutionEngine(
                     return true;
                 }
 
-                var acquire = await segmentedTraffic.AcquireAtomicAsync(
-                    plan.Segments[0], segmentedTraffic.Epoch, null, cancellationToken);
+                // Already at the destination safe-stop (zero-length path): complete MOVE without MQTT.
+                if (plan.FullEdgeIds.Length == 0 || plan.Segments[0].EdgeIds.Length == 0)
+                {
+                    step.OutputValues = new Dictionary<string, JsonElement>
+                    {
+                        ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                        ["completedAt"] = JsonSerializer.SerializeToElement(DateTimeOffset.UtcNow),
+                        ["trafficMode"] = JsonSerializer.SerializeToElement("Active"),
+                        ["trafficAlreadyAtGoal"] = JsonSerializer.SerializeToElement(true),
+                        ["stationPolicy"] = JsonSerializer.SerializeToElement(
+                            policy.Intent?.PolicyKind.ToString() ?? "Transit")
+                    };
+                    SetStepStatus(job, task, step, stepKey, JobStepStatus.COMPLETED, DateTimeOffset.UtcNow);
+                    logger.LogInformation(
+                        "Job {JobNo} {StepKey} Active Mode already at goal; MOVE completed without NAVIGATE",
+                        job.JobNo, stepKey);
+                    return true;
+                }
+
+                var acquire = await segmentedTraffic.AcquireRouteAsync(
+                    plan.Segments,
+                    new TrafficRouteGoal(pose.X, pose.Y, pose.Yaw),
+                    segmentedTraffic.Epoch,
+                    cancellationToken);
                 if (acquire.Queued)
                 {
                     trafficOpsLog?.Write(new TrafficOpsEvent(
@@ -893,7 +927,17 @@ public sealed class JobExecutionEngine(
         try
         {
             var bundle = await trafficCompile.CompileAsync(mapVersionId, includeOccupancy: false, cancellationToken);
-            return bundle.Result.HasErrors ? null : bundle.Result.Graph;
+            if (bundle.Result.HasErrors)
+            {
+                // Map editor validation can flag clearance/corridor issues while the compiled graph
+                // is still usable for Active segment grants. Hard-fail only when compile throws.
+                logger.LogWarning(
+                    "Traffic graph for map {MapVersionId} has validation errors ({Count}); Active/Shadow MOVE will still use it",
+                    mapVersionId,
+                    bundle.Result.Issues.Count(i => i.Severity == TrafficIssueSeverity.Error));
+            }
+
+            return bundle.Result.Graph;
         }
         catch (Exception ex)
         {

@@ -74,6 +74,7 @@ public static class FleetModule
         services.AddHostedService(sp => sp.GetRequiredService<SegmentedTrafficCoordinator>());
         services.AddHostedService<TrafficReconciliationHostedService>();
         services.AddHostedService<TrafficAuthorityPublisher>();
+        services.AddHostedService<TrafficAuthorityRenewHostedService>();
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();

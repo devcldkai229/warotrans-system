@@ -75,9 +75,19 @@ public sealed class TrafficState
             robot.X = seed.PoseX;
             robot.Y = seed.PoseY;
 
-            if (!seed.PoseKnown || !seed.LocalizationOk || seed.OccupiedEdgeIds.Length == 0)
+            if (!seed.PoseKnown || !seed.LocalizationOk)
             {
                 Quarantine(robot, "RECONCILE_UNCERTAIN");
+                continue;
+            }
+
+            // Localized with no granted edges (idle / rejected empty grant): ready, not quarantined.
+            if (seed.OccupiedEdgeIds.Length == 0)
+            {
+                robot.Phase = TrafficRobotPhase.Idle;
+                robot.QuarantineReason = null;
+                robot.NodeId = RoutePlanner.NearestNode(_graph, seed.PoseX ?? 0, seed.PoseY ?? 0);
+                Log($"reconcile:idle:{robot.RobotId}");
                 continue;
             }
 
@@ -89,6 +99,7 @@ public sealed class TrafficState
             }
 
             robot.Phase = TrafficRobotPhase.Idle;
+            robot.QuarantineReason = null;
             robot.NodeId = RoutePlanner.NearestNode(_graph, seed.PoseX ?? 0, seed.PoseY ?? 0);
             Log($"reconcile:ok:{robot.RobotId}");
         }
@@ -174,6 +185,7 @@ public sealed class TrafficState
 
         Occupy(robot, candidate.ResourceIds);
         robot.LastSeq = Math.Max(robot.LastSeq + 1, clientSeq ?? robot.LastSeq + 1);
+        robot.ProgressFloorSeq = robot.LastSeq;
         var authority = new MotionAuthority(
             Guid.NewGuid(),
             robot.RobotId,
@@ -193,26 +205,236 @@ public sealed class TrafficState
         RemoveFromAllQueues(robot.RobotId);
         StateVersion++;
         Log($"grant:{robot.RobotId}:auth:{authority.AuthorityId}");
-        LastGrantedEvent = new TrafficEvent(
-            TrafficEventKind.AuthorityGranted,
+        EmitSegmentEvent(TrafficEventKind.AuthorityGranted, robot, authority, candidate, isFirstSegment: true);
+        return Cache(candidate.RequestId, AcquireResult.Grant(authority));
+    }
+
+    /// <summary>
+    /// Active route: remembers the remaining segments + destination pose, then acquires the first segment.
+    /// Later segments are granted by <see cref="AdvanceRoute"/> when the robot stops awaiting authority.
+    /// </summary>
+    public AcquireResult AcquireRoute(
+        ImmutableArray<RouteSegmentCandidate> segments,
+        TrafficRouteGoal goal,
+        long? clientEpoch)
+    {
+        if (segments.IsDefaultOrEmpty)
+        {
+            return AcquireResult.Reject("EMPTY_ROUTE");
+        }
+
+        var robot = GetOrCreate(segments[0].RobotId);
+        if (robot.Authority is not null)
+        {
+            return AcquireAtomic(segments[0], clientEpoch, null); // AUTHORITY_ALREADY_HELD, keep current route
+        }
+
+        robot.PendingSegments = segments.RemoveAt(0);
+        robot.RouteGoal = goal;
+        robot.AwaitingExtension = false;
+        var result = AcquireAtomic(segments[0], clientEpoch, null);
+        if (!result.Granted && !result.Queued)
+        {
+            ClearRoute(robot);
+        }
+
+        return result;
+    }
+
+    /// <summary>Grants the next pending segment as EXTEND (robot stopped at a safe stop awaiting authority).</summary>
+    public TrafficOpResult AdvanceRoute(Guid robotId)
+    {
+        var robot = GetOrCreate(robotId);
+        if (robot.Authority is null)
+        {
+            return TrafficOpResult.Fail("NO_AUTHORITY");
+        }
+
+        if (robot.PendingSegments.IsDefaultOrEmpty)
+        {
+            robot.AwaitingExtension = false;
+            return TrafficOpResult.Fail("NO_PENDING_SEGMENT");
+        }
+
+        var next = robot.PendingSegments[0];
+        var rest = robot.PendingSegments.RemoveAt(0);
+        robot.PendingSegments = rest; // so the extend event knows whether it reaches the destination
+        var result = ExtendAtomic(next with { RequestId = Guid.NewGuid() }, Epoch);
+        if (!result.Granted)
+        {
+            robot.PendingSegments = rest.Insert(0, next);
+            robot.AwaitingExtension = true; // retried by the renew tick
+            return TrafficOpResult.Fail(result.Reason ?? result.WaitingReason.ToString());
+        }
+
+        robot.AwaitingExtension = false;
+        return TrafficOpResult.Success();
+    }
+
+    /// <summary>Robots stopped at a safe stop whose next segment could not be granted yet.</summary>
+    public IReadOnlyList<Guid> RobotsAwaitingExtension() =>
+        _robots.Values
+            .Where(r => r.AwaitingExtension && r.Authority is not null && r.Phase != TrafficRobotPhase.Quarantined)
+            .Select(r => r.RobotId)
+            .ToList();
+
+    /// <summary>
+    /// SAFE_STOP_REACHED: releases every occupied resource the robot has physically left (not station holds).
+    /// Authority is kept: the robot either finishes the route or waits for EXTEND.
+    /// </summary>
+    public TrafficOpResult ReportSafeStopReached(Guid robotId, long seq, long epoch, double poseX, double poseY, bool localizationOk)
+    {
+        if (epoch != Epoch)
+        {
+            return TrafficOpResult.Fail("STALE_EPOCH");
+        }
+
+        var robot = GetOrCreate(robotId);
+        if (!TryAcceptProgressSeq(robot, seq))
+        {
+            return TrafficOpResult.Fail("STALE_SEQ");
+        }
+
+        if (!localizationOk || _graph is null)
+        {
+            Quarantine(robot, "EXIT_UNCERTAIN");
+            return TrafficOpResult.Fail("EXIT_UNCERTAIN");
+        }
+
+        robot.X = poseX;
+        robot.Y = poseY;
+        robot.LocalizationOk = true;
+        robot.NodeId = RoutePlanner.NearestNode(_graph, poseX, poseY);
+
+        var cleared = robot.OccupiedResourceIds
+            .Where(rid => !robot.ServiceHoldIds.Contains(rid) && IsPhysicallyClear(robot, rid, poseX, poseY))
+            .ToList();
+        foreach (var rid in cleared)
+        {
+            ReleaseResource(robot, rid);
+        }
+
+        StateVersion++;
+        Log($"safe-stop:{robotId}:released:{string.Join(",", cleared)}");
+        PromoteWaiters(cleared);
+        return TrafficOpResult.Success();
+    }
+
+    /// <summary>
+    /// NAVIGATE finished. Success clears authority + route and releases what is physically clear; anything else
+    /// quarantines (fail-closed, occupancy kept until verified exit / operator).
+    /// </summary>
+    public TrafficOpResult CompleteRoute(Guid robotId, bool succeeded, string? reason)
+    {
+        var robot = GetOrCreate(robotId);
+        var previous = robot.Authority;
+        ClearRoute(robot);
+        if (!succeeded)
+        {
+            Quarantine(robot, $"NAVIGATE:{reason ?? "FAILED"}");
+            return TrafficOpResult.Success();
+        }
+
+        var cleared = new List<string>();
+        if (robot.X is double x && robot.Y is double y)
+        {
+            cleared = robot.OccupiedResourceIds
+                .Where(rid => !robot.ServiceHoldIds.Contains(rid) && IsPhysicallyClear(robot, rid, x, y))
+                .ToList();
+            foreach (var rid in cleared)
+            {
+                ReleaseResource(robot, rid);
+            }
+        }
+
+        robot.Authority = null;
+        robot.Phase = robot.ServiceHoldIds.Count > 0 ? TrafficRobotPhase.HoldingService : TrafficRobotPhase.Idle;
+        robot.WaitingReason = TrafficWaitingReason.None;
+        StateVersion++;
+        Log($"route-complete:{robotId}");
+        if (previous is not null)
+        {
+            _pendingEvents.Add(new TrafficEvent(
+                TrafficEventKind.AuthorityReleased, robot.RobotId, string.Empty, previous, null, null,
+                robot.JobStepId, null, null, null, null, IsFirstSegment: false));
+        }
+
+        PromoteWaiters(cleared);
+        return TrafficOpResult.Success();
+    }
+
+    private readonly List<TrafficEvent> _pendingEvents = [];
+
+    /// <summary>Grant/extend/renew events produced by mutations since the last drain (consumed by actor outbox).</summary>
+    public IReadOnlyList<TrafficEvent> DrainEvents()
+    {
+        if (_pendingEvents.Count == 0)
+        {
+            return [];
+        }
+
+        var events = _pendingEvents.ToList();
+        _pendingEvents.Clear();
+        return events;
+    }
+
+    private void EmitSegmentEvent(
+        TrafficEventKind kind,
+        RobotRuntime robot,
+        MotionAuthority authority,
+        RouteSegmentCandidate candidate,
+        bool isFirstSegment)
+    {
+        var isFinal = robot.RouteGoal is not null && robot.PendingSegments.IsDefaultOrEmpty;
+        double? goalX, goalY, goalYaw = null;
+        if (isFinal)
+        {
+            (goalX, goalY, goalYaw) = (robot.RouteGoal!.X, robot.RouteGoal.Y, robot.RouteGoal.Yaw);
+        }
+        else
+        {
+            (goalX, goalY) = ResolveNodePose(candidate.GoalSafeStopNodeId);
+        }
+
+        _pendingEvents.Add(new TrafficEvent(
+            kind,
             robot.RobotId,
             string.Empty,
             authority,
             null,
             candidate.JobId,
             candidate.JobStepId,
+            goalX,
+            goalY,
+            goalYaw,
             null,
-            null,
-            null,
-            null,
-            IsFirstSegment: true);
-        return Cache(candidate.RequestId, AcquireResult.Grant(authority));
+            isFirstSegment,
+            isFinal));
     }
 
-    /// <summary>Last grant/extend event produced by a mutation (consumed by actor outbox).</summary>
-    public TrafficEvent? LastGrantedEvent { get; private set; }
+    /// <summary>
+    /// Progress fencing. The floor is the last grant/extend seq plus the highest seq the robot itself reported —
+    /// never LastSeq: RENEW bumps LastSeq before the robot has applied it, so a report sent just after a renew
+    /// legitimately carries the previous seq.
+    /// </summary>
+    private static bool TryAcceptProgressSeq(RobotRuntime robot, long seq)
+    {
+        if (seq < Math.Max(robot.ProgressFloorSeq, robot.LastReportedSeq))
+        {
+            return false;
+        }
 
-    public void ClearLastGrantedEvent() => LastGrantedEvent = null;
+        robot.LastReportedSeq = seq;
+        robot.LastSeq = Math.Max(robot.LastSeq, seq);
+        return true;
+    }
+
+    private static void ClearRoute(RobotRuntime robot)
+    {
+        robot.PendingSegments = [];
+        robot.RouteGoal = null;
+        robot.AwaitingExtension = false;
+    }
 
     /// <summary>
     /// Extends an existing authority with the next safe-stop segment (lookahead). Cumulative edges.
@@ -262,6 +484,7 @@ public sealed class TrafficState
         var cumulativeResources = prev.ResourceIds.Concat(candidate.ResourceIds)
             .Distinct(StringComparer.Ordinal).ToImmutableArray();
         robot.LastSeq++;
+        robot.ProgressFloorSeq = robot.LastSeq;
         var authority = new MotionAuthority(
             prev.AuthorityId,
             robot.RobotId,
@@ -277,19 +500,7 @@ public sealed class TrafficState
         robot.Phase = TrafficRobotPhase.Authorized;
         StateVersion++;
         Log($"extend:{robot.RobotId}:auth:{authority.AuthorityId}:seq:{authority.Seq}");
-        LastGrantedEvent = new TrafficEvent(
-            TrafficEventKind.AuthorityExtended,
-            robot.RobotId,
-            string.Empty,
-            authority,
-            null,
-            candidate.JobId,
-            candidate.JobStepId,
-            null,
-            null,
-            null,
-            null,
-            IsFirstSegment: false);
+        EmitSegmentEvent(TrafficEventKind.AuthorityExtended, robot, authority, candidate, isFirstSegment: false);
         return Cache(candidate.RequestId, AcquireResult.Grant(authority));
     }
 
@@ -301,12 +512,11 @@ public sealed class TrafficState
         }
 
         var robot = GetOrCreate(robotId);
-        if (seq < robot.LastSeq)
+        if (!TryAcceptProgressSeq(robot, seq))
         {
             return TrafficOpResult.Fail("STALE_SEQ"); // out-of-order ignored (idempotent reject)
         }
 
-        robot.LastSeq = seq;
         robot.NodeId = nodeId ?? robot.NodeId;
         robot.X = x ?? robot.X;
         robot.Y = y ?? robot.Y;
@@ -314,6 +524,20 @@ public sealed class TrafficState
         if (!localizationOk)
         {
             Quarantine(robot, "LOCALIZATION_LOSS");
+            return TrafficOpResult.Success();
+        }
+
+        // Brief TF blips can sticky-quarantine; clear LOCALIZATION_LOSS when pose recovers
+        // while motion authority is still held so RENEW can resume.
+        if (robot.Phase == TrafficRobotPhase.Quarantined
+            && string.Equals(robot.QuarantineReason, "LOCALIZATION_LOSS", StringComparison.Ordinal)
+            && robot.Authority is not null)
+        {
+            robot.QuarantineReason = null;
+            robot.WaitingReason = TrafficWaitingReason.None;
+            robot.Phase = TrafficRobotPhase.Moving;
+            StateVersion++;
+            Log($"recover-loc:{robot.RobotId}");
             return TrafficOpResult.Success();
         }
 
@@ -341,7 +565,7 @@ public sealed class TrafficState
         }
 
         var robot = GetOrCreate(robotId);
-        if (seq < robot.LastSeq)
+        if (!TryAcceptProgressSeq(robot, seq))
         {
             return TrafficOpResult.Fail("STALE_SEQ");
         }
@@ -352,7 +576,6 @@ public sealed class TrafficState
             return TrafficOpResult.Fail("EXIT_UNCERTAIN");
         }
 
-        robot.LastSeq = seq;
         robot.X = poseX;
         robot.Y = poseY;
         robot.LocalizationOk = true;
@@ -405,6 +628,7 @@ public sealed class TrafficState
             }
         }
 
+        robot.ServiceHoldIds.Add(resourceId);
         robot.Phase = TrafficRobotPhase.HoldingService;
         StateVersion++;
         Log($"hold-service:{robotId}:{resourceId}");
@@ -429,6 +653,7 @@ public sealed class TrafficState
         }
 
         robot.Authority = null;
+        ClearRoute(robot);
         robot.Phase = TrafficRobotPhase.Idle;
         robot.QuarantineReason = null;
         StateVersion++;
@@ -457,6 +682,7 @@ public sealed class TrafficState
             robot.Authority = null;
         }
 
+        ClearRoute(robot);
         StateVersion++;
         Log($"cancel:{robotId}");
         return TrafficOpResult.Success();
@@ -497,6 +723,7 @@ public sealed class TrafficState
         }
 
         robot.Authority = null;
+        ClearRoute(robot);
         robot.X = poseX;
         robot.Y = poseY;
         robot.LocalizationOk = true;
@@ -519,7 +746,11 @@ public sealed class TrafficState
         return TrafficOpResult.Success();
     }
 
-    public TrafficOpResult RenewAuthority(Guid robotId, Guid authorityId, long seq, long epoch)
+    /// <summary>
+    /// Bumps seq and emits <see cref="TrafficEventKind.AuthorityRenewed"/> so the publisher
+    /// can keep the robot SafetySupervisor authority watchdog fed (Active Mode).
+    /// </summary>
+    public TrafficOpResult RenewAuthority(Guid robotId, Guid authorityId, long epoch, TimeSpan ttl)
     {
         if (epoch != Epoch)
         {
@@ -532,14 +763,43 @@ public sealed class TrafficState
             return TrafficOpResult.Fail("AUTHORITY_MISMATCH");
         }
 
-        if (seq < robot.LastSeq)
+        if (robot.Phase is not (TrafficRobotPhase.Authorized or TrafficRobotPhase.Moving))
         {
-            return TrafficOpResult.Fail("STALE_SEQ");
+            return TrafficOpResult.Fail("NOT_AUTHORIZED");
         }
 
-        robot.LastSeq = seq;
+        robot.LastSeq += 1;
+        var renewed = robot.Authority with { Seq = robot.LastSeq };
+        robot.Authority = renewed;
         StateVersion++;
+        var expiresAt = _clock.GetUtcNow().Add(ttl);
+        _pendingEvents.Add(new TrafficEvent(
+            TrafficEventKind.AuthorityRenewed,
+            robot.RobotId,
+            string.Empty,
+            renewed,
+            null,
+            null,
+            robot.JobStepId,
+            null,
+            null,
+            null,
+            expiresAt,
+            IsFirstSegment: false));
+        Log($"renew:{robot.RobotId}:auth:{renewed.AuthorityId}:seq:{renewed.Seq}");
         return TrafficOpResult.Success();
+    }
+
+    /// <summary>Robot ids that currently hold a motion authority (for renew tick).</summary>
+    public IReadOnlyList<(Guid RobotId, Guid AuthorityId)> ActiveAuthorityKeys()
+    {
+        // Renew only while motion is authorized/moving — not during station holds
+        // (hold may keep a prior Authority object; renewing there races NAVIGATE seq).
+        return _robots.Values
+            .Where(r => r.Authority is not null
+                && r.Phase is TrafficRobotPhase.Authorized or TrafficRobotPhase.Moving)
+            .Select(r => (r.RobotId, r.Authority!.AuthorityId))
+            .ToList();
     }
 
     public IReadOnlyDictionary<string, int> CongestionSnapshot()
@@ -788,6 +1048,7 @@ public sealed class TrafficState
     private void ReleaseResource(RobotRuntime robot, string resourceId)
     {
         robot.OccupiedResourceIds.Remove(resourceId);
+        robot.ServiceHoldIds.Remove(resourceId);
         if (_holders.TryGetValue(resourceId, out var set))
         {
             set.Remove(robot.RobotId);
@@ -1038,6 +1299,16 @@ public sealed class TrafficState
         return result;
     }
 
+    private (double? X, double? Y) ResolveNodePose(int nodeId)
+    {
+        if (_graph is not null && _graph.NodeById.TryGetValue(nodeId, out var node))
+        {
+            return (node.X, node.Y);
+        }
+
+        return (null, null);
+    }
+
     private void Log(string message)
     {
         if (_events.Count >= _eventCap)
@@ -1059,6 +1330,14 @@ public sealed class TrafficState
         public HashSet<string> OccupiedResourceIds { get; } = new(StringComparer.Ordinal);
         public MotionAuthority? Authority { get; set; }
         public long LastSeq { get; set; }
+        /// <summary>Seq of the last grant/extend; progress below it is stale (renew does not move it).</summary>
+        public long ProgressFloorSeq { get; set; }
+        public long LastReportedSeq { get; set; }
+        /// <summary>Station holds (bays) — never released by safe-stop / route completion.</summary>
+        public HashSet<string> ServiceHoldIds { get; } = new(StringComparer.Ordinal);
+        public ImmutableArray<RouteSegmentCandidate> PendingSegments { get; set; } = [];
+        public TrafficRouteGoal? RouteGoal { get; set; }
+        public bool AwaitingExtension { get; set; }
         public TrafficWaitingReason WaitingReason { get; set; }
         public Guid? BlockingOwner { get; set; }
         public string? QuarantineReason { get; set; }

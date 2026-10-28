@@ -11,6 +11,7 @@ using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Features.IssueNavigateCommand;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Services;
 
 namespace WaroTrans.Fleet.Traffic;
 
@@ -32,7 +33,9 @@ public sealed class TrafficAuthorityPublisher(
     };
 
     private readonly Dictionary<Guid, Guid> _activeCommandByRobot = new();
-    private readonly TimeSpan _authorityTtl = TimeSpan.FromSeconds(30);
+
+    private TimeSpan AuthorityTtl =>
+        TimeSpan.FromSeconds(Math.Max(5, options.Value.AuthorityTtlSec));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -70,21 +73,41 @@ public sealed class TrafficAuthorityPublisher(
             return;
         }
 
-        var expiresAt = evt.ExpiresAt ?? DateTimeOffset.UtcNow.Add(_authorityTtl);
+        if (evt.Kind is TrafficEventKind.AuthorityRevoked or TrafficEventKind.Quarantined
+            or TrafficEventKind.AuthorityReleased)
+        {
+            _activeCommandByRobot.Remove(evt.RobotId);
+            return;
+        }
+
+        if (evt.Authority.EdgeIds.IsDefaultOrEmpty || evt.Authority.EdgeIds.Length == 0)
+        {
+            logger.LogWarning(
+                "Skip Active publish for empty segment robot={RobotCode} auth={AuthorityId} (already at safe-stop)",
+                robot.Code, evt.Authority.AuthorityId);
+            return;
+        }
+
+        var expiresAt = evt.ExpiresAt ?? DateTimeOffset.UtcNow.Add(AuthorityTtl);
         var pathHash = AuthorityPathHash.Compute(evt.Authority.GraphHash, evt.Authority.EdgeIds);
+        // Only the segment that reaches the destination carries finalGoal: the robot completes NAVIGATE there
+        // and otherwise stops at the safe stop awaiting EXTEND.
+        var finalGoal = evt.IsFinalSegment && evt.GoalX is double gx && evt.GoalY is double gy
+            ? new Pose2DPayload { X = gx, Y = gy, Yaw = evt.GoalYaw ?? 0 }
+            : null;
         var authorityPayload = new AuthorityPayload
         {
             AuthorityId = evt.Authority.AuthorityId,
             Epoch = evt.Authority.Epoch,
             Seq = evt.Authority.Seq,
+            MapVersionId = robot.CurrentMapVersionId,
+            MapVersionCode = robot.MapVersionCode,
             GraphHash = evt.Authority.GraphHash,
             SegmentEdgeIds = evt.Authority.EdgeIds.ToList(),
             PathHash = pathHash,
             GoalSafeStopNodeId = evt.Authority.GoalSafeStopNodeId,
             ExpiresAt = expiresAt,
-            FinalGoal = evt.GoalX is double gx && evt.GoalY is double gy
-                ? new Pose2DPayload { X = gx, Y = gy, Yaw = evt.GoalYaw ?? 0 }
-                : null
+            FinalGoal = finalGoal
         };
 
         if (evt.Kind == TrafficEventKind.AuthorityGranted && evt.IsFirstSegment)
@@ -114,6 +137,54 @@ public sealed class TrafficAuthorityPublisher(
             return;
         }
 
+        if (evt.Kind == TrafficEventKind.AuthorityRenewed)
+        {
+            if (!_activeCommandByRobot.TryGetValue(evt.RobotId, out var renewTarget))
+            {
+                logger.LogWarning("RENEW without active command for robot {RobotCode}", robot.Code);
+                return;
+            }
+
+            var utcNow = DateTimeOffset.UtcNow;
+            var renewCommandId = Guid.NewGuid();
+            var renewPayload = new RenewAuthorityPayload
+            {
+                TargetCommandId = renewTarget,
+                AuthorityId = evt.Authority.AuthorityId,
+                Epoch = evt.Authority.Epoch,
+                Seq = evt.Authority.Seq,
+                ExpiresAt = expiresAt
+            };
+            db.RobotCommands.Add(new RobotCommand
+            {
+                Id = renewCommandId,
+                RobotId = evt.RobotId,
+                Type = RobotCommandType.RENEW_AUTHORITY,
+                Status = RobotCommandStatus.SENT,
+                PayloadJson = JsonSerializer.Serialize(renewPayload, JsonOptions),
+                IssuedAt = utcNow,
+                JobStepId = evt.JobStepId
+            });
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+            await db.PublishAndStampAsync(commandPublisher, new RobotCommandMessage
+            {
+                SchemaVersion = 1,
+                MessageId = Guid.NewGuid(),
+                CommandId = renewCommandId,
+                RobotCode = robot.Code,
+                Type = RobotCommandTypes.RenewAuthority,
+                IssuedAt = utcNow,
+                JobStepId = evt.JobStepId,
+                Payload = JsonSerializer.SerializeToElement(renewPayload, JsonOptions)
+            }, evt.RobotId, releasesRobot: false, ct).ConfigureAwait(false);
+
+            logger.LogDebug(
+                "Active RENEW_AUTHORITY robot={RobotCode} target={Target} seq={Seq}",
+                robot.Code, renewTarget, evt.Authority.Seq);
+            return;
+        }
+
         if (evt.Kind is TrafficEventKind.AuthorityExtended or TrafficEventKind.AuthorityGranted)
         {
             if (!_activeCommandByRobot.TryGetValue(evt.RobotId, out var targetCommandId))
@@ -133,7 +204,8 @@ public sealed class TrafficAuthorityPublisher(
                 SegmentEdgeIds = evt.Authority.EdgeIds.ToList(),
                 PathHash = pathHash,
                 GraphHash = evt.Authority.GraphHash,
-                ExpiresAt = expiresAt
+                ExpiresAt = expiresAt,
+                FinalGoal = finalGoal
             };
             var command = new RobotCommand
             {
@@ -148,7 +220,7 @@ public sealed class TrafficAuthorityPublisher(
             db.RobotCommands.Add(command);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
-            await commandPublisher.PublishAsync(new RobotCommandMessage
+            await db.PublishAndStampAsync(commandPublisher, new RobotCommandMessage
             {
                 SchemaVersion = 1,
                 MessageId = Guid.NewGuid(),
@@ -158,11 +230,11 @@ public sealed class TrafficAuthorityPublisher(
                 IssuedAt = utcNow,
                 JobStepId = evt.JobStepId,
                 Payload = JsonSerializer.SerializeToElement(extendPayload, JsonOptions)
-            }, ct).ConfigureAwait(false);
+            }, evt.RobotId, releasesRobot: false, ct).ConfigureAwait(false);
 
             logger.LogInformation(
-                "Active EXTEND_AUTHORITY robot={RobotCode} target={Target} seq={Seq}",
-                robot.Code, targetCommandId, evt.Authority.Seq);
+                "Active EXTEND_AUTHORITY robot={RobotCode} target={Target} seq={Seq} final={Final}",
+                robot.Code, targetCommandId, evt.Authority.Seq, evt.IsFinalSegment);
         }
     }
 }

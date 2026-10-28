@@ -40,16 +40,17 @@ public sealed class TrafficProgressIngress(
                 break;
 
             case TrafficProgressEvents.SafeStopReached:
-                if (message.LocalizationOk)
+                if (message.PoseX is double x && message.PoseY is double y)
                 {
-                    var snap = await coordinator.GetTrafficSnapshotAsync(ct).ConfigureAwait(false);
-                    var view = snap.Robots.FirstOrDefault(r => r.RobotId == robot.Id);
-                    var resources = view?.OccupiedResourceIds ?? [];
-                    if (resources.Length > 0 && message.PoseX is double x && message.PoseY is double y)
+                    // Releases only what the robot has physically left; the lane it stands on stays held.
+                    var exit = await coordinator.ReportSafeStopReachedAsync(
+                        robot.Id, message.Seq, message.Epoch, x, y, message.LocalizationOk, ct)
+                        .ConfigureAwait(false);
+                    if (!exit.Ok)
                     {
-                        await coordinator.ReportVerifiedExitAsync(
-                            robot.Id, message.Seq, message.Epoch, resources, x, y, true, ct)
-                            .ConfigureAwait(false);
+                        logger.LogWarning(
+                            "SAFE_STOP_REACHED robot={RobotCode} seq={Seq} not applied: {Reason}",
+                            message.RobotCode, message.Seq, exit.Reason);
                     }
                 }
 
@@ -68,6 +69,15 @@ public sealed class TrafficProgressIngress(
                     robot.Id, message.Seq, message.Epoch, null,
                     message.PoseX, message.PoseY, message.LocalizationOk, ct)
                     .ConfigureAwait(false);
+                // Next safe-stop segment of the route (EXTEND); if busy it is retried by the renew tick.
+                var advance = await coordinator.AdvanceRouteAsync(robot.Id, ct).ConfigureAwait(false);
+                if (!advance.Ok)
+                {
+                    logger.LogInformation(
+                        "Robot {RobotCode} awaiting authority, no EXTEND yet: {Reason}",
+                        message.RobotCode, advance.Reason);
+                }
+
                 break;
         }
     }

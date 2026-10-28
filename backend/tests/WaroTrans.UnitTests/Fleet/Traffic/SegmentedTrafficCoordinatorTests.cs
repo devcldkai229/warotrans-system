@@ -212,6 +212,29 @@ public class SegmentedTrafficCoordinatorTests
     }
 
     [Fact]
+    public void ReportProgress_clears_LOCALIZATION_LOSS_when_pose_recovers_with_authority()
+    {
+        var sim = new FakeRobotSim(FakeRobotSim.BuildNarrowBidirectional());
+        var robot = Guid.NewGuid();
+        var goalB = sim.Graph.Stations.First(s => s.EndpointCode == "EP-B").NodeId;
+        var grant = sim.AcquireNextSegment(robot, 0, 0, goalB);
+        Assert.True(grant.Granted);
+        var seq = grant.Authority!.Seq;
+
+        Assert.True(sim.State.ReportProgress(robot, seq + 1, sim.Epoch, null, 1, 0, localizationOk: false).Ok);
+        var lost = sim.State.Snapshot().Robots.Single(r => r.RobotId == robot);
+        Assert.Equal(TrafficRobotPhase.Quarantined, lost.Phase);
+        Assert.Equal("LOCALIZATION_LOSS", lost.QuarantineReason);
+        Assert.Empty(sim.State.ActiveAuthorityKeys());
+
+        Assert.True(sim.State.ReportProgress(robot, seq + 2, sim.Epoch, null, 1.1, 0, localizationOk: true).Ok);
+        var recovered = sim.State.Snapshot().Robots.Single(r => r.RobotId == robot);
+        Assert.Equal(TrafficRobotPhase.Moving, recovered.Phase);
+        Assert.Null(recovered.QuarantineReason);
+        Assert.Contains(sim.State.ActiveAuthorityKeys(), k => k.RobotId == robot);
+    }
+
+    [Fact]
     public void Release_without_verified_exit_rejected()
     {
         var sim = new FakeRobotSim(FakeRobotSim.BuildNarrowBidirectional());

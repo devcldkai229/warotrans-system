@@ -150,10 +150,11 @@ public static class StationPolicyResolver
 
         return purpose switch
         {
-            "PICKUP" when bayKind is TrafficStationBayKind.Service or TrafficStationBayKind.Unspecified
+            // Service bays = shelf faces. Unspecified (e.g. WAYPOINT docks on V018) follow purpose.
+            "PICKUP" when bayKind is TrafficStationBayKind.Service
                 => StationPolicyKind.ShelfService,
             "PICKUP" => StationPolicyKind.Inbound,
-            "DROPOFF" when bayKind is TrafficStationBayKind.Service or TrafficStationBayKind.Unspecified
+            "DROPOFF" when bayKind is TrafficStationBayKind.Service
                 => StationPolicyKind.ShelfService,
             "DROPOFF" => StationPolicyKind.Outbound,
             "CHARGE" => StationPolicyKind.Charging,

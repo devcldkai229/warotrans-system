@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.Navigation.Traffic;
 
 namespace WaroTrans.Fleet.Traffic;
@@ -13,6 +14,7 @@ public sealed class TrafficShadowObserver(
     ISegmentedTrafficCoordinator segmented,
     ITrafficCoordinator v1,
     RoutePlanner planner,
+    IOptions<TrafficOptions> trafficOptions,
     ILogger<TrafficShadowObserver> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -93,6 +95,13 @@ public sealed class TrafficShadowObserver(
         bool localizationOk,
         CancellationToken ct = default)
     {
+        // Active Mode: traffic_progress is the sole progress/authority channel. Feeding every
+        // telemetry LOST sample into ReportProgress sticky-quarantines and starves RENEW.
+        if (trafficOptions.Value.Mode == TrafficCoordinatorMode.Active)
+        {
+            return;
+        }
+
         var snap = await segmented.GetTrafficSnapshotAsync(ct).ConfigureAwait(false);
         var robot = snap.Robots.FirstOrDefault(r => r.RobotId == robotId);
         if (robot is null)

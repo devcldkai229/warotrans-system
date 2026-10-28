@@ -57,8 +57,13 @@ public sealed class RobotConnectivityMonitorHostedService(
         var notifier = scope.ServiceProvider.GetRequiredService<IRobotRealtimeNotifier>();
         var events = scope.ServiceProvider.GetRequiredService<IIntegrationEventPublisher>();
 
+        // Offline only when BOTH heartbeat and telemetry are older than the timeout.
+        // Active Mode can briefly starve the 1 Hz HB timer under Nav2/MQTT load while
+        // 5 Hz telemetry (and wall-clock receive timestamps) still prove the robot is live.
         var stale = await db.Robots
-            .Where(r => r.IsOnline && (r.LastHeartbeatAt == null || r.LastHeartbeatAt < cutoff))
+            .Where(r => r.IsOnline
+                        && (r.LastHeartbeatAt == null || r.LastHeartbeatAt < cutoff)
+                        && (r.LastTelemetryAt == null || r.LastTelemetryAt < cutoff))
             .ToListAsync(cancellationToken);
 
         if (stale.Count == 0)

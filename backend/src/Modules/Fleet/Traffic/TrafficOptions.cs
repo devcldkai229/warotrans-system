@@ -37,6 +37,15 @@ public sealed class TrafficOptions
     /// <summary>Seconds a HUMAN_INTERACTION may wait before ops escalation (hold is kept).</summary>
     public int HumanConfirmTimeoutSec { get; set; } = 300;
 
+    /// <summary>MQTT authority expiresAt horizon for grant/extend/renew (Active Mode).</summary>
+    public int AuthorityTtlSec { get; set; } = 30;
+
+    /// <summary>
+    /// How often Active Mode re-publishes RENEW_AUTHORITY while a segment is granted.
+    /// Must stay below robot <c>authority_loss_timeout_sec</c> (default 3s).
+    /// </summary>
+    public double AuthorityRenewIntervalSec { get; set; } = 1.5;
+
     public IReadOnlyList<TrafficStationMeta> ResolveStationMeta()
     {
         var list = new List<TrafficStationMeta>();

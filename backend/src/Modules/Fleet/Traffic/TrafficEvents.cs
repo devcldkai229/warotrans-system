@@ -9,7 +9,9 @@ public enum TrafficEventKind
     AuthorityExtended,
     AuthorityRenewed,
     AuthorityRevoked,
-    Quarantined
+    Quarantined,
+    /// <summary>Route finished (NAVIGATE SUCCEEDED): authority cleared, no more renew/extend.</summary>
+    AuthorityReleased
 }
 
 public sealed record TrafficEvent(
@@ -24,7 +26,9 @@ public sealed record TrafficEvent(
     double? GoalY,
     double? GoalYaw,
     DateTimeOffset? ExpiresAt,
-    bool IsFirstSegment);
+    bool IsFirstSegment,
+    // Authority now covers the route's last edge: Goal* is the destination endpoint pose (robot finishes NAVIGATE).
+    bool IsFinalSegment = false);
 
 /// <summary>Bounded outbox for Active Mode MQTT publishers (no IO in the actor).</summary>
 public sealed class TrafficEventOutbox

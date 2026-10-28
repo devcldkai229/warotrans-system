@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Entities;
@@ -17,7 +18,9 @@ public sealed class ProcessRobotCommandResultHandler(
     IIntegrationEventPublisher events,
     ITrafficCoordinator trafficCoordinator,
     ShadowSingleMoverGuard? shadowMoverGuard,
-    ILogger<ProcessRobotCommandResultHandler> logger)
+    ILogger<ProcessRobotCommandResultHandler> logger,
+    IOptions<TrafficOptions>? trafficOptions = null,
+    ISegmentedTrafficCoordinator? segmentedTraffic = null)
 {
     public async Task HandleAsync(RobotCommandResultMessage message, CancellationToken cancellationToken)
     {
@@ -102,6 +105,16 @@ public sealed class ProcessRobotCommandResultHandler(
             if (robot is not null)
             {
                 shadowMoverGuard?.Exit(robot.CurrentMapVersionId, robot.Id);
+            }
+
+            if (trafficOptions?.Value.Mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
+            {
+                // Active route finished: clear authority (stops RENEW) or quarantine on failure (fail-closed).
+                await segmentedTraffic.CompleteRouteAsync(
+                    command.RobotId,
+                    message.Outcome == RobotCommandOutcomes.Succeeded,
+                    message.ErrorCode ?? message.Outcome,
+                    cancellationToken);
             }
         }
         else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } targetCommandId)

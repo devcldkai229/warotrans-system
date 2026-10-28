@@ -23,7 +23,23 @@ public interface ISegmentedTrafficCoordinator
 
     Task<RoutePlanResult> RequestSegmentAsync(RoutePlanRequest request, CancellationToken ct = default);
 
-    Task<TrafficOpResult> RenewAuthorityAsync(Guid robotId, Guid authorityId, long seq, long epoch, CancellationToken ct = default);
+    /// <summary>Active Mode: acquire the first segment and keep the rest of the route for <see cref="AdvanceRouteAsync"/>.</summary>
+    Task<AcquireResult> AcquireRouteAsync(
+        ImmutableArray<RouteSegmentCandidate> segments, TrafficRouteGoal goal, long? epoch = null, CancellationToken ct = default);
+
+    /// <summary>Active Mode: robot stopped awaiting authority → EXTEND with the next pending segment.</summary>
+    Task<TrafficOpResult> AdvanceRouteAsync(Guid robotId, CancellationToken ct = default);
+
+    Task<TrafficOpResult> ReportSafeStopReachedAsync(
+        Guid robotId, long seq, long epoch, double poseX, double poseY, bool localizationOk, CancellationToken ct = default);
+
+    /// <summary>NAVIGATE result for an Active route: success clears authority, otherwise quarantine.</summary>
+    Task<TrafficOpResult> CompleteRouteAsync(Guid robotId, bool succeeded, string? reason, CancellationToken ct = default);
+
+    Task<TrafficOpResult> RenewAuthorityAsync(Guid robotId, Guid authorityId, long epoch, CancellationToken ct = default);
+
+    /// <summary>Active Mode: renew every robot that currently holds a segment authority.</summary>
+    Task<int> RenewAllActiveAuthoritiesAsync(CancellationToken ct = default);
 
     Task<TrafficOpResult> ReportProgressAsync(
         Guid robotId, long seq, long epoch, int? nodeId, double? x, double? y, bool localizationOk,

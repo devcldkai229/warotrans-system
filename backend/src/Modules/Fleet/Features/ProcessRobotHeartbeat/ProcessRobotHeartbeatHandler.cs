@@ -39,7 +39,22 @@ public sealed class ProcessRobotHeartbeatHandler(
             return;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        // ExecuteUpdate: telemetry/job rewrite UpdatedAt concurrency token several times/sec;
+        // tracked SaveChanges would drop HB liveness under Active NAVIGATE load.
+        var bootId = robot.LastHeartbeatBootId;
+        var sequence = robot.LastHeartbeatSequence;
+        var isOnline = robot.IsOnline;
+        await db.Robots
+            .Where(r => r.Id == robot.Id)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(r => r.LastHeartbeatAt, utcNow)
+                    .SetProperty(r => r.LastHeartbeatBootId, bootId)
+                    .SetProperty(r => r.LastHeartbeatSequence, sequence)
+                    .SetProperty(r => r.IsOnline, isOnline)
+                    .SetProperty(r => r.UpdatedAt, utcNow),
+                cancellationToken);
+        db.ChangeTracker.Clear();
 
         if (becameOnline)
         {
