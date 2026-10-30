@@ -19,7 +19,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
         string Name,
         string ZoneType,
         JsonElement Geometry,
-        int Capacity,
         double? MaxSpeed,
         bool IsActive,
         JsonElement? Policy,
@@ -86,7 +85,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
             name = "Restricted bay",
             zoneType = "KEEP_OUT",
             geometry = ClosedSquare(),
-            capacity = 2,
             isActive = true
         });
 
@@ -94,7 +92,7 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
         var created = (await response.Content.ReadFromJsonAsync<ZoneDto>())!;
         Assert.Equal("KEEP_OUT", created.ZoneType);
         Assert.Equal("Polygon", created.Geometry.GetProperty("type").GetString());
-        Assert.Equal(2, created.Capacity);
+        Assert.Equal("ZONE-RESTRICTED-BAY", created.Code);
 
         var list = (await Client.GetFromJsonAsync<List<ZoneDto>>($"/api/navigation/maps/{mapId}/zones"))!;
         Assert.Contains(list, z => z.Id == created.Id);
@@ -109,7 +107,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
             name = "Junction",
             zoneType = "NO_STOP",
             geometry = ClosedSquare(3),
-            capacity = 2,
             isActive = true
         });
         create.EnsureSuccessStatusCode();
@@ -120,7 +117,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
             name = "Junction A",
             zoneType = "NO_STOP",
             geometry = ClosedSquare(3),
-            capacity = 2,
             isActive = true,
             policySchemaVersion = 1
         });
@@ -132,59 +128,36 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
     }
 
     [Fact]
-    public async Task Post_single_occupancy_requires_capacity_one()
+    public async Task Post_single_occupancy_without_capacity()
     {
         var mapId = await CreateDraftMapAsync();
-
-        var bad = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/zones", new
-        {
-            name = "Narrow",
-            zoneType = "SINGLE_OCCUPANCY",
-            geometry = ClosedSquare(2),
-            capacity = 2,
-            isActive = true
-        });
-        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
 
         var ok = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/zones", new
         {
             name = "Narrow",
             zoneType = "SINGLE_OCCUPANCY",
             geometry = ClosedSquare(2),
-            capacity = 1,
             isActive = true
         });
         Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
     }
 
     [Fact]
-    public async Task Post_junction_requires_capacity_one()
+    public async Task Post_junction_without_capacity()
     {
         var mapId = await CreateDraftMapAsync();
-
-        var bad = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/zones", new
-        {
-            name = "Cross",
-            zoneType = "JUNCTION",
-            geometry = ClosedSquare(2),
-            capacity = 2,
-            isActive = true
-        });
-        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
 
         var ok = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/zones", new
         {
             name = "Cross",
             zoneType = "JUNCTION",
             geometry = ClosedSquare(2),
-            capacity = 1,
             isActive = true
         });
         Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
         var created = await ok.Content.ReadFromJsonAsync<ZoneDto>();
         Assert.NotNull(created);
         Assert.Equal("JUNCTION", created.ZoneType);
-        Assert.Equal(1, created.Capacity);
     }
 
     [Fact]
@@ -197,7 +170,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
             name = "Slow",
             zoneType = "SPEED",
             geometry = ClosedSquare(2),
-            capacity = 2,
             isActive = true
         });
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
@@ -207,7 +179,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
             name = "Slow",
             zoneType = "SPEED",
             geometry = ClosedSquare(2),
-            capacity = 2,
             maxSpeed = 0.8,
             isActive = true
         });
@@ -223,7 +194,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
             name = "Temp",
             zoneType = "KEEP_OUT",
             geometry = ClosedSquare(),
-            capacity = 1,
             isActive = true
         });
         create.EnsureSuccessStatusCode();
@@ -237,7 +207,6 @@ public sealed class ZoneEndpointTests(WaroTransWebApplicationFactory factory) : 
             name = "Keep",
             zoneType = "KEEP_OUT",
             geometry = ClosedSquare(),
-            capacity = 1,
             isActive = true
         });
         recreate.EnsureSuccessStatusCode();

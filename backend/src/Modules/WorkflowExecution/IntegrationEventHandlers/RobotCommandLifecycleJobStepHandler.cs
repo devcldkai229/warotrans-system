@@ -31,6 +31,15 @@ public sealed class RobotCommandLifecycleJobStepHandler(
             return;
         }
 
+        // Active Mode authority control (EXTEND/RENEW/REVOKE) never decides the MOVE outcome: the robot reports
+        // failure via traffic_progress FAULT and the NAVIGATE command_result.
+        if (integrationEvent.Type is RobotCommandTypes.ExtendAuthority
+            or RobotCommandTypes.RenewAuthority
+            or RobotCommandTypes.RevokeAuthority)
+        {
+            return;
+        }
+
         var step = await db.JobSteps
             .Include(s => s.JobTask)
             .FirstOrDefaultAsync(s => s.Id == stepId, cancellationToken);

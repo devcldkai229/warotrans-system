@@ -82,6 +82,9 @@ public sealed class ExtendAuthorityPayload
     public string GraphHash { get; set; } = string.Empty;
     public DateTimeOffset? ExpiresAt { get; set; }
     public Dictionary<string, double>? SpeedLimits { get; set; }
+
+    /// <summary>Set when the extended authority reaches the route destination (robot then finishes NAVIGATE).</summary>
+    public Pose2DPayload? FinalGoal { get; set; }
 }
 
 public sealed class RenewAuthorityPayload

@@ -82,7 +82,7 @@ function Get-AdminToken {
     return $login.Body.accessToken
 }
 
-function Invoke-Psql([string]$sql, [string]$container = "warotrans-postgres") {
+function Invoke-Psql([string]$sql, [string]$container = $(if ($env:WAROTRANS_PG_CONTAINER) { $env:WAROTRANS_PG_CONTAINER } else { "warotrans-postgres" })) {
     $OutputEncoding = $script:Utf8NoBom
     ($sql | docker exec -i $container psql -U warotrans -d warotrans -v ON_ERROR_STOP=1 -q -t -A) -join "`n"
 }

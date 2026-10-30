@@ -18,10 +18,11 @@ public class EdgeTests
     {
         public int EdgeCalls { get; private set; }
 
-        public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default)
+        public Task<string> NextEdgeCodeAsync(string suffix, CancellationToken cancellationToken = default)
         {
             EdgeCalls++;
-            return Task.FromResult($"EDGE-{EdgeCalls:000}");
+            var n = suffix.Trim().ToUpperInvariant().Replace(' ', '-');
+            return Task.FromResult(EdgeCalls == 1 ? $"EDGE-{n}" : $"EDGE-{n}---{EdgeCalls}");
         }
 
         public Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
@@ -73,10 +74,10 @@ public class EdgeTests
             Id = Guid.NewGuid(),
             MapVersionId = mapVersionId,
             Code = code,
+            Name = code,
             Geometry = JsonDocument.Parse("""{"type":"LineString","coordinates":[[0,0],[5,0]]}"""),
             WidthMeters = 1.0,
             Direction = EdgeDirection.BIDIRECTIONAL,
-            Capacity = 1,
             MaxSpeed = null,
             IsActive = true
         };
@@ -98,19 +99,19 @@ public class EdgeTests
 
     private static CreateEdgeRequest ValidCreateRequest(string direction = "ONE_WAY", bool? isActive = null) =>
         new(
+            "Lane A",
             LineString((1.0, 2.0), (2.5, 2.2), (4.0, 3.0)),
             1.2,
             direction,
-            2,
             0.8,
             isActive);
 
     private static UpdateEdgeRequest ValidUpdateRequest(string direction = "BIDIRECTIONAL") =>
         new(
+            "Lane B",
             LineString((10.0, 10.0), (20.0, 10.0)),
             2.0,
             direction,
-            3,
             null,
             false);
 
@@ -123,18 +124,19 @@ public class EdgeTests
 
         var response = await CreateHandler(dbContext).HandleAsync(map.Id, ValidCreateRequest());
 
-        Assert.Equal("EDGE-001", response.Code);
+        Assert.Equal("EDGE-LANE-A", response.Code);
+        Assert.Equal("Lane A", response.Name);
         Assert.Equal(map.Id, response.MapVersionId);
         Assert.Equal("ONE_WAY", response.Direction);
         Assert.Equal(1.2, response.WidthMeters);
-        Assert.Equal(2, response.Capacity);
         Assert.Equal(0.8, response.MaxSpeed);
         Assert.True(response.IsActive);
         Assert.Equal("LineString", response.Geometry.GetProperty("type").GetString());
         Assert.Equal(2.5, response.Geometry.GetProperty("coordinates")[1][0].GetDouble());
 
         var saved = await dbContext.Edges.SingleAsync();
-        Assert.Equal("EDGE-001", saved.Code);
+        Assert.Equal("EDGE-LANE-A", saved.Code);
+        Assert.Equal("Lane A", saved.Name);
         Assert.Equal(EdgeDirection.ONE_WAY, saved.Direction);
         Assert.Equal(1.2, saved.WidthMeters);
         Assert.Equal("LineString", saved.Geometry.RootElement.GetProperty("type").GetString());
@@ -152,8 +154,8 @@ public class EdgeTests
         var first = await handler.HandleAsync(map.Id, ValidCreateRequest());
         var second = await handler.HandleAsync(map.Id, ValidCreateRequest());
 
-        Assert.Equal("EDGE-001", first.Code);
-        Assert.Equal("EDGE-002", second.Code);
+        Assert.Equal("EDGE-LANE-A", first.Code);
+        Assert.Equal("EDGE-LANE-A---2", second.Code);
         Assert.Equal(2, generator.EdgeCalls);
     }
 
@@ -222,7 +224,7 @@ public class EdgeTests
         await dbContext.SaveChangesAsync();
         var generator = new FakeCodeGenerator();
 
-        var request = ValidCreateRequest() with { Capacity = 0 };
+        var request = ValidCreateRequest() with { Name = "" };
 
         await Assert.ThrowsAsync<FluentValidation.ValidationException>(() =>
             CreateHandler(dbContext, generator).HandleAsync(map.Id, request));
@@ -232,6 +234,7 @@ public class EdgeTests
 
     public static TheoryData<CreateEdgeRequest> InvalidCreateRequests => new()
     {
+        ValidCreateRequest() with { Name = "" },
         ValidCreateRequest() with { Geometry = JsonDocument.Parse("""{"type":"Point","coordinates":[1,2]}""").RootElement.Clone() },
         ValidCreateRequest() with { Geometry = JsonDocument.Parse("""{"type":"LineString","coordinates":[[1,1]]}""").RootElement.Clone() },
         ValidCreateRequest() with { Geometry = JsonDocument.Parse("""{"type":"LineString","coordinates":[[1,1],[NaN,2]]}""".Replace("NaN", "null")).RootElement.Clone() },
@@ -239,8 +242,6 @@ public class EdgeTests
         ValidCreateRequest() with { WidthMeters = -1 },
         ValidCreateRequest() with { Direction = "" },
         ValidCreateRequest() with { Direction = "TWO_WAY" },
-        ValidCreateRequest() with { Capacity = 0 },
-        ValidCreateRequest() with { Capacity = -1 },
         ValidCreateRequest() with { MaxSpeed = 0 },
         ValidCreateRequest() with { MaxSpeed = -0.5 },
         ValidCreateRequest() with { MaxSpeed = double.PositiveInfinity },
@@ -259,7 +260,6 @@ public class EdgeTests
         var request = ValidCreateRequest() with
         {
             Geometry = LineString((-1, 0), (0, -1)),
-            Capacity = 1,
             MaxSpeed = null
         };
 
@@ -287,7 +287,7 @@ public class EdgeTests
         }).IsValid);
         Assert.False(validator.Validate(ValidUpdateRequest() with { WidthMeters = 0 }).IsValid);
         Assert.False(validator.Validate(ValidUpdateRequest("UNKNOWN")).IsValid);
-        Assert.False(validator.Validate(ValidUpdateRequest() with { Capacity = 0 }).IsValid);
+        Assert.False(validator.Validate(ValidUpdateRequest() with { Name = "" }).IsValid);
         Assert.False(validator.Validate(ValidUpdateRequest() with { MaxSpeed = 0 }).IsValid);
     }
 
@@ -372,17 +372,17 @@ public class EdgeTests
         var response = await UpdateHandler(dbContext).HandleAsync(edge.Id, ValidUpdateRequest("one_way"));
 
         Assert.Equal("EDGE-001", response.Code);
+        Assert.Equal("Lane B", response.Name);
         Assert.Equal("ONE_WAY", response.Direction);
         Assert.Equal(2.0, response.WidthMeters);
-        Assert.Equal(3, response.Capacity);
         Assert.Null(response.MaxSpeed);
         Assert.False(response.IsActive);
         Assert.Equal(20, response.Geometry.GetProperty("coordinates")[1][0].GetDouble());
 
         var saved = await dbContext.Edges.SingleAsync();
         Assert.Equal("EDGE-001", saved.Code);
+        Assert.Equal("Lane B", saved.Name);
         Assert.Equal(EdgeDirection.ONE_WAY, saved.Direction);
-        Assert.Equal(3, saved.Capacity);
         Assert.False(saved.IsActive);
         Assert.Equal(20, saved.Geometry.RootElement.GetProperty("coordinates")[1][0].GetDouble());
     }
@@ -426,7 +426,6 @@ public class EdgeTests
 
         Assert.Equal("map_version_not_draft", ex.Code);
         var saved = await dbContext.Edges.AsNoTracking().SingleAsync();
-        Assert.Equal(1, saved.Capacity);
         Assert.True(saved.IsActive);
     }
 
@@ -439,7 +438,7 @@ public class EdgeTests
         await dbContext.SaveChangesAsync();
 
         await Assert.ThrowsAsync<FluentValidation.ValidationException>(() =>
-            UpdateHandler(dbContext).HandleAsync(edge.Id, ValidUpdateRequest() with { Capacity = 0 }));
+            UpdateHandler(dbContext).HandleAsync(edge.Id, ValidUpdateRequest() with { Name = "" }));
     }
 
     [Fact]

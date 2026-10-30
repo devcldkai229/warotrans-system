@@ -263,6 +263,7 @@ export function FleetPage() {
           zones={monitorMap.geometry.zones}
           bounds={monitorMap.geometry.bounds}
           occupancyImageUrl={monitorMap.geometry.occupancyImageUrl}
+          mapVersion={monitorMap.version}
         />
         <MapVersionToolbar
           warehouses={monitorMap.warehouses}

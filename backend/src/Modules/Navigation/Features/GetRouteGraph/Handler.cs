@@ -12,7 +12,7 @@ public sealed class GetRouteGraphHandler(TrafficGraphCompileService compileServi
     public async Task<RouteGraphExportResult> HandleAsync(Guid mapVersionId, CancellationToken cancellationToken = default)
     {
         // Topology export does not require occupancy (clearance warnings are for validation endpoint).
-        var bundle = await compileService.CompileAsync(mapVersionId, includeOccupancy: false, cancellationToken);
+        var bundle = await compileService.CompileAsync(mapVersionId, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken);
         var result = bundle.Result;
         var routeIssues = result.Issues
             .Where(i => i.Code is not (

@@ -432,11 +432,11 @@ export interface Edge {
   id: string
   mapVersionId: string
   code: string
+  name: string
   geometry: GeoJsonLineString
   /** Corridor width in meters (API: widthMeters). */
   widthMeters?: number
   direction: EdgeDirection
-  capacity: number
   maxSpeed: number | null
   isActive: boolean
 }
@@ -448,7 +448,6 @@ export interface Zone {
   name: string
   zoneType: ZoneType
   geometry: GeoJsonPolygon
-  capacity: number
   maxSpeed: number | null
   isActive: boolean
   policy?: Record<string, unknown> | null

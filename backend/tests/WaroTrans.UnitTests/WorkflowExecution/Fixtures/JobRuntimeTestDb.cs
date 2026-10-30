@@ -105,7 +105,7 @@ public sealed class FakeJobCodeGenerator : IBusinessCodeGenerator
     public Task<string> NextEndpointCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
         Task.FromResult("EP");
 
-    public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) =>
+    public Task<string> NextEdgeCodeAsync(string suffix, CancellationToken cancellationToken = default) =>
         Task.FromResult("EDGE");
 
     public Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default) =>

@@ -42,7 +42,9 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
             SingleWriter = false,
             FullMode = BoundedChannelFullMode.Wait
         });
-        _state.BeginEpoch(1);
+        // Epoch must grow across host restarts: robots persist (lastEpoch, lastSeq) and reject a fresh
+        // epoch-1 grant as STALE_SEQ. Start-up wall-clock seconds is monotonic enough for that.
+        _state.BeginEpoch(Math.Max(1, _clock.GetUtcNow().ToUnixTimeSeconds()));
     }
 
     /// <summary>Test helper: drive state synchronously without the channel loop.</summary>
@@ -57,7 +59,10 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
             return Task.CompletedTask;
         }
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // Own CTS — do NOT link to StartAsync's token. Host disposes that source on shutdown,
+        // which disposes a linked CTS and makes CancelAsync throw ObjectDisposedException in Stop/Dispose.
+        _ = cancellationToken;
+        _cts = new CancellationTokenSource();
         _loop = Task.Run(() => RunAsync(_cts.Token), CancellationToken.None);
         _logger.LogInformation("Segmented traffic coordinator started in {Mode} mode epoch={Epoch}", _options.Mode, Epoch);
         return Task.CompletedTask;
@@ -65,7 +70,11 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_cts is null)
+        // Host may dispose its StopAsync token; never link or wait on it for loop shutdown.
+        _ = cancellationToken;
+
+        var cts = Interlocked.Exchange(ref _cts, null);
+        if (cts is null)
         {
             return;
         }
@@ -73,30 +82,42 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         _inbox.Writer.TryComplete();
         try
         {
-            await _cts.CancelAsync().ConfigureAwait(false);
+            await cts.CancelAsync().ConfigureAwait(false);
             if (_loop is not null)
             {
-                await Task.WhenAny(_loop, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+                await Task.WhenAny(_loop, Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None))
+                    .ConfigureAwait(false);
             }
+        }
+        catch (ObjectDisposedException ex)
+        {
+            _logger.LogDebug(ex, "Traffic coordinator CTS already disposed during stop");
         }
         catch (OperationCanceledException)
         {
             // ignore
+        }
+        finally
+        {
+            cts.Dispose();
         }
     }
 
     public async ValueTask DisposeAsync()
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
-        _cts?.Dispose();
     }
 
-    public Task BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default) =>
-        EnqueueAsync(s =>
-        {
-            s.BindGraph(mapVersionId, graph);
-            return TrafficOpResult.Success();
-        }, ct);
+    public Task<TrafficOpResult> BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.BindGraph(mapVersionId, graph), ct);
+
+    public Task<TrafficOpResult> EnsureTrackedAsync(
+        Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.EnsureTracked(robotId, poseX, poseY, localizationOk), ct);
+
+    public Task<TrafficOpResult> ReportStoppedAwaitingAsync(
+        Guid robotId, long seq, long epoch, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.ReportStoppedAwaiting(robotId, seq, epoch, poseX, poseY, localizationOk), ct);
 
     public Task CompleteReconciliationAsync(IReadOnlyList<TrafficReconcileSeed> seeds, CancellationToken ct = default) =>
         EnqueueAsync(s =>
@@ -125,6 +146,44 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         return RoutePlanResult.OkPlan(plan.FullEdgeIds, [plan.Segments[0]], plan.Alternatives);
     }
 
+    public Task<AcquireResult> AcquireRouteAsync(
+        ImmutableArray<RouteSegmentCandidate> segments,
+        TrafficRouteGoal goal,
+        long? epoch = null,
+        CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.AcquireRoute(segments, goal, epoch);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
+    public Task<TrafficOpResult> AdvanceRouteAsync(Guid robotId, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.AdvanceRoute(robotId);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
+    public Task<TrafficOpResult> ReportSafeStopReachedAsync(
+        Guid robotId, long seq, long epoch, double poseX, double poseY, bool localizationOk, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.ReportSafeStopReached(robotId, seq, epoch, poseX, poseY, localizationOk);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
+    public Task<TrafficOpResult> CompleteRouteAsync(
+        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.CompleteRoute(robotId, succeeded, reason, authorityId);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
     public Task<AcquireResult> AcquireAtomicAsync(
         RouteSegmentCandidate candidate,
         long? epoch = null,
@@ -150,16 +209,49 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     private void PublishGranted(TrafficState state)
     {
-        if (state.LastGrantedEvent is { } evt)
+        foreach (var evt in state.DrainEvents())
         {
             _outbox.Publish(evt);
-            state.ClearLastGrantedEvent();
         }
     }
 
     public Task<TrafficOpResult> RenewAuthorityAsync(
-        Guid robotId, Guid authorityId, long seq, long epoch, CancellationToken ct = default) =>
-        EnqueueAsync(s => s.RenewAuthority(robotId, authorityId, seq, epoch), ct);
+        Guid robotId, Guid authorityId, long epoch, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var ttl = TimeSpan.FromSeconds(Math.Max(5, _options.AuthorityTtlSec));
+            var result = s.RenewAuthority(robotId, authorityId, epoch, ttl);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
+    public async Task<int> RenewAllActiveAuthoritiesAsync(CancellationToken ct = default)
+    {
+        if (_options.Mode != TrafficCoordinatorMode.Active)
+        {
+            return 0;
+        }
+
+        // Retry EXTEND for robots parked at a safe stop whose next segment was busy.
+        var awaiting = await EnqueueAsync(s => s.RobotsAwaitingExtension(), ct).ConfigureAwait(false);
+        foreach (var robotId in awaiting)
+        {
+            await AdvanceRouteAsync(robotId, ct).ConfigureAwait(false);
+        }
+
+        var keys = await EnqueueAsync(s => s.ActiveAuthorityKeys(), ct).ConfigureAwait(false);
+        var n = 0;
+        foreach (var (robotId, authorityId) in keys)
+        {
+            var result = await RenewAuthorityAsync(robotId, authorityId, Epoch, ct).ConfigureAwait(false);
+            if (result.Ok)
+            {
+                n++;
+            }
+        }
+
+        return n;
+    }
 
     public Task<TrafficOpResult> ReportProgressAsync(
         Guid robotId, long seq, long epoch, int? nodeId, double? x, double? y, bool localizationOk,
@@ -169,14 +261,38 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
     public Task<TrafficOpResult> ReportVerifiedExitAsync(
         Guid robotId, long seq, long epoch, ImmutableArray<string> resourceIds, double poseX, double poseY, bool localizationOk,
         CancellationToken ct = default) =>
-        EnqueueAsync(s => s.ReportVerifiedExit(robotId, seq, epoch, resourceIds, poseX, poseY, localizationOk), ct);
+        EnqueueAsync(s =>
+        {
+            var result = s.ReportVerifiedExit(robotId, seq, epoch, resourceIds, poseX, poseY, localizationOk);
+            PublishGranted(s); // promoted waiters
+            return result;
+        }, ct);
 
     public Task<TrafficOpResult> HoldServiceResourceAsync(Guid robotId, string resourceId, CancellationToken ct = default) =>
         EnqueueAsync(s => s.HoldServiceResource(robotId, resourceId), ct);
 
+    public Task<TrafficOpResult> ReleaseStaleServiceHoldsAsync(
+        Guid robotId,
+        ImmutableArray<string> keepResourceIds,
+        double poseX,
+        double poseY,
+        bool localizationOk,
+        CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.ReleaseStaleServiceHolds(robotId, keepResourceIds, poseX, poseY, localizationOk);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
     public Task<TrafficOpResult> ReleaseAfterPhysicalClearanceAsync(
         Guid robotId, string operatorId, ImmutableArray<string>? resourceIds = null, CancellationToken ct = default) =>
-        EnqueueAsync(s => s.ReleaseAfterPhysicalClearance(robotId, operatorId, resourceIds), ct);
+        EnqueueAsync(s =>
+        {
+            var result = s.ReleaseAfterPhysicalClearance(robotId, operatorId, resourceIds);
+            PublishGranted(s); // promoted waiters
+            return result;
+        }, ct);
 
     public Task<TrafficOpResult> CancelRequestAsync(Guid robotId, Guid? requestId = null, CancellationToken ct = default) =>
         EnqueueAsync(s => s.CancelRequest(robotId, requestId), ct);
@@ -189,8 +305,8 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public Task<TrafficOpResult> ReconcileRobotAsync(
         Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,
-        CancellationToken ct = default) =>
-        EnqueueAsync(s => s.ReconcileRobot(robotId, poseX, poseY, localizationOk, occupiedEdges), ct);
+        bool robotReportsIdle = true, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.ReconcileRobot(robotId, poseX, poseY, localizationOk, occupiedEdges, robotReportsIdle), ct);
 
     public Task<TrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken ct = default) =>
         EnqueueAsync(s => s.Snapshot(), ct);
@@ -203,7 +319,10 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         {
             try
             {
-                tcs.TrySetResult(action(state));
+                var result = action(state);
+                // Every mutation may emit grant / revoke / release events (promoted waiters, quarantine, ...).
+                PublishGranted(state);
+                tcs.TrySetResult(result);
             }
             catch (Exception ex)
             {

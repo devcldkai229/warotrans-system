@@ -1,0 +1,289 @@
+﻿{
+    "mapVersionId":  "d676f366-6f08-417d-921f-ac89e0b18626",
+    "graphHash":  "6a9bf530f9aab4aacc88a23e00650351019550e0838338805291986205b635d2",
+    "isValid":  false,
+    "nodeCount":  57,
+    "edgeCount":  110,
+    "resourceCount":  314,
+    "corridorCount":  12,
+    "holdingPointCount":  29,
+    "stoplineCount":  29,
+    "stationCount":  11,
+    "issues":  [
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9 (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9-COPY (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9-COPY"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9-COPY-COPY (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9-COPY-COPY"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9-COPY-COPY-COPY (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9-COPY-COPY-COPY"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 65 and 86.",
+                       "relatedCodes":  [
+                                            "edge:65",
+                                            "edge:86"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 80 and 69.",
+                       "relatedCodes":  [
+                                            "edge:80",
+                                            "edge:69"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 80 and 71.",
+                       "relatedCodes":  [
+                                            "edge:80",
+                                            "edge:71"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 83 and 59.",
+                       "relatedCodes":  [
+                                            "edge:83",
+                                            "edge:59"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 97 and 127.",
+                       "relatedCodes":  [
+                                            "edge:97",
+                                            "edge:127"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 104 and 114.",
+                       "relatedCodes":  [
+                                            "edge:104",
+                                            "edge:114"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 107 and 84.",
+                       "relatedCodes":  [
+                                            "edge:107",
+                                            "edge:84"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 122 and 89.",
+                       "relatedCodes":  [
+                                            "edge:122",
+                                            "edge:89"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 122 and 102.",
+                       "relatedCodes":  [
+                                            "edge:122",
+                                            "edge:102"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 123 and 145.",
+                       "relatedCodes":  [
+                                            "edge:123",
+                                            "edge:145"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 140 and 134.",
+                       "relatedCodes":  [
+                                            "edge:140",
+                                            "edge:134"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 150 and 126.",
+                       "relatedCodes":  [
+                                            "edge:150",
+                                            "edge:126"
+                                        ]
+                   },
+                   {
+                       "code":  "OVERLAP_ASYMMETRIC",
+                       "severity":  "ERROR",
+                       "message":  "Swept overlap asymmetric between edges 166 and 149.",
+                       "relatedCodes":  [
+                                            "edge:166",
+                                            "edge:149"
+                                        ]
+                   },
+                   {
+                       "code":  "CRITICAL_NO_EXIT",
+                       "severity":  "ERROR",
+                       "message":  "Critical resource narrow:EDGE-340 has no reachable safe-stop exit.",
+                       "relatedCodes":  [
+                                            "EDGE-340"
+                                        ]
+                   },
+                   {
+                       "code":  "CRITICAL_NO_EXIT",
+                       "severity":  "ERROR",
+                       "message":  "Critical resource narrow:EDGE-341 has no reachable safe-stop exit.",
+                       "relatedCodes":  [
+                                            "EDGE-341"
+                                        ]
+                   },
+                   {
+                       "code":  "CRITICAL_NO_EXIT",
+                       "severity":  "ERROR",
+                       "message":  "Critical resource narrow:EDGE-342 has no reachable safe-stop exit.",
+                       "relatedCodes":  [
+                                            "EDGE-342"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 6 at (0.442, -1.225) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:6"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 7 at (0.442, -0.849) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SORAGE_SELF_1"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 8 at (0.442, -0.485) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:8"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 56 at (4.092, -0.425) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:56"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 5 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:5",
+                                            "edge:152",
+                                            "edge:153",
+                                            "edge:155",
+                                            "edge:156",
+                                            "edge:165",
+                                            "edge:166"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 6 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:6",
+                                            "edge:61",
+                                            "edge:62",
+                                            "edge:75",
+                                            "edge:77",
+                                            "edge:82",
+                                            "edge:83"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 7 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:7",
+                                            "edge:92",
+                                            "edge:93",
+                                            "edge:94",
+                                            "edge:96",
+                                            "edge:97",
+                                            "edge:98",
+                                            "edge:99",
+                                            "edge:106",
+                                            "edge:107",
+                                            "edge:108",
+                                            "edge:109",
+                                            "edge:110",
+                                            "edge:115",
+                                            "edge:116",
+                                            "edge:117"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 11 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:11",
+                                            "edge:93",
+                                            "edge:94",
+                                            "edge:97",
+                                            "edge:98",
+                                            "edge:99",
+                                            "edge:106",
+                                            "edge:107",
+                                            "edge:108",
+                                            "edge:109",
+                                            "edge:115",
+                                            "edge:116"
+                                        ]
+                   }
+               ]
+}

@@ -51,6 +51,7 @@ public sealed class TrafficEventOutboxTests
             opts,
             new TrafficEventOutbox(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SegmentedTrafficCoordinator>.Instance);
-        Assert.Equal(1, coordinator.Epoch);
+        // Wall-clock based so a restarted host out-ranks the epoch robots persisted.
+        Assert.True(coordinator.Epoch > 1_700_000_000);
     }
 }

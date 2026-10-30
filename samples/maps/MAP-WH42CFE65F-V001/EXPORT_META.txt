@@ -1,0 +1,9 @@
+﻿mapId=f663f14f-3a28-4d14-aa4b-19d9e11bad69
+code=MAP-WH42CFE65F-V001
+warehouse=WH-42CFE65F
+validationIsValid=False
+topoErrors=0
+runtimeRouteGraphHash=d2ca6db4dc43fbf4c748b50336f5f99abcc11ca65f4f1fe74b2476390e513de4
+note=Topology OK after BIDIRECTIONAL+connectors+shelf snaps+park corridor nudge; clearance/stopline Errors remain on validation
+spawnPark=EP-PARK-5@(-1.929,-0.965)
+exportedAt=2026-10-30T01:15:00+07:00

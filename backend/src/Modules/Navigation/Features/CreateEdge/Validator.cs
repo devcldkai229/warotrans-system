@@ -8,6 +8,8 @@ public sealed class CreateEdgeValidator : AbstractValidator<CreateEdgeRequest>
 {
     public CreateEdgeValidator()
     {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(255);
+
         RuleFor(x => x.Geometry)
             .Must(g =>
             {
@@ -31,9 +33,6 @@ public sealed class CreateEdgeValidator : AbstractValidator<CreateEdgeRequest>
             .NotEmpty().WithMessage("Direction is required.")
             .IsEnumName(typeof(EdgeDirection), caseSensitive: false)
             .WithMessage($"Direction must be one of: {string.Join(", ", Enum.GetNames<EdgeDirection>())}.");
-
-        RuleFor(x => x.Capacity)
-            .GreaterThanOrEqualTo(1).WithMessage("Capacity must be at least 1.");
 
         RuleFor(x => x.MaxSpeed)
             .GreaterThan(0).WithMessage("MaxSpeed must be greater than 0 (meters/second).")

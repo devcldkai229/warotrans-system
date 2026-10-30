@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.Navigation.Traffic;
 
 namespace WaroTrans.Fleet.Traffic;
@@ -13,6 +14,7 @@ public sealed class TrafficShadowObserver(
     ISegmentedTrafficCoordinator segmented,
     ITrafficCoordinator v1,
     RoutePlanner planner,
+    IOptions<TrafficOptions> trafficOptions,
     ILogger<TrafficShadowObserver> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -93,6 +95,13 @@ public sealed class TrafficShadowObserver(
         bool localizationOk,
         CancellationToken ct = default)
     {
+        // Active Mode: traffic_progress is the sole progress/authority channel. Feeding every
+        // telemetry LOST sample into ReportProgress sticky-quarantines and starves RENEW.
+        if (trafficOptions.Value.Mode == TrafficCoordinatorMode.Active)
+        {
+            return;
+        }
+
         var snap = await segmented.GetTrafficSnapshotAsync(ct).ConfigureAwait(false);
         var robot = snap.Robots.FirstOrDefault(r => r.RobotId == robotId);
         if (robot is null)
@@ -113,6 +122,36 @@ public sealed class TrafficShadowObserver(
 
     public Task OnOfflineAsync(Guid robotId, CancellationToken ct = default) =>
         segmented.MarkOfflineAsync(robotId, ct);
+
+    /// <summary>
+    /// Cumulative authority edges: <c>authority.segmentEdgeIds</c> of an Active NAVIGATE, or the top-level
+    /// <c>segmentEdgeIds</c> of an EXTEND_AUTHORITY payload.
+    /// </summary>
+    public static ImmutableArray<int> ParseAuthorityEdgeIds(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("authority", out var authority) && authority.ValueKind == JsonValueKind.Object)
+            {
+                root = authority;
+            }
+
+            return root.TryGetProperty("segmentEdgeIds", out var edges) && edges.ValueKind == JsonValueKind.Array
+                ? edges.EnumerateArray().Select(e => e.GetInt32()).ToImmutableArray()
+                : [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     public static ImmutableArray<int> ParseRouteEdgeIds(string? payloadJson)
     {

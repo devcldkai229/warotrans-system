@@ -33,8 +33,8 @@ public class TrafficGraphCompilerTests
             edgeList,
             endpoints.ToList(),
             zoneList,
-            edgeList.Select(e => new TrafficLaneMeta(e.Code, WidthMeters: 1.0, Capacity: 1, e.Direction)).ToList(),
-            zoneList.Select(z => new TrafficZoneMeta(z.Code, z.ZoneType, Capacity: 1)).ToList(),
+            edgeList.Select(e => new TrafficLaneMeta(e.Code, WidthMeters: 1.0, e.Direction)).ToList(),
+            zoneList.Select(z => new TrafficZoneMeta(z.Code, z.ZoneType)).ToList(),
             footprint ?? TrafficFootprintOptions.Default,
             occupancy);
     }
@@ -90,15 +90,15 @@ public class TrafficGraphCompilerTests
             Lane("E-E", EdgeDirection.BIDIRECTIONAL, (1.1, 0), (2, 0)),
             Lane("E-N", EdgeDirection.BIDIRECTIONAL, (1, 0.1), (1, 1))
         ];
-        var zones = new[] { Zone("Z-J", ZoneType.JUNCTION, 0.85, -0.2, 1.15, 0.25) };
+        // Occupancy mutex is SINGLE_OCCUPANCY; JUNCTION alone is connectivity only.
+        var zones = new[] { Zone("Z-J", ZoneType.SINGLE_OCCUPANCY, 0.85, -0.2, 1.15, 0.25) };
 
         var result = TrafficGraphCompiler.Compile(Input(edges, [Stop("EP-A", 0, 0), Stop("EP-B", 2, 0), Stop("EP-C", 1, 1)], zones));
 
         Assert.Contains(result.Graph.Resources, r => r.Kind == TrafficResourceKind.JunctionConflict && r.RelatedCodes.Contains("Z-J"));
         Assert.NotEmpty(result.Graph.Corridors);
-        Assert.DoesNotContain(result.Issues, i => i.Code == TrafficGraphCompiler.LegacyJunctionZone);
         Assert.Contains(result.Graph.Edges, e => e.IsJunction || e.InCriticalCorridor);
-        // Junction capacity is owned by JunctionConflict — no duplicate CriticalCorridor for those edges.
+        // Occupancy capacity is owned by JunctionConflict — no duplicate CriticalCorridor for those edges.
         var junction = Assert.Single(result.Graph.Resources, r => r.Kind == TrafficResourceKind.JunctionConflict);
         Assert.DoesNotContain(result.Graph.Resources, r =>
             r.Kind == TrafficResourceKind.CriticalCorridor &&
@@ -106,7 +106,7 @@ public class TrafficGraphCompilerTests
     }
 
     [Fact]
-    public void Two_junction_zones_do_not_cross_include_edges()
+    public void Two_single_occupancy_zones_do_not_cross_include_edges()
     {
         RouteGraphEdgeInput[] edges =
         [
@@ -116,8 +116,8 @@ public class TrafficGraphCompilerTests
         ];
         var zones = new[]
         {
-            Zone("Z-J1", ZoneType.JUNCTION, -0.1, -0.2, 1.1, 0.2),
-            Zone("Z-J2", ZoneType.JUNCTION, 2.9, -0.2, 4.1, 0.2)
+            Zone("Z-J1", ZoneType.SINGLE_OCCUPANCY, -0.1, -0.2, 1.1, 0.2),
+            Zone("Z-J2", ZoneType.SINGLE_OCCUPANCY, 2.9, -0.2, 4.1, 0.2)
         };
 
         var result = TrafficGraphCompiler.Compile(Input(

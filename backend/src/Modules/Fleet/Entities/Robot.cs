@@ -102,7 +102,10 @@ public sealed class Robot
 
         LastHeartbeatBootId = bootId;
         LastHeartbeatSequence = sequence;
-        LastHeartbeatAt = sentAt == default ? utcNow : sentAt;
+        // Connectivity liveness uses Host receive time, not robot sentAt (WSL/Windows skew
+        // and sim-clock HB gaps must not false-offline a robot that is still publishing).
+        _ = sentAt;
+        LastHeartbeatAt = utcNow;
 
         if (!IsOnline)
         {
@@ -144,7 +147,9 @@ public sealed class Robot
 
         LastTelemetryBootId = bootId;
         LastTelemetrySequence = sequence;
-        LastTelemetryAt = sentAt == default ? utcNow : sentAt;
+        // Same receive-time liveness as heartbeat (WSL/Windows clock skew).
+        _ = sentAt;
+        LastTelemetryAt = utcNow;
 
         // Only accept a pose when localized and provided — never treat missing pose as 0,0,0.
         if (localizationStatus == Enums.LocalizationStatus.LOCALIZED

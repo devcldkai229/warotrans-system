@@ -148,21 +148,8 @@ public static class TrafficGraphValidator
             }
         }
 
-        // Zone rule conflicts: SPEED without max speed already handled at create; check NO_STOP ∩ KEEP_OUT N/A.
-        if (zoneMeta is not null)
-        {
-            foreach (var zone in zoneMeta)
-            {
-                if ((zone.ZoneType is ZoneType.JUNCTION or ZoneType.SINGLE_OCCUPANCY) && zone.Capacity != 1)
-                {
-                    issues.Add(new TrafficIssue(
-                        ZoneRuleConflict,
-                        TrafficIssueSeverity.Error,
-                        $"Zone {zone.Code} ({zone.ZoneType}) requires Capacity = 1.",
-                        [zone.Code]));
-                }
-            }
-        }
+        // Zone capacity column removed — SINGLE_OCCUPANCY is the occupancy lock itself.
+        _ = zoneMeta;
 
         foreach (var station in graph.Stations)
         {

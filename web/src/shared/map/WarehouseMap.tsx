@@ -30,7 +30,7 @@ import {
 } from './mapStyle'
 import { lineStringToPoints, polygonToPoints } from './geoJson'
 import { CHEVRON_PATH, laneGlyphs } from './laneGlyphs'
-import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES, distanceToPolyline, pointInPolygon } from './scene'
+import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES, pointInPolygon } from './scene'
 
 /** A Robot as the map draws it: pose from fleet.robots, status for the colour. */
 export interface MapRobot {
@@ -259,7 +259,7 @@ export function WarehouseMap({
     if (zoom === 1 && !follow) setPan({ x: 0, y: 0 })
   }, [zoom, follow])
 
-  // Occupancy against capacity, from the Robots currently drawn (rules/05: Zone and Edge occupancy).
+  // Occupancy for SINGLE_OCCUPANCY zones only (rules/05: no Edge/Zone capacity column).
   const zoneLoad = useMemo(
     () =>
       new Map(
@@ -269,16 +269,6 @@ export function WarehouseMap({
         ]),
       ),
     [zones, robots],
-  )
-  const edgeLoad = useMemo(
-    () =>
-      new Map(
-        edges.map((edge) => [
-          edge.id,
-          robots.filter((robot) => distanceToPolyline(robot, lineStringToPoints(edge.geometry)) < 1.2).length,
-        ]),
-      ),
-    [edges, robots],
   )
 
   const focused = new Set(focusEndpointIds)
@@ -361,8 +351,9 @@ export function WarehouseMap({
               {zones.map((zone) => {
                 const points = polygonToPoints(zone.geometry)
                 const load = zoneLoad.get(zone.id) ?? 0
-                const over = show.occupancy && zone.capacity > 0 && load > zone.capacity
-                const full = show.occupancy && zone.capacity > 0 && load === zone.capacity
+                const exclusive = zone.zoneType === 'SINGLE_OCCUPANCY'
+                const over = show.occupancy && exclusive && load > 1
+                const full = show.occupancy && exclusive && load === 1
                 const isSelected = selected.zoneId === zone.id
                 const anchor = zoneCentroid(points)
                 // Later states win: switched off, then full, then over capacity; a selection only thickens the edge.
@@ -728,12 +719,16 @@ export function WarehouseMap({
                 .map((zone) => {
                   const anchor = zoneCentroid(polygonToPoints(zone.geometry))
                   const load = zoneLoad.get(zone.id) ?? 0
-                  const capacityLine =
+                  const occupancyLine =
                     zone.zoneType === 'KEEP_OUT'
                       ? 'No entry'
-                      : show.occupancy
-                        ? `${load}/${zone.capacity} robots`
-                        : `${zone.capacity} robots`
+                      : zone.zoneType === 'SINGLE_OCCUPANCY'
+                        ? show.occupancy
+                          ? `${load}/1 robots`
+                          : '1 robot'
+                        : show.occupancy
+                          ? `${load} robots`
+                          : '—'
                   return (
                     <MapNameCallout
                       key={zone.id}
@@ -743,7 +738,7 @@ export function WarehouseMap({
                       bounds={bounds}
                       details={[
                         { label: 'Type', value: ZONE_LABEL[zone.zoneType] },
-                        { label: 'Capacity', value: capacityLine },
+                        { label: 'Occupancy', value: occupancyLine },
                         ...(show.occupancy && zone.maxSpeed != null
                           ? [{ label: 'Max', value: `${zone.maxSpeed} m/s` }]
                           : []),
@@ -775,11 +770,10 @@ export function WarehouseMap({
                 .map((edge) => {
                   const points = lineStringToPoints(edge.geometry)
                   const mid = points[Math.floor(points.length / 2)] ?? { x: 0, y: 0 }
-                  const load = edgeLoad.get(edge.id) ?? 0
                   return (
                     <MapNameCallout
                       key={edge.id}
-                      title={edge.code}
+                      title={edge.name || edge.code}
                       accent={EDGE_COLOR[edge.direction]}
                       anchor={mid}
                       bounds={bounds}
@@ -788,10 +782,7 @@ export function WarehouseMap({
                           label: 'Type',
                           value: edge.direction === 'ONE_WAY' ? 'One-way edge' : 'Two-way edge',
                         },
-                        {
-                          label: 'Capacity',
-                          value: show.occupancy ? `${load}/${edge.capacity} robots` : `${edge.capacity} robots`,
-                        },
+                        { label: 'Code', value: edge.code },
                         ...(edge.maxSpeed != null ? [{ label: 'Max', value: `${edge.maxSpeed} m/s` }] : []),
                       ]}
                     />

@@ -28,8 +28,10 @@ public static class Endpoint
                 CancellationToken ct) =>
             {
                 var edges = (body.OccupiedEdgeIds ?? []).ToImmutableArray();
+                // Operator-supplied pose: the operator vouches the robot is stopped there.
                 var result = await coordinator.ReconcileRobotAsync(
-                    robotId, body.PoseX, body.PoseY, body.LocalizationOk, edges, ct).ConfigureAwait(false);
+                    robotId, body.PoseX, body.PoseY, body.LocalizationOk, edges, robotReportsIdle: true, ct)
+                    .ConfigureAwait(false);
                 return result.Ok ? Results.Ok(result) : Results.Conflict(result);
             })
             .WithName("ReconcileTrafficRobot")

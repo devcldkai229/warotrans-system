@@ -1,0 +1,1713 @@
+﻿{
+    "type":  "FeatureCollection",
+    "name":  "MAP-WH42CFE65F-V003",
+    "properties":  {
+                       "graphHash":  "bd605a15b1e1fc14d3f2b57ffc495188b5d1bbec78744bf6d8e9855834b71d4a"
+                   },
+    "features":  [
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  1,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -2.15,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  2,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -2.15,
+                                                              0.05
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  3,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-PARKING-A---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.929,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  4,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-PARKING-B---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.479,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  5,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.25,
+                                                              0.05
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  6,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.25,
+                                                              0.45
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  7,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-A-01---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.25,
+                                                              0.604
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  8,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-A-02---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.25,
+                                                              0.953
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  9,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-A-03---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.25,
+                                                              1.343
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  10,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-A-04---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.25,
+                                                              1.62
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  11,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-CHARGER-A---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -1.029,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  12,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -0.4,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  13,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              -0.4,
+                                                              0.45
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  14,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.1,
+                                                              1
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  15,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-B-04---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.1,
+                                                              1.35
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  16,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.1,
+                                                              1.62
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  17,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-C-02---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.8,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  18,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-C-01---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.8,
+                                                              -0.77
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  19,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-B-03---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.85,
+                                                              1
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  20,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-B-02---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.85,
+                                                              1.35
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  21,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-SHELF-B-01---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.85,
+                                                              1.5
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  22,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.85,
+                                                              1.62
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  23,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.87,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  24,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.87,
+                                                              -0.29
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  25,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              0.87,
+                                                              0.2
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  26,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.3,
+                                                              0.2
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  27,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-WAIT-POINT---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.3,
+                                                              0.85
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  28,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-INBOUND-AREA---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.7,
+                                                              1.62
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  29,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-OUTBOUND-AREA---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.85,
+                                                              -0.965
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  30,
+                                            "frame":  "map",
+                                            "metadata":  {
+                                                             "endpoint_codes":  [
+                                                                                    "EP-INSPECTION-QUALITY-AREA---5"
+                                                                                ]
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.85,
+                                                              -0.9
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  31,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.85,
+                                                              -0.77
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  32,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.85,
+                                                              0.2
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  33,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.85,
+                                                              0.85
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  34,
+                                            "frame":  "map",
+                                            "metadata":  {
+
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "Point",
+                                          "coordinates":  [
+                                                              1.85,
+                                                              1.62
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  35,
+                                            "startid":  1,
+                                            "endid":  3,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-442"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -2.15,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      -1.929,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  36,
+                                            "startid":  2,
+                                            "endid":  1,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-447"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -2.15,
+                                                                      0.05
+                                                                  ],
+                                                                  [
+                                                                      -2.15,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  37,
+                                            "startid":  3,
+                                            "endid":  4,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-442"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.929,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      -1.479,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  38,
+                                            "startid":  4,
+                                            "endid":  11,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-442"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.479,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      -1.029,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  39,
+                                            "startid":  5,
+                                            "endid":  2,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-446"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.25,
+                                                                      0.05
+                                                                  ],
+                                                                  [
+                                                                      -2.15,
+                                                                      0.05
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  40,
+                                            "startid":  6,
+                                            "endid":  5,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-445"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.25,
+                                                                      0.45
+                                                                  ],
+                                                                  [
+                                                                      -1.25,
+                                                                      0.05
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  41,
+                                            "startid":  7,
+                                            "endid":  6,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-445"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.25,
+                                                                      0.604
+                                                                  ],
+                                                                  [
+                                                                      -1.25,
+                                                                      0.45
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  42,
+                                            "startid":  8,
+                                            "endid":  7,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-445"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.25,
+                                                                      0.953
+                                                                  ],
+                                                                  [
+                                                                      -1.25,
+                                                                      0.604
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  43,
+                                            "startid":  9,
+                                            "endid":  8,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-445"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.25,
+                                                                      1.343
+                                                                  ],
+                                                                  [
+                                                                      -1.25,
+                                                                      0.953
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  44,
+                                            "startid":  10,
+                                            "endid":  9,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-445"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.25,
+                                                                      1.62
+                                                                  ],
+                                                                  [
+                                                                      -1.25,
+                                                                      1.343
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  45,
+                                            "startid":  11,
+                                            "endid":  12,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-442"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -1.029,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      -0.4,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  46,
+                                            "startid":  12,
+                                            "endid":  13,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-458"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -0.4,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      -0.4,
+                                                                      0.45
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  47,
+                                            "startid":  12,
+                                            "endid":  17,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-442"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -0.4,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      0.8,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  48,
+                                            "startid":  13,
+                                            "endid":  6,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-459"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      -0.4,
+                                                                      0.45
+                                                                  ],
+                                                                  [
+                                                                      -1.25,
+                                                                      0.45
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  49,
+                                            "startid":  14,
+                                            "endid":  19,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-449"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.1,
+                                                                      1
+                                                                  ],
+                                                                  [
+                                                                      0.85,
+                                                                      1
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  50,
+                                            "startid":  15,
+                                            "endid":  14,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-448"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.1,
+                                                                      1.35
+                                                                  ],
+                                                                  [
+                                                                      0.1,
+                                                                      1
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  51,
+                                            "startid":  16,
+                                            "endid":  10,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-444"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.1,
+                                                                      1.62
+                                                                  ],
+                                                                  [
+                                                                      -1.25,
+                                                                      1.62
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  52,
+                                            "startid":  16,
+                                            "endid":  15,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-448"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.1,
+                                                                      1.62
+                                                                  ],
+                                                                  [
+                                                                      0.1,
+                                                                      1.35
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  53,
+                                            "startid":  17,
+                                            "endid":  18,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-454"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.8,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      0.8,
+                                                                      -0.77
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  54,
+                                            "startid":  17,
+                                            "endid":  23,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-442"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.8,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      0.87,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  55,
+                                            "startid":  18,
+                                            "endid":  31,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-455"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.8,
+                                                                      -0.77
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      -0.77
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  56,
+                                            "startid":  19,
+                                            "endid":  20,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-450"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.85,
+                                                                      1
+                                                                  ],
+                                                                  [
+                                                                      0.85,
+                                                                      1.35
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  57,
+                                            "startid":  20,
+                                            "endid":  19,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-457"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.85,
+                                                                      1.35
+                                                                  ],
+                                                                  [
+                                                                      0.85,
+                                                                      1
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  58,
+                                            "startid":  20,
+                                            "endid":  21,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-450"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.85,
+                                                                      1.35
+                                                                  ],
+                                                                  [
+                                                                      0.85,
+                                                                      1.5
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  59,
+                                            "startid":  21,
+                                            "endid":  22,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-450"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.85,
+                                                                      1.5
+                                                                  ],
+                                                                  [
+                                                                      0.85,
+                                                                      1.62
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  60,
+                                            "startid":  22,
+                                            "endid":  16,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-444"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.85,
+                                                                      1.62
+                                                                  ],
+                                                                  [
+                                                                      0.1,
+                                                                      1.62
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  61,
+                                            "startid":  23,
+                                            "endid":  24,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-462"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.87,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      0.87,
+                                                                      -0.29
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  62,
+                                            "startid":  23,
+                                            "endid":  29,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-442"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.87,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  63,
+                                            "startid":  24,
+                                            "endid":  25,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-461"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.87,
+                                                                      -0.29
+                                                                  ],
+                                                                  [
+                                                                      0.87,
+                                                                      0.2
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  64,
+                                            "startid":  25,
+                                            "endid":  26,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-460"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      0.87,
+                                                                      0.2
+                                                                  ],
+                                                                  [
+                                                                      1.3,
+                                                                      0.2
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  65,
+                                            "startid":  26,
+                                            "endid":  32,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-453,EDGE-460"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.3,
+                                                                      0.2
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      0.2
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  66,
+                                            "startid":  27,
+                                            "endid":  26,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-452"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.3,
+                                                                      0.85
+                                                                  ],
+                                                                  [
+                                                                      1.3,
+                                                                      0.2
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  67,
+                                            "startid":  28,
+                                            "endid":  22,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-444"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.7,
+                                                                      1.62
+                                                                  ],
+                                                                  [
+                                                                      0.85,
+                                                                      1.62
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  68,
+                                            "startid":  29,
+                                            "endid":  30,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-443"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      -0.965
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      -0.9
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  69,
+                                            "startid":  30,
+                                            "endid":  29,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-456"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      -0.9
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      -0.965
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  70,
+                                            "startid":  30,
+                                            "endid":  31,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-443"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      -0.9
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      -0.77
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  71,
+                                            "startid":  31,
+                                            "endid":  30,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-456"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      -0.77
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      -0.9
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  72,
+                                            "startid":  31,
+                                            "endid":  32,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-443"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      -0.77
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      0.2
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  73,
+                                            "startid":  32,
+                                            "endid":  33,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-443"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      0.2
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      0.85
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  74,
+                                            "startid":  33,
+                                            "endid":  27,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-451"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      0.85
+                                                                  ],
+                                                                  [
+                                                                      1.3,
+                                                                      0.85
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  75,
+                                            "startid":  33,
+                                            "endid":  34,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-443"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      0.85
+                                                                  ],
+                                                                  [
+                                                                      1.85,
+                                                                      1.62
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     },
+                     {
+                         "type":  "Feature",
+                         "properties":  {
+                                            "id":  76,
+                                            "startid":  34,
+                                            "endid":  28,
+                                            "metadata":  {
+                                                             "edge_code":  "EDGE-444"
+                                                         }
+                                        },
+                         "geometry":  {
+                                          "type":  "MultiLineString",
+                                          "coordinates":  [
+                                                              [
+                                                                  [
+                                                                      1.85,
+                                                                      1.62
+                                                                  ],
+                                                                  [
+                                                                      1.7,
+                                                                      1.62
+                                                                  ]
+                                                              ]
+                                                          ]
+                                      }
+                     }
+                 ]
+}

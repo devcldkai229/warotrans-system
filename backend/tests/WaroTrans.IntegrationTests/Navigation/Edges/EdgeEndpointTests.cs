@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -24,29 +23,22 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         Guid Id,
         Guid MapVersionId,
         string Code,
+        string Name,
         JsonElement Geometry,
         double WidthMeters,
         string Direction,
-        int Capacity,
         double? MaxSpeed,
         bool IsActive);
 
-    [GeneratedRegex(@"^EDGE-(\d{3,})$")]
+    [GeneratedRegex(@"^EDGE-LANE-A(---\d+)?$")]
     private static partial Regex EdgeCodeRegex();
 
-    private static int SequenceOf(string code)
+    private static object EdgeBody(string direction = "ONE_WAY", double? maxSpeed = 0.8, bool? isActive = null, string name = "Lane A") => new
     {
-        var match = EdgeCodeRegex().Match(code);
-        Assert.True(match.Success, $"'{code}' does not match EDGE-NNN.");
-        return int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-    }
-
-    private static object EdgeBody(string direction = "ONE_WAY", int capacity = 2, double? maxSpeed = 0.8, bool? isActive = null) => new
-    {
+        name,
         geometry = new { type = "LineString", coordinates = new[] { new[] { 1.0, 2.0 }, new[] { 2.5, 2.2 }, new[] { 4.0, 3.0 } } },
         widthMeters = 1.2,
         direction,
-        capacity,
         maxSpeed,
         isActive
     };
@@ -107,9 +99,9 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         var created = (await response.Content.ReadFromJsonAsync<EdgeDto>())!;
         Assert.Equal($"/api/navigation/edges/{created.Id}", response.Headers.Location?.ToString());
         Assert.Matches(EdgeCodeRegex(), created.Code);
+        Assert.Equal("Lane A", created.Name);
         Assert.Equal("ONE_WAY", created.Direction);
         Assert.Equal(1.2, created.WidthMeters);
-        Assert.Equal(2, created.Capacity);
         Assert.Equal(0.8, created.MaxSpeed);
         Assert.True(created.IsActive);
         Assert.Equal("LineString", created.Geometry.GetProperty("type").GetString());
@@ -119,7 +111,7 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
             """
-            SELECT map_version_id, code, direction, capacity, max_speed, is_active, width_meters,
+            SELECT map_version_id, code, name, direction, max_speed, is_active, width_meters,
                    geometry->>'type', (geometry->'coordinates'->1->>0)::float8
             FROM navigation.edges WHERE id = @id
             """,
@@ -130,8 +122,8 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         Assert.True(await reader.ReadAsync());
         Assert.Equal(mapId, reader.GetGuid(0));
         Assert.Equal(created.Code, reader.GetString(1));
-        Assert.Equal("ONE_WAY", reader.GetString(2));
-        Assert.Equal(2, reader.GetInt32(3));
+        Assert.Equal("Lane A", reader.GetString(2));
+        Assert.Equal("ONE_WAY", reader.GetString(3));
         Assert.Equal(0.8, reader.GetDouble(4));
         Assert.True(reader.GetBoolean(5));
         Assert.Equal(1.2, reader.GetDouble(6));
@@ -140,7 +132,7 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
     }
 
     [Fact]
-    public async Task Post_edges_get_consecutive_global_codes_across_maps()
+    public async Task Post_edges_generate_name_based_codes()
     {
         var mapId = await CreateDraftMapAsync();
         var otherMapId = await CreateDraftMapAsync();
@@ -149,8 +141,10 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         var second = await CreateEdgeAsync(otherMapId, "bidirectional");
         var third = await CreateEdgeAsync(mapId);
 
-        Assert.Equal(SequenceOf(first.Code) + 1, SequenceOf(second.Code));
-        Assert.Equal(SequenceOf(second.Code) + 1, SequenceOf(third.Code));
+        Assert.Matches(EdgeCodeRegex(), first.Code);
+        Assert.Matches(EdgeCodeRegex(), second.Code);
+        Assert.Matches(EdgeCodeRegex(), third.Code);
+        Assert.Equal(3, new[] { first.Code, second.Code, third.Code }.Distinct().Count());
         Assert.Equal("BIDIRECTIONAL", second.Direction);
     }
 
@@ -197,13 +191,13 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
 
         var onePoint = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", new
         {
+            name = "Lane A",
             geometry = new { type = "LineString", coordinates = new[] { new[] { 1.0, 1.0 } } },
             widthMeters = 1.0,
-            direction = "ONE_WAY",
-            capacity = 1
+            direction = "ONE_WAY"
         });
         var badDirection = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", EdgeBody(direction: "TWO_WAY"));
-        var noGeometry = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", new { direction = "ONE_WAY", capacity = 1, widthMeters = 1.0 });
+        var noGeometry = await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", new { name = "Lane A", direction = "ONE_WAY", widthMeters = 1.0 });
 
         foreach (var response in new[] { onePoint, badDirection, noGeometry })
         {
@@ -260,10 +254,10 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
 
         var response = await Client.PutAsJsonAsync($"/api/navigation/edges/{edge.Id}", new
         {
+            name = "Lane B",
             geometry = new { type = "LineString", coordinates = new[] { new[] { 10.0, 10.0 }, new[] { 20.0, 10.0 } } },
             widthMeters = 2.5,
             direction = "BIDIRECTIONAL",
-            capacity = 3,
             maxSpeed = (double?)null,
             isActive = false
         });
@@ -271,15 +265,15 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var updated = (await response.Content.ReadFromJsonAsync<EdgeDto>())!;
         Assert.Equal(edge.Code, updated.Code);
+        Assert.Equal("Lane B", updated.Name);
         Assert.Equal("BIDIRECTIONAL", updated.Direction);
         Assert.Equal(2.5, updated.WidthMeters);
-        Assert.Equal(3, updated.Capacity);
         Assert.Null(updated.MaxSpeed);
         Assert.False(updated.IsActive);
 
         var reloaded = (await Client.GetFromJsonAsync<EdgeDto>($"/api/navigation/edges/{edge.Id}"))!;
         Assert.Equal(20.0, reloaded.Geometry.GetProperty("coordinates")[1][0].GetDouble());
-        Assert.Equal(3, reloaded.Capacity);
+        Assert.Equal("Lane B", reloaded.Name);
         Assert.False(reloaded.IsActive);
     }
 
@@ -292,10 +286,10 @@ public sealed partial class EdgeEndpointTests(WaroTransWebApplicationFactory fac
 
         var response = await Client.PutAsJsonAsync($"/api/navigation/edges/{edge.Id}", new
         {
+            name = edge.Name,
             geometry = new { type = "LineString", coordinates = new[] { new[] { 0.0, 0.0 }, new[] { 1.0, 0.0 } } },
             widthMeters = 1.0,
             direction = "ONE_WAY",
-            capacity = 1,
             isActive = true
         });
 

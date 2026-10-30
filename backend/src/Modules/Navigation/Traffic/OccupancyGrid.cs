@@ -66,7 +66,8 @@ public sealed class OccupancyGrid
                 occ = (255 - value) / 255.0;
             }
 
-            // Free only when clearly below free_thresh; unknown + occupied → obstacle.
+            // Trinary like map_server: occ ≥ occupied_thresh is occupied, occ ≤ free_thresh is free, the band in
+            // between is unknown. Clearance is conservative, so only clearly free cells are traversable.
             _ = occupiedThreshold;
             occupied[i] = occ >= freeThreshold;
         }
@@ -111,11 +112,37 @@ public sealed class OccupancyGrid
         return min;
     }
 
+    /// <summary>
+    /// World → cell. PGM rows are stored top row first while map_server's origin is the bottom-left pixel,
+    /// so the row counted up from the origin is flipped (ROS map_server / GAZEBO_COORDINATE_CONTRACT).
+    /// </summary>
     public bool TryWorldToCell(double x, double y, out int col, out int row)
     {
         col = (int)Math.Floor((x - OriginX) / Resolution);
-        row = (int)Math.Floor((y - OriginY) / Resolution);
-        return col >= 0 && row >= 0 && col < Width && row < Height;
+        var rowFromBottom = (int)Math.Floor((y - OriginY) / Resolution);
+        row = Height - 1 - rowFromBottom;
+        return col >= 0 && rowFromBottom >= 0 && col < Width && rowFromBottom < Height;
+    }
+
+    /// <summary>Content hash of the obstacle mask + geometry (part of the traffic graph hash).</summary>
+    public string Fingerprint => _fingerprint ??= ComputeFingerprint();
+
+    private string? _fingerprint;
+
+    private string ComputeFingerprint()
+    {
+        var bits = new byte[(Occupied.Length + 7) / 8];
+        for (var i = 0; i < Occupied.Length; i++)
+        {
+            if (Occupied[i])
+            {
+                bits[i >> 3] |= (byte)(1 << (i & 7));
+            }
+        }
+
+        var header = Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture,
+            $"{Width}x{Height}@{Resolution:R}|{OriginX:R},{OriginY:R}|"));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData([.. header, .. bits])).ToLowerInvariant();
     }
 
     private static (int Width, int Height, byte[] Pixels) ParsePgm(ReadOnlySpan<byte> bytes)

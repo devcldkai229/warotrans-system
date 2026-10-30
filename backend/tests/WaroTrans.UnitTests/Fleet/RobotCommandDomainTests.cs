@@ -27,6 +27,27 @@ public class RobotCommandDomainTests
         Assert.False(cmd.TryApplyResult(RobotCommandOutcomes.Failed, "x", now));
     }
 
+    [Theory]
+    [InlineData(RobotCommandType.RENEW_AUTHORITY)]
+    [InlineData(RobotCommandType.EXTEND_AUTHORITY)]
+    [InlineData(RobotCommandType.REVOKE_AUTHORITY)]
+    public void Authority_control_ack_is_terminal(RobotCommandType type)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cmd = new RobotCommand
+        {
+            Id = Guid.NewGuid(),
+            RobotId = Guid.NewGuid(),
+            Type = type,
+            Status = RobotCommandStatus.SENT,
+            IssuedAt = now
+        };
+
+        Assert.True(cmd.TryApplyAck(true, null, now));
+        Assert.Equal(RobotCommandStatus.COMPLETED, cmd.Status);
+        Assert.False(cmd.IsInFlight); // must not block the next NAVIGATE (robot_busy)
+    }
+
     [Fact]
     public void Ack_timeout_only_from_sent()
     {

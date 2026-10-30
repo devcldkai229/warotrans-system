@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
+using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Traffic;
@@ -10,6 +12,7 @@ namespace WaroTrans.Fleet.Traffic;
 public sealed class TrafficProgressIngress(
     ISegmentedTrafficCoordinator coordinator,
     FleetDbContext db,
+    IOptions<TrafficOptions> options,
     ILogger<TrafficProgressIngress> logger)
 {
     public async Task HandleProgressAsync(TrafficProgressMessage message, CancellationToken ct)
@@ -40,16 +43,17 @@ public sealed class TrafficProgressIngress(
                 break;
 
             case TrafficProgressEvents.SafeStopReached:
-                if (message.LocalizationOk)
+                if (message.PoseX is double x && message.PoseY is double y)
                 {
-                    var snap = await coordinator.GetTrafficSnapshotAsync(ct).ConfigureAwait(false);
-                    var view = snap.Robots.FirstOrDefault(r => r.RobotId == robot.Id);
-                    var resources = view?.OccupiedResourceIds ?? [];
-                    if (resources.Length > 0 && message.PoseX is double x && message.PoseY is double y)
+                    // Releases only what the robot has physically left; the lane it stands on stays held.
+                    var exit = await coordinator.ReportSafeStopReachedAsync(
+                        robot.Id, message.Seq, message.Epoch, x, y, message.LocalizationOk, ct)
+                        .ConfigureAwait(false);
+                    if (!exit.Ok)
                     {
-                        await coordinator.ReportVerifiedExitAsync(
-                            robot.Id, message.Seq, message.Epoch, resources, x, y, true, ct)
-                            .ConfigureAwait(false);
+                        logger.LogWarning(
+                            "SAFE_STOP_REACHED robot={RobotCode} seq={Seq} not applied: {Reason}",
+                            message.RobotCode, message.Seq, exit.Reason);
                     }
                 }
 
@@ -64,10 +68,18 @@ public sealed class TrafficProgressIngress(
                 break;
 
             case TrafficProgressEvents.StoppedAwaitingAuthority:
-                await coordinator.ReportProgressAsync(
-                    robot.Id, message.Seq, message.Epoch, null,
-                    message.PoseX, message.PoseY, message.LocalizationOk, ct)
+                // Next safe-stop segment of the route (EXTEND) — only for an accepted report at the goal safe stop;
+                // a busy segment is retried by the renew tick.
+                var advance = await coordinator.ReportStoppedAwaitingAsync(
+                    robot.Id, message.Seq, message.Epoch, message.PoseX, message.PoseY, message.LocalizationOk, ct)
                     .ConfigureAwait(false);
+                if (!advance.Ok)
+                {
+                    logger.LogInformation(
+                        "Robot {RobotCode} awaiting authority, no EXTEND yet: {Reason}",
+                        message.RobotCode, advance.Reason);
+                }
+
                 break;
         }
     }
@@ -82,13 +94,31 @@ public sealed class TrafficProgressIngress(
             return;
         }
 
+        // Boot / reconnect / post-fault sync (audit T2). Occupancy is rebuilt only from a fresh, localized pose;
+        // otherwise the robot is quarantined and keeps everything it held.
+        var maxAge = TimeSpan.FromSeconds(Math.Max(0.5, options.Value.PoseMaxAgeSec));
+        var poseFresh = robot.LastTelemetryAt is { } at && DateTimeOffset.UtcNow - at <= maxAge;
+        var localized = poseFresh && robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
+        var faulted = string.Equals(message.State, "FAULTED", StringComparison.OrdinalIgnoreCase);
+        var idle = faulted || string.Equals(message.State, "IDLE", StringComparison.OrdinalIgnoreCase);
         var edges = message.GrantedEdgeIds?.ToImmutableArray() ?? [];
-        await coordinator.ReconcileRobotAsync(
+        var result = await coordinator.ReconcileRobotAsync(
             robot.Id,
             robot.PoseX,
             robot.PoseY,
-            localizationOk: string.Equals(message.State, "FAULTED", StringComparison.OrdinalIgnoreCase) == false,
+            localized,
             edges,
+            robotReportsIdle: idle,
             ct).ConfigureAwait(false);
+        if (faulted)
+        {
+            // The robot stopped on its own fault: occupancy is now known from its pose, but the fault itself
+            // still needs an operator / new verified state before motion is granted again.
+            await coordinator.MarkBlockedAsync(robot.Id, "ROBOT_FAULTED", ct).ConfigureAwait(false);
+        }
+
+        logger.LogInformation(
+            "authority_state robot={RobotCode} state={State} poseFresh={Fresh} reconcile={Ok}:{Reason}",
+            message.RobotCode, message.State, poseFresh, result.Ok, result.Reason);
     }
 }

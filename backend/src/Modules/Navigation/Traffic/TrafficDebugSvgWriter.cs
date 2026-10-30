@@ -50,7 +50,8 @@ public static class TrafficDebugSvgWriter
                     }
 
                     var wx = occupancy.OriginX + (col + 0.5) * occupancy.Resolution;
-                    var wy = occupancy.OriginY + (row + 0.5) * occupancy.Resolution;
+                    // PGM row 0 is the top of the image (world max y).
+                    var wy = occupancy.OriginY + (occupancy.Height - row - 0.5) * occupancy.Resolution;
                     sb.Append(CultureInfo.InvariantCulture,
                         $"<circle cx=\"{Tx(wx)}\" cy=\"{Ty(wy)}\" r=\"1\" fill=\"#4b5563\"/>");
                 }
