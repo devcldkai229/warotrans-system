@@ -50,7 +50,7 @@ export function NotificationSheet({
 
   const handleMarkAllRead = () => {
     markAllNotificationsRead();
-    toast.info('All notifications marked as read');
+    toast.info('Marked as read for this app session.');
   };
 
   const handleItemPress = (item: LiveNotificationEvent) => {
@@ -106,7 +106,7 @@ export function NotificationSheet({
             {/* Minimalist Popover Header */}
             <View style={styles.header}>
               <Text variant="headline" color={colors.textPrimary} style={styles.title}>
-                Notifications
+                Job Activity
               </Text>
 
               <View style={styles.headerActions}>
@@ -133,6 +133,7 @@ export function NotificationSheet({
             </View>
 
             {/* Notification items list */}
+            <Text variant="caption" color={colors.textSecondary} style={{ paddingHorizontal: 16, paddingBottom: 8 }}>Job snapshots and live updates. Read status is saved for this session only.</Text>
             <ScrollView
               style={styles.list}
               contentContainerStyle={styles.listContent}

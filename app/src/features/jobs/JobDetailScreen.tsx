@@ -44,7 +44,7 @@ import { JobTaskDetailSheet } from './JobTaskDetailSheet';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
-import { cancelRobotCommand, FALLBACK_ROBOTS, getJobDetail, listRobots, reportTaskProblem, resumeJob, startJob, type RobotDto } from '../../shared/api';
+import { cancelRobotCommand, getJobDetail, reportTaskProblem, resumeJob, startJob } from '../../shared/api';
 import type { JobDetailResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { createJobRefresh } from './jobRefresh';
@@ -74,21 +74,8 @@ export function JobDetailScreen() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showOtherContainers, setShowOtherContainers] = useState(false);
   const [showNudgeControls, setShowNudgeControls] = useState(false);
-  const [availableRobots, setAvailableRobots] = useState<RobotDto[]>(FALLBACK_ROBOTS);
-  const [selectedRobotId, setSelectedRobotId] = useState('');
   const [isStartingJob, setIsStartingJob] = useState(false);
   const [bottomConsoleHeight, setBottomConsoleHeight] = useState(160);
-
-  useEffect(() => {
-    let mounted = true;
-    listRobots().then((res) => {
-      if (mounted && res.items.length > 0) {
-        setAvailableRobots(res.items);
-        setSelectedRobotId(res.items[0].id);
-      }
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, []);
 
   /** Shared safety hold context */
   const { isHolding, toggleHold } = useSafetyHold();
@@ -156,8 +143,9 @@ export function JobDetailScreen() {
   const isQueuedOrCreated = job.status === 'CREATED' || job.status === 'QUEUED';
   const isEnRoute = job.status === 'RUNNING' && !isWaiting;
   const isCompleted = job.status === 'COMPLETED';
-  const selectedRobotCode = availableRobots.find((robot) => robot.id === selectedRobotId)?.code || 'Unassigned';
-  const selectedRobotUuid = job.assignedRobotId || availableRobots.find((robot) => robot.code === job.robot)?.id;
+  const selectedRobotUuid = job.assignedRobotId;
+  const assignedRobotLabel = job.assignedRobotId && (!job.robot || job.robot === 'Unassigned')
+    ? job.assignedRobotId : job.robot || 'Awaiting Robot Assignment';
   const selectedTask = job.tasks.find(task => task.id === selectedTaskId);
   const verificationTask = job.tasks.find(task => task.steps.some(step => step.id === verificationStepId));
   const verificationStep = verificationTask?.steps.find(step => step.id === verificationStepId);
@@ -172,12 +160,14 @@ export function JobDetailScreen() {
     if (isStartingJob) return;
     setIsStartingJob(true);
     try {
-      const updated = await startJob(job.id, selectedRobotId);
+      const updated = await startJob(job.id);
       if (!updated) throw new Error('Job could not be started');
       if (activeJobId.current !== job.id) return;
       jobReader.invalidate();
-      setJob(mapJobDetailToAppJobItem(updated, session?.id));
-      toast.success(`Job ${job.jobNo || job.id} started on ${selectedRobotCode}!`);
+      const started = mapJobDetailToAppJobItem(updated, session?.id);
+      setJob(started);
+      const assigned = started.robot && started.robot !== 'Unassigned' ? started.robot : started.assignedRobotId;
+      toast.success(`Job ${started.jobNo || started.id} started${assigned ? ` on ${assigned}` : ''}.`);
     } catch (err: any) {
       if (activeJobId.current === job.id) toast.error(err?.message || 'Failed to start job');
     } finally {
@@ -381,7 +371,7 @@ export function JobDetailScreen() {
           <View style={styles.robotContextRow}>
             <View style={styles.robotPill}>
               <Truck size={14} color={colors.primaryText} />
-              <Text variant="caption" color={colors.primaryText} style={styles.robotPillText} numberOfLines={1}>{job.robot}</Text>
+              <Text variant="caption" color={colors.primaryText} style={styles.robotPillText} numberOfLines={1}>{assignedRobotLabel}</Text>
             </View>
             <Button title="View Map" variant="ghost" size="sm" icon={Maximize2} onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })} />
           </View>
@@ -505,7 +495,7 @@ export function JobDetailScreen() {
                 {primaryTarget.code}
               </Text>
               <Text variant="bodyMedium" color={colors.textSecondary} style={{ marginTop: 2 }}>
-                <Text style={styles.boldQty}>{primaryTarget.qty} pcs</Text> · {primaryTarget.product}
+                <Text style={styles.boldQty}>{primaryTarget.qty} Container</Text> · {primaryTarget.product}
               </Text>
               <View style={styles.focusDestinationRow}>
                 <Text variant="caption" color={colors.textSecondary}>
@@ -549,7 +539,7 @@ export function JobDetailScreen() {
                             {item.code}
                           </Text>
                           <Text variant="caption" color={colors.textSecondary}>
-                            <Text style={styles.boldQty}>{item.qty} pcs</Text> · {item.product}
+                            <Text style={styles.boldQty}>{item.qty} Container</Text> · {item.product}
                           </Text>
                         </View>
                         <View style={styles.keepTag}>
@@ -649,28 +639,13 @@ export function JobDetailScreen() {
         )}
 
         {/* Tier 2 Commanding Action Button (Machined Obsidian #121317) */}
-        {isQueuedOrCreated && (
-          <View style={styles.robotSelectorRow}>
-            {availableRobots.map((robot) => (
-              <Pressable
-                key={robot.id}
-                onPress={() => setSelectedRobotId(robot.id)}
-                disabled={isStartingJob}
-                accessibilityRole="button"
-                accessibilityState={{ selected: selectedRobotId === robot.id }}
-                style={[styles.robotSelectorChip, selectedRobotId === robot.id && styles.robotSelectorChipSelected]}
-              >
-                <Text variant="label" color={selectedRobotId === robot.id ? colors.primaryText : colors.textSecondary}>
-                  {robot.code}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        {isQueuedOrCreated && <Text variant="caption" color={colors.textSecondary}>
+          The system assigns an available robot when you start this Job.
+        </Text>}
         <View style={styles.consoleCtaRow}>
           {isQueuedOrCreated ? (
             <Button
-              title={`Start Job on ${selectedRobotCode}`}
+              title="Start Job"
               variant="primary"
               size="lg"
               fullWidth
