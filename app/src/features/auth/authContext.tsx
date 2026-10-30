@@ -1,28 +1,28 @@
 import { Platform } from 'react-native';
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { AccountRole, UserSession } from '../../shared/types/contracts';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { UserSession } from '../../shared/types/contracts';
 import {
-  getCurrentAccount,
   loginWithCredentials,
   logoutSession,
 } from '../../shared/api/identityApi';
 import { setAccessToken, onSessionExpired } from '../../shared/api/client';
 import {
   clearAllStoredAuth,
-  getStoredAccessToken,
   getStoredRefreshToken,
-  getStoredUserSession,
   saveStoredAccessToken,
   saveStoredRefreshToken,
   saveStoredUserSession,
 } from '../../shared/api/secureStore';
 import { clearWarehouseSnapshots } from '../../shared/api/warehouseApi';
 import { queryClient } from '../../app/providers/QueryProvider';
+import { restoreSession } from './restoreSession';
 
 interface AuthContextType {
   session: UserSession | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  connectionError: string | null;
+  retrySession: () => void;
   login: (username: string, zone?: string, password?: string) => Promise<boolean> | boolean;
   loginAsync: (username: string, password?: string, zone?: string) => Promise<UserSession>;
   logout: () => void;
@@ -34,50 +34,32 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const authVersion = useRef(0);
 
   useEffect(() => {
     let isMounted = true;
-
-    async function hydrateAuth() {
-      try {
-        const [token, stored] = await Promise.all([
-          getStoredAccessToken(),
-          getStoredUserSession<UserSession>(),
-        ]);
-
-        if (token) {
-          setAccessToken(token);
-        }
-
-        if (stored && token) {
-          const account = await getCurrentAccount();
-          if (!isMounted) return;
-          const fullName = account.fullName || account.username;
-          const refreshed: UserSession = {
-            ...stored, id: account.id, username: account.username, fullName,
-            role: account.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
-            avatarInitials: fullName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase(),
-          };
-          setSession(refreshed);
-          await saveStoredUserSession(refreshed);
-        } else {
-          setAccessToken(null);
-          await clearAllStoredAuth();
-        }
-      } catch (err) {
-        setAccessToken(null);
-        if (isMounted) setSession(null);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-
-    hydrateAuth();
+    const version = ++authVersion.current;
+    const isCurrent = () => isMounted && authVersion.current === version;
+    setIsLoading(true);
+    void restoreSession(isCurrent).then(result => {
+      if (!isCurrent() || result.kind === 'cancelled') return;
+      setSession(result.kind === 'ready' ? result.session : null);
+      setConnectionError(result.kind === 'unavailable' ? result.message : null);
+      setIsLoading(false);
+    });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [restoreAttempt]);
+
+  const retrySession = () => {
+    if (isLoading) return;
+    setIsLoading(true);
+    setRestoreAttempt(value => value + 1);
+  };
 
   const loginAsync = async (
     username: string,
@@ -93,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: res.account.role === 'ADMIN' ? 'ADMIN' : 'STAFF', zone: zone || 'Inbound Dock 01',
       avatarInitials: fullName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'OP',
     };
+    authVersion.current += 1;
     clearWarehouseSnapshots();
     queryClient.clear();
     await clearAllStoredAuth();
@@ -101,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await saveStoredUserSession(nextSession);
     setAccessToken(res.accessToken);
     setSession(nextSession);
+    setConnectionError(null);
     return nextSession;
   };
 
@@ -110,12 +94,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const clearSession = () => {
+    authVersion.current += 1;
     if (Platform.OS === 'web' && typeof window !== 'undefined') window.history.replaceState(null, '', window.location.pathname);
     setAccessToken(null);
     clearWarehouseSnapshots();
     queryClient.clear();
     void clearAllStoredAuth();
     setSession(null);
+    setConnectionError(null);
+    setIsLoading(false);
   };
   useEffect(() => onSessionExpired(clearSession), []);
 
@@ -143,6 +130,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         isAuthenticated: !!session,
         isLoading,
+        connectionError,
+        retrySession,
         login,
         loginAsync,
         logout,

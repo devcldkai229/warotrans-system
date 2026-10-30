@@ -1,6 +1,5 @@
-import { listWarehouses } from '../../shared/api';
 import { toast } from '../../shared/context/ToastContext';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -23,14 +22,9 @@ import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { Text } from '../../shared/ui/Text';
-import { getActiveMapVersion, getMapVersionDetail } from '../../shared/api';
-
-const CORRIDORS = [
-  { id: 'CORR-A01-A02', name: 'Aisle A-01 (Between Rack A01 & A02)', zone: 'Zone A Storage' },
-  { id: 'CORR-MAIN-TRANSIT', name: 'Main Transit Corridor (Dock 01 ➔ Rack B)', zone: 'Arterial Highway' },
-  { id: 'CORR-DOCK-RECV', name: 'Dock Receiving Bay 01 Apron', zone: 'Inbound Staging' },
-  { id: 'CORR-PICK-C02', name: 'Zone C Fast-Pick Lane', zone: 'Zone C Pick-Face' },
-];
+import { getOperatingContext } from '../../shared/api/operatingContextApi';
+import { useQuery } from '@tanstack/react-query';
+import { getMapVersionDetail } from '../../shared/api';
 
 const HAZARD_CATEGORIES = [
   { id: 'LIQUID_SPILL', title: 'Liquid Spill', desc: 'Wet / slippery floor surface' },
@@ -41,53 +35,21 @@ const HAZARD_CATEGORIES = [
 
 export function BlockPathHazardScreen() {
   const { goBack } = useNavigation();
-  const [corridorOptions, setCorridorOptions] = useState(CORRIDORS);
-  const [selectedCorridor, setSelectedCorridor] = useState('CORR-A01-A02');
+  const [selectedCorridor, setSelectedCorridor] = useState('');
   const [hazardType, setHazardType] = useState('LIQUID_SPILL');
   const [severity, setSeverity] = useState<'CRITICAL_BLOCK' | 'CAUTION_SLOW'>('CRITICAL_BLOCK');
   const [duration, setDuration] = useState('30m');
-  const [notes, setNotes] = useState('Hydraulic fluid leakage spotted near Rack A-02 column 3. Caution cone placed.');
+  const [notes, setNotes] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [incidentCode, setIncidentCode] = useState('');
 
-  useEffect(() => {
-    let mounted = true;
-    const loadCorridors = async () => {
-      try {
-        const warehouse = (await listWarehouses({ isActive: true })).items[0];
-        if (!warehouse) return;
-        const activeMap = await getActiveMapVersion(warehouse.id);
-        if (!activeMap) return;
-        const detail = await getMapVersionDetail(activeMap.id);
-        const endpoints = detail.endpoints.filter((ep) => ep.isEnabled);
-        if (!endpoints.length || !mounted) return;
-        const epA = endpoints.find((ep) => ep.code === 'EP-A') || endpoints[0];
-        const epD = endpoints.find((ep) => ep.code === 'EP-D') || endpoints[endpoints.length - 1];
-        const dockIn = endpoints.find((ep) => ep.code === 'DOCK-IN-01');
-        const liveCorridors = [{
-          id: `MAP-${epA.id}-${epD.id}`,
-          name: `${epA.code} ➔ ${epD.code} (Active Map Corridor)`,
-          zone: activeMap.code,
-        }];
-        if (dockIn) liveCorridors.push({
-          id: `MAP-${dockIn.id}-STAGING`,
-          name: `${dockIn.code} Staging Approach`,
-          zone: activeMap.code,
-        });
-        const otherEndpoint = endpoints.find((ep) => ep.id !== epA.id && ep.id !== epD.id && ep.id !== dockIn?.id);
-        if (otherEndpoint) liveCorridors.push({
-          id: `MAP-${epA.id}-${otherEndpoint.id}`,
-          name: `${epA.code} ➔ ${otherEndpoint.code} (Active Map Corridor)`,
-          zone: activeMap.code,
-        });
-        setCorridorOptions([...liveCorridors, ...CORRIDORS]);
-      } catch (err) {
-        console.warn('Active map corridor discovery unavailable:', err);
-      }
-    };
-    loadCorridors();
-    return () => { mounted = false; };
-  }, []);
+  const paths = useQuery({ queryKey: ['hazard-paths'], queryFn: async () => {
+    const context = await getOperatingContext();
+    const detail = await getMapVersionDetail(context.map.id);
+    // Edges are configured paths; never invent a corridor from two endpoints.
+    return (detail.edges ?? []).filter(edge => edge.isActive).map(edge => ({ id: edge.id, name: edge.code, zone: context.map.code }));
+  } });
+  const corridorOptions = paths.data ?? [];
 
   const isSubmitting = false;
   const handleSubmit = () => {
@@ -130,7 +92,7 @@ export function BlockPathHazardScreen() {
               </View>
               <View style={styles.receiptRow}>
                 <Text variant="caption" color={colors.textSecondary}>Reported Location:</Text>
-                <Text variant="caption" style={styles.receiptVal}>{activeCorridorObj.name}</Text>
+                <Text variant="caption" style={styles.receiptVal}>{activeCorridorObj?.name || 'Location unavailable'}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text variant="caption" color={colors.textSecondary}>Hazard Classification:</Text>
@@ -183,6 +145,10 @@ export function BlockPathHazardScreen() {
                 AFFECTED CORRIDOR / AISLE
               </Text>
               <View style={{ gap: 8 }}>
+                {paths.data === undefined ? <View style={{ gap: 8 }}>
+                  <Text variant="caption">{paths.error ? 'Configured paths could not be loaded.' : 'Loading Configured Paths…'}</Text>
+                  {paths.error && <Button label="Retry" onPress={() => { void paths.refetch(); }} variant="outline" />}
+                </View> : !corridorOptions.length && <Text variant="caption">No configured paths are available. Contact the supervisor with the location code.</Text>}
                 {corridorOptions.map((c) => {
                   const isSelected = selectedCorridor === c.id;
                   return (
@@ -197,6 +163,7 @@ export function BlockPathHazardScreen() {
                         isSelected && styles.corridorCardSelected,
                       ]}
                       accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
                     >
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

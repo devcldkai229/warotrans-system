@@ -1,9 +1,7 @@
 import { useRealtime } from '../../shared/realtime';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Animated,
-  Easing,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -34,9 +32,10 @@ import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
+import { EmptyState } from '../../shared/ui/EmptyState';
 import { StatusPill } from '../../shared/ui/StatusPill';
 import { Text } from '../../shared/ui/Text';
-import { cancelRobotCommand, listRobots, listTransportRequests, type RobotDto } from '../../shared/api';
+import { listTransportRequests } from '../../shared/api';
 
 export interface RecentDispatchItem {
   id: string;
@@ -48,47 +47,6 @@ export interface RecentDispatchItem {
   container: string;
   containerCount: number;
   time: string;
-}
-
-function PulsingBeaconDot() {
-  const pingAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(pingAnim, {
-        toValue: 1,
-        duration: 1200,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: Platform.OS !== 'web',
-      })
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pingAnim]);
-
-  const scale = pingAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 2.4],
-  });
-  const opacity = pingAnim.interpolate({
-    inputRange: [0, 0.7, 1],
-    outputRange: [0.85, 0.3, 0],
-  });
-
-  return (
-    <View style={styles.beaconContainer}>
-      <Animated.View
-        style={[
-          styles.beaconPing,
-          {
-            transform: [{ scale }],
-            opacity,
-          },
-        ]}
-      />
-      <View style={styles.beaconCore} />
-    </View>
-  );
 }
 
 /**
@@ -103,78 +61,47 @@ function PulsingBeaconDot() {
 export function TransportScreen() {
   const { navigate, dockHeight } = useNavigation();
   const { lastJobUpdate } = useRealtime();
-  const { isHolding, toggleHold: toggleFleetHold } = useSafetyHold();
-  const [hasActiveAlert, setHasActiveAlert] = useState(false);
-  const [showIncidentDetails, setShowIncidentDetails] = useState(false);
-  const [dispatches, setDispatches] = useState<RecentDispatchItem[]>([]);
-  const [totalRecords, setTotalRecords] = useState<number>(0);
-  const [isLoadingDispatches, setIsLoadingDispatches] = useState(false);
-  const [availableRobots, setAvailableRobots] = useState<RobotDto[]>([]);
+  const { isHolding } = useSafetyHold();
+  const recent = useQuery({ queryKey: ['recent-dispatches'], queryFn: () => listTransportRequests({ take: 3 }), refetchInterval: 15_000 });
+  const { refetch } = recent;
+  useEffect(() => { if (lastJobUpdate) void refetch(); }, [lastJobUpdate, refetch]);
+  const totalRecords = recent.data?.total ?? 0;
+  const dispatches = useMemo(() => {
+    return (recent.data?.items ?? []).slice(0, 3).map((item) => {
+      const details = item.details || [];
+      const first = details[0];
+      const route = first
+        ? `${first.sourceEndpointCode || first.sourceEndpointId || 'Unknown Pickup'} ➔ ${first.destinationEndpointCode || first.destinationEndpointId || 'Unknown Destination'}`
+        : 'Multi-stop movement';
+      const firstBarcode = first?.containerBarcode || first?.containerId || 'Unknown Container';
+      const containerSummary =
+        details.length > 1
+          ? `${firstBarcode} (+${details.length - 1})`
+          : firstBarcode;
 
-  useEffect(() => {
-    let mounted = true;
-    listRobots().then((res) => { if (mounted) setAvailableRobots(res.items); }).catch(() => {});
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    async function loadRecent() {
-      setIsLoadingDispatches(true);
-      try {
-        const res = await listTransportRequests({ take: 3 });
-        if (isMounted && res?.items) {
-          setTotalRecords(res.total || res.items.length);
-          const mapped = res.items.slice(0, 3).map((item) => {
-            const details = item.details || [];
-            const first = details[0];
-            const route = first
-              ? `${first.sourceEndpointCode || first.sourceEndpointId || 'Unknown Pickup'} ➔ ${first.destinationEndpointCode || first.destinationEndpointId || 'Unknown Destination'}`
-              : 'Multi-stop movement';
-            const firstBarcode = first?.containerBarcode || first?.containerId || 'Unknown Container';
-            const containerSummary =
-              details.length > 1
-                ? `${firstBarcode} (+${details.length - 1})`
-                : firstBarcode;
-
-            return {
-              id: item.requestCode,
-              requestId: item.id,
-              type:
-                item.workflowName ||
-                (item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Movement'),
-              status: item.status,
-              statusLabel: requestStatusLabel(item.status),
-              route,
-              container: containerSummary,
-              containerCount: details.length,
-              time: item.submittedAt
-                ? new Date(item.submittedAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : 'Just now',
-            };
-          });
-          setDispatches(mapped);
-        }
-      } catch {
-        toast.error('Recent dispatches could not be refreshed.');
-      } finally {
-        if (isMounted) setIsLoadingDispatches(false);
-      }
-    }
-    loadRecent();
-    const poll = setInterval(loadRecent, 15000);
-    return () => { isMounted = false; clearInterval(poll); };
-  }, [lastJobUpdate]);
+      return {
+        id: item.requestCode,
+        requestId: item.id,
+        type:
+          item.workflowName ||
+          (item.workflowCode ? item.workflowCode.replace(/_/g, ' ') : 'Transport Movement'),
+        status: item.status,
+        statusLabel: requestStatusLabel(item.status),
+        route,
+        container: containerSummary,
+        containerCount: details.length,
+        time: item.submittedAt
+          ? new Date(item.submittedAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : 'Time unavailable',
+      };
+    });
+  }, [recent.data]);
 
   const bottomInset = dockReservedSpace(dockHeight);
   const topInset = useTopInset();
-
-  const toggleHold = () => {
-    toast.warning('Pause and resume are not supported. Open Fleet Recall to request command cancellation.');
-  };
 
   return (
     <View style={styles.container}>
@@ -231,7 +158,7 @@ export function TransportScreen() {
               </View>
             </Pressable>
 
-            {/* Card 2: Pack Container (Tactile White Card) */}
+            {/* Receiving entry */}
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
@@ -242,7 +169,7 @@ export function TransportScreen() {
                 pressed && styles.heroBtnPressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Pack and ingest container"
+              accessibilityLabel="Receive goods"
             >
               <View style={styles.heroBtnTopRow}>
                 <View style={styles.secondaryIconWell}>
@@ -253,61 +180,12 @@ export function TransportScreen() {
 
               <View style={styles.heroBtnContent}>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={styles.heroBtnTitle}>
-                  Pack Container
+                  Receive Goods
                 </Text>
               </View>
             </Pressable>
           </View>
         </View>
-
-        {/* 2. Emergency Active Alert Banner (HIDDEN by default, shown ONLY during anomalies) */}
-        {hasActiveAlert && (
-          <View style={styles.activeAlertCard}>
-            <View style={styles.alertHeaderRow}>
-              <View style={styles.alertTitleGroup}>
-                <PulsingBeaconDot />
-                <Text variant="label" color={colors.dangerText} style={styles.alertTitle}>
-                  AMR-01 Stalled · Cargo at Risk
-                </Text>
-              </View>
-              <Text variant="caption" color={colors.dangerText}>Zone A · Aisle 2</Text>
-            </View>
-
-            <Pressable
-              onPress={() => {
-                triggerHaptic('tap');
-                setShowIncidentDetails(!showIncidentDetails);
-              }}
-              style={styles.detailsToggle}
-            >
-              <Text variant="caption" color={colors.dangerText} style={{ fontWeight: '600' }}>
-                {showIncidentDetails ? 'Hide details' : 'View incident details'}
-              </Text>
-              {showIncidentDetails ? (
-                <ChevronUp size={14} color={colors.dangerText} />
-              ) : (
-                <ChevronDown size={14} color={colors.dangerText} />
-              )}
-            </Pressable>
-
-            {showIncidentDetails && (
-              <Text variant="caption" color={colors.dangerText} style={styles.alertDesc}>
-                Hardware motor stall with payload BOX-101 (12 pcs). Carrier AMR-02 is in standby for recovery.
-              </Text>
-            )}
-
-            <Pressable
-              onPress={() => {
-                triggerHaptic('warning');
-                navigate('payload_recovery');
-              }}
-              style={({ pressed }) => [styles.rescueBtn, pressed && styles.rescueBtnPressed]}
-            >
-              <LifeBuoy size={16} color="#ffffff" />
-              <Text variant="label" color={colors.textInverse}>Launch Rescue</Text>
-            </Pressable>
-          </View>
-        )}
 
         {/* 3. Quiet Operational Safety Bar (Integrated, non-intrusive) */}
         <View style={styles.section}>
@@ -318,14 +196,15 @@ export function TransportScreen() {
           <View style={styles.safetyStrip}>
             {/* Soft Hold Toggle */}
             <Pressable
-              onPress={toggleHold}
               style={({ pressed }) => [
                 styles.safetyStripBtn,
                 isHolding && styles.safetyStripBtnHolding,
                 pressed && styles.pressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Toggle 3m perimeter soft hold"
+              accessibilityLabel="Pause unavailable"
+              disabled
+              accessibilityState={{ disabled: true }}
             >
               <PauseCircle
                 size={18}
@@ -338,7 +217,7 @@ export function TransportScreen() {
                   color={isHolding ? colors.warningText : colors.textPrimary}
                   style={styles.safetyBtnTitle}
                 >
-                  {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
+                  Pause Unavailable
                 </Text>
               </View>
             </Pressable>
@@ -381,12 +260,19 @@ export function TransportScreen() {
               accessibilityLabel="View history"
             >
               <Text variant="caption" color={colors.primaryText} style={styles.viewHistoryText}>
-                View All ({totalRecords})
+                {recent.data === undefined ? 'View All' : `View All (${totalRecords})`}
               </Text>
               <ChevronRight size={14} color={colors.primaryText} />
             </Pressable>
           </View>
 
+          {recent.data === undefined ? <EmptyState compact
+            title={recent.error ? 'Dispatches Unavailable' : recent.fetchStatus === 'paused' ? 'Waiting For Connection' : 'Loading Dispatches…'}
+            message={recent.error ? recent.error.message : 'Recent requests have not loaded yet.'}
+            actionTitle={recent.error ? 'Retry' : undefined} onAction={() => { void refetch(); }} /> :
+            recent.error ? <EmptyState compact tone="warning" title="Could Not Refresh Dispatches"
+              message="Showing the last loaded requests." actionTitle="Retry" onAction={() => { void refetch(); }} /> :
+            dispatches.length === 0 ? <EmptyState compact title="No Dispatches Yet" message="Create a transport request to get started." /> : null}
           <View style={styles.recentCardsCol}>
             {dispatches.map((dispatch) => {
               const label =

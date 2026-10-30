@@ -28,6 +28,9 @@ interface BarcodeScannerHUDProps {
   onClose: () => void;
   onScanResult: (barcode: string) => void;
   targetBarcode?: string;
+  title?: string;
+  manualLabel?: string;
+  placeholder?: string;
 }
 
 export function BarcodeScannerHUD({
@@ -35,6 +38,9 @@ export function BarcodeScannerHUD({
   onClose,
   onScanResult,
   targetBarcode = '',
+  title = 'Scan container barcode',
+  manualLabel = 'Container barcode',
+  placeholder = 'Enter Or Scan Container Barcode',
 }: BarcodeScannerHUDProps) {
   const topInset = useTopInset();
   const [torchOn, setTorchOn] = useState(false);
@@ -75,7 +81,7 @@ export function BarcodeScannerHUD({
               <View style={styles.hudBadge}>
                 <Text style={styles.hudBadgeText}>Camera HUD</Text>
               </View>
-              <Text style={styles.hudTitle}>Scan container barcode</Text>
+              <Text style={styles.hudTitle}>{title}</Text>
             </View>
             <View style={styles.headerActions}>
               <Pressable
@@ -135,8 +141,8 @@ export function BarcodeScannerHUD({
           {/* Manual entry remains available when the camera is unavailable. */}
           <View style={styles.actionsBox}>
             <TextInput ref={manualInput} value={manualBarcode} onChangeText={setManualBarcode}
-              placeholder="Enter Or Scan Container Barcode" placeholderTextColor="#c4c8d0"
-              autoCapitalize="none" autoCorrect={false} accessibilityLabel="Container barcode"
+              placeholder={placeholder} placeholderTextColor="#c4c8d0"
+              autoCapitalize="none" autoCorrect={false} accessibilityLabel={manualLabel}
               onSubmitEditing={() => submitBarcode(manualBarcode)}
               style={{ minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#c4c8d0', paddingHorizontal: 12, color: '#ffffff', fontSize: 14 }} />
 

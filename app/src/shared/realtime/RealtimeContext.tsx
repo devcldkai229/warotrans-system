@@ -12,6 +12,7 @@ import { getAccessToken, onAccessTokenChange } from '../api/client';
 import { listJobs } from '../api/executionApi';
 import { listRobots } from '../api/fleetApi';
 import type { JobDetailResponse, RobotResponse } from '../types/contracts';
+import { jobActivityTime } from './jobActivity';
 
 export type { JobUpdatedRealtimeEvent };
 
@@ -52,7 +53,7 @@ function notificationFromJob(job: JobDetailResponse, robots: RobotResponse[]): L
     category: 'JOB_ASSIGNED',
     title: '',
     message: '',
-    timeLabel: 'Just now',
+    timeLabel: jobActivityTime(job),
     jobId: job.id,
     robotId: robotCode,
     isRead: false,

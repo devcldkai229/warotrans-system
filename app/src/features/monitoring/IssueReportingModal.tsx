@@ -275,6 +275,7 @@ export function IssueReportingModal({
           <View style={styles.notesCard}>
             <Text style={styles.sectionLabel}>Operator description</Text>
             <TextInput
+              accessibilityLabel="Operator description"
               value={notes}
               onChangeText={setNotes}
               placeholder="e.g. Left corner cracked, 2 units dislodged onto lane 2..."

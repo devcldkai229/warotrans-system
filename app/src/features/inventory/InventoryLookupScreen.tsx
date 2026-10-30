@@ -165,6 +165,7 @@ export function InventoryLookupScreen() {
       {/* Tầng 1: Single Compact Search & Barcode Scan Section */}
       <View style={styles.searchSection}>
         <Input
+          accessibilityLabel="Search inventory"
           value={searchTerm}
           onChangeText={setSearchTerm}
           onSubmitEditing={() => handleVerifyBarcode()}
@@ -774,7 +775,7 @@ const styles = StyleSheet.create({
   relocateBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.primaryText,
     fontFamily: typography.fontSans,
   },
   locationRow: {
