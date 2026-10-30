@@ -13,6 +13,7 @@ import { Icon, type IconName } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
 import { HeadingDial } from '../../maps/HeadingDial'
+import { CameraPanel } from './CameraPanel'
 import { Joystick } from './Joystick'
 import { Speedometer } from './Speedometer'
 import { useTeleopLoop } from './useTeleopLoop'
@@ -306,16 +307,24 @@ export function RobotManualPage() {
         <Speedometer speed={speed} max={Math.max(maxLinear, 0.1)} />
       </div>
 
-      {/* Bottom-right: joystick (Manual ON) and the control-panel button that opens the bottom bar */}
-      <div className={cx('absolute right-6 flex items-end gap-3 transition-[bottom] duration-200', barOpen ? 'bottom-20' : 'bottom-6')}>
-        {manualOn ? <Joystick disabled={!canDrive} onChange={steer} /> : null}
-        <div className="pb-2">
-          <RoundButton
-            icon="sliders"
-            label={barOpen ? 'Hide control panel' : 'Show control panel'}
-            active={barOpen}
-            onClick={() => setBarOpen(!barOpen)}
-          />
+      {/* Bottom-right: live camera above the joystick (Manual ON) and the control-panel button */}
+      <div
+        className={cx(
+          'absolute right-6 flex flex-col items-end gap-3 transition-[bottom] duration-200',
+          barOpen ? 'bottom-20' : 'bottom-6',
+        )}
+      >
+        {restRobot ? <CameraPanel robotId={restRobot.id} /> : null}
+        <div className="flex items-end gap-3">
+          {manualOn ? <Joystick disabled={!canDrive} onChange={steer} /> : null}
+          <div className="pb-2">
+            <RoundButton
+              icon="sliders"
+              label={barOpen ? 'Hide control panel' : 'Show control panel'}
+              active={barOpen}
+              onClick={() => setBarOpen(!barOpen)}
+            />
+          </div>
         </div>
       </div>
 
@@ -373,7 +382,7 @@ function ToolButton({ icon, label, active, onClick }: { icon: IconName; label: s
       aria-pressed={active}
       className={cx(
         'grid size-10 place-items-center rounded-lg shadow-float transition-colors duration-200',
-        active ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
+        active ? 'bg-primary text-white' : 'bg-surface text-ink-2 hover:text-ink',
       )}
       onClick={onClick}
     >
@@ -391,7 +400,7 @@ function RoundButton({ icon, label, active, onClick }: { icon: IconName; label: 
       aria-pressed={active}
       className={cx(
         'grid size-12 place-items-center rounded-full shadow-float transition-colors duration-200',
-        active ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
+        active ? 'bg-primary text-white' : 'bg-surface text-ink-2 hover:text-ink',
       )}
       onClick={onClick}
     >

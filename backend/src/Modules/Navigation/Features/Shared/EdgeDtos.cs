@@ -7,10 +7,10 @@ public sealed record EdgeResponse(
     Guid Id,
     Guid MapVersionId,
     string Code,
+    string Name,
     JsonElement Geometry,
     double WidthMeters,
     string Direction,
-    int Capacity,
     double? MaxSpeed,
     bool IsActive)
 {
@@ -18,10 +18,10 @@ public sealed record EdgeResponse(
         edge.Id,
         edge.MapVersionId,
         edge.Code,
+        edge.Name,
         edge.Geometry.RootElement.Clone(),
         edge.WidthMeters,
         edge.Direction.ToString(),
-        edge.Capacity,
         edge.MaxSpeed,
         edge.IsActive);
 }

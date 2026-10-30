@@ -1,0 +1,78 @@
+{
+    "mapVersionId":  "d676f366-6f08-417d-921f-ac89e0b18626",
+    "graphHash":  "6a9bf530f9aab4aacc88a23e00650351019550e0838338805291986205b635d2",
+    "isValid":  true,
+    "nodeCount":  57,
+    "edgeCount":  110,
+    "resourceCount":  325,
+    "corridorCount":  12,
+    "holdingPointCount":  53,
+    "stoplineCount":  49,
+    "stationCount":  11,
+    "issues":  [
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9 (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9-COPY (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9-COPY"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9-COPY-COPY (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9-COPY-COPY"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---9-COPY-COPY-COPY (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---9-COPY-COPY-COPY"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 6 at (0.442, -1.225) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:6"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 7 at (0.442, -0.849) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SORAGE_SELF_1"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 8 at (0.442, -0.485) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:8"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 56 at (4.092, -0.425) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:56"
+                                        ]
+                   }
+               ]
+}

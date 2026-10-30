@@ -72,7 +72,28 @@ public sealed class ProcessRobotTelemetryHandler(
             return;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        // Same concurrency-safe path as heartbeat: avoid stale UpdatedAt dropping liveness.
+        await db.Robots
+            .Where(r => r.Id == robot.Id)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(r => r.LastTelemetryAt, robot.LastTelemetryAt)
+                    .SetProperty(r => r.LastTelemetryBootId, robot.LastTelemetryBootId)
+                    .SetProperty(r => r.LastTelemetrySequence, robot.LastTelemetrySequence)
+                    .SetProperty(r => r.PoseX, robot.PoseX)
+                    .SetProperty(r => r.PoseY, robot.PoseY)
+                    .SetProperty(r => r.PoseYaw, robot.PoseYaw)
+                    .SetProperty(r => r.BatteryPercent, robot.BatteryPercent)
+                    .SetProperty(r => r.NavigationStatus, robot.NavigationStatus)
+                    .SetProperty(r => r.LocalizationStatus, robot.LocalizationStatus)
+                    .SetProperty(r => r.LinearVelocity, robot.LinearVelocity)
+                    .SetProperty(r => r.AngularVelocity, robot.AngularVelocity)
+                    .SetProperty(r => r.MapVersionCode, robot.MapVersionCode)
+                    .SetProperty(r => r.CurrentCommandId, robot.CurrentCommandId)
+                    .SetProperty(r => r.ErrorCode, robot.ErrorCode)
+                    .SetProperty(r => r.UpdatedAt, robot.UpdatedAt),
+                cancellationToken);
+        db.ChangeTracker.Clear();
 
         // Admin notifications: only the moment something starts, not every reading while it lasts.
         if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent

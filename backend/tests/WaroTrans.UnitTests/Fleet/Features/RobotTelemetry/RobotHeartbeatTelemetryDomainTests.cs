@@ -20,6 +20,17 @@ public class RobotHeartbeatTelemetryDomainTests
     }
 
     [Fact]
+    public void ApplyHeartbeat_uses_receive_time_not_robot_sentAt_for_LastHeartbeatAt()
+    {
+        var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", DateTimeOffset.UtcNow);
+        var sentAt = DateTimeOffset.Parse("2020-01-01T00:00:00Z");
+        var receivedAt = DateTimeOffset.Parse("2026-10-27T12:00:00Z");
+
+        Assert.True(robot.TryApplyHeartbeat(Guid.NewGuid(), 1, sentAt, receivedAt, out _));
+        Assert.Equal(receivedAt, robot.LastHeartbeatAt);
+    }
+
+    [Fact]
     public void ApplyHeartbeat_ignores_stale_sequence()
     {
         var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", DateTimeOffset.UtcNow);

@@ -1,0 +1,20 @@
+﻿OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 65 and 86. | edge:65,edge:86
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 80 and 69. | edge:80,edge:69
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 80 and 71. | edge:80,edge:71
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 83 and 59. | edge:83,edge:59
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 97 and 127. | edge:97,edge:127
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 104 and 114. | edge:104,edge:114
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 107 and 84. | edge:107,edge:84
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 122 and 89. | edge:122,edge:89
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 122 and 102. | edge:122,edge:102
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 123 and 145. | edge:123,edge:145
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 140 and 134. | edge:140,edge:134
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 150 and 126. | edge:150,edge:126
+OVERLAP_ASYMMETRIC | Swept overlap asymmetric between edges 166 and 149. | edge:166,edge:149
+CRITICAL_NO_EXIT | Critical resource narrow:EDGE-340 has no reachable safe-stop exit. | EDGE-340
+CRITICAL_NO_EXIT | Critical resource narrow:EDGE-341 has no reachable safe-stop exit. | EDGE-341
+CRITICAL_NO_EXIT | Critical resource narrow:EDGE-342 has no reachable safe-stop exit. | EDGE-342
+CORRIDOR_NO_STOPLINE | Critical corridor 5 has no stopline at an entry. | corridor:5,edge:152,edge:153,edge:155,edge:156,edge:165,edge:166
+CORRIDOR_NO_STOPLINE | Critical corridor 6 has no stopline at an entry. | corridor:6,edge:61,edge:62,edge:75,edge:77,edge:82,edge:83
+CORRIDOR_NO_STOPLINE | Critical corridor 7 has no stopline at an entry. | corridor:7,edge:92,edge:93,edge:94,edge:96,edge:97,edge:98,edge:99,edge:106,edge:107,edge:108,edge:109,edge:110,edge:115,edge:116,edge:117
+CORRIDOR_NO_STOPLINE | Critical corridor 11 has no stopline at an entry. | corridor:11,edge:93,edge:94,edge:97,edge:98,edge:99,edge:106,edge:107,edge:108,edge:109,edge:115,edge:116

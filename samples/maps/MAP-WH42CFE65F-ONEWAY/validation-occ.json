@@ -1,0 +1,262 @@
+{
+    "mapVersionId":  "1143c8a3-ae62-4660-b684-bc462450f30f",
+    "graphHash":  "c06b78a0eadd72e468a8a7a322a9ae2303a4d433956fbb852148453fece67d10",
+    "isValid":  false,
+    "nodeCount":  34,
+    "edgeCount":  42,
+    "resourceCount":  86,
+    "corridorCount":  0,
+    "holdingPointCount":  33,
+    "stoplineCount":  0,
+    "stationCount":  17,
+    "issues":  [
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 36 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-447"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 40 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-445"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 41 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-445"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 47 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-442"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 48 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-459"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 49 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-449"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 51 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-444"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 55 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-455"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 62 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-442"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 66 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-452"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 67 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-444"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 6 turn clearance 0.05 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:6"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 7 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 10 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 19 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 21 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 27 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 6 at (-1.25, 0.45) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:6"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 12 at (-0.4, -0.965) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:12"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 16 at (0.1, 1.62) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:16"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 17 at (0.8, -0.965) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 19 at (0.85, 1) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 20 at (0.85, 1.35) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 22 at (0.85, 1.62) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:22"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 23 at (0.87, -0.965) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:23"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 26 at (1.3, 0.2) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:26"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 29 at (1.85, -0.965) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 30 at (1.85, -0.9) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 31 at (1.85, -0.77) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:31"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 32 at (1.85, 0.2) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:32"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 33 at (1.85, 0.85) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:33"
+                                        ]
+                   }
+               ]
+}

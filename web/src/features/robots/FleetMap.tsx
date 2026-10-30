@@ -2,9 +2,11 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Edge, Endpoint, RobotView, Zone } from '@/shared/api/contracts'
 import { getTrafficSnapshot, type TrafficSnapshot } from '@/shared/api/fleet'
+import type { MapVersionDto } from '@/shared/api/navigation'
 import type { MapBounds } from '@/shared/lib/mapView'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot, type MapTrafficOverlay } from '@/shared/map/WarehouseMap'
 import { findEndpointByName } from '@/shared/map/scene'
+import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
 import { LIVE_MAP_LABEL } from './mock'
 import { RobotPreviewCard } from './RobotPreviewCard'
 
@@ -24,6 +26,8 @@ interface FleetMapProps {
   occupancyImageUrl?: string | null
   /** Poll SegmentedTrafficCoordinator snapshot (Admin). Default on for overview. */
   enableTrafficOverlay?: boolean
+  /** Active MapVersion meta for VITE_MAP_ALIGN_DEBUG overlay (origin/resolution). */
+  mapVersion?: MapVersionDto | null
 }
 
 /** "Rack A-12 → Dock 3" → the two Endpoints it names, when both exist on the map. */
@@ -46,7 +50,9 @@ export function FleetMap({
   bounds,
   occupancyImageUrl = null,
   enableTrafficOverlay = true,
+  mapVersion = null,
 }: FleetMapProps) {
+  const alignDebug = isMapAlignDebugEnabled()
   const trafficQuery = useQuery({
     queryKey: ['fleet-traffic-snapshot'],
     queryFn: getTrafficSnapshot,
@@ -175,6 +181,14 @@ export function FleetMap({
         <span className={`size-1.5 rounded-full ${snap ? 'bg-green' : 'bg-amber'}`} />
         {snap ? `${LIVE_MAP_LABEL} · traffic e${snap.epoch}` : LIVE_MAP_LABEL}
       </div>
+      {alignDebug ? (
+        <MapAlignDebugOverlay
+          robots={robots}
+          endpoints={endpoints}
+          mapVersion={mapVersion}
+          trafficEpoch={snap?.epoch}
+        />
+      ) : null}
     </>
   )
 }

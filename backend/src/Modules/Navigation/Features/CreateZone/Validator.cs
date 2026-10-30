@@ -29,11 +29,9 @@ public sealed class CreateZoneValidator : AbstractValidator<CreateZoneRequest>
             })
             .WithMessage("Geometry must be a valid closed GeoJSON Polygon in world meters.");
 
-        RuleFor(x => x.Capacity).GreaterThanOrEqualTo(1);
         RuleFor(x => x.MaxSpeed)
             .GreaterThan(0)
             .Must(s => double.IsFinite(s!.Value))
             .When(x => x.MaxSpeed.HasValue);
-        RuleFor(x => x.Code).MaximumLength(100).When(x => x.Code is not null);
     }
 }

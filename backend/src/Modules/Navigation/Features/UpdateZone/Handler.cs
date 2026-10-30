@@ -49,14 +49,13 @@ public sealed class UpdateZoneHandler(
             : null;
         var schemaVersion = request.PolicySchemaVersion ?? ZonePolicyValidator.SchemaVersion;
 
-        ZonePolicyValidator.Validate(zoneType, request.Capacity, request.MaxSpeed, policyDoc, schemaVersion);
+        ZonePolicyValidator.Validate(zoneType, request.MaxSpeed, policyDoc, schemaVersion);
 
         zone.Geometry?.Dispose();
         zone.Policy?.Dispose();
         zone.Name = request.Name.Trim();
         zone.ZoneType = zoneType;
         zone.Geometry = GeoJsonGeometry.NormalizePolygon(request.Geometry);
-        zone.Capacity = request.Capacity;
         zone.MaxSpeed = request.MaxSpeed;
         zone.IsActive = request.IsActive;
         zone.Policy = policyDoc;

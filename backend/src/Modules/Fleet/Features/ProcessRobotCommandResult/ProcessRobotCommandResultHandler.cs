@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Entities;
@@ -17,7 +18,9 @@ public sealed class ProcessRobotCommandResultHandler(
     IIntegrationEventPublisher events,
     ITrafficCoordinator trafficCoordinator,
     ShadowSingleMoverGuard? shadowMoverGuard,
-    ILogger<ProcessRobotCommandResultHandler> logger)
+    ILogger<ProcessRobotCommandResultHandler> logger,
+    IOptions<TrafficOptions>? trafficOptions = null,
+    ISegmentedTrafficCoordinator? segmentedTraffic = null)
 {
     public async Task HandleAsync(RobotCommandResultMessage message, CancellationToken cancellationToken)
     {
@@ -103,6 +106,17 @@ public sealed class ProcessRobotCommandResultHandler(
             {
                 shadowMoverGuard?.Exit(robot.CurrentMapVersionId, robot.Id);
             }
+
+            if (trafficOptions?.Value.Mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
+            {
+                // Active route finished: clear authority (stops RENEW) or quarantine on failure (fail-closed).
+                await segmentedTraffic.CompleteRouteAsync(
+                    command.RobotId,
+                    message.Outcome == RobotCommandOutcomes.Succeeded,
+                    message.ErrorCode ?? message.Outcome,
+                    NavigateAuthorityId(command.PayloadJson),
+                    cancellationToken);
+            }
         }
         else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } targetCommandId)
         {
@@ -131,5 +145,24 @@ public sealed class ProcessRobotCommandResultHandler(
                 command.ErrorCode,
                 RobotCommandLifecycleChanged.Phases.Result),
             cancellationToken);
+    }
+
+    /// <summary>Active NAVIGATE payload carries <c>authority.authorityId</c>; null for plain NAVIGATE.</summary>
+    private static Guid? NavigateAuthorityId(string payloadJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            return doc.RootElement.TryGetProperty("authority", out var authority)
+                   && authority.ValueKind == JsonValueKind.Object
+                   && authority.TryGetProperty("authorityId", out var id)
+                   && id.TryGetGuid(out var guid)
+                ? guid
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }

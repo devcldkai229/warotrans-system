@@ -89,6 +89,26 @@ public sealed class SweptConflictIndex
             conflicts[seg.Id] = list;
         }
 
+        // Conflict is undirected. Spatial hashing + ShareVertex skips can leave A→B without B→A;
+        // symmetrize so ValidateOverlapSymmetry / mutual exclusion stay consistent (V019 OVERLAP_ASYMMETRIC).
+        foreach (var (id, list) in conflicts.ToArray())
+        {
+            foreach (var otherId in list)
+            {
+                if (!conflicts.TryGetValue(otherId, out var otherList))
+                {
+                    otherList = [];
+                    conflicts[otherId] = otherList;
+                }
+
+                var idx = otherList.BinarySearch(id);
+                if (idx < 0)
+                {
+                    otherList.Insert(~idx, id);
+                }
+            }
+        }
+
         return new SweptConflictIndex(conflicts, cellSize);
     }
 

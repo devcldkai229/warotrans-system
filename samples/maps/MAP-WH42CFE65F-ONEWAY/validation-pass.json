@@ -1,0 +1,46 @@
+﻿{
+    "mapVersionId":  "1143c8a3-ae62-4660-b684-bc462450f30f",
+    "graphHash":  "dca48d0986088aa93a6a42ea38b9d2f08b5003c2638fa7a86dad923d315d74d0",
+    "isValid":  true,
+    "nodeCount":  30,
+    "edgeCount":  32,
+    "resourceCount":  95,
+    "corridorCount":  0,
+    "holdingPointCount":  30,
+    "stoplineCount":  0,
+    "stationCount":  17,
+    "issues":  [
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 9 at (-0.3, 0.1) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:9"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 17 at (-0.1, 0.1) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:17"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 19 at (1.7, 0.1) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:19"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 28 at (1.8, 0.1) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:28"
+                                        ]
+                   }
+               ]
+}

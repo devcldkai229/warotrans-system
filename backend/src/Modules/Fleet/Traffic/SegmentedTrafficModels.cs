@@ -95,6 +95,9 @@ public sealed record RoutePlanRequest(
     Guid? JobStepId = null,
     Guid? JobId = null);
 
+/// <summary>Destination pose of an Active route (endpoint pose, map frame).</summary>
+public sealed record TrafficRouteGoal(double X, double Y, double Yaw);
+
 public sealed record RouteSegmentCandidate(
     Guid RequestId,
     Guid RobotId,

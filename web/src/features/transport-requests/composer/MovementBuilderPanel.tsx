@@ -189,7 +189,7 @@ export function MovementBuilderPanel({
               type="button"
               className={cx(
                 'flex-1 rounded-full px-2 py-1 text-[11px] font-medium',
-                viewMode === item ? 'bg-ink text-surface' : 'text-muted hover:text-ink',
+                viewMode === item ? 'bg-primary text-white' : 'text-muted hover:text-ink',
               )}
               onClick={() => setViewMode(item)}
             >

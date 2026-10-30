@@ -19,6 +19,6 @@ public static class UpdateEdgeEndpoint
         })
         .WithName("UpdateEdge")
         .WithSummary("Update an Edge (Lane) on a draft map version")
-        .WithDescription("Updates geometry, direction, capacity, max speed and active flag of an Edge. Only allowed when its MapVersion is DRAFT. The Edge code is not changed.");
+        .WithDescription("Updates name, geometry, direction, max speed and active flag of an Edge. Only allowed when its MapVersion is DRAFT. The Edge code is not changed.");
     }
 }

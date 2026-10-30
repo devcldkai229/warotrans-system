@@ -1,0 +1,23 @@
+[
+ {
+  "RuleID": "generic-api-key",
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 19,
+  "EndLine": 19,
+  "StartColumn": 48,
+  "EndColumn": 104,
+  "Match": "Key\", \"warotrans-integration-test-signing-key-0123456789\"",
+  "Secret": "warotrans-integration-test-signing-key-0123456789",
+  "File": "backend/tests/WaroTrans.IntegrationTests/Infrastructure/WaroTransWebApplicationFactory.cs",
+  "SymlinkFile": "",
+  "Commit": "d8b8d7b614247deb2c072b3e898349f27a7cb29b",
+  "Link": "https://github.com/devcldkai229/warotrans-system/blob/d8b8d7b614247deb2c072b3e898349f27a7cb29b/backend/tests/WaroTrans.IntegrationTests/Infrastructure/WaroTransWebApplicationFactory.cs#L19",
+  "Entropy": 4.214641,
+  "Author": "thanggumball",
+  "Email": "thanglatoiii@gmail.com",
+  "Date": "2026-10-07T15:59:30Z",
+  "Message": "feat(identity): add JWT login with refresh token rotation and role authorization\n\n- Identity slices: login, refresh, logout, current account, Admin-only account list\n- identity.refresh_tokens table; tokens are stored hashed and rotated on every use,\n  and a replayed token revokes that device's session\n- Result/Error primitives for expected business failures\n- ICurrentUser exposes the role; JWT issuer, audience and signing key are validated\n- Endpoints require a signed-in user by default; CORS for the web client\n- Development seed accounts and integration tests for auth and roles",
+  "Tags": [],
+  "Fingerprint": "d8b8d7b614247deb2c072b3e898349f27a7cb29b:backend/tests/WaroTrans.IntegrationTests/Infrastructure/WaroTransWebApplicationFactory.cs:generic-api-key:19"
+ }
+]

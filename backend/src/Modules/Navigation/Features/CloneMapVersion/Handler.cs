@@ -15,7 +15,7 @@ namespace WaroTrans.Navigation.Features.CloneMapVersion;
 /// Copies a map version (any status) into a new DRAFT of the same warehouse so it can be edited: same occupancy
 /// image (asset URIs are reused, assets are never deleted) and a copy of every endpoint, zone, edge and endpoint
 /// group. Codes are never copied: they come from the system code generator like any new item (endpoint EP-{NAME},
-/// zone ZONE-{NAME}, edge EDGE-nnn); ids are new and endpoints remember their source (SourceEndpointId) so
+/// zone ZONE-{NAME}, edge EDGE-{NAME}); ids are new and endpoints remember their source (SourceEndpointId) so
 /// storage locations can follow them on publish.
 /// </summary>
 public sealed class CloneMapVersionHandler(
@@ -113,7 +113,6 @@ public sealed class CloneMapVersionHandler(
                 Name = zone.Name,
                 ZoneType = zone.ZoneType,
                 Geometry = Copy(zone.Geometry),
-                Capacity = zone.Capacity,
                 MaxSpeed = zone.MaxSpeed,
                 IsActive = zone.IsActive,
                 Policy = zone.Policy is null ? null : Copy(zone.Policy),
@@ -124,15 +123,16 @@ public sealed class CloneMapVersionHandler(
         foreach (var edge in await dbContext.Edges.AsNoTracking()
                      .Where(e => e.MapVersionId == source.Id).OrderBy(e => e.Code).ToListAsync(cancellationToken))
         {
+            var edgeName = string.IsNullOrWhiteSpace(edge.Name) ? edge.Code : edge.Name;
             dbContext.Edges.Add(new Edge
             {
                 Id = Guid.NewGuid(),
                 MapVersionId = clone.Id,
-                Code = await codeGenerator.NextEdgeCodeAsync(cancellationToken),
+                Code = await codeGenerator.NextEdgeCodeAsync(edgeName, cancellationToken),
+                Name = edgeName,
                 Geometry = Copy(edge.Geometry),
                 WidthMeters = edge.WidthMeters,
                 Direction = edge.Direction,
-                Capacity = edge.Capacity,
                 MaxSpeed = edge.MaxSpeed,
                 IsActive = edge.IsActive
             });

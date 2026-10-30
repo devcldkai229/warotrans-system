@@ -26,12 +26,18 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
     public async Task<string> NextEndpointCodeAsync(string suffix, CancellationToken cancellationToken = default)
     {
         var normalized = suffix.Trim().ToUpperInvariant().Replace(' ', '-');
+        // Bump sequence for observability; code is stable from name. Uniqueness is (MapVersionId, Code).
         _ = await NextValueAsync($"endpoint:{normalized}", null, cancellationToken);
         return $"EP-{normalized}";
     }
 
-    public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) =>
-        NextFixedAsync("edge", "EDGE-", 3, cancellationToken);
+    public async Task<string> NextEdgeCodeAsync(string suffix, CancellationToken cancellationToken = default)
+    {
+        var normalized = suffix.Trim().ToUpperInvariant().Replace(' ', '-');
+        // Edges may share a display name on one map; sequence keeps Code unique per MapVersion.
+        var value = await NextValueAsync($"edge:{normalized}", null, cancellationToken);
+        return value == 1 ? $"EDGE-{normalized}" : $"EDGE-{normalized}---{value}";
+    }
 
     public async Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default)
     {

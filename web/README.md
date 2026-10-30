@@ -37,6 +37,11 @@ The UI is styled with Tailwind CSS v4 utility classes; there are no per-feature 
   override each other predictably.
 - The warehouse map is drawn in metres inside an SVG, so its paint is set with SVG attributes from
   `src/shared/map/mapStyle.ts`, which follows the same tokens.
+- There are two themes, dark (default) and light. The `@theme` block holds the dark values and
+  `:root[data-theme='light']` in the base layer overrides them, so a screen never branches on the theme: use the
+  tokens and it follows. The choice is stored in `localStorage` (`warotrans.theme`), applied by a small script in
+  `index.html` before the first paint, and switched from `src/shared/theme/theme.ts` (user menu, login page). Do not
+  write a light-only or dark-only hex colour in a component; the map neutrals are CSS variables for the same reason.
 
 ---
 

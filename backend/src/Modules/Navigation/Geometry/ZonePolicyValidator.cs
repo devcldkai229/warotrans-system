@@ -6,6 +6,7 @@ namespace WaroTrans.Navigation.Geometry;
 
 /// <summary>
 /// Validates type-specific Zone.Policy JSON against ZoneType enum values.
+/// Occupancy is enforced by SINGLE_OCCUPANCY zones (no Capacity column).
 /// </summary>
 public static class ZonePolicyValidator
 {
@@ -13,7 +14,6 @@ public static class ZonePolicyValidator
 
     public static void Validate(
         ZoneType zoneType,
-        int capacity,
         double? maxSpeed,
         JsonDocument? policy,
         int policySchemaVersion)
@@ -23,11 +23,6 @@ public static class ZonePolicyValidator
             throw new DomainValidationException(
                 $"Unsupported PolicySchemaVersion '{policySchemaVersion}' (expected {SchemaVersion}).",
                 "zone_policy_invalid");
-        }
-
-        if (capacity < 1)
-        {
-            throw new DomainValidationException("Capacity must be at least 1.", "zone_policy_invalid");
         }
 
         if (maxSpeed is { } speed && (!double.IsFinite(speed) || speed <= 0))
@@ -44,7 +39,9 @@ public static class ZonePolicyValidator
         {
             case ZoneType.KEEP_OUT:
             case ZoneType.NO_STOP:
-                // No extra policy required.
+            case ZoneType.SINGLE_OCCUPANCY:
+            case ZoneType.JUNCTION:
+                // No extra policy required. SINGLE_OCCUPANCY is the occupancy lock itself.
                 break;
 
             case ZoneType.SPEED:
@@ -52,17 +49,6 @@ public static class ZonePolicyValidator
                 {
                     throw new DomainValidationException(
                         "SPEED zones require MaxSpeed (meters/second).",
-                        "zone_policy_invalid");
-                }
-
-                break;
-
-            case ZoneType.SINGLE_OCCUPANCY:
-            case ZoneType.JUNCTION:
-                if (capacity != 1)
-                {
-                    throw new DomainValidationException(
-                        $"{zoneType} zones require Capacity = 1.",
                         "zone_policy_invalid");
                 }
 

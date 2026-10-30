@@ -35,6 +35,19 @@ public sealed class LocalMapAssetStore(IHostEnvironment environment) : IMapAsset
             $"{baseUrl}/map-preview.png");
     }
 
+    /// <summary>"/map-assets/{rest}" → RootPath/{rest}; null for any other URI or one escaping RootPath.</summary>
+    private string? ResolveLocalPath(string mapUri)
+    {
+        const string prefix = "/map-assets/";
+        if (!mapUri.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var full = Path.GetFullPath(Path.Combine(RootPath, mapUri[prefix.Length..]));
+        return full.StartsWith(RootPath + Path.DirectorySeparatorChar, StringComparison.Ordinal) ? full : null;
+    }
+
     public async Task<byte[]?> TryReadMapPgmAsync(
         string mapUri,
         Guid warehouseId,
@@ -46,7 +59,9 @@ public sealed class LocalMapAssetStore(IHostEnvironment environment) : IMapAsset
             return null;
         }
 
-        var pgmPath = Path.Combine(RootPath, warehouseId.ToString("D"), mapVersionId.ToString("D"), "map.pgm");
+        // A clone shares its source's assets (same MapUri), so the URI — not the clone's own id — names the file.
+        var pgmPath = ResolveLocalPath(mapUri)
+                      ?? Path.Combine(RootPath, warehouseId.ToString("D"), mapVersionId.ToString("D"), "map.pgm");
         if (!File.Exists(pgmPath))
         {
             return null;

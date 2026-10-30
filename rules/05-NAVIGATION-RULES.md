@@ -93,23 +93,26 @@ JUNCTION
 
 Zone columns:
 ```text
-capacity
 maxSpeed?            meters/second
 isActive
 policy               jsonb (type-specific, schema-versioned)
 policySchemaVersion  int (v1)
 ```
 
+There is **no** Capacity column on Zone. Exclusive occupancy is the presence of an active
+`SINGLE_OCCUPANCY` polygon over the lane segments (traffic compile creates a capacity-1 resource
+for those segments). `JUNCTION` is connectivity only (directed arrival → departure links).
+
 ### Zone policy (schema v1)
 Typed common fields stay on columns; `policy` only holds type-specific extras.
 
 | ZoneType | Policy rules |
 |----------|----------------|
-| `KEEP_OUT` | empty/null policy OK; Capacity ≥ 1 (no entry) |
-| `SPEED` | Capacity ≥ 1; MaxSpeed required (m/s) |
-| `NO_STOP` | empty/null policy OK; Capacity ≥ 1 |
-| `SINGLE_OCCUPANCY` | Capacity must be 1; MaxSpeed optional |
-| `JUNCTION` | Capacity must be 1; MaxSpeed optional; free movement inside to transition toward the next point |
+| `KEEP_OUT` | empty/null policy OK (no entry) |
+| `SPEED` | MaxSpeed required (m/s) |
+| `NO_STOP` | empty/null policy OK |
+| `SINGLE_OCCUPANCY` | MaxSpeed optional; one robot at a time on covered segments |
+| `JUNCTION` | MaxSpeed optional; free movement inside to transition toward the next point |
 
 Do not invent ZoneType values beyond the enum above.
 
@@ -134,12 +137,17 @@ Rules: finite numbers, at least 2 positions.
 
 Properties:
 ```text
+name                 used to generate Code (EDGE-{NAME}) on create
 widthMeters          meters, must be > 0
 direction            ONE_WAY | BIDIRECTIONAL
-capacity
 maxSpeed?            meters/second
 isActive
 ```
+
+There is **no** Capacity column on Edge. Lane exclusivity comes from overlapping
+`SINGLE_OCCUPANCY` zones (and geometric mutexes such as NarrowBidirectional for
+`BIDIRECTIONAL` centre lines). Endpoint / Zone / Edge `Code` is generated from `Name`
+on create (EP-/ZONE-/EDGE- + slug); update does not rewrite Code.
 
 Do not force `sourceEndpointId` or `destinationEndpointId` onto Edge.
 

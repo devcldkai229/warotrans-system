@@ -79,6 +79,13 @@ public sealed class RobotCommand
         or RobotCommandStatus.ACKED
         or RobotCommandStatus.RUNNING;
 
+    /// <summary>
+    /// EXTEND / RENEW / REVOKE_AUTHORITY: the robot only ACKs these (no command_result), so the ACK is terminal.
+    /// </summary>
+    public bool IsAuthorityControl => Type is RobotCommandType.EXTEND_AUTHORITY
+        or RobotCommandType.RENEW_AUTHORITY
+        or RobotCommandType.REVOKE_AUTHORITY;
+
     public bool TryApplyAck(bool accepted, string? reasonCode, DateTimeOffset utcNow)
     {
         if (IsTerminal)
@@ -100,7 +107,13 @@ public sealed class RobotCommand
         AckedAt = utcNow;
         RejectReasonCode = reasonCode;
 
-        if (accepted)
+        if (accepted && IsAuthorityControl)
+        {
+            Status = RobotCommandStatus.COMPLETED;
+            Outcome = RobotCommandOutcomes.Succeeded;
+            CompletedAt = utcNow;
+        }
+        else if (accepted)
         {
             Status = Type == RobotCommandType.CANCEL
                 ? RobotCommandStatus.ACKED

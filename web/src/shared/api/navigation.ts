@@ -55,10 +55,10 @@ export interface EdgeDto {
   id: string
   mapVersionId: string
   code: string
+  name: string
   geometry: GeoJsonLineString
   widthMeters: number
   direction: EdgeDirection | string
-  capacity: number
   maxSpeed: number | null
   isActive: boolean
 }
@@ -70,7 +70,6 @@ export interface ZoneDto {
   name: string
   zoneType: ZoneType | string
   geometry: GeoJsonPolygon
-  capacity: number
   maxSpeed: number | null
   isActive: boolean
   policy: Record<string, unknown> | null
@@ -155,6 +154,18 @@ export function updateMapVersion(
 
 export function publishMapVersion(id: string) {
   return apiRequest<MapVersionDto>(`/api/navigation/maps/${id}/publish`, { method: 'POST' })
+}
+
+/** Download Nav2 route-graph GeoJSON for a map (used after publish to rebuild Gazebo / Nav2). */
+export async function downloadRouteGraphGeoJson(mapVersionId: string, fileName?: string) {
+  const data = await apiFetch<unknown>(`/api/navigation/maps/${mapVersionId}/route-graph`)
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/geo+json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName ?? `route-graph-${mapVersionId}.geojson`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 /**
@@ -257,10 +268,10 @@ export function updateEndpoint(
 export function createEdge(
   mapVersionId: string,
   body: {
+    name: string
     geometry: GeoJsonLineString
     widthMeters: number
     direction: string
-    capacity: number
     maxSpeed?: number | null
     isActive?: boolean
   },
@@ -274,10 +285,10 @@ export function createEdge(
 export function updateEdge(
   id: string,
   body: {
+    name: string
     geometry: GeoJsonLineString
     widthMeters: number
     direction: string
-    capacity: number
     maxSpeed?: number | null
     isActive: boolean
   },
@@ -298,10 +309,8 @@ export function createZone(
     name: string
     zoneType: string
     geometry: GeoJsonPolygon
-    capacity: number
     maxSpeed?: number | null
     isActive?: boolean
-    code?: string
     policy?: Record<string, unknown> | null
     policySchemaVersion?: number
   },
@@ -318,7 +327,6 @@ export function updateZone(
     name: string
     zoneType: string
     geometry: GeoJsonPolygon
-    capacity: number
     maxSpeed?: number | null
     isActive: boolean
     policy?: Record<string, unknown> | null

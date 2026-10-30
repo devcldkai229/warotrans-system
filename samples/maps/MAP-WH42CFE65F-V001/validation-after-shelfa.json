@@ -1,0 +1,1072 @@
+﻿{
+    "mapVersionId":  "f663f14f-3a28-4d14-aa4b-19d9e11bad69",
+    "graphHash":  "e2c46513841641ee88d580b5ed86ba6dca59e4d147e0aeef99e36bf2ec343dfc",
+    "isValid":  false,
+    "nodeCount":  54,
+    "edgeCount":  154,
+    "resourceCount":  520,
+    "corridorCount":  18,
+    "holdingPointCount":  19,
+    "stoplineCount":  15,
+    "stationCount":  17,
+    "issues":  [
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---1 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---1"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---10 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---10"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---5 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---5"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---8 (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---8"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---9 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---9"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---6 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---11 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---11"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---12 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---12"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---3 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---3"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---14 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---14"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---15 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---15"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---19 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---19"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---17 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---17"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---21 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---21"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---22 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---22"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 55 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:55"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 56 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:56"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 58 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:58"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 59 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:59"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 60 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:60"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 61 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:61"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 62 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:62"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 64 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:64"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 70 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 72 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 73 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 74 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 81 clearance 0.1 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 82 clearance 0.1 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 83 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:83"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 86 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:86"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 92 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:92"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 93 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:93"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 94 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:94"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 95 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:95"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 96 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:96"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 97 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:97"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 98 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:98"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 102 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:102"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 107 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:107"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 110 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 114 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:114"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 125 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:125"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 130 clearance 0.067 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:130"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 132 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 133 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 135 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 141 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 143 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 154 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:154"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 155 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:155"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 157 clearance 0.067 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:157"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 162 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:162"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 170 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 172 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 173 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 174 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 175 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 176 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 177 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 178 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 179 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 180 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 187 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:187"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 191 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:191"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 194 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 200 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 2 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:2"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 4 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 6 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 8 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:8"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 9 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 11 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:11"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 13 turn clearance 0.1 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 14 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-CHARGER-7"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 17 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:17"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 26 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:26"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 28 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:28"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 30 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 33 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 38 turn clearance 0.05 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:38"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 39 turn clearance 0.05 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:39"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 40 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 41 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:41"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 42 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:42"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 45 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 46 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:46"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 52 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:52"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 53 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 54 turn clearance 0.217 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:54"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 9 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:9"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 10 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:10"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 12 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:12"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 13 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:13"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 29 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:29"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 30 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:30"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 31 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:31"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 32 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:32"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 33 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:33"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 34 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:34"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 40 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:40"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 45 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:45"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 47 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:47"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 53 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:53"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 5 at (-1.455, -0.99) has 6 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 7 at (-1.25, 0.05) has 6 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:7"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-8 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-9 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-10 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-11 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-16 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-16"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-14 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-13 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-13"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-12 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-12"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-17 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-15 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-15"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-4 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-3 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-1 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-1"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-2 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 1 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:1",
+                                            "edge:109",
+                                            "edge:110",
+                                            "edge:111",
+                                            "edge:132"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 5 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:5",
+                                            "edge:100",
+                                            "edge:122",
+                                            "edge:123",
+                                            "edge:134"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 6 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:6",
+                                            "edge:100",
+                                            "edge:122",
+                                            "edge:123",
+                                            "edge:134"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 8 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:8",
+                                            "edge:99",
+                                            "edge:103"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 10 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:10",
+                                            "edge:133",
+                                            "edge:141",
+                                            "edge:142",
+                                            "edge:143",
+                                            "edge:146",
+                                            "edge:179"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 12 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:12",
+                                            "edge:79",
+                                            "edge:80",
+                                            "edge:81",
+                                            "edge:82"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 14 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:14",
+                                            "edge:180",
+                                            "edge:189",
+                                            "edge:192",
+                                            "edge:194",
+                                            "edge:195",
+                                            "edge:196",
+                                            "edge:205",
+                                            "edge:208"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 17 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:17",
+                                            "edge:168",
+                                            "edge:185"
+                                        ]
+                   }
+               ]
+}

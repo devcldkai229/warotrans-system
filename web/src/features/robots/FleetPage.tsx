@@ -23,7 +23,7 @@ import { ROBOT_STATUS_ORDER } from './constants'
 const chipClass = (active: boolean) =>
   cx(
     'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors duration-200',
-    active ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
+    active ? 'bg-primary text-white' : 'bg-surface text-ink-2 hover:text-ink',
   )
 
 function toRobotView(robot: Robot): RobotView {
@@ -197,7 +197,7 @@ export function FleetPage() {
                         className={cx(
                           // Each Robot is its own white card, like a Request, so rows read as separate items on the grey panel.
                           'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 rounded-md bg-surface px-4 py-3.5 text-left transition-shadow duration-200',
-                          previewCode === robot.code ? 'ring-2 ring-ink' : 'hover:shadow-float',
+                          previewCode === robot.code ? 'ring-2 ring-blue' : 'hover:shadow-float',
                         )}
                         onClick={() => navigate(`/monitor/fleet/${robot.code}`)}
                       >
@@ -263,6 +263,7 @@ export function FleetPage() {
           zones={monitorMap.geometry.zones}
           bounds={monitorMap.geometry.bounds}
           occupancyImageUrl={monitorMap.geometry.occupancyImageUrl}
+          mapVersion={monitorMap.version}
         />
         <MapVersionToolbar
           warehouses={monitorMap.warehouses}

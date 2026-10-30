@@ -23,7 +23,6 @@ function zone(
   name: string,
   zoneType: ZoneType,
   area: [number, number, number, number],
-  capacity: number,
   maxSpeed: number | null = null,
 ): Zone {
   const ring = rect(...area).map((p) => [p.x, p.y] as [number, number])
@@ -36,7 +35,6 @@ function zone(
     name,
     zoneType,
     geometry: { type: 'Polygon', coordinates: [ring] },
-    capacity,
     maxSpeed,
     isActive: true,
   }
@@ -44,19 +42,19 @@ function zone(
 
 function edge(
   n: number,
+  name: string,
   direction: Edge['direction'],
   points: [number, number][],
-  capacity: number,
   maxSpeed: number | null = null,
 ): Edge {
   return {
     id: `edge-${n}`,
     mapVersionId: NO_VERSION,
     code: `EG-${String(n).padStart(2, '0')}`,
+    name,
     geometry: { type: 'LineString', coordinates: points.map(([x, y]) => [x, y] as [number, number]) },
     widthMeters: 1,
     direction,
-    capacity,
     maxSpeed,
     isActive: true,
   }
@@ -82,22 +80,22 @@ function endpoint(name: string, endpointType: EndpointType, x: number, y: number
 }
 
 export const SCENE_ZONES: Zone[] = [
-  zone(1, 'Receiving & packing', 'SPEED', [2, 30, 16, 48], 4, 1.2),
-  zone(2, 'Storage aisles', 'SPEED', [18, 36, 34, 48], 4, 0.8),
-  zone(3, 'Zone C — Junction', 'NO_STOP', [21, 21, 31, 31], 2),
-  zone(4, 'Zone F — Narrow aisle', 'SINGLE_OCCUPANCY', [21, 7, 31, 15], 1, 0.5),
-  zone(5, 'Dispatch docks', 'SPEED', [40, 2, 48, 20], 3, 1.0),
-  zone(6, 'Exclusion zone', 'KEEP_OUT', [2, 14, 8, 24], 1),
+  zone(1, 'Receiving & packing', 'SPEED', [2, 30, 16, 48], 1.2),
+  zone(2, 'Storage aisles', 'SPEED', [18, 36, 34, 48], 0.8),
+  zone(3, 'Zone C — Junction', 'NO_STOP', [21, 21, 31, 31]),
+  zone(4, 'Zone F — Narrow aisle', 'SINGLE_OCCUPANCY', [21, 7, 31, 15], 0.5),
+  zone(5, 'Dispatch docks', 'SPEED', [40, 2, 48, 20], 1.0),
+  zone(6, 'Exclusion zone', 'KEEP_OUT', [2, 14, 8, 24]),
 ]
 
 export const SCENE_EDGES: Edge[] = [
-  edge(1, 'BIDIRECTIONAL', [[10, 42], [24, 42], [37, 42]], 2),
-  edge(2, 'BIDIRECTIONAL', [[37, 42], [37, 26], [37, 11.5]], 2),
-  edge(3, 'BIDIRECTIONAL', [[10, 42], [10, 26], [10, 12]], 2),
-  edge(4, 'BIDIRECTIONAL', [[10, 26], [26, 26], [37, 26]], 2),
-  edge(5, 'ONE_WAY', [[37, 11.5], [26, 11], [10, 12]], 1, 0.5),
-  edge(6, 'BIDIRECTIONAL', [[37, 16], [44, 16], [44, 4]], 2),
-  edge(7, 'BIDIRECTIONAL', [[5, 32], [5, 42], [10, 42]], 2),
+  edge(1, 'North aisle', 'BIDIRECTIONAL', [[10, 42], [24, 42], [37, 42]]),
+  edge(2, 'East spine', 'BIDIRECTIONAL', [[37, 42], [37, 26], [37, 11.5]]),
+  edge(3, 'West spine', 'BIDIRECTIONAL', [[10, 42], [10, 26], [10, 12]]),
+  edge(4, 'Centre cross', 'BIDIRECTIONAL', [[10, 26], [26, 26], [37, 26]]),
+  edge(5, 'South one-way', 'ONE_WAY', [[37, 11.5], [26, 11], [10, 12]], 0.5),
+  edge(6, 'Dock spur', 'BIDIRECTIONAL', [[37, 16], [44, 16], [44, 4]]),
+  edge(7, 'Inbound link', 'BIDIRECTIONAL', [[5, 32], [5, 42], [10, 42]]),
 ]
 
 export const SCENE_ENDPOINTS: Endpoint[] = [

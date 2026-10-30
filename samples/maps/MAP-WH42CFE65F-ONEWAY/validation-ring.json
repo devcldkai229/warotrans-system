@@ -1,0 +1,134 @@
+{
+    "mapVersionId":  "1143c8a3-ae62-4660-b684-bc462450f30f",
+    "graphHash":  "4682948b2002e284bcb3602ef92e2f17dc4f3bb98fc5fa36c1211dee017e0e74",
+    "isValid":  false,
+    "nodeCount":  40,
+    "edgeCount":  48,
+    "resourceCount":  109,
+    "corridorCount":  4,
+    "holdingPointCount":  36,
+    "stoplineCount":  8,
+    "stationCount":  17,
+    "issues":  [
+                   {
+                       "code":  "OCCUPANCY_MISSING",
+                       "severity":  "WARNING",
+                       "message":  "No occupancy grid supplied; clearance and turn checks are skipped.",
+                       "relatedCodes":  [
+
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 13 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:13"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 34 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:34"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 8 at (-1.25, 0.45) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:8"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 16 at (-0.4, -0.965) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:16"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 20 at (0.1, 1.62) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:20"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 21 at (0.8, -0.965) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 23 at (0.85, 1) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 24 at (0.85, 1.35) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 26 at (0.85, 1.62) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:26"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 27 at (0.87, -0.965) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:27"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 30 at (1.3, 0.2) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:30"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 36 at (1.85, -0.77) has 4 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:36"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 37 at (1.85, 0.2) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:37"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 38 at (1.85, 0.85) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:38"
+                                        ]
+                   }
+               ]
+}
