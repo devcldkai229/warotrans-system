@@ -22,6 +22,7 @@ using WaroTrans.Fleet.Features.ProcessRobotTelemetry;
 using WaroTrans.Fleet.Features.GetTrafficSnapshot;
 using WaroTrans.Fleet.Features.ReconcileTrafficRobot;
 using WaroTrans.Fleet.Features.RegisterRobot;
+using WaroTrans.Fleet.Features.StreamRobotCamera;
 using WaroTrans.Fleet.Features.TeleopRobot;
 using WaroTrans.Fleet.Mqtt;
 using WaroTrans.Fleet.Persistence;
@@ -58,6 +59,9 @@ public static class FleetModule
         services.AddScoped<IFleetModule, WaroTrans.Fleet.Services.FleetModuleApi>();
         services.AddScoped<IssueCancelCommandHandler>();
         services.AddScoped<TeleopRobotHandler>();
+        services.Configure<RobotCameraOptions>(configuration.GetSection(RobotCameraOptions.SectionName));
+        services.AddHttpClient(StreamRobotCameraHandler.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddScoped<StreamRobotCameraHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();
 
         services.AddSingleton<TrafficReadySignal>();
@@ -94,6 +98,7 @@ public static class FleetModule
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();
         group.MapTeleopRobot();
+        group.MapStreamRobotCamera();
         group.MapGetTrafficSnapshot();
         group.MapTrafficOperatorEndpoints();
         return endpoints;
