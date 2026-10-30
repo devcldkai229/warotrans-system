@@ -46,21 +46,19 @@ public sealed class CreateZoneHandler(
             : null;
         var schemaVersion = request.PolicySchemaVersion ?? ZonePolicyValidator.SchemaVersion;
 
-        ZonePolicyValidator.Validate(zoneType, request.Capacity, request.MaxSpeed, policyDoc, schemaVersion);
+        ZonePolicyValidator.Validate(zoneType, request.MaxSpeed, policyDoc, schemaVersion);
 
-        var code = string.IsNullOrWhiteSpace(request.Code)
-            ? await codeGenerator.NextZoneCodeAsync(request.Name, cancellationToken)
-            : request.Code.Trim().ToUpperInvariant();
+        var name = request.Name.Trim();
+        var code = await codeGenerator.NextZoneCodeAsync(name, cancellationToken);
 
         var zone = new Zone
         {
             Id = Guid.NewGuid(),
             MapVersionId = mapVersionId,
             Code = code,
-            Name = request.Name.Trim(),
+            Name = name,
             ZoneType = zoneType,
             Geometry = GeoJsonGeometry.NormalizePolygon(request.Geometry),
-            Capacity = request.Capacity,
             MaxSpeed = request.MaxSpeed,
             IsActive = request.IsActive ?? true,
             Policy = policyDoc,

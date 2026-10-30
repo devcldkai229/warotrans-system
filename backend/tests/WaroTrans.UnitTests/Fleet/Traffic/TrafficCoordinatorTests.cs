@@ -22,7 +22,7 @@ public class TrafficCoordinatorTests
             ],
             [new RouteGraphEndpointInput("EP-A", 0, 0, true), new RouteGraphEndpointInput("EP-B", 2, 0, true)],
             [],
-            [new TrafficLaneMeta("E-1", WidthMeters: 1.0, Capacity: 1, EdgeDirection.BIDIRECTIONAL)],
+            [new TrafficLaneMeta("E-1", WidthMeters: 1.0, EdgeDirection.BIDIRECTIONAL)],
             [],
             TrafficFootprintOptions.Default);
         return TrafficGraphCompiler.Compile(input).Graph;

@@ -54,7 +54,7 @@ public sealed class TrafficGraphBenchmarkTests(ITestOutputHelper output)
             edges,
             endpoints,
             [],
-            edges.Select(e => new TrafficLaneMeta(e.Code, WidthMeters: 1.0, Capacity: 1, e.Direction)).ToList(),
+            edges.Select(e => new TrafficLaneMeta(e.Code, WidthMeters: 1.0, e.Direction)).ToList(),
             [],
             TrafficFootprintOptions.Default);
 

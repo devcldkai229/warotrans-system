@@ -82,7 +82,7 @@ public class SegmentedTrafficCoordinatorTests
                 new("EP-D", 2, 0.1, true)
             ],
             [],
-            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, 1, e.Direction)).ToList(),
+            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, e.Direction)).ToList(),
             [],
             TrafficFootprintOptions.Default);
         var graph = TrafficGraphCompiler.Compile(input).Graph;

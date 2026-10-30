@@ -355,10 +355,10 @@ public sealed class CompiledTrafficGraph
 }
 
 /// <summary>Per drawn-Edge metadata not carried by <see cref="RouteGraphEdgeInput"/>.</summary>
-public sealed record TrafficLaneMeta(string Code, double WidthMeters, int Capacity, EdgeDirection Direction);
+public sealed record TrafficLaneMeta(string Code, double WidthMeters, EdgeDirection Direction);
 
-/// <summary>Per Zone capacity for in-memory resources.</summary>
-public sealed record TrafficZoneMeta(string Code, ZoneType ZoneType, int Capacity);
+/// <summary>Per Zone type for in-memory resources (occupancy comes from SINGLE_OCCUPANCY only).</summary>
+public sealed record TrafficZoneMeta(string Code, ZoneType ZoneType);
 
 /// <summary>Endpoint code → bay kind (from Traffic:Stations config).</summary>
 public sealed record TrafficStationMeta(string EndpointCode, TrafficStationBayKind BayKind);

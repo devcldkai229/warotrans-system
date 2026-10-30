@@ -67,6 +67,18 @@ public interface ISegmentedTrafficCoordinator
 
     Task<TrafficOpResult> HoldServiceResourceAsync(Guid robotId, string resourceId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Releases service holds not in <paramref name="keepResourceIds"/> when the robot pose is physically clear
+    /// of those resources (N4). Does not run on safe-stop alone (T11).
+    /// </summary>
+    Task<TrafficOpResult> ReleaseStaleServiceHoldsAsync(
+        Guid robotId,
+        ImmutableArray<string> keepResourceIds,
+        double poseX,
+        double poseY,
+        bool localizationOk,
+        CancellationToken ct = default);
+
     Task<TrafficOpResult> ReleaseAfterPhysicalClearanceAsync(
         Guid robotId, string operatorId, ImmutableArray<string>? resourceIds = null, CancellationToken ct = default);
 

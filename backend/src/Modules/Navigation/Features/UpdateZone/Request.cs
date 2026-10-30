@@ -6,7 +6,6 @@ public sealed record UpdateZoneRequest(
     string Name,
     string ZoneType,
     JsonElement Geometry,
-    int Capacity,
     double? MaxSpeed,
     bool IsActive,
     JsonElement? Policy = null,

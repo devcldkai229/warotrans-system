@@ -1,0 +1,2216 @@
+{
+    "mapVersionId":  "1143c8a3-ae62-4660-b684-bc462450f30f",
+    "graphHash":  "7dce2f2151b910d93fa7980e38d4a628c6d36e33d78950cab2bfccdcf7f4d639",
+    "isValid":  false,
+    "nodeCount":  60,
+    "edgeCount":  74,
+    "resourceCount":  210,
+    "corridorCount":  17,
+    "holdingPointCount":  20,
+    "stoplineCount":  18,
+    "stationCount":  17,
+    "issues":  [
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---19---6 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---19---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---17---6 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---17---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-STORAGE-ZONE---13 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-STORAGE-ZONE---13"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-ZONE---5 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-ZONE---5"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-ZONE-IN-CENTER---5 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-ZONE-IN-CENTER---5"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---8---6 (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---8---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-STORAGE-ZONE---14 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-STORAGE-ZONE---14"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-ZONE-IN-OUTBOUND/INSPECTION---5 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-ZONE-IN-OUTBOUND/INSPECTION---5"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---9---6 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---9---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-STORAGE-ZONE---15 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-STORAGE-ZONE---15"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-IN-LANE---9 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-IN-LANE---9"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---10---6 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---10---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-IN-LANE---10 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-IN-LANE---10"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---15---6 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---15---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-ZONE-IN-INBOUND---5 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-ZONE-IN-INBOUND---5"
+                                        ]
+                   },
+                   {
+                       "code":  "OCCUPANCY_MISSING",
+                       "severity":  "WARNING",
+                       "message":  "No occupancy grid supplied; clearance and turn checks are skipped.",
+                       "relatedCodes":  [
+
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-01---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-02---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5, EP-WAIT-POINT---5, EP-INSPECTION-QUALITY-AREA---5, EP-INBOUND-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5",
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5, EP-WAIT-POINT---5, EP-INSPECTION-QUALITY-AREA---5, EP-INBOUND-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5",
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-WAIT-POINT---5, EP-INSPECTION-QUALITY-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-WAIT-POINT---5, EP-INSPECTION-QUALITY-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5, EP-WAIT-POINT---5, EP-INSPECTION-QUALITY-AREA---5, EP-INBOUND-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5",
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5, EP-WAIT-POINT---5, EP-INSPECTION-QUALITY-AREA---5, EP-INBOUND-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5",
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5, EP-INSPECTION-QUALITY-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-B-04---5, EP-SHELF-B-01---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5, EP-SHELF-B-03---5, EP-SHELF-B-02---5, EP-WAIT-POINT---5, EP-INSPECTION-QUALITY-AREA---5, EP-OUTBOUND-AREA---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-B-04---5",
+                                            "EP-SHELF-B-01---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5",
+                                            "EP-SHELF-B-03---5",
+                                            "EP-SHELF-B-02---5",
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-PARKING-A---5, EP-PARKING-B---5, EP-SHELF-A-01---5, EP-SHELF-A-02---5, EP-SHELF-A-03---5, EP-SHELF-A-04---5, EP-CHARGER-A---5, EP-SHELF-C-02---5, EP-SHELF-C-01---5 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-PARKING-A---5",
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5",
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 7 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:7"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 8 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:8"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 10 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:10"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 11 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:11"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 29 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:29"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 31 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:31"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 32 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:32"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 33 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:33"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 34 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:34"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 35 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:35"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 42 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:42"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 49 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:49"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 51 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:51"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 59 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:59"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-01---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-01---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-01---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-01---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-01---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-02---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-02---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-02---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-02---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-02---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-02---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-03---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-A-04---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-INBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-04---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-INBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-01---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-02---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-C-01---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-INBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-03---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-INBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-SHELF-B-02---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAIT-POINT---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INSPECTION-QUALITY-AREA---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-B-04---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-B-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-B-01---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-B-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-B-03---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-B-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-SHELF-B-02---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-SHELF-B-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-INBOUND-AREA---5 the robot cannot reach EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-PARKING-A---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-PARKING-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-PARKING-B---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-PARKING-B---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-CHARGER-A---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-CHARGER-A---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-OUTBOUND-AREA---5 the robot cannot reach EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 5 at (-1.25, 0.05) has 3 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:5"
+                                        ]
+                   },
+                   {
+                       "code":  "ONE_WAY_TRAP",
+                       "severity":  "ERROR",
+                       "message":  "Endpoint EP-INBOUND-AREA---5 has no outgoing path (one-way trap).",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-A-01---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-A-02---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-A-03---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-A-04---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-B-04---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-B-01---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-C-02---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-C-01---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-B-03---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-SHELF-B-02---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-SHELF-B-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAIT-POINT---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-INSPECTION-QUALITY-AREA---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-INBOUND-AREA---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-OUTBOUND-AREA---5 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 6 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:6",
+                                            "edge:105"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 8 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:8",
+                                            "edge:79"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 16 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:16",
+                                            "edge:89",
+                                            "edge:96",
+                                            "edge:97",
+                                            "edge:98"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-A-01---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-A-02---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-A-03---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-A-04---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-A-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-B-04---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-B-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-B-04---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-B-04---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-B-01---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-B-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-B-01---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-B-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-C-02---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-C-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-C-01---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-C-01---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-B-03---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-B-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-B-03---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-B-03---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-SHELF-B-02---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-SHELF-B-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-SHELF-B-02---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-SHELF-B-02---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-WAIT-POINT---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-WAIT-POINT---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-INSPECTION-QUALITY-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-INSPECTION-QUALITY-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-INBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-INBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-INBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-A---5 is not mutually reachable from station EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-A---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARKING-B---5 is not mutually reachable from station EP-OUTBOUND-AREA---5.",
+                       "relatedCodes":  [
+                                            "EP-PARKING-B---5",
+                                            "EP-OUTBOUND-AREA---5"
+                                        ]
+                   }
+               ]
+}

@@ -31,10 +31,6 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int>("Capacity")
-                        .HasColumnType("integer")
-                        .HasColumnName("capacity");
-
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -64,6 +60,12 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("max_speed");
 
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
                     b.Property<double>("WidthMeters")
                         .HasColumnType("double precision")
                         .HasColumnName("width_meters");
@@ -86,8 +88,6 @@ namespace WaroTrans.Navigation.Persistence.Migrations
 
                     b.ToTable("edges", "navigation", t =>
                         {
-                            t.HasCheckConstraint("ck_edges_capacity_positive", "capacity >= 1");
-
                             t.HasCheckConstraint("ck_edges_width_meters_positive", "width_meters > 0");
                         });
                 });
@@ -371,10 +371,6 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int>("Capacity")
-                        .HasColumnType("integer")
-                        .HasColumnName("capacity");
-
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -434,10 +430,7 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_zones_map_version_id_code");
 
-                    b.ToTable("zones", "navigation", t =>
-                        {
-                            t.HasCheckConstraint("ck_zones_capacity_positive", "capacity >= 1");
-                        });
+                    b.ToTable("zones", "navigation");
                 });
 #pragma warning restore 612, 618
         }

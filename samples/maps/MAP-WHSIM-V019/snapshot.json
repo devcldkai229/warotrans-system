@@ -1,0 +1,960 @@
+{
+    "edges": [
+        {
+            "id": "a44afa66-2f9b-487d-bd5c-ae69621afbe4",
+            "code": "EDGE-334",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        2.775,
+                        -1.368
+                    ],
+                    [
+                        2.775,
+                        -0.359
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.8,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "bb463f4f-4347-4fdf-bf7c-431161acbe65",
+            "code": "EDGE-335",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        1.6,
+                        -0.376
+                    ],
+                    [
+                        1.6,
+                        -1.334
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.75,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "537314de-0c85-4f9b-b5b1-1faeb6c2c311",
+            "code": "EDGE-336",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        4.092,
+                        -0.367
+                    ],
+                    [
+                        4.092,
+                        -1.27
+                    ]
+                ]
+            },
+            "direction": "BIDIRECTIONAL",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.9,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "f49407d3-0fa3-4159-ada1-3b54743f6e23",
+            "code": "EDGE-337",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        0.442,
+                        -0.402
+                    ],
+                    [
+                        0.442,
+                        -1.305
+                    ]
+                ]
+            },
+            "direction": "BIDIRECTIONAL",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.55,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "745ea939-606c-436b-951c-2d3b9c2f426b",
+            "code": "EDGE-338",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        1.942,
+                        -1.472
+                    ],
+                    [
+                        2.44,
+                        -1.472
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.45,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "140e0113-316e-41cb-b74c-f4cb571e9861",
+            "code": "EDGE-339",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        3.175,
+                        -1.487
+                    ],
+                    [
+                        3.713,
+                        -1.488
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.45,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "5e2a3520-86d2-4546-a833-282177553bdd",
+            "code": "EDGE-340",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        0.718,
+                        -0.192
+                    ],
+                    [
+                        1.237,
+                        -0.192
+                    ]
+                ]
+            },
+            "direction": "BIDIRECTIONAL",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.55,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "78329a1f-e568-4f24-852c-3909b5c6cd3b",
+            "code": "EDGE-341",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        1.921,
+                        -0.185
+                    ],
+                    [
+                        2.44,
+                        -0.185
+                    ]
+                ]
+            },
+            "direction": "BIDIRECTIONAL",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.55,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "74a9dc43-aa15-427b-b0ad-d248abd6c106",
+            "code": "EDGE-342",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        3.145,
+                        -0.14
+                    ],
+                    [
+                        3.664,
+                        -0.14
+                    ]
+                ]
+            },
+            "direction": "BIDIRECTIONAL",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.55,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "19a8f15e-752c-4d3e-8f49-9a7b00c13308",
+            "code": "EDGE-343",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        3.717,
+                        -1.935
+                    ],
+                    [
+                        3.163,
+                        -1.935
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.45,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "1667819d-0023-41bd-9cbb-5de07f0aa898",
+            "code": "EDGE-344",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        2.5,
+                        -1.919
+                    ],
+                    [
+                        1.946,
+                        -1.919
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.45,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "3d11dd38-9859-4205-a390-39e29abfcd7a",
+            "code": "EDGE-345",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        0.716,
+                        -1.461
+                    ],
+                    [
+                        1.214,
+                        -1.461
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.45,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        },
+        {
+            "id": "8ae2c5aa-3337-45c2-ab59-a3aeaca55b16",
+            "code": "EDGE-346",
+            "capacity": 1,
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        1.245,
+                        -1.929
+                    ],
+                    [
+                        0.691,
+                        -1.929
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.45,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626"
+        }
+    ],
+    "zones": [
+        {
+            "id": "7c9da78f-f25f-4583-845e-9f62dc46be30",
+            "code": "ZONE-JUNCTION",
+            "name": "Junction",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            0.155,
+                            -1.232
+                        ],
+                        [
+                            0.751,
+                            -1.218
+                        ],
+                        [
+                            0.751,
+                            -2.157
+                        ],
+                        [
+                            0.155,
+                            -2.14
+                        ],
+                        [
+                            0.155,
+                            -1.232
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "5f665e26-98dd-4566-93ee-54fb5b825600",
+            "code": "ZONE-JUNCTION---1",
+            "name": "Junction - 1",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            2.379,
+                            -1.241
+                        ],
+                        [
+                            3.202,
+                            -1.241
+                        ],
+                        [
+                            3.202,
+                            -2.148
+                        ],
+                        [
+                            2.371,
+                            -2.148
+                        ],
+                        [
+                            2.379,
+                            -1.241
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "9f595b96-254d-40f4-9d85-7da28376f022",
+            "code": "ZONE-JUNCTION---1-COPY",
+            "name": "Junction - 1 copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            1.183,
+                            -1.255
+                        ],
+                        [
+                            2.006,
+                            -1.255
+                        ],
+                        [
+                            2.006,
+                            -2.162
+                        ],
+                        [
+                            1.175,
+                            -2.162
+                        ],
+                        [
+                            1.183,
+                            -1.255
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "a408cfe3-c713-44dc-b318-901da298f51b",
+            "code": "ZONE-JUNCTION---1-COPY-2",
+            "name": "Junction - 1 copy 2",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            3.671,
+                            -1.238
+                        ],
+                        [
+                            4.494,
+                            -1.238
+                        ],
+                        [
+                            4.494,
+                            -2.145
+                        ],
+                        [
+                            3.663,
+                            -2.145
+                        ],
+                        [
+                            3.671,
+                            -1.238
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "753a4e6d-335a-47ac-bdd5-73b98283764f",
+            "code": "ZONE-JUNCTION---1-COPY-2-COPY",
+            "name": "Junction - 1 copy 2 copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            3.656,
+                            0.136
+                        ],
+                        [
+                            4.475,
+                            0.136
+                        ],
+                        [
+                            4.487,
+                            -0.425
+                        ],
+                        [
+                            3.656,
+                            -0.425
+                        ],
+                        [
+                            3.656,
+                            0.136
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "3530aeb6-27cd-4a37-8565-f2c3796aa07d",
+            "code": "ZONE-JUNCTION-COPY",
+            "name": "Junction copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            0.134,
+                            0.106
+                        ],
+                        [
+                            0.743,
+                            0.106
+                        ],
+                        [
+                            0.74,
+                            -0.493
+                        ],
+                        [
+                            0.144,
+                            -0.476
+                        ],
+                        [
+                            0.134,
+                            0.106
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "e8712f87-a3aa-4dbc-b881-63c755317604",
+            "code": "ZONE-JUNCTION-COPY-COPY",
+            "name": "Junction copy copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            1.23,
+                            0.083
+                        ],
+                        [
+                            1.966,
+                            0.085
+                        ],
+                        [
+                            1.966,
+                            -0.516
+                        ],
+                        [
+                            1.24,
+                            -0.499
+                        ],
+                        [
+                            1.23,
+                            0.083
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "e32e8bcd-3f5a-435d-9b9d-9999dd08ade4",
+            "code": "ZONE-JUNCTION-COPY-COPY-COPY",
+            "name": "Junction copy copy copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            2.403,
+                            0.09
+                        ],
+                        [
+                            3.143,
+                            0.09
+                        ],
+                        [
+                            3.139,
+                            -0.509
+                        ],
+                        [
+                            2.413,
+                            -0.492
+                        ],
+                        [
+                            2.403,
+                            0.09
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "JUNCTION",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "62fb61a8-8eaa-4893-a201-23c7381d1cd5",
+            "code": "ZONE-NO-STOP---9",
+            "name": "No-stop - 9",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            2.388,
+                            -1.253
+                        ],
+                        [
+                            3.202,
+                            -1.266
+                        ],
+                        [
+                            3.189,
+                            -2.131
+                        ],
+                        [
+                            2.388,
+                            -2.131
+                        ],
+                        [
+                            2.388,
+                            -1.253
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "7bda3877-1fd7-47d9-923c-0150b9f885b8",
+            "code": "ZONE-NO-STOP---9-COPY",
+            "name": "No-stop - 9 copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            1.188,
+                            -1.267
+                        ],
+                        [
+                            2.002,
+                            -1.28
+                        ],
+                        [
+                            1.989,
+                            -2.145
+                        ],
+                        [
+                            1.188,
+                            -2.145
+                        ],
+                        [
+                            1.188,
+                            -1.267
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "47ecdf9a-020f-4e95-ac1f-1328279741b6",
+            "code": "ZONE-NO-STOP---9-COPY-COPY",
+            "name": "No-stop - 9 copy copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            1.225,
+                            0.097
+                        ],
+                        [
+                            1.966,
+                            0.076
+                        ],
+                        [
+                            1.957,
+                            -0.516
+                        ],
+                        [
+                            1.229,
+                            -0.495
+                        ],
+                        [
+                            1.225,
+                            0.097
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "bfffc672-1061-4dac-a26c-5acee2ac8598",
+            "code": "ZONE-NO-STOP---9-COPY-COPY-COPY",
+            "name": "No-stop - 9 copy copy copy",
+            "policy": null,
+            "capacity": 1,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            2.411,
+                            0.108
+                        ],
+                        [
+                            3.152,
+                            0.087
+                        ],
+                        [
+                            3.143,
+                            -0.505
+                        ],
+                        [
+                            2.415,
+                            -0.484
+                        ],
+                        [
+                            2.411,
+                            0.108
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "policy_schema_version": 1
+        }
+    ],
+    "format": "warotrans-map-snapshot/1",
+    "endpoints": [
+        {
+            "x": 2.013,
+            "y": 0.37,
+            "id": "64e0cc71-1c14-42f6-8802-b7bd16c44c48",
+            "yaw": -1.5707963267948966,
+            "code": "EP-CHARGER-1",
+            "name": "CHARGER 1",
+            "is_enabled": true,
+            "endpoint_type": "CHARGER",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "2e6dc7f0-d900-41d9-9396-ae035df4b062"
+        },
+        {
+            "x": 0.045,
+            "y": -0.133,
+            "id": "3f7cb8ee-cb38-478f-8855-380b9a034c23",
+            "yaw": 0,
+            "code": "EP-INBOUND",
+            "name": "INBOUND",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "42cd2147-bd52-4efd-8c6e-a3a433c5812a"
+        },
+        {
+            "x": 1.22,
+            "y": 0.254,
+            "id": "2a63a4d5-0acc-4db1-a17b-48480a23938b",
+            "yaw": -1.5707963267948966,
+            "code": "EP-INSPECTION",
+            "name": "INSPECTION",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "e45d61f1-7384-4cb4-8200-52e29ae5ed55"
+        },
+        {
+            "x": 0.032,
+            "y": -1.782,
+            "id": "9a9e346d-5c3a-4db1-b51d-a9aba97a300a",
+            "yaw": 0,
+            "code": "EP-OUTBOUND",
+            "name": "OUTBOUND",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "8209fc50-c72e-42a1-9e3e-e77ba2a5b387"
+        },
+        {
+            "x": 2.959,
+            "y": 0.357,
+            "id": "bc0dcd0b-9b8b-4a87-8a90-f5f473bf4a21",
+            "yaw": -1.5707963267948966,
+            "code": "EP-PARK-1",
+            "name": "PARK 1",
+            "is_enabled": true,
+            "endpoint_type": "PARK",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "70fec4ec-412d-4bdf-9032-7ec25a2f53c5"
+        },
+        {
+            "x": 3.415,
+            "y": 0.357,
+            "id": "e0438230-4e4c-4ca8-9c12-c4f8cf666242",
+            "yaw": -1.5707963267948966,
+            "code": "EP-PARK-2",
+            "name": "PARK 2",
+            "is_enabled": true,
+            "endpoint_type": "PARK",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "7c2eb764-83dc-4bb3-8215-ea9f9e561be8"
+        },
+        {
+            "x": 0.442,
+            "y": -0.849,
+            "id": "9993ab79-ef8e-4078-9e25-4a39ca4fc600",
+            "yaw": 1.5707963267948966,
+            "code": "EP-SORAGE_SELF_1",
+            "name": "SORAGE_SELF_1",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "95d7b8b6-f5d7-4ac0-b83b-c04b621fc03d"
+        },
+        {
+            "x": 1.6,
+            "y": -0.883,
+            "id": "f0bf3ee8-c2c0-4d5e-a52b-af5aba925f3a",
+            "yaw": -1.5707963267948966,
+            "code": "EP-SORAGE_SELF_2",
+            "name": "SORAGE_SELF_2",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "f6e86006-61d2-46fb-96fd-52cc75a8267c"
+        },
+        {
+            "x": 2.775,
+            "y": -0.866,
+            "id": "2ba737d0-7408-4c30-a542-87fe943495c6",
+            "yaw": 1.5707963267948966,
+            "code": "EP-SORAGE_SELF_3",
+            "name": "SORAGE_SELF_3",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "22999183-9ff7-470e-8630-a096e89289fa"
+        },
+        {
+            "x": 3.461,
+            "y": -1.935,
+            "id": "0b46ad35-621b-4cc6-a310-e38a3e4b7ef8",
+            "yaw": 3.141592653589793,
+            "code": "EP-SORAGE_SELF_4",
+            "name": "SORAGE_SELF_4",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "752a0bfe-8db3-4629-aa94-1509d42765e8"
+        },
+        {
+            "x": 0.965,
+            "y": -1.929,
+            "id": "d1087d5f-1d9e-43f0-b8a1-206baf16e5f5",
+            "yaw": 3.141592653589793,
+            "code": "EP-SORAGE_SELF_5",
+            "name": "SORAGE_SELF_5",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.08726646259971647,
+            "map_version_id": "d676f366-6f08-417d-921f-ac89e0b18626",
+            "position_tolerance": 0.1,
+            "source_endpoint_id": "db557b43-10fe-4eb6-9f5f-763f9dddcf83"
+        }
+    ],
+    "exportedAt": "2026-10-28T09:25:38.381109+00:00",
+    "mapVersion": {
+        "id": "d676f366-6f08-417d-921f-ac89e0b18626",
+        "code": "MAP-WHSIM-V019",
+        "name": "WH-SIM V019 (clearance + lane-centred shelves)",
+        "negate": false,
+        "status": "PUBLISHED",
+        "map_uri": "/map-assets/33333333-3333-3333-3333-333333333333/7cb001f7-cbf3-4f3e-8400-fddc00d63b19/map.pgm",
+        "frame_id": "map",
+        "origin_x": -0.594,
+        "origin_y": -2.719,
+        "created_at": "2026-10-28T04:54:08.696398+00:00",
+        "origin_yaw": 0,
+        "resolution": 0.05,
+        "version_no": 19,
+        "content_hash": "a5244f6f8aeeba5c45d9621417bf227ea88905b692750c9eb710793b805322b8",
+        "map_yaml_uri": "/map-assets/33333333-3333-3333-3333-333333333333/7cb001f7-cbf3-4f3e-8400-fddc00d63b19/map.yaml",
+        "published_at": "2026-10-28T04:58:12.753128+00:00",
+        "warehouse_id": "33333333-3333-3333-3333-333333333333",
+        "free_threshold": 0.196,
+        "preview_image_uri": "/map-assets/33333333-3333-3333-3333-333333333333/7cb001f7-cbf3-4f3e-8400-fddc00d63b19/map-preview.png",
+        "image_width_pixels": 107,
+        "occupied_threshold": 0.65,
+        "image_height_pixels": 68,
+        "source_map_version_id": "7cb001f7-cbf3-4f3e-8400-fddc00d63b19"
+    },
+    "endpointGroups": [
+    ],
+    "endpointGroupMembers": [
+    ]
+}

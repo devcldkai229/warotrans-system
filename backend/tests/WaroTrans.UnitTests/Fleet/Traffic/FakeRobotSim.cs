@@ -95,8 +95,8 @@ public sealed class FakeRobotSim
             edges,
             endpoints,
             zones,
-            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, 1, e.Direction)).ToList(),
-            zones.Select(z => new TrafficZoneMeta(z.Code, z.ZoneType, 1)).ToList(),
+            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, e.Direction)).ToList(),
+            zones.Select(z => new TrafficZoneMeta(z.Code, z.ZoneType)).ToList(),
             TrafficFootprintOptions.Default);
 
         return TrafficGraphCompiler.Compile(input).Graph;
@@ -119,7 +119,7 @@ public sealed class FakeRobotSim
             edges,
             endpoints,
             [],
-            [new TrafficLaneMeta("E-NARROW", 0.5, 1, EdgeDirection.BIDIRECTIONAL)],
+            [new TrafficLaneMeta("E-NARROW", 0.5, EdgeDirection.BIDIRECTIONAL)],
             [],
             TrafficFootprintOptions.Default);
         return TrafficGraphCompiler.Compile(input).Graph;
@@ -151,8 +151,8 @@ public sealed class FakeRobotSim
             edges,
             endpoints,
             zones,
-            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, 1, e.Direction)).ToList(),
-            [new TrafficZoneMeta("Z-J", ZoneType.JUNCTION, 1)],
+            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, e.Direction)).ToList(),
+            [new TrafficZoneMeta("Z-J", ZoneType.JUNCTION)],
             TrafficFootprintOptions.Default);
         return TrafficGraphCompiler.Compile(input).Graph;
     }

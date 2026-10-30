@@ -133,7 +133,6 @@ export interface ZoneResponse {
   name: string;
   zoneType: ZoneType;
   geometry: JsonValue;
-  capacity: number;
   maxSpeed: number | null;
   isActive: boolean;
   policy: JsonValue | null;

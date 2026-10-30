@@ -32,9 +32,9 @@ public sealed record RouteGraphInput(
     IReadOnlyList<RouteGraphEndpointInput> Endpoints,
     IReadOnlyList<RouteGraphZoneInput>? Zones = null);
 
-/// <param name="VertexSnapTolerance">Points closer than this (m) are one node; a node this close to a segment splits it.</param>
-/// <param name="EndpointSnapDistance">An Endpoint at most this far (m) from a lane is joined to it by a connector; farther
-/// from every lane, at most this far from a junction zone, it is reached through that zone.</param>
+/// <param name="VertexSnapTolerance">Points closer than this (m) are one node; a node this close to a segment splits it.
+/// An Endpoint within this of a lane is treated as on-lane (station stays at stored x,y).</param>
+/// <param name="EndpointSnapDistance">Legacy option kept for traffic hash stability; attach no longer invents foot connectors.</param>
 /// <param name="JunctionCaptureDistance">A lane end this far (m) outside a junction zone (JUNCTION / SINGLE_OCCUPANCY / NO_STOP)
 /// still counts as reaching it (hand-drawn lanes stop a little short of the zone edge).</param>
 public sealed record RouteGraphOptions(

@@ -85,24 +85,20 @@ public class RouteGraphBuilderTests
     }
 
     [Fact]
-    public void Endpoint_beside_a_lane_is_joined_by_two_connectors_at_the_perpendicular_foot()
+    public void Endpoint_beside_a_lane_is_an_error_without_synthetic_spur()
     {
+        // 0.2 m off the lane (> vertex snap): no foot↔endpoint connector (would reverse ONE_WAY).
         var result = Build([Lane("E-1", Both, (0, 0), (2, 0))], Stop("EP-A", 1, 0.2), Stop("EP-END", 2, 0));
 
-        Assert.Equal(4, result.Graph.Nodes.Count);                  // (0,0) (1,0) foot, (1,0.2) stop, (2,0)
         Assert.Equal(["EP-A"], NodeAt(result.Graph, 1, 0.2).EndpointCodes);
-        Assert.True(HasEdge(result.Graph, (0, 0), (1, 0)));         // lane split at the foot, both directions kept
-        Assert.True(HasEdge(result.Graph, (1, 0), (0, 0)));
-        var connectors = result.Graph.Edges.Where(e => e.IsConnector).ToList();
-        Assert.Equal(2, connectors.Count);
-        Assert.True(HasEdge(result.Graph, (1, 0), (1, 0.2)));
-        Assert.True(HasEdge(result.Graph, (1, 0.2), (1, 0)));
-        Assert.All(connectors, c => Assert.Empty(c.EdgeCodes));
-        Assert.Empty(result.Issues);
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+        var issue = Assert.Single(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.Equal(["EP-A"], issue.RelatedCodes);
+        Assert.True(result.HasErrors);
     }
 
     [Fact]
-    public void Endpoint_further_than_half_a_metre_is_an_error()
+    public void Endpoint_further_than_vertex_snap_is_an_error()
     {
         var result = Build([Lane("E-1", Both, (0, 0), (2, 0))], Stop("EP-FAR", 1, 0.6));
 
@@ -433,24 +429,17 @@ public class RouteGraphBuilderTests
     }
 
     [Fact]
-    public void Endpoint_beside_a_junction_zone_is_reached_through_an_exit_point_on_its_edge()
+    public void Endpoint_beside_a_junction_zone_is_an_error_without_synthetic_spur()
     {
-        // EP-IN is 0.94 m from both lanes but 0.30 m below the junction zone.
+        // EP-IN is outside the junction: no exit-point connector (would invent a two-way spur).
         var result = BuildWithZones(
             [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (2, 0), (3, 0))],
             [Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 0.5)],
             Stop("EP-A", 0, 0), Stop("EP-B", 3, 0), Stop("EP-IN", 1.5, -0.8));
 
-        Assert.Empty(result.Issues);
-        var connector = EdgeBetween(result.Graph, (1.5, -0.5), (1.5, -0.8));
-        Assert.True(connector is { IsConnector: true });
-        Assert.True(EdgeBetween(result.Graph, (1.5, -0.8), (1.5, -0.5)) is { IsConnector: true });
-        foreach (var laneEnd in new[] { (1.0, 0.0), (2.0, 0.0) })
-        {
-            Assert.True(EdgeBetween(result.Graph, laneEnd, (1.5, -0.5)) is { IsJunction: true });  // into the zone exit
-            Assert.True(EdgeBetween(result.Graph, (1.5, -0.5), laneEnd) is { IsJunction: true });  // and back out
-        }
-        Assert.True(EdgeBetween(result.Graph, (1, 0), (2, 0)) is { IsJunction: true });          // lanes still linked
+        Assert.Contains(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar && i.RelatedCodes.Contains("EP-IN"));
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+        Assert.True(EdgeBetween(result.Graph, (1, 0), (2, 0)) is { IsJunction: true }); // lanes still linked
     }
 
     [Fact]
@@ -469,18 +458,20 @@ public class RouteGraphBuilderTests
     }
 
     [Fact]
-    public void Exit_point_keeps_the_one_way_lane_directions()
+    public void Station_inside_zone_keeps_the_one_way_lane_directions()
     {
+        // EP-X inside the zone: arrival → station → departure only (no reverse against ONE_WAY).
         var result = BuildWithZones(
             [Lane("L-IN", OneWay, (3, 0), (2, 0)), Lane("L-OUT", OneWay, (1, 0), (0, 0))],
             [Zone("Z-J", ZoneType.NO_STOP, 1, -0.5, 2, 0.5)],
-            Stop("EP-X", 1.5, -0.8));
+            Stop("EP-X", 1.5, 0));
 
-        Assert.NotNull(EdgeBetween(result.Graph, (2, 0), (1.5, -0.5)));        // arrive from the incoming lane
-        Assert.NotNull(EdgeBetween(result.Graph, (1.5, -0.5), (1, 0)));        // leave by the outgoing lane
-        Assert.Null(EdgeBetween(result.Graph, (1.5, -0.5), (2, 0)));           // never against a one-way lane
-        Assert.Null(EdgeBetween(result.Graph, (1, 0), (1.5, -0.5)));
+        Assert.NotNull(EdgeBetween(result.Graph, (2, 0), (1.5, 0)));
+        Assert.NotNull(EdgeBetween(result.Graph, (1.5, 0), (1, 0)));
+        Assert.Null(EdgeBetween(result.Graph, (1.5, 0), (2, 0)));
+        Assert.Null(EdgeBetween(result.Graph, (1, 0), (1.5, 0)));
         Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
     }
 
     [Theory]

@@ -2,13 +2,18 @@
 
 Theo dõi tiến độ xử lý audit [2026-10-28-route-traffic-audit.md](../audits/2026-10-28-route-traffic-audit.md).
 
+> **Closeout pointer:** consolidated evidence and honest status → [`CHATGPT_TRAFFIC_CURRENT_STATE.md`](CHATGPT_TRAFFIC_CURRENT_STATE.md) (`PARTIALLY VERIFIED`).  
+> **Luồng Route→Traffic→Reservation→Gazebo:** [`AUDIT_ROUTE_TRAFFIC_GAZEBO.md`](AUDIT_ROUTE_TRAFFIC_GAZEBO.md).  
+> P0 env → [`P0_SECURITY_ENV.md`](P0_SECURITY_ENV.md). V019 Errors → [`V019_VALIDATION_ANALYSIS.md`](V019_VALIDATION_ANALYSIS.md).
+
 | | |
 |---|---|
-| **Commit** | `warotrans-system` → `fd62d55` (branch `feature/traffic-hardening`)<br>`warotrans` → `dfc70a2` (branch `feature/traffic-hardening`) |
-| **Unit test** | backend 460/460 PASS · robot 220 PASS, 1 skipped |
-| **E2E 1 robot** | **PASS** — JOB-20261028-000003, 17/17 bước, 107 giây |
-| **E2E 2 robot** | NOT_RUN (sim chưa hỗ trợ 2 stack Nav2) |
-| **Chưa xong** | Phase B (hết lượn hình sin), lặp lại E2E ≥3 lần, 7 file deliverable còn lại |
+| **Commit** | `warotrans-system` → `b8b874b` + **uncommitted** closeout (branch `feature/traffic-hardening`)<br>`warotrans` → `dfc70a2` + **uncommitted** Nav Phase B (branch `feature/traffic-hardening`) |
+| **Unit test** | Traffic safety / graph regressions 34 PASS this session; full suite not re-run end-to-end |
+| **E2E 1 robot** | Baseline **PASS** JOB-000003 17/17; closeout best **JOB-000009 12/17 FAIL** @ S02 — see current-state doc |
+| **E2E 2 robot** | NOT_RUN (P3 gate not passed; dual Nav2 still absent) |
+| **V019 validation** | **0 Errors** live (`isValid=true`); snapshot `samples/maps/MAP-WHSIM-V019/` |
+| **Chưa xong** | 3× durable 17/17 E2E; two-robot; commit closeout |
 
 **Chưa push.** Toàn bộ nằm trên branch `feature/traffic-hardening` ở cả hai repo.
 

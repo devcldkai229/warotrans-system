@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -43,7 +44,6 @@ public sealed class JobExecutionEngine(
     ILogger<JobExecutionEngine> logger,
     ITrafficCoordinator? trafficCoordinator = null,
     TrafficGraphCompileService? trafficCompile = null,
-    CompiledTrafficGraphCache? trafficGraphCache = null,
     IOptions<TrafficOptions>? trafficOptions = null,
     TrafficShadowObserver? trafficShadow = null,
     ShadowSingleMoverGuard? shadowMoverGuard = null,
@@ -655,6 +655,23 @@ public sealed class JobExecutionEngine(
                     ? purposeEl.GetString()
                     : "TRANSIT";
                 var policy = StationPolicyResolver.Resolve(graph, pose.Code, purpose);
+                // N4: before taking the next bay, drop previous service holds the robot has physically left.
+                // Keep only the holds required for this MOVE destination. T11 still protects holds during
+                // safe-stop / CompleteRoute — this path runs only when starting a new MOVE with a known pose.
+                if (robot.PoseX is double holdX && robot.PoseY is double holdY && locOk)
+                {
+                    var keep = policy.Intent?.HoldResourceIds ?? ImmutableArray<string>.Empty;
+                    var stale = await segmentedTraffic.ReleaseStaleServiceHoldsAsync(
+                        robotId, keep, holdX, holdY, locOk, cancellationToken);
+                    if (!stale.Ok && stale.Reason is not null
+                        && !stale.Reason.StartsWith("QUARANTINED", StringComparison.Ordinal))
+                    {
+                        logger.LogWarning(
+                            "Job {JobNo} {StepKey} stale station-hold release: {Reason}",
+                            job.JobNo, stepKey, stale.Reason);
+                    }
+                }
+
                 if (policy.Intent is { HoldResourceIds.Length: > 0 } intent)
                 {
                     foreach (var rid in intent.HoldResourceIds)
@@ -921,13 +938,9 @@ public sealed class JobExecutionEngine(
         Guid mapVersionId,
         CancellationToken cancellationToken)
     {
-        if (trafficGraphCache is not null &&
-            trafficGraphCache.TryGetForMap(mapVersionId, out var cached) &&
-            cached is not null)
-        {
-            return cached;
-        }
-
+        // Do not use CompiledTrafficGraphCache.TryGetForMap: validation/debug compile with
+        // occupancy (different graphHash) and would be returned here. Binding that hash while
+        // reconciliation already holds the runtime (no-occupancy) graph → GRAPH_IN_USE / failed MOVE.
         if (trafficCompile is null)
         {
             return null;
@@ -1062,6 +1075,24 @@ public sealed class JobExecutionEngine(
         if (job.Status == JobStatus.COMPLETED)
         {
             return;
+        }
+
+        // N4: job finished — release every service hold the robot has physically cleared (keep none).
+        if (segmentedTraffic is not null && AssignedRobot(job) is Guid finishedRobotId)
+        {
+            var robot = await fleet.GetRobotAsync(finishedRobotId, cancellationToken);
+            if (robot is { PoseX: double x, PoseY: double y }
+                && robot.LocalizationStatus == LocalizationStatus.LOCALIZED)
+            {
+                var release = await segmentedTraffic.ReleaseStaleServiceHoldsAsync(
+                    finishedRobotId, ImmutableArray<string>.Empty, x, y, true, cancellationToken);
+                if (!release.Ok)
+                {
+                    logger.LogWarning(
+                        "Job {JobNo} completed but station holds not fully released: {Reason}",
+                        job.JobNo, release.Reason);
+                }
+            }
         }
 
         job.Status = JobStatus.COMPLETED;

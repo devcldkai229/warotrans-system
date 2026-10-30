@@ -26,7 +26,7 @@ public class TrafficSafetyRegressionTests
         ];
         return TrafficGraphCompiler.Compile(new TrafficCompileInput(
             "LINE4", "map", edges, endpoints, [],
-            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, 1, e.Direction)).ToList(),
+            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, e.Direction)).ToList(),
             [], TrafficFootprintOptions.Default)).Graph;
     }
 
@@ -298,5 +298,143 @@ public class TrafficSafetyRegressionTests
         var other = FakeRobotSim.BuildNarrowBidirectional();
         Assert.Equal("GRAPH_IN_USE", sim.State.BindGraph(Guid.NewGuid(), other).Reason);
         Assert.Same(sim.Graph, sim.State.Graph);
+    }
+
+    // ---------------------------------------------------------------- N4 station-hold lifecycle
+
+    [Fact]
+    public void N4_stale_inbound_hold_releases_only_after_physical_clearance()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+        var inbound = $"node:{Station(sim, "EP-A")}";
+        Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(robot, inbound).Ok);
+
+        // Still standing on the bay — must keep the hold (station departure gate).
+        Assert.True(sim.State.ReleaseStaleServiceHolds(
+            robot, ImmutableArray<string>.Empty, 0, 0, true).Ok);
+        Assert.Contains(inbound, View(sim, robot).OccupiedResourceIds);
+
+        // Far from EP-A (at EP-B) with keep=[] — verified clear → release.
+        Assert.True(sim.State.ReleaseStaleServiceHolds(
+            robot, ImmutableArray<string>.Empty, 6, 0, true).Ok);
+        Assert.DoesNotContain(inbound, View(sim, robot).OccupiedResourceIds);
+    }
+
+    [Fact]
+    public void N4_safe_stop_does_not_release_service_hold_T11()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+        var inbound = $"node:{Station(sim, "EP-A")}";
+        Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(robot, inbound).Ok);
+        Assert.True(StartRoute(sim, robot, 0, 0, "EP-M1").Granted);
+
+        var auth = View(sim, robot).Authority!;
+        var goal = sim.Graph.NodeById[auth.GoalSafeStopNodeId];
+        Assert.True(sim.State.ReportSafeStopReached(robot, auth.Seq, sim.Epoch, goal.X, goal.Y, true).Ok);
+
+        Assert.Contains(inbound, View(sim, robot).OccupiedResourceIds);
+    }
+
+    [Fact]
+    public void N4_complete_route_keeps_service_hold_until_stale_release()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+        var inbound = $"node:{Station(sim, "EP-A")}";
+        Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(robot, inbound).Ok);
+        Assert.True(StartRoute(sim, robot, 0, 0, "EP-M1").Granted);
+
+        Assert.True(sim.State.CompleteRoute(robot, succeeded: true, null).Ok);
+        Assert.Contains(inbound, View(sim, robot).OccupiedResourceIds);
+
+        Assert.True(sim.State.ReleaseStaleServiceHolds(
+            robot, ImmutableArray<string>.Empty, 6, 0, true).Ok);
+        Assert.DoesNotContain(inbound, View(sim, robot).OccupiedResourceIds);
+    }
+
+    [Fact]
+    public void N4_multi_stop_keeps_next_bay_releases_previous_when_clear()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+        var inbound = $"node:{Station(sim, "EP-A")}";
+        var shelf = $"node:{Station(sim, "EP-M2")}";
+        Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(robot, inbound).Ok);
+
+        // EP-M1 (2,0) still touches E-1 on the inbound node resource — not clear yet.
+        // EP-M2 (4,0) is past E-1 → physically clear of inbound; keep only the shelf hold.
+        Assert.True(sim.State.EnsureTracked(robot, 4, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(robot, shelf).Ok);
+        Assert.True(sim.State.ReleaseStaleServiceHolds(
+            robot, ImmutableArray.Create(shelf), 4, 0, true).Ok);
+
+        Assert.DoesNotContain(inbound, View(sim, robot).OccupiedResourceIds);
+        Assert.Contains(shelf, View(sim, robot).OccupiedResourceIds);
+    }
+
+    [Fact]
+    public void N4_failed_navigate_keeps_hold_until_clearance_or_operator()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+        var inbound = $"node:{Station(sim, "EP-A")}";
+        Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(robot, inbound).Ok);
+        Assert.True(StartRoute(sim, robot, 0, 0, "EP-M1").Granted);
+
+        Assert.True(sim.State.CompleteRoute(robot, succeeded: false, "CONTROLLER_FAILED").Ok);
+        Assert.Equal(TrafficRobotPhase.Quarantined, View(sim, robot).Phase);
+        Assert.Contains(inbound, View(sim, robot).OccupiedResourceIds);
+
+        // Quarantined: ReleaseStaleServiceHolds must refuse (no premature empty bay).
+        Assert.False(sim.State.ReleaseStaleServiceHolds(
+            robot, ImmutableArray<string>.Empty, 6, 0, true).Ok);
+
+        Assert.True(sim.State.ReleaseAfterPhysicalClearance(robot, "op", null).Ok);
+        Assert.DoesNotContain(inbound, View(sim, robot).OccupiedResourceIds);
+    }
+
+    [Fact]
+    public void N4_cancel_quarantines_and_does_not_empty_the_bay()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var robot = Guid.NewGuid();
+        var inbound = $"node:{Station(sim, "EP-A")}";
+        Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(robot, inbound).Ok);
+
+        Assert.True(sim.State.CancelRequest(robot, null).Ok);
+        Assert.Equal(TrafficRobotPhase.Quarantined, View(sim, robot).Phase);
+        Assert.Contains(inbound, View(sim, robot).OccupiedResourceIds);
+        Assert.False(sim.State.ReleaseStaleServiceHolds(
+            robot, ImmutableArray<string>.Empty, 6, 0, true).Ok);
+    }
+
+    [Fact]
+    public void N4_second_robot_waits_then_acquires_after_verified_release()
+    {
+        var sim = new FakeRobotSim(BuildFourStopLine());
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var inbound = $"node:{Station(sim, "EP-A")}";
+
+        Assert.True(sim.State.EnsureTracked(first, 0, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(first, inbound).Ok);
+
+        Assert.True(sim.State.EnsureTracked(second, 6, 0, true).Ok);
+        var blocked = sim.State.HoldServiceResource(second, inbound);
+        Assert.False(blocked.Ok);
+
+        Assert.True(sim.State.ReleaseStaleServiceHolds(
+            first, ImmutableArray<string>.Empty, 6, 0, true).Ok);
+        Assert.True(sim.State.HoldServiceResource(second, inbound).Ok);
+        Assert.Contains(inbound, View(sim, second).OccupiedResourceIds);
+        Assert.DoesNotContain(inbound, View(sim, first).OccupiedResourceIds);
     }
 }

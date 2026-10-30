@@ -238,7 +238,7 @@ public class TrafficActiveRouteTests
             edges,
             endpoints,
             [],
-            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, 1, e.Direction)).ToList(),
+            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, e.Direction)).ToList(),
             [],
             TrafficFootprintOptions.Default);
         return TrafficGraphCompiler.Compile(input).Graph;

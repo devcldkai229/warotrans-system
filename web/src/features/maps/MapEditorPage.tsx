@@ -95,9 +95,9 @@ function offsetPoints(points: Point[]): Point[] {
   return points.map((p) => ({ x: snap(p.x + DUPLICATE_OFFSET.x), y: snap(p.y + DUPLICATE_OFFSET.y) }))
 }
 
-// Endpoint / zone codes come from the name on the backend (EP-{NAME} / ZONE-{NAME}: trimmed, upper case, spaces → '-')
+// Endpoint / zone / edge codes come from the name on the backend (EP-/ZONE-/EDGE-{NAME}: trimmed, upper case, spaces → '-')
 // and must be unique on the map, so the copy's name is "<name> copy", then "<name> copy 2", ... whose code is free.
-function duplicateName(name: string, prefix: 'EP' | 'ZONE', takenCodes: string[]): string {
+function duplicateName(name: string, prefix: 'EP' | 'ZONE' | 'EDGE', takenCodes: string[]): string {
   const taken = new Set(takenCodes.map((c) => c.toUpperCase()))
   const codeOf = (n: string) => `${prefix}-${n.trim().toUpperCase().replaceAll(' ', '-')}`
   for (let i = 1; ; i++) {
@@ -127,10 +127,10 @@ function toEdge(e: EdgeDto): Edge {
     id: e.id,
     mapVersionId: e.mapVersionId,
     code: e.code,
+    name: e.name,
     geometry: e.geometry,
     widthMeters: e.widthMeters,
     direction: e.direction as EdgeDirection,
-    capacity: e.capacity,
     maxSpeed: e.maxSpeed,
     isActive: e.isActive,
   }
@@ -144,7 +144,6 @@ function toZone(z: ZoneDto): Zone {
     name: z.name,
     zoneType: z.zoneType as ZoneType,
     geometry: z.geometry,
-    capacity: z.capacity,
     maxSpeed: z.maxSpeed,
     isActive: z.isActive,
     policy: z.policy,
@@ -190,8 +189,8 @@ export function MapEditorPage() {
   const [actionOk, setActionOk] = useState<string | null>(null)
   const [epDraft, setEpDraft] = useState<Partial<Endpoint> | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<{
+    name: string
     direction: EdgeDirection
-    capacity: number
     widthMeters: number
     maxSpeed: string
     isActive: boolean
@@ -199,7 +198,6 @@ export function MapEditorPage() {
   const [zoneDraft, setZoneDraft] = useState<{
     name: string
     zoneType: ZoneType
-    capacity: number
     maxSpeed: string
     isActive: boolean
   } | null>(null)
@@ -323,8 +321,8 @@ export function MapEditorPage() {
     const edge = edges.find((e) => e.id === id)
     if (!edge) return
     setEdgeDraft({
+      name: edge.name,
       direction: edge.direction,
-      capacity: edge.capacity,
       widthMeters: edge.widthMeters ?? 1,
       maxSpeed: edge.maxSpeed?.toString() ?? '',
       isActive: edge.isActive,
@@ -339,7 +337,6 @@ export function MapEditorPage() {
     setZoneDraft({
       name: zone.name,
       zoneType: zone.zoneType,
-      capacity: zone.capacity,
       maxSpeed: zone.maxSpeed?.toString() ?? '',
       isActive: zone.isActive,
     })
@@ -444,19 +441,20 @@ export function MapEditorPage() {
     if (!version || !isDraft || points.length < 2) return
     setActionError(null)
     try {
+      const name = `Lane ${edges.length + 1}`
       const created = await createEdge(version.id, {
+        name,
         geometry: pointsToLineString(points),
         widthMeters: 1,
         direction,
-        capacity: 1,
         maxSpeed: null,
         isActive: true,
       })
       await invalidate()
       setActionOk(`Created ${created.code}`)
       setEdgeDraft({
+        name: created.name,
         direction: created.direction as EdgeDirection,
-        capacity: created.capacity,
         widthMeters: created.widthMeters,
         maxSpeed: created.maxSpeed?.toString() ?? '',
         isActive: created.isActive,
@@ -475,10 +473,10 @@ export function MapEditorPage() {
     setActionError(null)
     try {
       await updateEdge(edge.id, {
+        name: edgeDraft.name,
         geometry: edge.geometry,
         widthMeters: edgeDraft.widthMeters,
         direction: edgeDraft.direction,
-        capacity: edgeDraft.capacity,
         maxSpeed: edgeDraft.maxSpeed === '' ? null : Number(edgeDraft.maxSpeed),
         isActive: edgeDraft.isActive,
       })
@@ -515,10 +513,10 @@ export function MapEditorPage() {
     setEdgeDraft((draft) => (draft && mode.kind === 'edge' && mode.edgeId === id ? { ...draft, widthMeters } : draft))
     try {
       await updateEdge(id, {
+        name: edge.name,
         geometry: edge.geometry,
         widthMeters,
         direction: edge.direction,
-        capacity: edge.capacity,
         maxSpeed: edge.maxSpeed,
         isActive: edge.isActive,
       })
@@ -546,10 +544,10 @@ export function MapEditorPage() {
           old && { ...old, edges: old.edges.map((e) => (e.id === edge.id ? { ...e, geometry } : e)) },
         )
         await updateEdge(edge.id, {
+          name: edge.name,
           geometry,
           widthMeters: edge.widthMeters ?? 1,
           direction: edge.direction,
-          capacity: edge.capacity,
           maxSpeed: edge.maxSpeed,
           isActive: edge.isActive,
         })
@@ -565,7 +563,6 @@ export function MapEditorPage() {
           name: zone.name,
           zoneType: zone.zoneType,
           geometry,
-          capacity: zone.capacity,
           maxSpeed: zone.maxSpeed,
           isActive: zone.isActive,
           policy: zone.policy ?? null,
@@ -595,7 +592,6 @@ export function MapEditorPage() {
         name,
         zoneType: type,
         geometry: pointsToPolygon(points),
-        capacity: type === 'SINGLE_OCCUPANCY' || type === 'JUNCTION' ? 1 : 2,
         maxSpeed: type === 'SPEED' ? 0.5 : null,
         isActive: true,
       })
@@ -604,7 +600,6 @@ export function MapEditorPage() {
       setZoneDraft({
         name: created.name,
         zoneType: created.zoneType as ZoneType,
-        capacity: created.capacity,
         maxSpeed: created.maxSpeed?.toString() ?? '',
         isActive: created.isActive,
       })
@@ -625,7 +620,6 @@ export function MapEditorPage() {
         name: zoneDraft.name,
         zoneType: zoneDraft.zoneType,
         geometry: zone.geometry,
-        capacity: zoneDraft.capacity,
         maxSpeed: zoneDraft.maxSpeed === '' ? null : Number(zoneDraft.maxSpeed),
         isActive: zoneDraft.isActive,
         policy: buildZonePolicy(zoneDraft),
@@ -678,18 +672,18 @@ export function MapEditorPage() {
         const edge = edges.find((e) => e.id === mode.edgeId)
         if (!edge) return
         const created = await createEdge(version.id, {
+          name: duplicateName(edge.name || edge.code, 'EDGE', edges.map((e) => e.code)),
           geometry: pointsToLineString(offsetPoints(lineStringToPoints(edge.geometry))),
           widthMeters: edge.widthMeters ?? 1,
           direction: edge.direction,
-          capacity: edge.capacity,
           maxSpeed: edge.maxSpeed,
           isActive: edge.isActive,
         })
         await invalidate()
         setActionOk(`Duplicated ${edge.code} as ${created.code}`)
         setEdgeDraft({
+          name: created.name,
           direction: created.direction as EdgeDirection,
-          capacity: created.capacity,
           widthMeters: created.widthMeters,
           maxSpeed: created.maxSpeed?.toString() ?? '',
           isActive: created.isActive,
@@ -702,7 +696,6 @@ export function MapEditorPage() {
           name: duplicateName(zone.name, 'ZONE', zones.map((z) => z.code)),
           zoneType: zone.zoneType,
           geometry: pointsToPolygon(offsetPoints(polygonToPoints(zone.geometry))),
-          capacity: zone.capacity,
           maxSpeed: zone.maxSpeed,
           isActive: zone.isActive,
           policy: zone.policy ?? null,
@@ -713,7 +706,6 @@ export function MapEditorPage() {
         setZoneDraft({
           name: created.name,
           zoneType: created.zoneType as ZoneType,
-          capacity: created.capacity,
           maxSpeed: created.maxSpeed?.toString() ?? '',
           isActive: created.isActive,
         })
@@ -1185,6 +1177,14 @@ export function MapEditorPage() {
             <Field label="Code">
               <input className={controlClass()} value={selectedEdge.code} readOnly disabled />
             </Field>
+            <Field label="Name">
+              <input
+                className={controlClass()}
+                value={edgeDraft.name}
+                disabled={!isDraft}
+                onChange={(e) => setEdgeDraft({ ...edgeDraft, name: e.target.value })}
+              />
+            </Field>
             <Field label="Direction">
               <select
                 className={controlClass()}
@@ -1199,29 +1199,17 @@ export function MapEditorPage() {
                 ))}
               </select>
             </Field>
-            <FieldRow>
-              <Field label="Capacity">
-                <input
-                  className={controlClass()}
-                  type="number"
-                  min={1}
-                  value={edgeDraft.capacity}
-                  disabled={!isDraft}
-                  onChange={(e) => setEdgeDraft({ ...edgeDraft, capacity: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Width (m)">
-                <input
-                  className={controlClass()}
-                  type="number"
-                  step="0.05"
-                  min={0.01}
-                  value={edgeDraft.widthMeters}
-                  disabled={!isDraft}
-                  onChange={(e) => setEdgeDraft({ ...edgeDraft, widthMeters: Number(e.target.value) })}
-                />
-              </Field>
-            </FieldRow>
+            <Field label="Width (m)">
+              <input
+                className={controlClass()}
+                type="number"
+                step="0.05"
+                min={0.01}
+                value={edgeDraft.widthMeters}
+                disabled={!isDraft}
+                onChange={(e) => setEdgeDraft({ ...edgeDraft, widthMeters: Number(e.target.value) })}
+              />
+            </Field>
             <Field label="Max speed (m/s)">
               <input
                 className={controlClass()}
@@ -1280,7 +1268,6 @@ export function MapEditorPage() {
                   setZoneDraft({
                     ...zoneDraft,
                     zoneType: next,
-                    capacity: next === 'SINGLE_OCCUPANCY' || next === 'JUNCTION' ? 1 : zoneDraft.capacity,
                     maxSpeed: next === 'SPEED' && zoneDraft.maxSpeed === '' ? '0.5' : zoneDraft.maxSpeed,
                   })
                 }}
@@ -1295,34 +1282,22 @@ export function MapEditorPage() {
             {zoneDraft.zoneType === 'SPEED' ? (
               <p className="text-xs text-amber-ink">SPEED requires MaxSpeed (m/s).</p>
             ) : null}
-            {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' || zoneDraft.zoneType === 'JUNCTION' ? (
-              <p className="text-xs text-amber-ink">{zoneDraft.zoneType} requires Capacity = 1.</p>
+            {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' ? (
+              <p className="text-xs text-muted">One robot at a time on lanes covered by this zone.</p>
             ) : null}
             {zoneDraft.zoneType === 'JUNCTION' ? (
               <p className="text-xs text-muted">
-                Lanes that end at this zone are connected; an Endpoint within 0.5 m of it is reached through it.
+                Lanes that end at this zone are connected; an Endpoint inside it is reached through it.
               </p>
             ) : null}
-            <FieldRow>
-              <Field label="Capacity">
-                <input
-                  className={controlClass()}
-                  type="number"
-                  min={1}
-                  value={zoneDraft.capacity}
-                  disabled={!isDraft}
-                  onChange={(e) => setZoneDraft({ ...zoneDraft, capacity: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Max speed (m/s)">
-                <input
-                  className={controlClass()}
-                  value={zoneDraft.maxSpeed}
-                  disabled={!isDraft}
-                  onChange={(e) => setZoneDraft({ ...zoneDraft, maxSpeed: e.target.value })}
-                />
-              </Field>
-            </FieldRow>
+            <Field label="Max speed (m/s)">
+              <input
+                className={controlClass()}
+                value={zoneDraft.maxSpeed}
+                disabled={!isDraft}
+                onChange={(e) => setZoneDraft({ ...zoneDraft, maxSpeed: e.target.value })}
+              />
+            </Field>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

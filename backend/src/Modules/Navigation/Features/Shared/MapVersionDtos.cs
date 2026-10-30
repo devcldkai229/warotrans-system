@@ -100,10 +100,10 @@ public sealed record EdgeListItemDto(
     Guid Id,
     Guid MapVersionId,
     string Code,
+    string Name,
     JsonElement Geometry,
     double WidthMeters,
     string Direction,
-    int Capacity,
     double? MaxSpeed,
     bool IsActive);
 
@@ -114,7 +114,6 @@ public sealed record ZoneListItemDto(
     string Name,
     string ZoneType,
     JsonElement Geometry,
-    int Capacity,
     double? MaxSpeed,
     bool IsActive,
     JsonElement? Policy,

@@ -60,7 +60,8 @@ public sealed class TrafficState
             && _robots.Values.Any(r => r.OccupiedResourceIds.Count > 0 || r.Authority is not null))
         {
             Log($"bind-refused:{graph.GraphHash}:in-use:{_graph.GraphHash}");
-            return TrafficOpResult.Fail("GRAPH_IN_USE");
+            return TrafficOpResult.Fail(
+                $"GRAPH_IN_USE bound={_graph.GraphHash} requested={graph.GraphHash} mapBound={_mapVersionId} mapReq={mapVersionId}");
         }
 
         _mapVersionId = mapVersionId;
@@ -745,6 +746,69 @@ public sealed class TrafficState
         robot.Phase = TrafficRobotPhase.HoldingService;
         StateVersion++;
         Log($"hold-service:{robotId}:{resourceId}");
+        return TrafficOpResult.Success();
+    }
+
+    /// <summary>
+    /// N4: drop service holds that are no longer needed, but only after a localized pose proves the footprint
+    /// (plus localization margin) has left those resources. Holds listed in <paramref name="keepResourceIds"/>
+    /// stay. Safe-stop / CompleteRoute never call this — that is T11 (shelf work must survive mid-route stops).
+    /// </summary>
+    public TrafficOpResult ReleaseStaleServiceHolds(
+        Guid robotId,
+        ImmutableArray<string> keepResourceIds,
+        double poseX,
+        double poseY,
+        bool localizationOk)
+    {
+        var robot = GetOrCreate(robotId);
+        if (robot.Phase == TrafficRobotPhase.Quarantined)
+        {
+            return TrafficOpResult.Fail($"QUARANTINED:{robot.QuarantineReason}");
+        }
+
+        if (!localizationOk)
+        {
+            return TrafficOpResult.Fail("LOCALIZATION");
+        }
+
+        robot.X = poseX;
+        robot.Y = poseY;
+        robot.LocalizationOk = true;
+        if (_graph is not null)
+        {
+            robot.NodeId = RoutePlanner.NearestNode(_graph, poseX, poseY);
+        }
+
+        var keep = keepResourceIds.IsDefaultOrEmpty
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : keepResourceIds.ToHashSet(StringComparer.Ordinal);
+
+        var released = robot.ServiceHoldIds
+            .Where(rid => !keep.Contains(rid) && IsPhysicallyClear(robot, rid, poseX, poseY))
+            .ToList();
+
+        foreach (var rid in released)
+        {
+            ReleaseResource(robot, rid);
+        }
+
+        if (robot.ServiceHoldIds.Count == 0 && robot.Authority is null)
+        {
+            robot.Phase = TrafficRobotPhase.Idle;
+        }
+        else if (robot.ServiceHoldIds.Count > 0 && robot.Authority is null)
+        {
+            robot.Phase = TrafficRobotPhase.HoldingService;
+        }
+
+        if (released.Count > 0)
+        {
+            StateVersion++;
+            Log($"release-stale-holds:{robotId}:{string.Join(",", released)}");
+            PromoteWaiters(released);
+        }
+
         return TrafficOpResult.Success();
     }
 

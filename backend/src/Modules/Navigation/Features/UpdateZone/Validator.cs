@@ -26,7 +26,6 @@ public sealed class UpdateZoneValidator : AbstractValidator<UpdateZoneRequest>
                 }
             })
             .WithMessage("Geometry must be a valid closed GeoJSON Polygon in world meters.");
-        RuleFor(x => x.Capacity).GreaterThanOrEqualTo(1);
         RuleFor(x => x.MaxSpeed)
             .GreaterThan(0)
             .Must(s => double.IsFinite(s!.Value))

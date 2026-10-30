@@ -39,25 +39,34 @@ public sealed class TrafficAuthorityPublisher(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var evt in outbox.ReadAllAsync(stoppingToken).ConfigureAwait(false))
+        // Host bind failure / Ctrl+C cancels stoppingToken; ReadAllAsync throws OCE from MoveNext
+        // (outside the per-event try). Swallow it so BackgroundServiceExceptionBehavior=StopHost
+        // does not turn a normal shutdown into a process crash.
+        try
         {
-            if (options.Value.Mode != TrafficCoordinatorMode.Active)
+            await foreach (var evt in outbox.ReadAllAsync(stoppingToken).ConfigureAwait(false))
             {
-                continue;
-            }
+                if (options.Value.Mode != TrafficCoordinatorMode.Active)
+                {
+                    continue;
+                }
 
-            try
-            {
-                await HandleAsync(evt, stoppingToken).ConfigureAwait(false);
+                try
+                {
+                    await HandleAsync(evt, stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "TrafficAuthorityPublisher failed for robot {RobotId}", evt.RobotId);
+                }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "TrafficAuthorityPublisher failed for robot {RobotId}", evt.RobotId);
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
         }
     }
 

@@ -1,20 +1,51 @@
 {
-  "warehouseId": "33333333-3333-3333-3333-333333333333",
-  "mapVersionId": "d676f366-6f08-417d-921f-ac89e0b18626",
-  "mapVersionCode": "MAP-WHSIM-V019",
-  "robotId": "26a87e79-7e4f-46fb-b815-8c6bcb0f7805",
+  "warehouseId": "42cfe65f-7727-4dd2-a66b-b9b93dc2d549",
+  "mapVersionId": "1143c8a3-ae62-4660-b684-bc462450f30f",
+  "mapVersionCode": "MAP-WH42CFE65F-V003",
+  "robotId": "1a9cfd7b-0417-4f65-8271-3ef780bc0cac",
   "robotCode": "RBT-SIM-01",
   "endpoints": [
-    {"alias": "IN", "endpointId": "3f7cb8ee-cb38-478f-8855-380b9a034c23", "code": "EP-INBOUND", "x": 0.045, "y": -0.133, "yaw": 0.0},
-    {"alias": "S01", "endpointId": "9993ab79-ef8e-4078-9e25-4a39ca4fc600", "code": "EP-SORAGE_SELF_1", "x": 0.442, "y": -0.849, "yaw": 1.5707963267948966},
-    {"alias": "S02", "endpointId": "f0bf3ee8-c2c0-4d5e-a52b-af5aba925f3a", "code": "EP-SORAGE_SELF_2", "x": 1.6, "y": -0.883, "yaw": -1.5707963267948966},
-    {"alias": "S03", "endpointId": "2ba737d0-7408-4c30-a542-87fe943495c6", "code": "EP-SORAGE_SELF_3", "x": 2.775, "y": -0.866, "yaw": 1.5707963267948966},
-    {"alias": "S04", "endpointId": "0b46ad35-621b-4cc6-a310-e38a3e4b7ef8", "code": "EP-SORAGE_SELF_4", "x": 3.461, "y": -1.935, "yaw": 3.141592653589793},
-    {"alias": "S05", "endpointId": "d1087d5f-1d9e-43f0-b8a1-206baf16e5f5", "code": "EP-SORAGE_SELF_5", "x": 0.965, "y": -1.929, "yaw": 3.141592653589793},
-    {"alias": "OUT", "endpointId": "9a9e346d-5c3a-4db1-b51d-a9aba97a300a", "code": "EP-OUTBOUND", "x": 0.032, "y": -1.782, "yaw": 0.0},
-    {"alias": "QC-01", "endpointId": "2a63a4d5-0acc-4db1-a17b-48480a23938b", "code": "EP-INSPECTION", "x": 1.22, "y": 0.254, "yaw": -1.5707963267948966},
-    {"alias": "CHG-01", "endpointId": "64e0cc71-1c14-42f6-8802-b7bd16c44c48", "code": "EP-CHARGER-1", "x": 2.013, "y": 0.37, "yaw": -1.5707963267948966},
-    {"alias": "PARK-01", "endpointId": "bc0dcd0b-9b8b-4a87-8a90-f5f473bf4a21", "code": "EP-PARK-1", "x": 2.959, "y": 0.357, "yaw": -1.5707963267948966},
-    {"alias": "PARK-02", "endpointId": "e0438230-4e4c-4ca8-9c12-c4f8cf666242", "code": "EP-PARK-2", "x": 3.415, "y": 0.357, "yaw": -1.5707963267948966}
-  ]
+    {
+      "alias": "IN",
+      "endpointId": "f483b965-7942-4003-88b8-f4c52796f9b2",
+      "code": "EP-INBOUND-AREA---5",
+      "x": 1.7,
+      "y": 1.55,
+      "yaw": 0.0,
+      "name": "Inbound Area"
+    },
+    {
+      "alias": "PARK",
+      "endpointId": "d6a4dea2-1ae5-4b3e-a16e-932adb214310",
+      "code": "EP-PARKING-A---5",
+      "x": -1.929,
+      "y": -0.95,
+      "yaw": 0.0,
+      "name": "Parking A"
+    },
+    {
+      "alias": "S01",
+      "endpointId": "9d0ff20a-56c4-4234-ac8a-514ecf493f5d",
+      "code": "EP-SHELF-A-01---5",
+      "x": -0.3,
+      "y": 0.6,
+      "yaw": 1.5707963267948966,
+      "name": "Shelf-A-01"
+    },
+    {
+      "alias": "S04",
+      "endpointId": "ec205999-a66e-4319-ab26-15d0546915ff",
+      "code": "EP-SHELF-C-01---5",
+      "x": -0.6,
+      "y": -0.95,
+      "yaw": 0.0,
+      "name": "Shelf-C-01"
+    }
+  ],
+  "storageLocations": {
+    "S01": "f2000000-0000-4000-8000-000000000001",
+    "S02": "f2000000-0000-4000-8000-000000000002",
+    "S03": "f2000000-0000-4000-8000-000000000003",
+    "S04": "f2000000-0000-4000-8000-000000000004"
+  }
 }

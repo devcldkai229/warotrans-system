@@ -28,6 +28,7 @@ public sealed class MqttRobotCommandPublisher
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly MqttClientFactory _factory = new();
     private IMqttClient? _client;
+    private int _disposeOnce; // 0 = live, 1 = disposing/disposed (DI may DisposeAsync once per interface alias)
 
     public MqttRobotCommandPublisher(
         IOptions<MqttOptions> options,
@@ -223,7 +224,22 @@ public sealed class MqttRobotCommandPublisher
 
     public async ValueTask DisposeAsync()
     {
-        await _gate.WaitAsync().ConfigureAwait(false);
+        // Registered once as concrete + three interface aliases; the container may call DisposeAsync
+        // for each registration. Second+ calls must be no-ops (SemaphoreSlim is already disposed).
+        if (Interlocked.Exchange(ref _disposeOnce, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _gate.WaitAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
         try
         {
             if (_client is not null)

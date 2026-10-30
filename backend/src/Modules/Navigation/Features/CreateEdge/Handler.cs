@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 using WaroTrans.Navigation.Entities;
@@ -42,21 +43,43 @@ public sealed class CreateEdgeHandler(
                 "map_version_not_draft");
         }
 
+        var name = request.Name.Trim();
+        var code = await codeGenerator.NextEdgeCodeAsync(name, cancellationToken);
+
+        var codeExists = await dbContext.Edges
+            .AsNoTracking()
+            .AnyAsync(e => e.MapVersionId == mapVersionId && e.Code == code, cancellationToken);
+
+        if (codeExists)
+        {
+            throw new ConflictException(
+                $"Edge code '{code}' already exists on this map version.",
+                "edge_code_conflict");
+        }
+
         var edge = new Edge
         {
             Id = Guid.NewGuid(),
             MapVersionId = mapVersionId,
-            Code = await codeGenerator.NextEdgeCodeAsync(cancellationToken),
+            Code = code,
+            Name = name,
             Geometry = GeoJsonGeometry.NormalizeLineString(request.Geometry),
             WidthMeters = request.WidthMeters,
             Direction = Enum.Parse<EdgeDirection>(request.Direction, ignoreCase: true),
-            Capacity = request.Capacity,
             MaxSpeed = request.MaxSpeed,
             IsActive = request.IsActive ?? true
         };
 
         dbContext.Edges.Add(edge);
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new ConflictException($"Edge code '{code}' already exists on this map.", "edge_code_exists");
+        }
 
         return EdgeResponse.From(edge);
     }

@@ -52,10 +52,10 @@ public sealed class UpdateEdgeHandler(
         }
 
         edge.Geometry?.Dispose();
+        edge.Name = request.Name.Trim();
         edge.Geometry = GeoJsonGeometry.NormalizeLineString(request.Geometry);
         edge.WidthMeters = request.WidthMeters;
         edge.Direction = Enum.Parse<EdgeDirection>(request.Direction, ignoreCase: true);
-        edge.Capacity = request.Capacity;
         edge.MaxSpeed = request.MaxSpeed;
         edge.IsActive = request.IsActive;
 

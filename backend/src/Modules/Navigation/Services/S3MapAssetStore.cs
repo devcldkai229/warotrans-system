@@ -2,6 +2,7 @@ using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Exceptions;
 
@@ -10,15 +11,18 @@ namespace WaroTrans.Navigation.Services;
 /// <summary>
 /// Stores imported map assets in S3. Bucket/credentials come from MapAssetStorage:S3 config
 /// (fill BucketName when ready; empty bucket fails at upload with a clear error).
+/// Reads also honor Host-local <c>/map-assets/...</c> URIs (clones and Local mirrors) before S3.
 /// </summary>
 public sealed class S3MapAssetStore : IMapAssetStore, IDisposable
 {
     private readonly S3MapAssetStorageOptions _options;
     private readonly IAmazonS3 _client;
+    private readonly string _localMapsRoot;
 
-    public S3MapAssetStore(IOptions<MapAssetStorageOptions> options)
+    public S3MapAssetStore(IOptions<MapAssetStorageOptions> options, IHostEnvironment environment)
     {
         _options = options.Value.S3 ?? new S3MapAssetStorageOptions();
+        _localMapsRoot = Path.GetFullPath(Path.Combine(environment.ContentRootPath, "data", "maps"));
         var region = RegionEndpoint.GetBySystemName(
             string.IsNullOrWhiteSpace(_options.Region) ? "ap-southeast-1" : _options.Region);
 
@@ -105,13 +109,32 @@ public sealed class S3MapAssetStore : IMapAssetStore, IDisposable
         Guid mapVersionId,
         CancellationToken cancellationToken = default)
     {
-        if (PendingMapAssetUris.IsPending(mapUri) || string.IsNullOrWhiteSpace(_options.BucketName))
+        if (PendingMapAssetUris.IsPending(mapUri))
+        {
+            return null;
+        }
+
+        // Prefer Host-local mirror when MapUri is /map-assets/... (clone reuse or prep scripts).
+        const string localPrefix = "/map-assets/";
+        if (mapUri.StartsWith(localPrefix, StringComparison.Ordinal))
+        {
+            var full = Path.GetFullPath(Path.Combine(_localMapsRoot, mapUri[localPrefix.Length..]));
+            if (full.StartsWith(_localMapsRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && File.Exists(full))
+            {
+                return await File.ReadAllBytesAsync(full, cancellationToken);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.BucketName))
         {
             return null;
         }
 
         var prefix = string.IsNullOrWhiteSpace(_options.KeyPrefix) ? "maps" : _options.KeyPrefix.Trim().Trim('/');
-        var key = $"{prefix}/{warehouseId:D}/{mapVersionId:D}/map.pgm";
+        // Prefer key encoded in MapUri (clone may point at the source map's object).
+        var key = TryS3KeyFromUri(mapUri, prefix)
+                  ?? $"{prefix}/{warehouseId:D}/{mapVersionId:D}/map.pgm";
         try
         {
             using var response = await _client.GetObjectAsync(_options.BucketName, key, cancellationToken);
@@ -124,6 +147,27 @@ public sealed class S3MapAssetStore : IMapAssetStore, IDisposable
         {
             return null;
         }
+    }
+
+    private static string? TryS3KeyFromUri(string mapUri, string keyPrefix)
+    {
+        if (mapUri.StartsWith("/map-assets/", StringComparison.Ordinal))
+        {
+            return $"{keyPrefix}/{mapUri["/map-assets/".Length..]}".Replace('\\', '/');
+        }
+
+        if (!Uri.TryCreate(mapUri, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        var path = uri.AbsolutePath.TrimStart('/');
+        if (path.EndsWith("/map.pgm", StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        return null;
     }
 
     public void Dispose() => _client.Dispose();

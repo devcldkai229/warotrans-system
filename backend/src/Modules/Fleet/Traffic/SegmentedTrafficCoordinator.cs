@@ -70,6 +70,9 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        // Host may dispose its StopAsync token; never link or wait on it for loop shutdown.
+        _ = cancellationToken;
+
         var cts = Interlocked.Exchange(ref _cts, null);
         if (cts is null)
         {
@@ -82,7 +85,8 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
             await cts.CancelAsync().ConfigureAwait(false);
             if (_loop is not null)
             {
-                await Task.WhenAny(_loop, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)).ConfigureAwait(false);
+                await Task.WhenAny(_loop, Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None))
+                    .ConfigureAwait(false);
             }
         }
         catch (ObjectDisposedException ex)
@@ -266,6 +270,20 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public Task<TrafficOpResult> HoldServiceResourceAsync(Guid robotId, string resourceId, CancellationToken ct = default) =>
         EnqueueAsync(s => s.HoldServiceResource(robotId, resourceId), ct);
+
+    public Task<TrafficOpResult> ReleaseStaleServiceHoldsAsync(
+        Guid robotId,
+        ImmutableArray<string> keepResourceIds,
+        double poseX,
+        double poseY,
+        bool localizationOk,
+        CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.ReleaseStaleServiceHolds(robotId, keepResourceIds, poseX, poseY, localizationOk);
+            PublishGranted(s);
+            return result;
+        }, ct);
 
     public Task<TrafficOpResult> ReleaseAfterPhysicalClearanceAsync(
         Guid robotId, string operatorId, ImmutableArray<string>? resourceIds = null, CancellationToken ct = default) =>

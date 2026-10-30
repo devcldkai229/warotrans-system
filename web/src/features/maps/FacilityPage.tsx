@@ -6,6 +6,7 @@ import {
   archiveMapVersion,
   cloneMapVersion,
   createMapVersion,
+  downloadRouteGraphGeoJson,
   fetchSampleMapFiles,
   getActiveMapVersion,
   importMapVersion,
@@ -501,6 +502,37 @@ export function FacilityPage() {
                   View
                 </Button>
               ) : null}
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  try {
+                    const safe = published.code.replace(/[^A-Za-z0-9_-]+/g, '_')
+                    await downloadRouteGraphGeoJson(published.id, `route_graph_${safe}.geojson`)
+                    window.alert(
+                      [
+                        `Đã tải route-graph cho ${published.code}.`,
+                        '',
+                        'Tiếp theo (WSL / sim), cập nhật warehouse_layout.yaml web.map_version_id nếu cần, rồi:',
+                        '  cd ros2_ws/src/warotrans_simulation',
+                        "  python3 scripts/sync_web_map.py --user admin --password 'Admin@123'",
+                        '  python3 scripts/generate_warehouse.py',
+                        '  # copy GeoJSON vừa tải vào GRAPH_PATH (vd. /home/ser/maps/...)',
+                        '  bash ../../../scripts/_restart_sim_clean.sh',
+                      ].join('\n'),
+                    )
+                  } catch (err) {
+                    setActionError(
+                      err instanceof ApiError
+                        ? err.message
+                        : err instanceof Error
+                          ? err.message
+                          : 'Không tải được route-graph',
+                    )
+                  }
+                }}
+              >
+                Dựng map
+              </Button>
               <Button
                 variant="ghost"
                 disabled={archiveMutation.isPending}

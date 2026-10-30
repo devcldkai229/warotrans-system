@@ -1,0 +1,7 @@
+CRITICAL_NO_EXIT | Critical resource narrow:EDGE-340 has no reachable safe-stop exit.
+CRITICAL_NO_EXIT | Critical resource narrow:EDGE-341 has no reachable safe-stop exit.
+CRITICAL_NO_EXIT | Critical resource narrow:EDGE-342 has no reachable safe-stop exit.
+CORRIDOR_NO_STOPLINE | Critical corridor 5 has no stopline at an entry.
+CORRIDOR_NO_STOPLINE | Critical corridor 6 has no stopline at an entry.
+CORRIDOR_NO_STOPLINE | Critical corridor 7 has no stopline at an entry.
+CORRIDOR_NO_STOPLINE | Critical corridor 11 has no stopline at an entry.

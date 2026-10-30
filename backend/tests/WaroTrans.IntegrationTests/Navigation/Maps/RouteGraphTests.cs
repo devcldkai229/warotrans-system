@@ -37,10 +37,10 @@ public sealed class RouteGraphTests(WaroTransWebApplicationFactory factory) : In
     private async Task AddLaneAsync(Guid mapId, string direction, params double[][] points) =>
         (await Client.PostAsJsonAsync($"/api/navigation/maps/{mapId}/edges", new
         {
+            name = $"Lane {Guid.NewGuid():N}"[..12],
             geometry = new { type = "LineString", coordinates = points },
             widthMeters = 0.5,
             direction,
-            capacity = 1,
             maxSpeed = 0.3
         })).EnsureSuccessStatusCode();
 
@@ -65,7 +65,7 @@ public sealed class RouteGraphTests(WaroTransWebApplicationFactory factory) : In
         var map = await CreateDraftAsync();
         await AddLaneAsync(map.Id, "BIDIRECTIONAL", [0.0, 0.0], [2.0, 0.0]);
         await AddStopAsync(map.Id, "Dock A", 0.0, 0.0);              // on the lane end
-        await AddStopAsync(map.Id, "Dock B", 2.0, 0.2);              // 0.2 m beside the lane end → connectors
+        await AddStopAsync(map.Id, "Dock B", 2.0, 0.0);              // on the other lane end (on-lane attach)
 
         var response = await Client.GetAsync($"/api/navigation/maps/{map.Id}/route-graph");
 
@@ -75,7 +75,8 @@ public sealed class RouteGraphTests(WaroTransWebApplicationFactory factory) : In
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("FeatureCollection", json.RootElement.GetProperty("type").GetString());
         Assert.Equal(map.Code, json.RootElement.GetProperty("name").GetString());
-        Assert.Equal((3, 4, 2), Count(json.RootElement));            // (0,0) (2,0) (2,0.2); 2 lane + 2 connector edges
+        // Two endpoint nodes on lane ends; BIDIRECTIONAL → two directed MultiLineString features; no foot connectors.
+        Assert.Equal((2, 2, 0), Count(json.RootElement));
         var codes = json.RootElement.GetProperty("features").EnumerateArray()
             .Where(f => f.GetProperty("properties").GetProperty("metadata").TryGetProperty("endpoint_codes", out _))
             .SelectMany(f => f.GetProperty("properties").GetProperty("metadata").GetProperty("endpoint_codes").EnumerateArray())

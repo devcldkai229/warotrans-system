@@ -53,7 +53,7 @@ public class MapVersionTests
         public Task<string> NextCategoryCodeAsync(string suffix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextSkuCodeAsync(string prefix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextEndpointCodeAsync(string suffix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> NextEdgeCodeAsync(string suffix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextZoneCodeAsync(string suffix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();

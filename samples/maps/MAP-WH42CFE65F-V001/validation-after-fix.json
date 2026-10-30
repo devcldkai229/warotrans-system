@@ -1,0 +1,2396 @@
+﻿{
+    "mapVersionId":  "f663f14f-3a28-4d14-aa4b-19d9e11bad69",
+    "graphHash":  "2857eaa90fd4076382797c45129ad6e6d1cc6faad10c781631d4843c1053f5f1",
+    "isValid":  false,
+    "nodeCount":  55,
+    "edgeCount":  156,
+    "resourceCount":  573,
+    "corridorCount":  18,
+    "holdingPointCount":  17,
+    "stoplineCount":  14,
+    "stationCount":  17,
+    "issues":  [
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---1 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---1"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---10 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---10"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---5 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---5"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-NO-STOP---8 (NO_STOP) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-NO-STOP---8"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---9 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---9"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---6 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---6"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---11 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---11"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---12 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---12"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---3 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---3"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---14 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---14"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---15 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---15"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---19 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---19"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---17 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---17"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---21 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---21"
+                                        ]
+                   },
+                   {
+                       "code":  "LEGACY_JUNCTION_ZONE",
+                       "severity":  "WARNING",
+                       "message":  "Zone ZONE-SINGLE-OCCUPANCY---22 (SINGLE_OCCUPANCY) is used as a junction connect; prefer ZoneType JUNCTION.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---22"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-5 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-6 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-PARK-5, EP-PARK-6, EP-CHARGER-7, EP-WAYPOINT-16, EP-WAYPOINT-14, EP-WAYPOINT-13, EP-WAYPOINT-12, EP-WAYPOINT-17, EP-WAYPOINT-15, EP-WAYPOINT-4, EP-WAYPOINT-3, EP-WAYPOINT-1, EP-WAYPOINT-2 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-PARK-5",
+                                            "EP-PARK-6",
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-PARK-5, EP-PARK-6, EP-CHARGER-7, EP-WAYPOINT-16, EP-WAYPOINT-14, EP-WAYPOINT-13, EP-WAYPOINT-12, EP-WAYPOINT-17, EP-WAYPOINT-15, EP-WAYPOINT-4, EP-WAYPOINT-3, EP-WAYPOINT-1, EP-WAYPOINT-2 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-PARK-5",
+                                            "EP-PARK-6",
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-PARK-5, EP-PARK-6, EP-CHARGER-7, EP-WAYPOINT-16, EP-WAYPOINT-14, EP-WAYPOINT-13, EP-WAYPOINT-12, EP-WAYPOINT-17, EP-WAYPOINT-15, EP-WAYPOINT-4, EP-WAYPOINT-3, EP-WAYPOINT-1, EP-WAYPOINT-2 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-PARK-5",
+                                            "EP-PARK-6",
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-PARK-5, EP-PARK-6, EP-CHARGER-7, EP-WAYPOINT-16, EP-WAYPOINT-14, EP-WAYPOINT-13, EP-WAYPOINT-12, EP-WAYPOINT-17, EP-WAYPOINT-15, EP-WAYPOINT-4, EP-WAYPOINT-3, EP-WAYPOINT-1, EP-WAYPOINT-2 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-PARK-5",
+                                            "EP-PARK-6",
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-CHARGER-7 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-16 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-14 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-13 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-12 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-17 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-15 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-4 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-3 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-1 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-2 the robot cannot reach EP-WAYPOINT-8, EP-WAYPOINT-9, EP-WAYPOINT-10, EP-WAYPOINT-11 following the lane directions.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2",
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 56 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:56"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 57 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:57"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 59 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:59"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 60 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:60"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 61 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:61"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 62 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:62"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 63 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:63"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 65 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:65"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 70 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 71 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:71"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 72 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 76 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-358"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 82 clearance 0.1 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 83 clearance 0.1 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 84 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:84"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 85 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:85"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 86 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-358"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 89 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:89"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 95 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:95"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 96 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:96"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 97 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:97"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 98 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:98"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 99 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:99"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 100 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:100"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 101 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:101"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 105 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:105"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 110 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:110"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 113 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 117 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:117"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 128 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:128"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 133 clearance 0.067 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:133"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 135 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 136 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 138 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 144 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 146 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 157 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:157"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 158 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:158"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 160 clearance 0.067 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:160"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 165 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:165"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 173 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 175 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 176 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 177 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 178 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 179 clearance 0.05 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-362"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 180 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 181 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 182 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 183 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 190 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:190"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 194 clearance 0.117 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "edge:194"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 197 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-355"
+                                        ]
+                   },
+                   {
+                       "code":  "INSUFFICIENT_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Edge 203 clearance 0 m \u003c required 0.15 m.",
+                       "relatedCodes":  [
+                                            "EDGE-357"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 2 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:2"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 4 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 6 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 7 turn clearance 0.05 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:7"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 8 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 9 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:9"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 11 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:11"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 13 turn clearance 0.1 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 14 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-CHARGER-7"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 15 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:15"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 18 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:18"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 27 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:27"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 29 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:29"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 31 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 34 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 39 turn clearance 0.05 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:39"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 40 turn clearance 0.05 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:40"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 41 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 42 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:42"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 43 turn clearance 0 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:43"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 46 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 47 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:47"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 53 turn clearance 0.15 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:53"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 54 turn clearance 0.2 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "TURN_CLEARANCE",
+                       "severity":  "ERROR",
+                       "message":  "Node 55 turn clearance 0.217 m \u003c required 0.226 m.",
+                       "relatedCodes":  [
+                                            "node:55"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 8 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:8"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 10 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:10"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 12 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:12"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 13 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:13"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 30 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:30"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 31 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:31"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 32 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:32"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 33 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:33"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 34 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:34"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 35 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:35"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 41 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:41"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 46 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:46"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 48 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:48"
+                                        ]
+                   },
+                   {
+                       "code":  "SAFE_STOP_IN_CRITICAL",
+                       "severity":  "ERROR",
+                       "message":  "Candidate safe-stop node 54 lies inside a critical/NO_STOP/junction resource.",
+                       "relatedCodes":  [
+                                            "node:54"
+                                        ]
+                   },
+                   {
+                       "code":  "CRITICAL_NO_EXIT",
+                       "severity":  "ERROR",
+                       "message":  "Critical resource junction:ZONE-SINGLE-OCCUPANCY---14 has no reachable safe-stop exit.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---14"
+                                        ]
+                   },
+                   {
+                       "code":  "CRITICAL_NO_EXIT",
+                       "severity":  "ERROR",
+                       "message":  "Critical resource junction:ZONE-SINGLE-OCCUPANCY---15 has no reachable safe-stop exit.",
+                       "relatedCodes":  [
+                                            "ZONE-SINGLE-OCCUPANCY---15"
+                                        ]
+                   },
+                   {
+                       "code":  "CRITICAL_NO_EXIT",
+                       "severity":  "ERROR",
+                       "message":  "Critical resource narrow:EDGE-358 has no reachable safe-stop exit.",
+                       "relatedCodes":  [
+                                            "EDGE-358"
+                                        ]
+                   },
+                   {
+                       "code":  "CRITICAL_NO_EXIT",
+                       "severity":  "ERROR",
+                       "message":  "Critical resource narrow:EDGE-359 has no reachable safe-stop exit.",
+                       "relatedCodes":  [
+                                            "EDGE-359"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-5 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-5 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-5 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-5 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-6 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-6 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-6 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-PARK-6 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-PARK-5.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-PARK-5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-PARK-6.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-PARK-6"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-CHARGER-7.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-CHARGER-7"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-16.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-16"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-14.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-13.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-13"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-12.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-12"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-17.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-15.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-15"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-4.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-3.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-1.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-1"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-8 the robot cannot reach EP-WAYPOINT-2.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-PARK-5.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-PARK-5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-PARK-6.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-PARK-6"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-CHARGER-7.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-CHARGER-7"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-16.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-16"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-14.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-13.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-13"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-12.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-12"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-17.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-15.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-15"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-4.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-3.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-1.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-1"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-9 the robot cannot reach EP-WAYPOINT-2.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-PARK-5.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-PARK-5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-PARK-6.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-PARK-6"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-CHARGER-7.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-CHARGER-7"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-16.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-16"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-14.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-13.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-13"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-12.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-12"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-17.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-15.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-15"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-4.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-3.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-1.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-1"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-10 the robot cannot reach EP-WAYPOINT-2.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-PARK-5.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-PARK-5"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-PARK-6.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-PARK-6"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-CHARGER-7.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-CHARGER-7"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-16.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-16"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-14.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-13.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-13"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-12.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-12"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-17.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-15.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-15"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-4.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-3.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-1.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-1"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-11 the robot cannot reach EP-WAYPOINT-2.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11",
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-CHARGER-7 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-CHARGER-7 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-CHARGER-7 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-CHARGER-7 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-CHARGER-7",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-16 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-16 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-16 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-16 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-16",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-14 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-14 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-14 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-14 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-13 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-13 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-13 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-13 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-13",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-12 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-12 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-12 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-12 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-12",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-17 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-17 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-17 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-17 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-15 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-15 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-15 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-15 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-15",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-4 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-4 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-4 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-4 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-3 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-3 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-3 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-3 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-1 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-1 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-1 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-1 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-1",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-2 the robot cannot reach EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-2 the robot cannot reach EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-2 the robot cannot reach EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "ENDPOINT_DISCONNECTED",
+                       "severity":  "ERROR",
+                       "message":  "From EP-WAYPOINT-2 the robot cannot reach EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "AMBIGUOUS_INTERSECTION",
+                       "severity":  "WARNING",
+                       "message":  "Node 5 at (-1.455, -0.99) has 6 incidents without a JUNCTION zone.",
+                       "relatedCodes":  [
+                                            "node:5"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-8 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-9 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-10 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-11 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-16 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-16"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-14 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-14"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-13 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-13"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-12 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-12"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-17 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-17"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-15 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-15"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-4 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-4"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-3 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-3"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-1 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-1"
+                                        ]
+                   },
+                   {
+                       "code":  "STOP_IN_JUNCTION",
+                       "severity":  "WARNING",
+                       "message":  "Station EP-WAYPOINT-2 is adjacent to a junction/single-occupancy corridor.",
+                       "relatedCodes":  [
+                                            "EP-WAYPOINT-2"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 1 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:1",
+                                            "edge:112",
+                                            "edge:113",
+                                            "edge:114",
+                                            "edge:135"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 5 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:5",
+                                            "edge:103",
+                                            "edge:125",
+                                            "edge:126",
+                                            "edge:137"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 6 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:6",
+                                            "edge:103",
+                                            "edge:125",
+                                            "edge:126",
+                                            "edge:137"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 8 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:8",
+                                            "edge:102",
+                                            "edge:106"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 10 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:10",
+                                            "edge:136",
+                                            "edge:144",
+                                            "edge:145",
+                                            "edge:146",
+                                            "edge:149",
+                                            "edge:182"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 11 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:11",
+                                            "edge:70",
+                                            "edge:71",
+                                            "edge:72",
+                                            "edge:73",
+                                            "edge:74",
+                                            "edge:75",
+                                            "edge:76",
+                                            "edge:77",
+                                            "edge:78",
+                                            "edge:79",
+                                            "edge:85",
+                                            "edge:86"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 12 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:12",
+                                            "edge:80",
+                                            "edge:81",
+                                            "edge:82",
+                                            "edge:83"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 14 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:14",
+                                            "edge:183",
+                                            "edge:192",
+                                            "edge:195",
+                                            "edge:197",
+                                            "edge:198",
+                                            "edge:199",
+                                            "edge:208",
+                                            "edge:211"
+                                        ]
+                   },
+                   {
+                       "code":  "CORRIDOR_NO_STOPLINE",
+                       "severity":  "ERROR",
+                       "message":  "Critical corridor 17 has no stopline at an entry.",
+                       "relatedCodes":  [
+                                            "corridor:17",
+                                            "edge:171",
+                                            "edge:188"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-5 is not mutually reachable from station EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-6 is not mutually reachable from station EP-WAYPOINT-8.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-8"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-5 is not mutually reachable from station EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-6 is not mutually reachable from station EP-WAYPOINT-9.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-9"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-5 is not mutually reachable from station EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-6 is not mutually reachable from station EP-WAYPOINT-10.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-10"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-5 is not mutually reachable from station EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-PARK-5",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   },
+                   {
+                       "code":  "RECOVERY_UNREACHABLE",
+                       "severity":  "ERROR",
+                       "message":  "Recovery bay EP-PARK-6 is not mutually reachable from station EP-WAYPOINT-11.",
+                       "relatedCodes":  [
+                                            "EP-PARK-6",
+                                            "EP-WAYPOINT-11"
+                                        ]
+                   }
+               ]
+}

@@ -78,10 +78,10 @@ public sealed class TrafficGraphCompileService(
             .ToList();
 
         var laneMeta = edges
-            .Select(e => new TrafficLaneMeta(e.Code, e.WidthMeters, e.Capacity, e.Direction))
+            .Select(e => new TrafficLaneMeta(e.Code, e.WidthMeters, e.Direction))
             .ToList();
         var zoneMeta = zones
-            .Select(z => new TrafficZoneMeta(z.Code, z.ZoneType, z.Capacity))
+            .Select(z => new TrafficZoneMeta(z.Code, z.ZoneType))
             .ToList();
 
         var footprint = footprintOptions.Value;

@@ -14,8 +14,6 @@ public sealed class Zone
     /// <summary>GeoJSON Polygon in map/world meters (FrameId of MapVersion).</summary>
     public JsonDocument Geometry { get; set; } = null!;
 
-    public int Capacity { get; set; }
-
     /// <summary>Max speed in meters/second when set.</summary>
     public double? MaxSpeed { get; set; }
 

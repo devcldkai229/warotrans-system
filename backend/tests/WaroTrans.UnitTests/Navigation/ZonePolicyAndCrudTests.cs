@@ -23,7 +23,7 @@ public class ZonePolicyAndCrudTests
         public Task<string> NextSkuCodeAsync(string prefix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextMapVersionCodeAsync(string warehouseCode, int versionNo, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextEndpointCodeAsync(string suffix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<string> NextEdgeCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> NextEdgeCodeAsync(string suffix, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -68,41 +68,29 @@ public class ZonePolicyAndCrudTests
         });
 
     [Fact]
-    public void SingleOccupancy_RequiresCapacityOne()
+    public void SingleOccupancy_AndJunction_AcceptWithoutCapacity()
     {
-        Assert.Throws<DomainValidationException>(() =>
-            ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, 2, 0.5, null, 1));
-
-        ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, 1, null, null, 1);
-        ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, 1, 0.4, null, 1);
-    }
-
-    [Fact]
-    public void Junction_RequiresCapacityOne()
-    {
-        Assert.Throws<DomainValidationException>(() =>
-            ZonePolicyValidator.Validate(ZoneType.JUNCTION, 2, null, null, 1));
-
-        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 1, null, null, 1);
-        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 1, 0.5, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.SINGLE_OCCUPANCY, 0.4, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.JUNCTION, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 0.5, null, 1);
     }
 
     [Fact]
     public void Speed_RequiresMaxSpeed()
     {
         Assert.Throws<DomainValidationException>(() =>
-            ZonePolicyValidator.Validate(ZoneType.SPEED, 3, null, null, 1));
+            ZonePolicyValidator.Validate(ZoneType.SPEED, null, null, 1));
 
-        ZonePolicyValidator.Validate(ZoneType.SPEED, 3, 0.8, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.SPEED, 0.8, null, 1);
     }
 
     [Fact]
     public void KeepOut_AndNoStop_AcceptEmptyPolicy()
     {
-        ZonePolicyValidator.Validate(ZoneType.KEEP_OUT, 1, null, null, 1);
-        ZonePolicyValidator.Validate(ZoneType.NO_STOP, 2, null, null, 1);
-        // JUNCTION requires Capacity = 1 (see Junction_RequiresCapacityOne); empty MaxSpeed/policy is OK.
-        ZonePolicyValidator.Validate(ZoneType.JUNCTION, 1, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.KEEP_OUT, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.NO_STOP, null, null, 1);
+        ZonePolicyValidator.Validate(ZoneType.JUNCTION, null, null, 1);
     }
 
     [Fact]
@@ -118,7 +106,6 @@ public class ZonePolicyAndCrudTests
             "Dock gate",
             "KEEP_OUT",
             ClosedSquare(),
-            1,
             null,
             true));
 
@@ -130,7 +117,6 @@ public class ZonePolicyAndCrudTests
                 "No",
                 "KEEP_OUT",
                 ClosedSquare(),
-                1,
                 null,
                 true)));
         Assert.Equal("map_version_not_draft", ex.Code);
@@ -149,7 +135,6 @@ public class ZonePolicyAndCrudTests
             Name = "A",
             ZoneType = ZoneType.KEEP_OUT,
             Geometry = GeoJsonGeometry.NormalizePolygon(ClosedSquare()),
-            Capacity = 1,
             IsActive = true,
             PolicySchemaVersion = 1
         };
@@ -161,7 +146,6 @@ public class ZonePolicyAndCrudTests
                 "B",
                 "KEEP_OUT",
                 ClosedSquare(),
-                1,
                 null,
                 true)));
         Assert.Equal("map_version_not_draft", ex.Code);

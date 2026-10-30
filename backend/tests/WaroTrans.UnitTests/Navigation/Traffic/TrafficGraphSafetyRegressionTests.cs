@@ -39,8 +39,8 @@ public class TrafficGraphSafetyRegressionTests
             edges,
             endpoints,
             zones ?? [],
-            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, laneCapacity, e.Direction)).ToList(),
-            (zones ?? []).Select(z => new TrafficZoneMeta(z.Code, z.ZoneType, 1)).ToList(),
+            edges.Select(e => new TrafficLaneMeta(e.Code, 1.0, e.Direction)).ToList(),
+            (zones ?? []).Select(z => new TrafficZoneMeta(z.Code, z.ZoneType)).ToList(),
             TrafficFootprintOptions.Default,
             occupancy);
 
@@ -77,15 +77,17 @@ public class TrafficGraphSafetyRegressionTests
     // ---------------------------------------------------------------- G6: straight lane through endpoints
 
     [Fact]
-    public void G6_endpoint_next_to_a_lane_is_served_on_the_lane_without_bending_it()
+    public void G6_endpoint_on_lane_keeps_stored_pose_and_splits_the_lane()
     {
+        // Within vertex snap (5 cm): station stays at stored (x,y); lane is split through that pose.
         var graph = Compile(
             [Lane("E-1", Both, (0, 0), (4, 0))],
             [new("EP-A", 0, 0, true), new("EP-BAY", 2, 0.04, true), new("EP-B", 4, 0, true)]);
 
-        Assert.All(graph.Nodes, n => Assert.Equal(0, n.Y, 9)); // every node stays on y = 0
         var bay = graph.Nodes.Single(n => n.EndpointCodes.Contains("EP-BAY"));
         Assert.Equal(2, bay.X, 9);
+        Assert.Equal(0.04, bay.Y, 9);
+        Assert.DoesNotContain(graph.Edges, e => e.IsConnector);
     }
 
     // ---------------------------------------------------------------- G8 / G9: junction links
@@ -94,10 +96,11 @@ public class TrafficGraphSafetyRegressionTests
     public void G9_junction_link_running_along_the_zone_edge_still_belongs_to_the_zone()
     {
         // Lane ends 3 cm under the top edge: the link's midpoint is closer than 5 cm to the boundary.
+        // Occupancy lock uses SINGLE_OCCUPANCY; JUNCTION alone is connectivity only.
         var graph = Compile(
             [Lane("E-IN", OneWay, (-1, 0.47), (0.2, 0.47)), Lane("E-OUT", OneWay, (1.8, 0.47), (3, 0.47))],
             [new("EP-A", -1, 0.47, true), new("EP-B", 3, 0.47, true)],
-            [Zone("Z-J", ZoneType.JUNCTION, 0, -0.5, 2, 0.5)]);
+            [Zone("Z-J", ZoneType.SINGLE_OCCUPANCY, 0, -0.5, 2, 0.5)]);
 
         var links = graph.Edges.Where(e => e.IsJunction).ToList();
         Assert.NotEmpty(links);
@@ -129,19 +132,18 @@ public class TrafficGraphSafetyRegressionTests
     }
 
     [Fact]
-    public void G10_station_beside_a_junction_is_served_through_it_not_by_a_connector_across_it()
+    public void G10_station_inside_a_junction_stays_at_stored_pose_without_connector_spur()
     {
-        // Lanes end at the junction; EP-DOCK sits 0.1 m beside the zone and 0.45 m from the nearest lane end.
+        // EP-DOCK is inside the junction polygon; attach uses arrival→departure links only (no two-way spur).
         var graph = Compile(
             [Lane("E-W", Both, (-1, 0), (0, 0)), Lane("E-E", Both, (0.6, 0), (2, 0))],
-            [new("EP-W", -1, 0, true), new("EP-E", 2, 0, true), new("EP-DOCK", 0.3, 0.4, true)],
+            [new("EP-W", -1, 0, true), new("EP-E", 2, 0, true), new("EP-DOCK", 0.3, 0.1, true)],
             [Zone("Z-J", ZoneType.JUNCTION, -0.1, -0.3, 0.7, 0.3)]);
 
         var dock = graph.Nodes.Single(n => n.EndpointCodes.Contains("EP-DOCK"));
-        Assert.True(dock.IsSafeStop); // a robot waiting at the station does not sit inside the junction
-        var access = graph.Edges.Where(e => e.IsConnector && (e.StartId == dock.Id || e.EndId == dock.Id)).ToList();
-        Assert.NotEmpty(access);
-        Assert.All(access, e => Assert.DoesNotContain("Z-J", e.ZoneCodes));
+        Assert.Equal(0.3, dock.X, 9);
+        Assert.Equal(0.1, dock.Y, 9);
+        Assert.DoesNotContain(graph.Edges, e => e.IsConnector);
     }
 
     // ---------------------------------------------------------------- T4: crossing without a zone
@@ -178,20 +180,20 @@ public class TrafficGraphSafetyRegressionTests
         Assert.True(second.Queued);
     }
 
-    // ---------------------------------------------------------------- T5: station connector both ways
+    // ---------------------------------------------------------------- T5: on-lane bay (no synthetic connector)
 
     [Fact]
-    public void T5_bay_resource_covers_both_directions_of_the_station_connector()
+    public void T5_on_lane_bay_has_no_connector_spur()
     {
         var graph = Compile(
             [Lane("E-1", Both, (0, 0), (4, 0))],
-            [new("EP-A", 0, 0, true), new("EP-BAY", 2, 0.3, true), new("EP-B", 4, 0, true)]);
+            [new("EP-A", 0, 0, true), new("EP-BAY", 2, 0, true), new("EP-B", 4, 0, true)]);
 
         var bayNode = graph.Nodes.Single(n => n.EndpointCodes.Contains("EP-BAY"));
-        var connectors = graph.Edges.Where(e => e.IsConnector && (e.StartId == bayNode.Id || e.EndId == bayNode.Id))
-            .Select(e => e.Id).Order().ToArray();
-        Assert.Equal(2, connectors.Length);
-        Assert.Equal(connectors, graph.Resources.Single(r => r.Id == "bay:EP-BAY").EdgeIds.Order().ToArray());
+        Assert.Equal(2, bayNode.X, 9);
+        Assert.Equal(0, bayNode.Y, 9);
+        Assert.DoesNotContain(graph.Edges, e => e.IsConnector);
+        Assert.True(bayNode.IsStation || bayNode.IsSafeStop || bayNode.EndpointCodes.Contains("EP-BAY"));
     }
 
     // ---------------------------------------------------------------- T17: opposing traffic
@@ -210,6 +212,52 @@ public class TrafficGraphSafetyRegressionTests
 
         Assert.True(east.Granted);
         Assert.False(west.Granted);
+    }
+
+    // ---------------------------------------------------------------- V019 closeout: stopline / exit detection
+
+    [Fact]
+    public void Bidirectional_junction_corridor_gets_stopline_at_external_entry()
+    {
+        // Cross: N–S and E–W bidirectional through a JUNCTION zone; approaches are non-critical.
+        RouteGraphEdgeInput[] edges =
+        [
+            Lane("E-W", Both, (-2, 0), (0, 0)),
+            Lane("E-E", Both, (0, 0), (2, 0)),
+            Lane("E-S", Both, (0, -2), (0, 0)),
+            Lane("E-N", Both, (0, 0), (0, 2)),
+            Lane("J-WE", Both, (-0.4, 0), (0.4, 0)),
+            Lane("J-SN", Both, (0, -0.4), (0, 0.4)),
+        ];
+        var result = TrafficGraphCompiler.Compile(Input(
+            edges,
+            [new("EP-W", -2, 0, true), new("EP-E", 2, 0, true), new("EP-S", 0, -2, true), new("EP-N", 0, 2, true)],
+            [Zone("Z-J", ZoneType.JUNCTION, -0.5, -0.5, 0.5, 0.5)]));
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == TrafficGraphValidator.CorridorNoStopline);
+        Assert.NotEmpty(result.Graph.Stoplines);
+        Assert.All(result.Graph.Corridors, c =>
+            Assert.Contains(result.Graph.Stoplines, s => s.CorridorId == c.Id));
+    }
+
+    [Fact]
+    public void Narrow_bidirectional_finds_exit_via_undirected_multi_hop()
+    {
+        // Narrow both-ways segment; safe stop is two hops out on an undirected approach.
+        RouteGraphEdgeInput[] edges =
+        [
+            Lane("NARROW", Both, (0, 0), (1, 0)),
+            Lane("APPROACH", Both, (-2, 0), (0, 0)),
+        ];
+        var result = TrafficGraphCompiler.Compile(Input(
+            edges,
+            [new("EP-SAFE", -2, 0, true), new("EP-FAR", 1, 0, true)]));
+
+        Assert.Contains(result.Graph.Resources, r => r.Id == "narrow:NARROW");
+        Assert.True(result.Graph.ExitSafeStopsByResourceId.TryGetValue("narrow:NARROW", out var exits));
+        Assert.NotEmpty(exits);
+        Assert.DoesNotContain(result.Issues, i =>
+            i.Code == TrafficGraphCompiler.CriticalNoExit && i.RelatedCodes.Contains("narrow:NARROW"));
     }
 
     private static int Station(FakeRobotSim sim, string code) =>

@@ -17,11 +17,11 @@ namespace WaroTrans.Navigation.RouteGraph;
 /// straight to every lane end that leaves it (arrival → departure only, so one-way lanes keep their direction), as long
 /// as the link stays inside the zone and out of KEEP_OUT zones. Lanes therefore need not be drawn across an
 /// intersection. Prefer JUNCTION; SINGLE_OCCUPANCY / NO_STOP remain for backward compatibility.</item>
-/// <item>An Endpoint on a node is attached to it; one at most <see cref="RouteGraphOptions.EndpointSnapDistance"/>
-/// from a lane gets its own node, joined to the lane by two connector segments at the perpendicular foot. Farther from
-/// every lane but inside a junction zone, or at most that distance from its edge, it is reached through the zone: an exit
-/// point on the zone edge (the Endpoint itself when inside) joins the junction both ways and a two-way connector runs
-/// from it to the Endpoint.</item>
+/// <item>An Endpoint becomes a station node at its stored (x, y). If that pose lies on a drawn lane (within
+/// <see cref="RouteGraphOptions.VertexSnapTolerance"/>), the lane is split through that pose — the station is never
+/// moved onto the lane centre. Off-lane endpoints are served only when they lie inside a user-drawn junction zone
+/// (JUNCTION / SINGLE_OCCUPANCY / NO_STOP). No synthetic two-way spur from a perpendicular foot is added; a ONE_WAY
+/// edge never gains a reverse segment from attach.</item>
 /// <item>SPEED zones lower the speed limit of the pieces inside; NO_STOP / SINGLE_OCCUPANCY / JUNCTION only label them.</item>
 /// <item>Identical segments are merged (lowest speed limit, all Edge / Zone codes).</item>
 /// <item>Every Endpoint must reach every other one; non-Endpoint nodes without an outgoing segment are reported.</item>
@@ -404,68 +404,31 @@ public static class RouteGraphBuilder
         }
 
         /// <summary>
-        /// Endpoint too far from every lane: reach it through the nearest junction zone it lies in or at most
-        /// EndpointSnapDistance from. Exit point P = the Endpoint when inside, else the closest point of the zone edge;
-        /// every arrival of the zone links to P and P to every departure, then a two-way connector P ↔ Endpoint.
+        /// Endpoint inside a junction zone: station stays at (x, y); arrivals → exit and exit → departures
+        /// (no reverse spur, no move onto a lane centre).
         /// </summary>
         private bool AttachThroughJunction(RouteGraphEndpointInput endpoint)
         {
             var candidates = _junctions
-                .Select(j => (Junction: j, Distance: Inside(j.Ring, endpoint.X, endpoint.Y, 0) ? 0 : DistanceToRing(j.Ring, endpoint.X, endpoint.Y)))
-                .Where(c => c.Distance <= options.EndpointSnapDistance)
-                .OrderBy(c => c.Distance)
-                .ThenBy(c => c.Junction.Code, StringComparer.Ordinal);
-            foreach (var (junction, distance) in candidates)
+                .Where(j => Inside(j.Ring, endpoint.X, endpoint.Y, 0))
+                .OrderBy(j => j.Code, StringComparer.Ordinal);
+            foreach (var junction in candidates)
             {
-                var (px, py) = distance <= _tolerance ? (endpoint.X, endpoint.Y) : ClosestOnRing(junction.Ring, endpoint.X, endpoint.Y);
                 var added = Nodes.Count;
-                var exit = FindOrAddNode(px, py); // may be a lane end already on the zone edge
+                var exit = FindOrAddNode(endpoint.X, endpoint.Y);
                 var linked = junction.Arrivals.Count(from => AddJunctionLink(junction, from, exit))
                     + junction.Departures.Count(to => AddJunctionLink(junction, exit, to));
                 if (exit == added && linked == 0)
                 {
-                    Nodes.RemoveAt(exit); // no lane end of this zone can reach the exit point
+                    Nodes.RemoveAt(exit);
                     continue;
                 }
 
-                if (distance <= _tolerance)
-                {
-                    Nodes[exit].EndpointCodes.Add(endpoint.Code);
-                    return true;
-                }
-
-                var stop = AddNode(endpoint.X, endpoint.Y);
-                Nodes[stop].EndpointCodes.Add(endpoint.Code);
-                Segments.Add(WorkSegment.Connector(exit, stop));
-                Segments.Add(WorkSegment.Connector(stop, exit));
+                Nodes[exit].EndpointCodes.Add(endpoint.Code);
                 return true;
             }
 
             return false;
-        }
-
-        private double NearestJunctionDistance(double x, double y) =>
-            _junctions.Count == 0
-                ? double.MaxValue
-                : _junctions.Min(j => Inside(j.Ring, x, y, 0) ? 0 : DistanceToRing(j.Ring, x, y));
-
-        private static (double X, double Y) ClosestOnRing(IReadOnlyList<RoutePoint> ring, double x, double y)
-        {
-            var best = (X: ring[0].X, Y: ring[0].Y, D: double.MaxValue);
-            for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
-            {
-                var (dx, dy) = (ring[i].X - ring[j].X, ring[i].Y - ring[j].Y);
-                var lengthSquared = dx * dx + dy * dy;
-                var t = lengthSquared == 0 ? 0 : Math.Clamp(((x - ring[j].X) * dx + (y - ring[j].Y) * dy) / lengthSquared, 0, 1);
-                var (fx, fy) = (ring[j].X + t * dx, ring[j].Y + t * dy);
-                var d = Math.Sqrt(Square(fx - x) + Square(fy - y));
-                if (d < best.D)
-                {
-                    best = (fx, fy, d);
-                }
-            }
-
-            return (best.X, best.Y);
         }
 
         public void Label(RouteGraphZoneInput zone)
@@ -492,61 +455,30 @@ public static class RouteGraphBuilder
 
         public void AttachEndpoint(RouteGraphEndpointInput endpoint, List<RouteGraphIssue> issues)
         {
-            var onNode = NearestNode(endpoint.X, endpoint.Y, drivableOnly: true);
-            if (onNode is { } existing && Distance(Nodes[existing], endpoint.X, endpoint.Y) <= _tolerance)
-            {
-                Nodes[existing].EndpointCodes.Add(endpoint.Code);
-                return;
-            }
-
-            var (segment, footX, footY, distance) = NearestFoot(endpoint.X, endpoint.Y);
-
-            // Closer to a junction zone than to any drawn lane: serve it through the junction (exit point on the
-            // zone edge). A straight connector to the far lane would cut across the junction and put the station
-            // inside a critical resource.
-            if (segment >= 0 && distance > _tolerance
-                && NearestJunctionDistance(endpoint.X, endpoint.Y) + _tolerance < distance
-                && AttachThroughJunction(endpoint))
-            {
-                return;
-            }
-
-            if (segment < 0 || distance > options.EndpointSnapDistance)
-            {
-                if (AttachThroughJunction(endpoint))
-                {
-                    return;
-                }
-
-                issues.Add(new RouteGraphIssue(
-                    EndpointTooFar,
-                    RouteGraphIssueSeverity.Error,
-                    string.Create(CultureInfo.InvariantCulture,
-                        $"Endpoint {endpoint.Code} is {distance:0.00} m from the nearest lane (max {options.EndpointSnapDistance:0.00} m) and not within that distance of a junction zone: draw a lane to it, move it, or extend a junction zone to it."),
-                    [endpoint.Code]));
-                return;
-            }
-
-            // Perpendicular foot on the lane (or the segment end when the foot falls on it).
-            var seg = Segments[segment];
-            var foot = Distance(Nodes[seg.Start], footX, footY) <= _tolerance ? seg.Start
-                : Distance(Nodes[seg.End], footX, footY) <= _tolerance ? seg.End
-                : AddNode(footX, footY);
-            SplitSegmentsThrough(foot);
-
+            var (_, _, _, distance) = NearestFoot(endpoint.X, endpoint.Y);
             if (distance <= _tolerance)
             {
-                // On the lane itself: the Endpoint is served at the foot, so the lane centre line stays straight.
-                // A node at the Endpoint's own x,y would bend the lane through it (sideways kinks of up to 5 cm).
-                Nodes[foot].EndpointCodes.Add(endpoint.Code);
+                // Station stays at stored (x, y); split the lane through that pose — never move the code onto a foot.
+                var stop = FindOrAddNode(endpoint.X, endpoint.Y);
+                Nodes[stop].EndpointCodes.Add(endpoint.Code);
+                SplitSegmentsThrough(stop);
                 return;
             }
 
-            // Off the lane: Endpoint ↔ foot connector.
-            var stop = AddNode(endpoint.X, endpoint.Y);
-            Nodes[stop].EndpointCodes.Add(endpoint.Code);
-            Segments.Add(WorkSegment.Connector(foot, stop));
-            Segments.Add(WorkSegment.Connector(stop, foot));
+            if (AttachThroughJunction(endpoint))
+            {
+                return;
+            }
+
+            // Off-lane and not inside a junction zone: do not invent a two-way spur (would reverse ONE_WAY lanes).
+            var orphan = FindOrAddNode(endpoint.X, endpoint.Y);
+            Nodes[orphan].EndpointCodes.Add(endpoint.Code);
+            issues.Add(new RouteGraphIssue(
+                EndpointTooFar,
+                RouteGraphIssueSeverity.Error,
+                string.Create(CultureInfo.InvariantCulture,
+                    $"Endpoint {endpoint.Code} is {distance:0.00} m from the nearest lane (max {_tolerance:0.00} m on-lane) and not inside a junction zone: draw a lane through it, move it onto a lane, or place a junction zone over it."),
+                [endpoint.Code]));
         }
 
         public RouteGraph Freeze(string name, string frameId)
