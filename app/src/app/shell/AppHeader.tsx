@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Bell, ChevronDown, MapPin } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -62,6 +63,7 @@ export function AppHeader({
   initialOpen,
 }: AppHeaderProps) {
   const topInset = useTopInset();
+  const styles = useThemedStyles(createStyles);
   const { unreadCount } = useRealtime();
   const { session } = useAuth();
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(initialOpen === 'zone');
@@ -129,7 +131,7 @@ export function AppHeader({
             accessibilityLabel={`Account menu for ${operatorName}`}
             style={({ pressed }) => [styles.avatar, pressed && styles.avatarPressed]}
           >
-            <Text variant="label" color={colors.textInverse} style={styles.avatarText}>
+            <Text variant="label" color="#ffffff" style={styles.avatarText}>
               {avatarInitials}
             </Text>
           </Pressable>
@@ -162,104 +164,108 @@ export function AppHeader({
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    zIndex: 999,
-    ...shadows.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 56,
-  },
-  leftGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-  },
-  zonePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 40,
-    paddingHorizontal: 12,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    maxWidth: 180,
-  },
-  zonePillPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  zoneName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  rightGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginLeft: 8,
-  },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  iconBtnPressed: {
-    backgroundColor: colors.surfaceMuted,
-    transform: [{ scale: 0.95 }],
-  },
-  notifBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#ef4444',
-    borderWidth: 1.5,
-    borderColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  notifBadgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 12,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#121317', // Solid deep ink / black
-  },
-  avatarPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.95 }],
-  },
-  avatarText: {
-    fontWeight: '700',
-    fontSize: 14,
-  },
-});
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolean) =>
+  StyleSheet.create({
+    header: {
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+      zIndex: 999,
+      ...shadows.sm,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      minHeight: 56,
+    },
+    leftGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flex: 1,
+      minWidth: 0,
+    },
+    zonePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 40,
+      paddingHorizontal: 12,
+      borderRadius: radii.full,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.border,
+      maxWidth: 180,
+    },
+    zonePillPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    zoneName: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    rightGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginLeft: 8,
+    },
+    iconBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: radii.full,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+    },
+    iconBtnPressed: {
+      backgroundColor: colors.surfaceMuted,
+      transform: [{ scale: 0.95 }],
+    },
+    notifBadge: {
+      position: 'absolute',
+      top: -2,
+      right: -2,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: colors.danger,
+      borderWidth: 1.5,
+      borderColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 3,
+    },
+    notifBadgeText: {
+      color: '#ffffff',
+      fontSize: 10,
+      fontWeight: '800',
+      lineHeight: 12,
+    },
+    avatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? colors.darkAction : '#121317',
+      borderWidth: isDark ? 1 : 0,
+      borderColor: colors.darkActionBorder,
+    },
+    avatarPressed: {
+      opacity: 0.85,
+      transform: [{ scale: 0.95 }],
+    },
+    avatarText: {
+      fontWeight: '700',
+      fontSize: 14,
+      color: '#ffffff',
+    },
+  });

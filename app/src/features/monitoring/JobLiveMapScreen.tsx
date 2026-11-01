@@ -14,10 +14,11 @@ import {
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { dockReservedSpace } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
@@ -33,6 +34,7 @@ const DOCK_ZONE_GAP = 12;
 const SHEET_FALLBACK_HEIGHT = 174;
 
 export function JobLiveMapScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { session } = useAuth();
   const { params, dockHeight, goBack } = useNavigation();
   const { lastJobUpdate } = useRealtime();
@@ -150,7 +152,7 @@ export function JobLiveMapScreen() {
               <Text style={styles.metricLabel}>{lastReported ? 'Last Pose' : 'Pose Snapshot'}</Text>
             </View>
             <View style={[styles.metricCol, { borderRightWidth: 0 }]}>
-              <Text style={[styles.metricVal, { color: colors.darkAction }]}>
+              <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
                 {telemetry?.navigationStatus || 'Unknown'}
               </Text>
               <Text style={styles.metricLabel}>Nav State</Text>
@@ -170,7 +172,7 @@ export function JobLiveMapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -331,7 +333,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.sm,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -391,7 +393,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.border,
@@ -428,7 +430,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     right: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,

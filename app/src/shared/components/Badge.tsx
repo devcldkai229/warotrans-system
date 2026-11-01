@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
+import { useThemeColors } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
 export type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -12,7 +13,8 @@ interface BadgeProps {
 }
 
 export function Badge({ label, tone = 'neutral', size = 'md' }: BadgeProps) {
-  const toneStyles = getToneStyles(tone);
+  const colors = useThemeColors();
+  const toneStyles = getToneStyles(tone, colors);
   const isSm = size === 'sm';
 
   return (
@@ -24,27 +26,27 @@ export function Badge({ label, tone = 'neutral', size = 'md' }: BadgeProps) {
   );
 }
 
-function getToneStyles(tone: BadgeTone) {
+function getToneStyles(tone: BadgeTone, colors: ThemeColors) {
   switch (tone) {
     case 'success':
       return {
         container: { backgroundColor: colors.successBg, borderColor: colors.successBorder },
-        text: { color: colors.success },
+        text: { color: colors.successText },
       };
     case 'warning':
       return {
         container: { backgroundColor: colors.warningBg, borderColor: colors.warningBorder },
-        text: { color: colors.warning },
+        text: { color: colors.warningText },
       };
     case 'danger':
       return {
         container: { backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder },
-        text: { color: colors.danger },
+        text: { color: colors.dangerText },
       };
     case 'info':
       return {
         container: { backgroundColor: colors.infoBg, borderColor: colors.infoBorder },
-        text: { color: colors.info },
+        text: { color: colors.infoText },
       };
     case 'neutral':
     default:

@@ -17,9 +17,10 @@ import {
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import {
   Button,
@@ -56,6 +57,7 @@ const INITIAL_JOB = EMPTY_JOB;
 export function HomeScreen() {
   const { session } = useAuth();
   const { navigate, dockHeight } = useNavigation();
+  const styles = useThemedStyles(createStyles);
   const [peekSheetHeight, setPeekSheetHeight] = useState(0);
   const fleetQuery = useMapFleet(session?.id || '');
   const rawFleet = fleetQuery.robots;
@@ -298,7 +300,7 @@ export function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Open command cancellation console"
                   >
-                    <ShieldAlert size={13} color="#b91c1c" />
+                    <ShieldAlert size={13} color={colors.dangerText} />
                     <Text style={styles.fleetRecallLinkText}>
                       Command Cancellation
                     </Text>
@@ -332,7 +334,7 @@ export function HomeScreen() {
                       <View style={styles.fleetTelemetryRow}>
                         <Text variant="caption" color={colors.textSecondary}>{r.lastReported ? 'Last Speed' : 'Speed'}: {r.speed}</Text>
                         <View style={styles.batteryRow}>
-                          <BatteryMedium size={13} color={r.battery != null && r.battery < 20 ? '#dc2626' : colors.successText} />
+                          <BatteryMedium size={13} color={r.battery != null && r.battery < 20 ? colors.dangerText : colors.successText} />
                           <Text variant="caption" color={colors.textSecondary}>{r.battery == null ? '—' : `${r.battery}%`}</Text>
                         </View>
                       </View>
@@ -348,10 +350,10 @@ export function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#eef1f6',
+    backgroundColor: colors.background,
     position: 'relative',
   },
   mapCanvas: {
@@ -470,7 +472,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radii.full,
-    backgroundColor: 'rgba(50, 53, 62, 0.08)',
+    backgroundColor: colors.surfaceSubtle,
   },
   fleetToggleText: {
     fontWeight: '600',
@@ -532,15 +534,15 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    backgroundColor: '#fef2f2',
+    backgroundColor: colors.dangerBg,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#fca5a5',
+    borderColor: colors.dangerBorder,
   },
   fleetRecallLinkText: {
     fontSize: 10.5,
     fontWeight: '800',
-    color: '#b91c1c',
+    color: colors.dangerText,
   },
   fleetSectionTitle: {
     fontWeight: '600',

@@ -9,8 +9,9 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
+import { useThemeColors } from '../theme/ThemeContext';
 import { Text, TextColor } from './Text';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
@@ -62,8 +63,9 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  const colors = useThemeColors();
   const isInteractive = !disabled && !loading;
-  const tone = TONE[variant];
+  const tone = getTone(colors)[variant];
   const metrics = SIZE_METRICS[size];
   const IconCmp = Icon;
   const iconSize = metrics.icon;
@@ -110,32 +112,34 @@ export function Button({
 }
 
 /** Per-variant container + foreground. Kept in one table so they cannot drift. */
-const TONE: Record<ButtonVariant, { container: ViewStyle; text: TextColor }> = {
-  primary: {
-    container: {
-      backgroundColor: colors.darkAction, // Warm Dark Gray (Graphite)
-      borderWidth: 1,
-      borderColor: colors.darkActionBorder,
+function getTone(colors: ThemeColors): Record<ButtonVariant, { container: ViewStyle; text: TextColor }> {
+  return {
+    primary: {
+      container: {
+        backgroundColor: colors.darkAction, // Warm Dark Gray (Graphite)
+        borderWidth: 1,
+        borderColor: colors.darkActionBorder,
+      },
+      text: '#ffffff',
     },
-    text: colors.textInverse,
-  },
-  secondary: {
-    container: { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
-    text: colors.textPrimary,
-  },
-  outline: {
-    container: { backgroundColor: 'transparent', borderColor: colors.primaryBorder },
-    text: colors.primary,
-  },
-  ghost: {
-    container: { backgroundColor: 'transparent', borderColor: 'transparent' },
-    text: colors.primary,
-  },
-  danger: {
-    container: { backgroundColor: colors.danger, borderColor: colors.danger },
-    text: colors.textInverse,
-  },
-};
+    secondary: {
+      container: { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+      text: colors.textPrimary,
+    },
+    outline: {
+      container: { backgroundColor: 'transparent', borderColor: colors.primaryBorder },
+      text: colors.primaryText,
+    },
+    ghost: {
+      container: { backgroundColor: 'transparent', borderColor: 'transparent' },
+      text: colors.primaryText,
+    },
+    danger: {
+      container: { backgroundColor: colors.danger, borderColor: colors.danger },
+      text: '#ffffff',
+    },
+  };
+}
 
 const SIZE_METRICS: Record<ButtonSize, { icon: number; variant: 'label' | 'bodyMedium' | 'headline'; rowGap: ViewStyle }> = {
   sm: { icon: 16, variant: 'label', rowGap: { gap: 6 } },

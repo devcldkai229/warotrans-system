@@ -2,7 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
 import { Text } from '../../ui';
-import { colors } from '../../theme/colors';
+import { useThemeColors } from '../../theme/ThemeContext';
 import { MapAnchor } from '../MapAnchor';
 import { mapGridLines } from '../mapGrid';
 import { spacedLocations } from '../mapModel';
@@ -10,6 +10,7 @@ import type { MapFrame } from '../mapTransform';
 import type { MapCameraController } from '../hooks/useMapCamera';
 
 export const GridLabels=memo(function GridLabels({map,frame,camera}:{map:MapVersionDetailDto;frame:MapFrame;camera:MapCameraController}) {
+  const colors = useThemeColors();
   const labels=useMemo(()=>spacedLocations(mapGridLines(map,frame,camera.settledZoom).map(line=>{
     const dx=line.b.x-line.a.x,dy=line.b.y-line.a.y,length=Math.hypot(dx,dy);
     const inset=Math.min(length/2,36/camera.settledZoom);

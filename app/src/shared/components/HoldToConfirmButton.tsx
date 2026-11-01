@@ -8,7 +8,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Check } from 'lucide-react-native';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
 interface HoldToConfirmButtonProps {
@@ -27,6 +28,7 @@ export function HoldToConfirmButton({
   disabled = false,
   style,
 }: HoldToConfirmButtonProps) {
+  const styles = useThemedStyles(createStyles);
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -125,41 +127,44 @@ export function HoldToConfirmButton({
   );
 }
 
-const styles = StyleSheet.create({
-  buttonContainer: {
-    height: 52,
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-    borderRadius: 6,
-    position: 'relative',
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  progressFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: colors.success,
-  },
-  contentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    zIndex: 10,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  labelWhite: {
-    color: '#ffffff',
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    buttonContainer: {
+      height: 52,
+      backgroundColor: colors.successBg,
+      borderWidth: 1,
+      borderColor: colors.successBorder,
+      borderRadius: 6,
+      position: 'relative',
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: '100%',
+    },
+    buttonDisabled: {
+      opacity: 0.5,
+    },
+    progressFill: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      backgroundColor: colors.success,
+    },
+    contentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      zIndex: 10,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      fontFamily: typography.fontSans,
+    },
+    labelWhite: {
+      color: '#ffffff',
+    },
+  });

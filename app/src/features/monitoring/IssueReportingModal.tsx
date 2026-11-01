@@ -25,9 +25,10 @@ import {
 } from 'lucide-react-native';
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -92,6 +93,7 @@ export function IssueReportingModal({
   robotCode = 'Unassigned',
   jobId = '',
 }: IssueReportingModalProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const [selectedCat, setSelectedCat] = useState<IncidentCategory>('CONTAINER_DAMAGED');
   const [notes, setNotes] = useState('');
   const [photoAttached, setPhotoAttached] = useState(false);
@@ -306,7 +308,7 @@ export function IssueReportingModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   fullScreenContainer: {
     flex: 1,
     backgroundColor: colors.background,
@@ -322,7 +324,7 @@ const styles = StyleSheet.create({
   safetyBox: {
     flexDirection: 'row',
     gap: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: 'rgba(220, 38, 38, 0.25)',
@@ -358,7 +360,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -390,7 +392,7 @@ const styles = StyleSheet.create({
   },
   catTitleSelected: {
     fontWeight: '700',
-    color: colors.darkAction,
+    color: colors.textPrimary,
   },
   checkBadge: {
     width: 20,
@@ -401,7 +403,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   evidenceCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -498,7 +500,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: radii.sm,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
@@ -523,7 +525,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: radii.sm,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -537,7 +539,7 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   notesCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -559,7 +561,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },

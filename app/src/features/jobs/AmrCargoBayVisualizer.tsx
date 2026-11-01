@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, View, Pressable } from 'react-native';
 import { Box, Layers, CheckCircle2, ArrowDownRight, ArrowUpRight, ShieldAlert } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { Text } from '../../shared/ui';
@@ -33,6 +34,7 @@ export function AmrCargoBayVisualizer({
   isWaiting = false,
   onSelectContainer,
 }: AmrCargoBayVisualizerProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const activeRobot = robotCode || robotId || 'Unassigned';
 
   const totalCount = containers.length;
@@ -172,15 +174,15 @@ export function AmrCargoBayVisualizer({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   handoverActionBadge: {
     backgroundColor: colors.primary,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     padding: 16,
     marginBottom: 16,
   },
@@ -204,12 +206,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: radii.md,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   titleText: {
-    color: '#121317',
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -217,11 +219,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radii.sm,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     flexShrink: 0,
   },
   capacityText: {
-    color: '#4B5563',
+    color: colors.textSecondary,
     fontWeight: '600',
     fontSize: 12,
   },
@@ -229,20 +231,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   containerCard: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     padding: 12,
   },
   targetCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#121317',
+    backgroundColor: colors.surface,
+    borderColor: colors.textPrimary,
     borderWidth: 1.5,
   },
   deliveredCard: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
     opacity: 0.7,
   },
   cardHeader: {
@@ -261,16 +263,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   indicatorTarget: {
-    backgroundColor: '#121317',
+    backgroundColor: colors.textPrimary,
   },
   indicatorDelivered: {
     backgroundColor: colors.success,
   },
   indicatorOnboard: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
   },
   barcodeText: {
-    color: '#121317',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -279,7 +281,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#121317',
+    backgroundColor: colors.darkAction,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -296,13 +298,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.successBg,
   },
   onboardBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primaryLight,
   },
   badgeText: {
     fontSize: 11,
@@ -317,10 +319,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   emptyText: {
@@ -333,10 +335,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.warningBg,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: colors.warningBorder,
   },
   waitingText: {
     fontSize: 12,

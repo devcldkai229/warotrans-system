@@ -27,9 +27,10 @@ import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { SegmentedControl } from '../../shared/ui/SegmentedControl';
 import { Text as StatusText } from '../../shared/ui/Text';
 import { containerLocationFilters, getContainerLocation, groupInventoryByProduct } from './inventoryData';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -45,6 +46,7 @@ import {
 export type LevelFilterKey = 'ALL' | number;
 
 export function InventoryLookupScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { goBack, navigate } = useNavigation();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -547,13 +549,13 @@ export function InventoryLookupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
   searchSection: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
@@ -584,7 +586,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   spatialFilterSection: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingVertical: 8,
@@ -604,7 +606,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minHeight: 30,
     borderRadius: 6,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     flexDirection: 'row',
@@ -645,7 +647,7 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
   },
   categoryBar: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingVertical: 8,
@@ -689,7 +691,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   containerCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -812,7 +814,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -917,7 +919,7 @@ const styles = StyleSheet.create({
   containerPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
     borderRadius: 4,
@@ -953,10 +955,10 @@ const styles = StyleSheet.create({
   verifiedCard: {
     marginHorizontal: 16,
     marginTop: 10,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.successBg,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.successBorder,
     padding: 14,
     gap: 8,
     ...shadows.sm,
@@ -966,7 +968,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#DCFCE7',
+    borderBottomColor: colors.successBorder,
     paddingBottom: 8,
   },
   verifiedBadgeRow: {
@@ -978,12 +980,12 @@ const styles = StyleSheet.create({
   verifiedTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#065F46',
+    color: colors.successText,
   },
   verifiedStatusBadge: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.successBorder,
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 4,
@@ -991,13 +993,13 @@ const styles = StyleSheet.create({
   verifiedStatusText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#166534',
+    color: colors.successText,
     fontFamily: typography.fontMono,
   },
   verifiedCloseBtn: {
     padding: 4,
     borderRadius: 4,
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
@@ -1013,19 +1015,19 @@ const styles = StyleSheet.create({
   },
   verifiedLabel: {
     fontSize: 11.5,
-    color: '#047857',
+    color: colors.successText,
     fontWeight: '500',
   },
   verifiedValue: {
     fontSize: 12,
-    color: '#064E3B',
+    color: colors.textPrimary,
     fontWeight: '700',
     flexShrink: 1,
     textAlign: 'right',
   },
   verifiedValueMono: {
     fontSize: 12,
-    color: '#064E3B',
+    color: colors.textPrimary,
     fontWeight: '800',
     fontFamily: typography.fontMono,
   },

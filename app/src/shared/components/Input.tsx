@@ -7,8 +7,9 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 import { Text } from '../ui/Text';
 
@@ -35,6 +36,7 @@ export function Input({
   ...props
 }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const styles = useThemedStyles(createStyles);
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -75,50 +77,51 @@ export function Input({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: 6,
-  },
-  label: {
-    fontWeight: '600',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    minHeight: 48,
-    paddingHorizontal: 14,
-  },
-  inputFocused: {
-    borderColor: colors.primary,
-    backgroundColor: '#ffffff',
-  },
-  inputError: {
-    borderColor: colors.danger,
-    backgroundColor: colors.dangerBg,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    fontFamily: typography.fontSans,
-    color: colors.textPrimary,
-    paddingVertical: 12,
-  },
-  iconLeft: {
-    marginRight: 10,
-  },
-  iconRight: {
-    marginLeft: 10,
-  },
-  errorText: {
-    marginTop: 2,
-    fontWeight: '600',
-  },
-  hintText: {
-    marginTop: 2,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      gap: 6,
+    },
+    label: {
+      fontWeight: '600',
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radii.md,
+      minHeight: 48,
+      paddingHorizontal: 14,
+    },
+    inputFocused: {
+      borderColor: colors.primary,
+      backgroundColor: colors.surface,
+    },
+    inputError: {
+      borderColor: colors.danger,
+      backgroundColor: colors.dangerBg,
+    },
+    input: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '500',
+      fontFamily: typography.fontSans,
+      color: colors.textPrimary,
+      paddingVertical: 12,
+    },
+    iconLeft: {
+      marginRight: 10,
+    },
+    iconRight: {
+      marginLeft: 10,
+    },
+    errorText: {
+      marginTop: 2,
+      fontWeight: '600',
+    },
+    hintText: {
+      marginTop: 2,
+    },
+  });

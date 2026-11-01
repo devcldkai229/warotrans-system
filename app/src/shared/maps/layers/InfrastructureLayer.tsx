@@ -1,12 +1,13 @@
 import React, { memo } from 'react';
 import Svg, { ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
-import { colors } from '../../theme/colors';
+import { useThemeColors } from '../../theme/ThemeContext';
 import { zoneColor } from '../mapPresentation';
 import { worldToBase, type MapFrame, type MapPoint } from '../mapTransform';
 
 interface Props { map: MapVersionDetailDto; frame: MapFrame; zones: boolean; lanes: boolean; zoom: number }
 export const InfrastructureLayer = memo(function InfrastructureLayer({map,frame,zones,lanes,zoom}: Props) {
+  const colors = useThemeColors();
   const clip=`infrastructure-${map.id}`;
   const point=(p:number[])=>worldToBase({x:p[0],y:p[1]},map,frame);
   const path=(points:MapPoint[])=>points.map((p,i)=>`${i?'L':'M'}${p.x},${p.y}`).join(' ');

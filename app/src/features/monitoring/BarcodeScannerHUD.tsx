@@ -16,9 +16,10 @@ import {
   X,
   Zap,
 } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { useTopInset } from '../../shared/theme/layout';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -42,6 +43,7 @@ export function BarcodeScannerHUD({
   manualLabel = 'Container barcode',
   placeholder = 'Enter Or Scan Container Barcode',
 }: BarcodeScannerHUDProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const topInset = useTopInset();
   const [torchOn, setTorchOn] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -202,7 +204,7 @@ export function BarcodeScannerHUD({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.92)',

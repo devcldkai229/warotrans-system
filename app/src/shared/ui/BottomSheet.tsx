@@ -9,8 +9,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme/colors';
-import { radii } from '../theme/radii';
+import { ThemeColors } from '../theme/colors';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 interface BottomSheetProps {
   onClose: () => void;
@@ -26,6 +26,7 @@ export function BottomSheet({
   autoHeight = false,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
   const [expanded, setExpanded] = useState(false);
   const [availableHeight, setAvailableHeight] = useState(0);
   const pan = useMemo(() => PanResponder.create({
@@ -80,23 +81,29 @@ export function BottomSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end', alignItems: 'center' },
-  sheet: {
-    width: '100%',
-    maxWidth: 560,
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.8)',
-  },
-  handleTarget: { minHeight: 30, paddingTop: 8, paddingBottom: 6, alignItems: 'center', justifyContent: 'center' },
-  handle: { width: 36, height: 5, borderRadius: 2.5, backgroundColor: 'rgba(60, 60, 67, 0.28)' },
-});
+const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) =>
+  StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end', alignItems: 'center' },
+    sheet: {
+      width: '100%',
+      maxWidth: 560,
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      overflow: 'hidden',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: -6 },
+      shadowOpacity: isDark ? 0.5 : 0.12,
+      shadowRadius: 20,
+      elevation: 16,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    handleTarget: { minHeight: 30, paddingTop: 8, paddingBottom: 6, alignItems: 'center', justifyContent: 'center' },
+    handle: {
+      width: 36,
+      height: 5,
+      borderRadius: 2.5,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(60, 60, 67, 0.28)',
+    },
+  });

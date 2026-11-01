@@ -2,7 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ArrowRight, Boxes, Truck } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { JobStatus } from '../../shared/types/contracts';
@@ -92,6 +93,7 @@ function workflowTag(workflowName: string): string {
  * concern, no second "kind" field to drift out of sync with it.
  */
 export function JobCard({ job, onPress, onAccept }: JobCardProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const effectiveStatus = job.status;
   const status = JOB_STATUS_PRESENTATION[effectiveStatus];
   const action: JobAction = job.hasWaitingHandover
@@ -200,7 +202,7 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   cardDetails: { gap: 12, minHeight: 44 },
   header: {
     flexDirection: 'row',

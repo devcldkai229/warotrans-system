@@ -25,10 +25,11 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { JOB_STATUS_PRESENTATION } from '../jobs/jobData';
 import { requestStatusLabel } from './dispatchData';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -59,6 +60,7 @@ export interface RecentDispatchItem {
  *   - Recent Dispatches: Structured, high-contrast operational audit cards.
  */
 export function TransportScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, dockHeight } = useNavigation();
   const { lastJobUpdate } = useRealtime();
   const { isHolding } = useSafetyHold();
@@ -152,7 +154,7 @@ export function TransportScreen() {
               </View>
 
               <View style={styles.heroBtnContent}>
-                <Text variant="bodyMedium" color={colors.textInverse} style={styles.heroBtnTitle}>
+                <Text variant="bodyMedium" color="#ffffff" style={styles.heroBtnTitle}>
                   New Request
                 </Text>
               </View>
@@ -368,7 +370,7 @@ export function TransportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

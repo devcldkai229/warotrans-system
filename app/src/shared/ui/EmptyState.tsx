@@ -1,7 +1,8 @@
 import { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors, SemanticTone } from '../theme/colors';
+import { SemanticTone, ThemeColors } from '../theme/colors';
+import { useThemeColors } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { Text } from './Text';
 
@@ -38,7 +39,8 @@ export function EmptyState({
   compact = false,
   style,
 }: EmptyStateProps) {
-  const palette = TONE_PALETTE[tone];
+  const colors = useThemeColors();
+  const palette = getTonePalette(colors)[tone];
   const IconCmp = Icon;
 
   return (
@@ -72,13 +74,15 @@ export function EmptyState({
   );
 }
 
-const TONE_PALETTE: Record<SemanticTone, { well: string; text: string }> = {
-  neutral: { well: colors.surfaceSubtle, text: colors.textMuted },
-  info: { well: colors.infoBg, text: colors.info },
-  success: { well: colors.successBg, text: colors.success },
-  warning: { well: colors.warningBg, text: colors.warning },
-  danger: { well: colors.dangerBg, text: colors.danger },
-};
+function getTonePalette(colors: ThemeColors): Record<SemanticTone, { well: string; text: string }> {
+  return {
+    neutral: { well: colors.surfaceSubtle, text: colors.textMuted },
+    info: { well: colors.infoBg, text: colors.info },
+    success: { well: colors.successBg, text: colors.success },
+    warning: { well: colors.warningBg, text: colors.warning },
+    danger: { well: colors.dangerBg, text: colors.danger },
+  };
+}
 
 const styles = StyleSheet.create({
   container: {

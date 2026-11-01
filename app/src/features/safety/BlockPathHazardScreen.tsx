@@ -17,7 +17,8 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -34,6 +35,7 @@ const HAZARD_CATEGORIES = [
 ];
 
 export function BlockPathHazardScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { goBack } = useNavigation();
   const [selectedCorridor, setSelectedCorridor] = useState('');
   const [hazardType, setHazardType] = useState('LIQUID_SPILL');
@@ -316,10 +318,10 @@ export function BlockPathHazardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.background,
   },
   scrollContent: {
     padding: 16,
@@ -334,29 +336,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   corridorCardSelected: {
-    borderColor: '#121317',
+    borderColor: colors.textPrimary,
     borderWidth: 1.5,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surfaceSubtle,
   },
   corridorId: {
     fontSize: 13,
-    color: '#121317',
+    color: colors.textPrimary,
   },
   corridorZonePill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
   },
   corridorZoneText: {
     fontSize: 11,
-    color: '#4B5563',
+    color: colors.textSecondary,
   },
   corridorName: {
     marginTop: 4,
@@ -366,7 +368,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#121317',
+    backgroundColor: colors.darkAction,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -378,22 +380,22 @@ const styles = StyleSheet.create({
   hazardCard: {
     width: '48.5%',
     padding: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   hazardCardSelected: {
-    borderColor: '#DC2626',
+    borderColor: colors.danger,
     borderWidth: 1.5,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerBg,
   },
   hazardTitle: {
     fontSize: 13,
-    color: '#121317',
+    color: colors.textPrimary,
   },
   hazardTitleSelected: {
-    color: '#DC2626',
+    color: colors.dangerText,
   },
   hazardDesc: {
     marginTop: 4,
@@ -406,24 +408,24 @@ const styles = StyleSheet.create({
   severityBtn: {
     flex: 1,
     padding: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   severityBtnSelectedFull: {
-    borderColor: '#DC2626',
+    borderColor: colors.danger,
     borderWidth: 1.5,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerBg,
   },
   severityBtnSelectedCaution: {
-    borderColor: '#D97706',
+    borderColor: colors.warning,
     borderWidth: 1.5,
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.warningBg,
   },
   severityTitle: {
     fontSize: 13,
-    color: '#121317',
+    color: colors.textPrimary,
   },
   severitySub: {
     marginTop: 4,
@@ -437,17 +439,17 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   durationBtnSelected: {
-    borderColor: '#121317',
-    backgroundColor: '#121317',
+    borderColor: colors.darkAction,
+    backgroundColor: colors.darkAction,
   },
   durationBtnText: {
-    color: '#4B5563',
+    color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -457,22 +459,22 @@ const styles = StyleSheet.create({
   submittedCard: {
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   submittedIconBadge: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.dangerBg,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
   },
   submittedTitle: {
-    color: '#121317',
+    color: colors.textPrimary,
     fontSize: 18,
     textAlign: 'center',
   },
@@ -485,10 +487,10 @@ const styles = StyleSheet.create({
     width: '100%',
     marginVertical: 20,
     padding: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     gap: 10,
   },
   receiptRow: {
@@ -498,19 +500,19 @@ const styles = StyleSheet.create({
   },
   receiptBorderTop: {
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
     paddingTop: 10,
   },
   receiptVal: {
-    color: '#121317',
+    color: colors.textPrimary,
     fontWeight: '500',
   },
   receiptDanger: {
-    color: '#DC2626',
+    color: colors.dangerText,
     fontWeight: '700',
   },
   receiptDuration: {
-    color: '#121317',
+    color: colors.textPrimary,
     fontWeight: '700',
   },
   receiptHighlight: {

@@ -4,6 +4,8 @@ import { Platform } from 'react-native';
 const ACCESS_TOKEN_KEY = 'warotrans_access_token';
 const REFRESH_TOKEN_KEY = 'warotrans_refresh_token';
 const USER_SESSION_KEY = 'warotrans_user_session';
+export const THEME_MODE_KEY = 'warotrans.theme_mode';
+export type StoredThemeMode = 'system' | 'light' | 'dark';
 
 /**
  * Persist access token in hardware-backed secure storage on mobile devices,
@@ -181,4 +183,46 @@ export async function clearAllStoredAuth(): Promise<void> {
     removeStoredRefreshToken(),
     removeStoredUserSession(),
   ]);
+}
+
+/**
+ * Persist UI theme mode preference ('system' | 'light' | 'dark').
+ */
+export async function saveStoredThemeMode(mode: StoredThemeMode): Promise<void> {
+  if (Platform.OS === 'web') {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(THEME_MODE_KEY, mode);
+      }
+    } catch {}
+  } else {
+    try {
+      await SecureStore.setItemAsync(THEME_MODE_KEY, mode);
+    } catch (err) {
+      console.warn('SecureStore setItemAsync error for theme mode:', err);
+    }
+  }
+}
+
+export async function getStoredThemeMode(): Promise<StoredThemeMode | null> {
+  let raw: string | null = null;
+  if (Platform.OS === 'web') {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        raw = window.localStorage.getItem(THEME_MODE_KEY);
+      }
+    } catch {
+      return null;
+    }
+  } else {
+    try {
+      raw = await SecureStore.getItemAsync(THEME_MODE_KEY);
+    } catch {
+      return null;
+    }
+  }
+  if (raw === 'system' || raw === 'light' || raw === 'dark') {
+    return raw;
+  }
+  return null;
 }

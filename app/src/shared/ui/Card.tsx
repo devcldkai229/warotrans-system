@@ -6,9 +6,10 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
-import { shadows } from '../theme/shadows';
+import { ThemeShadows } from '../theme/shadows';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg';
 
@@ -52,6 +53,7 @@ export function Card({
   gap,
   contentStyle,
 }: CardProps) {
+  const styles = useThemedStyles(createStyles);
   const body = (
     <View style={[styles.inner, paddingStyles[padding], gap !== undefined && { gap }, contentStyle]}>
       {children}
@@ -95,28 +97,29 @@ const paddingStyles = StyleSheet.create({
   lg: { padding: 20 },
 });
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    ...shadows.md,
-  },
-  /** `overflow: hidden` lives on the outer card so the hairline follows the radius. */
-  inner: {
-    width: '100%',
-  },
-  /** Touch floor for a pressable card — see the call site for the reasoning. */
-  cardPressable: {
-    minWidth: 44,
-    minHeight: 44,
-  },
-  pressed: {
-    opacity: 0.9,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-});
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: radii.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+      ...shadows.md,
+    },
+    /** `overflow: hidden` lives on the outer card so the hairline follows the radius. */
+    inner: {
+      width: '100%',
+    },
+    /** Touch floor for a pressable card — see the call site for the reasoning. */
+    cardPressable: {
+      minWidth: 44,
+      minHeight: 44,
+    },
+    pressed: {
+      opacity: 0.9,
+    },
+    disabled: {
+      opacity: 0.5,
+    },
+  });

@@ -6,12 +6,14 @@ import { ArrowDown, Box, ChevronRight, MapPin, Truck } from 'lucide-react-native
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { getTransportRequest, getWorkflow, listJobSummaries, listRobots } from '../../shared/api';
 import { useRealtime } from '../../shared/realtime';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { Button, Card, ProgressMeter, ScreenHeader, StatusPill, Text } from '../../shared/ui';
 import { transportDate, transportRequestProgress } from './transportRequestData';
 
 export function TransportRequestDetailScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { params, navigate, goBack } = useNavigation();
   const requestId = typeof params?.requestId === 'string' ? params.requestId : '';
   const insets = useSafeAreaInsets();
@@ -136,7 +138,7 @@ export function TransportRequestDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   state: { padding: 24, gap: 16 },
   scroll: { flex: 1 },

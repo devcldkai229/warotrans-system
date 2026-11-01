@@ -3,13 +3,15 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Check, Search, X } from 'lucide-react-native';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { Text, TextField } from '../../shared/ui';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import type { TransportPlace } from './transportDraft';
 
 export function TransportPlaceSheet({ title, options, selectedId, onSelect, onClose, emptyMessage }: {
   title: string; options: TransportPlace[]; selectedId?: string; onSelect: (place: TransportPlace) => void;
   onClose: () => void; emptyMessage: string;
 }) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const [search, setSearch] = useState('');
   const filtered = useMemo(() => options.filter(option => `${option.label} ${option.code}`.toLowerCase().includes(search.trim().toLowerCase())), [options, search]);
   return <BottomSheet onClose={onClose} accessibilityLabel={title}>
@@ -33,7 +35,7 @@ export function TransportPlaceSheet({ title, options, selectedId, onSelect, onCl
   </BottomSheet>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
   close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   search: { paddingHorizontal: 20, paddingVertical: 12 },

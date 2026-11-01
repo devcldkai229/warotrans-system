@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { getApiBaseUrl } from '../api/client';
 import type { MapVersionDetailDto } from '../api/navigationApi';
@@ -8,7 +8,8 @@ import { mapRobotSnapshots } from '../maps/mapModel';
 import { zoneColor } from '../maps/mapPresentation';
 import { fitMapViewport, hasMapCalibration, resolveMapPreviewUri, worldToMapPercent } from '../utils/mapCoordinates';
 import { Button, Text } from '../ui';
-import { colors } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
+import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { MapViewport } from '../maps/MapViewport';
 import { interactiveMapEnabled } from '../maps/mapFeatures';
 import { mapRobotState, type MapUpdateMode } from '../maps/mapTelemetry';
@@ -30,6 +31,8 @@ export function WarehouseMapLayer(props: Props) {
 }
 
 function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, loading = false, contentInsets = { top: 0, bottom: 0 }, updateMode = 'polling' }: Props) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const geometry = map;
   const valid = hasMapCalibration(geometry);
@@ -46,8 +49,20 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
   return <View style={styles.root} onLayout={event => setBounds(event.nativeEvent.layout)}>
     {!valid ? <View style={styles.empty}>{loading ? <ActivityIndicator color={colors.primary} /> : null}<Text variant="body">{loading ? 'Loading Map…' : 'Map Unavailable'}</Text></View> :
       <View style={{ position: 'absolute', left: (bounds.width - width) / 2, top: contentInsets.top + (availableHeight - height) / 2, width, height }}>
-        {source && <Image key={imageKey} source={source} accessibilityLabel={`Map ${map?.code}`}
-          onLoad={() => setLoadedImage(imageKey)} onError={() => setFailedImage(imageKey)} resizeMode="stretch" style={[StyleSheet.absoluteFill, { width, height }]} />}
+        {source && (
+          <>
+            <Image key={imageKey} source={source} accessibilityLabel={`Map ${map?.code}`}
+              onLoad={() => setLoadedImage(imageKey)} onError={() => setFailedImage(imageKey)} resizeMode="stretch"
+              style={[
+                StyleSheet.absoluteFill,
+                { width, height },
+                Platform.OS === 'web' && isDark ? ({ filter: 'invert(0.88) brightness(0.62)' } as any) : null,
+              ]} />
+            {Platform.OS !== 'web' && isDark ? (
+              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18, 19, 23, 0.58)' }]} />
+            ) : null}
+          </>
+        )}
         {source && loadedImage !== imageKey && failedImage !== imageKey ? <ActivityIndicator style={styles.imageLoading} color={colors.primary} /> : null}
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
           {(runtimeMap?.zones || []).filter(zone => zone.mapVersionId === map?.id && zone.isActive && zone.geometry.type === 'Polygon').map(zone => {
@@ -96,7 +111,7 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
     </View> : null}
   </View>;
 }
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   root: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.background, overflow: 'hidden' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   imageLoading: { ...StyleSheet.absoluteFill },

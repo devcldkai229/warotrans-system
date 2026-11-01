@@ -12,12 +12,14 @@ import type { ProductItem } from '../../shared/api/warehouseApi';
 import { getOperatingContext } from '../../shared/api/operatingContextApi';
 import { getUserErrorMessage } from '../../shared/api/client';
 import { mobileCapabilities } from '../../shared/api/capabilities';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import { productForScannedBarcode, receivingCount, receivingLocations, registerReceivingBatch } from './receivingData';
 
 export function CreateContainerScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { goBack, navigate } = useNavigation();
   const insets = useSafeAreaInsets();
   const [product, setProduct] = useState<ProductItem | null>(null);
@@ -186,7 +188,7 @@ export function CreateContainerScreen() {
   </View>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   body: { flex: 1 },
   content: { padding: 16, gap: 16, paddingBottom: 24 },

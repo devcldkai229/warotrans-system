@@ -18,13 +18,15 @@ import { TransportHistoryScreen } from '../../features/transport/TransportHistor
 import { TransportRequestDetailScreen } from '../../features/transport/TransportRequestDetailScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
 import { AppHeader } from '../shell/AppHeader';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { BottomTabBar } from './BottomTabBar';
 import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
   const { session, isAuthenticated, logout, updateZone } = useAuth();
   const { currentScreen, goBack, params, navigate } = useNavigation();
+  const styles = useThemedStyles(createStyles);
 
   if (!isAuthenticated || !session) {
     return <LoginScreen />;
@@ -113,17 +115,18 @@ export function AppNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  content: {
-    flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
-    zIndex: 1,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.background,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    content: {
+      flex: 1,
+      position: 'relative',
+      overflow: 'hidden',
+      zIndex: 1,
+    },
+  });

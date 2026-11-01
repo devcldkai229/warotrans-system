@@ -8,7 +8,8 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
 interface ButtonProps {
@@ -36,6 +37,7 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  const { styles, pressedStyles, textStyles } = useThemedStyles(createButtonStyles);
   const isInteractive = !disabled && !loading;
 
   return (
@@ -57,7 +59,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'primary' || variant === 'danger' ? colors.textInverse : colors.primary}
+          color={variant === 'primary' || variant === 'danger' ? '#ffffff' : colors.primary}
         />
       ) : (
         <View style={styles.contentRow}>
@@ -80,162 +82,134 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  primary: {
-    backgroundColor: colors.darkAction, // Warm Dark Gray (Graphite)
-    borderWidth: 1,
-    borderColor: colors.darkActionBorder,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  secondary: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
-  danger: {
-    backgroundColor: colors.danger,
-    borderBottomWidth: 3,
-    borderBottomColor: '#991b1b',
-  },
-  sm: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  md: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  lg: {
-    minHeight: 54,
-    paddingVertical: 15,
-    paddingHorizontal: 24,
-  },
-  disabled: {
-    backgroundColor: '#cbd5e1',
-    borderColor: '#cbd5e1',
-    borderBottomWidth: 0,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  /**
-   * CTA label budget: long labels must never escape the pill.
-   *
-   * Yoga defaults to `flexShrink: 0`, so an over-long label kept its full
-   * intrinsic width inside a narrower box and — because `justifyContent` is
-   * `center` — bled out of BOTH sides of the button. `flexShrink: 1` +
-   * `minWidth: 0` hand the overflow back to the text so it wraps inside the
-   * pill instead.
-   *
-   * There is deliberately NO `numberOfLines` cap here: truncating a CTA to
-   * `GENERATE & INGEST BAR…` hides the action the key performs, which on a
-   * handheld in a warehouse is worse than a two-line key. Every button in the
-   * app sizes itself with `minHeight`/`paddingVertical` (never a fixed height),
-   * so a wrapped label grows the pill safely. `flexShrink: 0` on the icon slots
-   * keeps the glyph from squashing when the label does wrap.
-   */
-  contentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  iconLeft: {
-    marginRight: 8,
-    flexShrink: 0,
-  },
-  iconRight: {
-    marginLeft: 8,
-    flexShrink: 0,
-  },
-});
-
-/**
- * Press physics: every button compresses 2% on touch-down so the press reads as a
- * mechanical key travel rather than a flat colour swap.
- *
- * `primary` / `danger` carry a 3px bottom bevel. A real beveled key does not shrink —
- * it is pushed *into* the surface — so these variants keep `borderBottomWidth` at 3
- * and instead collapse it via the 2% scale (shrinking the bevel would reflow the
- * button and jitter the label by 2pt on every touch). `primary` additionally drops
- * its cast shadow, since a depressed key casts none.
- */
-const pressedStyles = StyleSheet.create({
-  primary: {
-    backgroundColor: colors.darkActionPressed,
-    transform: [{ scale: 0.985 }],
-    shadowOpacity: 0.05,
-    elevation: 1,
-  },
-  secondary: {
-    backgroundColor: colors.surfaceMuted,
-    transform: [{ scale: 0.98 }],
-  },
-  outline: {
-    backgroundColor: colors.primaryLight,
-    transform: [{ scale: 0.98 }],
-  },
-  danger: {
-    backgroundColor: '#b91c1c',
-    transform: [{ scale: 0.98 }],
-  },
-});
-
-const textStyles = StyleSheet.create({
-  base: {
-    fontWeight: '800',
-    fontFamily: typography.fontSans,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-    // Pairs with `contentRow.flexShrink`: the label is the only element allowed
-    // to give up width, and it wraps rather than escaping the pill.
-    flexShrink: 1,
-  },
-  primary: {
-    color: colors.textInverse,
-  },
-  secondary: {
-    color: colors.textPrimary,
-  },
-  outline: {
-    color: colors.primary,
-  },
-  danger: {
-    color: colors.textInverse,
-  },
-  sm: {
-    fontSize: 12,
-    fontWeight: '800',
-    fontFamily: typography.fontSans,
-  },
-  md: {
-    fontSize: 14,
-    fontWeight: '800',
-    fontFamily: typography.fontSans,
-  },
-  lg: {
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    fontFamily: typography.fontSans,
-  },
-  disabled: {
-    color: colors.textMuted,
-  },
+const createButtonStyles = (colors: ThemeColors) => ({
+  styles: StyleSheet.create({
+    base: {
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+    },
+    primary: {
+      backgroundColor: colors.darkAction,
+      borderWidth: 1,
+      borderColor: colors.darkActionBorder,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    secondary: {
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    outline: {
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+    },
+    danger: {
+      backgroundColor: colors.danger,
+      borderBottomWidth: 3,
+      borderBottomColor: '#991b1b',
+    },
+    sm: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+    },
+    md: {
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+    },
+    lg: {
+      minHeight: 54,
+      paddingVertical: 15,
+      paddingHorizontal: 24,
+    },
+    disabled: {
+      backgroundColor: colors.surfaceMuted,
+      borderColor: colors.border,
+      borderBottomWidth: 0,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    contentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    iconLeft: {
+      marginRight: 8,
+      flexShrink: 0,
+    },
+    iconRight: {
+      marginLeft: 8,
+      flexShrink: 0,
+    },
+  }),
+  pressedStyles: StyleSheet.create({
+    primary: {
+      backgroundColor: colors.darkActionPressed,
+      transform: [{ scale: 0.985 }],
+      shadowOpacity: 0.05,
+      elevation: 1,
+    },
+    secondary: {
+      backgroundColor: colors.surfaceMuted,
+      transform: [{ scale: 0.98 }],
+    },
+    outline: {
+      backgroundColor: colors.primaryLight,
+      transform: [{ scale: 0.98 }],
+    },
+    danger: {
+      backgroundColor: '#b91c1c',
+      transform: [{ scale: 0.98 }],
+    },
+  }),
+  textStyles: StyleSheet.create({
+    base: {
+      fontWeight: '800',
+      fontFamily: typography.fontSans,
+      letterSpacing: 0.5,
+      textAlign: 'center',
+      flexShrink: 1,
+    },
+    primary: {
+      color: '#ffffff',
+    },
+    secondary: {
+      color: colors.textPrimary,
+    },
+    outline: {
+      color: colors.primaryText,
+    },
+    danger: {
+      color: '#ffffff',
+    },
+    sm: {
+      fontSize: 12,
+      fontWeight: '800',
+      fontFamily: typography.fontSans,
+    },
+    md: {
+      fontSize: 14,
+      fontWeight: '800',
+      fontFamily: typography.fontSans,
+    },
+    lg: {
+      fontSize: 15,
+      fontWeight: '900',
+      letterSpacing: 0.8,
+      fontFamily: typography.fontSans,
+    },
+    disabled: {
+      color: colors.textMuted,
+    },
+  }),
 });
 

@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
 import {
@@ -186,6 +187,7 @@ const EMPTY_COPY: Record<JobScope, { title: string; message: string }> = {
  * and what has already been done.
  */
 export function JobsScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, params, dockHeight, setActiveJobCount } = useNavigation();
   const { session } = useAuth();
   const { lastJobUpdate } = useRealtime();
@@ -400,6 +402,7 @@ export function JobsScreen() {
 }
 
 function ListSeparator() {
+  const { styles } = useThemedStyles(createStyles);
   return <View style={styles.separator} />;
 }
 
@@ -462,7 +465,7 @@ function ListEmpty({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,

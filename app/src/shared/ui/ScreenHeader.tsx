@@ -1,10 +1,11 @@
 import { ArrowLeft } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
 import { useTopInset } from '../theme/layout';
 import { radii } from '../theme/radii';
-import { shadows } from '../theme/shadows';
+import { ThemeShadows } from '../theme/shadows';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { Text } from './Text';
 
 /**
@@ -57,6 +58,7 @@ export function ScreenHeader({
   style,
 }: ScreenHeaderProps) {
   const topInset = useTopInset();
+  const styles = useThemedStyles(createStyles);
   const showBack = canGoBack && !!onBack;
 
   return (
@@ -99,44 +101,45 @@ export function ScreenHeader({
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: HEADER_BOTTOM_PADDING,
-  },
-  surface: {
-    backgroundColor: colors.surface,
-    ...shadows.sm,
-  },
-  transparent: {
-    backgroundColor: 'transparent',
-  },
-  bordered: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  row: {
-    minHeight: HEADER_CONTENT_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    marginLeft: -10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.pill,
-  },
-  backBtnPressed: {
-    backgroundColor: colors.surfaceSubtle,
-  },
-  titleGroup: {
-    flex: 1,
-    minWidth: 0,
-  },
-  rightAction: {
-    flexShrink: 0,
-  },
-});
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+  StyleSheet.create({
+    header: {
+      paddingHorizontal: 16,
+      paddingBottom: HEADER_BOTTOM_PADDING,
+    },
+    surface: {
+      backgroundColor: colors.surface,
+      ...shadows.sm,
+    },
+    transparent: {
+      backgroundColor: 'transparent',
+    },
+    bordered: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    row: {
+      minHeight: HEADER_CONTENT_HEIGHT,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    backBtn: {
+      width: 44,
+      height: 44,
+      marginLeft: -10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radii.pill,
+    },
+    backBtnPressed: {
+      backgroundColor: colors.surfaceSubtle,
+    },
+    titleGroup: {
+      flex: 1,
+      minWidth: 0,
+    },
+    rightAction: {
+      flexShrink: 0,
+    },
+  });

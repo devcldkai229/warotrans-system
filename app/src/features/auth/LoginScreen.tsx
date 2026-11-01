@@ -17,15 +17,19 @@ import {
   Lock,
   LogIn,
   MapPin,
+  Monitor,
+  Moon,
+  Sun,
   User,
   X,
 } from 'lucide-react-native';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useTheme, useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { useToast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -62,6 +66,8 @@ export const WORK_ZONES = [
 export function LoginScreen() {
   const { loginAsync } = useAuth();
   const { success: showToastSuccess } = useToast();
+  const { mode, cycleMode } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const topInset = useTopInset();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -121,6 +127,29 @@ export function LoginScreen() {
         <View style={[styles.container, { paddingTop: topInset }]}>
           {/* Top Section with high stacking context to overlay over actionSection */}
           <View style={styles.topSection}>
+            <View style={styles.themeBar}>
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
+                  cycleMode();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Appearance: ${mode === 'system' ? 'Auto' : mode === 'dark' ? 'Dark' : 'Light'}. Tap to switch theme.`}
+                style={({ pressed }) => [styles.themeCyclePill, pressed && styles.themeCyclePillPressed]}
+              >
+                {mode === 'system' ? (
+                  <Monitor size={13} color={colors.textSecondary} strokeWidth={2.2} />
+                ) : mode === 'dark' ? (
+                  <Moon size={13} color={colors.primaryText} strokeWidth={2.2} />
+                ) : (
+                  <Sun size={13} color={colors.warningText} strokeWidth={2.2} />
+                )}
+                <Text style={styles.themeCycleLabel}>
+                  {mode === 'system' ? 'Auto' : mode === 'dark' ? 'Dark' : 'Light'}
+                </Text>
+              </Pressable>
+            </View>
+
             {/* Centered Brand Hero */}
             <View style={styles.brandHero}>
               <View style={styles.logoBadgeWrap}>
@@ -280,7 +309,7 @@ export function LoginScreen() {
             {/* Error Banner */}
             {error && (
               <View style={styles.errorAlert}>
-                <AlertCircle size={16} color="#dc2626" style={styles.errorAlertIcon} />
+                <AlertCircle size={16} color={colors.danger} style={styles.errorAlertIcon} />
                 <Text style={styles.errorAlertText}>{error}</Text>
               </View>
             )}
@@ -302,37 +331,63 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  outerWrapper: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 0,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-    backgroundColor: colors.background,
-    justifyContent: 'space-between',
-    maxWidth: 480,
-    width: '100%',
-    alignSelf: 'center',
-    position: 'relative',
-  },
-  topSection: {
-    position: 'relative',
-    zIndex: 100,
-  },
-  brandHero: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: Platform.select({ android: 12, default: 18 }),
-    marginBottom: 4,
-  },
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+  StyleSheet.create({
+    outerWrapper: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'space-between',
+    },
+    container: {
+      flex: 1,
+      paddingHorizontal: 24,
+      paddingTop: 0,
+      paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+      backgroundColor: colors.background,
+      justifyContent: 'space-between',
+      maxWidth: 480,
+      width: '100%',
+      alignSelf: 'center',
+      position: 'relative',
+    },
+    topSection: {
+      position: 'relative',
+      zIndex: 100,
+    },
+    themeBar: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      paddingTop: 8,
+    },
+    themeCyclePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 32,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    themeCyclePillPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    themeCycleLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      fontFamily: typography.fontSans,
+    },
+    brandHero: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: Platform.select({ android: 6, default: 10 }),
+      marginBottom: 4,
+    },
   logoBadgeWrap: {
     marginBottom: 14,
     shadowColor: colors.primary,
@@ -515,9 +570,9 @@ const styles = StyleSheet.create({
   errorAlert: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fef2f2',
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
-    borderColor: '#fca5a5',
+    borderColor: colors.dangerBorder,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -531,7 +586,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: '600',
-    color: '#b91c1c',
+    color: colors.dangerText,
     fontFamily: typography.fontSans,
   },
   submitButton: {
