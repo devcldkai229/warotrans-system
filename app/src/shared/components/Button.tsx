@@ -37,7 +37,7 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
-  const { styles, pressedStyles, textStyles } = useThemedStyles(createButtonStyles);
+  const { baseStyles, pressedStyles, textStyles } = useThemedStyles(createButtonStyles);
   const isInteractive = !disabled && !loading;
 
   return (
@@ -48,11 +48,11 @@ export function Button({
       accessibilityLabel={label}
       accessibilityState={{ disabled: !isInteractive, busy: loading }}
       style={({ pressed }) => [
-        styles.base,
-        styles[variant],
-        styles[size],
+        baseStyles.base,
+        baseStyles[variant],
+        baseStyles[size],
         style,
-        disabled && styles.disabled,
+        disabled && baseStyles.disabled,
         pressed && isInteractive && pressedStyles[variant],
       ]}
     >
@@ -62,8 +62,8 @@ export function Button({
           color={variant === 'primary' || variant === 'danger' ? '#ffffff' : colors.primary}
         />
       ) : (
-        <View style={styles.contentRow}>
-          {icon && <View style={styles.iconLeft}>{icon}</View>}
+        <View style={baseStyles.contentRow}>
+          {icon && <View style={baseStyles.iconLeft}>{icon}</View>}
           <Text
             style={[
               textStyles.base,
@@ -75,7 +75,7 @@ export function Button({
           >
             {label}
           </Text>
-          {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+          {rightIcon && <View style={baseStyles.iconRight}>{rightIcon}</View>}
         </View>
       )}
     </Pressable>
@@ -83,7 +83,7 @@ export function Button({
 }
 
 const createButtonStyles = (colors: ThemeColors) => ({
-  styles: StyleSheet.create({
+  baseStyles: StyleSheet.create({
     base: {
       borderRadius: 12,
       alignItems: 'center',

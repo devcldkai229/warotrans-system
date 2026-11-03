@@ -179,14 +179,38 @@ export function useThemedStyles<T extends object>(
   if (cached !== undefined) {
     return cached as ThemedStylesResult<T>;
   }
-  const created = factory(colors, shadows, isDark);
+  const raw = factory(colors, shadows, isDark);
+  const created =
+    raw && typeof raw === 'object' && Object.isFrozen(raw) ? ({ ...raw } as T) : raw;
   if (created && typeof created === 'object') {
-    Object.defineProperties(created, {
-      styles: { value: created, enumerable: false, configurable: true },
-      colors: { value: colors, enumerable: false, configurable: true },
-      shadows: { value: shadows, enumerable: false, configurable: true },
-      isDark: { value: isDark, enumerable: false, configurable: true },
-    });
+    if (!('styles' in created)) {
+      Object.defineProperty(created, 'styles', {
+        value: created,
+        enumerable: false,
+        configurable: true,
+      });
+    }
+    if (!('colors' in created)) {
+      Object.defineProperty(created, 'colors', {
+        value: colors,
+        enumerable: false,
+        configurable: true,
+      });
+    }
+    if (!('shadows' in created)) {
+      Object.defineProperty(created, 'shadows', {
+        value: shadows,
+        enumerable: false,
+        configurable: true,
+      });
+    }
+    if (!('isDark' in created)) {
+      Object.defineProperty(created, 'isDark', {
+        value: isDark,
+        enumerable: false,
+        configurable: true,
+      });
+    }
   }
   entry[resolvedScheme] = created;
   return created as ThemedStylesResult<T>;

@@ -91,70 +91,78 @@ class RealtimeClient {
 
     const baseUrl = getApiBaseUrl();
     const hubUrl = `${baseUrl.replace(/\/$/, '')}/hubs/notifications`;
+    let conn: HubConnection | null = null;
 
     try {
-      this.connection = new HubConnectionBuilder()
+      conn = new HubConnectionBuilder()
         .withUrl(hubUrl, {
           accessTokenFactory: () => getAccessToken() ?? '',
           transport: HttpTransportType.WebSockets | HttpTransportType.LongPolling,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-        .configureLogging(LogLevel.Warning)
+        .configureLogging(LogLevel.None)
         .build();
+      this.connection = conn;
 
-      this.connection.on('robotConnectivityChanged', (data: RobotConnectivityEvent) => {
+      conn.on('robotConnectivityChanged', (data: RobotConnectivityEvent) => {
         this.connectivityListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.on('robotTelemetryUpdated', (data: RobotTelemetryEvent) => {
+      conn.on('robotTelemetryUpdated', (data: RobotTelemetryEvent) => {
         this.telemetryListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.on('notificationReceived', (data: LiveNotificationEvent) => {
+      conn.on('notificationReceived', (data: LiveNotificationEvent) => {
         this.notificationListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.on('transportRequestStatusChanged', (data: TransportStatusEvent) => {
+      conn.on('transportRequestStatusChanged', (data: TransportStatusEvent) => {
         this.transportStatusListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.on('jobUpdated', (data: JobUpdatedRealtimeEvent) => {
+      conn.on('jobUpdated', (data: JobUpdatedRealtimeEvent) => {
         this.jobUpdatedListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.onreconnecting(() => {
+      conn.onreconnecting(() => {
         this.notifyConnectionState(false);
       });
 
-      this.connection.onreconnected(() => {
+      conn.onreconnected(() => {
         this.notifyConnectionState(true);
       });
 
-      this.connection.onclose(() => {
+      conn.onclose(() => {
         this.notifyConnectionState(false);
       });
 
-      await this.connection.start();
-      this.notifyConnectionState(true);
+      await conn.start();
+      if (this.connection === conn) {
+        this.isConnecting = false;
+        this.notifyConnectionState(true);
+      }
     } catch (err) {
-      // In local dev/demo without backend running, log quietly without halting runtime
-      console.warn('Realtime Hub connection offline or unreachable:', hubUrl);
-      this.connection = null;
-      this.notifyConnectionState(false);
-    } finally {
-      this.isConnecting = false;
+      // Ignore intentional cancellation when stop()/restart() is called during negotiation
+      if (this.connection === conn) {
+        console.warn('Realtime Hub connection offline or unreachable:', hubUrl);
+        this.connection = null;
+        this.isConnecting = false;
+        this.notifyConnectionState(false);
+      }
     }
   }
 
   public async stop(): Promise<void> {
-    if (this.connection) {
+    const conn = this.connection;
+    if (conn) {
+      this.connection = null;
+      this.isConnecting = false;
+      this.notifyConnectionState(false);
       try {
-        await this.connection.stop();
+        await conn.stop();
       } catch {
         // quiet shutdown
       }
-      this.connection = null;
-      this.notifyConnectionState(false);
     }
   }
 
