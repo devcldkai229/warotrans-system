@@ -390,11 +390,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     },
   logoBadgeWrap: {
     marginBottom: 14,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
-    elevation: 6,
   },
   brandTitle: {
     fontSize: 22,
