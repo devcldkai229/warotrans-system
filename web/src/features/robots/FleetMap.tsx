@@ -66,13 +66,16 @@ export function FleetMap({
     if (!snap) return null
     const authorizedEdgeIds = snap.robots.flatMap((r) => r.authority?.edgeIds ?? [])
     const occupiedResourceIds = snap.resources.filter((r) => r.holders.length > 0).map((r) => r.resourceId)
+    // Stage-3: also surface zone:/cell: ids held via semantic grants.
+    const semanticHeld = snap.robots.flatMap((r) => r.authority?.resourceIds ?? r.occupiedResourceIds ?? [])
+    const allOccupied = Array.from(new Set([...occupiedResourceIds, ...semanticHeld]))
     const quarantined = new Set(
       snap.robots.filter((r) => r.phase === 'Quarantined' || r.quarantineReason).map((r) => r.robotId),
     )
     const quarantinedRobotCodes = robots
       .filter((robot) => quarantined.has(robot.id))
       .map((robot) => robot.code)
-    return { authorizedEdgeIds, occupiedResourceIds, quarantinedRobotCodes }
+    return { authorizedEdgeIds, occupiedResourceIds: allOccupied, quarantinedRobotCodes }
   }, [snap, robots])
 
   const mapRobots = useMemo<MapRobot[]>(

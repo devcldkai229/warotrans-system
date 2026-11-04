@@ -13,4 +13,13 @@ public static class AuthorityPathHash
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
+
+    /// <summary>Stage-3: SHA-256 of <c>fingerprint|resourceId,...</c> (sorted by caller).</summary>
+    public static string Compute(string fingerprint, IReadOnlyList<string> resourceIds)
+    {
+        var ids = string.Join(",", resourceIds);
+        var payload = $"{fingerprint}|{ids}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
 }

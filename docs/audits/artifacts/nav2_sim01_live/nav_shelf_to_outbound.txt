@@ -1,0 +1,27 @@
+Waiting for an action server to become available...
+Sending goal:
+     pose:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: map
+  pose:
+    position:
+      x: 1.793
+      y: -0.977
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: 0.7071080798594735
+      w: 0.7071054825112363
+behavior_tree: ''
+
+Goal accepted with ID: 32942f92dc2843e0af9ba2062d9f9c7e
+
+Result:
+    error_code: 0
+error_msg: ''
+
+Goal finished with status: CANCELED

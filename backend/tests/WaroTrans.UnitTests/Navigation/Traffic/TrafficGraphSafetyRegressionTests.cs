@@ -96,11 +96,10 @@ public class TrafficGraphSafetyRegressionTests
     public void G9_junction_link_running_along_the_zone_edge_still_belongs_to_the_zone()
     {
         // Lane ends 3 cm under the top edge: the link's midpoint is closer than 5 cm to the boundary.
-        // Occupancy lock uses SINGLE_OCCUPANCY; JUNCTION alone is connectivity only.
         var graph = Compile(
             [Lane("E-IN", OneWay, (-1, 0.47), (0.2, 0.47)), Lane("E-OUT", OneWay, (1.8, 0.47), (3, 0.47))],
             [new("EP-A", -1, 0.47, true), new("EP-B", 3, 0.47, true)],
-            [Zone("Z-J", ZoneType.SINGLE_OCCUPANCY, 0, -0.5, 2, 0.5)]);
+            [Zone("Z-J", ZoneType.JUNCTION, 0, -0.5, 2, 0.5)]);
 
         var links = graph.Edges.Where(e => e.IsJunction).ToList();
         Assert.NotEmpty(links);
@@ -132,9 +131,9 @@ public class TrafficGraphSafetyRegressionTests
     }
 
     [Fact]
-    public void G10_station_inside_a_junction_stays_at_stored_pose_without_connector_spur()
+    public void G10_station_inside_a_junction_stays_at_stored_pose_with_access_connectors()
     {
-        // EP-DOCK is inside the junction polygon; attach uses arrival→departure links only (no two-way spur).
+        // EP-DOCK is inside the junction; access IsConnector chords keep pose (no perpendicular foot spur).
         var graph = Compile(
             [Lane("E-W", Both, (-1, 0), (0, 0)), Lane("E-E", Both, (0.6, 0), (2, 0))],
             [new("EP-W", -1, 0, true), new("EP-E", 2, 0, true), new("EP-DOCK", 0.3, 0.1, true)],
@@ -143,7 +142,8 @@ public class TrafficGraphSafetyRegressionTests
         var dock = graph.Nodes.Single(n => n.EndpointCodes.Contains("EP-DOCK"));
         Assert.Equal(0.3, dock.X, 9);
         Assert.Equal(0.1, dock.Y, 9);
-        Assert.DoesNotContain(graph.Edges, e => e.IsConnector);
+        Assert.Contains(graph.Edges, e => e.IsConnector && e.IsJunction && (e.StartId == dock.Id || e.EndId == dock.Id));
+        Assert.Contains(graph.Resources, r => r.Id == "bay:EP-DOCK");
     }
 
     // ---------------------------------------------------------------- T4: crossing without a zone
@@ -194,6 +194,22 @@ public class TrafficGraphSafetyRegressionTests
         Assert.Equal(0, bayNode.Y, 9);
         Assert.DoesNotContain(graph.Edges, e => e.IsConnector);
         Assert.True(bayNode.IsStation || bayNode.IsSafeStop || bayNode.EndpointCodes.Contains("EP-BAY"));
+    }
+
+    [Fact]
+    public void Off_lane_bay_resource_excludes_second_robot()
+    {
+        var sim = new FakeRobotSim(Compile(
+            [Lane("E-1", Both, (0, 0), (4, 0))],
+            [new("EP-A", 0, 0, true), new("EP-DOCK", 2, 1.0, true), new("EP-B", 4, 0, true)]));
+        Assert.Contains(sim.Graph.Resources, r => r.Id == "bay:EP-DOCK");
+
+        var first = sim.AcquireNextSegment(Guid.NewGuid(), 0, 0, Station(sim, "EP-DOCK"));
+        var second = sim.AcquireNextSegment(Guid.NewGuid(), 4, 0, Station(sim, "EP-DOCK"));
+
+        Assert.True(first.Granted);
+        Assert.False(second.Granted);
+        Assert.True(second.Queued);
     }
 
     // ---------------------------------------------------------------- T17: opposing traffic
@@ -258,6 +274,47 @@ public class TrafficGraphSafetyRegressionTests
         Assert.NotEmpty(exits);
         Assert.DoesNotContain(result.Issues, i =>
             i.Code == TrafficGraphCompiler.CriticalNoExit && i.RelatedCodes.Contains("narrow:NARROW"));
+    }
+
+    [Fact]
+    public void StopInNoStop_ignores_connector_crossing_when_pose_disk_clear()
+    {
+        // Station east of NO_STOP; access connector midpoint may be labeled NoStop.
+        RouteGraphEdgeInput[] edges =
+        [
+            Lane("LANE", Both, (0, 0), (2, 0)),
+        ];
+        var zones = new[]
+        {
+            Zone("Z-NS", ZoneType.NO_STOP, -0.5, -0.5, 0.5, 0.5),
+        };
+        var input = Input(edges, [new("EP-BAY", 1.5, 0.4, true)], zones);
+        var compiled = TrafficGraphCompiler.Compile(input);
+        var report = TrafficGraphValidator.Validate(
+            Guid.NewGuid(), compiled.Graph, compiled.Issues, zones: zones);
+
+        Assert.DoesNotContain(report.Issues, i =>
+            i.Code == TrafficGraphValidator.StopInNoStop && i.RelatedCodes.Contains("EP-BAY"));
+    }
+
+    [Fact]
+    public void StopInNoStop_fires_when_pose_disk_intersects_polygon()
+    {
+        RouteGraphEdgeInput[] edges =
+        [
+            Lane("LANE", Both, (0, 0), (2, 0)),
+        ];
+        var zones = new[]
+        {
+            Zone("Z-NS", ZoneType.NO_STOP, 0.5, -0.5, 1.5, 0.5),
+        };
+        var input = Input(edges, [new("EP-IN", 1.0, 0.0, true)], zones);
+        var compiled = TrafficGraphCompiler.Compile(input);
+        var report = TrafficGraphValidator.Validate(
+            Guid.NewGuid(), compiled.Graph, compiled.Issues, zones: zones);
+
+        Assert.Contains(report.Issues, i =>
+            i.Code == TrafficGraphValidator.StopInNoStop && i.RelatedCodes.Contains("EP-IN"));
     }
 
     private static int Station(FakeRobotSim sim, string code) =>

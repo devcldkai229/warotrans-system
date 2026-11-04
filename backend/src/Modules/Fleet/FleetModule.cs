@@ -9,6 +9,7 @@ using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Features.DisableRobot;
 using WaroTrans.Fleet.Features.EnableRobot;
+using WaroTrans.Fleet.Features.PutRobotInService;
 using WaroTrans.Fleet.Features.GetRobot;
 using WaroTrans.Fleet.Features.GetRobotStatistics;
 using WaroTrans.Fleet.Features.IssueCancelCommand;
@@ -49,6 +50,7 @@ public static class FleetModule
         services.AddScoped<GetRobotStatisticsHandler>();
         services.AddScoped<EnableRobotHandler>();
         services.AddScoped<DisableRobotHandler>();
+        services.AddScoped<PutRobotInServiceHandler>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
         services.AddScoped<ProcessRobotTelemetryHandler>();
         services.AddScoped<ProcessRobotCommandAckHandler>();
@@ -78,6 +80,7 @@ public static class FleetModule
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();
+        services.AddHostedService<SemanticPolicyBootstrapHostedService>();
 
         return services;
     }
@@ -92,6 +95,7 @@ public static class FleetModule
         group.MapGetRobotStatistics();
         group.MapEnableRobot();
         group.MapDisableRobot();
+        group.MapPutRobotInService();
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();
         group.MapTeleopRobot();

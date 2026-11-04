@@ -36,7 +36,12 @@ public sealed record MotionAuthority(
     ImmutableArray<int> ReservedExitSafeStops,
     long Seq,
     long Epoch,
-    string GraphHash);
+    string GraphHash,
+    /// <summary>Ordered executable steps; empty = legacy Forward-only over EdgeIds.</summary>
+    ImmutableArray<TrafficManeuverStep> Maneuvers = default,
+    /// <summary>Stage-3 Nav2 plan revision this grant authorizes (0 = edge-based Active).</summary>
+    long PlanRevision = 0,
+    string? SemanticMapFingerprint = null);
 
 public sealed record RobotTrafficView(
     Guid RobotId,
@@ -51,7 +56,9 @@ public sealed record RobotTrafficView(
     TrafficWaitingReason WaitingReason,
     Guid? BlockingOwner,
     string? QuarantineReason,
-    Guid? JobStepId);
+    Guid? JobStepId,
+    long PlanRevision = 0,
+    ImmutableArray<SemanticPlanPose> ProposedPath = default);
 
 public sealed record ResourceTrafficView(
     string ResourceId,
@@ -112,7 +119,8 @@ public sealed record RouteSegmentCandidate(
     long BasedOnStateVersion,
     int Priority,
     Guid? JobStepId,
-    Guid? JobId);
+    Guid? JobId,
+    ImmutableArray<TrafficManeuverStep> Maneuvers = default);
 
 public sealed record RoutePlanResult(
     bool Ok,

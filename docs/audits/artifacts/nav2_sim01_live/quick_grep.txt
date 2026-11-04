@@ -1,0 +1,2 @@
+[planner_server-16] [WARN] [1793501111.322228138] [planner_server]: LaneAwareNavfn: start/goal LETHAL (start=254 goal=254 threshold=254)
+[planner_server-16] [WARN] [1793501111.322340761] [planner_server]: GridBased plugin failed to plan from (-1.85, -0.53) to (-1.02, -0.53): "GridBased generated a empty path"

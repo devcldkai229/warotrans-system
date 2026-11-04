@@ -124,9 +124,19 @@ Protocol decision: [adr/0007-traffic-route-ownership.md](adr/0007-traffic-route-
   "goalSafeStopNodeId": 42,
   "finalGoal": { "x": 1.0, "y": 2.0, "yaw": 0.0 },
   "expiresAt": "2026-10-25T05:00:30.000Z",
-  "speedLimits": { "12": 0.4 }
+  "speedLimits": { "12": 0.4 },
+  "maneuvers": [
+    { "kind": "Forward", "edgeIds": [12] },
+    { "kind": "Spin", "edgeIds": [], "yawTarget": 1.57, "resourceIds": ["node:42"] },
+    { "kind": "Reverse", "edgeIds": [15] }
+  ]
 }
 ```
+
+`maneuvers` is optional (CompilerVersion 10+). Missing / empty → legacy Forward-only over `segmentEdgeIds`
+(older robots). Kinds: `Forward` | `Reverse` | `Spin`. ContinuousArc is **not** an MQTT kind —
+classified ContinuousArc stations execute as Forward kink. Active Mode requires
+`enable_authority_gate:=true`; Reverse/Spin must not run without an active grant.
 
 Schema version stays **1**. Shadow Mode may omit `authority` and keep using `route`.
 See ADR 0010. New commands: `EXTEND_AUTHORITY`, `RENEW_AUTHORITY`, `REVOKE_AUTHORITY`.

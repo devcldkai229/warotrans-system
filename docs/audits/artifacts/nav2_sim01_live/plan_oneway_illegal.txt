@@ -1,0 +1,339 @@
+Waiting for an action server to become available...
+Sending goal:
+     goal:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: map
+  pose:
+    position:
+      x: 1.15
+      y: -0.327
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: 1.0
+      w: 0.0
+start:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: map
+  pose:
+    position:
+      x: 1.55
+      y: -0.327
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: 1.0
+      w: 0.0
+planner_id: GridBased
+use_start: true
+
+Goal accepted with ID: 7ec34bc151d14a1982e918dd559f9808
+
+Result:
+    path:
+  header:
+    stamp:
+      sec: 287
+      nanosec: 481000000
+    frame_id: map
+  poses:
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.55
+        y: -0.327
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 1.0
+        w: 0.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.5460000666826965
+        y: -0.2899999832361937
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.5460000666826965
+        y: -0.23999998249113563
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.5460000666826965
+        y: -0.18999998174607757
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.5460000666826965
+        y: -0.1399999810010195
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.5460000666826965
+        y: -0.08999998025596145
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.4960000659376385
+        y: -0.039999979510903394
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.4460000651925804
+        y: -0.039999979510903394
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.3960000644475223
+        y: -0.039999979510903394
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.3460000637024643
+        y: -0.039999979510903394
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.2960000629574062
+        y: -0.039999979510903394
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.2460000622123482
+        y: -0.039999979510903394
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.19600006146729
+        y: -0.039999979510903394
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.146000060722232
+        y: -0.08999998025596145
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.146000060722232
+        y: -0.1399999810010195
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.146000060722232
+        y: -0.18999998174607757
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.146000060722232
+        y: -0.23999998249113563
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.146000060722232
+        y: -0.2899999832361937
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - header:
+      stamp:
+        sec: 287
+        nanosec: 481000000
+      frame_id: map
+    pose:
+      position:
+        x: 1.15
+        y: -0.327
+        z: 0.0
+      orientation:
+        x: 0.0
+        y: 0.0
+        z: 1.0
+        w: 0.0
+planning_time:
+  sec: 0
+  nanosec: 1000000
+error_code: 0
+error_msg: ''
+
+Goal finished with status: SUCCEEDED

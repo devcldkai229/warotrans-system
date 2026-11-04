@@ -20,6 +20,8 @@ public interface IFleetModule
     /// <c>RobotCommandLifecycleChanged</c> (ACK / RESULT) carrying <paramref name="jobStepId"/>.
     /// Throws an AppException when the robot cannot take the command (offline, disabled, busy).
     /// Optional <paramref name="route"/> attaches a traffic route grant (graph hash + authorized edge ids).
+    /// Optional <paramref name="timeoutSeconds"/> is sent as payload.timeoutSeconds: the robot cancels the
+    /// Nav2 goal and reports FAILED once it is exceeded.
     /// </summary>
     Task<Guid> NavigateAsync(
         Guid robotId,
@@ -29,7 +31,14 @@ public interface IFleetModule
         Guid jobId,
         Guid jobStepId,
         CancellationToken cancellationToken = default,
-        RouteGrantSnapshot? route = null);
+        RouteGrantSnapshot? route = null,
+        double? timeoutSeconds = null);
+
+    /// <summary>
+    /// Sends CANCEL for an in-flight NAVIGATE. Best effort: returns false (and logs) when the robot is offline
+    /// or the command already finished, so a Job cancel is never blocked by it.
+    /// </summary>
+    Task<bool> CancelNavigationAsync(Guid robotId, Guid navigateCommandId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Arms the physical HUMAN_INTERACTION confirm button on the robot (MQTT interaction_request).

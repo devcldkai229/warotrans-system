@@ -1,0 +1,24 @@
+$ErrorActionPreference = "Continue"
+Get-Process WaroTrans.Host -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-NetTCPConnection -LocalPort 5090 -ErrorAction SilentlyContinue | ForEach-Object {
+  Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
+}
+Start-Sleep -Seconds 2
+$projDir = "E:\programming\my_project\warotrans-system\backend\src\WaroTrans.Host"
+$env:ASPNETCORE_ENVIRONMENT = "Simulation"
+$p = Start-Process -FilePath "dotnet" `
+  -ArgumentList @("run","--project","$projDir\WaroTrans.Host.csproj","--launch-profile","Simulation") `
+  -WorkingDirectory $projDir `
+  -PassThru `
+  -WindowStyle Minimized
+Write-Host "started host pid=$($p.Id)"
+for ($i = 0; $i -lt 30; $i++) {
+  Start-Sleep -Seconds 2
+  try {
+    $h = (Invoke-WebRequest -Uri "http://127.0.0.1:5090/health" -UseBasicParsing -TimeoutSec 2).Content
+    Write-Host "health=$h t=$($i*2)s"
+    exit 0
+  } catch {}
+}
+Write-Host "health_timeout"
+exit 1

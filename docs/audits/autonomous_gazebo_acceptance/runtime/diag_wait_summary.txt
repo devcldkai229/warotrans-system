@@ -1,0 +1,6 @@
+{'robot': 'SIM-01', 'goal': 'EP-WAIT-POINT', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.793,-0.977', 'end_xy': '1.445,0.726', 'goal_error_m': '0.185'}
+{'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.445,0.726', 'end_xy': '1.682,-0.797', 'goal_error_m': '0.212'}
+{'robot': 'SIM-01', 'goal': 'EP-SHELF-C-01', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.682,-0.797', 'end_xy': '0.854,-0.618', 'goal_error_m': '0.160'}
+{'robot': 'SIM-01', 'goal': 'EP-WAIT-POINT', 'status': 'PASS', 'error_code': 0, 'start_xy': '0.854,-0.618', 'end_xy': '1.451,0.730', 'goal_error_m': '0.188'}
+{'robot': 'SIM-01', 'goal': 'EP-INBOUND', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '1.451,0.730', 'end_xy': '1.295,0.944', 'goal_error_m': '0.751'}
+{"legs": 5, "pass": 4, "out": "/mnt/e/programming/my_project/warotrans-system/docs/audits/autonomous_gazebo_acceptance/runtime/diag_wait_motion.csv"}

@@ -1,0 +1,21 @@
+feature,source_class,target_class,relationship_type,source_method,target_method,evidence_path,evidence_symbol,implementation_status,notes
+FE-06,Nav2ActionNavigator,NavigatorPort,realization,send_goal/is_ready/cancel_goal,,ros2_ws/src/warotrans_fleet/warotrans_fleet/nav2_navigator.py,Nav2ActionNavigator,IMPLEMENTED,Protocol in navigator.py
+FE-06,MoveCommandHandler,Nav2ActionNavigator,dependency,handle,_send_goal/send_goal,ros2_ws/src/warotrans_fleet/warotrans_fleet/move_command_handler.py,MoveCommandHandler,IMPLEMENTED,legacy path
+FE-06,RobotGatewayNode,MoveCommandHandler,association,_on_mqtt_message/handle,,ros2_ws/src/warotrans_fleet/warotrans_fleet/robot_gateway_node.py,RobotGatewayNode,IMPLEMENTED,
+FE-06,LaneAwareNavfn,nav2_core::GlobalPlanner,inheritance,createPlan,,ros2_ws/src/warotrans_lane_planner/include/warotrans_lane_planner/lane_aware_navfn.hpp,LaneAwareNavfn,IMPLEMENTED,pluginlib
+FE-06,Esp32BridgeNode,geometry_msgs/Twist,dependency,cmd_vel callback,,ros2_ws/src/warotrans_hardware/warotrans_hardware/esp32_bridge_node.py,Esp32BridgeNode,IMPLEMENTED,
+FE-06,MqttRobotCommandPublisher,RobotCommandMessage,dependency,PublishAsync,,backend/src/WaroTrans.BuildingBlocks/Mqtt/MqttRobotCommandPublisher.cs,PublishAsync,IMPLEMENTED,
+FE-06,CmdVelAuthorityGate,AuthorityGateLogic,composition,decide,on_authority_ok,ros2_ws/src/warotrans_fleet/warotrans_fleet/cmd_vel_authority_gate.py,CmdVelAuthorityGate,IMPLEMENTED,FE-11 boundary
+FE-11,SegmentedTrafficCoordinator,ISegmentedTrafficCoordinator,realization,,,backend/src/Modules/Fleet/Traffic/SegmentedTrafficCoordinator.cs,SegmentedTrafficCoordinator,IMPLEMENTED,
+FE-11,SegmentedTrafficCoordinator,TrafficState,composition,EnqueueAsync/RunAsync,Acquire*,backend/src/Modules/Fleet/Traffic/SegmentedTrafficCoordinator.cs,TrafficState,IMPLEMENTED,single-writer actor owns state
+FE-11,TrafficCoordinator,ITrafficCoordinator,realization,,,backend/src/Modules/Fleet/Traffic/TrafficCoordinator.cs,TrafficCoordinator,IMPLEMENTED,V1 Shadow
+FE-11,TrafficState,SemanticReservation,dependency,AcquireSemanticPlan,CollectResources,backend/src/Modules/Fleet/Traffic/TrafficState.cs,AcquireSemanticPlan,IMPLEMENTED,static helpers
+FE-11,TrafficState,CompiledTrafficGraph,association,BindGraph/AcquireAtomic,ResourcesCovering,backend/src/Modules/Fleet/Traffic/TrafficState.cs,BindGraph,IMPLEMENTED,when Active bound
+FE-11,TrafficAuthorityPublisher,IMqttRobotCommandPublisher,dependency,HandleAsync,PublishAsync,backend/src/Modules/Fleet/Traffic/TrafficAuthorityPublisher.cs,HandleAsync,IMPLEMENTED,
+FE-11,TrafficProgressIngress,ISegmentedTrafficCoordinator,dependency,HandlePlanProposeAsync,AcquireSemanticPlanAsync,backend/src/Modules/Fleet/Traffic/TrafficProgressIngress.cs,HandlePlanProposeAsync,IMPLEMENTED,
+FE-11,RobotMqttIngress,TrafficProgressIngress,dependency,,,backend/src/Modules/Fleet/Mqtt/RobotMqttIngress.cs,RobotMqttIngress,IMPLEMENTED,
+FE-11,TrafficClient,AuthorityStore,association,accept/authority_valid,,ros2_ws/src/warotrans_fleet/warotrans_fleet/traffic_client.py,TrafficClient,IMPLEMENTED,Active
+FE-11,TrafficClient,Nav2SegmentExecutor,association,execute_maneuvers,,ros2_ws/src/warotrans_fleet/warotrans_fleet/traffic_client.py,TrafficClient,IMPLEMENTED,Active
+FE-11,SemanticTrafficClient,CmdVelAuthorityGate,association,set_authority_ok,/traffic/authority_ok,ros2_ws/src/warotrans_fleet/warotrans_fleet/semantic_traffic_client.py,SemanticTrafficClient,IMPLEMENTED,runtime topic not OO composition
+FE-11,RoutePlanner,CompiledTrafficGraph,dependency,SegmentSafeStops,ResourcesCovering,backend/src/Modules/Fleet/Traffic/RoutePlanner.cs,RoutePlanner,IMPLEMENTED,
+FE-11,WaroTrans.Fleet,WaroTrans.Navigation,dependency (ProjectReference),,,backend/src/Modules/Fleet/WaroTrans.Fleet.csproj,ProjectReference,IMPLEMENTED,compile-time

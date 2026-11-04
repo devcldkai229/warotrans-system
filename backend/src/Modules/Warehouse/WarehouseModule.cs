@@ -77,6 +77,9 @@ public static class WarehouseModule
         group.MapListProductCategories();
         group.MapCreateProductCategory();
         GetContainerEndpoint.Map(group);
+        // Receiving: was mapped in 3a8dc58 and lost when the module's endpoints were regrouped, so no client could
+        // register a container (and therefore never create a Transport Request).
+        CreateContainerEndpoint.Map(group);
         return endpoints;
     }
 }

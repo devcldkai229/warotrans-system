@@ -1,0 +1,79 @@
+compiler=10
+graphHash=fbbf11bb070fabb14d9b84692c004f0dee9099136fd9fa1741dd8539306f40f2
+nodes=149 edges=230 resources=1967
+input edges=5 endpoints=17 zones=24
+occupancyFingerprint=ab273d2239e62a7068d5d0d30fd62886002f34bab8f5065a0afd34d77e3556b3
+footprint L=0.32 W=0.26 pad=0.02 half=0.15 turn=0.226
+routeOptions snapV=0.05 snapEp=0.5 juncCap=0.15 maxAccess=3
+LEVEL snapshot_compile_hash=fbbf11bb070fabb14d9b84692c004f0dee9099136fd9fa1741dd8539306f40f2
+LEVEL graph_hash_binding=PASS (snapshot compile + tests + Debug SVG share fbbf11bb070fabb14d9b84692c004f0dee9099136fd9fa1741dd8539306f40f2; Host Check verified separately)
+CONN_OK EP-PARKING-A→EP-INBOUND edges=[199,224,229,240,283,286,303,327,335,360,365]
+CONN_OK EP-INBOUND→EP-SHELFA01 edges=[376,378,377,375,361,359,336,189,181,161,173,184,192,202,209]
+CONN_OK EP-SHELFA01→EP-OUTBOUND edges=[223,213,207,201,191,182,169,165,176,186,197,299,307,335,360,366]
+CONN_OK EP-OUTBOUND→EP-PARKING-A edges=[379,361,359,340,329,312,256,247,210,206]
+LEVEL graph_connectivity=PASS
+LEVEL geometry=PASS
+TURN real_pivot_map_data EP-PARKING-A node=28 pose=(-1.825,-0.538) yaw=-1.5708 clr=0.2 need=0.226 maxΔdeg=135.0 approachVsYawDeg=140.3 onCycleIncident=True
+TURN real_pivot_map_data EP-PARKING-B node=35 pose=(-1.445,-0.532) yaw=-1.5708 clr=0.2 need=0.226 maxΔdeg=136.6 approachVsYawDeg=133.8 onCycleIncident=False
+TURN real_pivot_map_data EP-CHARGING-A node=52 pose=(-1.051,-0.538) yaw=-1.5708 clr=0.2 need=0.226 maxΔdeg=135.0 approachVsYawDeg=134.3 onCycleIncident=False
+TURN real_pivot_map_data EP-SHELFB04 node=110 pose=(0.562,0.973) yaw=1.5708 clr=0.15 need=0.226 maxΔdeg=146.2 approachVsYawDeg=159.2 onCycleIncident=False
+TURN real_pivot_map_data EP-SHELFC01 node=132 pose=(0.916,-0.761) yaw=3.1416 clr=0.233 need=0.226 maxΔdeg=174.2 approachVsYawDeg=138.5 onCycleIncident=False
+TURN real_pivot_map_data EP-QUEUE-POINT node=133 pose=(1.306,0.809) yaw=0 clr=0.2 need=0.226 maxΔdeg=137.5 approachVsYawDeg=131.8 onCycleIncident=False
+LEVEL turn_remaining=6 false_candidates=0
+SHELFB01 pose=(0.818,1.697) distToNoStop=0.446 poseDiskHits=[]
+NOSTOP_CLASS EP-SHELFB01=cleared_by_pose_disk_rule (code fix v8)
+LEVEL traffic_resources=PASS
+LEVEL traffic_e2e=NOT_RUN (no two-robot grant execution)
+KIN edge=199 len=0.6 headingDeg=-0.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=224 len=0.091 headingDeg=-28.8 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=229 len=0.39 headingDeg=-41.0 minClr=0.183 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=240 len=0.652 headingDeg=-4.4 minClr=0.15 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=283 len=0.079 headingDeg=45.0 minClr=0.45 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=286 len=0.594 headingDeg=41.6 minClr=0.183 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=303 len=0.4 headingDeg=0.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=327 len=0.184 headingDeg=47.2 minClr=0.367 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=335 len=0.636 headingDeg=0.0 minClr=0.3 half=0.15 J=False C=False (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=360 len=0.082 headingDeg=0.0 minClr=0.3 half=0.15 J=False C=False (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=365 len=1.932 headingDeg=83.6 minClr=0.167 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=376 len=0.12 headingDeg=-79.9 minClr=0.25 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=378 len=1 headingDeg=-90.0 minClr=0.3 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=377 len=0.112 headingDeg=-116.6 minClr=0.3 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=375 len=0.283 headingDeg=-135.0 minClr=0.25 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=361 len=0.073 headingDeg=-179.3 minClr=0.25 half=0.15 J=False C=False (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=359 len=0.632 headingDeg=-179.3 minClr=0.25 half=0.15 J=False C=False (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=336 len=2.716 headingDeg=179.5 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=189 len=0.112 headingDeg=153.4 minClr=0.25 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=181 len=0.283 headingDeg=135.0 minClr=0.283 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=161 len=0.307 headingDeg=83.6 minClr=0.4 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=173 len=0.224 headingDeg=26.6 minClr=0.233 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=184 len=0.141 headingDeg=45.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=192 len=0.2 headingDeg=0.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=202 len=0.112 headingDeg=-26.6 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=209 len=0.372 headingDeg=-44.3 minClr=0.25 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=223 len=0.114 headingDeg=151.2 minClr=0.25 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=213 len=0.264 headingDeg=129.0 minClr=0.233 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=207 len=0.112 headingDeg=153.4 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=201 len=0.2 headingDeg=180.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=191 len=0.145 headingDeg=-157.7 minClr=0.233 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=182 len=0.283 headingDeg=-135.0 minClr=0.283 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=169 len=0.195 headingDeg=-90.0 minClr=0.45 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=165 len=0.116 headingDeg=-64.5 minClr=0.4 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=176 len=0.224 headingDeg=-26.6 minClr=0.233 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=186 len=0.138 headingDeg=-43.5 minClr=0.183 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=197 len=2.1 headingDeg=-0.5 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=299 len=0.112 headingDeg=-26.6 minClr=0.267 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=307 len=0.648 headingDeg=-44.0 minClr=0.283 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=366 len=0.827 headingDeg=-60.2 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=379 len=1.292 headingDeg=109.2 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=340 len=0.078 headingDeg=163.7 minClr=0.25 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=329 len=0.3 headingDeg=180.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=312 len=1.414 headingDeg=-135.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=256 len=0.112 headingDeg=-153.4 minClr=0.183 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=247 len=0.824 headingDeg=180.0 minClr=0.15 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=210 len=0.112 headingDeg=153.4 minClr=0.45 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+KIN edge=206 len=0.354 headingDeg=135.0 minClr=0.2 half=0.15 J=True C=True (polyline centerline; curvature=0 straight segment; not FollowPath)
+LEVEL static_corridor=PASS
+LEVEL motion_execution=NOT_RUN (no robot/Nav2 FollowPath evidence)
+LEVEL gazebo_e2e=NOT_RUN (no isolated MAP-ONE Gazebo bring-up)
+SVG=E:\programming\my_project\warotrans-system\samples\maps\MAP-ONE-V001\debug-cycle-route.svg
+HIST TURN_CLEARANCE=6

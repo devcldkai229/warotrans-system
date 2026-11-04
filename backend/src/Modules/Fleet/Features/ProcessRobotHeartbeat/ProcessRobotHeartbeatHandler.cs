@@ -12,6 +12,7 @@ public sealed class ProcessRobotHeartbeatHandler(
     FleetDbContext db,
     IRobotRealtimeNotifier realtimeNotifier,
     IIntegrationEventPublisher eventPublisher,
+    Traffic.TrafficShadowObserver? trafficShadow,
     ILogger<ProcessRobotHeartbeatHandler> logger)
 {
     public async Task HandleAsync(RobotHeartbeatMessage message, CancellationToken cancellationToken)
@@ -55,6 +56,13 @@ public sealed class ProcessRobotHeartbeatHandler(
                     .SetProperty(r => r.UpdatedAt, utcNow),
                 cancellationToken);
         db.ChangeTracker.Clear();
+
+        // TrafficState is in-memory: Host restart re-quarantines OFFLINE while DB may still
+        // IsOnline=true, so becameOnline stays false. Every verified HB must sync MarkOnline.
+        if (isOnline && trafficShadow is not null)
+        {
+            await trafficShadow.OnOnlineAsync(robot.Id, cancellationToken).ConfigureAwait(false);
+        }
 
         if (becameOnline)
         {

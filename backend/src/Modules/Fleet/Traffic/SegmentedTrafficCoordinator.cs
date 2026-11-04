@@ -111,6 +111,17 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
     public Task<TrafficOpResult> BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default) =>
         EnqueueAsync(s => s.BindGraph(mapVersionId, graph), ct);
 
+    public Task<TrafficOpResult> BindSemanticPolicyAsync(SemanticTrafficPolicy policy, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.BindSemanticPolicy(policy), ct);
+
+    public Task<AcquireResult> AcquireSemanticPlanAsync(SemanticPlanProposeRequest request, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.AcquireSemanticPlan(request);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
     public Task<TrafficOpResult> EnsureTrackedAsync(
         Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
         EnqueueAsync(s => s.EnsureTracked(robotId, poseX, poseY, localizationOk), ct);
@@ -227,16 +238,20 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public async Task<int> RenewAllActiveAuthoritiesAsync(CancellationToken ct = default)
     {
-        if (_options.Mode != TrafficCoordinatorMode.Active)
+        if (_options.Mode is not (TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic))
         {
             return 0;
         }
 
-        // Retry EXTEND for robots parked at a safe stop whose next segment was busy.
-        var awaiting = await EnqueueAsync(s => s.RobotsAwaitingExtension(), ct).ConfigureAwait(false);
-        foreach (var robotId in awaiting)
+        if (_options.Mode == TrafficCoordinatorMode.Active)
         {
-            await AdvanceRouteAsync(robotId, ct).ConfigureAwait(false);
+            // Retry EXTEND for robots parked at a safe stop whose next segment was busy.
+            // Segmented routes only: a Semantic plan carries no pending segments.
+            var awaiting = await EnqueueAsync(s => s.RobotsAwaitingExtension(), ct).ConfigureAwait(false);
+            foreach (var robotId in awaiting)
+            {
+                await AdvanceRouteAsync(robotId, ct).ConfigureAwait(false);
+            }
         }
 
         var keys = await EnqueueAsync(s => s.ActiveAuthorityKeys(), ct).ConfigureAwait(false);
@@ -302,6 +317,9 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public Task<TrafficOpResult> MarkOfflineAsync(Guid robotId, CancellationToken ct = default) =>
         EnqueueAsync(s => s.MarkOffline(robotId), ct);
+
+    public Task<TrafficOpResult> MarkOnlineAsync(Guid robotId, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.MarkOnline(robotId), ct);
 
     public Task<TrafficOpResult> ReconcileRobotAsync(
         Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,

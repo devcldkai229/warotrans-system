@@ -36,6 +36,18 @@ public sealed class ProcessRobotCommandResultHandler(
             return;
         }
 
+        // The command is found by id alone: only the robot it was sent to may finish it.
+        var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == command.RobotId, cancellationToken);
+        if (robot is not null && !string.Equals(robot.Code, message.RobotCode, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "Dropped command_result {CommandId} from robot {Sender}: the command belongs to {Owner}",
+                message.CommandId,
+                message.RobotCode,
+                robot.Code);
+            return;
+        }
+
         // CANCEL command result is optional; primary correlation is on the navigate commandId.
         var utcNow = DateTimeOffset.UtcNow;
         if (!command.TryApplyResult(message.Outcome, message.ErrorCode, utcNow))
@@ -46,8 +58,6 @@ public sealed class ProcessRobotCommandResultHandler(
                 command.Status);
             return;
         }
-
-        var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == command.RobotId, cancellationToken);
         JobAssignment? assignment = null;
         if (command.JobAssignmentId is { } assignmentId)
         {

@@ -13,5 +13,6 @@ public interface IRobotMqttIngress
     Task HandleCommandResultAsync(RobotCommandResultMessage message, CancellationToken cancellationToken);
     Task HandleInteractionConfirmAsync(RobotInteractionConfirmMessage message, CancellationToken cancellationToken);
     Task HandleTrafficProgressAsync(TrafficProgressMessage message, CancellationToken cancellationToken);
+    Task HandleTrafficPlanAsync(TrafficPlanProposeMessage message, CancellationToken cancellationToken);
     Task HandleAuthorityStateAsync(AuthorityStateMessage message, CancellationToken cancellationToken);
 }

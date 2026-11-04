@@ -95,7 +95,18 @@ export interface TrafficRobotView {
   y?: number | null
   localizationOk: boolean
   occupiedResourceIds: string[]
-  authority?: { authorityId: string; edgeIds: number[]; graphHash: string; seq: number; epoch: number } | null
+  authority?: {
+    authorityId: string
+    edgeIds: number[]
+    graphHash: string
+    seq: number
+    epoch: number
+    planRevision?: number
+    semanticMapFingerprint?: string | null
+    resourceIds?: string[]
+  } | null
+  planRevision?: number
+  proposedPath?: { x: number; y: number; yaw: number }[]
   waitingReason: string
   quarantineReason?: string | null
   jobStepId?: string | null

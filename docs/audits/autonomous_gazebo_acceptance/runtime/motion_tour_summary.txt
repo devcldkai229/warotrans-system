@@ -1,0 +1,17 @@
+{'robot': 'SIM-01', 'goal': 'EP-WAIT-POINT', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.793,-0.977', 'end_xy': '1.449,0.725', 'goal_error_m': '0.189'}
+{'robot': 'SIM-01', 'goal': 'EP-INBOUND', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.449,0.725', 'end_xy': '1.757,1.349', 'goal_error_m': '0.194'}
+{'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.757,1.349', 'end_xy': '1.748,-0.774', 'goal_error_m': '0.208'}
+{'robot': 'SIM-01', 'goal': 'EP-SHELF-C-01', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.748,-0.774', 'end_xy': '0.790,-0.620', 'goal_error_m': '0.179'}
+{'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'PASS', 'error_code': 0, 'start_xy': '0.790,-0.620', 'end_xy': '1.706,-0.818', 'goal_error_m': '0.181'}
+{'robot': 'SIM-01', 'goal': 'EP-SHELF-B-01', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.706,-0.818', 'end_xy': '0.484,1.236', 'goal_error_m': '0.240'}
+{'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'PASS', 'error_code': 0, 'start_xy': '0.484,1.236', 'end_xy': '1.720,-0.805', 'goal_error_m': '0.186'}
+{'robot': 'SIM-01', 'goal': 'EP-SHELF-A-01', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.720,-0.805', 'end_xy': '-1.384,1.486', 'goal_error_m': '0.169'}
+{'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'PASS', 'error_code': 0, 'start_xy': '-1.384,1.486', 'end_xy': '1.693,-0.808', 'goal_error_m': '0.197'}
+{'robot': 'SIM-01', 'goal': 'EP-PARKING-A', 'status': 'PASS', 'error_code': 0, 'start_xy': '1.693,-0.808', 'end_xy': '-1.673,-0.622', 'goal_error_m': '0.200'}
+{'robot': 'SIM-01', 'goal': 'EP-CHARGING-A', 'status': 'PASS', 'error_code': 0, 'start_xy': '-1.673,-0.622', 'end_xy': '-1.193,-0.613', 'goal_error_m': '0.192'}
+{'robot': 'SIM-01', 'goal': 'EP-PARKING-B', 'status': 'PASS', 'error_code': 0, 'start_xy': '-1.193,-0.613', 'end_xy': '-1.265,-0.614', 'goal_error_m': '0.189'}
+{'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '-1.265,-0.614', 'end_xy': '0.925,-0.455', 'goal_error_m': '1.013'}
+{'robot': 'SIM-01', 'goal': 'EP-INSPECTION', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '0.925,-0.455', 'end_xy': '0.926,-0.455', 'goal_error_m': '0.553'}
+{'robot': 'SIM-01', 'goal': 'EP-SHELF-C-02', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '0.926,-0.455', 'end_xy': '0.926,-0.455', 'goal_error_m': '0.638'}
+{'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '0.926,-0.455', 'end_xy': '0.926,-0.455', 'goal_error_m': '1.012'}
+{"legs": 16, "pass": 12, "out": "/mnt/e/programming/my_project/warotrans-system/docs/audits/autonomous_gazebo_acceptance/MOTION_RESULTS.csv"}

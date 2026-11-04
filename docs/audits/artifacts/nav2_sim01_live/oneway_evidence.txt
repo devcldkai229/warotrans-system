@@ -1,0 +1,23 @@
+illegal_pose_count=21
+illegal_delta=(0.000,0.000) translation_yaw=0.000 vs_lane_tangent=0.0
+against_lane=False
+legal_pose_count=22
+legal_delta_x=-1.550 expected_positive_along_tangent
+illegal_pose_count=21
+illegal_delta=(0.000,0.000) translation_yaw=0.000 vs_lane_tangent=0.0
+against_lane=False
+legal_pose_count=22
+legal_delta_x=-1.550 expected_positive_along_tangent
+illegal_pose_count=0
+illegal_empty_or_unparsed
+legal_pose_count=0
+illegal_pose_count=21
+illegal_delta=(0.000,0.000) translation_yaw=0.000 vs_lane_tangent=0.0
+against_lane=False
+legal_pose_count=22
+legal_delta_x=-1.550 expected_positive_along_tangent
+illegal_pose_count=21
+illegal_delta=(0.000,0.000) translation_yaw=0.000 vs_lane_tangent=0.0
+against_lane=False
+legal_pose_count=22
+legal_delta_x=-1.550 expected_positive_along_tangent

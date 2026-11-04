@@ -28,7 +28,7 @@ public sealed class TrafficAuthorityRenewHostedService(
                 break;
             }
 
-            if (options.Value.Mode != TrafficCoordinatorMode.Active)
+            if (options.Value.Mode is not (TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic))
             {
                 continue;
             }

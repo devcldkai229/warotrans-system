@@ -1,0 +1,54 @@
+source_subsystem,source_package,target_subsystem,target_package,dependency_type,evidence_path,evidence_symbol,confidence,notes
+Backend,WaroTrans.Host,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,Composition root
+Backend,WaroTrans.Host,Backend,WaroTrans.Identity,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Host,Backend,WaroTrans.Warehouse,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Host,Backend,WaroTrans.Transportation,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Host,Backend,WaroTrans.WorkflowExecution,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Host,Backend,WaroTrans.Fleet,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Host,Backend,WaroTrans.Navigation,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Host,Backend,WaroTrans.Operations,C# ProjectReference,backend/src/WaroTrans.Host/WaroTrans.Host.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Identity,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/Modules/Identity/WaroTrans.Identity.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Warehouse,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/Modules/Warehouse/WaroTrans.Warehouse.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Operations,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/Modules/Operations/WaroTrans.Operations.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Navigation,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/Modules/Navigation/WaroTrans.Navigation.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Navigation,Backend,WaroTrans.Warehouse,C# ProjectReference,backend/src/Modules/Navigation/WaroTrans.Navigation.csproj,ProjectReference,VERIFIED,Also implements Warehouse Contracts IMapEndpointCatalog
+Backend,WaroTrans.Fleet,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/Modules/Fleet/WaroTrans.Fleet.csproj,ProjectReference,VERIFIED,Uses BuildingBlocks.Mqtt
+Backend,WaroTrans.Fleet,Backend,WaroTrans.Warehouse,C# ProjectReference,backend/src/Modules/Fleet/WaroTrans.Fleet.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Fleet,Backend,WaroTrans.Navigation,C# ProjectReference,backend/src/Modules/Fleet/WaroTrans.Fleet.csproj,ProjectReference,VERIFIED,Fleet.Traffic uses Navigation.Traffic types
+Backend,WaroTrans.WorkflowExecution,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/Modules/WorkflowExecution/WaroTrans.WorkflowExecution.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.WorkflowExecution,Backend,WaroTrans.Fleet,C# ProjectReference,backend/src/Modules/WorkflowExecution/WaroTrans.WorkflowExecution.csproj,ProjectReference,VERIFIED,JobExecutionEngine
+Backend,WaroTrans.WorkflowExecution,Backend,WaroTrans.Navigation,C# ProjectReference,backend/src/Modules/WorkflowExecution/WaroTrans.WorkflowExecution.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Transportation,Backend,WaroTrans.BuildingBlocks,C# ProjectReference,backend/src/Modules/Transportation/WaroTrans.Transportation.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Transportation,Backend,WaroTrans.WorkflowExecution,C# ProjectReference,backend/src/Modules/Transportation/WaroTrans.Transportation.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Transportation,Backend,WaroTrans.Warehouse,C# ProjectReference,backend/src/Modules/Transportation/WaroTrans.Transportation.csproj,ProjectReference,VERIFIED,
+Backend,WaroTrans.Transportation,Backend,WaroTrans.Navigation,C# ProjectReference,backend/src/Modules/Transportation/WaroTrans.Transportation.csproj,ProjectReference,VERIFIED,
+UserApplications,web.app,UserApplications,web.features,TypeScript/JavaScript import,web/src/App.tsx; web/src/app/AppShell.tsx,feature page imports,VERIFIED,Composition → features
+UserApplications,web.features,UserApplications,web.shared.api,TypeScript/JavaScript import,web/src/features/**/*.tsx,@/shared/api,VERIFIED,Dominant pattern
+UserApplications,web.features,UserApplications,web.shared.ui,TypeScript/JavaScript import,web/src/features/**/*.tsx,@/shared/ui,VERIFIED,
+UserApplications,web.features,UserApplications,web.shared.lib,TypeScript/JavaScript import,web/src/features/**/*.tsx,@/shared/lib,VERIFIED,
+UserApplications,web.features,UserApplications,web.shared.map,TypeScript/JavaScript import,web/src/features/jobs/JobDetailPage.tsx,@/shared/map,VERIFIED,Also other map consumers
+UserApplications,web.features,UserApplications,web.shared.realtime,TypeScript/JavaScript import,web/src/features/**/*.tsx,useNotificationsHub,VERIFIED,Subset of screens
+UserApplications,app.app,UserApplications,app.features,TypeScript/JavaScript import,app/src/app/navigation/AppNavigator.tsx,screen composition,VERIFIED,
+UserApplications,app.features,UserApplications,app.shared,TypeScript/JavaScript import,app/src/features/**/*.*,shared/api|theme|ui|...,VERIFIED,No feature↔feature imports found
+RobotEdge,warotrans_hardware,RobotEdge,warotrans_msgs,ROS package dependency,ros2_ws/src/warotrans_hardware/package.xml,depend,VERIFIED,Also Python import WheelTicks
+RobotEdge,warotrans_teleop,RobotEdge,warotrans_msgs,ROS package dependency,ros2_ws/src/warotrans_teleop/package.xml,depend,VERIFIED,
+RobotEdge,warotrans_teleop,RobotEdge,warotrans_hardware,ROS package dependency,ros2_ws/src/warotrans_teleop/package.xml,depend,VERIFIED,Also imports motor_mixer
+RobotEdge,warotrans_navigation,RobotEdge,warotrans_lane_planner,ROS package dependency,ros2_ws/src/warotrans_navigation/package.xml,exec_depend,VERIFIED,Plugin loaded via YAML overlay when configured
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_description,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_hardware,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_teleop,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_sensors,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_localization,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_slam,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_navigation,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_perception,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,perception currently scaffold
+RobotEdge,warotrans_bringup,RobotEdge,warotrans_fleet,ROS package dependency,ros2_ws/src/warotrans_bringup/package.xml,exec_depend,VERIFIED,fleet.launch Include not found in current bringup launches — dep declared
+RobotEdge,warotrans_simulation,RobotEdge,warotrans_description,ROS package dependency,ros2_ws/src/warotrans_simulation/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_simulation,RobotEdge,warotrans_localization,ROS package dependency,ros2_ws/src/warotrans_simulation/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_simulation,RobotEdge,warotrans_navigation,ROS package dependency,ros2_ws/src/warotrans_simulation/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_simulation,RobotEdge,warotrans_fleet,ROS package dependency,ros2_ws/src/warotrans_simulation/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_simulation,RobotEdge,warotrans_lane_planner,ROS package dependency,ros2_ws/src/warotrans_simulation/package.xml,exec_depend,VERIFIED,
+RobotEdge,warotrans_fleet,RobotEdge,warotrans_simulation,Python import,ros2_ws/src/warotrans_fleet/warotrans_fleet/path_policy_validator.py,_load_adapter/semantic_map_adapter,VERIFIED,NOT declared in fleet package.xml; annotate as import coupling
+UserApplications,web,Backend,WaroTrans.Host,Runtime integration,web/src/shared/api/client.ts; web/src/shared/realtime/useNotificationsHub.ts,REST+SignalR,VERIFIED,Not a compile-time package dependency — stereotype «runtime»
+UserApplications,app,Backend,WaroTrans.Host,Runtime integration,app/src/shared/api/client.ts; app/src/shared/realtime/realtimeClient.ts,REST+SignalR,VERIFIED,Not a compile-time package dependency — stereotype «runtime»
+Backend,WaroTrans.BuildingBlocks,RobotEdge,warotrans_fleet,Runtime integration,backend/src/WaroTrans.BuildingBlocks/Mqtt/; backend/src/Modules/Fleet/Mqtt/RobotMqttIngress.cs,MQTT topics/commands,VERIFIED,Cross-repo runtime; Fleet implements ingress

@@ -11,7 +11,7 @@ public sealed class GetRouteGraphHandler(TrafficGraphCompileService compileServi
 {
     public async Task<RouteGraphExportResult> HandleAsync(Guid mapVersionId, CancellationToken cancellationToken = default)
     {
-        // Topology export does not require occupancy (clearance warnings are for validation endpoint).
+        // Same occupancy policy as Check / Debug SVG / Active MOVE (fail-closed strip when PGM exists).
         var bundle = await compileService.CompileAsync(mapVersionId, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken);
         var result = bundle.Result;
         var routeIssues = result.Issues
@@ -35,6 +35,9 @@ public sealed class GetRouteGraphHandler(TrafficGraphCompileService compileServi
             RouteGraphBuilder.EndpointInKeepOut,
             RouteGraphBuilder.DeadEndNode,
             RouteGraphBuilder.LaneInKeepOut,
+            RouteGraphBuilder.ServiceAccessBlocked,
+            TrafficGraphCompiler.ServiceAccessBlocked,
+            TrafficGraphCompiler.JunctionTransitionBlocked,
             TrafficGraphCompiler.LegacyJunctionZone,
             TrafficGraphCompiler.FrameMismatch
         };
@@ -44,7 +47,9 @@ public sealed class GetRouteGraphHandler(TrafficGraphCompileService compileServi
                                              i.Code.StartsWith("DEAD_", StringComparison.Ordinal) ||
                                              i.Code.StartsWith("LANE_", StringComparison.Ordinal) ||
                                              i.Code.StartsWith("LEGACY_", StringComparison.Ordinal) ||
-                                             i.Code.StartsWith("FRAME_", StringComparison.Ordinal))
+                                             i.Code.StartsWith("FRAME_", StringComparison.Ordinal) ||
+                                             i.Code.StartsWith("SERVICE_", StringComparison.Ordinal) ||
+                                             i.Code.StartsWith("JUNCTION_", StringComparison.Ordinal))
             .ToList();
 
         return new RouteGraphExportResult(

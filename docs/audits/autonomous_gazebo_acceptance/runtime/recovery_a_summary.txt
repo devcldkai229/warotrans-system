@@ -1,0 +1,10 @@
+
+=== ANNOUNCE: TF ready SIM-01=(-1.7979999999998633, -0.6750000000000222) (start EP-PARKING-A when present) SIM-02=None (start EP-PARKING-B when present) ===
+
+
+=== ANNOUNCE: Test A: robot=SIM-01 START=EP-PARKING-A → GOAL=EP-INBOUND (1.747,1.543) standalone semantic ===
+
+{'test': 'A', 'robot': 'SIM-01', 'start_endpoint': 'EP-PARKING-A', 'goal_endpoint': 'EP-INBOUND', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '-1.798,-0.675', 'end_xy': '-0.897,-0.872', 'displacement_m': '0.922', 'goal_error_m': '3.580', 'note': 'standalone semantic'}
+
+=== ANNOUNCE: DONE wrote /mnt/e/programming/my_project/warotrans-system/docs/audits/autonomous_gazebo_acceptance/runtime/tmp_a.csv ===
+

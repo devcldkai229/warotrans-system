@@ -209,6 +209,37 @@ public sealed class Robot
         UpdatedAt = utcNow;
     }
 
+    /// <summary>
+    /// Operator puts a registered robot into service: OFFLINE (never commissioned) → AVAILABLE.
+    /// Heartbeats deliberately never change <see cref="Status"/>, so without this a newly registered robot could not
+    /// be dispatched at all. Only a connected, enabled robot that is not running a command may be put in service.
+    /// </summary>
+    public void PutInService(DateTimeOffset utcNow)
+    {
+        if (Status != RobotStatus.OFFLINE)
+        {
+            throw new ConflictException($"Robot {Code} is already {Status}.", "robot_not_offline");
+        }
+
+        if (!IsEnabled)
+        {
+            throw new DomainValidationException($"Robot {Code} is disabled.", "robot_disabled");
+        }
+
+        if (!IsOnline)
+        {
+            throw new DomainValidationException($"Robot {Code} is not connected (no heartbeat).", "robot_offline");
+        }
+
+        if (CurrentCommandId is not null)
+        {
+            throw new ConflictException($"Robot {Code} still has command {CurrentCommandId}.", "robot_busy");
+        }
+
+        Status = RobotStatus.AVAILABLE;
+        UpdatedAt = utcNow;
+    }
+
     /// <summary>Backend-owned: clear command and return to AVAILABLE.</summary>
     public void MarkAvailable(DateTimeOffset utcNow)
     {

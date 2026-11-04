@@ -36,6 +36,9 @@ public sealed class NavigateToPosePayload
 
     /// <summary>Segment motion authority (Active Mode). Optional in Shadow/legacy.</summary>
     public AuthorityPayload? Authority { get; set; }
+
+    /// <summary>Robot cancels the Nav2 goal and reports FAILED after this long. Null = no deadline.</summary>
+    public double? TimeoutSeconds { get; set; }
 }
 
 /// <summary>Authorized edge set for a NAVIGATE_TO_POSE under traffic coordination.</summary>
@@ -54,6 +57,12 @@ public sealed class AuthorityPayload
     public Guid? MapVersionId { get; set; }
     public string? MapVersionCode { get; set; }
     public string GraphHash { get; set; } = string.Empty;
+    /// <summary>Stage-3 semantic map fingerprint (replaces RouteGraph graphHash on semantic path).</summary>
+    public string? SemanticMapFingerprint { get; set; }
+    /// <summary>Stage-3 Nav2 plan revision authorized by this grant.</summary>
+    public long PlanRevision { get; set; }
+    /// <summary>Stage-3 reserved resource ids (zone:/cell:).</summary>
+    public List<string> ResourceIds { get; set; } = [];
     public string? RouteId { get; set; }
     public int RouteVersion { get; set; }
     public List<int> SegmentEdgeIds { get; set; } = [];
@@ -62,6 +71,26 @@ public sealed class AuthorityPayload
     public Pose2DPayload? FinalGoal { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
     public Dictionary<string, double>? SpeedLimits { get; set; }
+
+    /// <summary>
+    /// Ordered executable steps (Forward / Reverse / Spin). Empty or null = legacy Forward-only
+    /// over <see cref="SegmentEdgeIds"/> (backward compatible with older robots).
+    /// </summary>
+    public List<ManeuverStepPayload>? Maneuvers { get; set; }
+}
+
+/// <summary>One executable motion step under MotionAuthority (CompilerVersion 10+).</summary>
+public sealed class ManeuverStepPayload
+{
+    /// <summary>Forward | Reverse | Spin.</summary>
+    public string Kind { get; set; } = "Forward";
+
+    public List<int> EdgeIds { get; set; } = [];
+
+    /// <summary>Absolute yaw target (rad, map frame) for Spin; unused for Forward/Reverse.</summary>
+    public double? YawTarget { get; set; }
+
+    public List<string>? ResourceIds { get; set; }
 }
 
 public sealed class Pose2DPayload
@@ -80,11 +109,17 @@ public sealed class ExtendAuthorityPayload
     public List<int> SegmentEdgeIds { get; set; } = [];
     public string PathHash { get; set; } = string.Empty;
     public string GraphHash { get; set; } = string.Empty;
+    public string? SemanticMapFingerprint { get; set; }
+    public long PlanRevision { get; set; }
+    public List<string> ResourceIds { get; set; } = [];
     public DateTimeOffset? ExpiresAt { get; set; }
     public Dictionary<string, double>? SpeedLimits { get; set; }
 
     /// <summary>Set when the extended authority reaches the route destination (robot then finishes NAVIGATE).</summary>
     public Pose2DPayload? FinalGoal { get; set; }
+
+    /// <summary>Steps for the newly granted slice; empty/null = Forward-only over SegmentEdgeIds.</summary>
+    public List<ManeuverStepPayload>? Maneuvers { get; set; }
 }
 
 public sealed class RenewAuthorityPayload
@@ -130,6 +165,24 @@ public sealed class TrafficProgressMessage
     public double? PoseYaw { get; set; }
     public bool LocalizationOk { get; set; }
     public string? FaultCode { get; set; }
+    public DateTimeOffset SentAt { get; set; }
+    /// <summary>Stage-3: cleared resource ids after physical exit.</summary>
+    public List<string>? ClearedResourceIds { get; set; }
+}
+
+/// <summary>Robot → backend Nav2 plan proposal for Stage-3 semantic grants.</summary>
+public sealed class TrafficPlanProposeMessage
+{
+    public int SchemaVersion { get; set; } = 1;
+    public Guid MessageId { get; set; }
+    public string RobotCode { get; set; } = string.Empty;
+    public string SemanticMapFingerprint { get; set; } = string.Empty;
+    public long PlanRevision { get; set; }
+    public Guid? CommandId { get; set; }
+    public Guid? JobStepId { get; set; }
+    public Guid? JobId { get; set; }
+    public List<Pose2DPayload> Poses { get; set; } = [];
+    public Pose2DPayload? Goal { get; set; }
     public DateTimeOffset SentAt { get; set; }
 }
 

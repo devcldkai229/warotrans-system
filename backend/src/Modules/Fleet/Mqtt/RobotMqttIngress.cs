@@ -34,6 +34,9 @@ public sealed class RobotMqttIngress(
     public Task HandleTrafficProgressAsync(TrafficProgressMessage message, CancellationToken cancellationToken) =>
         trafficProgressIngress?.HandleProgressAsync(message, cancellationToken) ?? Task.CompletedTask;
 
+    public Task HandleTrafficPlanAsync(TrafficPlanProposeMessage message, CancellationToken cancellationToken) =>
+        trafficProgressIngress?.HandlePlanProposeAsync(message, cancellationToken) ?? Task.CompletedTask;
+
     public Task HandleAuthorityStateAsync(AuthorityStateMessage message, CancellationToken cancellationToken) =>
         trafficProgressIngress?.HandleAuthorityStateAsync(message, cancellationToken) ?? Task.CompletedTask;
 }

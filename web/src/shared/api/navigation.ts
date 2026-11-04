@@ -168,6 +168,37 @@ export async function downloadRouteGraphGeoJson(mapVersionId: string, fileName?:
   URL.revokeObjectURL(url)
 }
 
+export interface RouteGraphIssueDto {
+  code: string
+  severity: string
+  message: string
+  relatedCodes: string[]
+}
+
+/** Compile + validate CompiledTrafficGraph (occupancy when available). Does not persist. */
+export interface RouteGraphValidationDto {
+  mapVersionId: string
+  graphHash: string
+  isValid: boolean
+  nodeCount: number
+  edgeCount: number
+  resourceCount: number
+  corridorCount: number
+  holdingPointCount: number
+  stoplineCount: number
+  stationCount: number
+  issues: RouteGraphIssueDto[]
+}
+
+export function checkRouteGraph(mapVersionId: string) {
+  return apiFetch<RouteGraphValidationDto>(`/api/navigation/maps/${mapVersionId}/traffic-graph/validation`)
+}
+
+/** Drop in-memory compiled graph cache for this map (geometry unchanged). */
+export function clearRouteGraphCache(mapVersionId: string) {
+  return apiRequest<void>(`/api/navigation/maps/${mapVersionId}/route-graph-cache`, { method: 'DELETE' })
+}
+
 /**
  * Copies a map version (published, archived or draft) into a new editable DRAFT: same image, copies of its
  * endpoints / zones / edges (new ids, codes from the system generator). Publishing the copy moves storage locations.

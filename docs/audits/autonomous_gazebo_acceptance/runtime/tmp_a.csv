@@ -1,0 +1,2 @@
+test,robot,start_endpoint,goal_endpoint,status,error_code,start_xy,end_xy,displacement_m,goal_error_m,note
+A,SIM-01,EP-PARKING-A,EP-INBOUND,TIMEOUT,-1,"-1.798,-0.675","-0.897,-0.872",0.922,3.580,standalone semantic

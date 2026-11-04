@@ -1,0 +1,11 @@
+[cmd_vel_authority_gate-21] [WARN] [1793506347.898420777] [cmd_vel_authority_gate]: authority gate BLOCKING /cmd_vel_safe (authority_ok false/stale)
+[controller_server-15] [INFO] [1793506349.360612044] [controller_server]: getting progress checker plugins..
+[controller_server-15] [INFO] [1793506349.560103521] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-15] [INFO] [1793506349.560694192] [controller_server]: Controller Server has progress_checker  progress checkers available.
+[controller_server-15] [WARN] [1793506372.748872635] [controller_server]: No progress checker was specified in parameter 'current_progress_checker'. Server will use only plugin loaded progress_checker . This warning will appear once.
+[collision_monitor-20] [INFO] [1793506377.036028069] [collision_monitor]: Robot to approach for 1.200000 seconds away from collision
+[collision_monitor-20] [INFO] [1793506393.848438938] [collision_monitor]: Robot to approach for 1.200000 seconds away from collision
+[planner_server-16] [WARN] [1793506423.968678605] [planner_server]: GridBased plugin failed to plan from (-0.04, -0.30) to (1.75, 1.54): "GridBased generated a empty path"
+[planner_server-16] [WARN] [1793506424.088734962] [planner_server]: GridBased plugin failed to plan from (-0.01, -0.28) to (1.75, 1.54): "GridBased generated a empty path"
+[planner_server-16] [WARN] [1793506426.248999517] [planner_server]: GridBased plugin failed to plan from (0.03, -0.25) to (1.75, 1.54): "GridBased generated a empty path"
+[planner_server-16] [WARN] [1793506427.088490735] [planner_server]: GridBased plugin failed to plan from (0.03, -0.25) to (1.75, 1.54): "GridBased generated a empty path"

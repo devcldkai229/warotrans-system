@@ -8,9 +8,9 @@ export interface EndpointTemplate {
 
 /** One entry per backend EndpointType; the labels/descriptions are UI copy. */
 export const ENDPOINT_TEMPLATES: EndpointTemplate[] = [
-  { type: 'WAYPOINT', title: 'Waypoint', description: 'Intermediate path point or general destination' },
-  { type: 'CHARGER', title: 'Charger', description: 'Charging dock for Robots' },
-  { type: 'PARK', title: 'Park', description: 'Waiting / parking position for idle Robots' },
+  { type: 'WAYPOINT', title: 'Waypoint', description: 'Điểm đường / điểm trung gian' },
+  { type: 'CHARGER', title: 'Charger', description: 'Điểm sạc' },
+  { type: 'PARK', title: 'Park', description: 'Điểm đỗ / chờ' },
 ]
 
 export interface ZoneTemplate {
@@ -21,14 +21,14 @@ export interface ZoneTemplate {
 
 /** One entry per backend ZoneType (rules/05). */
 export const ZONE_TEMPLATES: ZoneTemplate[] = [
-  { type: 'KEEP_OUT', title: 'Keep-out', description: 'Robots must not enter this area' },
-  { type: 'SPEED', title: 'Speed zone', description: 'Area with a required speed limit' },
-  { type: 'NO_STOP', title: 'No-stop', description: 'Robots must not stop in this area' },
-  { type: 'SINGLE_OCCUPANCY', title: 'Single-occupancy', description: 'Only one Robot may occupy this area' },
+  { type: 'KEEP_OUT', title: 'Keep-out', description: 'Khu vực cấm vào (đỏ sọc chéo)' },
+  { type: 'SPEED', title: 'Speed zone', description: 'Khu vực giới hạn tốc độ (vàng)' },
+  { type: 'NO_STOP', title: 'No-stop', description: 'Khu vực cấm dừng (xanh da trời)' },
+  { type: 'SINGLE_OCCUPANCY', title: 'Single-occupancy', description: 'Khu vực giới hạn 1 xe (tím)' },
   {
     type: 'JUNCTION',
     title: 'Junction',
-    description: 'One Robot at a time; free movement inside to transition toward the next point',
+    description: 'Legacy — không dùng cho map mới (màu xanh indigo nhạt)',
   },
 ]
 
