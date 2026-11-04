@@ -4,6 +4,7 @@ import { cx } from '@/shared/lib/cx'
 import { Icon } from '@/shared/ui/Icon'
 import { initialsOf, useAuth } from '@/features/auth/authContext'
 import { NotificationBell } from '@/features/notifications/NotificationBell'
+import { useTheme } from '@/shared/theme/theme'
 import { Wordmark } from './Wordmark'
 
 interface NavGroup {
@@ -38,12 +39,13 @@ const MENU_ITEM = 'flex h-9 w-full items-center rounded-sm px-3 text-left text-s
 export function AppShell() {
   const { pathname } = useLocation()
   const { account, signOut } = useAuth()
+  const { theme, toggle: toggleTheme } = useTheme()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   if (!account) return null
 
   return (
     <div className="flex h-svh min-w-[1100px] flex-col bg-surface">
-      <header className="relative z-50 flex h-14 flex-none items-center gap-8 px-6">
+      <header className="relative z-50 flex h-14 flex-none items-center gap-8 border-b border-outline-soft px-6">
         <Link to="/monitor/fleet" aria-label="WaroTrans home">
           <Wordmark />
         </Link>
@@ -56,7 +58,7 @@ export function AppShell() {
                 <NavLink
                   to={group.items ? group.items[0].to : group.to}
                   className={cx(
-                    'flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm transition-colors duration-200',
+                    'flex h-9 items-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition-colors duration-200',
                     active ? 'bg-container-high text-ink' : 'text-ink-2 hover:bg-container-high hover:text-ink',
                   )}
                 >
@@ -95,7 +97,7 @@ export function AppShell() {
               aria-expanded={userMenuOpen}
               onClick={() => setUserMenuOpen((open) => !open)}
             >
-              <span className="grid size-7 place-items-center rounded-full bg-ink text-xs font-medium text-surface">
+              <span className="grid size-7 place-items-center rounded-full bg-primary text-xs font-medium text-white">
                 {initialsOf(account.fullName)}
               </span>
               {account.fullName}
@@ -116,6 +118,10 @@ export function AppShell() {
                       Management
                     </Link>
                   ) : null}
+                  <button type="button" role="menuitem" className={cx(MENU_ITEM, 'gap-2.5')} onClick={toggleTheme}>
+                    <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} className="text-ink-2" />
+                    {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                  </button>
                   <button type="button" role="menuitem" className={cx(MENU_ITEM, 'text-red-ink')} onClick={signOut}>
                     Sign out
                   </button>

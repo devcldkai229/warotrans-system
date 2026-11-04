@@ -18,10 +18,10 @@ export function controlClass(size: ControlSize = 'md', className?: string) {
   return cx(
     'min-w-0 border text-ink transition-colors duration-200 placeholder:text-muted',
     'focus:border-blue focus:outline-2 focus:outline-offset-0 focus:outline-blue/25',
-    'disabled:bg-container-high disabled:text-muted',
+    'disabled:bg-container disabled:text-muted',
     size === 'pill'
-      ? 'rounded-full border-transparent bg-container-high hover:bg-container-higher focus:bg-surface'
-      : 'rounded-sm border-outline bg-surface hover:border-ink/30',
+      ? 'rounded-full border-transparent bg-container-high hover:bg-container-higher focus:bg-container-high'
+      : 'rounded-sm border-outline bg-container-high hover:border-ink/30',
     CONTROL_SIZE[size],
     className,
   )

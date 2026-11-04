@@ -80,7 +80,7 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
                 type="button"
                 className={cx(
                   'flex w-full items-center gap-2 rounded-md px-3.5 py-2.5 text-left transition-colors duration-200',
-                  selectedJobNo === job.jobNo ? 'bg-container-high ring-2 ring-ink' : 'bg-container hover:bg-container-high',
+                  selectedJobNo === job.jobNo ? 'bg-container-high ring-2 ring-blue' : 'bg-container hover:bg-container-high',
                 )}
                 aria-pressed={selectedJobNo === job.jobNo}
                 onClick={() => onSelectJob(job.jobNo)}

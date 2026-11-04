@@ -4,7 +4,7 @@ export type ButtonVariant = 'primary' | 'tonal' | 'surface' | 'outline' | 'ghost
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: 'bg-ink text-surface hover:bg-ink-soft',
+  primary: 'bg-primary text-white hover:bg-primary-hover',
   tonal: 'bg-container-high text-ink hover:bg-container-higher',
   // For buttons that sit on a grey container instead of on the white page.
   surface: 'bg-surface text-ink hover:bg-container-high',
@@ -32,7 +32,7 @@ export interface ButtonStyle {
  */
 export function buttonClass({ variant = 'tonal', size = 'md', block = false }: ButtonStyle = {}, className?: string) {
   return cx(
-    'inline-flex shrink-0 items-center justify-center rounded-full font-medium whitespace-nowrap transition-colors duration-200',
+    'inline-flex shrink-0 items-center justify-center rounded-sm font-semibold whitespace-nowrap transition-colors duration-200',
     'disabled:pointer-events-none disabled:opacity-40',
     VARIANT[variant],
     SIZE[size],

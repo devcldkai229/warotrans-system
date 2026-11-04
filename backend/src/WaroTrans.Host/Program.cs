@@ -14,6 +14,7 @@ using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Fleet;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.Abstractions;
+using WaroTrans.Fleet.Features.StreamRobotCamera;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Operations.Contracts;
 using WaroTrans.Transportation.IntegrationEvents;
@@ -74,11 +75,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
         options.Events = new JwtBearerEvents
         {
-            // Browsers cannot set the Authorization header on WebSocket requests, so SignalR sends the token here.
+            // Browsers cannot set the Authorization header on WebSocket requests (SignalR) or on an <img> (robot
+            // camera MJPEG stream), so those send the token here.
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
-                if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken)
+                    && (path.StartsWithSegments("/hubs")
+                        || (path.StartsWithSegments("/api/fleet/robots")
+                            && path.Value!.EndsWith(StreamRobotCameraEndpoint.PathSuffix, StringComparison.Ordinal))))
                 {
                     context.Token = accessToken;
                 }

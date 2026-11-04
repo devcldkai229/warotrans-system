@@ -5,10 +5,18 @@
     <link rel="icon" type="image/png" href="/logo_wrt.png" />
     <link rel="apple-touch-icon" href="/logo_wrt.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@8..144,300..600&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@400..600&display=swap" rel="stylesheet" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#242526" />
+    <script>
+      // Pick the saved theme before the first paint (dark is the default), so the page never flashes the other one.
+      try {
+        var saved = window.localStorage.getItem('warotrans.theme')
+        document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark'
+        if (saved === 'light') document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark'
+      }
+    </script>
     <title>WaroTrans</title>
   </head>
   <body>

@@ -216,6 +216,65 @@ function taskTitle(task: JobTaskDto, labels: Labels) {
   }
 }
 
+/** A task still in play: one of its steps is running, waiting, paused or failed, or it is where the job is now. */
+function isActiveTask(task: JobTaskDto, currentStepId: string | null) {
+  return task.steps.some(
+    (step) =>
+      step.id === currentStepId || ['EXECUTING', 'READY', 'WAITING', 'PAUSED', 'FAILED'].includes(step.status),
+  )
+}
+
+/**
+ * One task of the job as a group that opens and closes. It is open while the task is in play and closed otherwise,
+ * so a long job does not push the step in question off the screen; opening a closed one is one click, and a task
+ * that becomes active (the job reaches it) opens itself.
+ */
+function TaskGroup({
+  task,
+  title,
+  active,
+  children,
+}: {
+  task: JobTaskDto
+  title: string
+  active: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(active)
+  const [wasActive, setWasActive] = useState(active)
+  if (active !== wasActive) {
+    setWasActive(active)
+    if (active) setOpen(true)
+  }
+
+  const done = task.steps.filter((step) => step.status === 'COMPLETED').length
+  const waiting = task.steps.some((step) => step.status === 'WAITING')
+  const failed = task.steps.some((step) => step.status === 'FAILED')
+
+  return (
+    <div className="mt-3 first:mt-6">
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 rounded-md px-1 py-2 text-left transition-colors hover:bg-container-high"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={16} className="text-muted" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-base font-medium">{title}</span>
+          <span className="mt-0.5 block text-xs text-muted">
+            Task {task.sequenceNo} · {done} of {task.steps.length} {task.steps.length === 1 ? 'step' : 'steps'} done
+          </span>
+        </span>
+        <StatusBadge tone={failed ? 'red' : waiting ? 'amber' : done === task.steps.length ? 'green' : 'blue'} surface>
+          {task.status}
+        </StatusBadge>
+      </button>
+      {open ? <div className="mt-1 mb-2 flex flex-col gap-1.5">{children}</div> : null}
+    </div>
+  )
+}
+
 function allSteps(job: JobDetailDto) {
   return job.tasks.flatMap((task) => task.steps)
 }
@@ -430,31 +489,25 @@ export function JobDetailPage() {
               </span>
             </header>
 
-            {job.tasks.map((task, index) => (
-              <div key={task.id}>
-                <div className={cx('mb-3 flex items-start justify-between gap-3', index === 0 ? 'mt-6' : 'mt-8')}>
-                  <div>
-                    <h3 className="text-base font-medium">{taskTitle(task, labels)}</h3>
-                    <p className="mt-0.5 text-xs text-muted">Task {task.sequenceNo}</p>
-                  </div>
-                  <StatusBadge tone={task.steps.some((s) => s.status === 'WAITING') ? 'amber' : 'blue'} surface>
-                    {task.status}
-                  </StatusBadge>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  {task.steps.map((step) => (
-                    <StepRow
-                      key={step.id}
-                      jobId={job.id}
-                      step={step}
-                      number={steps.indexOf(step) + 1}
-                      defaultOpen={step.status === 'WAITING' || step.status === 'FAILED'}
-                      labels={labels}
-                      canConfirm={canConfirm}
-                    />
-                  ))}
-                </div>
-              </div>
+            {job.tasks.map((task) => (
+              <TaskGroup
+                key={task.id}
+                task={task}
+                title={taskTitle(task, labels)}
+                active={isActiveTask(task, job.currentStepId)}
+              >
+                {task.steps.map((step) => (
+                  <StepRow
+                    key={step.id}
+                    jobId={job.id}
+                    step={step}
+                    number={steps.indexOf(step) + 1}
+                    defaultOpen={step.status === 'WAITING' || step.status === 'FAILED'}
+                    labels={labels}
+                    canConfirm={canConfirm}
+                  />
+                ))}
+              </TaskGroup>
             ))}
 
             {job.failureMessage ? (

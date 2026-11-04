@@ -27,17 +27,19 @@ interface AmrCargoBayVisualizerProps {
 
 export function AmrCargoBayVisualizer({
   robotCode,
-  robotId = 'AMR-01',
+  robotId,
   containers = [],
   targetCode,
   isWaiting = false,
   onSelectContainer,
 }: AmrCargoBayVisualizerProps) {
-  const activeRobot = robotCode || robotId;
+  const activeRobot = robotCode || robotId || 'Unassigned';
 
   const totalCount = containers.length;
+  const onboardCount = containers.filter(container => container.status === 'ONBOARD').length;
+  const deliveredCount = containers.filter(container => container.status === 'DELIVERED').length;
   const targetItems = containers.filter(
-    (c) => isWaiting && c.status !== 'DELIVERED' && c.action !== 'DELIVERED' &&
+    (c) => isWaiting && ['PENDING', 'ASSIGNED', 'ONBOARD'].includes(c.status || '') &&
       (c.action === 'UNLOAD' || c.action === 'PICKUP') &&
       (targetCode ? c.code === targetCode : c.isTarget ?? c === containers.find((item) => item.action === 'UNLOAD' || item.action === 'PICKUP')),
   );
@@ -52,17 +54,17 @@ export function AmrCargoBayVisualizer({
           </View>
           <View style={styles.titleTextBlock}>
             <Text variant="headline" style={styles.titleText}>
-              {activeRobot} Cargo Bay
+              {activeRobot} Manifest
             </Text>
             <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
-              Payload manifest · Max 2 bays
+              {onboardCount} Onboard · {deliveredCount} Delivered
             </Text>
           </View>
         </View>
 
         <View style={styles.capacityBadge}>
           <Text variant="caption" style={styles.capacityText}>
-            {totalCount}/2 {totalCount === 1 ? 'Bay' : 'Bays'}
+            {totalCount} {totalCount === 1 ? 'Container' : 'Containers'}
           </Text>
         </View>
       </View>
@@ -72,7 +74,7 @@ export function AmrCargoBayVisualizer({
         <View style={styles.emptyBay}>
           <Box size={24} color={colors.textMuted} />
           <Text variant="caption" color={colors.textSecondary} style={styles.emptyText}>
-            Cargo bay ready · No containers allocated
+            No containers allocated to this job
           </Text>
         </View>
       ) : (
@@ -81,11 +83,11 @@ export function AmrCargoBayVisualizer({
             const isTarget =
               targetItems.includes(container);
 
-            const isDelivered =
-              container.status === 'DELIVERED' || container.action === 'DELIVERED';
-
-            const isPickup =
-              container.action === 'PICKUP' && !isDelivered;
+            const isDelivered = container.status === 'DELIVERED';
+            const statusLabels: Record<string, string> = {
+              PENDING: 'Pending Pickup', ASSIGNED: 'Awaiting Pickup', ONBOARD: 'Onboard',
+              DELIVERED: 'Delivered', FAILED: 'Failed', CANCELLED: 'Cancelled',
+            };
 
             const isUnload =
               container.action === 'UNLOAD' && !isDelivered;
@@ -140,9 +142,7 @@ export function AmrCargoBayVisualizer({
                   ) : (
                     <View style={styles.onboardBadge}>
                       <Text variant="caption" color={colors.textSecondary} style={styles.badgeText}>
-                        {isPickup && container.status !== 'LOADED' && container.status !== 'ONBOARD'
-                          ? 'Waiting Pickup'
-                          : targetItems.some((c) => c.action === 'UNLOAD') ? 'Keep Onboard' : 'Onboard AMR'}
+                        {statusLabels[container.status || ''] || 'Status Unavailable'}
                       </Text>
                     </View>
                   )}
@@ -150,7 +150,7 @@ export function AmrCargoBayVisualizer({
 
                 {container.location ? (
                   <Text variant="caption" color={colors.textSecondary} style={styles.locationText}>
-                    Destination: {container.location}
+                    Reported Location: {container.location}
                   </Text>
                 ) : null}
               </Pressable>
@@ -164,7 +164,7 @@ export function AmrCargoBayVisualizer({
         <View style={styles.waitingBanner}>
           <ShieldAlert size={14} color={colors.warning} />
           <Text variant="caption" color={colors.warning} style={styles.waitingText}>
-            AMR stationed. Scan container barcode to confirm handover.
+            Scan this container or use the robot confirmation button after handover.
           </Text>
         </View>
       ) : null}

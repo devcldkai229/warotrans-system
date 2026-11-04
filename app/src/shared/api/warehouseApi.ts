@@ -7,6 +7,7 @@ export interface ContainerListItem {
   id: string; barcode: string; status: ContainerStatus | string; productId: string; productSku: string; productName: string;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentEndpointCode?: string | null; currentLevelNo: number | null;
+  supplierPackageBarcode?: string | null; updatedAt?: string;
   qty?: number; category?: string; zoneLabel?: string;
 }
 export interface ListContainersResponse { items: ContainerListItem[]; total: number }
@@ -47,14 +48,23 @@ function queryString(params: Record<string, string | number | boolean | undefine
 export function listWarehouses(params: { isActive?: boolean; skip?: number; take?: number } = {}) {
   return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${queryString(params)}`);
 }
-export async function listContainers(params: { warehouseId: string; search?: string; eligibleOnly?: boolean; skip?: number; take?: number }): Promise<ListContainersResponse> {
+export async function listContainers(params: { warehouseId: string; search?: string; eligibleOnly?: boolean; take?: number }): Promise<ListContainersResponse> {
   const response = await apiFetch<ListContainersResponse>(`/api/warehouse/containers${queryString(params)}`);
   containersSnapshot = response.items;
   return response;
 }
-export function getContainer(id: string) { return apiFetch<ContainerListItem>(`/api/warehouse/containers/${id}`); }
+export interface ContainerDetailResponse extends Omit<ContainerListItem, 'currentEndpointId' | 'currentEndpointCode'> {
+  currentStorageLocationName: string | null; createdBy: string; createdAt: string; updatedAt: string;
+}
+async function getContainerDetails(path: string): Promise<ContainerListItem> {
+  const response = await apiFetch<ContainerDetailResponse>(path);
+  // The detail route does not return a Navigation endpoint. Callers may resolve it
+  // from currentStorageLocationId; never reuse an endpoint from another snapshot.
+  return { ...response, currentEndpointId: null };
+}
+export function getContainer(id: string) { return getContainerDetails(`/api/warehouse/containers/${id}`); }
 export function getContainerByBarcode(barcode: string) {
-  return apiFetch<ContainerListItem>(`/api/warehouse/containers/by-barcode/${encodeURIComponent(barcode)}`);
+  return getContainerDetails(`/api/warehouse/containers/by-barcode/${encodeURIComponent(barcode.trim())}`);
 }
 export function listInventory(params: { warehouseId: string; search?: string; skip?: number; take?: number }) {
   return apiFetch<{ items: InventoryStockItem[]; total: number }>(`/api/warehouse/inventory${queryString(params)}`);

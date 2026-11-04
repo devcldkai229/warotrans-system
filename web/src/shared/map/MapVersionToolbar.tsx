@@ -30,7 +30,7 @@ export function MapVersionToolbar({
   return (
     <div
       className={cx(
-        'absolute top-3 left-3 z-5 flex flex-wrap items-center gap-2 rounded-full bg-surface/95 py-1.5 pr-2 pl-3 text-xs text-ink-2 shadow-float',
+        'absolute top-3 left-1/2 z-5 -translate-x-1/2 flex flex-wrap items-center gap-2 rounded-full bg-surface/95 py-1.5 pr-2 pl-3 text-xs text-ink-2 shadow-float',
         className,
       )}
     >

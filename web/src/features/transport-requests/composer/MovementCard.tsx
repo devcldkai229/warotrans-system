@@ -66,7 +66,7 @@ export function MovementCard({
       className={cx(
         'rounded-md bg-surface p-3',
         selected && 'ring-2 ring-blue/40',
-        activeForMapPick && 'ring-2 ring-ink',
+        activeForMapPick && 'ring-2 ring-blue',
       )}
     >
       <header className="mb-3 flex items-center gap-2">

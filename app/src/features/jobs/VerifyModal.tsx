@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -24,9 +24,10 @@ import { typography } from '../../shared/theme/typography';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { confirmHandover, getContainerByBarcode } from '../../shared/api';
-import type { JobDetailResponse } from '../../shared/types/contracts';
+import { ApiError, confirmHandover, getContainerByBarcode } from '../../shared/api';
+import type { JobDetailResponse, JobStatus, JobStepResponse } from '../../shared/types/contracts';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
+import { handoverStatus } from './handoverData';
 
 interface OtherContainerInfo {
   code: string;
@@ -38,8 +39,8 @@ interface VerifyModalProps {
   targetContainer?: string;
   targetContainerId?: string;
   jobStepId?: string;
-  handoverType?: 'PICKUP' | 'DROPOFF';
-  operatorId?: string;
+  step?: JobStepResponse;
+  jobStatus?: JobStatus;
   robotCode?: string;
   location?: string;
   targetShelf?: string;
@@ -52,6 +53,7 @@ interface VerifyModalProps {
   onClose: () => void;
   onSuccess: (code: string, updatedJob?: JobDetailResponse | null) => void;
   onReportIssue: () => void;
+  onRefreshJob: () => Promise<JobDetailResponse>;
 }
 
 export function VerifyModal({
@@ -59,8 +61,8 @@ export function VerifyModal({
   targetContainer = '',
   targetContainerId,
   jobStepId,
-  handoverType,
-  operatorId,
+  step,
+  jobStatus,
   robotCode = 'Unassigned',
   location = 'Unknown Location',
   targetShelf = 'Unknown Destination',
@@ -73,50 +75,70 @@ export function VerifyModal({
   onClose,
   onSuccess,
   onReportIssue,
+  onRefreshJob,
 }: VerifyModalProps) {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
   const [mismatch, setMismatch] = useState(initialMismatch);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionVersion = useRef(0);
+  const submissionPending = useRef(false);
+  const status = handoverStatus(step, jobStatus);
 
   useEffect(() => {
-    if (!visible) return;
-    setVerificationError(null);
-    setBarcodeInput(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
-    setMismatch(initialMismatch);
-    setIsSubmitting(false);
-  }, [visible, initialMismatch, initialBarcodeInput]);
+    submissionVersion.current++;
+    submissionPending.current = false;
+    if (visible) {
+      setVerificationError(null);
+      setBarcodeInput(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
+      setMismatch(initialMismatch);
+      setIsSubmitting(false);
+    }
+    return () => { submissionVersion.current++; };
+  }, [visible, jobStepId, initialMismatch, initialBarcodeInput]);
+
+  useEffect(() => {
+    if (!status.canConfirm) {
+      submissionVersion.current++; submissionPending.current = false;
+      setIsSubmitting(false); setIsScannerOpen(false); setMismatch(false);
+    }
+  }, [status.canConfirm]);
 
   const handleVerify = async (codeToVerify?: string) => {
     const code = (codeToVerify ?? barcodeInput).trim();
-    if (!code || isSubmitting) return;
+    if (!code || isSubmitting || submissionPending.current || !status.canConfirm) return;
     setVerificationError(null);
 
     if (code.toUpperCase() === targetContainer.toUpperCase() || code.toUpperCase() === targetContainerId?.toUpperCase()) {
+      const attempt = ++submissionVersion.current;
+      submissionPending.current = true;
       setIsSubmitting(true);
       try {
         if (!jobStepId || !targetContainerId) throw new Error('No waiting handover step is available. Refresh the job.');
         const targetIsUuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(targetContainerId || '');
         const resolved = targetIsUuid ? null : await getContainerByBarcode(code);
+        if (attempt !== submissionVersion.current) return;
         const resolvedContainerId = targetIsUuid ? targetContainerId! : resolved?.id || targetContainerId || code;
         const res = await confirmHandover({
           jobStepId,
           scannedContainerBarcode: resolvedContainerId,
           containerId: resolvedContainerId,
-          confirmedBy: operatorId,
-          handoverType: handoverType || 'DROPOFF',
-          notes: `Handover confirmed for ${code} on ${robotCode}`,
           note: `Handover confirmed for ${code} on ${robotCode}`,
         });
+        if (attempt !== submissionVersion.current) return;
         triggerHaptic('success');
         setMismatch(false);
         toast.success(`Payload ${code} verified. Handover completed.`);
         onSuccess(code, res && 'status' in res && res.id ? res as JobDetailResponse : null);
       } catch (err: any) {
+        if (attempt !== submissionVersion.current) return;
         setVerificationError(err?.message || 'Handover confirmation failed');
+        if (err instanceof ApiError && ['job_not_running', 'job_step_not_waiting'].includes(err.code || '')) {
+          try { await onRefreshJob(); } catch { /* Keep the original confirmation error visible. */ }
+        }
       } finally {
-        setIsSubmitting(false);
+        if (attempt === submissionVersion.current) { submissionPending.current = false; setIsSubmitting(false); }
       }
     } else {
       triggerHaptic('error');
@@ -167,7 +189,7 @@ export function VerifyModal({
                         color={colors.warning}
                         style={styles.timerText}
                       >
-                        Waiting
+                        {status.completed ? 'Completed' : 'Waiting'}
                       </Text>
                     </View>
                   </View>
@@ -187,6 +209,11 @@ export function VerifyModal({
                 >
                   <X size={20} color={colors.textSecondary} />
                 </Pressable>
+              </View>
+
+              <View style={[styles.handoverStatus, status.completed && styles.handoverCompleted]} accessibilityLiveRegion="polite">
+                <Text variant="bodyMedium" color={status.completed ? colors.successText : colors.textPrimary}>{status.message}</Text>
+                {status.canConfirm ? <Text variant="body">After loading or unloading this container, scan its barcode here or press the confirmation button on the robot.</Text> : null}
               </View>
 
               {/* Target Container Card */}
@@ -220,7 +247,7 @@ export function VerifyModal({
               </View>
 
               {/* Barcode Scan & Input Console */}
-              <View style={styles.scanSection}>
+              {status.canConfirm && <View style={styles.scanSection}>
                 {verificationError && <Text variant="body" color={colors.danger}>{verificationError}</Text>}
                 <Text variant="label" style={styles.sectionLabel}>
                   Scan or Enter Barcode
@@ -257,38 +284,12 @@ export function VerifyModal({
                   </Pressable>
                 </View>
 
-                {/* Quick Test Autocomplete Chip */}
-                <View style={styles.quickChipRow}>
-                  <Text variant="caption" color={colors.textMuted}>
-                    Quick test:
-                  </Text>
-                  <Pressable
-                    onPress={() => {
-                      setBarcodeInput(targetContainer);
-                      handleVerify(targetContainer);
-                    }}
-                    style={styles.quickChip}
-                  >
-                    <Text variant="caption" color={colors.primary} style={styles.quickChipText}>
-                      Match {targetContainer}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      setBarcodeInput('BOX-999');
-                      handleVerify('BOX-999');
-                    }}
-                    style={styles.quickChipMismatch}
-                  >
-                    <Text variant="caption" color={colors.danger} style={styles.quickChipText}>
-                      Test Mismatch
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
+              </View>}
+
+              {!status.canConfirm && verificationError && !status.completed ? <Text variant="body" color={colors.danger}>{verificationError}</Text> : null}
 
               {/* Bottom Actions */}
-              <View style={styles.actionRow}>
+              {status.canConfirm ? <View style={styles.actionRow}>
                 <Button
                   title="Report Issue"
                   variant="outline"
@@ -306,7 +307,7 @@ export function VerifyModal({
                   size="lg"
                   style={styles.confirmButton}
                 />
-              </View>
+              </View> : <Button title="Close" onPress={onClose} size="lg" fullWidth />}
             </ScrollView>
           ) : (
             /* Barcode Mismatch Alert Screen */
@@ -396,6 +397,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
   },
+  handoverStatus: { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md, padding: 12, gap: 6 },
+  handoverCompleted: { backgroundColor: colors.successBg },
   backdrop: {
     ...StyleSheet.absoluteFill,
   },

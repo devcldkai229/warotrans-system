@@ -1,5 +1,6 @@
-import { parseStaffInputs } from './dispatchData';
-import React, { useEffect, useMemo, useState } from 'react';
+import { parseStaffInputs, staffInputDefaults } from './dispatchData';
+import { submitDispatch } from './dispatchSubmission';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -36,25 +37,20 @@ import {
   EndpointDto,
   QueuedJobResponse,
   StorageLocationListItem,
-  WarehouseListItem,
   WarehouseZoneCode,
   WorkflowListItem,
-  createTransportRequest,
-  getActiveMapVersion,
+  getOperatingContext,
   getMapVersionDetail,
-  getSeedContainersSnapshot,
-  getStorageLocationsSnapshot,
   listContainers,
   listPublishedWorkflows,
   listStorageLocations,
-  listWarehouses,
   queueTransportRequest,
   startJob,
   listRobots,
   RobotDto,
   FALLBACK_ROBOTS,
-  getWorkflowRequestInputSchema, getContainerByBarcode, getTransportRequest,
-  type WorkflowRequestInputSchema, type TransportRequestDetailResponse,
+  getWorkflowRequestInputSchema, getContainerByBarcode, getContainer, getTransportRequest,
+  type WorkflowRequestInputSchema, type TransportRequestDetailResponse, type TransportRequestResponse,
 } from '../../shared/api';
 import { WORKFLOWS, WorkflowItem } from './workflowTemplates';
 import { WorkflowTemplateCard } from './WorkflowTemplateCard';
@@ -202,8 +198,8 @@ function mapContainerToStagedItem(c: ContainerListItem): StagedContainer {
     id: c.id,
     barcode: c.barcode,
     status: c.status,
-    productName: c.productName || 'Warehouse Item',
-    sku: c.productSku || 'SKU-GEN',
+    productName: c.productName || 'Product Unavailable',
+    sku: c.productSku || 'SKU Unavailable',
     qty: 1,
     sourceStorageLocationId: c.currentStorageLocationId || null,
     sourceStorageLocationCode: c.currentStorageLocationCode || null,
@@ -214,11 +210,7 @@ function mapContainerToStagedItem(c: ContainerListItem): StagedContainer {
   };
 }
 
-function buildWorkflowPool(
-  workflowId: string,
-  allContainers: ContainerListItem[],
-  forceIncludeBarcode?: string
-): StagedContainer[] {
+function buildWorkflowPool(allContainers: ContainerListItem[]): StagedContainer[] {
   const filtered = allContainers.filter(container => ['CREATED', 'PACKED', 'STORED'].includes(container.status)).map(mapContainerToStagedItem);
 
   return filtered;
@@ -256,12 +248,8 @@ export function TransportCreationScreen() {
   }, [selectedWorkflow.id]);
 
   // Live warehouse containers & storage locations
-  const [allContainers, setAllContainers] = useState<ContainerListItem[]>(() =>
-    getSeedContainersSnapshot()
-  );
-  const [storageLocations, setStorageLocations] = useState<StorageLocationListItem[]>(() =>
-    getStorageLocationsSnapshot()
-  );
+  const [allContainers, setAllContainers] = useState<ContainerListItem[]>([]);
+  const [storageLocations, setStorageLocations] = useState<StorageLocationListItem[]>([]);
 
   // Tier 1: Target Zone (for Rack workflows) or Target Endpoint (for Station/Dock workflows)
   const [targetZone, setTargetZone] = useState<WarehouseZoneCode>(currentPreset.defaultTargetZone);
@@ -270,20 +258,8 @@ export function TransportCreationScreen() {
   );
 
   // Staged containers pool for current workflow
-  const [stagedContainers, setStagedContainers] = useState<StagedContainer[]>(() =>
-    buildWorkflowPool(resolvedInitialWf.id, getSeedContainersSnapshot(), params?.container)
-  );
-  const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>(() => {
-    const initialPool = buildWorkflowPool(
-      resolvedInitialWf.id,
-      getSeedContainersSnapshot(),
-      params?.container
-    );
-    if (params?.container) {
-      return [params.container];
-    }
-    return initialPool[0] ? [initialPool[0].barcode] : [];
-  });
+  const [stagedContainers, setStagedContainers] = useState<StagedContainer[]>([]);
+  const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>(params?.container ? [params.container] : []);
 
   // Tier 2: Custom per-container slot overrides (`barcode -> AllocatedStorageSlot`)
   const [customSlotOverrides, setCustomSlotOverrides] = useState<
@@ -295,7 +271,12 @@ export function TransportCreationScreen() {
   const [customBarcode, setCustomBarcode] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
 
-  // Backend metadata - default to demo warehouse ID
+  // Warehouse and map are resolved from the selected server context.
+  const [operatingLabel, setOperatingLabel] = useState('');
+  const [contextRetry, setContextRetry] = useState(0);
+  const requestedContainersKey = JSON.stringify(Array.isArray(params?.containers) ? params.containers : []);
+  const [previousRequest, setPreviousRequest] = useState<TransportRequestResponse | null>(null);
+  const [containerTotal, setContainerTotal] = useState(0);
   const [activeWarehouseId, setActiveWarehouseId] = useState<string>(
     ''
   );
@@ -307,25 +288,27 @@ export function TransportCreationScreen() {
   const [contextReady, setContextReady] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
   const [inputSchema, setInputSchema] = useState<WorkflowRequestInputSchema | null>(null);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [schemaRetry, setSchemaRetry] = useState(0);
   const [staffInputs, setStaffInputs] = useState<Record<string, string>>({});
   const [sourceOverride, setSourceOverride] = useState('');
   const [repeatDetails, setRepeatDetails] = useState<TransportRequestDetailResponse[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
+  const submissionPending = useRef(false);
+  const queuePending = useRef(false);
   const [availableRobots, setAvailableRobots] = useState<RobotDto[]>(FALLBACK_ROBOTS);
   const [selectedRobotId, setSelectedRobotId] = useState('');
   const [isStartingJob, setIsStartingJob] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    listRobots().then((res) => {
-      if (mounted && res.items.length > 0) {
-        setAvailableRobots(res.items);
-        setSelectedRobotId(res.items[0].id);
-      }
+    setAvailableRobots([]); setSelectedRobotId('');
+    if (activeWarehouseId) listRobots({ warehouseId: activeWarehouseId }).then(res => {
+      if (mounted) { setAvailableRobots(res.items); setSelectedRobotId(res.items[0]?.id || ''); }
     }).catch(() => {});
     return () => { mounted = false; };
-  }, []);
+  }, [activeWarehouseId]);
 
   // Target Destination Mode: 'ENDPOINT' vs 'SLOT'
   const [destinationType, setDestinationType] = useState<'ENDPOINT' | 'SLOT'>(
@@ -343,7 +326,7 @@ export function TransportCreationScreen() {
     carrier: string;
     containerCount: number;
     containerAssignments: Array<{ barcode: string; targetLabel: string }>;
-    estimatedMissions: number;
+    queueError: string | null;
   } | null>(null);
 
   const availableWorkflows = useMemo(() => publishedWorkflows.map(workflow => {
@@ -354,21 +337,25 @@ export function TransportCreationScreen() {
   useEffect(() => {
     if (!availableWorkflows.length) return;
     setSelectedWorkflow(current => {
-      const wanted = String(params?.workflow || current.backendId || current.code).toLowerCase();
+      const wanted = String(previousRequest?.workflowId || params?.workflow || current.backendId || current.code).toLowerCase();
       const match = availableWorkflows.find(item => [item.backendId, item.id, item.code, item.name].some(value => value?.toLowerCase() === wanted));
       if (match) return match;
-      if (params?.workflow) { setContextError('The requested workflow is not published. Select an available workflow.'); return { ...current, backendId: undefined }; }
+      if (previousRequest || params?.workflow) { setSchemaError('The requested workflow is not published. Select an available workflow.'); return { ...current, backendId: undefined }; }
       return availableWorkflows[0];
     });
-  }, [availableWorkflows, params?.workflow]);
+  }, [availableWorkflows, params?.workflow, previousRequest]);
   useEffect(() => {
     let mounted = true;
     setInputSchema(null); setStaffInputs({});
+    if (!selectedWorkflow.backendId) return;
+    setSchemaError(null);
     if (selectedWorkflow.backendId) getWorkflowRequestInputSchema(selectedWorkflow.backendId).then(schema => {
-      if (mounted) setInputSchema(schema);
-    }).catch(error => { if (mounted) setContextError(error.message || 'Workflow inputs could not be loaded.'); });
+      if (!mounted) return;
+      setInputSchema(schema);
+      if (previousRequest?.workflowId === schema.workflowId) setStaffInputs(staffInputDefaults(schema.workflowInputs, previousRequest.workflowInputs));
+    }).catch(error => { if (mounted) setSchemaError(error.message || 'Workflow inputs could not be loaded.'); });
     return () => { mounted = false; };
-  }, [selectedWorkflow.backendId]);
+  }, [selectedWorkflow.backendId, previousRequest, schemaRetry]);
 
   // Dynamically resolve target endpoint choices from backend map endpoints
   const availableEndpointOptions: EndpointTargetOption[] = useMemo(() => {
@@ -392,7 +379,7 @@ export function TransportCreationScreen() {
             ep.endpointCode === 'DOCK-OUT-04' ||
             ep.endpointCode.startsWith('EP-')
         ) || availableEndpointOptions[0];
-      setSelectedEndpointOption(preferred);
+      setSelectedEndpointOption(current => availableEndpointOptions.some(endpoint => endpoint.endpointId === current.endpointId) ? current : preferred);
     }
   }, [availableEndpointOptions]);
 
@@ -401,48 +388,59 @@ export function TransportCreationScreen() {
     setContextReady(false); setContextError(null);
     async function loadBackendContext() {
       try {
-        const [workflows, warehouses] = await Promise.all([listPublishedWorkflows(), listWarehouses({ isActive: true })]);
-        const warehouse = warehouses.items[0];
-        if (!warehouse) throw new Error('No active warehouse is configured.');
-        const map = await getActiveMapVersion(warehouse.id);
-        if (!map) throw new Error('This warehouse has no published active map.');
+        const [workflows, previous] = await Promise.all([
+          listPublishedWorkflows(),
+          params?.repeatRequestId ? getTransportRequest(params.repeatRequestId) : Promise.resolve(null),
+        ]);
+        if (!mounted) return;
+        setPublishedWorkflows(workflows.items); setPreviousRequest(previous);
+        const { warehouse, map } = await getOperatingContext(previous?.warehouseId);
+        if (!mounted) return;
+        setOperatingLabel(`${warehouse.name} · ${map.code}`);
+        setActiveWarehouseId(warehouse.id);
         const [containers, locations, detail] = await Promise.all([
           listContainers({ warehouseId: warehouse.id, eligibleOnly: true, take: 100 }),
           listStorageLocations({ warehouseId: warehouse.id, activeOnly: true }), getMapVersionDetail(map.id),
         ]);
         if (!mounted) return;
-        setPublishedWorkflows(workflows.items); setActiveWarehouseId(warehouse.id); setActiveMapVersionId(map.id);
-        setStorageLocations(locations.items); setAllContainers(containers.items);
-        const pool = buildWorkflowPool(selectedWorkflow.id, containers.items, params?.container);
+        const requestedBarcodes: string[] = Array.isArray(params?.containers) ? params.containers
+          : typeof params?.container === 'string' ? [params.container] : [];
+        const missingContainers = await Promise.all([
+          ...(previous?.details || []).filter(line => !containers.items.some(container => container.id === line.containerId)).map(line => getContainer(line.containerId)),
+          ...requestedBarcodes.filter(barcode => !containers.items.some(container => container.barcode === barcode)).map(barcode => getContainerByBarcode(barcode)),
+        ]);
+        if (!mounted) return;
+        const all = [...new Map([...containers.items, ...missingContainers].map(container => [container.id, container])).values()];
+        setActiveMapVersionId(map.id); setContainerTotal(containers.total);
+        setStorageLocations(locations.items); setAllContainers(all);
+        const pool = buildWorkflowPool(all);
+        if (requestedBarcodes.some(barcode => !pool.some(container => container.barcode === barcode))) throw new Error('A selected container is no longer eligible for transport.');
         setStagedContainers(pool); setEndpoints(detail.endpoints.filter(endpoint => endpoint.isEnabled));
         if (Array.isArray(params?.containers)) setSelectedBarcodes(params.containers);
         else if (params?.container) setSelectedBarcodes([params.container]);
         else setSelectedBarcodes(previous => previous.filter(code => pool.some(container => container.barcode === code)));
-        if (params?.repeatRequestId) {
-          const previous = await getTransportRequest(params.repeatRequestId);
-          if (!mounted) return;
+        if (previous) {
           setRepeatDetails(previous.details);
           const repeatOverrides: Record<string, EndpointTargetOption> = {};
           for (const line of previous.details) {
-            const container = containers.items.find(item => item.id === line.containerId);
+            const container = all.find(item => item.id === line.containerId);
             const endpoint = detail.endpoints.find(item => item.id === line.destinationEndpointId && item.isEnabled);
-            if (!container || !endpoint) throw new Error('A container or destination in the previous request is no longer available.');
+            if (!container || !pool.some(item => item.id === container.id) || !endpoint) throw new Error('A container or destination in the previous request is no longer available on the active map.');
             repeatOverrides[container.barcode] = { endpointId: endpoint.id, endpointCode: endpoint.code, label: endpoint.name || endpoint.code };
           }
           setPerContainerEndpointOverrides(repeatOverrides);
-          setSelectedBarcodes(previous.details.map(line => containers.items.find(container => container.id === line.containerId)?.barcode).filter((code): code is string => Boolean(code)));
+          setSelectedBarcodes(previous.details.map(line => all.find(container => container.id === line.containerId)?.barcode).filter((code): code is string => Boolean(code)));
           setSelectedEndpointOption(current => {
             const endpoint = detail.endpoints.find(item => item.id === previous.details[0]?.destinationEndpointId);
             return endpoint ? { endpointId: endpoint.id, endpointCode: endpoint.code, label: endpoint.name } : current;
           });
-          setStaffInputs(Object.fromEntries(Object.entries(previous.workflowInputs || {}).map(([key, value]) => [key, String(value)])));
         }
         setContextReady(true);
       } catch (error: any) { if (mounted) setContextError(error.message || 'Could not load dispatch context.'); }
     }
     void loadBackendContext();
     return () => { mounted = false; };
-  }, [selectedWorkflow.id, params?.container, params?.repeatRequestId]);
+  }, [params?.container, params?.repeatRequestId, requestedContainersKey, contextRetry]);
 
   // Available slot count in the currently selected Target Zone
   const availableSlotsInTargetZone = useMemo(() => {
@@ -522,7 +520,7 @@ export function TransportCreationScreen() {
     }
     setCustomSlotOverrides({});
     setPerContainerEndpointOverrides({});
-    const pool = buildWorkflowPool(wf.id, allContainers);
+    const pool = buildWorkflowPool(allContainers);
     setStagedContainers(pool);
     setSelectedBarcodes(pool[0] ? [pool[0].barcode] : []);
     setStep(2);
@@ -598,6 +596,9 @@ export function TransportCreationScreen() {
     try {
       const container = await getContainerByBarcode(code);
       if (!['CREATED', 'PACKED', 'STORED'].includes(container.status)) throw new Error('This container is not eligible for transport.');
+      if (container.currentStorageLocationId && !storageLocations.some(location => location.id === container.currentStorageLocationId)) {
+        throw new Error('This container is not at an available storage location in the selected warehouse.');
+      }
       if (selectedBarcodes.length >= 10) throw new Error('Maximum 10 containers per request.');
       if (!allContainers.some(item => item.id === container.id)) {
         setAllContainers(previous => [...previous, container]);
@@ -612,6 +613,8 @@ export function TransportCreationScreen() {
   const selectedContainers = useMemo(() => {
     return stagedContainers.filter((c) => selectedBarcodes.includes(c.barcode));
   }, [stagedContainers, selectedBarcodes]);
+  const pickupSummary = [...new Set(selectedContainers.map(container => container.sourceEndpointId || container.sourceStorageLocationId
+    ? container.originDisplayLabel : endpoints.find(endpoint => endpoint.id === sourceOverride)?.name || 'Select Pickup Endpoint'))].join(', ');
 
   const filteredStagedContainers = useMemo(() => {
     if (!searchQuery.trim()) return stagedContainers;
@@ -624,14 +627,14 @@ export function TransportCreationScreen() {
     );
   }, [stagedContainers, searchQuery]);
 
-  const estimatedMissions = Math.max(1, Math.ceil(selectedContainers.length / 2));
-
   const handleConfirmDispatch = async (autoQueue: boolean = false) => {
+    if (isSubmitting || submissionPending.current || dispatchedOrder) return;
     if (selectedContainers.length === 0) {
       toast.warning('Please select at least 1 container to dispatch.');
       return;
     }
 
+    submissionPending.current = true;
     setIsSubmitting(true);
     try {
       if (!contextReady || !activeWarehouseId || !activeMapVersionId) throw new Error('Wait for a valid warehouse and active map.');
@@ -643,6 +646,7 @@ export function TransportCreationScreen() {
         if (!container) throw new Error(`Container ${selected.barcode} is no longer available.`);
         const previous = repeatDetails.find(line => line.containerId === container.id);
         const sourceLocation = storageLocations.find(location => location.id === container.currentStorageLocationId);
+        if (container.currentStorageLocationId && !sourceLocation) throw new Error(`The storage location for ${container.barcode} is unavailable in this warehouse.`);
         const sourceId = container.currentEndpointId || sourceLocation?.endpointId || sourceOverride;
         const source = endpoints.find(endpoint => endpoint.id === sourceId);
         if (!source) throw new Error(`Select the pickup endpoint for ${container.barcode}.`);
@@ -667,16 +671,10 @@ export function TransportCreationScreen() {
       });
       const createPayload = { warehouseId: activeWarehouseId, mapVersionId: activeMapVersionId,
         workflowId: selectedWorkflow.backendId, workflowInputs, details,
-        note: `${selectedWorkflow.name}: ${containerAssignmentsSummary.map(item => `${item.barcode} ➔ ${item.targetLabel}`).join(', ')}` };
+        note: selectedWorkflow.name };
 
-      const created = await createTransportRequest(createPayload);
-
-      // Refresh local storage locations snapshot after reservation
-
-
-      if (autoQueue) {
-        // One-tap Submit & Auto-Queue execution
-        const queued = await queueTransportRequest(created.id);
+      const { created, queued, queueError } = await submitDispatch(createPayload, autoQueue);
+      if (queued) {
         triggerHaptic('success');
         setDispatchedOrder({
           id: created.id,
@@ -689,7 +687,7 @@ export function TransportCreationScreen() {
               : queued.jobs?.[0]?.assignedRobotCode || 'Awaiting Robot Assignment',
           containerCount: selectedContainers.length,
           containerAssignments: containerAssignmentsSummary,
-          estimatedMissions: queued.jobs?.length || estimatedMissions,
+          queueError: null,
         });
         toast.success(`Request ${created.requestCode} created & queued successfully!`);
       } else {
@@ -703,37 +701,41 @@ export function TransportCreationScreen() {
           carrier: 'Fleet Scheduler (Pending Queueing)',
           containerCount: selectedContainers.length,
           containerAssignments: containerAssignmentsSummary,
-          estimatedMissions,
+          queueError,
         });
-        toast.success(`Transport Request ${created.requestCode} submitted!`);
+        if (queueError) toast.error(`Request ${created.requestCode} submitted. Queue failed: ${queueError}`);
+        else toast.success(`Transport Request ${created.requestCode} submitted!`);
       }
       setStep(3);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to dispatch mission');
     } finally {
+      submissionPending.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleQueueSubmittedRequest = async () => {
-    if (!dispatchedOrder?.id) return;
+    if (!dispatchedOrder?.id || dispatchedOrder.status !== 'SUBMITTED' || isQueueing || queuePending.current) return;
+    const requestId = dispatchedOrder.id;
+    queuePending.current = true;
     setIsQueueing(true);
     try {
-      const queued = await queueTransportRequest(dispatchedOrder.id);
+      const queued = await queueTransportRequest(requestId);
       triggerHaptic('success');
       setDispatchedOrder((prev) =>
-        prev
+        prev?.id === requestId
           ? {
               ...prev,
               status: 'QUEUED',
+              queueError: null,
               jobs: queued.jobs || [],
               carrier:
                 (queued.jobs?.length || 1) > 1
                   ? 'Awaiting Robot Assignment'
                   : queued.jobs?.[0]?.assignedRobotCode || 'Awaiting Robot Assignment',
-              estimatedMissions: queued.jobs?.length || prev.estimatedMissions,
             }
-          : null
+          : prev
       );
       toast.success(
         `Request ${dispatchedOrder.requestCode} queued! Job: ${
@@ -741,8 +743,10 @@ export function TransportCreationScreen() {
         }`
       );
     } catch (err: any) {
+      setDispatchedOrder(previous => previous?.id === requestId ? { ...previous, queueError: err?.message || 'Failed to queue request' } : previous);
       toast.error(err?.message || 'Failed to queue request');
     } finally {
+      queuePending.current = false;
       setIsQueueing(false);
     }
   };
@@ -773,8 +777,12 @@ export function TransportCreationScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {step !== 3 && operatingLabel ? <Text variant="caption">{operatingLabel}</Text> : null}
         {contextError && <Text variant="body" color={colors.danger}>{contextError}</Text>}
+        {contextError && <Button label="Retry Dispatch Context" variant="outline" size="sm" onPress={() => setContextRetry(value => value + 1)} />}
+        {schemaError && <View><Text variant="body" color={colors.dangerText}>{schemaError}</Text><Button label="Retry Workflow Inputs" variant="outline" size="sm" onPress={() => setSchemaRetry(value => value + 1)} /></View>}
         {!contextReady && !contextError && <Text variant="body">Loading Dispatch Context…</Text>}
+        {contextReady && containerTotal > allContainers.length && step === 2 ? <Text variant="caption" color={colors.warningText}>Showing {allContainers.length} of {containerTotal} containers. Scan an unlisted barcode to look it up.</Text> : null}
         {step === 2 && <View style={styles.routeContextCard}>
           {inputSchema?.workflowInputs.map(field => <Input key={field.key}
             label={`${field.label || field.key}${field.required ? ' *' : ''}`}
@@ -830,24 +838,13 @@ export function TransportCreationScreen() {
                       >
                         {currentPreset.originLabel}
                       </Text>
-                      {selectedWorkflow.id === 'inbound' && (
-                        <View style={styles.stationBadge}>
-                          <Text
-                            variant="caption"
-                            color={colors.textPrimary}
-                            style={styles.stationBadgeText}
-                          >
-                            Your Station
-                          </Text>
-                        </View>
-                      )}
                     </View>
                     <Text
                       variant="bodyMedium"
                       color={colors.textPrimary}
                       style={styles.stationName}
                     >
-                      {currentPreset.originDetail}
+                      {pickupSummary || 'Select Containers To View Pickup Locations'}
                     </Text>
                   </View>
                 </View>
@@ -999,7 +996,7 @@ export function TransportCreationScreen() {
                 <View style={styles.manifestHeaderTitle}>
                   <Package size={18} color="#121317" />
                   <Text variant="bodyMedium" style={styles.manifestTitle}>
-                    {currentPreset.poolTitle}
+                    Eligible Containers
                   </Text>
                   <View style={styles.countBadge}>
                     <Text
@@ -1270,22 +1267,9 @@ export function TransportCreationScreen() {
                   <Text variant="caption" color={colors.textSecondary}>
                     {selectedContainers.length === 0
                       ? 'Tap checkboxes above to select containers and auto-assign slots.'
-                      : `Fleet Split: ${estimatedMissions} AMR ${
-                          estimatedMissions === 1 ? 'Mission' : 'Missions'
-                        } (Estimate · Confirmed After Queue)`}
+                      : 'Job allocation will be returned by the backend after queueing.'}
                   </Text>
                 </View>
-                {selectedContainers.length > 2 && (
-                  <View style={styles.multiMissionBadge}>
-                    <Text
-                      variant="caption"
-                      color={colors.textPrimary}
-                      style={{ fontWeight: '700', fontSize: 11 }}
-                    >
-                      Multiple Missions
-                    </Text>
-                  </View>
-                )}
               </View>
 
               <View style={{ gap: 8, marginTop: 8 }}>
@@ -1342,9 +1326,10 @@ export function TransportCreationScreen() {
                     dispatchedOrder?.requestCode
                   }. Ready to queue for autonomous AMR fleet execution.`
                 : `${dispatchedOrder?.containerCount || 0} container(s) queued and split into ${
-                    dispatchedOrder?.jobs?.length || dispatchedOrder?.estimatedMissions || 1
+                    dispatchedOrder?.jobs?.length || 0
                   } autonomous AMR job(s).`}
             </Text>
+            {dispatchedOrder?.queueError ? <Text variant="body" color={colors.dangerText}>Request saved. Queue failed: {dispatchedOrder.queueError}. Retry queueing this request below.</Text> : null}
 
             {/* If SUBMITTED: Prominent CTA to Queue */}
             {dispatchedOrder?.status === 'SUBMITTED' && (
@@ -1536,7 +1521,7 @@ export function TransportCreationScreen() {
                   />
                 </>
               )}
-              {dispatchedOrder?.status === 'QUEUED' && (
+              {dispatchedOrder?.status === 'QUEUED' && dispatchedOrder.jobs.length > 0 && (
                 <Button
                   label="View Provisioned Job"
                   icon={<MapPin size={16} color={colors.primary} />}
@@ -1559,7 +1544,12 @@ export function TransportCreationScreen() {
               />
               <Button
                 label="Create Another Request"
+                disabled={isQueueing || isSubmitting}
                 onPress={() => {
+                  setDispatchedOrder(null);
+                  setSelectedBarcodes([]);
+                  setRepeatDetails([]);
+                  setSourceOverride('');
                   setCustomSlotOverrides({});
                   setPerContainerEndpointOverrides({});
                   setStep(1);

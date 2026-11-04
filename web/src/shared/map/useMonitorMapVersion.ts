@@ -62,9 +62,17 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
 
   const [storedWarehouseId, setStoredWarehouseId] = useState(() => readStored(WAREHOUSE_KEY))
   const [storedMapVersionId, setStoredMapVersionId] = useState(() => readStored(MAP_KEY))
+  /** Manual warehouse pick; cleared when preferredWarehouseId changes (follow selection again). */
+  const [manualWarehouseId, setManualWarehouseId] = useState<string | null>(null)
+  const [seenPreferredWarehouseId, setSeenPreferredWarehouseId] = useState(preferredWarehouseId)
   /** Manual map pick; cleared when preferredMapVersionId changes (follow selection again). */
   const [manualMapVersionId, setManualMapVersionId] = useState<string | null>(null)
   const [seenPreferredMapId, setSeenPreferredMapId] = useState(preferredMapVersionId)
+
+  if (preferredWarehouseId !== seenPreferredWarehouseId) {
+    setSeenPreferredWarehouseId(preferredWarehouseId)
+    setManualWarehouseId(null)
+  }
 
   if (preferredMapVersionId !== seenPreferredMapId) {
     setSeenPreferredMapId(preferredMapVersionId)
@@ -81,6 +89,9 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
 
   const warehouseId = useMemo(() => {
     if (!warehouseItems?.length) return ''
+    if (manualWarehouseId && warehouseItems.some((w) => w.id === manualWarehouseId)) {
+      return manualWarehouseId
+    }
     if (preferredWarehouseId && warehouseItems.some((w) => w.id === preferredWarehouseId)) {
       return preferredWarehouseId
     }
@@ -88,7 +99,7 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
       return storedWarehouseId
     }
     return warehouseItems[0].id
-  }, [warehouseItems, storedWarehouseId, preferredWarehouseId])
+  }, [warehouseItems, manualWarehouseId, preferredWarehouseId, storedWarehouseId])
 
   const mapsQuery = useQuery({
     queryKey: ['navigation', 'maps', warehouseId],
@@ -144,6 +155,7 @@ export function useMonitorMapVersion(options: UseMonitorMapVersionOptions = {}):
   )
 
   function setWarehouseId(id: string) {
+    setManualWarehouseId(id)
     setStoredWarehouseId(id)
     writeStored(WAREHOUSE_KEY, id)
     setStoredMapVersionId('')
