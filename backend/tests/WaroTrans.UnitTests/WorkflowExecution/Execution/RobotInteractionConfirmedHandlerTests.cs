@@ -368,12 +368,16 @@ public sealed class RobotInteractionConfirmedHandlerTests
             Guid jobId,
             Guid jobStepId,
             CancellationToken cancellationToken = default,
-            RouteGrantSnapshot? route = null)
+            RouteGrantSnapshot? route = null,
+            double? timeoutSeconds = null)
         {
             var commandId = Guid.NewGuid();
             Commands.Add((robotId, x, y, jobStepId, commandId));
             return Task.FromResult(commandId);
         }
+
+        public Task<bool> CancelNavigationAsync(Guid robotId, Guid navigateCommandId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
 
         public Task RequestHumanInteractionAsync(Guid robotId, Guid jobId, Guid jobStepId, string interactionType, Guid containerId, Guid endpointId, CancellationToken cancellationToken = default)
         {

@@ -11,6 +11,7 @@ public sealed class GetTrafficGraphValidationHandler(TrafficGraphCompileService 
             mapVersionId,
             bundle.Result.Graph,
             bundle.Result.Issues,
-            bundle.ZoneMeta);
+            bundle.ZoneMeta,
+            zones: bundle.Zones);
     }
 }

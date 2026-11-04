@@ -11,11 +11,13 @@ public sealed class GetTrafficGraphDebugSvgHandler(TrafficGraphCompileService co
             mapVersionId,
             bundle.Result.Graph,
             bundle.Result.Issues,
-            bundle.ZoneMeta);
+            bundle.ZoneMeta,
+            zones: bundle.Zones);
         return TrafficDebugSvgWriter.Write(
             bundle.Result.Graph,
             bundle.Occupancy,
             report.Issues,
-            bundle.Zones);
+            bundle.Zones,
+            bundle.Result.RejectedAccessPaths);
     }
 }

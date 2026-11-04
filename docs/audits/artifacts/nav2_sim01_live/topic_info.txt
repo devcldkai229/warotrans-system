@@ -1,0 +1,216 @@
+INFO /map
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/bin/ros2", line 33, in <module>
+    sys.exit(load_entry_point('ros2cli==0.32.10', 'console_scripts', 'ros2')())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/cli.py", line 91, in main
+    rc = extension.main(parser=parser, args=args)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/command/topic.py", line 41, in main
+    return extension.main(args=args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/verb/info.py", line 41, in main
+    with NodeStrategy(args) as node:
+         ^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/strategy.py", line 31, in __init__
+    if use_daemon and is_daemon_running(args):
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 75, in is_daemon_running
+    return node.connected
+           ^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 46, in connected
+    for method in self._proxy.system.listMethods()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1122, in __call__
+    return self.__send(self.__name, args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1461, in __request
+    response = self.__transport.request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1166, in request
+    return self.single_request(host, handler, request_body, verbose)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1178, in single_request
+    http_conn = self.send_request(host, handler, request_body, verbose)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1291, in send_request
+    self.send_content(connection, request_body)
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1321, in send_content
+    connection.endheaders(request_body)
+  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
+    self.send(msg)
+  File "/usr/lib/python3.12/http/client.py", line 1064, in send
+    self.connect()
+  File "/usr/lib/python3.12/http/client.py", line 1030, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/socket.py", line 852, in create_connection
+    raise exceptions[0]
+  File "/usr/lib/python3.12/socket.py", line 837, in create_connection
+    sock.connect(sa)
+TimeoutError: [Errno 110] Connection timed out
+missing /map
+INFO /global_costmap/costmap
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/bin/ros2", line 33, in <module>
+    sys.exit(load_entry_point('ros2cli==0.32.10', 'console_scripts', 'ros2')())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/cli.py", line 91, in main
+    rc = extension.main(parser=parser, args=args)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/command/topic.py", line 41, in main
+    return extension.main(args=args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/verb/info.py", line 41, in main
+    with NodeStrategy(args) as node:
+         ^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/strategy.py", line 31, in __init__
+    if use_daemon and is_daemon_running(args):
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 75, in is_daemon_running
+    return node.connected
+           ^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 46, in connected
+    for method in self._proxy.system.listMethods()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1122, in __call__
+    return self.__send(self.__name, args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1461, in __request
+    response = self.__transport.request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1166, in request
+    return self.single_request(host, handler, request_body, verbose)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1178, in single_request
+    http_conn = self.send_request(host, handler, request_body, verbose)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1291, in send_request
+    self.send_content(connection, request_body)
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1321, in send_content
+    connection.endheaders(request_body)
+  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
+    self.send(msg)
+  File "/usr/lib/python3.12/http/client.py", line 1064, in send
+    self.connect()
+  File "/usr/lib/python3.12/http/client.py", line 1030, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/socket.py", line 852, in create_connection
+    raise exceptions[0]
+  File "/usr/lib/python3.12/socket.py", line 837, in create_connection
+    sock.connect(sa)
+TimeoutError: [Errno 110] Connection timed out
+missing /global_costmap/costmap
+INFO /global_costmap/costmap_raw
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/bin/ros2", line 33, in <module>
+    sys.exit(load_entry_point('ros2cli==0.32.10', 'console_scripts', 'ros2')())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/cli.py", line 91, in main
+    rc = extension.main(parser=parser, args=args)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/command/topic.py", line 41, in main
+    return extension.main(args=args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/verb/info.py", line 41, in main
+    with NodeStrategy(args) as node:
+         ^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/strategy.py", line 31, in __init__
+    if use_daemon and is_daemon_running(args):
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 75, in is_daemon_running
+    return node.connected
+           ^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 46, in connected
+    for method in self._proxy.system.listMethods()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1122, in __call__
+    return self.__send(self.__name, args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1461, in __request
+    response = self.__transport.request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1166, in request
+    return self.single_request(host, handler, request_body, verbose)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1178, in single_request
+    http_conn = self.send_request(host, handler, request_body, verbose)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1291, in send_request
+    self.send_content(connection, request_body)
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1321, in send_content
+    connection.endheaders(request_body)
+  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
+    self.send(msg)
+  File "/usr/lib/python3.12/http/client.py", line 1064, in send
+    self.connect()
+  File "/usr/lib/python3.12/http/client.py", line 1030, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/socket.py", line 852, in create_connection
+    raise exceptions[0]
+  File "/usr/lib/python3.12/socket.py", line 837, in create_connection
+    sock.connect(sa)
+TimeoutError: [Errno 110] Connection timed out
+missing /global_costmap/costmap_raw
+INFO /keepout_filter_mask
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/bin/ros2", line 33, in <module>
+    sys.exit(load_entry_point('ros2cli==0.32.10', 'console_scripts', 'ros2')())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/cli.py", line 91, in main
+    rc = extension.main(parser=parser, args=args)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/command/topic.py", line 41, in main
+    return extension.main(args=args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2topic/verb/info.py", line 41, in main
+    with NodeStrategy(args) as node:
+         ^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/strategy.py", line 31, in __init__
+    if use_daemon and is_daemon_running(args):
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 75, in is_daemon_running
+    return node.connected
+           ^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/ros2cli/node/daemon.py", line 46, in connected
+    for method in self._proxy.system.listMethods()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1122, in __call__
+    return self.__send(self.__name, args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1461, in __request
+    response = self.__transport.request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1166, in request
+    return self.single_request(host, handler, request_body, verbose)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1178, in single_request
+    http_conn = self.send_request(host, handler, request_body, verbose)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1291, in send_request
+    self.send_content(connection, request_body)
+  File "/usr/lib/python3.12/xmlrpc/client.py", line 1321, in send_content
+    connection.endheaders(request_body)
+  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
+    self.send(msg)
+  File "/usr/lib/python3.12/http/client.py", line 1064, in send
+    self.connect()
+  File "/usr/lib/python3.12/http/client.py", line 1030, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/socket.py", line 852, in create_connection
+    raise exceptions[0]
+  File "/usr/lib/python3.12/socket.py", line 837, in create_connection
+    sock.connect(sa)
+TimeoutError: [Errno 110] Connection timed out
+missing /keepout_filter_mask

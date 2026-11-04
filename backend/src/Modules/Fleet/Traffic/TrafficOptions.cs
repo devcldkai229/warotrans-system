@@ -6,8 +6,10 @@ public enum TrafficCoordinatorMode
 {
     /// <summary>V1 whole-route grants dispatch motion; segmented coordinator observes only.</summary>
     Shadow = 0,
-    /// <summary>Segmented coordinator is the sole motion authority (deferred).</summary>
-    Active = 1
+    /// <summary>Segmented coordinator is the sole motion authority (RouteGraph edge grants).</summary>
+    Active = 1,
+    /// <summary>Stage-3: Nav2 path proposal + spatial/semantic zone/cell grants (no RouteGraph A*).</summary>
+    Semantic = 2
 }
 
 /// <summary>Configuration under <c>Traffic</c>.</summary>
@@ -54,6 +56,15 @@ public sealed class TrafficOptions
 
     /// <summary>Telemetry older than this is not trusted to seed or reconcile occupancy.</summary>
     public double PoseMaxAgeSec { get; set; } = 5.0;
+
+    /// <summary>Directory with Stage-2/3 adapter artifacts (lanes/zones/manifest). Empty = unset.</summary>
+    public string SemanticMapDirectory { get; set; } = "";
+
+    /// <summary>Look-ahead horizon (m) for swept cell reservation.</summary>
+    public double SemanticHorizonMeters { get; set; } = 4.0;
+
+    /// <summary>Spatial cell size (m) for dynamic conflict resources.</summary>
+    public double SemanticCellSizeMeters { get; set; } = 0.5;
 
     public IReadOnlyList<TrafficStationMeta> ResolveStationMeta()
     {

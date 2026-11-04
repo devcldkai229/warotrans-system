@@ -320,6 +320,8 @@ public sealed class JobExecutionEngine(
             switch (step.Status)
             {
                 case JobStepStatus.COMPLETED:
+                    // A MOVE is completed by its robot RESULT outside this loop, so its task is closed here.
+                    CompleteTaskIfDone(task);
                     continue;
                 case JobStepStatus.EXECUTING or JobStepStatus.WAITING or JobStepStatus.PAUSED:
                     return; // waiting for robot RESULT or Staff confirmation
@@ -611,6 +613,107 @@ public sealed class JobExecutionEngine(
         {
             RouteGrantSnapshot? routeGrant = null;
             var mode = trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow;
+
+            // Stage-3 Semantic Mode: Backend authorizes spatial resources; Nav2 proposes the path (no RouteGraph A*).
+            if (mode == TrafficCoordinatorMode.Semantic && segmentedTraffic is not null)
+            {
+                var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+                if (robot is null)
+                {
+                    Fail(job, task, step, stepKey, "robot_not_found", "Robot missing for Semantic MOVE.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                var mapDir = trafficOptions?.Value.SemanticMapDirectory?.Trim() ?? "";
+                if (string.IsNullOrWhiteSpace(mapDir) || !Directory.Exists(mapDir))
+                {
+                    Fail(job, task, step, stepKey, "semantic_map_unavailable",
+                        "Traffic:Semantic MapDirectory missing for Semantic MOVE.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                // The bundle is one directory on disk, not per map: a job on another map version must not
+                // be reserved against it (its fingerprint, zones and endpoints describe a different floor).
+                var bundleMapId = SemanticReservation.TryReadManifestMapVersionId(mapDir);
+                if (bundleMapId != job.MapVersionId)
+                {
+                    Fail(job, task, step, stepKey, "semantic_map_mismatch",
+                        $"SemanticMapDirectory is for map version '{bundleMapId?.ToString() ?? "unknown"}', the Job runs on '{job.MapVersionId}'.",
+                        DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                var policy = SemanticReservation.TryLoadFromDirectory(mapDir, job.MapVersionId, "");
+                if (policy is null)
+                {
+                    Fail(job, task, step, stepKey, "semantic_policy_unavailable",
+                        "Could not load semantic_manifest / single_occupancy from SemanticMapDirectory.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                // Apply horizon/cell overrides from options.
+                // Same overrides as SemanticPolicyBootstrapHostedService, so both binds describe the same robot.
+                var footprint = trafficOptions!.Value.Footprint;
+                policy = policy with
+                {
+                    HorizonMeters = trafficOptions.Value.SemanticHorizonMeters,
+                    CellSizeMeters = trafficOptions.Value.SemanticCellSizeMeters,
+                    FootprintHalfLength = Math.Max(0.01, footprint.LengthMeters / 2.0 + footprint.PaddingMeters),
+                    FootprintHalfWidth = Math.Max(0.01, footprint.WidthMeters / 2.0 + footprint.PaddingMeters)
+                };
+
+                var bind = await segmentedTraffic.BindSemanticPolicyAsync(policy, cancellationToken);
+                if (!bind.Ok)
+                {
+                    Fail(job, task, step, stepKey, "semantic_policy_in_use",
+                        $"Cannot bind semantic policy: {bind.Reason}", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                var locOk = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
+                var tracked = await segmentedTraffic.EnsureTrackedAsync(
+                    robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken);
+                if (!tracked.Ok)
+                {
+                    Fail(job, task, step, stepKey, "traffic_robot_unavailable",
+                        $"Semantic Mode cannot move the robot: {tracked.Reason}", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                // Goal only — robot Nav2 plans; grant arrives after traffic_plan uplink.
+                Guid semanticCommandId;
+                try
+                {
+                    semanticCommandId = await fleet.NavigateAsync(
+                        robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, route: null,
+                        timeoutSeconds: CommandTimeoutSeconds(step));
+                }
+                catch (Exception ex)
+                {
+                    Fail(job, task, step, stepKey, "navigate_rejected", ex.Message, DateTimeOffset.UtcNow);
+                    return true;
+                }
+
+                // Same bookkeeping as the Shadow path: the robot RESULT finishes the step, and the command id
+                // lives in OutputValues so IsCurrentCommand can drop a superseded command's late RESULT.
+                var semanticOutputs = new Dictionary<string, JsonElement>
+                {
+                    ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                    [RobotCommandIdKey] = JsonSerializer.SerializeToElement(semanticCommandId),
+                    ["trafficMode"] = JsonSerializer.SerializeToElement("Semantic"),
+                    ["semanticMapFingerprint"] = JsonSerializer.SerializeToElement(policy.SemanticMapFingerprint)
+                };
+                if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var supersededSemantic))
+                {
+                    semanticOutputs[SupersededCommandIdsKey] = supersededSemantic;
+                }
+
+                step.OutputValues = semanticOutputs;
+                logger.LogInformation(
+                    "Job {JobNo} {StepKey} Semantic MOVE issued navigate cmd={CommandId} goal={Code} fingerprint={Fp}",
+                    job.JobNo, stepKey, semanticCommandId, pose.Code, policy.SemanticMapFingerprint);
+                return false;
+            }
 
             // Active Mode: segmented coordinator is sole motion authority (publisher issues MQTT).
             if (mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
@@ -904,7 +1007,8 @@ public sealed class JobExecutionEngine(
             }
 
             var commandId = await fleet.NavigateAsync(
-                robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, routeGrant);
+                robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, routeGrant,
+                CommandTimeoutSeconds(step));
             var outputs = new Dictionary<string, JsonElement>
             {
                 ["startedAt"] = JsonSerializer.SerializeToElement(now),
@@ -1177,6 +1281,14 @@ public sealed class JobExecutionEngine(
             .OrderBy(t => t.SequenceNo)
             .SelectMany(t => t.JobSteps.OrderBy(s => s.SequenceNo).Select(s => (t, s)));
 
+    /// <summary>MOVE input <c>commandTimeoutSeconds</c>, sent to the robot as payload.timeoutSeconds (it cancels the Nav2 goal).</summary>
+    private static double? CommandTimeoutSeconds(JobStep step) =>
+        step.ResolvedInputs.TryGetValue("commandTimeoutSeconds", out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.GetDouble() is > 0 and var seconds
+            ? seconds
+            : null;
+
     private static Dictionary<string, JsonElement> VariableContext(Job job)
     {
         var context = new Dictionary<string, JsonElement>(job.ContextValues, StringComparer.Ordinal);
@@ -1255,6 +1367,22 @@ public sealed class JobExecutionEngine(
                 segmentedTraffic.Epoch, null, reason ?? "OPERATOR_CANCEL"));
         }
 
+        // Active mode stops the robot through its traffic authority; every other mode needs an explicit CANCEL of
+        // the running NAVIGATE, otherwise the robot keeps driving to the goal of a cancelled Job.
+        if (robotId is Guid cancelRobotId
+            && (trafficOptions?.Value.Mode ?? TrafficCoordinatorMode.Shadow) != TrafficCoordinatorMode.Active)
+        {
+            foreach (var running in OrderedSteps(job).Select(x => x.Step)
+                         .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.EXECUTING))
+            {
+                if (running.OutputValues.TryGetValue(RobotCommandIdKey, out var commandValue)
+                    && commandValue.ValueKind == JsonValueKind.String)
+                {
+                    await fleet.CancelNavigationAsync(cancelRobotId, commandValue.GetGuid(), cancellationToken);
+                }
+            }
+        }
+
         var workflowSteps = await db.WorkflowSteps.AsNoTracking()
             .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
             .ToDictionaryAsync(s => s.Id, cancellationToken);
@@ -1273,6 +1401,13 @@ public sealed class JobExecutionEngine(
             task.Status = JobTaskStatus.CANCELLED;
             task.CompletedAt ??= now;
             task.FailureCode = "job_cancelled";
+        }
+
+        // Containers follow the Job so the Transport Request details leave IN_PROGRESS (JobContainerStatusChangedHandler).
+        foreach (var container in job.JobContainers.Where(c => c.Status is not (JobContainerStatus.DELIVERED
+                     or JobContainerStatus.FAILED or JobContainerStatus.CANCELLED)))
+        {
+            SetContainerStatus(job, container, JobContainerStatus.CANCELLED, now);
         }
 
         job.Status = JobStatus.CANCELLED;

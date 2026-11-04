@@ -19,15 +19,22 @@ public static class TrafficGraphCompiler
     public const string OccupancyMissing = "OCCUPANCY_MISSING";
     public const string FrameMismatch = "FRAME_MISMATCH";
     public const string InsufficientClearance = "INSUFFICIENT_CLEARANCE";
+    public const string ServiceAccessBlocked = "SERVICE_ACCESS_BLOCKED";
+    public const string JunctionTransitionBlocked = RouteGraphBuilder.JunctionTransitionBlocked;
     public const string TurnClearance = "TURN_CLEARANCE";
+    public const string ManeuverUnsupported = "MANEUVER_UNSUPPORTED";
     public const string CriticalNoExit = "CRITICAL_NO_EXIT";
     public const string SafeStopInCritical = "SAFE_STOP_IN_CRITICAL";
     public const string OverlapAsymmetric = "OVERLAP_ASYMMETRIC";
 
-    public static TrafficCompileResult Compile(TrafficCompileInput input, RouteGraphOptions? routeOptions = null)
+    public static TrafficCompileResult Compile(
+        TrafficCompileInput input,
+        RouteGraphOptions? routeOptions = null,
+        TrafficManeuverOptions? maneuverOptions = null)
     {
         var issues = new List<TrafficIssue>();
         var footprint = input.Footprint;
+        var maneuvers = maneuverOptions ?? TrafficManeuverOptions.Default;
 
         if (!string.Equals(input.FrameId, input.ExpectedFrameId, StringComparison.Ordinal))
         {
@@ -36,18 +43,6 @@ public static class TrafficGraphCompiler
                 TrafficIssueSeverity.Error,
                 $"Map frame '{input.FrameId}' does not match expected '{input.ExpectedFrameId}'.",
                 [input.FrameId, input.ExpectedFrameId]));
-        }
-
-        foreach (var zone in input.Zones.Where(z => z.IsActive))
-        {
-            if (zone.ZoneType is ZoneType.SINGLE_OCCUPANCY or ZoneType.NO_STOP)
-            {
-                issues.Add(new TrafficIssue(
-                    LegacyJunctionZone,
-                    TrafficIssueSeverity.Warning,
-                    $"Zone {zone.Code} ({zone.ZoneType}) is used as a junction connect; prefer ZoneType JUNCTION.",
-                    [zone.Code]));
-            }
         }
 
         if (input.Occupancy is null)
@@ -60,7 +55,18 @@ public static class TrafficGraphCompiler
         }
 
         var routeInput = new RouteGraphInput(input.Name, input.FrameId, input.Edges, input.Endpoints, input.Zones);
-        var routeResult = RouteGraphBuilder.Build(routeInput, routeOptions);
+        RouteGraphAccessContext? accessCtx = null;
+        if (input.Occupancy is { } occForAccess)
+        {
+            accessCtx = new RouteGraphAccessContext
+            {
+                RequiredHalfWidthMeters = footprint.HalfWidth,
+                GridStepMeters = Math.Max(occForAccess.Resolution, 0.05),
+                ClearanceAt = occForAccess.ClearanceAt
+            };
+        }
+
+        var routeResult = RouteGraphBuilder.Build(routeInput, routeOptions, zoneRules: null, access: accessCtx);
         foreach (var issue in routeResult.Issues)
         {
             issues.Add(new TrafficIssue(
@@ -71,6 +77,25 @@ public static class TrafficGraphCompiler
         }
 
         var route = routeResult.Graph;
+        if (accessCtx is not null)
+        {
+            foreach (var rej in accessCtx.RejectedJunctionTransitions)
+            {
+                issues.Add(new TrafficIssue(
+                    JunctionTransitionBlocked,
+                    TrafficIssueSeverity.Error,
+                    string.Create(CultureInfo.InvariantCulture,
+                        $"Junction {rej.JunctionCode}: no clearance-safe transition ({rej.Reason}) " +
+                        $"from ({rej.FromX:0.###},{rej.FromY:0.###}) to ({rej.ToX:0.###},{rej.ToY:0.###})."),
+                    [rej.JunctionCode]));
+            }
+        }
+
+        if (input.Occupancy is { } accessGrid)
+        {
+            route = StripUnsafeGeneratedEdges(route, accessGrid, footprint, issues);
+        }
+
         var graphHash = ComputeGraphHash(input, routeOptions);
         var laneMeta = input.LaneMeta.ToDictionary(m => m.Code, StringComparer.Ordinal);
         var zoneMeta = input.ZoneMeta.ToDictionary(m => m.Code, StringComparer.Ordinal);
@@ -225,32 +250,95 @@ public static class TrafficGraphCompiler
             holding.Add(node.Id);
         }
 
-        // Turn clearance at nodes that change direction / stations / holding.
+        // Turn clearance: stations use yaw/arc/pivot classifier; holding / branch nodes keep TurnRadius disk.
+        // Pure IsConnector-chain waypoints only need path HalfWidth — not TurnRadius at every kink.
+        var spinRequiredNodeIds = new HashSet<int>();
         if (input.Occupancy is { } occ)
         {
+            var yawByCode = input.EndpointYaw;
             foreach (var node in route.Nodes)
             {
-                var degree = trafficEdges.Count(e => e.StartId == node.Id || e.EndId == node.Id);
-                var needsTurn = degree >= 3 || stationNodeIds.Contains(node.Id) || holding.Contains(node.Id);
-                if (!needsTurn)
+                if (stationNodeIds.Contains(node.Id))
                 {
-                    // Also check when incoming/outgoing headings differ by > ~30°.
-                    needsTurn = HasHeadingChange(node.Id, trafficEdges, nodesById);
+                    var incident = trafficEdges.Where(e => e.StartId == node.Id || e.EndId == node.Id).ToList();
+                    double? yaw = null;
+                    var code = node.EndpointCodes.Count > 0 ? node.EndpointCodes[0] : null;
+                    if (code is not null && yawByCode is not null && yawByCode.TryGetValue(code, out var y))
+                    {
+                        yaw = y;
+                    }
+
+                    var verdict = StationManeuverClassifier.Evaluate(
+                        code ?? $"node:{node.Id}",
+                        node.Id,
+                        incident,
+                        id => (nodesById[id].X, nodesById[id].Y),
+                        footprint,
+                        occ,
+                        yaw);
+
+                    // Capability gate: reverse / spin must be executable on the robot.
+                    var reversePairs = verdict.Pairs.Count(p =>
+                        p.Class is StationManeuverClassifier.ManeuverClass.ReverseSameEdge
+                            or StationManeuverClassifier.ManeuverClass.YawDriveInReverseOut);
+                    var pivotPairs = verdict.Pairs.Count(p =>
+                        p.Class == StationManeuverClassifier.ManeuverClass.TruePivot);
+                    // ContinuousArc is classified only — Active Mode executes it as Forward kink (no arc grant).
+                    _ = maneuvers.ContinuousArcEnabled;
+
+                    if (verdict.NeedsPivotClearance)
+                    {
+                        spinRequiredNodeIds.Add(node.Id);
+                    }
+
+                    if (reversePairs > 0 && !maneuvers.ReverseEnabled)
+                    {
+                        issues.Add(new TrafficIssue(
+                            ManeuverUnsupported,
+                            TrafficIssueSeverity.Error,
+                            $"Node {node.Id} ({code}): reverse maneuver required but Traffic:Maneuvers:ReverseEnabled=false.",
+                            node.EndpointCodes.Count > 0 ? node.EndpointCodes : [$"node:{node.Id}"]));
+                    }
+
+                    if (pivotPairs > 0 && !maneuvers.SpinEnabled)
+                    {
+                        issues.Add(new TrafficIssue(
+                            ManeuverUnsupported,
+                            TrafficIssueSeverity.Error,
+                            $"Node {node.Id} ({code}): TruePivot/Spin required but Traffic:Maneuvers:SpinEnabled=false.",
+                            node.EndpointCodes.Count > 0 ? node.EndpointCodes : [$"node:{node.Id}"]));
+                        continue;
+                    }
+
+                    if (!verdict.NeedsPivotClearance || verdict.PivotClearanceOk)
+                    {
+                        continue;
+                    }
+
+                    var clearance = occ.ClearanceAt(node.X, node.Y);
+                    var fail = verdict.FailReason ?? "unknown";
+                    issues.Add(new TrafficIssue(
+                        TurnClearance,
+                        TrafficIssueSeverity.Error,
+                        string.Create(CultureInfo.InvariantCulture,
+                            $"Node {node.Id} true-pivot FAIL failReason={fail} (disk clr={clearance:0.###} m, required={footprint.TurnRadius:0.###} m)."),
+                        node.EndpointCodes.Count > 0 ? node.EndpointCodes : [$"node:{node.Id}"]));
+                    continue;
                 }
 
-                if (!needsTurn)
+                if (!RequiresTurnClearance(node.Id, trafficEdges, nodesById, stationNodeIds, holding))
                 {
                     continue;
                 }
 
-                var clearance = occ.ClearanceAt(node.X, node.Y);
-                if (clearance + 1e-9 < footprint.TurnRadius)
+                var clr = occ.ClearanceAt(node.X, node.Y);
+                if (clr + 1e-9 < footprint.TurnRadius)
                 {
                     issues.Add(new TrafficIssue(
                         TurnClearance,
                         TrafficIssueSeverity.Error,
                         string.Create(CultureInfo.InvariantCulture,
-                            $"Node {node.Id} turn clearance {clearance:0.###} m < required {footprint.TurnRadius:0.###} m."),
+                            $"Node {node.Id} turn clearance {clr:0.###} m < required {footprint.TurnRadius:0.###} m."),
                         node.EndpointCodes.Count > 0 ? node.EndpointCodes : [$"node:{node.Id}"]));
                 }
             }
@@ -303,6 +391,46 @@ public static class TrafficGraphCompiler
                     holding.Add(nid);
                 }
             }
+
+            // Last resort: pick a boundary node that is not NO_STOP and has enough turn clearance when occupancy exists.
+            if (!stoplines.Any(s => s.CorridorId == corridor.Id) && corridor.EdgeIds.Length > 0)
+            {
+                var candidates = corridor.EdgeIds
+                    .Select(id => trafficEdges.First(e => e.Id == id))
+                    .SelectMany(e => new[] { (NodeId: e.StartId, Edge: e), (NodeId: e.EndId, Edge: e) })
+                    .GroupBy(x => x.NodeId)
+                    .Select(g => g.First())
+                    .OrderBy(x => x.NodeId)
+                    .ToList();
+
+                var placed = false;
+                foreach (var (nodeId, edge) in candidates)
+                {
+                    if (edge.NoStop)
+                    {
+                        continue;
+                    }
+
+                    if (input.Occupancy is { } occGrid)
+                    {
+                        var n = nodesById[nodeId];
+                        if (occGrid.ClearanceAt(n.X, n.Y) + 1e-9 < footprint.TurnRadius)
+                        {
+                            continue;
+                        }
+                    }
+
+                    stoplines.Add(new TrafficStopline(nodeId, corridor.Id, edge.Id));
+                    holding.Add(nodeId);
+                    placed = true;
+                    break;
+                }
+
+                if (!placed)
+                {
+                    // Leave CORRIDOR_NO_STOPLINE rather than invent an unsafe holding point.
+                }
+            }
         }
 
         var stoplineNodeIds = stoplines.Select(s => s.NodeId).ToHashSet();
@@ -332,6 +460,13 @@ public static class TrafficGraphCompiler
 
             if (criticalNodeIds.Contains(nodeId))
             {
+                // Station poses may sit on bay access adjacent to junction/critical edges — they are not
+                // corridor holding safe-stops; do not emit SAFE_STOP_IN_CRITICAL for them.
+                if (stationNodeIds.Contains(nodeId))
+                {
+                    continue;
+                }
+
                 issues.Add(new TrafficIssue(
                     SafeStopInCritical,
                     TrafficIssueSeverity.Error,
@@ -352,7 +487,8 @@ public static class TrafficGraphCompiler
                 [.. n.EndpointCodes],
                 holding.Contains(n.Id) || safeStops.Contains(n.Id),
                 stationNodeIds.Contains(n.Id),
-                safeStops.Contains(n.Id)))
+                safeStops.Contains(n.Id),
+                spinRequiredNodeIds.Contains(n.Id)))
             .ToImmutableArray();
 
         BuildNodeConflictResources(trafficEdges, trafficNodes, resources);
@@ -415,18 +551,90 @@ public static class TrafficGraphCompiler
             exitSafeStops,
             safeStops.OrderBy(id => id).ToImmutableArray());
 
-        return new TrafficCompileResult(graph, issues);
+        return new TrafficCompileResult(graph, issues, accessCtx?.RejectedPaths);
     }
 
     /// <summary>
     /// Bumped whenever RouteGraphBuilder / this compiler change node, edge or resource output for the same input,
     /// so a robot holding a graph file from an older build can never accept a grant (edge ids would differ).
     /// </summary>
-    public const int CompilerVersion = 2;
+    public const int CompilerVersion = 10;
+
+    /// <summary>
+    /// Fail-closed: drop generated IsConnector / IsJunction edges below half-width so they never enter
+    /// the executable traffic graph. Authored lane EdgeCodes are reported as INSUFFICIENT_CLEARANCE instead.
+    /// </summary>
+    private static global::WaroTrans.Navigation.RouteGraph.RouteGraph StripUnsafeGeneratedEdges(
+        global::WaroTrans.Navigation.RouteGraph.RouteGraph route,
+        OccupancyGrid grid,
+        TrafficFootprintOptions footprint,
+        List<TrafficIssue> issues)
+    {
+        var nodesById = route.Nodes.ToDictionary(n => n.Id);
+        var blockedEdgeIds = new HashSet<int>();
+        var blockedEndpointCodes = new SortedSet<string>(StringComparer.Ordinal);
+        var blockedJunctionCodes = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var edge in route.Edges.Where(e => e.IsConnector || e.IsJunction))
+        {
+            var a = nodesById[edge.StartId];
+            var b = nodesById[edge.EndId];
+            var length = Math.Sqrt(Square(b.X - a.X) + Square(b.Y - a.Y));
+            if (length <= 1e-9)
+            {
+                blockedEdgeIds.Add(edge.Id);
+                continue;
+            }
+
+            var clearance = grid.MinClearanceAlong(a.X, a.Y, b.X, b.Y);
+            if (clearance + 1e-9 >= footprint.HalfWidth)
+            {
+                continue;
+            }
+
+            blockedEdgeIds.Add(edge.Id);
+            foreach (var code in a.EndpointCodes.Concat(b.EndpointCodes))
+            {
+                blockedEndpointCodes.Add(code);
+            }
+
+            foreach (var z in edge.ZoneCodes)
+            {
+                blockedJunctionCodes.Add(z);
+            }
+        }
+
+        if (blockedEdgeIds.Count == 0)
+        {
+            return route;
+        }
+
+        foreach (var code in blockedEndpointCodes)
+        {
+            issues.Add(new TrafficIssue(
+                ServiceAccessBlocked,
+                TrafficIssueSeverity.Error,
+                $"Endpoint {code}: access connector blocked by occupancy (clearance below robot half-width {footprint.HalfWidth:0.###} m).",
+                [code]));
+        }
+
+        foreach (var code in blockedJunctionCodes)
+        {
+            issues.Add(new TrafficIssue(
+                JunctionTransitionBlocked,
+                TrafficIssueSeverity.Error,
+                $"Junction {code}: generated transition stripped (clearance below robot half-width {footprint.HalfWidth:0.###} m).",
+                [code]));
+        }
+
+        var kept = route.Edges.Where(e => !blockedEdgeIds.Contains(e.Id)).ToList();
+        return route with { Edges = kept };
+    }
 
     public static string ComputeGraphHash(TrafficCompileInput input, RouteGraphOptions? routeOptions = null)
     {
         var options = routeOptions ?? RouteGraphOptions.Default;
+        var yawByCode = input.EndpointYaw ?? new Dictionary<string, double>(StringComparer.Ordinal);
         var canonical = new
         {
             compilerVersion = CompilerVersion,
@@ -434,15 +642,17 @@ public static class TrafficGraphCompiler
             {
                 vertexSnap = Round(options.VertexSnapTolerance),
                 endpointSnap = Round(options.EndpointSnapDistance),
-                junctionCapture = Round(options.JunctionCaptureDistance)
+                junctionCapture = Round(options.JunctionCaptureDistance),
+                maxEndpointAccess = Round(options.MaxEndpointAccessDistance)
             },
             // Occupancy changes safe stops / holding nodes; a graph compiled without it must not share the hash.
             occupancy = input.Occupancy?.Fingerprint,
             stations = (input.StationMeta ?? [])
                 .OrderBy(s => s.EndpointCode, StringComparer.Ordinal)
                 .Select(s => new { s.EndpointCode, kind = s.BayKind.ToString() }),
-            serviceStops = input.ServiceStopEndpointCodes?.Order(StringComparer.Ordinal).ToList(),
-            recoveryStops = input.RecoveryEndpointCodes?.Order(StringComparer.Ordinal).ToList(),
+            // Normalize null → empty so Host (empty HashSet) and harness (null) share one graphHash.
+            serviceStops = OrderCodes(input.ServiceStopEndpointCodes),
+            recoveryStops = OrderCodes(input.RecoveryEndpointCodes),
             name = input.Name,
             frameId = input.FrameId,
             footprint = new
@@ -451,6 +661,10 @@ public static class TrafficGraphCompiler
                 width = Round(input.Footprint.WidthMeters),
                 padding = Round(input.Footprint.PaddingMeters)
             },
+            // Endpoint yaw affects station maneuver class (reverse vs pivot); include in hash (v10).
+            endpointYaw = yawByCode
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => new { code = kv.Key, yaw = Round(kv.Value) }),
             edges = input.Edges
                 .OrderBy(e => e.Code, StringComparer.Ordinal)
                 .Select(e => new
@@ -489,6 +703,11 @@ public static class TrafficGraphCompiler
     }
 
     private static double Round(double v) => Math.Round(v, 6, MidpointRounding.AwayFromZero);
+
+    private static List<string> OrderCodes(IReadOnlySet<string>? codes) =>
+        codes is null || codes.Count == 0
+            ? []
+            : codes.Order(StringComparer.Ordinal).ToList();
 
     private static void BuildLaneResources(
         List<TrafficEdge> edges,
@@ -552,8 +771,9 @@ public static class TrafficGraphCompiler
         List<TrafficResource> resources)
     {
         _ = zoneMeta;
+        // JUNCTION owns crossing mutex for auto-generated portal/access edges. SINGLE_OCCUPANCY is zone capacity only.
         foreach (var zone in zones
-                     .Where(z => z.IsActive && z.ZoneType == ZoneType.SINGLE_OCCUPANCY)
+                     .Where(z => z.IsActive && z.ZoneType == ZoneType.JUNCTION)
                      .OrderBy(z => z.Code, StringComparer.Ordinal))
         {
             // Restrict to edges that belong to THIS zone — never pull every IsJunction edge into every group.
@@ -648,8 +868,10 @@ public static class TrafficGraphCompiler
     {
         _ = issues;
         var edgeById = edges.ToDictionary(e => e.Id);
+        // Only capacity-1 mutexes already cover a pair. Lane (Capacity=MaxValue) is tracking-only and must
+        // not suppress PhysicalOverlap — otherwise crossing chords that share a lane code get no lock.
         var coveredPairs = new HashSet<(int, int)>();
-        foreach (var resource in resources)
+        foreach (var resource in resources.Where(r => r.Capacity <= 1))
         {
             var ids = resource.EdgeIds.OrderBy(id => id).ToArray();
             for (var i = 0; i < ids.Length; i++)
@@ -982,13 +1204,85 @@ public static class TrafficGraphCompiler
         return ([.. offsets], [.. flat]);
     }
 
-    private static bool HasHeadingChange(
+    /// <summary>
+    /// Turn-in-place footprint check is required for holding points, real pivots at stations, and nodes where a
+    /// non-connector (lane/junction) edge participates in a branch or real heading change.
+    /// Drive-in / reverse-out (same undirected access) and small heading changes (≤30°) need path HalfWidth only.
+    /// Connector-only chain kinks are covered by edge MinClearanceAlong ≥ HalfWidth.
+    /// </summary>
+    private static bool RequiresTurnClearance(
         int nodeId,
         List<TrafficEdge> edges,
+        Dictionary<int, RouteGraphNode> nodes,
+        HashSet<int> stationNodeIds,
+        HashSet<int> holding)
+    {
+        if (holding.Contains(nodeId) && !stationNodeIds.Contains(nodeId))
+        {
+            return true;
+        }
+
+        var incident = edges.Where(e => e.StartId == nodeId || e.EndId == nodeId).ToList();
+        if (incident.Count == 0)
+        {
+            return false;
+        }
+
+        if (incident.All(e => e.IsConnector) && !stationNodeIds.Contains(nodeId))
+        {
+            return false;
+        }
+
+        if (stationNodeIds.Contains(nodeId))
+        {
+            // Station pivot need is decided in the occupancy pass via StationManeuverClassifier
+            // (yaw / continuous arc / true pivot). Do not force TurnRadius from Δheading alone.
+            return false;
+        }
+
+        var nonConnector = incident.Where(e => !e.IsConnector).ToList();
+        var neighbours = new HashSet<int>();
+        foreach (var e in nonConnector)
+        {
+            neighbours.Add(e.StartId == nodeId ? e.EndId : e.StartId);
+        }
+
+        if (neighbours.Count >= 3)
+        {
+            return true;
+        }
+
+        return HasRealPivot(nodeId, incident, nodes, requireNonConnector: true);
+    }
+
+    /// <summary>
+    /// Station needs TurnRadius only when some through-maneuver is a real pivot (heading Δ &gt; 30°)
+    /// that is not reverse along the same undirected access edge.
+    /// </summary>
+    private static bool StationRequiresPivot(
+        int nodeId,
+        List<TrafficEdge> incident,
         Dictionary<int, RouteGraphNode> nodes)
     {
-        var incoming = edges.Where(e => e.EndId == nodeId).ToList();
-        var outgoing = edges.Where(e => e.StartId == nodeId).ToList();
+        var incoming = incident.Where(e => e.EndId == nodeId).ToList();
+        var outgoing = incident.Where(e => e.StartId == nodeId).ToList();
+        if (incoming.Count == 0 || outgoing.Count == 0)
+        {
+            // Dead-end bay: approach then reverse out on the same undirected connector — no spin.
+            return false;
+        }
+
+        return HasRealPivot(nodeId, incident, nodes, requireNonConnector: false);
+    }
+
+    private static bool HasRealPivot(
+        int nodeId,
+        List<TrafficEdge> incident,
+        Dictionary<int, RouteGraphNode> nodes,
+        bool requireNonConnector)
+    {
+        var incoming = incident.Where(e => e.EndId == nodeId).ToList();
+        var outgoing = incident.Where(e => e.StartId == nodeId).ToList();
         if (incoming.Count == 0 || outgoing.Count == 0)
         {
             return false;
@@ -1003,7 +1297,12 @@ public static class TrafficGraphCompiler
             {
                 if (oute.EndId == inn.StartId)
                 {
-                    continue; // reverse of same undirected lane
+                    continue; // reverse of same undirected segment (drive-in / reverse-out)
+                }
+
+                if (requireNonConnector && inn.IsConnector && oute.IsConnector)
+                {
+                    continue;
                 }
 
                 var c = nodes[oute.StartId];

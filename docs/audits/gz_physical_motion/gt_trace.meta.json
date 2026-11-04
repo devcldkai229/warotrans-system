@@ -1,0 +1,7 @@
+{
+  "ns": "sim01",
+  "world": "map_one_v001",
+  "model": "warotrans_sim_01",
+  "out": "/mnt/e/programming/my_project/warotrans-system/docs/audits/gz_physical_motion/gt_trace.csv",
+  "note": "gz_* from `gz model -p` when available; odom_* is GZ OdometryPublisher via bridge"
+}

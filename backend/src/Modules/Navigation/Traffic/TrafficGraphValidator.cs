@@ -32,7 +32,8 @@ public static class TrafficGraphValidator
         CompiledTrafficGraph graph,
         IReadOnlyList<TrafficIssue>? extraIssues = null,
         IReadOnlyList<TrafficZoneMeta>? zoneMeta = null,
-        IReadOnlySet<string>? requiredStationCodes = null)
+        IReadOnlySet<string>? requiredStationCodes = null,
+        IReadOnlyList<RouteGraph.RouteGraphZoneInput>? zones = null)
     {
         var issues = new List<TrafficIssue>();
         if (extraIssues is not null)
@@ -42,11 +43,22 @@ public static class TrafficGraphValidator
 
         issues.AddRange(graph.CompileIssues);
 
+        // Endpoints already root-caused as SERVICE_ACCESS_BLOCKED should not spam cascade codes.
+        var serviceAccessBlocked = issues
+            .Where(i => i.Code == TrafficGraphCompiler.ServiceAccessBlocked)
+            .SelectMany(i => i.RelatedCodes)
+            .ToHashSet(StringComparer.Ordinal);
+
         var stationNodes = graph.Stations.Select(s => s.NodeId).ToHashSet();
         var endpointNodes = graph.Nodes.Where(n => n.EndpointCodes.Length > 0).ToList();
 
         foreach (var station in graph.Stations)
         {
+            if (serviceAccessBlocked.Contains(station.EndpointCode))
+            {
+                continue;
+            }
+
             var reachableFromSelf = graph.Outgoing(station.NodeId).Any() ||
                                     graph.Edges.Any(e => e.EndId == station.NodeId);
             if (!reachableFromSelf && graph.Edges.Length > 0)
@@ -62,9 +74,19 @@ public static class TrafficGraphValidator
         // Pairwise station reachability.
         foreach (var from in endpointNodes)
         {
+            if (from.EndpointCodes.Any(serviceAccessBlocked.Contains))
+            {
+                continue;
+            }
+
             foreach (var to in endpointNodes)
             {
                 if (from.Id == to.Id)
+                {
+                    continue;
+                }
+
+                if (to.EndpointCodes.Any(serviceAccessBlocked.Contains))
                 {
                     continue;
                 }
@@ -93,24 +115,29 @@ public static class TrafficGraphValidator
         }
 
         // Ambiguous intersection: degree ≥ 3 without critical/junction labeling.
+        // Pure IsConnector waypoints (BFS access chains) are not map intersections.
         foreach (var node in graph.Nodes)
         {
-            var incident = graph.Edges.Count(e => e.StartId == node.Id || e.EndId == node.Id);
-            if (incident < 3)
+            var incidentEdges = graph.Edges.Where(e => e.StartId == node.Id || e.EndId == node.Id).ToList();
+            if (incidentEdges.Count < 3)
             {
                 continue;
             }
 
-            var labeled = graph.Edges.Any(e =>
-                (e.StartId == node.Id || e.EndId == node.Id) &&
-                (e.IsJunction || e.InCriticalCorridor || e.SingleOccupancy || e.NoStop));
+            if (incidentEdges.All(e => e.IsConnector))
+            {
+                continue;
+            }
+
+            var labeled = incidentEdges.Any(e =>
+                e.IsJunction || e.InCriticalCorridor || e.SingleOccupancy || e.NoStop);
             if (!labeled)
             {
                 issues.Add(new TrafficIssue(
                     AmbiguousIntersection,
                     TrafficIssueSeverity.Warning,
                     string.Create(CultureInfo.InvariantCulture,
-                        $"Node {node.Id} at ({node.X:0.###}, {node.Y:0.###}) has {incident} incidents without a JUNCTION zone."),
+                        $"Node {node.Id} at ({node.X:0.###}, {node.Y:0.###}) has {incidentEdges.Count} incidents without a JUNCTION zone."),
                     node.EndpointCodes.Length > 0 ? node.EndpointCodes.ToArray() : [$"node:{node.Id}"]));
             }
         }
@@ -140,6 +167,11 @@ public static class TrafficGraphValidator
             }
             else if (endpointNodes.Count > 1)
             {
+                if (node.EndpointCodes.Any(serviceAccessBlocked.Contains))
+                {
+                    continue;
+                }
+
                 issues.Add(new TrafficIssue(
                     OneWayTrap,
                     TrafficIssueSeverity.Error,
@@ -156,27 +188,30 @@ public static class TrafficGraphValidator
             var node = graph.NodeById[station.NodeId];
             var criticalEdges = graph.Edges.Where(e =>
                 (e.StartId == node.Id || e.EndId == node.Id) && e.InCriticalCorridor).ToList();
-            if (criticalEdges.Any(e => e.NoStop))
+
+            // STOP_IN_NO_STOP = stop footprint intersects a NO_STOP polygon.
+            // Traversing a NoStop-tagged access connector (midpoint in NO_STOP) is allowed;
+            // standing with HalfWidth disk inside/near NO_STOP is not.
+            if (StationStopIntersectsNoStop(node.X, node.Y, graph.Footprint.HalfWidth, zones, criticalEdges))
             {
                 issues.Add(new TrafficIssue(
                     StopInNoStop,
                     TrafficIssueSeverity.Error,
-                    $"Station {station.EndpointCode} lies on a NO_STOP corridor.",
+                    $"Station {station.EndpointCode} stop footprint intersects a NO_STOP zone.",
                     [station.EndpointCode]));
             }
 
-            if (criticalEdges.Any(e => e.IsJunction || e.SingleOccupancy))
+            // Only warn when the station itself sits on a junction/SO edge — not merely bay-adjacent
+            // via an IsConnector spur that touches a junction corridor.
+            var onJunctionLane = criticalEdges.Any(e =>
+                !e.IsConnector && (e.IsJunction || e.SingleOccupancy));
+            if (onJunctionLane && !station.IsServiceStop)
             {
-                // Station node inside junction area.
-                var inJunction = criticalEdges.Any(e => e.IsJunction || e.SingleOccupancy);
-                if (inJunction && !station.IsServiceStop)
-                {
-                    issues.Add(new TrafficIssue(
-                        StopInJunction,
-                        TrafficIssueSeverity.Warning,
-                        $"Station {station.EndpointCode} is adjacent to a junction/single-occupancy corridor.",
-                        [station.EndpointCode]));
-                }
+                issues.Add(new TrafficIssue(
+                    StopInJunction,
+                    TrafficIssueSeverity.Warning,
+                    $"Station {station.EndpointCode} lies on a junction/single-occupancy corridor.",
+                    [station.EndpointCode]));
             }
         }
 
@@ -333,5 +368,82 @@ public static class TrafficGraphValidator
             graph.Nodes.Count(n => n.IsHoldingPoint),
             graph.Stoplines.Length,
             graph.Stations.Length);
+    }
+
+    /// <summary>
+    /// True when the station stop disk (HalfWidth) intersects a NO_STOP polygon.
+    /// Without zone rings: fall back to a non-connector NoStop critical edge under the station
+    /// (through-lane stop). Connector-only NoStop tags (access spur crossing NO_STOP) do not count.
+    /// </summary>
+    private static bool StationStopIntersectsNoStop(
+        double x,
+        double y,
+        double halfWidth,
+        IReadOnlyList<RouteGraph.RouteGraphZoneInput>? zones,
+        List<TrafficEdge> criticalIncident)
+    {
+        if (zones is not null)
+        {
+            foreach (var zone in zones.Where(z => z.IsActive && z.ZoneType == ZoneType.NO_STOP))
+            {
+                if (PointInRing(zone.Ring, x, y) || DistToRing(zone.Ring, x, y) <= halfWidth + 1e-9)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return criticalIncident.Any(e => e.NoStop && !e.IsConnector);
+    }
+
+    private static bool PointInRing(IReadOnlyList<RouteGraph.RoutePoint> ring, double x, double y)
+    {
+        var inside = false;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+        {
+            var xi = ring[i].X;
+            var yi = ring[i].Y;
+            var xj = ring[j].X;
+            var yj = ring[j].Y;
+            var intersect = ((yi > y) != (yj > y)) &&
+                            (x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi);
+            if (intersect)
+            {
+                inside = !inside;
+            }
+        }
+
+        return inside;
+    }
+
+    private static double DistToRing(IReadOnlyList<RouteGraph.RoutePoint> ring, double x, double y)
+    {
+        var best = double.PositiveInfinity;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            best = Math.Min(best, DistPointSeg(x, y, a.X, a.Y, b.X, b.Y));
+        }
+
+        return best;
+    }
+
+    private static double DistPointSeg(double px, double py, double ax, double ay, double bx, double by)
+    {
+        var abx = bx - ax;
+        var aby = by - ay;
+        var t = abx * abx + aby * aby;
+        if (t < 1e-18)
+        {
+            return Math.Sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay));
+        }
+
+        var u = Math.Clamp(((px - ax) * abx + (py - ay) * aby) / t, 0, 1);
+        var qx = ax + u * abx;
+        var qy = ay + u * aby;
+        return Math.Sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
     }
 }

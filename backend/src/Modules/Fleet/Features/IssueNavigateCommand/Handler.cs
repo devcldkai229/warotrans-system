@@ -91,7 +91,8 @@ public sealed class IssueNavigateCommandHandler(
                     EdgeIds = route.EdgeIds?.ToList() ?? []
                 }
                 : null,
-            Authority = request.Authority
+            Authority = request.Authority,
+            TimeoutSeconds = request.TimeoutSeconds is > 0 ? request.TimeoutSeconds : null
         };
         var payloadJson = JsonSerializer.Serialize(posePayload, JsonOptions);
 

@@ -163,6 +163,8 @@ public sealed class JobExecutionEngineTests
         Assert.NotNull(job.CompletedAt);
         Assert.All(await StepsAsync(jobId), s => Assert.Equal(JobStepStatus.COMPLETED, s.Status));
         Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.DELIVERED, c.Status));
+        Assert.All(await _db.JobTasks.Where(t => t.JobId == jobId).ToListAsync(),
+            t => Assert.Equal(JobTaskStatus.COMPLETED, t.Status));
         Assert.Equal(4, await _db.HandoverConfirmations.CountAsync());
 
         // Transportation receives every container transition.
@@ -394,6 +396,177 @@ public sealed class JobExecutionEngineTests
         Assert.Equal("payload_recovery_required", ex.Code);
     }
 
+    // ------------------------------------------------------------------ Semantic traffic mode (Nav2 plans, backend grants)
+
+    /// <summary>
+    /// Engine wired like the Host with Traffic:Mode=Semantic. The bundle directory holds a manifest for
+    /// <paramref name="bundleMapVersionId"/> (default: the Job's map).
+    /// </summary>
+    private JobExecutionEngine SemanticEngine(Guid? bundleMapVersionId = null)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "wt-semantic-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "semantic_manifest.json"), JsonSerializer.Serialize(new
+        {
+            mapCode = "MAP-TEST",
+            mapVersionId = bundleMapVersionId ?? _mapVersionId,
+            semanticMapFingerprint = "fp-test"
+        }));
+        File.WriteAllText(Path.Combine(dir, "single_occupancy.json"), """{"zones":[]}""");
+
+        var options = Microsoft.Extensions.Options.Options.Create(new WaroTrans.Fleet.Traffic.TrafficOptions
+        {
+            Mode = WaroTrans.Fleet.Traffic.TrafficCoordinatorMode.Semantic,
+            SemanticMapDirectory = dir,
+            EventLogCapacity = 64
+        });
+        _semanticTraffic ??= new WaroTrans.Fleet.Traffic.SegmentedTrafficCoordinator(
+            options, new WaroTrans.Fleet.Traffic.TrafficEventOutbox(),
+            NullLogger<WaroTrans.Fleet.Traffic.SegmentedTrafficCoordinator>.Instance);
+        return new JobExecutionEngine(
+            _db, _fleet, _navigation, _requests, new StepInputResolver(), _events,
+            NullLogger<JobExecutionEngine>.Instance,
+            trafficOptions: options,
+            segmentedTraffic: _semanticTraffic);
+    }
+
+    private WaroTrans.Fleet.Traffic.SegmentedTrafficCoordinator? _semanticTraffic;
+
+    private RobotCommandLifecycleJobStepHandler SemanticResultHandler() =>
+        new(_db, SemanticEngine(), _events, NullLogger<RobotCommandLifecycleJobStepHandler>.Instance);
+
+    private Task SemanticRobotResultAsync(Guid stepId, string outcome = "SUCCEEDED", Guid? commandId = null) =>
+        SemanticResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
+            commandId ?? _fleet.Commands.Last(c => c.JobStepId == stepId).CommandId, _fleet.RobotId, "RBT-SIM-01",
+            "NAVIGATE_TO_POSE", "COMPLETED", null, stepId, outcome, outcome == "SUCCEEDED" ? null : "NAV_FAILED",
+            RobotCommandLifecycleChanged.Phases.Result));
+
+    [Fact]
+    public async Task Semantic_move_waits_for_the_robot_before_asking_staff()
+    {
+        var jobId = await ProvisionAsync();
+
+        await SemanticEngine().StartAsync(jobId, null);
+
+        var started = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Null(started.FailureMessage);
+        // Was: the Semantic branch reported the MOVE as finished, so PICKUP_CONFIRM was armed while driving.
+        var steps = await StepsAsync(jobId);
+        Assert.Equal(JobStepStatus.EXECUTING, steps.First(s => s.Key == "MOVE_PICKUP").Status);
+        Assert.All(steps.Where(s => s.Key == "PICKUP_CONFIRM"), s => Assert.Equal(JobStepStatus.PENDING, s.Status));
+        Assert.Empty(_fleet.InteractionRequests);
+        Assert.Single(_fleet.Commands);
+
+        var move = await _db.JobSteps.FirstAsync(s => s.Id == _fleet.Commands[0].JobStepId);
+        Assert.Equal(_fleet.Commands[0].CommandId, move.OutputValues["robotCommandId"].GetGuid());
+        Assert.Equal("Semantic", move.OutputValues["trafficMode"].GetString());
+
+        await SemanticRobotResultAsync(move.Id);
+
+        steps = await StepsAsync(jobId);
+        Assert.Equal(JobStepStatus.WAITING, steps.First(s => s.Key == "PICKUP_CONFIRM").Status);
+        Assert.Single(_fleet.InteractionRequests);
+    }
+
+    [Fact]
+    public async Task Semantic_job_with_two_containers_runs_to_completion_and_closes_every_task()
+    {
+        var jobId = await ProvisionAsync();
+        await SemanticEngine().StartAsync(jobId, null);
+
+        await SemanticRobotResultAsync(_fleet.Commands[^1].JobStepId);                  // at A
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        Assert.Equal(9.0, _fleet.Commands[^1].X);                                       // → D
+        await SemanticRobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        Assert.Equal(9.5, _fleet.Commands[^1].X);                                       // → E
+        await SemanticRobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).Include(j => j.JobTasks)
+            .SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.COMPLETED, job.Status);
+        Assert.Equal(3, _fleet.Commands.Count);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.DELIVERED, c.Status));
+        // Was: the stop tasks whose last step is a MOVE stayed RUNNING after the Job completed.
+        Assert.All(job.JobTasks, t => Assert.Equal(JobTaskStatus.COMPLETED, t.Status));
+        Assert.Equal(["ASSIGNED", "ONBOARD", "DELIVERED"],
+            _events.Of<JobContainerStatusChanged>().Where(e => e.ContainerId == C2).Select(e => e.Status));
+    }
+
+    [Fact]
+    public async Task Semantic_move_against_a_bundle_of_another_map_fails_without_moving()
+    {
+        var jobId = await ProvisionAsync();
+
+        await SemanticEngine(bundleMapVersionId: Guid.NewGuid()).StartAsync(jobId, null);
+
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.FAILED, job.Status);
+        Assert.Equal("semantic_map_mismatch", job.FailureCode);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task Semantic_late_result_of_a_superseded_command_does_not_complete_the_resumed_move()
+    {
+        var jobId = await ProvisionAsync();
+        await MovesRequestReassignAsync();
+        await SemanticEngine().StartAsync(jobId, null);
+        var (_, _, _, moveStepId, oldCommand) = _fleet.Commands[0];
+        await SemanticResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
+            oldCommand, _fleet.RobotId, "RBT-SIM-01", "NAVIGATE_TO_POSE", "FAILED",
+            null, moveStepId, null, "robot_offline", RobotCommandLifecycleChanged.Phases.OfflineAbort));
+        await SemanticEngine().ResumeAsync(jobId, null);
+
+        await SemanticRobotResultAsync(moveStepId, commandId: oldCommand);
+        Assert.Equal(JobStepStatus.EXECUTING, (await StepsAsync(jobId)).First(s => s.Key == "MOVE_PICKUP").Status);
+
+        await SemanticRobotResultAsync(moveStepId);
+        Assert.Equal(JobStepStatus.WAITING, (await StepsAsync(jobId)).First(s => s.Key == "PICKUP_CONFIRM").Status);
+    }
+
+    [Fact]
+    public async Task Cancelling_a_semantic_job_stops_the_robot_and_releases_the_containers()
+    {
+        var jobId = await ProvisionAsync();
+        await SemanticEngine().StartAsync(jobId, null);
+        var running = _fleet.Commands[^1];
+
+        await SemanticEngine().CancelJobAsync(jobId, "operator test");
+
+        // Was: no CANCEL left the backend outside Active mode, so the robot kept driving to the goal.
+        Assert.Equal([(_fleet.RobotId, running.CommandId)], _fleet.Cancels);
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.CANCELLED, job.Status);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.CANCELLED, c.Status));
+        Assert.Contains(_events.Of<JobContainerStatusChanged>(), e => e.ContainerId == C1 && e.Status == "CANCELLED");
+    }
+
+    [Fact]
+    public async Task Move_command_timeout_input_reaches_the_robot_command()
+    {
+        var jobId = await ProvisionAsync();
+        foreach (var move in await _db.WorkflowSteps.Where(s => s.StepType == StepType.MOVE).ToListAsync())
+        {
+            move.InputBindings = new Dictionary<string, WaroTrans.WorkflowExecution.ValueObjects.StepInputBinding>(move.InputBindings)
+            {
+                ["commandTimeoutSeconds"] = new()
+                {
+                    SourceType = WaroTrans.BuildingBlocks.Enums.BindingSourceType.CONSTANT,
+                    ConstantValue = JsonSerializer.SerializeToElement(360)
+                }
+            };
+        }
+
+        await _db.SaveChangesAsync();
+
+        await SemanticEngine().StartAsync(jobId, null);
+
+        Assert.Equal([360.0], _fleet.Timeouts);
+    }
+
     private async Task PauseAsync(Guid jobId)
     {
         var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
@@ -446,11 +619,22 @@ public sealed class JobExecutionEngineTests
             Guid jobId,
             Guid jobStepId,
             CancellationToken cancellationToken = default,
-            RouteGrantSnapshot? route = null)
+            RouteGrantSnapshot? route = null,
+            double? timeoutSeconds = null)
         {
             var commandId = Guid.NewGuid();
             Commands.Add((robotId, x, y, jobStepId, commandId));
+            Timeouts.Add(timeoutSeconds);
             return Task.FromResult(commandId);
+        }
+
+        public List<double?> Timeouts { get; } = [];
+        public List<(Guid RobotId, Guid CommandId)> Cancels { get; } = [];
+
+        public Task<bool> CancelNavigationAsync(Guid robotId, Guid navigateCommandId, CancellationToken cancellationToken = default)
+        {
+            Cancels.Add((robotId, navigateCommandId));
+            return Task.FromResult(true);
         }
 
         public Task RequestHumanInteractionAsync(

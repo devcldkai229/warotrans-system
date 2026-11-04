@@ -85,28 +85,25 @@ public class RouteGraphBuilderTests
     }
 
     [Fact]
-    public void Endpoint_beside_a_lane_is_an_error_without_synthetic_spur()
+    public void Endpoint_beside_a_lane_gets_foot_spur_connectors()
     {
-        // 0.2 m off the lane (> vertex snap): no foot↔endpoint connector (would reverse ONE_WAY).
+        // 0.2 m off the lane (> vertex snap): straight access spur, pose kept.
         var result = Build([Lane("E-1", Both, (0, 0), (2, 0))], Stop("EP-A", 1, 0.2), Stop("EP-END", 2, 0));
 
         Assert.Equal(["EP-A"], NodeAt(result.Graph, 1, 0.2).EndpointCodes);
-        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
-        var issue = Assert.Single(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
-        Assert.Equal(["EP-A"], issue.RelatedCodes);
-        Assert.True(result.HasErrors);
+        Assert.True(EdgeBetween(result.Graph, (1, 0), (1, 0.2)) is { IsConnector: true });
+        Assert.True(EdgeBetween(result.Graph, (1, 0.2), (1, 0)) is { IsConnector: true });
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
     }
 
     [Fact]
-    public void Endpoint_further_than_vertex_snap_is_an_error()
+    public void Endpoint_further_than_vertex_snap_still_attaches_via_spur()
     {
         var result = Build([Lane("E-1", Both, (0, 0), (2, 0))], Stop("EP-FAR", 1, 0.6));
 
-        var issue = Assert.Single(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
-        Assert.Equal(RouteGraphIssueSeverity.Error, issue.Severity);
-        Assert.Equal(["EP-FAR"], issue.RelatedCodes);
-        Assert.Contains("0.60 m", issue.Message);
-        Assert.True(result.HasErrors);
+        Assert.Equal(["EP-FAR"], NodeAt(result.Graph, 1, 0.6).EndpointCodes);
+        Assert.Contains(result.Graph.Edges, e => e.IsConnector);
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
     }
 
     [Fact]
@@ -300,29 +297,40 @@ public class RouteGraphBuilderTests
         Assert.Empty(result.Issues);
     }
 
-    // ------------------------------------------------------------------ junction zones (SINGLE_OCCUPANCY / NO_STOP)
+    // ------------------------------------------------------------------ junction zones (JUNCTION only)
 
     private static RouteGraphEdge? EdgeBetween(RouteGraph graph, (double X, double Y) from, (double X, double Y) to) =>
         graph.Edges.SingleOrDefault(e => e.StartId == NodeAt(graph, from.X, from.Y).Id && e.EndId == NodeAt(graph, to.X, to.Y).Id);
 
     [Fact]
-    public void Single_occupancy_zone_links_two_lanes_that_stop_at_it_in_the_lane_direction()
+    public void Single_occupancy_zone_does_not_link_lanes()
     {
-        // The intersection is drawn as a zone only: one westbound lane ends at its east edge, the next starts at its west edge.
         var result = BuildWithZones(
             [Lane("L-EAST", OneWay, (3, 0), (2, 0)), Lane("L-WEST", OneWay, (1, 0), (0, 0))],
             [Zone("Z-CROSS", ZoneType.SINGLE_OCCUPANCY, 1, -0.5, 2, 0.5)],
             Stop("EP-START", 3, 0), Stop("EP-END", 0, 0));
 
+        Assert.Null(EdgeBetween(result.Graph, (2, 0), (1, 0)));
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsJunction);
+    }
+
+    [Fact]
+    public void Junction_zone_links_two_lanes_that_stop_at_it_in_the_lane_direction()
+    {
+        var result = BuildWithZones(
+            [Lane("L-EAST", OneWay, (3, 0), (2, 0)), Lane("L-WEST", OneWay, (1, 0), (0, 0))],
+            [Zone("Z-CROSS", ZoneType.JUNCTION, 1, -0.5, 2, 0.5)],
+            Stop("EP-START", 3, 0), Stop("EP-END", 0, 0));
+
         var link = EdgeBetween(result.Graph, (2, 0), (1, 0));
         Assert.NotNull(link);
         Assert.True(link.IsJunction);
-        Assert.True(link.SingleOccupancy);
+        Assert.False(link.SingleOccupancy);
         Assert.Equal(["Z-CROSS"], link.ZoneCodes);
-        Assert.Null(EdgeBetween(result.Graph, (1, 0), (2, 0)));                 // never against the one-way lanes
+        Assert.Null(EdgeBetween(result.Graph, (1, 0), (2, 0)));
         Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.DeadEndNode);
         var unreachable = Assert.Single(result.Issues, i => i.Code == RouteGraphBuilder.EndpointUnreachable);
-        Assert.Equal(["EP-END", "EP-START"], unreachable.RelatedCodes);       // only the way back is missing (one-way)
+        Assert.Equal(["EP-END", "EP-START"], unreachable.RelatedCodes);
     }
 
     [Fact]
@@ -333,43 +341,41 @@ public class RouteGraphBuilderTests
                 Lane("IN-N", OneWay, (1.5, 3), (1.5, 2)), Lane("OUT-S", OneWay, (1.5, 1), (1.5, 0)),
                 Lane("IN-E", OneWay, (3, 1.5), (2, 1.5)), Lane("OUT-W", OneWay, (1, 1.5), (0, 1.5))
             ],
-            [Zone("Z-X", ZoneType.SINGLE_OCCUPANCY, 1, 1, 2, 2)]);
+            [Zone("Z-X", ZoneType.JUNCTION, 1, 1, 2, 2)]);
 
         var links = result.Graph.Edges.Where(e => e.IsJunction).ToList();
-        Assert.Equal(4, links.Count);                                           // N→S, N→W, E→S, E→W
+        Assert.Equal(4, links.Count);
         Assert.NotNull(EdgeBetween(result.Graph, (1.5, 2), (1.5, 1)));
         Assert.NotNull(EdgeBetween(result.Graph, (1.5, 2), (1, 1.5)));
         Assert.NotNull(EdgeBetween(result.Graph, (2, 1.5), (1.5, 1)));
         Assert.NotNull(EdgeBetween(result.Graph, (2, 1.5), (1, 1.5)));
-        Assert.Null(EdgeBetween(result.Graph, (1.5, 1), (1.5, 2)));            // no link into an incoming lane
+        Assert.Null(EdgeBetween(result.Graph, (1.5, 1), (1.5, 2)));
     }
 
     [Theory]
-    [InlineData(0.10, true)]   // hand-drawn lane stopping 10 cm before the zone edge still reaches it
-    [InlineData(0.30, false)]  // 30 cm short: not part of the junction
+    [InlineData(0.10, true)]
+    [InlineData(0.30, false)]
     public void Lane_end_just_outside_the_junction_still_counts(double gap, bool linked)
     {
         var result = BuildWithZones(
             [Lane("L-IN", OneWay, (3, 0), (2 + gap, 0)), Lane("L-OUT", OneWay, (1 - gap, 0), (0, 0))],
-            [Zone("Z-CROSS", ZoneType.NO_STOP, 1, -0.5, 2, 0.5)]);
+            [Zone("Z-CROSS", ZoneType.JUNCTION, 1, -0.5, 2, 0.5)]);
 
-        Assert.Equal(linked, EdgeBetween(result.Graph, (2 + gap, 0), (1 - gap, 0)) is { IsJunction: true, NoStop: true });
+        Assert.Equal(linked, EdgeBetween(result.Graph, (2 + gap, 0), (1 - gap, 0)) is { IsJunction: true });
     }
 
     [Fact]
     public void Links_never_leave_an_l_shaped_junction()
     {
-        // L-shaped zone: bottom arm x 0..3 / y 0..1, left arm x 0..1 / y 0..3. The straight line from the top of the left
-        // arm to the end of the bottom arm cuts the missing corner, so only the links inside the L exist.
-        var zone = new RouteGraphZoneInput("Z-L", ZoneType.SINGLE_OCCUPANCY,
+        var zone = new RouteGraphZoneInput("Z-L", ZoneType.JUNCTION,
             [new(0, 0), new(3, 0), new(3, 1), new(1, 1), new(1, 3), new(0, 3), new(0, 0)], null, true);
         var result = BuildWithZones(
             [Lane("IN-TOP", OneWay, (0.5, 4), (0.5, 3)), Lane("OUT-RIGHT", OneWay, (3, 0.5), (4, 0.5)),
              Lane("OUT-BOTTOM", OneWay, (0.5, 0), (0.5, -1))],
             [zone]);
 
-        Assert.Null(EdgeBetween(result.Graph, (0.5, 3), (3, 0.5)));            // would leave the L
-        Assert.NotNull(EdgeBetween(result.Graph, (0.5, 3), (0.5, 0)));         // straight down the left arm
+        Assert.Null(EdgeBetween(result.Graph, (0.5, 3), (3, 0.5)));
+        Assert.NotNull(EdgeBetween(result.Graph, (0.5, 3), (0.5, 0)));
     }
 
     [Fact]
@@ -377,22 +383,26 @@ public class RouteGraphBuilderTests
     {
         var result = BuildWithZones(
             [Lane("L-IN", OneWay, (3, 0), (2, 0)), Lane("L-OUT", OneWay, (1, 0), (0, 0))],
-            [Zone("Z-CROSS", ZoneType.SINGLE_OCCUPANCY, 1, -0.5, 2, 0.5), Zone("Z-PILLAR", ZoneType.KEEP_OUT, 1.4, -0.1, 1.6, 0.1)]);
+            [Zone("Z-CROSS", ZoneType.JUNCTION, 1, -0.5, 2, 0.5), Zone("Z-PILLAR", ZoneType.KEEP_OUT, 1.4, -0.1, 1.6, 0.1)]);
 
         Assert.DoesNotContain(result.Graph.Edges, e => e.IsJunction);
     }
 
     [Fact]
-    public void Overlapping_no_stop_and_single_occupancy_zones_give_one_link_with_both_labels()
+    public void Overlapping_policy_zones_label_junction_link_without_creating_extra_connect()
     {
         var result = BuildWithZones(
             [Lane("L-IN", OneWay, (3, 0), (2, 0)), Lane("L-OUT", OneWay, (1, 0), (0, 0))],
-            [Zone("Z-ONE", ZoneType.SINGLE_OCCUPANCY, 1, -0.5, 2, 0.5), Zone("Z-NOSTOP", ZoneType.NO_STOP, 0.95, -0.55, 2.05, 0.55)]);
+            [
+                Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 0.5),
+                Zone("Z-ONE", ZoneType.SINGLE_OCCUPANCY, 1, -0.5, 2, 0.5),
+                Zone("Z-NOSTOP", ZoneType.NO_STOP, 0.95, -0.55, 2.05, 0.55)
+            ]);
 
         var link = Assert.Single(result.Graph.Edges, e => e.IsJunction);
         Assert.True(link.SingleOccupancy);
         Assert.True(link.NoStop);
-        Assert.Equal(["Z-NOSTOP", "Z-ONE"], link.ZoneCodes);
+        Assert.Equal(["Z-J", "Z-NOSTOP", "Z-ONE"], link.ZoneCodes);
         using var json = JsonDocument.Parse(RouteGraphGeoJsonWriter.Write(result.Graph));
         Assert.Contains(json.RootElement.GetProperty("features").EnumerateArray(),
             f => f.GetProperty("properties").GetProperty("metadata").TryGetProperty("junction", out var j) && j.GetBoolean());
@@ -429,41 +439,54 @@ public class RouteGraphBuilderTests
     }
 
     [Fact]
-    public void Endpoint_beside_a_junction_zone_is_an_error_without_synthetic_spur()
+    public void Endpoint_beside_a_junction_zone_uses_junction_access_not_only_lane_foot()
     {
-        // EP-IN is outside the junction: no exit-point connector (would invent a two-way spur).
+        // EP-IN is outside the polygon but within MaxEndpointAccessDistance → portal access (IsConnector+IsJunction).
         var result = BuildWithZones(
             [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (2, 0), (3, 0))],
             [Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 0.5)],
             Stop("EP-A", 0, 0), Stop("EP-B", 3, 0), Stop("EP-IN", 1.5, -0.8));
 
-        Assert.Contains(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar && i.RelatedCodes.Contains("EP-IN"));
-        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
-        Assert.True(EdgeBetween(result.Graph, (1, 0), (2, 0)) is { IsJunction: true }); // lanes still linked
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.Equal(["EP-IN"], NodeAt(result.Graph, 1.5, -0.8).EndpointCodes);
+        Assert.Contains(result.Graph.Edges, e => e.IsConnector && e.IsJunction);
+        Assert.True(EdgeBetween(result.Graph, (1, 0), (2, 0)) is { IsJunction: true });
     }
 
     [Fact]
-    public void Endpoint_inside_a_junction_zone_becomes_a_junction_node()
+    public void Endpoint_inside_a_junction_zone_becomes_an_access_node()
     {
         var result = BuildWithZones(
             [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (2, 0), (3, 0))],
-            [Zone("Z-J", ZoneType.SINGLE_OCCUPANCY, 1, -0.5, 2, 1.0)],
+            [Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 1.0)],
             Stop("EP-A", 0, 0), Stop("EP-B", 3, 0), Stop("EP-MID", 1.5, 0.7));
 
         Assert.Empty(result.Issues);
         Assert.Equal(["EP-MID"], NodeAt(result.Graph, 1.5, 0.7).EndpointCodes);
-        Assert.True(EdgeBetween(result.Graph, (1, 0), (1.5, 0.7)) is { IsJunction: true, SingleOccupancy: true });
-        Assert.True(EdgeBetween(result.Graph, (1.5, 0.7), (2, 0)) is { IsJunction: true });
-        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+        Assert.True(EdgeBetween(result.Graph, (1, 0), (1.5, 0.7)) is { IsJunction: true, IsConnector: true });
+        Assert.True(EdgeBetween(result.Graph, (1.5, 0.7), (2, 0)) is { IsJunction: true, IsConnector: true });
+    }
+
+    [Fact]
+    public void Endpoint_far_from_lanes_but_inside_large_junction_still_attaches()
+    {
+        // ~1.5 m from lanes; must not depend on EndpointSnapDistance (0.5 m).
+        var result = BuildWithZones(
+            [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (5, 0), (6, 0))],
+            [Zone("Z-J", ZoneType.JUNCTION, 0.5, -2, 5.5, 2)],
+            Stop("EP-A", 0, 0), Stop("EP-B", 6, 0), Stop("EP-DOCK", 3, 1.5));
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.Equal(["EP-DOCK"], NodeAt(result.Graph, 3, 1.5).EndpointCodes);
+        Assert.Contains(result.Graph.Edges, e => e.IsConnector && e.IsJunction);
     }
 
     [Fact]
     public void Station_inside_zone_keeps_the_one_way_lane_directions()
     {
-        // EP-X inside the zone: arrival → station → departure only (no reverse against ONE_WAY).
         var result = BuildWithZones(
             [Lane("L-IN", OneWay, (3, 0), (2, 0)), Lane("L-OUT", OneWay, (1, 0), (0, 0))],
-            [Zone("Z-J", ZoneType.NO_STOP, 1, -0.5, 2, 0.5)],
+            [Zone("Z-J", ZoneType.JUNCTION, 1, -0.5, 2, 0.5)],
             Stop("EP-X", 1.5, 0));
 
         Assert.NotNull(EdgeBetween(result.Graph, (2, 0), (1.5, 0)));
@@ -471,18 +494,92 @@ public class RouteGraphBuilderTests
         Assert.Null(EdgeBetween(result.Graph, (1.5, 0), (2, 0)));
         Assert.Null(EdgeBetween(result.Graph, (1, 0), (1.5, 0)));
         Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
-        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+        Assert.Contains(result.Graph.Edges, e => e.IsConnector);
     }
 
     [Theory]
-    [InlineData(ZoneType.JUNCTION, 1.5, -1.2)]   // 0.70 m below the junction zone
-    [InlineData(ZoneType.SPEED, 1.5, -0.8)]      // close, but a SPEED zone is not a junction
-    public void Endpoint_far_from_lanes_and_junction_zones_is_still_too_far(ZoneType type, double x, double y)
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public void Off_lane_endpoint_attaches_via_lane_foot_spur_without_junction(double offsetY)
+    {
+        var result = Build(
+            [Lane("L-1", Both, (0, 0), (4, 0))],
+            Stop("EP-A", 0, 0), Stop("EP-B", 4, 0), Stop("EP-DOCK", 2, offsetY));
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.Equal(["EP-DOCK"], NodeAt(result.Graph, 2, offsetY).EndpointCodes);
+        Assert.True(EdgeBetween(result.Graph, (2, 0), (2, offsetY)) is { IsConnector: true, IsJunction: false });
+        Assert.True(EdgeBetween(result.Graph, (2, offsetY), (2, 0)) is { IsConnector: true });
+    }
+
+    [Fact]
+    public void Off_lane_endpoint_beyond_max_access_distance_is_too_far()
+    {
+        var result = RouteGraphBuilder.Build(
+            new RouteGraphInput(
+                "MAP-TEST",
+                "map",
+                [Lane("L-1", Both, (0, 0), (4, 0))],
+                [Stop("EP-A", 0, 0), Stop("EP-FAR", 2, 3.5)],
+                null),
+            new RouteGraphOptions(MaxEndpointAccessDistance: 3.0));
+
+        Assert.Contains(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar && i.RelatedCodes.Contains("EP-FAR"));
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+    }
+
+    [Fact]
+    public void Off_lane_spur_blocked_by_keep_out_emits_service_access_blocked()
+    {
+        var result = BuildWithZones(
+            [Lane("L-1", Both, (0, 0), (4, 0))],
+            [Zone("Z-WALL", ZoneType.KEEP_OUT, 1.8, 0.2, 2.2, 0.8)],
+            Stop("EP-A", 0, 0), Stop("EP-B", 4, 0), Stop("EP-DOCK", 2, 1.0));
+
+        Assert.Contains(result.Issues, i =>
+            i.Code == RouteGraphBuilder.ServiceAccessBlocked && i.RelatedCodes.Contains("EP-DOCK"));
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+    }
+
+    [Fact]
+    public void Off_lane_spur_on_one_way_lane_does_not_reverse_the_lane()
+    {
+        var result = Build(
+            [Lane("L-1", OneWay, (0, 0), (4, 0))],
+            Stop("EP-A", 0, 0), Stop("EP-DOCK", 2, 0.8));
+
+        Assert.True(HasEdge(result.Graph, (0, 0), (2, 0)));
+        Assert.True(HasEdge(result.Graph, (2, 0), (4, 0)));
+        Assert.False(HasEdge(result.Graph, (2, 0), (0, 0)));
+        Assert.False(HasEdge(result.Graph, (4, 0), (2, 0)));
+        Assert.True(EdgeBetween(result.Graph, (2, 0), (2, 0.8)) is { IsConnector: true });
+        Assert.True(EdgeBetween(result.Graph, (2, 0.8), (2, 0)) is { IsConnector: true });
+    }
+
+    [Fact]
+    public void Endpoint_outside_junction_still_spurs_when_multiple_junctions_exist()
+    {
+        var result = BuildWithZones(
+            [Lane("L-1", Both, (0, 0), (6, 0))],
+            [
+                Zone("Z-J1", ZoneType.JUNCTION, 0.5, -0.3, 1.5, 0.3),
+                Zone("Z-J2", ZoneType.JUNCTION, 4.5, -0.3, 5.5, 0.3)
+            ],
+            Stop("EP-A", 0, 0), Stop("EP-B", 6, 0), Stop("EP-MID", 3, 1.0));
+
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.Contains(result.Graph.Edges, e => e.IsConnector && !e.IsJunction);
+        Assert.Equal(["EP-MID"], NodeAt(result.Graph, 3, 1.0).EndpointCodes);
+    }
+
+    [Fact]
+    public void Endpoint_far_below_and_beyond_access_cap_remains_too_far()
     {
         var result = BuildWithZones(
             [Lane("L-A", Both, (0, 0), (1, 0)), Lane("L-B", Both, (2, 0), (3, 0))],
-            [Zone("Z", type, 1, -0.5, 2, 0.5, maxSpeed: 0.2)],
-            Stop("EP-FAR", x, y));
+            [Zone("Z", ZoneType.SPEED, 1, -0.5, 2, 0.5, maxSpeed: 0.2)],
+            Stop("EP-FAR", 1.5, -3.5));
 
         var issue = Assert.Single(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
         Assert.Equal(["EP-FAR"], issue.RelatedCodes);
@@ -513,20 +610,19 @@ public class RouteGraphBuilderTests
     ];
 
     [Fact]
-    public void Map_v7_as_drawn_reports_what_the_map_editor_must_fix()
+    public void Map_v7_as_drawn_attaches_off_lane_bays_via_spurs()
     {
         var result = Build(MapV7Lanes(), MapV7Stops());
 
-        // Bay / dock stops are 0.55–0.63 m from the nearest lane (limit 0.5 m).
-        var tooFar = result.Issues.Where(i => i.Code == RouteGraphBuilder.EndpointTooFar).SelectMany(i => i.RelatedCodes).Order().ToList();
-        Assert.Equal(["EP-CHG-01", "EP-IN", "EP-OUT", "EP-PARK-01", "EP-PARK-02", "EP-QC"], tooFar);
-        // The exit lane (2.725, 2.10)↓ is not joined to the 1-robot junction: nothing leads to the bottom lane / EP-S03.
-        Assert.Contains(result.Issues, i => i.Code == RouteGraphBuilder.EndpointUnreachable && i.RelatedCodes.Contains("EP-S03"));
-        // The east column ends at (3.15, 3.625) with no way on.
-        Assert.Contains(result.Issues, i => i.Code == RouteGraphBuilder.DeadEndNode && i.RelatedCodes.Contains("L-EASTCOL-UP"));
-        // Stops lying on lanes become nodes directly.
+        // Off-lane bays (~0.55–0.63 m) now get IsConnector spurs — not ENDPOINT_TOO_FAR.
+        Assert.DoesNotContain(result.Issues, i => i.Code == RouteGraphBuilder.EndpointTooFar);
+        Assert.Contains(result.Graph.Edges, e => e.IsConnector);
+        Assert.Equal(["EP-CHG-01"], NodeAt(result.Graph, 0.75, 4.18).EndpointCodes);
+        Assert.Equal(["EP-IN"], NodeAt(result.Graph, 0.32, 0.40).EndpointCodes);
         Assert.Equal(["EP-S01"], NodeAt(result.Graph, 1.45, 2.775).EndpointCodes);
         Assert.Equal(["EP-S03"], NodeAt(result.Graph, 1.45, 1.025).EndpointCodes);
+        // Drawn one-way topology still has real reachability gaps (not attachment failures).
+        Assert.Contains(result.Issues, i => i.Code == RouteGraphBuilder.EndpointUnreachable);
     }
 
     [Fact]

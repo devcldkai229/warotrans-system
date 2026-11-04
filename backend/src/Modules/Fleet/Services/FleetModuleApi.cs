@@ -6,6 +6,7 @@ using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Features.DispatchRobot;
+using WaroTrans.Fleet.Features.IssueCancelCommand;
 using WaroTrans.Fleet.Features.IssueNavigateCommand;
 using WaroTrans.Fleet.Persistence;
 
@@ -14,6 +15,7 @@ namespace WaroTrans.Fleet.Services;
 public sealed class FleetModuleApi(
     FleetDbContext db,
     IssueNavigateCommandHandler issueNavigateCommandHandler,
+    IssueCancelCommandHandler issueCancelCommandHandler,
     IMqttRobotInteractionPublisher interactionPublisher,
     ILogger<FleetModuleApi> logger) : IFleetModule
 {
@@ -52,7 +54,8 @@ public sealed class FleetModuleApi(
         Guid jobId,
         Guid jobStepId,
         CancellationToken cancellationToken = default,
-        RouteGrantSnapshot? route = null)
+        RouteGrantSnapshot? route = null,
+        double? timeoutSeconds = null)
     {
         // JobId without JobAssignmentId: Fleet records one assignment per navigate command
         // (ended by its RESULT). The Job keeps its robot in WorkflowExecution (assignedRobotId).
@@ -66,9 +69,29 @@ public sealed class FleetModuleApi(
             };
         var response = await issueNavigateCommandHandler.HandleAsync(
             robotId,
-            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload),
+            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload, TimeoutSeconds: timeoutSeconds),
             cancellationToken);
         return response.CommandId;
+    }
+
+    public async Task<bool> CancelNavigationAsync(
+        Guid robotId,
+        Guid navigateCommandId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await issueCancelCommandHandler.HandleAsync(
+                robotId, new IssueCancelCommandRequest(navigateCommandId), cancellationToken);
+            return true;
+        }
+        catch (AppException ex)
+        {
+            logger.LogWarning(
+                "CANCEL of navigate {CommandId} on robot {RobotId} not sent: {Code} {Message}",
+                navigateCommandId, robotId, ex.Code, ex.Message);
+            return false;
+        }
     }
 
     public async Task RequestHumanInteractionAsync(

@@ -1,0 +1,75 @@
+[
+  {
+    "id": "bringup",
+    "result": "PASS",
+    "filterMaskWarnCount": 0
+  },
+  {
+    "id": "costmap_diag",
+    "result": "INFO",
+    "artifact": "/tmp/nav2_live_artifacts/diag_costmap_lethal.json"
+  },
+  {
+    "id": "path_policy_probe",
+    "result": "PASS",
+    "artifact": "/tmp/nav2_live_artifacts/path_policy_probe.json"
+  },
+  {
+    "id": "plan_parking_to_inbound",
+    "result": "PASS",
+    "log": "/tmp/nav2_live_artifacts/plan_parking_to_inbound.txt"
+  },
+  {
+    "id": "nav_parking_to_inbound",
+    "result": "FAIL",
+    "log": "/tmp/nav2_live_artifacts/nav_parking_to_inbound.txt",
+    "timeout_rc": 0
+  },
+  {
+    "id": "plan_inbound_to_shelf",
+    "result": "PASS",
+    "log": "/tmp/nav2_live_artifacts/plan_inbound_to_shelf.txt"
+  },
+  {
+    "id": "nav_inbound_to_shelf",
+    "result": "FAIL",
+    "log": "/tmp/nav2_live_artifacts/nav_inbound_to_shelf.txt",
+    "timeout_rc": 0
+  },
+  {
+    "id": "plan_shelf_to_outbound",
+    "result": "PASS",
+    "log": "/tmp/nav2_live_artifacts/plan_shelf_to_outbound.txt"
+  },
+  {
+    "id": "nav_shelf_to_outbound",
+    "result": "FAIL",
+    "log": "/tmp/nav2_live_artifacts/nav_shelf_to_outbound.txt",
+    "timeout_rc": 0
+  },
+  {
+    "id": "plan_outbound_to_parking",
+    "result": "PASS",
+    "log": "/tmp/nav2_live_artifacts/plan_outbound_to_parking.txt"
+  },
+  {
+    "id": "nav_outbound_to_parking",
+    "result": "FAIL",
+    "log": "/tmp/nav2_live_artifacts/nav_outbound_to_parking.txt",
+    "timeout_rc": 0
+  },
+  {
+    "id": "oneway_illegal",
+    "result": "PASS",
+    "note": "detour not against lane tangent"
+  },
+  {
+    "id": "oneway_legal",
+    "result": "PASS"
+  },
+  {
+    "id": "session_end",
+    "result": "INFO",
+    "note": "revoking open-grant by killing stage1_open_grant/sim"
+  }
+]

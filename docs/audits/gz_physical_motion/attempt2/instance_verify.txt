@@ -1,0 +1,49 @@
+## live instance
+launch_pid=107989
+[INFO] [launch.user]: [multi_sim] Stage-3 MAP-ONE robots=sim01 (no stage1_open_grant)
+[INFO] [launch.user]: [multi_sim] sim01 robot=warotrans_sim_01 code=RBT-SIM-01 spawn=(-1.848,-0.575) endpoint=EP-PARKING-A
+[INFO] [launch.user]: [warotrans_simulation] world=/mnt/e/programming/my_project/warotrans/ros2_ws/src/warotrans_simulation/worlds/map_one_v001.sdf gui=True skip_gazebo=False spawn=(-1.8480,-0.5750,-1.5708) source=layout.endpoints:EP-PARKING-A+nudge endpoint=EP-PARKING-A robot=warotrans_sim_01 ns=- topic_prefix='sim01/' ekf=False motor_deadband=0.0
+## gz topics (sample)
+/model/warotrans_sim_01/odometry_with_covariance
+/sim01/cmd_vel
+/sim01/imu/data
+/sim01/joint_states
+/sim01/odom
+/sim01/scan
+/sim01/scan/points
+/sim01/tf
+/sim01/wheel_odom
+/sim01/wheel_tf
+/world/map_one_v001/clock
+/world/map_one_v001/dynamic_pose/info
+/world/map_one_v001/pose/info
+/world/map_one_v001/scene/deletion
+/world/map_one_v001/scene/info
+/world/map_one_v001/state
+/world/map_one_v001/stats
+/model/warotrans_sim_01/enable
+/world/map_one_v001/light_config
+/world/map_one_v001/material_color
+## clock hz (2s)
+/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py:188: RuntimeWarning: Failed to fini rosout publisher: rcl node implementation is invalid, at ./src/rcl/node.c:390
+  self.__node = _rclpy.Node(
+error creating node: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/guard_condition.c:67
+## odom hz (2s)
+/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py:188: RuntimeWarning: Failed to fini rosout publisher: rcl node implementation is invalid, at ./src/rcl/node.c:390
+  self.__node = _rclpy.Node(
+error creating node: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/guard_condition.c:67
+## gz stats once
+sim_time {
+  sec: 72
+  nsec: 121000000
+}
+real_time {
+  sec: 77
+  nsec: 18893229
+}
+iterations: 72121
+real_time_factor: 0.99014606634770763
+step_size {
+  nsec: 1000000
+}
+

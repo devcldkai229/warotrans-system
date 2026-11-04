@@ -1,0 +1,54 @@
+Waiting for an action server to become available...
+Sending goal:
+     goal:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: map
+  pose:
+    position:
+      x: -1.02
+      y: -0.529
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: -0.7071
+      w: 0.7071
+start:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: ''
+  pose:
+    position:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+planner_id: GridBased
+use_start: false
+
+Goal accepted with ID: d1c67858458d465f93ce528769eb1ddf
+
+Result:
+    path:
+  header:
+    stamp:
+      sec: 46
+      nanosec: 815000000
+    frame_id: map
+  poses: []
+planning_time:
+  sec: 0
+  nanosec: 0
+error_code: 208
+error_msg: ''
+
+Goal finished with status: ABORTED

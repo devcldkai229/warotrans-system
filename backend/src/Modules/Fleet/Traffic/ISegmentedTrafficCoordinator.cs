@@ -14,6 +14,12 @@ public interface ISegmentedTrafficCoordinator
     /// <summary>Fails with GRAPH_IN_USE when switching graphs while any robot holds occupancy or authority.</summary>
     Task<TrafficOpResult> BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default);
 
+    /// <summary>Stage-3: bind semantic zone/cell policy (fingerprint). Fails SEMANTIC_IN_USE when occupied.</summary>
+    Task<TrafficOpResult> BindSemanticPolicyAsync(SemanticTrafficPolicy policy, CancellationToken ct = default);
+
+    /// <summary>Stage-3: Nav2 path proposal → exclusive zone/cell grant (no RouteGraph A*).</summary>
+    Task<AcquireResult> AcquireSemanticPlanAsync(SemanticPlanProposeRequest request, CancellationToken ct = default);
+
     /// <summary>
     /// Active MOVE start: makes sure the coordinator tracks the robot. Never releases occupancy and never lifts a
     /// quarantine; an untracked robot is seeded with the resources under its pose.
@@ -87,6 +93,9 @@ public interface ISegmentedTrafficCoordinator
     Task<TrafficOpResult> MarkBlockedAsync(Guid robotId, string reason, CancellationToken ct = default);
 
     Task<TrafficOpResult> MarkOfflineAsync(Guid robotId, CancellationToken ct = default);
+
+    /// <summary>Clear OFFLINE quarantine after a verified fresh heartbeat (not traffic_plan).</summary>
+    Task<TrafficOpResult> MarkOnlineAsync(Guid robotId, CancellationToken ct = default);
 
     /// <summary>
     /// Rebuilds occupancy from a trusted pose: keeps what the robot's footprint (plus margin) still covers, releases

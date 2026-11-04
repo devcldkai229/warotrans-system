@@ -15,6 +15,51 @@ public sealed class TrafficProgressIngress(
     IOptions<TrafficOptions> options,
     ILogger<TrafficProgressIngress> logger)
 {
+    public async Task HandlePlanProposeAsync(TrafficPlanProposeMessage message, CancellationToken ct)
+    {
+        if (options.Value.Mode != TrafficCoordinatorMode.Semantic)
+        {
+            logger.LogDebug("Ignore traffic_plan propose outside Semantic mode ({Mode})", options.Value.Mode);
+            return;
+        }
+
+        var robot = await db.Robots.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Code == message.RobotCode, ct)
+            .ConfigureAwait(false);
+        if (robot is null)
+        {
+            logger.LogWarning("traffic_plan for unknown robot {RobotCode}", message.RobotCode);
+            return;
+        }
+
+        var poses = message.Poses
+            .Select(p => new SemanticPlanPose(p.X, p.Y, p.Yaw))
+            .ToImmutableArray();
+        SemanticPlanPose? goal = message.Goal is { } g
+            ? new SemanticPlanPose(g.X, g.Y, g.Yaw)
+            : null;
+        var req = new SemanticPlanProposeRequest(
+            message.MessageId == Guid.Empty ? Guid.NewGuid() : message.MessageId,
+            robot.Id,
+            message.RobotCode,
+            message.SemanticMapFingerprint,
+            message.PlanRevision,
+            poses,
+            goal,
+            message.JobStepId,
+            message.JobId);
+        var result = await coordinator.AcquireSemanticPlanAsync(req, ct).ConfigureAwait(false);
+        logger.LogInformation(
+            "traffic_plan robot={RobotCode} rev={Rev} granted={Granted} queued={Queued} reason={Reason} wait={Wait} blocker={Blocker}",
+            message.RobotCode,
+            message.PlanRevision,
+            result.Granted,
+            result.Queued,
+            result.Reason,
+            result.WaitingReason,
+            result.BlockingOwner);
+    }
+
     public async Task HandleProgressAsync(TrafficProgressMessage message, CancellationToken ct)
     {
         var robot = await db.Robots.AsNoTracking()
@@ -81,6 +126,21 @@ public sealed class TrafficProgressIngress(
                 }
 
                 break;
+        }
+
+        // Stage-3: robot reports physical clearance of reserved resources.
+        if (message.ClearedResourceIds is { Count: > 0 } cleared
+            && message.PoseX is double cx && message.PoseY is double cy)
+        {
+            await coordinator.ReportVerifiedExitAsync(
+                robot.Id,
+                message.Seq,
+                message.Epoch,
+                cleared.ToImmutableArray(),
+                cx,
+                cy,
+                message.LocalizationOk,
+                ct).ConfigureAwait(false);
         }
     }
 

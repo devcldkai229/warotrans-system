@@ -319,7 +319,7 @@ export function WarehouseMap({
         >
           <defs>
             <pattern id="wmap-hatch" width="1" height="1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="1" stroke={MAP_RED} strokeOpacity={0.22} strokeWidth="0.3" />
+              <line x1="0" y1="0" x2="0" y2="1" stroke={ZONE_COLOR.KEEP_OUT} strokeOpacity={0.55} strokeWidth="0.35" />
             </pattern>
             <pattern id="wmap-dots" width="5" height="5" patternUnits="userSpaceOnUse">
               <circle cx="0" cy="0" r="0.09" fill={MAP_LINE} />

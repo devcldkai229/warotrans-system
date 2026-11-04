@@ -29,35 +29,43 @@ export const ZONE_LABEL: Record<ZoneType, string> = {
   JUNCTION: 'Junction',
 }
 
-// OTTO-like: lanes and junctions share one blue so a junction reads as part of the lane network; no-stop is red,
-// single-occupancy yellow. Keep-out stays red but is always hatched, which tells it apart from no-stop.
-export const LANE_BLUE = '#2d88ff'
+// Lane network blue (edges / legacy JUNCTION). Zone palette is independent.
+export const LANE_BLUE = '#3279f9'
 
+/**
+ * Zone map colours (Map Editor + Fleet Monitor):
+ * KEEP_OUT — red + diagonal hatch; SPEED — yellow; NO_STOP — sky blue; SINGLE_OCCUPANCY — purple.
+ * JUNCTION — muted blue (legacy only; not drawn for new maps).
+ */
 export const ZONE_COLOR: Record<ZoneType, string> = {
-  KEEP_OUT: '#f02849',
-  SPEED: '#a66cff',
-  NO_STOP: '#f5533d',
-  SINGLE_OCCUPANCY: '#f7b928',
-  JUNCTION: LANE_BLUE,
+  KEEP_OUT: '#c62828',
+  SPEED: '#f9a825',
+  NO_STOP: '#039be5',
+  SINGLE_OCCUPANCY: '#8e24aa',
+  JUNCTION: '#5c6bc0',
 }
 
-/** Fill strength of a zone: junctions as strong as a lane band, the others a light tint. */
+/** Fill strength — slightly stronger so zones read clearly on the occupancy image. */
 export const ZONE_FILL_OPACITY: Record<ZoneType, number> = {
-  KEEP_OUT: 0.1,
-  SPEED: 0.1,
-  NO_STOP: 0.16,
-  SINGLE_OCCUPANCY: 0.2,
-  JUNCTION: 0.22,
+  KEEP_OUT: 0.2,
+  SPEED: 0.24,
+  NO_STOP: 0.24,
+  SINGLE_OCCUPANCY: 0.26,
+  JUNCTION: 0.18,
 }
 
 /** Lane band and chevron strength (monitor map and Map Editor). */
 export const LANE_BAND_OPACITY = 0.22
 export const LANE_CHEVRON_OPACITY = 0.8
 
+/**
+ * Endpoint colours:
+ * WAYPOINT — black; CHARGER — green; PARK — deep orange (distinct from zone yellow/red/sky/purple).
+ */
 export const ENDPOINT_COLOR: Record<EndpointType, string> = {
-  WAYPOINT: 'var(--color-ink-2)',
-  CHARGER: 'var(--color-teal)',
-  PARK: 'var(--color-muted)',
+  WAYPOINT: '#121317',
+  CHARGER: '#2e7d32',
+  PARK: '#ef6c00',
 }
 
 export const ENDPOINT_NAME: Record<EndpointType, string> = {
@@ -89,8 +97,8 @@ export function zoneSwatchStyle(type: ZoneType): CSSProperties {
     borderColor: color,
     background:
       type === 'KEEP_OUT'
-        ? `repeating-linear-gradient(45deg, ${color}47 0 2px, transparent 2px 4px)`
-        : `${color}24`,
+        ? `repeating-linear-gradient(45deg, ${color}88 0 3px, transparent 3px 6px)`
+        : `${color}55`,
   }
 }
 

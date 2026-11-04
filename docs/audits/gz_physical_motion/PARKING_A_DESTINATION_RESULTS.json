@@ -1,0 +1,431 @@
+{
+  "tol_m": 0.2,
+  "collision_monitor": "OFF_DIAG",
+  "n_dest": 6,
+  "n_pass": 3,
+  "all_pass": false,
+  "destinations": [
+    {
+      "phase": "to_dest",
+      "code": "EP-INBOUND",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.1609756942170842,
+      "disp_m": 3.9964529460337403,
+      "odom0": [
+        -1.7429999999996828,
+        -0.5660000000000001
+      ],
+      "odom1": [
+        1.746532175727775,
+        1.38202498557502
+      ],
+      "goal": [
+        1.747,
+        1.543
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-OUTBOUND",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.20166565080927804,
+      "disp_m": 3.381725767833302,
+      "odom0": [
+        -1.584295903095104,
+        -0.6558422368282598
+      ],
+      "odom1": [
+        1.7953176282032242,
+        -0.775347667219441
+      ],
+      "goal": [
+        1.793,
+        -0.977
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-WAIT-POINT",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.23434547581702825,
+      "disp_m": 3.379268013089514,
+      "odom0": [
+        -1.591453087832292,
+        -0.6611030535358223
+      ],
+      "odom1": [
+        1.4954864720914176,
+        0.7137629245391208
+      ],
+      "goal": [
+        1.292,
+        0.83
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-SHELF-A-01",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.15856596976885837,
+      "disp_m": 2.1900996434621445,
+      "odom0": [
+        -1.5533048411134316,
+        -0.627984274236154
+      ],
+      "odom1": [
+        -1.4595559022498052,
+        1.5601079506837545
+      ],
+      "goal": [
+        -1.325,
+        1.644
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-SHELF-C-01",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.1759004692657322,
+      "disp_m": 2.5361290575840765,
+      "odom0": [
+        -1.7778962522794501,
+        -0.6809637923715804
+      ],
+      "odom1": [
+        0.7579871381127871,
+        -0.645664683954129
+      ],
+      "goal": [
+        0.875,
+        -0.777
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-SHELF-B-04",
+      "accepted": true,
+      "status": "TIMEOUT",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 2.7779279664210907,
+      "disp_m": 1.0582818285952924,
+      "odom0": [
+        -1.5825377138639498,
+        -0.6129384288028425
+      ],
+      "odom1": [
+        -0.5357556846260615,
+        -0.7685270273555778
+      ],
+      "goal": [
+        0.793,
+        1.671
+      ],
+      "auth_end": false
+    }
+  ],
+  "all_legs": [
+    {
+      "phase": "to_dest",
+      "code": "EP-INBOUND",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.1609756942170842,
+      "disp_m": 3.9964529460337403,
+      "odom0": [
+        -1.7429999999996828,
+        -0.5660000000000001
+      ],
+      "odom1": [
+        1.746532175727775,
+        1.38202498557502
+      ],
+      "goal": [
+        1.747,
+        1.543
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "return_home",
+      "from": "EP-INBOUND",
+      "code": "EP-PARKING-A",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.21152503770364808,
+      "disp_m": 3.904781492839333,
+      "odom0": [
+        1.746532175727775,
+        1.38202498557502
+      ],
+      "odom1": [
+        -1.584295903095104,
+        -0.6558422368282598
+      ],
+      "goal": [
+        -1.743,
+        -0.516
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-OUTBOUND",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.20166565080927804,
+      "disp_m": 3.381725767833302,
+      "odom0": [
+        -1.584295903095104,
+        -0.6558422368282598
+      ],
+      "odom1": [
+        1.7953176282032242,
+        -0.775347667219441
+      ],
+      "goal": [
+        1.793,
+        -0.977
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "return_home",
+      "from": "EP-OUTBOUND",
+      "code": "EP-PARKING-A",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.20981268487149862,
+      "disp_m": 3.3886970526666205,
+      "odom0": [
+        1.7953176282032242,
+        -0.775347667219441
+      ],
+      "odom1": [
+        -1.591453087832292,
+        -0.6611030535358223
+      ],
+      "goal": [
+        -1.743,
+        -0.516
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-WAIT-POINT",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.23434547581702825,
+      "disp_m": 3.379268013089514,
+      "odom0": [
+        -1.591453087832292,
+        -0.6611030535358223
+      ],
+      "odom1": [
+        1.4954864720914176,
+        0.7137629245391208
+      ],
+      "goal": [
+        1.292,
+        0.83
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "return_home",
+      "from": "EP-WAIT-POINT",
+      "code": "EP-PARKING-A",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.22028329709989047,
+      "disp_m": 3.3309779370170927,
+      "odom0": [
+        1.4954864720914176,
+        0.7137629245391208
+      ],
+      "odom1": [
+        -1.5533048411134316,
+        -0.627984274236154
+      ],
+      "goal": [
+        -1.743,
+        -0.516
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-SHELF-A-01",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.15856596976885837,
+      "disp_m": 2.1900996434621445,
+      "odom0": [
+        -1.5533048411134316,
+        -0.627984274236154
+      ],
+      "odom1": [
+        -1.4595559022498052,
+        1.5601079506837545
+      ],
+      "goal": [
+        -1.325,
+        1.644
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "return_home",
+      "from": "EP-SHELF-A-01",
+      "code": "EP-PARKING-A",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.16861435649660714,
+      "disp_m": 2.2635686726887863,
+      "odom0": [
+        -1.4595559022498052,
+        1.5601079506837545
+      ],
+      "odom1": [
+        -1.7778962522794501,
+        -0.6809637923715804
+      ],
+      "goal": [
+        -1.743,
+        -0.516
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-SHELF-C-01",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.1759004692657322,
+      "disp_m": 2.5361290575840765,
+      "odom0": [
+        -1.7778962522794501,
+        -0.6809637923715804
+      ],
+      "odom1": [
+        0.7579871381127871,
+        -0.645664683954129
+      ],
+      "goal": [
+        0.875,
+        -0.777
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "return_home",
+      "from": "EP-SHELF-C-01",
+      "code": "EP-PARKING-A",
+      "accepted": true,
+      "status": "status_4",
+      "pass": true,
+      "arrived_xy": true,
+      "err_m": 0.18747054235471622,
+      "disp_m": 2.340753637292262,
+      "odom0": [
+        0.7579871381127871,
+        -0.645664683954129
+      ],
+      "odom1": [
+        -1.5825377138639498,
+        -0.6129384288028425
+      ],
+      "goal": [
+        -1.743,
+        -0.516
+      ],
+      "auth_end": true
+    },
+    {
+      "phase": "to_dest",
+      "code": "EP-SHELF-B-04",
+      "accepted": true,
+      "status": "TIMEOUT",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 2.7779279664210907,
+      "disp_m": 1.0582818285952924,
+      "odom0": [
+        -1.5825377138639498,
+        -0.6129384288028425
+      ],
+      "odom1": [
+        -0.5357556846260615,
+        -0.7685270273555778
+      ],
+      "goal": [
+        0.793,
+        1.671
+      ],
+      "auth_end": false
+    },
+    {
+      "phase": "return_home",
+      "from": "EP-SHELF-B-04",
+      "code": "EP-PARKING-A",
+      "accepted": true,
+      "status": "status_4",
+      "pass": false,
+      "arrived_xy": false,
+      "err_m": 0.20695837139782322,
+      "disp_m": 1.071301778021919,
+      "odom0": [
+        -0.5357556846260615,
+        -0.7685270273555778
+      ],
+      "odom1": [
+        -1.602310021100072,
+        -0.6677830600850343
+      ],
+      "goal": [
+        -1.743,
+        -0.516
+      ],
+      "auth_end": true
+    }
+  ]
+}

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MQTTnet;
+using MQTTnet.Protocol;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.BuildingBlocks.Options;
 
@@ -48,19 +49,24 @@ public sealed class MqttSubscriberHostedService(
 
                 await client.ConnectAsync(builder.Build(), stoppingToken).ConfigureAwait(false);
 
+                // The robot publishes these at QoS 1; a QoS 0 subscription downgrades delivery to at-most-once,
+                // and a lost RESULT leaves the Job step EXECUTING (there is no execution timeout after ACK).
+                // Heartbeat/telemetry stay QoS 0: they are periodic and superseded by the next sample.
+                const MqttQualityOfServiceLevel reliable = MqttQualityOfServiceLevel.AtLeastOnce;
                 var subscribeOptions = factory.CreateSubscribeOptionsBuilder()
                     .WithTopicFilter(RobotMqttTopics.HeartbeatFilter(mqtt.TopicPrefix))
                     .WithTopicFilter(RobotMqttTopics.TelemetryFilter(mqtt.TopicPrefix))
-                    .WithTopicFilter(RobotMqttTopics.CommandAckFilter(mqtt.TopicPrefix))
-                    .WithTopicFilter(RobotMqttTopics.CommandResultFilter(mqtt.TopicPrefix))
-                    .WithTopicFilter(RobotMqttTopics.InteractionConfirmFilter(mqtt.TopicPrefix))
-                    .WithTopicFilter(RobotMqttTopics.TrafficProgressFilter(mqtt.TopicPrefix))
-                    .WithTopicFilter(RobotMqttTopics.AuthorityStateFilter(mqtt.TopicPrefix))
+                    .WithTopicFilter(RobotMqttTopics.CommandAckFilter(mqtt.TopicPrefix), reliable)
+                    .WithTopicFilter(RobotMqttTopics.CommandResultFilter(mqtt.TopicPrefix), reliable)
+                    .WithTopicFilter(RobotMqttTopics.InteractionConfirmFilter(mqtt.TopicPrefix), reliable)
+                    .WithTopicFilter(RobotMqttTopics.TrafficProgressFilter(mqtt.TopicPrefix), reliable)
+                    .WithTopicFilter(RobotMqttTopics.TrafficPlanFilter(mqtt.TopicPrefix), reliable)
+                    .WithTopicFilter(RobotMqttTopics.AuthorityStateFilter(mqtt.TopicPrefix), reliable)
                     .Build();
 
                 await client.SubscribeAsync(subscribeOptions, stoppingToken).ConfigureAwait(false);
                 logger.LogInformation(
-                    "MQTT subscribed to robot uplink topics (incl. traffic_progress/authority_state) on {Host}:{Port}",
+                    "MQTT subscribed to robot uplink topics (incl. traffic_progress/traffic_plan/authority_state) on {Host}:{Port}",
                     mqtt.Host,
                     mqtt.Port);
 
@@ -169,6 +175,10 @@ public sealed class MqttSubscriberHostedService(
                     await HandleTrafficProgressAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)
                         .ConfigureAwait(false);
                     break;
+                case RobotMqttTopics.TrafficPlanSuffix:
+                    await HandleTrafficPlanAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
                 case RobotMqttTopics.AuthorityStateSuffix:
                     await HandleAuthorityStateAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)
                         .ConfigureAwait(false);
@@ -250,10 +260,7 @@ public sealed class MqttSubscriberHostedService(
             throw new InvalidOperationException($"Invalid command_ack JSON on {topic}");
         }
 
-        if (string.IsNullOrWhiteSpace(message.RobotCode))
-        {
-            message.RobotCode = robotCodeFromTopic;
-        }
+        message.RobotCode = MatchTopicRobotCode(message.RobotCode, robotCodeFromTopic);
 
         var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotCommandAckMessage>>();
         await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
@@ -274,10 +281,7 @@ public sealed class MqttSubscriberHostedService(
             throw new InvalidOperationException($"Invalid command_result JSON on {topic}");
         }
 
-        if (string.IsNullOrWhiteSpace(message.RobotCode))
-        {
-            message.RobotCode = robotCodeFromTopic;
-        }
+        message.RobotCode = MatchTopicRobotCode(message.RobotCode, robotCodeFromTopic);
 
         var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotCommandResultMessage>>();
         await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
@@ -298,20 +302,7 @@ public sealed class MqttSubscriberHostedService(
             throw new InvalidOperationException($"Invalid interaction_confirm JSON on {topic}");
         }
 
-        if (string.IsNullOrWhiteSpace(message.RobotCode))
-        {
-            message.RobotCode = robotCodeFromTopic;
-        }
-        else if (!string.Equals(message.RobotCode, robotCodeFromTopic, StringComparison.Ordinal))
-        {
-            throw new ValidationException(
-                "RobotCode in payload must match the topic robotCode.",
-                [
-                    new FluentValidation.Results.ValidationFailure(
-                        nameof(message.RobotCode),
-                        $"Topic robotCode '{robotCodeFromTopic}' != payload '{message.RobotCode}'.")
-                ]);
-        }
+        message.RobotCode = MatchTopicRobotCode(message.RobotCode, robotCodeFromTopic);
 
         var validator = scope.ServiceProvider.GetRequiredService<IValidator<RobotInteractionConfirmMessage>>();
         await validator.ValidateAndThrowAsync(message, cancellationToken).ConfigureAwait(false);
@@ -331,12 +322,27 @@ public sealed class MqttSubscriberHostedService(
             throw new InvalidOperationException($"Invalid traffic_progress JSON on {topic}");
         }
 
-        if (string.IsNullOrWhiteSpace(message.RobotCode))
-        {
-            message.RobotCode = robotCodeFromTopic;
-        }
+        message.RobotCode = MatchTopicRobotCode(message.RobotCode, robotCodeFromTopic);
 
         await ingress.HandleTrafficProgressAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleTrafficPlanAsync(
+        IRobotMqttIngress ingress,
+        string payload,
+        string topic,
+        string robotCodeFromTopic,
+        CancellationToken cancellationToken)
+    {
+        var message = JsonSerializer.Deserialize<TrafficPlanProposeMessage>(payload, JsonOptions);
+        if (message is null)
+        {
+            throw new InvalidOperationException($"Invalid traffic_plan JSON on {topic}");
+        }
+
+        message.RobotCode = MatchTopicRobotCode(message.RobotCode, robotCodeFromTopic);
+
+        await ingress.HandleTrafficPlanAsync(message, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task HandleAuthorityStateAsync(
@@ -352,11 +358,33 @@ public sealed class MqttSubscriberHostedService(
             throw new InvalidOperationException($"Invalid authority_state JSON on {topic}");
         }
 
-        if (string.IsNullOrWhiteSpace(message.RobotCode))
-        {
-            message.RobotCode = robotCodeFromTopic;
-        }
+        message.RobotCode = MatchTopicRobotCode(message.RobotCode, robotCodeFromTopic);
 
         await ingress.HandleAuthorityStateAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Uplinks that change command, traffic or job state must come from the robot whose topic they arrive on.
+    /// An empty payload robotCode takes the topic's; a different one is rejected.
+    /// </summary>
+    public static string MatchTopicRobotCode(string? payloadRobotCode, string robotCodeFromTopic)
+    {
+        if (string.IsNullOrWhiteSpace(payloadRobotCode))
+        {
+            return robotCodeFromTopic;
+        }
+
+        if (!string.Equals(payloadRobotCode, robotCodeFromTopic, StringComparison.Ordinal))
+        {
+            throw new ValidationException(
+                "RobotCode in payload must match the topic robotCode.",
+                [
+                    new FluentValidation.Results.ValidationFailure(
+                        "RobotCode",
+                        $"Topic robotCode '{robotCodeFromTopic}' != payload '{payloadRobotCode}'.")
+                ]);
+        }
+
+        return payloadRobotCode;
     }
 }

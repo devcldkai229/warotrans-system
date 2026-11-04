@@ -29,6 +29,18 @@ public sealed class ProcessRobotCommandAckHandler(
             return;
         }
 
+        // The command is found by id alone: only the robot it was sent to may acknowledge it.
+        var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == command.RobotId, cancellationToken);
+        if (robot is not null && !string.Equals(robot.Code, message.RobotCode, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "Dropped command_ack {CommandId} from robot {Sender}: the command belongs to {Owner}",
+                message.CommandId,
+                message.RobotCode,
+                robot.Code);
+            return;
+        }
+
         var utcNow = DateTimeOffset.UtcNow;
         if (!command.TryApplyAck(message.Accepted, message.ReasonCode, utcNow))
         {
@@ -38,8 +50,6 @@ public sealed class ProcessRobotCommandAckHandler(
                 command.Status);
             return;
         }
-
-        var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == command.RobotId, cancellationToken);
         JobAssignment? assignment = null;
         if (command.JobAssignmentId is { } assignmentId)
         {

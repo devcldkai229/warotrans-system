@@ -1,0 +1,37 @@
+pre_authority [True, True, True, True, True] n 61
+goal_accepted True
+{
+  "cmd_vel": {
+    "n": 245,
+    "lx_max": 0.20867839938369884,
+    "lx_absmax": 0.20867839938369884,
+    "az_absmax": 1.0,
+    "nonzero": 171
+  },
+  "cmd_vel_safe": {
+    "n": 245,
+    "lx_max": 0.20867839938369884,
+    "lx_absmax": 0.20867839938369884,
+    "az_absmax": 1.0,
+    "nonzero": 171
+  },
+  "cmd_vel_nav": {
+    "n": 177,
+    "lx_max": 0.2105958448816908,
+    "lx_absmax": 0.2105958448816908,
+    "az_absmax": 1.3699195597319371,
+    "nonzero": 82
+  },
+  "cmd_vel_smoothed": {
+    "n": 442,
+    "lx_max": 0.20867839938369884,
+    "lx_absmax": 0.20867839938369884,
+    "az_absmax": 1.0,
+    "nonzero": 171
+  },
+  "authority_ok": {
+    "n": 561,
+    "last": true,
+    "true_frac": 1.0
+  }
+}

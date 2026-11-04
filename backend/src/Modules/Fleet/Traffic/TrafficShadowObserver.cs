@@ -95,9 +95,10 @@ public sealed class TrafficShadowObserver(
         bool localizationOk,
         CancellationToken ct = default)
     {
-        // Active Mode: traffic_progress is the sole progress/authority channel. Feeding every
-        // telemetry LOST sample into ReportProgress sticky-quarantines and starves RENEW.
-        if (trafficOptions.Value.Mode == TrafficCoordinatorMode.Active)
+        // Active/Semantic: traffic_progress / traffic_plan are the sole progress/authority channels.
+        // Feeding every telemetry UNKNOWN/LOST sample into ReportProgress sticky-quarantines
+        // (LOCALIZATION_LOSS) and blocks subsequent semantic grants.
+        if (trafficOptions.Value.Mode is TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic)
         {
             return;
         }
@@ -122,6 +123,9 @@ public sealed class TrafficShadowObserver(
 
     public Task OnOfflineAsync(Guid robotId, CancellationToken ct = default) =>
         segmented.MarkOfflineAsync(robotId, ct);
+
+    public Task OnOnlineAsync(Guid robotId, CancellationToken ct = default) =>
+        segmented.MarkOnlineAsync(robotId, ct);
 
     /// <summary>
     /// Cumulative authority edges: <c>authority.segmentEdgeIds</c> of an Active NAVIGATE, or the top-level
