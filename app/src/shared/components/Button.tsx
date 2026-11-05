@@ -41,7 +41,10 @@ export function Button({
   return (
     <Pressable
       onPress={isInteractive ? onPress : undefined}
+      disabled={!isInteractive}
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !isInteractive, busy: loading }}
       style={({ pressed }) => [
         styles.base,
         styles[variant],

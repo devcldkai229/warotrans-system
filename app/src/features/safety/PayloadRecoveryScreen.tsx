@@ -35,6 +35,11 @@ export function PayloadRecoveryScreen() {
   const [phase, setPhase] = useState<RescuePhase>('briefing');
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isLoadingContext, setIsLoadingContext] = useState(true);
+  const [hasRecoveryJob, setHasRecoveryJob] = useState(false);
+  const [contextError, setContextError] = useState(false);
+  const [failureDetail, setFailureDetail] = useState('Failure details unavailable');
+  const [productName, setProductName] = useState('Product unavailable');
 
   const jobId = params?.jobId || '';
   const robotId = params?.robotId || params?.robot || 'Unassigned';
@@ -50,6 +55,7 @@ export function PayloadRecoveryScreen() {
 
   useEffect(() => {
     let mounted = true;
+    setIsLoadingContext(true); setHasRecoveryJob(false); setContextError(false); setFeedback(null);
     const loadRecoveryContext = async () => {
       const loadJob = async () => {
         if (jobId) return getJobDetail(jobId);
@@ -75,11 +81,16 @@ export function PayloadRecoveryScreen() {
         || robots.find((robot) => robot.code === context.assignedRobotCode)
         || robots.find((robot) => robot.id === robotId || robot.code === robotId);
       if (assignedRobot) setDisplayRobotId(assignedRobot.code);
+      if (jobResult.status === 'rejected') throw jobResult.reason;
       if (!job) { setFeedback('No job currently requires recovery.'); return; }
+      if (job.status !== 'RECOVERY_REQUIRED') { setFeedback('This job does not currently require recovery. Open Job Details to inspect its status.'); return; }
       setResolvedJobId(job.id);
       setDisplayJobNo(job.jobNo);
       const container = job.containers[0] ? await getContainer(job.containers[0].containerId).catch(() => null) : null;
-      if (container) setDisplayContainer(container.barcode);
+      if (!mounted) return;
+      setHasRecoveryJob(true);
+      setFailureDetail(job.failureMessage || job.failureCode || 'Failure details unavailable');
+      if (container) { setDisplayContainer(container.barcode); setProductName(container.productName || 'Product unavailable'); }
       const resolveEndpoint = (value: unknown) => {
         const code = map?.endpoints.find((endpoint) => endpoint.id === value || endpoint.code === value)?.code;
         const text = textValue(value);
@@ -99,7 +110,8 @@ export function PayloadRecoveryScreen() {
         || (source && target ? `${source} ➔ ${target} (Active Corridor)` : undefined);
       if (location) setDisplayLocation(location);
     };
-    loadRecoveryContext().catch((err) => console.warn('Recovery context unavailable:', err));
+    loadRecoveryContext().catch((err) => { if (mounted) { setContextError(true); setFeedback(err instanceof Error ? err.message : 'Recovery context could not be loaded.'); } })
+      .finally(() => { if (mounted) setIsLoadingContext(false); });
     return () => { mounted = false; };
   }, [jobId, robotId]);
 
@@ -124,7 +136,11 @@ export function PayloadRecoveryScreen() {
           </View>
         )}
 
-        {phase === 'completed' ? (
+        <View style={styles.actionCard}><Text style={styles.actionTitle}>Recovery Execution Unavailable</Text><Text style={styles.actionDesc}>Inspect the Job here. Contact the supervisor to arrange recovery; this app cannot dispatch a rescue robot or confirm a payload transfer.</Text></View>
+        {isLoadingContext || !hasRecoveryJob ? <View style={styles.actionCard}>
+          <Text style={styles.actionTitle}>{isLoadingContext ? 'Loading Recovery Context…' : contextError ? 'Recovery Context Unavailable' : 'No Recovery Job To Display'}</Text>
+          <Button label="Back To Jobs" onPress={() => navigate('jobs')} variant="outline" />
+        </View> : phase === 'completed' ? (
           <View style={styles.completedCard}>
             <View style={styles.completedIconBadge}>
               <Check size={24} color="#16a34a" />
@@ -186,7 +202,7 @@ export function PayloadRecoveryScreen() {
                   <View style={styles.alertBadge}>
                     <Text style={styles.alertBadgeText}>Fleet incident</Text>
                   </View>
-                  <Text style={styles.alertRobotText}>{faultedRobot} Stalled</Text>
+                  <Text style={styles.alertRobotText}>{faultedRobot} · Needs Recovery</Text>
                 </View>
               </View>
             </View>
@@ -277,31 +293,31 @@ export function PayloadRecoveryScreen() {
               <View style={styles.diagFaulted}>
                 <Text style={styles.diagLabel}>Unit & Mission</Text>
                 <Text style={styles.diagRobotId}>{faultedRobot}</Text>
-                <Text style={styles.diagDetail}>{displayJobNo} · Error: Drive motor stall</Text>
+                <Text style={styles.diagDetail}>{displayJobNo} · {failureDetail}</Text>
                 <View style={styles.diagPillFaulted}>
-                  <Text style={styles.diagPillTextFaulted}>Current Halted Position: {displayLocation}</Text>
+                  <Text style={styles.diagPillTextFaulted}>Reported Location: {displayLocation}</Text>
                 </View>
               </View>
 
               <View style={styles.diagRescue}>
                 <Text style={styles.diagLabel}>Rescue robot</Text>
                 <Text style={styles.diagRobotId}>{rescueRobot}</Text>
-                <Text style={styles.diagDetail}>Battery: 92% · Deck empty</Text>
+                <Text style={styles.diagDetail}>Battery and payload unavailable</Text>
                 <View style={styles.diagPillRescue}>
-                  <Text style={styles.diagPillTextRescue}>Status: Ready</Text>
+                  <Text style={styles.diagPillTextRescue}>Status: Not Assigned</Text>
                 </View>
               </View>
             </View>
 
             {/* Stranded Cargo Info */}
             <View style={styles.cargoCard}>
-              <Text style={styles.cargoTitle}>Stranded cargo onboard</Text>
+              <Text style={styles.cargoTitle}>Job Container</Text>
               <View style={styles.cargoStack}>
                 <View style={styles.cargoTopLine}>
                   <Box size={16} color={colors.textSecondary} />
                   <Text style={styles.cargoCode}>{targetContainer}</Text>
                   <Text style={styles.cargoDesc}>
-                    Electronic Components · <Text style={styles.boldUnits}>45 units</Text>
+                    {productName} · <Text style={styles.boldUnits}>1 Container</Text>
                   </Text>
                 </View>
                 <View style={styles.cargoDestLine}>

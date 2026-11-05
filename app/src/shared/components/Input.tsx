@@ -31,6 +31,7 @@ export function Input({
   leftIcon,
   rightIcon,
   secureTextEntry,
+  accessibilityLabel,
   ...props
 }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
@@ -51,12 +52,13 @@ export function Input({
       >
         {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
         <TextInput
+          {...props}
+          accessibilityLabel={accessibilityLabel ?? label}
           placeholderTextColor={colors.textMuted}
           style={[styles.input, inputStyle]}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onFocus={(event) => { setIsFocused(true); props.onFocus?.(event); }}
+          onBlur={(event) => { setIsFocused(false); props.onBlur?.(event); }}
           secureTextEntry={secureTextEntry}
-          {...props}
         />
         {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
       </View>

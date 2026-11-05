@@ -98,6 +98,44 @@ export class ApiError extends Error {
   }
 }
 
+export function getUserErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
+}
+
+function networkError(init: RequestInit = {}, path = ''): ApiError {
+  const isWrite = !path.startsWith('/api/identity/') && init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase());
+  return new ApiError(0, 'NETWORK_ERROR', isWrite
+    ? 'Could not confirm the result. Reconnect and check the latest status before trying again.'
+    : 'Cannot reach the server. Check your connection and try again.');
+}
+
+function httpErrorMessage(status: number): string {
+  if (status >= 500) return 'The server is temporarily unavailable. Please try again shortly.';
+  switch (status) {
+    case 400: return 'Check the information entered and try again.';
+    case 401: return 'Your session could not be verified. Please sign in again.';
+    case 403: return 'You do not have permission to perform this action.';
+    case 404: return 'This record is no longer available. Refresh to see the latest information.';
+    case 409: return 'This action conflicts with the current status. Refresh before trying again.';
+    case 429: return 'Too many requests. Wait a moment and try again.';
+    default: return 'The request could not be completed. Please try again.';
+  }
+}
+
+async function readResponse<T>(response: Response): Promise<T> {
+  if (response.status === 204) return null as T;
+  try {
+    return await response.json() as T;
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    throw new ApiError(502, 'INVALID_RESPONSE', 'The server response could not be read. Refresh to check the latest status.');
+  }
+}
+
 let inMemoryToken: string | null = null;
 type TokenChangeListener = (token: string | null) => void;
 const tokenListeners = new Set<TokenChangeListener>();
@@ -143,24 +181,34 @@ export function getAccessToken(): string | null {
 export const getBearerToken = getAccessToken;
 
 async function parseApiError(response: Response): Promise<ApiError> {
+  // Unexpected server failures may include stack traces or implementation details.
+  if (response.status >= 500) return new ApiError(response.status, 'SERVER_ERROR', httpErrorMessage(response.status));
   let code: string | null = null;
-  let message = `Request failed with status ${response.status}`;
+  let message = httpErrorMessage(response.status);
   let errors: ProblemError[] = [];
 
   try {
     const data = await response.json();
     if (data && typeof data === 'object') {
-      code = data.code ?? null;
-      message = data.detail || data.title || data.message || message;
+      code = typeof data.code === 'string' ? data.code : null;
+      const genericTitles = ['bad request', 'unauthorized', 'forbidden', 'not found', 'conflict', 'too many requests'];
+      const title = typeof data.title === 'string' && !genericTitles.includes(data.title.toLowerCase()) ? data.title : undefined;
+      const detail = [data.detail, data.message, title].find(value => typeof value === 'string' && value.trim());
+      if (detail) message = detail;
       if (Array.isArray(data.errors)) {
-        errors = data.errors;
+        errors = data.errors.flatMap((error: unknown): ProblemError[] => {
+          if (typeof error !== 'object' || error === null || !('message' in error) || typeof error.message !== 'string') return [];
+          return [{ property: 'property' in error && typeof error.property === 'string' ? error.property : '',
+            code: 'code' in error && typeof error.code === 'string' ? error.code : 'validation', message: error.message }];
+        });
       } else if (data.errors && typeof data.errors === 'object') {
         errors = Object.entries(data.errors).flatMap(([property, messages]) =>
           (Array.isArray(messages) ? messages : [messages]).map(message => ({ property, code: 'validation', message: String(message) })));
-        if (errors.length) message = errors.map(error => error.message).join('\n');
       }
+      if (errors.length) message = errors.map(error => error.message).join('\n');
     }
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     // Empty or non-JSON body (e.g. 401 Unauthorized gateway error)
   }
 
@@ -193,27 +241,33 @@ async function performTokenRefresh(): Promise<string | null> {
       }),
     });
 
+    if (version !== tokenVersion) return null;
     if (!res.ok) {
-      if ([400, 401, 403].includes(res.status)) expireSession(version);
-      return null;
+      if ([400, 401, 403].includes(res.status)) {
+        expireSession(version);
+        return null;
+      }
+      // A refresh outage is not evidence that the saved session was revoked.
+      throw await parseApiError(res);
     }
 
-    const data = await res.json();
+    const data = await readResponse<{ accessToken?: string; refreshToken?: string | null }>(res);
     // A logout or another login must not be undone by an old refresh response.
     if (version !== tokenVersion) return null;
-    if (data && data.accessToken) {
+    if (data && typeof data.accessToken === 'string' && data.accessToken) {
       await saveStoredAccessToken(data.accessToken);
-      if (data.refreshToken) {
+      if (typeof data.refreshToken === 'string' && data.refreshToken) {
         await saveStoredRefreshToken(data.refreshToken);
       }
       if (version !== tokenVersion) return null;
       setAccessToken(data.accessToken);
       return data.accessToken;
     }
-    return null;
+    throw new ApiError(502, 'INVALID_RESPONSE', 'The server response could not be read. Please try again.');
   } catch (err) {
-    console.warn('Silent token refresh failed:', err);
-    return null;
+    if (version !== tokenVersion) return null;
+    if (isAbortError(err) || err instanceof ApiError) throw err;
+    throw networkError();
   }
 }
 
@@ -244,8 +298,9 @@ export async function apiFetch<T>(
       ...init,
       headers,
     });
-  } catch (err: any) {
-    throw new ApiError(0, 'NETWORK_ERROR', err?.message || 'Network connection failed');
+  } catch (err) {
+    if (init.signal?.aborted || isAbortError(err)) throw err;
+    throw networkError(init, path);
   }
 
   if (!response.ok) {
@@ -279,15 +334,13 @@ export async function apiFetch<T>(
             ...init,
             headers: retryHeaders,
           });
-        } catch (err: any) {
-          throw new ApiError(0, 'NETWORK_ERROR', err?.message || 'Network connection failed on retry');
+        } catch (err) {
+          if (init.signal?.aborted || isAbortError(err)) throw err;
+          throw networkError(init, path);
         }
 
         if (retryResponse.ok) {
-          if (retryResponse.status === 204) {
-            return null as unknown as T;
-          }
-          return (await retryResponse.json()) as T;
+          return readResponse<T>(retryResponse);
         }
 
         if (retryResponse.status === 401) expireSession(retryVersion);
@@ -298,10 +351,5 @@ export async function apiFetch<T>(
     throw await parseApiError(response);
   }
 
-  // Handle 204 No Content
-  if (response.status === 204) {
-    return null as unknown as T;
-  }
-
-  return (await response.json()) as T;
+  return readResponse<T>(response);
 }

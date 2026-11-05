@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getCurrentAccount } from '../../shared/api/identityApi';
+import { useRealtime } from '../../shared/realtime';
 import {
   ScrollView,
   StyleSheet,
@@ -6,11 +9,8 @@ import {
   View,
 } from 'react-native';
 import {
-  Box,
-  CheckCircle2,
   RefreshCw,
   WifiOff,
-  Zap,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
@@ -19,118 +19,37 @@ import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
-import { triggerHaptic } from '../../shared/utils/haptics';
-
-interface PendingTask {
-  id: string;
-  label: string;
-  timestamp: string;
-  status: 'queued' | 'synced';
-}
-
-const INITIAL_TASKS: PendingTask[] = [];
 
 export function OfflineBannerHUD() {
   const { goBack } = useNavigation();
-  const [tasks, setTasks] = useState<PendingTask[]>(INITIAL_TASKS);
-  const [countdown, setCountdown] = useState(5);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const { isConnected } = useRealtime();
+  const connection = useQuery({ queryKey: ['connection-check'], queryFn: getCurrentAccount, retry: false });
 
-  useEffect(() => {
-    if (isSyncing) return;
-    const timer = setInterval(() => {
-      setCountdown((prev) => (prev <= 1 ? 5 : prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isSyncing]);
-
-  const handleSimulateSync = () => {
-    setFeedback('Offline commands are not queued. Reconnect and retry the operation; nothing has been synchronized.');
-  };
-
-  const pendingCount = tasks.filter((t) => t.status !== 'synced').length;
-
-  return (
-    <View style={styles.container}>
-      <SubScreenHeader
-        label="Network resiliency"
-        title="Connection Status"
-        onBack={goBack}
-      />
-
-      {/* Amber Reconnecting Banner */}
-      <View style={styles.banner}>
-        <View style={styles.bannerLeft}>
-          <View style={styles.bannerIconBox}>
-            <WifiOff size={18} color="#b45309" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.bannerTitle}>Offline mode active</Text>
-            <Text style={styles.bannerSubtitle}>
-              {pendingCount} transactions cached safely in local device storage
-            </Text>
-          </View>
-        </View>
-        <View style={styles.retryPill}>
-          <Text style={styles.retryText}>Retry in 0{countdown}s</Text>
+  return <View style={styles.container}>
+    <SubScreenHeader label="Network Resiliency" title="Connection Status" onBack={goBack} />
+    <View style={styles.banner}>
+      <View style={styles.bannerLeft}>
+        <View style={styles.bannerIconBox}><WifiOff size={18} color={colors.warningText} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.bannerTitle}>Offline Actions Unavailable</Text>
+          <Text style={styles.bannerSubtitle}>Unsent actions are not saved on this device or replayed automatically.</Text>
         </View>
       </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {feedback && (
-          <View style={styles.feedbackToast}>
-            <Text style={styles.feedbackText}>{feedback}</Text>
-          </View>
-        )}
-
-        {/* Local Sync Queue Card */}
-        <View style={styles.queueCard}>
-          <View style={styles.queueHeader}>
-            <Text style={styles.queueTitle}>Local sync queue</Text>
-            <Text style={styles.queueCount}>
-              {pendingCount} pending task{pendingCount !== 1 ? 's' : ''}
-            </Text>
-          </View>
-
-          <View style={{ gap: 8 }}>
-            {tasks.map((t) => (
-              <View key={t.id} style={styles.taskRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                  {t.status === 'synced' ? (
-                    <CheckCircle2 size={16} color="#16a34a" />
-                  ) : (
-                    <Box size={16} color="#b45309" />
-                  )}
-                  <Text style={styles.taskLabel} numberOfLines={1}>
-                    {t.label}
-                  </Text>
-                </View>
-                <Text style={styles.taskTime}>{t.timestamp}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Manual Sync Trigger in Warm Dark Gray */}
-        <Button
-          label={'Offline Sync Unavailable'}
-          icon={
-            isSyncing ? (
-              <RefreshCw size={18} color="#ffffff" />
-            ) : (
-              <Zap size={18} color="#ffffff" />
-            )
-          }
-          onPress={handleSimulateSync}
-          disabled={true}
-          variant="primary"
-          size="lg"
-          style={{ width: '100%', marginTop: 8 }}
-        />
-      </ScrollView>
     </View>
-  );
+    <ScrollView contentContainerStyle={styles.scrollContent}>
+      <View style={styles.queueCard}>
+        <View style={styles.queueHeader}><Text style={styles.queueTitle}>Server Connection</Text></View>
+        <Text style={styles.taskLabel}>{connection.isFetching ? 'Checking server…' : connection.error ? 'Server check failed. Reconnect and retry.' : connection.data ? 'Server responded to the last check.' : 'Server has not been checked.'}</Text>
+        <Text style={styles.taskLabel}>Live updates: {isConnected ? 'Connected' : 'Disconnected'}. This is separate from the server check.</Text>
+      </View>
+      <View style={styles.queueCard}>
+        <View style={styles.queueHeader}><Text style={styles.queueTitle}>If An Action Fails</Text></View>
+        <Text style={styles.taskLabel}>Reconnect, reopen the Job or request, and check its current status before trying again. The server may have received an action even if its response was lost.</Text>
+      </View>
+      <Button label="Check Connection" icon={<RefreshCw size={18} color={colors.textInverse} />}
+        onPress={() => { void connection.refetch(); }} loading={connection.isFetching} size="lg" />
+    </ScrollView>
+  </View>;
 }
 
 const styles = StyleSheet.create({
