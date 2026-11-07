@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { JobStatus, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { listJobs, resumeJob, startJob, type JobSummaryDto } from '@/shared/api/jobs'
 import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
+import { getActiveMapVersion } from '@/shared/api/navigation'
+import { getStockVoucher } from '@/shared/api/warehouses'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
@@ -21,6 +23,7 @@ import {
   TransportRequestComposer,
   type ComposerMapState,
 } from './composer/TransportRequestComposer'
+import { voucherPrefill, type ComposerPrefill } from './composer/voucherPrefill'
 import { REQUEST_STATUS_GROUPS } from './constants'
 import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
@@ -197,6 +200,32 @@ export function TransportRequestsPage() {
   const [composing, setComposing] = useState(false)
   const [composerMap, setComposerMap] = useState<ComposerMapState | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
+  const [prefill, setPrefill] = useState<ComposerPrefill | null>(null)
+
+  // "Dispatch robots" on a stock voucher lands here with ?voucher=<id>: open the composer filled with its Containers,
+  // on the warehouse's published map. The parameter is dropped when the composer closes.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const voucherId = searchParams.get('voucher')
+  const [openedVoucherId, setOpenedVoucherId] = useState<string | null>(null)
+  const voucherPrefillQuery = useQuery({
+    queryKey: ['transport-requests', 'voucher-prefill', voucherId],
+    queryFn: async () => {
+      const voucher = await getStockVoucher(voucherId!)
+      const map = await getActiveMapVersion(voucher.warehouseId)
+      return voucherPrefill(voucher, map?.id ?? '')
+    },
+    enabled: Boolean(voucherId),
+    staleTime: 0,
+    gcTime: 0,
+  })
+  if (voucherId && voucherPrefillQuery.data && openedVoucherId !== voucherId) {
+    setOpenedVoucherId(voucherId)
+    setPrefill(voucherPrefillQuery.data)
+    setSelectedId(null)
+    setSelectedJobNo(null)
+    setComposing(true)
+    setBanner(null)
+  }
 
   const listQuery = useQuery({
     queryKey: ['transport-requests', 'list', query],
@@ -355,6 +384,7 @@ export function TransportRequestsPage() {
   function startCompose() {
     setSelectedId(null)
     setSelectedJobNo(null)
+    setPrefill(null)
     setComposing(true)
     setBanner(null)
   }
@@ -362,6 +392,8 @@ export function TransportRequestsPage() {
   function endCompose() {
     setComposing(false)
     setComposerMap(null)
+    setPrefill(null)
+    if (voucherId) setSearchParams({}, { replace: true })
   }
 
   function toggle(status: TransportRequestStatus) {
@@ -396,6 +428,7 @@ export function TransportRequestsPage() {
           }}
           onMapState={handleComposerMapState}
           onBanner={setBanner}
+          prefill={prefill}
         />
       ) : (
         <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">

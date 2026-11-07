@@ -401,7 +401,8 @@ public sealed class CreateTransportRequestHandlerTests
             Detail(2, C2, EndpointA, EndpointE, sourceLocation, 3, destinationLocation, null)));
 
         var details = db.Load(response.Id).Details.OrderBy(d => d.SequenceNo).ToList();
-        Assert.Null(details[0].SourceStorageLocationId);
+        // Endpoint A is a shelf's Endpoint, so the bare Endpoint picks up that shelf; Endpoint D is no shelf.
+        Assert.Equal(sourceLocation, details[0].SourceStorageLocationId);
         Assert.Null(details[0].SourceLevelNo);
         Assert.Null(details[0].DestinationStorageLocationId);
         Assert.Null(details[0].DestinationLevelNo);
@@ -471,6 +472,96 @@ public sealed class CreateTransportRequestHandlerTests
             handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD, null, 0))));
 
         Assert.Equal(0, db.RequestCount());
+    }
+
+    [Fact]
+    public async Task Putaway_of_an_unshelved_container_needs_a_confirmed_inbound_voucher()
+    {
+        var handler = CreateHandler(out var db);
+        var shelf = AddLocation(EndpointD, "LOC-D");
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C3, EndpointA, EndpointD, destinationLocation: shelf))));
+
+        Assert.Equal("inbound_voucher_required", ex.Code);
+        Assert.Equal(0, db.RequestCount());
+    }
+
+    [Fact]
+    public async Task Putaway_passes_with_a_confirmed_inbound_voucher_of_the_same_warehouse()
+    {
+        var handler = CreateHandler(out var db);
+        var shelf = AddLocation(EndpointD, "LOC-D");
+        _warehouse.ConfirmedVoucherLines.Add(new ContainerVoucherSnapshot(C3, Guid.NewGuid(), "PN-1", StockVoucherType.OUTBOUND, WarehouseId));
+        _warehouse.ConfirmedVoucherLines.Add(new ContainerVoucherSnapshot(C3, Guid.NewGuid(), "PN-2", StockVoucherType.INBOUND, Guid.NewGuid()));
+
+        var wrong = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C3, EndpointA, EndpointD, destinationLocation: shelf))));
+        Assert.Equal("inbound_voucher_required", wrong.Code);
+
+        _warehouse.ConfirmedVoucherLines.Add(new ContainerVoucherSnapshot(C3, Guid.NewGuid(), "PN-3", StockVoucherType.INBOUND, WarehouseId));
+        await CreateHandler(out _).HandleAsync(Request(Detail(1, C3, EndpointA, EndpointD, destinationLocation: shelf)));
+
+        Assert.Equal(1, db.RequestCount());
+    }
+
+    [Fact]
+    public async Task Taking_a_shelved_container_off_shelf_needs_a_confirmed_outbound_voucher()
+    {
+        var shelf = AddLocation(EndpointA, "LOC-A");
+        _warehouse.Containers[C1] = new ContainerSnapshot(C1, "CTN-1", ContainerStatus.STORED, shelf, 1);
+        var handler = CreateHandler(out var db);
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointE, shelf, 1))));
+        Assert.Equal("outbound_voucher_required", ex.Code);
+
+        _warehouse.ConfirmedVoucherLines.Add(new ContainerVoucherSnapshot(C1, Guid.NewGuid(), "PX-1", StockVoucherType.OUTBOUND, WarehouseId));
+        await CreateHandler(out _).HandleAsync(Request(Detail(1, C1, EndpointA, EndpointE, shelf, 1)));
+        Assert.Equal(1, db.RequestCount());
+    }
+
+    [Fact]
+    public async Task Shelf_to_shelf_relocation_needs_no_voucher()
+    {
+        var from = AddLocation(EndpointA, "LOC-A");
+        var to = AddLocation(EndpointD, "LOC-D");
+        _warehouse.Containers[C1] = new ContainerSnapshot(C1, "CTN-1", ContainerStatus.STORED, from, 1);
+        var handler = CreateHandler(out var db);
+
+        await handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD, from, 1, to, 2)));
+
+        Assert.Equal(1, db.RequestCount());
+    }
+
+    [Fact]
+    public async Task Issued_container_cannot_be_transported()
+    {
+        _warehouse.Containers[C1] = new ContainerSnapshot(C1, "CTN-1", ContainerStatus.ISSUED, null, null);
+        var handler = CreateHandler(out _);
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C1, EndpointA, EndpointD))));
+
+        Assert.Equal("container_not_eligible", ex.Code);
+    }
+
+    [Fact]
+    public async Task Choosing_a_shelf_by_its_bare_endpoint_still_needs_the_inbound_voucher()
+    {
+        var shelf = AddLocation(EndpointD, "LOC-D");
+        var handler = CreateHandler(out var db);
+
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            handler.HandleAsync(Request(Detail(1, C3, EndpointA, EndpointD))));
+        Assert.Equal("inbound_voucher_required", ex.Code);
+
+        _warehouse.ConfirmedVoucherLines.Add(new ContainerVoucherSnapshot(C3, Guid.NewGuid(), "PN-1", StockVoucherType.INBOUND, WarehouseId));
+        var response = await CreateHandler(out _).HandleAsync(Request(Detail(1, C3, EndpointA, EndpointD)));
+
+        var detail = Assert.Single(db.Load(response.Id).Details);
+        Assert.Equal(shelf, detail.DestinationStorageLocationId);
+        Assert.Null(detail.DestinationLevelNo);
     }
 
     private Guid AddLocation(Guid endpointId, string code, bool isActive = true)

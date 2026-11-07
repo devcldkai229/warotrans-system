@@ -58,6 +58,12 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
     public Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         NextDailyAsync("job", "JOB-", day, cancellationToken);
 
+    public Task<string> NextInboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+        NextDailyAsync("voucher-in", "PN-", day, cancellationToken);
+
+    public Task<string> NextOutboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+        NextDailyAsync("voucher-out", "PX-", day, cancellationToken);
+
     private async Task<string> NextFixedAsync(string key, string prefix, int width, CancellationToken cancellationToken)
     {
         var value = await NextValueAsync(key, null, cancellationToken);

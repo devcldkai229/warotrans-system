@@ -1,6 +1,6 @@
 import { apiFetch } from './client';
 import { requireMobileCapability } from './capabilities';
-import type { ContainerStatus, ShelfSlotOccupancy } from '../types/contracts';
+import type { ContainerStatus, ShelfSlotOccupancy, StockVoucherStatus, StockVoucherType } from '../types/contracts';
 export interface WarehouseListItem { id: string; code: string; name: string; isActive: boolean; createdAt: string }
 export interface ListWarehousesResponse { items: WarehouseListItem[]; total: number }
 export interface ContainerListItem {
@@ -101,6 +101,8 @@ export function autoAllocateStorageSlots(zone: WarehouseZoneCode, count: number,
 export interface CreateContainerBody {
   productId: string; warehouseId?: string; supplierPackageBarcode?: string | null; initialStorageLocationId?: string | null;
   initialLevelNo?: number | null; productName?: string; productSku?: string; qty?: number; category?: string;
+  /** A DRAFT phiếu nhập; the new Container is added to it in the same transaction. */
+  stockVoucherId?: string | null;
 }
 export interface CreateContainerResponse {
   id: string; barcode: string; status: string; productId: string;
@@ -113,7 +115,20 @@ export async function createContainer(body: CreateContainerBody): Promise<Create
     method: 'POST', body: JSON.stringify({
       productId: body.productId, supplierPackageBarcode: body.supplierPackageBarcode ?? null,
       initialStorageLocationId: body.initialStorageLocationId ?? null, initialLevelNo: body.initialLevelNo ?? null,
+      stockVoucherId: body.stockVoucherId ?? null,
     }),
   });
   return response;
+}
+/** `Warehouse/Features/ListStockVouchers/Response.cs`. Quantities are Containers; `doneCount` is robot progress. */
+export interface StockVoucherListItem {
+  id: string; code: string; type: StockVoucherType; status: StockVoucherStatus; referenceNo: string | null; note: string | null;
+  createdAt: string; confirmedAt: string | null; containerCount: number; doneCount: number;
+}
+export function listStockVouchers(params: { warehouseId: string; type?: StockVoucherType; status?: StockVoucherStatus; take?: number }) {
+  return apiFetch<{ items: StockVoucherListItem[]; total: number }>(`/api/warehouse/stock-vouchers${queryString(params)}`);
+}
+/** Putaway needs the phiếu nhập CONFIRMED; confirming does not wait for robots. */
+export function confirmStockVoucher(id: string) {
+  return apiFetch<StockVoucherListItem>(`/api/warehouse/stock-vouchers/${id}/confirm`, { method: 'POST' });
 }

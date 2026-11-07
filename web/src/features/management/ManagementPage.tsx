@@ -13,6 +13,8 @@ import { InventorySection } from './InventorySection'
 import { LocationsSection } from './LocationsSection'
 import { ProductsSection } from './ProductsSection'
 import { RolesSection } from './RolesSection'
+import { useStockVouchers } from './stockVouchers'
+import { VouchersSection } from './VouchersSection'
 import { WarehousesSection } from './WarehousesSection'
 import {
   listCategories,
@@ -33,6 +35,7 @@ type TabId =
   | 'categories'
   | 'containers'
   | 'inventory'
+  | 'vouchers'
   | 'locations'
 
 const MENU: { label: string; items: { id: TabId; label: string }[] }[] = [
@@ -51,6 +54,7 @@ const MENU: { label: string; items: { id: TabId; label: string }[] }[] = [
       { id: 'categories', label: 'Categories' },
       { id: 'containers', label: 'Containers' },
       { id: 'inventory', label: 'Inventory' },
+      { id: 'vouchers', label: 'Stock vouchers' },
       { id: 'locations', label: 'Storage locations' },
     ],
   },
@@ -64,6 +68,7 @@ const TAB_IDS: TabId[] = [
   'categories',
   'containers',
   'inventory',
+  'vouchers',
   'locations',
 ]
 
@@ -92,6 +97,7 @@ export function ManagementPage() {
     queryKey: ['warehouses', 'all'],
     queryFn: () => listWarehouses({ take: 100 }),
   })
+  const vouchersQuery = useStockVouchers(locationListing.warehouse?.id ?? null)
 
   useEffect(() => {
     let cancelled = false
@@ -184,9 +190,10 @@ export function ManagementPage() {
       categories: categories.length,
       containers: containers.total,
       inventory: inventory.items.reduce((sum, row) => sum + row.containerCount, 0),
+      vouchers: vouchersQuery.data?.total ?? 0,
       locations: locationListing.items.length,
     }),
-    [accounts, products, categories, locationListing, containers, inventory, warehousesQuery.data],
+    [accounts, products, categories, locationListing, containers, inventory, warehousesQuery.data, vouchersQuery.data],
   )
 
   return (
@@ -233,6 +240,7 @@ export function ManagementPage() {
             ) : null}
             {tab === 'containers' ? <ContainersSection listing={containers} loadState={containerState} /> : null}
             {tab === 'inventory' ? <InventorySection listing={inventory} loadState={inventoryState} /> : null}
+            {tab === 'vouchers' ? <VouchersSection warehouse={locationListing.warehouse} products={products} /> : null}
             {tab === 'locations' ? (
               <LocationsSection
                 listing={locationListing}

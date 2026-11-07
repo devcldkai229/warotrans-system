@@ -599,7 +599,17 @@ export interface CreateCategoryBody {
   description?: string
 }
 
-export type ContainerStatus = 'CREATED' | 'PACKED' | 'RESERVED' | 'IN_TRANSIT' | 'STORED' | 'HOLD' | 'EMPTY' | 'OUT_OF_SERVICE'
+/** ISSUED: left the warehouse on a confirmed outbound stock voucher; it holds no storage location. */
+export type ContainerStatus =
+  | 'CREATED'
+  | 'PACKED'
+  | 'RESERVED'
+  | 'IN_TRANSIT'
+  | 'STORED'
+  | 'HOLD'
+  | 'EMPTY'
+  | 'OUT_OF_SERVICE'
+  | 'ISSUED'
 
 /** warehouse.containers: the physical transport unit; one Container holds one Product type (rules/00). */
 export interface Container {

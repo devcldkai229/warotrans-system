@@ -659,13 +659,17 @@ export function TransportCreationScreen() {
         const destinationLocation = slot ? storageLocations.find(location => location.id === slot.storageLocationId && location.endpointId === destination.id) : undefined;
         const repeatLocation = previous && previous.destinationEndpointId === destination.id
           ? storageLocations.find(location => location.id === previous.destinationStorageLocationId && location.endpointId === destination.id) : undefined;
+        // A shelf endpoint picked directly still lands the Container on that shelf, so the backend stores it
+        // (and checks its phiếu nhập); the level is left to the backend default.
+        const endpointLocation = destinationLocation || repeatLocation
+          ? undefined : storageLocations.find(location => location.endpointId === destination.id && location.isActive);
         containerAssignmentsSummary.push({ barcode: container.barcode, targetLabel: destination.code });
         return {
           sequenceNo: index + 1, containerId: container.id,
           sourceStorageLocationId: sourceLocation?.id || null, sourceEndpointId: source.id,
           sourceLevelNo: sourceLocation ? container.currentLevelNo : null,
           destinationEndpointId: destination.id,
-          destinationStorageLocationId: destinationLocation?.id || repeatLocation?.id || null,
+          destinationStorageLocationId: destinationLocation?.id || repeatLocation?.id || endpointLocation?.id || null,
           destinationLevelNo: destinationLocation ? slot?.levelNo ?? null : repeatLocation ? previous?.destinationLevelNo ?? null : null,
         };
       });

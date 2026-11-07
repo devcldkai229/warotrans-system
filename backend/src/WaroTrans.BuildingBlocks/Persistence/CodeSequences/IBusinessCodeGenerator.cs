@@ -13,4 +13,6 @@ public interface IBusinessCodeGenerator
     Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);
     Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);
     Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);
+    Task<string> NextInboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);
+    Task<string> NextOutboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);
 }

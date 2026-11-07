@@ -13,6 +13,8 @@ export function useTransportRequestComposerData(options: {
   warehouseId: string
   mapVersionId: string
   workflowId: string
+  /** Containers a prefilled draft already uses (e.g. a stock voucher's), kept selectable beside the fetched page. */
+  extraContainers?: ComposerContainer[]
 }): ComposerData {
   const { account } = useAuth()
   const [containerSearch, setContainerSearch] = useState('')
@@ -121,27 +123,34 @@ export function useTransportRequestComposerData(options: {
     [locationsQuery.data, endpointById],
   )
 
-  const containers: ComposerContainer[] = useMemo(
-    () =>
-      (containersQuery.data?.items ?? []).map((item) => {
+  const { extraContainers } = options
+  const containers: ComposerContainer[] = useMemo(() => {
+    const fetched = (containersQuery.data?.items ?? []).map((item) => {
+      const endpoint = item.currentEndpointId ? endpointById.get(item.currentEndpointId) : undefined
+      return {
+        id: item.id,
+        barcode: item.barcode,
+        productName: item.productName,
+        sku: item.productSku,
+        status: item.status as ContainerStatus,
+        currentStorageLocationId: item.currentStorageLocationId,
+        currentLocationCode: item.currentStorageLocationCode,
+        currentLocationName: item.currentStorageLocationCode,
+        currentLevelNo: item.currentLevelNo,
+        currentEndpointId: item.currentEndpointId,
+        currentEndpointCode: endpoint?.code ?? null,
+        currentEndpointName: endpoint?.name ?? null,
+      }
+    })
+    const fetchedIds = new Set(fetched.map((item) => item.id))
+    const extras = (extraContainers ?? [])
+      .filter((item) => !fetchedIds.has(item.id))
+      .map((item) => {
         const endpoint = item.currentEndpointId ? endpointById.get(item.currentEndpointId) : undefined
-        return {
-          id: item.id,
-          barcode: item.barcode,
-          productName: item.productName,
-          sku: item.productSku,
-          status: item.status as ContainerStatus,
-          currentStorageLocationId: item.currentStorageLocationId,
-          currentLocationCode: item.currentStorageLocationCode,
-          currentLocationName: item.currentStorageLocationCode,
-          currentLevelNo: item.currentLevelNo,
-          currentEndpointId: item.currentEndpointId,
-          currentEndpointCode: endpoint?.code ?? null,
-          currentEndpointName: endpoint?.name ?? null,
-        }
-      }),
-    [containersQuery.data, endpointById],
-  )
+        return { ...item, currentEndpointCode: endpoint?.code ?? null, currentEndpointName: endpoint?.name ?? null }
+      })
+    return [...extras, ...fetched]
+  }, [containersQuery.data, endpointById, extraContainers])
 
   const workflows: ComposerWorkflow[] = useMemo(
     () =>

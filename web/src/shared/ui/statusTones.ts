@@ -82,6 +82,7 @@ export const CONTAINER_STATUS_TONE: Record<ContainerStatus, Tone> = {
   HOLD: 'amber',
   EMPTY: 'grey',
   OUT_OF_SERVICE: 'red',
+  ISSUED: 'rose',
 }
 
 /** Solid tone, for dots and progress bars. */

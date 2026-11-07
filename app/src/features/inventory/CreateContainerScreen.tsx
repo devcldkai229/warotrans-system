@@ -25,7 +25,15 @@ import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { createContainer, listProducts, listProductCategories } from '../../shared/api';
+import {
+  confirmStockVoucher,
+  createContainer,
+  listProducts,
+  listProductCategories,
+  listStockVouchers,
+  listWarehouses,
+  type StockVoucherListItem,
+} from '../../shared/api';
 
 interface ProductCatalogEntry {
   name: string;
@@ -56,6 +64,22 @@ export function CreateContainerScreen() {
   const [supplierBarcode, setSupplierBarcode] = useState('');
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [printFeedback, setPrintFeedback] = useState<string | null>(null);
+  // Draft phiếu nhập the new Containers go on; '' = none. Putaway needs the voucher CONFIRMED.
+  const [vouchers, setVouchers] = useState<StockVoucherListItem[]>([]);
+  const [voucherId, setVoucherId] = useState('');
+  const [voucherConfirmed, setVoucherConfirmed] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const voucher = vouchers.find(item => item.id === voucherId);
+
+  useEffect(() => {
+    let mounted = true;
+    listWarehouses({ isActive: true, take: 50 })
+      .then(warehouses => Promise.all(warehouses.items.map(warehouse =>
+        listStockVouchers({ warehouseId: warehouse.id, type: 'INBOUND', status: 'DRAFT', take: 50 }))))
+      .then(pages => { if (mounted) setVouchers(pages.flatMap(page => page.items)); })
+      .catch(() => { if (mounted) setVouchers([]); });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -92,7 +116,11 @@ export function CreateContainerScreen() {
     const created: string[] = [];
     try {
       for (let index = 0; index < count; index++) {
-        const response = await createContainer({ productId: item.productId, supplierPackageBarcode: supplierBarcode.trim() || null });
+        const response = await createContainer({
+          productId: item.productId,
+          supplierPackageBarcode: supplierBarcode.trim() || null,
+          stockVoucherId: voucherId || null,
+        });
         created.push(response.barcode);
       }
     } catch (error: any) {
@@ -109,6 +137,28 @@ export function CreateContainerScreen() {
   const handlePrint = () => {
     setPrintFeedback('Printer integration is not configured. Use the registered container code for manual entry.');
     setTimeout(() => setPrintFeedback(null), 4000);
+  };
+  const handleConfirmVoucher = async () => {
+    if (!voucher || isConfirming) return;
+    setIsConfirming(true);
+    try {
+      await confirmStockVoucher(voucher.id);
+      setVoucherConfirmed(true);
+      toast.success(`${voucher.code} confirmed. Its Containers can be put away.`);
+    } catch (error: any) {
+      toast.error(error.message || 'The voucher could not be confirmed.');
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+  const handleIngestAnother = () => {
+    // A confirmed voucher takes no more Containers, so it leaves the picker.
+    if (voucherConfirmed) {
+      setVouchers(current => current.filter(item => item.id !== voucherId));
+      setVoucherId('');
+      setVoucherConfirmed(false);
+    }
+    setIsSuccess(false);
   };
   const handleDispatchInbound = () => {
     if (!createdBarcodes.length) return;
@@ -262,16 +312,42 @@ export function CreateContainerScreen() {
 
             {/* Next Steps CTA */}
             <View style={styles.successActions}>
+              {voucher ? (
+                <View style={styles.voucherNote}>
+                  <Text style={styles.voucherNoteText}>
+                    {voucherConfirmed
+                      ? `${voucher.code} is confirmed: its Containers can be put away.`
+                      : `Added to ${voucher.code} (draft). Confirm it when every Container is registered; putaway needs a confirmed phiếu nhập.`}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.voucherNote}>
+                  <Text style={styles.voucherNoteText}>
+                    Not on a phiếu nhập. Putaway needs one: add these Containers to a voucher on the web first.
+                  </Text>
+                </View>
+              )}
+              {voucher && !voucherConfirmed ? (
+                <Button
+                  label={`Confirm ${voucher.code}`}
+                  icon={<Check size={18} color="#ffffff" />}
+                  loading={isConfirming}
+                  disabled={isConfirming}
+                  onPress={handleConfirmVoucher}
+                  variant="primary"
+                  size="lg"
+                />
+              ) : null}
               <Button
                 label="Dispatch Putaway"
-                icon={<Rocket size={18} color="#ffffff" />}
+                icon={<Rocket size={18} color={voucher && !voucherConfirmed ? colors.textPrimary : '#ffffff'} />}
                 onPress={handleDispatchInbound}
-                variant="primary"
+                variant={voucher && !voucherConfirmed ? 'outline' : 'primary'}
                 size="lg"
               />
               <Button
                 label="Ingest Another Container"
-                onPress={() => setIsSuccess(false)}
+                onPress={handleIngestAnother}
                 variant="outline"
                 size="md"
               />
@@ -327,6 +403,28 @@ export function CreateContainerScreen() {
                 );
               })}
             </View>
+
+            {/* Phiếu nhập the Containers are received on */}
+            <Text style={styles.fieldLabel}>Inbound voucher (phiếu nhập)</Text>
+            <View style={styles.categoryChips}>
+              {[{ id: '', code: 'None' }, ...vouchers].map((item) => {
+                const isSelected = voucherId === item.id;
+                return (
+                  <Pressable
+                    key={item.id || 'none'}
+                    onPress={() => { setVoucherId(item.id); setVoucherConfirmed(false); }}
+                    style={[styles.chip, isSelected && styles.chipSelected]}
+                  >
+                    <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                      {item.code}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {vouchers.length === 0 && (
+              <Text style={styles.voucherHint}>No draft phiếu nhập. Create one in Management → Stock vouchers on the web.</Text>
+            )}
 
             {/* Step 3: Quantity */}
             <Text style={styles.fieldLabel}>Supplier Package</Text>
@@ -629,6 +727,24 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 18,
     gap: 10,
+  },
+  voucherNote: {
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: 12,
+  },
+  voucherNoteText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  voucherHint: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontFamily: typography.fontSans,
+    marginTop: 6,
   },
   formCard: {
     backgroundColor: '#ffffff',
