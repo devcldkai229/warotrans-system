@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Navigation.RouteGraph;
 using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.IntegrationTests.Navigation.Maps;
@@ -105,7 +106,7 @@ public sealed class RouteGraphTests(WaroTransWebApplicationFactory factory) : In
     {
         var map = await CreateDraftAsync();
         await AddLaneAsync(map.Id, "BIDIRECTIONAL", [0.0, 0.0], [2.0, 0.0]);
-        await AddStopAsync(map.Id, "Far Dock", 1.0, 0.8);
+        await AddStopAsync(map.Id, "Far Dock", 1.0, RouteGraphOptions.Default.MaxEndpointAccessDistance + 0.5);
 
         var response = await Client.GetAsync($"/api/navigation/maps/{map.Id}/route-graph");
 
@@ -116,7 +117,7 @@ public sealed class RouteGraphTests(WaroTransWebApplicationFactory factory) : In
         Assert.Equal("ENDPOINT_TOO_FAR", issue.GetProperty("code").GetString());
         Assert.Equal("ERROR", issue.GetProperty("severity").GetString());
         Assert.Equal("EP-FAR-DOCK", issue.GetProperty("relatedCodes")[0].GetString());
-        Assert.Contains("0.80 m", issue.GetProperty("message").GetString());
+        Assert.Contains("3.50 m", issue.GetProperty("message").GetString());
     }
 
     [Fact]

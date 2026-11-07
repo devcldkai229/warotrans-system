@@ -37,7 +37,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       mongodb:
-        image: mongo:8
+        # MongoDB 8.x refuses to start on the runner's Linux kernel (6.19+): SERVER-121912.
+        image: mongo:7
         env:
           MONGO_INITDB_ROOT_USERNAME: warotrans
           MONGO_INITDB_ROOT_PASSWORD: warotrans

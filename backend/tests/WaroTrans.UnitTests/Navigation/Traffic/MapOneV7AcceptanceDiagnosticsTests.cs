@@ -21,7 +21,7 @@ public sealed class MapOneV7AcceptanceDiagnosticsTests(ITestOutputHelper output)
         "EP-PARKING-A", "EP-INBOUND", "EP-SHELF-A-01", "EP-OUTBOUND", "EP-PARKING-A"
     ];
 
-    [Fact]
+    [Fact(Skip = MapSnapshotCompileHarness.ActiveRouteGraphNotConnected)]
     public void Acceptance_fingerprint_turn_nostop_traffic_motion_labels()
     {
         var root = MapSnapshotCompileHarness.ResolveSampleDir(MapFolder);

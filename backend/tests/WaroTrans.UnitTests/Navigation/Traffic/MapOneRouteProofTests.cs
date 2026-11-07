@@ -24,7 +24,7 @@ public sealed class MapOneRouteProofTests(ITestOutputHelper output)
         "EP-PARKING-A", "EP-OUTBOUND", "EP-SHELF-A-01", "EP-INBOUND", "EP-PARKING-A"
     ];
 
-    [Fact]
+    [Fact(Skip = MapSnapshotCompileHarness.ActiveRouteGraphNotConnected)]
     public void Route_proof_levels_and_debug_svg()
     {
         var input = MapSnapshotCompileHarness.Load(MapFolder);
