@@ -20,13 +20,13 @@ public sealed class MapOneTurnManeuverAuditTests(ITestOutputHelper output)
         "EP-PARKING-A", "EP-OUTBOUND",
         "EP-PARKING-B", "EP-SHELFA04", "EP-CHARGING-A", "EP-SHELFB04",
         "EP-SHELFB01", "EP-SHELFB03", "EP-SHELFC02", "EP-QUEUE-POINT",
-        "EP-INBOUND", "EP-SHELFA01", "EP-INSPECTION", "EP-SHELFA02", "EP-SHELFA03",
+        "EP-INBOUND", "EP-SHELF-A-01", "EP-INSPECTION", "EP-SHELFA02", "EP-SHELFA03",
         "EP-SHELFB02", "EP-SHELFC01"
     ];
 
     private static readonly string[] ForwardCycle =
     [
-        "EP-PARKING-A", "EP-INBOUND", "EP-SHELFA01", "EP-OUTBOUND", "EP-PARKING-A"
+        "EP-PARKING-A", "EP-INBOUND", "EP-SHELF-A-01", "EP-OUTBOUND", "EP-PARKING-A"
     ];
 
     [Fact]

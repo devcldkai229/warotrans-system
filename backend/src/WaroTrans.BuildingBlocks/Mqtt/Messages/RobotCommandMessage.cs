@@ -113,6 +113,10 @@ public sealed class ExtendAuthorityPayload
     public long PlanRevision { get; set; }
     public List<string> ResourceIds { get; set; } = [];
     public DateTimeOffset? ExpiresAt { get; set; }
+    /// <summary>Stage-3: robot plan hash this grant covers (echo of traffic_plan.planHash).</summary>
+    public string? PlanHash { get; set; }
+    /// <summary>Stage-3: geometry the resources were computed with, so the robot can check it stays inside them.</summary>
+    public SemanticGeometryPayload? Geometry { get; set; }
     public Dictionary<string, double>? SpeedLimits { get; set; }
 
     /// <summary>Set when the extended authority reaches the route destination (robot then finishes NAVIGATE).</summary>
@@ -120,6 +124,17 @@ public sealed class ExtendAuthorityPayload
 
     /// <summary>Steps for the newly granted slice; empty/null = Forward-only over SegmentEdgeIds.</summary>
     public List<ManeuverStepPayload>? Maneuvers { get; set; }
+}
+
+public sealed class SemanticGeometryPayload
+{
+    public double CellSizeMeters { get; set; }
+    public double HorizonMeters { get; set; }
+    public double SampleStepMeters { get; set; }
+    /// <summary>Disc radius reserved around each path sample.</summary>
+    public double ReserveRadiusMeters { get; set; }
+    /// <summary>Footprint radius (any heading) the robot checks against the reserved cells.</summary>
+    public double FootprintRadiusMeters { get; set; }
 }
 
 public sealed class RenewAuthorityPayload
@@ -181,6 +196,8 @@ public sealed class TrafficPlanProposeMessage
     public Guid? CommandId { get; set; }
     public Guid? JobStepId { get; set; }
     public Guid? JobId { get; set; }
+    /// <summary>Robot-computed hash of <see cref="Poses"/>; the grant echoes it.</summary>
+    public string? PlanHash { get; set; }
     public List<Pose2DPayload> Poses { get; set; } = [];
     public Pose2DPayload? Goal { get; set; }
     public DateTimeOffset SentAt { get; set; }
@@ -199,6 +216,10 @@ public sealed class AuthorityStateMessage
     public string State { get; set; } = "IDLE";
     public Guid? ActiveCommandId { get; set; }
     public List<int> GrantedEdgeIds { get; set; } = [];
+    /// <summary>Robot's own map pose when it sent this (right after a reconnect the stored telemetry is stale).</summary>
+    public double? PoseX { get; set; }
+    public double? PoseY { get; set; }
+    public bool? LocalizationOk { get; set; }
     public DateTimeOffset SentAt { get; set; }
 }
 

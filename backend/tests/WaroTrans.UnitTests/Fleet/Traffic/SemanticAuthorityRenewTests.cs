@@ -30,7 +30,7 @@ public class SemanticAuthorityRenewTests
         ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(1, 0, 0));
 
     private static SemanticPlanProposeRequest Propose(Guid robotId, string fingerprint, long revision) =>
-        new(Guid.NewGuid(), robotId, "RBT-1", fingerprint, revision, Plan(), null, null, null);
+        new(Guid.NewGuid(), robotId, "RBT-1", fingerprint, revision, Plan(), null, null, null, CommandId: Guid.Empty);
 
     private static SegmentedTrafficCoordinator Coordinator(TrafficCoordinatorMode mode) =>
         new(
@@ -44,6 +44,7 @@ public class SemanticAuthorityRenewTests
         var coordinator = Coordinator(TrafficCoordinatorMode.Semantic);
         var policy = Policy();
         Assert.True((await coordinator.BindSemanticPolicyAsync(policy)).Ok);
+        await coordinator.CompleteReconciliationAsync([]);
 
         var robotId = Guid.NewGuid();
         var grant = await coordinator.AcquireSemanticPlanAsync(
@@ -84,6 +85,7 @@ public class SemanticAuthorityRenewTests
         state.BeginEpoch(1);
         var policy = Policy();
         Assert.True(state.BindSemanticPolicy(policy).Ok);
+        state.CompleteReconciliation([]);
 
         var grantedAt = clock.GetUtcNow();
         var robotId = Guid.NewGuid();
@@ -117,6 +119,7 @@ public class SemanticAuthorityRenewTests
         state.BeginEpoch(1);
         var policy = Policy();
         Assert.True(state.BindSemanticPolicy(policy).Ok);
+        state.CompleteReconciliation([]);
 
         var robotId = Guid.NewGuid();
         Assert.True(state.AcquireSemanticPlan(Propose(robotId, policy.SemanticMapFingerprint, 1)).Granted);

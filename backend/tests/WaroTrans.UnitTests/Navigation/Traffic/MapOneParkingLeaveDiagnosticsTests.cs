@@ -35,7 +35,7 @@ public sealed class MapOneParkingLeaveDiagnosticsTests(ITestOutputHelper output)
             sb.AppendLine($"JUNCTION {z.Code} bbox=[{xs.Min():0.###}..{xs.Max():0.###},{ys.Min():0.###}..{ys.Max():0.###}]");
         }
 
-        string[] codes = ["EP-PARKING-A", "EP-PARKING-B", "EP-CHARGING-A", "EP-INBOUND", "EP-OUTBOUND", "EP-SHELFA01"];
+        string[] codes = ["EP-PARKING-A", "EP-PARKING-B", "EP-CHARGING-A", "EP-INBOUND", "EP-OUTBOUND", "EP-SHELF-A-01"];
         var stations = g.Stations.ToDictionary(s => s.EndpointCode, s => s, StringComparer.Ordinal);
         foreach (var code in codes.Where(stations.ContainsKey))
         {

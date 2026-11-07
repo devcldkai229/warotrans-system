@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Fleet.Enums;
@@ -16,6 +17,7 @@ namespace WaroTrans.Fleet.Services;
 public sealed class RobotCommandTimeoutMonitorHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<MqttOptions> mqttOptions,
+    RobotIngressGate ingressGate,
     ILogger<RobotCommandTimeoutMonitorHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -48,6 +50,11 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
 
     private async Task TickAsync(CancellationToken cancellationToken)
     {
+        if (!ingressGate.IsActive)
+        {
+            return; // standby: ACKs are handled by the lease holder
+        }
+
         var options = mqttOptions.Value;
         var timeout = TimeSpan.FromSeconds(Math.Max(1, options.CommandAckTimeoutSeconds));
         var cutoff = DateTimeOffset.UtcNow - timeout;

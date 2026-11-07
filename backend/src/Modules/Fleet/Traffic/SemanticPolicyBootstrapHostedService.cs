@@ -76,13 +76,7 @@ public sealed class SemanticPolicyBootstrapHostedService(
             return;
         }
 
-        policy = policy with
-        {
-            HorizonMeters = opts.SemanticHorizonMeters,
-            CellSizeMeters = opts.SemanticCellSizeMeters,
-            FootprintHalfLength = Math.Max(0.01, opts.Footprint.LengthMeters / 2.0 + opts.Footprint.PaddingMeters),
-            FootprintHalfWidth = Math.Max(0.01, opts.Footprint.WidthMeters / 2.0 + opts.Footprint.PaddingMeters),
-        };
+        policy = opts.ApplySemanticOverrides(policy);
 
         var bind = await coordinator.BindSemanticPolicyAsync(policy, cancellationToken).ConfigureAwait(false);
         if (!bind.Ok)

@@ -18,7 +18,7 @@ public sealed class MapOneV7AcceptanceDiagnosticsTests(ITestOutputHelper output)
 
     private static readonly string[] ForwardCycle =
     [
-        "EP-PARKING-A", "EP-INBOUND", "EP-SHELFA01", "EP-OUTBOUND", "EP-PARKING-A"
+        "EP-PARKING-A", "EP-INBOUND", "EP-SHELF-A-01", "EP-OUTBOUND", "EP-PARKING-A"
     ];
 
     [Fact]

@@ -406,6 +406,7 @@ public sealed class JobExecutionEngineTests
     {
         var dir = Path.Combine(Path.GetTempPath(), "wt-semantic-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        _lastBundleDir = dir;
         File.WriteAllText(Path.Combine(dir, "semantic_manifest.json"), JsonSerializer.Serialize(new
         {
             mapCode = "MAP-TEST",
@@ -431,6 +432,7 @@ public sealed class JobExecutionEngineTests
     }
 
     private WaroTrans.Fleet.Traffic.SegmentedTrafficCoordinator? _semanticTraffic;
+    private string _lastBundleDir = "";
 
     private RobotCommandLifecycleJobStepHandler SemanticResultHandler() =>
         new(_db, SemanticEngine(), _events, NullLogger<RobotCommandLifecycleJobStepHandler>.Instance);
@@ -440,6 +442,102 @@ public sealed class JobExecutionEngineTests
             commandId ?? _fleet.Commands.Last(c => c.JobStepId == stepId).CommandId, _fleet.RobotId, "RBT-SIM-01",
             "NAVIGATE_TO_POSE", "COMPLETED", null, stepId, outcome, outcome == "SUCCEEDED" ? null : "NAV_FAILED",
             RobotCommandLifecycleChanged.Phases.Result));
+
+    [Fact]
+    public async Task Semantic_move_on_a_quarantined_robot_pauses_the_job_and_resumes_after_reconcile()
+    {
+        var jobId = await ProvisionAsync();
+        SemanticEngine();
+        await _semanticTraffic!.CompleteReconciliationAsync([]);
+        await _semanticTraffic.MarkOfflineAsync(_fleet.RobotId);    // e.g. link dropped before the job started
+
+        await SemanticEngine().StartAsync(jobId, null);
+
+        // A safety wait, not a failed job: no motion, PAUSED whatever OnFailure says, containers untouched.
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Equal("traffic_robot_unavailable", job.FailureCode);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.ASSIGNED, c.Status));
+        Assert.Empty(_fleet.Commands);
+
+        // Operator reconciles the localized robot, then resumes: the MOVE goes out.
+        Assert.True((await _semanticTraffic.ReconcileRobotAsync(_fleet.RobotId, 0, 0, true, [])).Ok);
+        await SemanticEngine().ResumeAsync(jobId, null);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Single(_fleet.Commands);
+    }
+
+    private JobExecutionEngine HomeEngine(string homeCode)
+    {
+        var engine = SemanticEngine();
+        var options = Microsoft.Extensions.Options.Options.Create(new WaroTrans.Fleet.Traffic.TrafficOptions
+        {
+            Mode = WaroTrans.Fleet.Traffic.TrafficCoordinatorMode.Semantic,
+            SemanticMapDirectory = _lastBundleDir,
+            EventLogCapacity = 64,
+            RobotHomeEndpoints = new(StringComparer.Ordinal) { ["RBT-SIM-01"] = homeCode }
+        });
+        _ = engine;
+        return new JobExecutionEngine(
+            _db, _fleet, _navigation, _requests, new StepInputResolver(), _events,
+            NullLogger<JobExecutionEngine>.Instance,
+            trafficOptions: options,
+            segmentedTraffic: _semanticTraffic);
+    }
+
+    private void PlaceHomeEndpoint(double x, double y)
+    {
+        var id = Guid.NewGuid();
+        _navigation.Poses[id] = new EndpointPoseSnapshot(id, _mapVersionId, "EP-PARKING-A", x, y, 0.0, true);
+    }
+
+    [Fact]
+    public async Task First_job_is_refused_unless_the_robot_is_localized_at_its_home_endpoint()
+    {
+        var jobId = await ProvisionAsync();
+        PlaceHomeEndpoint(5.0, 5.0);
+        SetRobot(r => r with { PoseX = 0, PoseY = 0 });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => HomeEngine("EP-PARKING-A").StartAsync(jobId, null));
+
+        Assert.Equal("robot_not_at_home", ex.Code);
+        Assert.Empty(_fleet.Commands);
+        Assert.NotEqual(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+
+        // Placed and localized there (within tolerance): it starts.
+        SetRobot(r => r with { PoseX = 5.1, PoseY = 4.9 });
+        await HomeEngine("EP-PARKING-A").StartAsync(jobId, null);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Single(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task First_job_is_refused_when_the_robot_is_not_localized_or_the_home_is_not_on_the_map()
+    {
+        var jobId = await ProvisionAsync();
+        var missing = await Assert.ThrowsAsync<ConflictException>(() => HomeEngine("EP-NOT-THERE").StartAsync(jobId, null));
+        Assert.Equal("robot_home_not_on_map", missing.Code);
+
+        PlaceHomeEndpoint(0, 0);
+        SetRobot(r => r with { PoseX = 0, PoseY = 0, LocalizationStatus = LocalizationStatus.LOST });
+        var lost = await Assert.ThrowsAsync<ConflictException>(() => HomeEngine("EP-PARKING-A").StartAsync(jobId, null));
+        Assert.Equal("robot_not_localized", lost.Code);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task Semantic_move_with_stale_telemetry_pauses_instead_of_trusting_the_stored_pose()
+    {
+        var jobId = await ProvisionAsync();
+        SetRobot(r => r with { LastTelemetryAt = DateTimeOffset.UtcNow.AddMinutes(-1) });
+
+        await SemanticEngine().StartAsync(jobId, null);
+
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Equal("traffic_robot_unavailable", job.FailureCode);
+        Assert.Empty(_fleet.Commands);
+    }
 
     [Fact]
     public async Task Semantic_move_waits_for_the_robot_before_asking_staff()
@@ -675,6 +773,9 @@ public sealed class JobExecutionEngineTests
 
         public Task<IReadOnlyList<EndpointSnapshot>> GetEndpointsAsync(IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EndpointSnapshot>>([]);
+
+        public Task<EndpointPoseSnapshot?> GetEndpointPoseByCodeAsync(Guid mapVersionId, string code, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Poses.Values.FirstOrDefault(p => p.MapVersionId == mapVersionId && p.Code == code));
     }
 
     private sealed class FakeRequestActivity : ITransportRequestActivityQuery

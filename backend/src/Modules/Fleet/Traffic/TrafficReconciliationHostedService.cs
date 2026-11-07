@@ -26,6 +26,38 @@ public sealed class TrafficReconciliationHostedService(
         var fleetDb = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
         var compile = scope.ServiceProvider.GetService<TrafficGraphCompileService>();
 
+        var (seeds, mapVersionId) = await BuildSeedsAsync(fleetDb, cancellationToken).ConfigureAwait(false);
+        CompiledTrafficGraph? graph = null;
+
+        // Semantic Mode reserves zones/cells from the bundle; a RouteGraph bound here would switch occupancy seeding,
+        // reconcile and clearance to graph geometry (no resources at all off the lanes).
+        if (options.Value.Mode != TrafficCoordinatorMode.Semantic && mapVersionId is Guid mv && compile is not null)
+        {
+            try
+            {
+                var compiled = await compile.CompileAsync(mv, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken)
+                    .ConfigureAwait(false);
+                graph = compiled.Result.Graph;
+                await segmented.BindGraphAsync(mv, graph, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Traffic reconcile: failed to compile graph for map {MapVersionId}", mv);
+            }
+        }
+
+        await segmented.CompleteReconciliationAsync(seeds, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation(
+            "Traffic reconcile complete: seeds={SeedCount} graphBound={Bound} mode={Mode}",
+            seeds.Count,
+            graph is not null,
+            options.Value.Mode);
+    }
+
+    /// <summary>What the database says about every robot that may be on the floor (start-up and lease takeover).</summary>
+    public static async Task<(IReadOnlyList<TrafficReconcileSeed> Seeds, Guid? MapVersionId)> BuildSeedsAsync(
+        FleetDbContext fleetDb, CancellationToken cancellationToken)
+    {
         var openCommands = await fleetDb.RobotCommands
             .AsNoTracking()
             .Where(c => c.Type == RobotCommandType.NAVIGATE_TO_POSE &&
@@ -54,8 +86,6 @@ public sealed class TrafficReconciliationHostedService(
 
         var seeds = new List<TrafficReconcileSeed>();
         Guid? mapVersionId = null;
-        CompiledTrafficGraph? graph = null;
-
         foreach (var robot in robots.OrderBy(r => r.Id))
         {
             mapVersionId ??= robot.CurrentMapVersionId;
@@ -83,31 +113,11 @@ public sealed class TrafficReconciliationHostedService(
                 poseKnown ? robot.PoseX : null,
                 poseKnown ? robot.PoseY : null,
                 locOk,
-                poseKnown));
+                poseKnown,
+                InMotion: cmd is not null));
         }
 
-        if (mapVersionId is Guid mv && compile is not null)
-        {
-            try
-            {
-                var compiled = await compile.CompileAsync(mv, TrafficGraphCompileService.RuntimeIncludesOccupancy, cancellationToken)
-                    .ConfigureAwait(false);
-                graph = compiled.Result.Graph;
-                await segmented.BindGraphAsync(mv, graph, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Traffic reconcile: failed to compile graph for map {MapVersionId}", mv);
-            }
-        }
-
-        _ = options;
-        await segmented.CompleteReconciliationAsync(seeds, cancellationToken).ConfigureAwait(false);
-        logger.LogInformation(
-            "Traffic reconcile complete: seeds={SeedCount} graphBound={Bound} mode={Mode}",
-            seeds.Count,
-            graph is not null,
-            options.Value.Mode);
+        return (seeds, mapVersionId);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
