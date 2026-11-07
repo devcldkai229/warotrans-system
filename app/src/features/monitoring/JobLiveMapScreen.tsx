@@ -1,5 +1,6 @@
 import { WarehouseMapLayer } from '../../shared/components/WarehouseMapLayer';
 import { getMapVersionDetail } from '../../shared/api';
+import { formatBatteryPercent } from '../../shared/utils/battery';
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -139,7 +140,7 @@ export function JobLiveMapScreen() {
           <View style={styles.metricRow}>
             <View style={styles.metricCol}>
               <Text style={styles.metricVal}>
-                {telemetry && Number.isFinite(Number(telemetry.batteryPercent)) ? `${Math.round(Number(telemetry.batteryPercent))}%` : '—'}
+                {telemetry ? formatBatteryPercent(telemetry.batteryPercent) : '—'}
               </Text>
               <Text style={styles.metricLabel}>Battery</Text>
             </View>

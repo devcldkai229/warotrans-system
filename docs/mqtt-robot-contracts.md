@@ -52,6 +52,11 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
   "mapVersionCode": "MAP-WH001-V001",
   "pose": { "x": 0.0, "y": 0.0, "yaw": 0.0 },
   "batteryPercent": null,
+  "batteryVoltage": null,
+  "batteryEstimationMode": "UNAVAILABLE",
+  "batteryConfidence": "NONE",
+  "batteryChargingState": "UNKNOWN",
+  "batteryMeasuredAt": null,
   "navigationStatus": "IDLE",
   "localizationStatus": "LOCALIZED",
   "linearVelocity": 0.0,
@@ -65,7 +70,19 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
 `localizationStatus`: `LOCALIZED|LOST|UNKNOWN`
 
 - `pose` is required when `localizationStatus` is `LOCALIZED`; use `null` when `LOST` or `UNKNOWN`.
-- `batteryPercent` may be `null` when the robot has no battery sensor.
+- `batteryPercent` (0..100) is `null` when the battery is **unknown** (no sensor, sensor fault, stale estimate). `null` is
+  never 0 %: the backend stores it as unknown and the UI shows "Unknown".
+- Battery fields below are optional and additive (schemaVersion stays 1). A message without them (older gateway) is read
+  as mode `REPORTED` when `batteryPercent` is a number, unknown when it is `null`.
+  - `batteryVoltage`: filtered pack voltage in volts (0..30) or `null`.
+  - `batteryEstimationMode`: `VOLTAGE_ONLY` (0-25 V divider on the ESP32 ADC + OCV table, no current sensor) |
+    `SIMULATED` (simulation fixed value) | `UNAVAILABLE` (then `batteryPercent` MUST be `null`).
+  - `batteryConfidence`: `MEDIUM` (voltage-only reading at rest) | `LOW` (under load, recovering, restored) | `NONE`.
+  - `batteryChargingState`: `UNKNOWN` | `CHARGING` | `NOT_CHARGING`. Voltage alone cannot tell charging apart, so robots
+    send `UNKNOWN` unless an independent source confirms it. Informational only: it never changes `Robot.Status`.
+  - `batteryMeasuredAt`: when the gateway received the estimate (UTC ISO-8601) or `null`.
+- Battery freshness and dispatch eligibility are decided by the backend (`Fleet:Battery`, server receipt time), not by
+  the robot clock.
 - When a navigate command is active, `currentCommandId` MUST equal that `commandId`; otherwise `null`.
 - Telemetry updates runtime snapshot only. It must not overwrite Fleet operational `Robot.Status`.
 

@@ -1,6 +1,7 @@
 import type { TransportRequestView } from '@/shared/api/contracts'
 import { formatDuration, humanize } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
+import { formatBatteryPercent } from '@/shared/ui/battery'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { JOB_STATUS_TONE, STEP_STATUS_TONE } from '@/shared/ui/statusTones'
@@ -34,7 +35,7 @@ export function JobSummaryPanel({ jobRef, onClose, onOpenFull }: JobSummaryPanel
       <MetaList>
         <MetaRow label="Robot">
           {jobRef.robotCode ?? 'Unassigned'}
-          {job?.assignedRobot ? `, ${job.assignedRobot.batteryPercent}% battery` : ''}
+          {job?.assignedRobot ? `, battery ${formatBatteryPercent(job.assignedRobot.batteryPercent)}` : ''}
         </MetaRow>
         {job?.routeLabel ? <MetaRow label="Route">{job.routeLabel}</MetaRow> : null}
         {job?.container ? <MetaRow label="Container">{job.container.barcode}</MetaRow> : null}

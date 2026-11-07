@@ -11,7 +11,14 @@ public sealed class Robot
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public RobotStatus Status { get; set; }
-    public decimal BatteryPercent { get; set; }
+    /// <summary>State of charge 0..100; null = unknown (no valid battery telemetry), never 0.</summary>
+    public decimal? BatteryPercent { get; set; }
+    public decimal? BatteryVoltage { get; set; }
+    public BatteryEstimationMode? BatteryEstimationMode { get; set; }
+    public BatteryConfidence? BatteryConfidence { get; set; }
+    public BatteryChargingState? BatteryChargingState { get; set; }
+    /// <summary>Server time of the last telemetry that carried a known <see cref="BatteryPercent"/>.</summary>
+    public DateTimeOffset? BatteryUpdatedAt { get; set; }
     public double PoseX { get; set; }
     public double PoseY { get; set; }
     public double PoseYaw { get; set; }
@@ -48,7 +55,7 @@ public sealed class Robot
             Code = code,
             Name = name,
             Status = RobotStatus.OFFLINE,
-            BatteryPercent = 0,
+            BatteryPercent = null,
             PoseX = 0,
             PoseY = 0,
             PoseYaw = 0,
@@ -126,7 +133,7 @@ public sealed class Robot
         double? poseX,
         double? poseY,
         double? poseYaw,
-        decimal? batteryPercent,
+        RobotBatteryReading battery,
         NavigationStatus navigationStatus,
         LocalizationStatus localizationStatus,
         double linearVelocity,
@@ -157,10 +164,7 @@ public sealed class Robot
             PoseYaw = poseYaw.Value;
         }
 
-        if (batteryPercent is not null)
-        {
-            BatteryPercent = batteryPercent.Value;
-        }
+        ApplyBattery(battery, utcNow);
 
         NavigationStatus = navigationStatus;
         LocalizationStatus = localizationStatus;
@@ -171,6 +175,33 @@ public sealed class Robot
         ErrorCode = errorCode;
         UpdatedAt = utcNow;
         return true;
+    }
+
+    /// <summary>
+    /// Each telemetry replaces the battery snapshot: a null percent means UNKNOWN now, so an old value is not
+    /// kept (and nothing is ever defaulted to 0).
+    /// </summary>
+    private void ApplyBattery(RobotBatteryReading battery, DateTimeOffset utcNow)
+    {
+        if (battery.Percent is { } percent)
+        {
+            BatteryPercent = percent;
+            BatteryVoltage = battery.Voltage;
+            BatteryEstimationMode = battery.Mode is null or Enums.BatteryEstimationMode.UNAVAILABLE
+                ? Enums.BatteryEstimationMode.REPORTED
+                : battery.Mode;
+            BatteryConfidence = battery.Confidence;
+            BatteryChargingState = battery.ChargingState ?? Enums.BatteryChargingState.UNKNOWN;
+            BatteryUpdatedAt = utcNow;
+            return;
+        }
+
+        BatteryPercent = null;
+        BatteryVoltage = null;
+        BatteryEstimationMode = Enums.BatteryEstimationMode.UNAVAILABLE;
+        BatteryConfidence = Enums.BatteryConfidence.NONE;
+        BatteryChargingState = Enums.BatteryChargingState.UNKNOWN;
+        BatteryUpdatedAt = null;
     }
 
     /// <summary>

@@ -286,7 +286,7 @@ export function PayloadRecoveryScreen() {
               <View style={styles.diagRescue}>
                 <Text style={styles.diagLabel}>Rescue robot</Text>
                 <Text style={styles.diagRobotId}>{rescueRobot}</Text>
-                <Text style={styles.diagDetail}>Battery: 92% · Deck empty</Text>
+                <Text style={styles.diagDetail}>Battery: Unknown · Deck empty</Text>
                 <View style={styles.diagPillRescue}>
                   <Text style={styles.diagPillTextRescue}>Status: Ready</Text>
                 </View>

@@ -132,10 +132,34 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("angular_velocity");
 
-                    b.Property<decimal>("BatteryPercent")
+                    b.Property<string>("BatteryChargingState")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("battery_charging_state");
+
+                    b.Property<string>("BatteryConfidence")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("battery_confidence");
+
+                    b.Property<string>("BatteryEstimationMode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("battery_estimation_mode");
+
+                    b.Property<decimal?>("BatteryPercent")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("battery_percent");
+
+                    b.Property<DateTimeOffset?>("BatteryUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("battery_updated_at");
+
+                    b.Property<decimal?>("BatteryVoltage")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)")
+                        .HasColumnName("battery_voltage");
 
                     b.Property<string>("Code")
                         .IsRequired()

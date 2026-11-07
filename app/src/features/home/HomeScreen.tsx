@@ -18,6 +18,7 @@ import {
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { colors } from '../../shared/theme/colors';
+import { formatBatteryPercent, isBatteryLow } from '../../shared/utils/battery';
 import { radii } from '../../shared/theme/radii';
 import { shadows } from '../../shared/theme/shadows';
 import { typography } from '../../shared/theme/typography';
@@ -87,7 +88,8 @@ export function HomeScreen() {
   const robots = useMemo<MapRobot[]>(() => rawFleet.map(robot => {
     const live = robotTelemetry[robot.code];
     const navigation = live?.navigationStatus || robot.navigationStatus;
-    const battery = live?.batteryPercent ?? robot.batteryPercent;
+    // Live telemetry wins even when it says UNKNOWN (null): an older REST value must not linger.
+    const battery = live ? live.batteryPercent : robot.batteryPercent;
     const velocity = live?.linearVelocity ?? robot.linearVelocity;
     return {
       id: robot.code,
@@ -140,7 +142,7 @@ export function HomeScreen() {
           setSelectedRobotId(id);
           const r = robots.find((item) => item.id === id);
           if (r) {
-            toast.info(`${r.id}: Battery ${r.battery == null ? '—' : `${r.battery}%`}, Speed ${r.speed}`);
+            toast.info(`${r.id}: Battery ${formatBatteryPercent(r.battery)}, Speed ${r.speed}`);
           }
         }}
         style={styles.mapCanvas}
@@ -341,8 +343,8 @@ export function HomeScreen() {
                       <View style={styles.fleetTelemetryRow}>
                         <Text variant="caption" color={colors.textSecondary}>Speed: {r.speed}</Text>
                         <View style={styles.batteryRow}>
-                          <BatteryMedium size={13} color={r.battery != null && r.battery < 20 ? '#dc2626' : colors.successText} />
-                          <Text variant="caption" color={colors.textSecondary}>{r.battery == null ? '—' : `${r.battery}%`}</Text>
+                          <BatteryMedium size={13} color={isBatteryLow(r.battery) ? '#dc2626' : r.battery == null ? colors.textSecondary : colors.successText} />
+                          <Text variant="caption" color={colors.textSecondary}>{formatBatteryPercent(r.battery)}</Text>
                         </View>
                       </View>
                     </View>

@@ -1,4 +1,5 @@
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Features.Shared;
 
 namespace WaroTrans.Fleet.Abstractions;
 
@@ -18,11 +19,12 @@ public interface IRobotRealtimeNotifier
         double poseX,
         double poseY,
         double poseYaw,
-        decimal batteryPercent,
+        decimal? batteryPercent,
         NavigationStatus? navigationStatus,
         LocalizationStatus? localizationStatus,
         DateTimeOffset? lastTelemetryAt,
         CancellationToken cancellationToken = default,
         double? linearVelocity = null,
-        double? angularVelocity = null);
+        double? angularVelocity = null,
+        RobotBatteryResponse? battery = null);
 }

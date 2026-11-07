@@ -5,6 +5,8 @@ import { ApiError } from '@/shared/api/client'
 import { disableRobot, enableRobot } from '@/shared/api/fleet'
 import { formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
+import { BatteryIndicator } from '@/shared/ui/BatteryIndicator'
+import { batteryDispatchLabel, formatBatteryPercent } from '@/shared/ui/battery'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
@@ -111,18 +113,15 @@ function buildSections(robot: RobotView): Section[] {
     {
       id: 'telemetry',
       label: 'Telemetry',
-      summary: hasTelemetry ? `${robot.batteryPercent}%` : 'No telemetry yet',
+      summary: hasTelemetry ? formatBatteryPercent(robot.batteryPercent) : 'No telemetry yet',
       body: (
         <dl>
           <Field label="Battery">
-            {hasTelemetry ? (
-              <>
-                {robot.batteryPercent}% <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
-              </>
-            ) : (
-              '—'
-            )}
+            <BatteryIndicator percent={robot.batteryPercent} battery={robot.battery} showDetail />
           </Field>
+          {batteryDispatchLabel(robot.battery) ? (
+            <Field label="Dispatch">{batteryDispatchLabel(robot.battery)}</Field>
+          ) : null}
           <Field label="Pose X">{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
           <Field label="Pose Y">{hasTelemetry ? `${robot.poseY.toFixed(2)} m` : '—'}</Field>
           <Field label="Pose yaw">{hasTelemetry ? `${Math.round((robot.poseYaw * 180) / Math.PI)}°` : '—'}</Field>
@@ -131,8 +130,8 @@ function buildSections(robot: RobotView): Section[] {
           <Field label="Last telemetry">{formatDateTimeWithYear(robot.lastTelemetryAt)}</Field>
           {!hasTelemetry ? (
             <p className="py-2 text-xs text-muted">
-              Pose and battery default to 0 until the first telemetry message. Values shown as "—" until
-              telemetry is received.
+              Pose defaults to 0 until the first telemetry message. Values shown as "—" until telemetry is
+              received; the battery stays "Unknown" until the robot reports a valid reading.
             </p>
           ) : null}
         </dl>

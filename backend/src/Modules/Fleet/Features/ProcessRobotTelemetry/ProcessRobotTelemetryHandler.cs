@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Abstractions;
+using WaroTrans.Fleet.Battery;
+using WaroTrans.Fleet.Entities;
+using WaroTrans.Fleet.Features.Shared;
 using WaroTrans.Fleet.Enums;
-using WaroTrans.Fleet.Features.GetRobotStatistics;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Traffic;
@@ -16,6 +19,7 @@ public sealed class ProcessRobotTelemetryHandler(
     IRobotRealtimeNotifier realtimeNotifier,
     IIntegrationEventPublisher events,
     TrafficShadowObserver? trafficShadow,
+    IOptions<BatteryOptions> batteryOptions,
     ILogger<ProcessRobotTelemetryHandler> logger)
 {
     public async Task HandleAsync(RobotTelemetryMessage message, CancellationToken cancellationToken)
@@ -53,7 +57,7 @@ public sealed class ProcessRobotTelemetryHandler(
             message.Pose?.X,
             message.Pose?.Y,
             message.Pose?.Yaw,
-            message.BatteryPercent,
+            ToBatteryReading(message),
             navigationStatus,
             localizationStatus,
             message.LinearVelocity,
@@ -75,11 +79,18 @@ public sealed class ProcessRobotTelemetryHandler(
         await db.SaveChangesAsync(cancellationToken);
 
         // Admin notifications: only the moment something starts, not every reading while it lasts.
-        if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent
-            && robot.BatteryPercent <= GetRobotStatisticsHandler.LowBatteryPercent
-            && robot.Status != RobotStatus.CHARGING)
+        var batteryAfter = robot.BatteryPercent;
+        switch (BatteryAlertRules.Evaluate(batteryBefore, batteryAfter, batteryOptions.Value))
         {
-            await events.PublishAsync(new RobotBatteryLow(robot.Id, robot.Code, robot.BatteryPercent), cancellationToken);
+            case BatteryAlertTransition.CRITICAL when robot.Status != RobotStatus.CHARGING:
+                await events.PublishAsync(new RobotBatteryCritical(robot.Id, robot.Code, batteryAfter!.Value), cancellationToken);
+                break;
+            case BatteryAlertTransition.LOW when robot.Status != RobotStatus.CHARGING:
+                await events.PublishAsync(new RobotBatteryLow(robot.Id, robot.Code, batteryAfter!.Value), cancellationToken);
+                break;
+            case BatteryAlertTransition.RECOVERED:
+                await events.PublishAsync(new RobotBatteryRecovered(robot.Id, robot.Code, batteryAfter!.Value), cancellationToken);
+                break;
         }
 
         if (string.IsNullOrEmpty(errorBefore) && !string.IsNullOrEmpty(robot.ErrorCode))
@@ -104,7 +115,8 @@ public sealed class ProcessRobotTelemetryHandler(
             robot.LastTelemetryAt,
             cancellationToken,
             robot.LinearVelocity,
-            robot.AngularVelocity);
+            robot.AngularVelocity,
+            RobotBatteryResponse.From(robot, batteryOptions.Value, utcNow));
 
         if (trafficShadow is not null)
         {
@@ -123,4 +135,15 @@ public sealed class ProcessRobotTelemetryHandler(
             }
         }
     }
+
+    /// <summary>Unknown modes/confidences are rejected by the validator; anything unparsable here is dropped.</summary>
+    public static RobotBatteryReading ToBatteryReading(RobotTelemetryMessage message) => new(
+        message.BatteryPercent,
+        message.BatteryVoltage,
+        ParseOrNull<BatteryEstimationMode>(message.BatteryEstimationMode),
+        ParseOrNull<BatteryConfidence>(message.BatteryConfidence),
+        ParseOrNull<BatteryChargingState>(message.BatteryChargingState));
+
+    private static T? ParseOrNull<T>(string? value) where T : struct, Enum =>
+        Enum.TryParse<T>(value, ignoreCase: false, out var parsed) ? parsed : null;
 }

@@ -4,6 +4,7 @@ import { cx } from '@/shared/lib/cx'
 import { formatRelativeTime } from '@/shared/lib/format'
 import { poseToPercent } from '@/shared/lib/mapView'
 import { Button, IconButton } from '@/shared/ui/Button'
+import { BatteryIndicator } from '@/shared/ui/BatteryIndicator'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
@@ -61,8 +62,7 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
 
       <dl className="mt-3">
         <Row label="Battery">
-          {robot.batteryPercent}%
-          <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
+          <BatteryIndicator percent={robot.batteryPercent} battery={robot.battery} />
         </Row>
         <Row label="Heartbeat">{formatRelativeTime(robot.lastHeartbeatAt)}</Row>
         <Row label="Position">

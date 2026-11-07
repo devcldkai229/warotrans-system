@@ -27,6 +27,7 @@ import {
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useToast } from '../../shared/context/ToastContext';
 import { Button } from '../../shared/components/Button';
+import { formatBatteryPercent, isBatteryLow } from '../../shared/utils/battery';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
@@ -106,10 +107,8 @@ export function FleetRecallScreen() {
         isOnline: liveConn ? liveConn.isOnline : robot.isOnline,
         // A cancel acceptance is pending until a later fleet refresh confirms robot state.
         status: liveConn?.status || robot.status,
-        batteryPercent:
-          liveTelem && typeof liveTelem.batteryPercent === 'number'
-            ? liveTelem.batteryPercent
-            : robot.batteryPercent,
+        // Live telemetry wins even when it says UNKNOWN (null).
+        batteryPercent: liveTelem ? liveTelem.batteryPercent : robot.batteryPercent,
         poseX:
           liveTelem && typeof liveTelem.poseX === 'number'
             ? liveTelem.poseX
@@ -351,8 +350,8 @@ export function FleetRecallScreen() {
                         <Battery size={13} color={colors.textSecondary} />
                         <Text variant="caption" color={colors.textSecondary}>Battery</Text>
                       </View>
-                      <Text style={[styles.metricValue, robot.batteryPercent < 20 && styles.batteryLow]}>
-                        {Math.round(robot.batteryPercent)}%
+                      <Text style={[styles.metricValue, isBatteryLow(robot.batteryPercent) && styles.batteryLow]}>
+                        {formatBatteryPercent(robot.batteryPercent)}
                       </Text>
                     </View>
 

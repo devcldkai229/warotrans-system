@@ -120,6 +120,8 @@ builder.Services.AddScoped<IIntegrationEventHandler<JobStatusChanged>, AdminNoti
 builder.Services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<RobotBatteryLow>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotBatteryCritical>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<RobotBatteryRecovered>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<RobotErrorReported>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobWaitingToStart>, AdminNotificationProducer>();

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { HubConnectionBuilder, HubConnectionState, LogLevel, type HubConnection } from '@microsoft/signalr'
 import { getAccessToken, getApiUrl } from '@/shared/api/client'
+import type { RobotBattery } from '@/shared/api/contracts'
 
 /** Server → client messages of /hubs/notifications (backend NotificationsHub). */
 export interface RobotTelemetryMessage {
@@ -9,7 +10,10 @@ export interface RobotTelemetryMessage {
   poseX: number
   poseY: number
   poseYaw: number
-  batteryPercent: number
+  /** null = UNKNOWN, never 0 %. */
+  batteryPercent: number | null
+  /** Battery details (mode, confidence, stale, dispatch); absent on older backends. */
+  battery?: RobotBattery | null
   navigationStatus: string | null
   localizationStatus: string | null
   lastTelemetryAt: string | null

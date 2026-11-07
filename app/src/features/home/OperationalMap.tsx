@@ -5,6 +5,7 @@ import { BatteryMedium, Bot, Layers, MapPin, ParkingSquare, X, Zap } from 'lucid
 import type { EndpointDto, MapVersionDetailDto, ZoneDto } from '../../shared/api/navigationApi';
 import type { RobotDto } from '../../shared/api';
 import { getApiBaseUrl } from '../../shared/api/client';
+import { formatBatteryPercent } from '../../shared/utils/battery';
 import { displayPoint, findMapModel, mapHeading, mapRobotSnapshots, mapViewport, spacedLocations } from '../../shared/maps/mapModel';
 import { zoneColor, zoneLabel } from '../../shared/maps/mapPresentation';
 import { resolveMapPreviewUri, worldToMapPercent } from '../../shared/utils/mapCoordinates';
@@ -89,7 +90,7 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
       {selectedRobot ? <Pressable style={styles.telemetry} accessibilityRole="button" accessibilityLabel={`Robot ${selectedRobot.code} status`} onPress={() => onSelectRobot(selectedRobot.code)}>
         <View style={[styles.dot, { backgroundColor: selectedRobot.isOnline ? colors.success : colors.textMuted }]} /><Text variant="caption" fontWeight="700">{selectedRobot.code}</Text>
         <Text variant="caption" color={selectedRobot.isOnline ? 'successText' : 'textSecondary'}>{selectedRobot.isOnline ? 'Online' : 'Offline'}</Text>
-        <BatteryMedium size={14} color={colors.textSecondary} /><Text variant="caption">{typeof selectedPose?.batteryPercent === 'number' ? `${Math.round(selectedPose.batteryPercent)}%` : '—'}</Text>
+        <BatteryMedium size={14} color={colors.textSecondary} /><Text variant="caption">{formatBatteryPercent(selectedPose?.batteryPercent)}</Text>
       </Pressable> : <Text variant="caption">No Robot Linked To This Map</Text>}
     </View>
     {sceneVisible && viewport.width > 0 && viewport.height > 0 ? <View style={[styles.floor, { position: 'absolute', left, top: sceneTop, width: viewport.width, height: viewport.height }]}>

@@ -1,10 +1,12 @@
+using Microsoft.Extensions.Options;
+using WaroTrans.Fleet.Battery;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.Fleet.Features.Shared;
 using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.ListRobots;
 
-public sealed class ListRobotsHandler(FleetDbContext db)
+public sealed class ListRobotsHandler(FleetDbContext db, IOptions<BatteryOptions> batteryOptions, TimeProvider clock)
 {
     public async Task<ListRobotsResponse> HandleAsync(ListRobotsRequest request, CancellationToken cancellationToken)
     {
@@ -40,7 +42,7 @@ public sealed class ListRobotsHandler(FleetDbContext db)
             .Take(request.Take)
             .ToListAsync(cancellationToken);
 
-        var items = robots.Select(RobotResponse.From).ToList();
+        var items = robots.Select(r => RobotResponse.From(r, batteryOptions.Value, clock.GetUtcNow())).ToList();
         return new ListRobotsResponse(items, total);
     }
 }

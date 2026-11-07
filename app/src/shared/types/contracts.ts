@@ -193,6 +193,19 @@ export type NavigationStatus =
 /** `Fleet/Enums/LocalizationStatus.cs`. */
 export type LocalizationStatus = 'LOCALIZED' | 'LOST' | 'UNKNOWN';
 
+/** `Fleet/Features/Shared/RobotBatteryResponse.cs`. `percent` null = UNKNOWN: show "Unknown", never 0 %. */
+export interface RobotBattery {
+  percent: number | null;
+  voltage: number | null;
+  estimationMode: 'VOLTAGE_ONLY' | 'SIMULATED' | 'REPORTED' | 'UNAVAILABLE';
+  confidence: 'MEDIUM' | 'LOW' | 'NONE' | null;
+  chargingState: 'UNKNOWN' | 'CHARGING' | 'NOT_CHARGING';
+  updatedAt: UtcDateTime | null;
+  isStale: boolean;
+  dispatchStatus: 'ELIGIBLE' | 'UNKNOWN' | 'STALE' | 'LOW';
+  dispatchAllowed: boolean;
+}
+
 /** `Fleet/Features/Shared/RobotResponse.cs`. */
 export interface RobotResponse {
   id: string;
@@ -202,7 +215,9 @@ export interface RobotResponse {
   name: string;
   status: RobotStatus;
   isOnline: boolean;
-  batteryPercent: number;
+  /** null = UNKNOWN (no valid battery reading), never 0 %. */
+  batteryPercent: number | null;
+  battery?: RobotBattery;
   poseX: number;
   poseY: number;
   poseYaw: number;
@@ -679,7 +694,7 @@ export interface RobotSummary {
   id: string;
   code: string;
   status: RobotStatus;
-  batteryPercent: number;
+  batteryPercent: number | null;
   currentEndpointCode: string;
   isEnabled: boolean;
   isVirtual: boolean;

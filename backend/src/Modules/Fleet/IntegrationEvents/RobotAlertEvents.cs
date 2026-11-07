@@ -3,10 +3,24 @@ using WaroTrans.BuildingBlocks.Abstractions;
 namespace WaroTrans.Fleet.IntegrationEvents;
 
 /// <summary>
-/// A robot's battery just dropped to or below <see cref="Features.GetRobotStatistics.GetRobotStatisticsHandler.LowBatteryPercent"/>
-/// while it is not charging. Raised once per drop (the telemetry before it was above the threshold), not on every reading.
+/// A robot's known battery SOC just dropped to or below <c>Fleet:Battery:LowPercent</c> (not to Critical) and the
+/// robot is not in CHARGING status. Raised once per drop, not on every reading. Unknown SOC never raises it.
 /// </summary>
 public sealed record RobotBatteryLow(Guid RobotId, string RobotCode, decimal BatteryPercent) : IIntegrationEvent
+{
+    public Guid EventId { get; } = Guid.NewGuid();
+    public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A robot's known battery SOC just dropped to or below <c>Fleet:Battery:CriticalPercent</c>.</summary>
+public sealed record RobotBatteryCritical(Guid RobotId, string RobotCode, decimal BatteryPercent) : IIntegrationEvent
+{
+    public Guid EventId { get; } = Guid.NewGuid();
+    public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A robot's battery SOC is back above Low + hysteresis: its battery notifications can be resolved.</summary>
+public sealed record RobotBatteryRecovered(Guid RobotId, string RobotCode, decimal BatteryPercent) : IIntegrationEvent
 {
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;

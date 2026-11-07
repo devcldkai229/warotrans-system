@@ -172,6 +172,24 @@ export type UpdateAccountBody = Pick<Account, 'email' | 'fullName' | 'role'>
 export type NavigationStatus = 'IDLE' | 'NAVIGATING' | 'PAUSED' | 'SUCCEEDED' | 'FAILED' | 'CANCELED'
 export type LocalizationStatus = 'LOCALIZED' | 'LOST' | 'UNKNOWN'
 
+export type BatteryEstimationMode = 'VOLTAGE_ONLY' | 'SIMULATED' | 'REPORTED' | 'UNAVAILABLE'
+export type BatteryConfidence = 'MEDIUM' | 'LOW' | 'NONE'
+export type BatteryChargingState = 'UNKNOWN' | 'CHARGING' | 'NOT_CHARGING'
+export type BatteryDispatchStatus = 'ELIGIBLE' | 'UNKNOWN' | 'STALE' | 'LOW'
+
+/** Fleet `RobotBatteryResponse`. `percent` null = UNKNOWN: show "Unknown", never 0 %. */
+export interface RobotBattery {
+  percent: number | null
+  voltage: number | null
+  estimationMode: BatteryEstimationMode
+  confidence: BatteryConfidence | null
+  chargingState: BatteryChargingState
+  updatedAt: string | null
+  isStale: boolean
+  dispatchStatus: BatteryDispatchStatus
+  dispatchAllowed: boolean
+}
+
 /** Mirrors Fleet `RobotResponse` from GET /api/fleet/robots. */
 export interface Robot {
   id: string
@@ -181,7 +199,9 @@ export interface Robot {
   name: string
   status: RobotStatus
   isOnline: boolean
-  batteryPercent: number
+  /** null = UNKNOWN (no battery measurement yet / sensor not installed), never 0 %. */
+  batteryPercent: number | null
+  battery?: RobotBattery
   /** Map coordinates in metres (same frame as Endpoint.x / Endpoint.y). */
   poseX: number
   poseY: number
@@ -254,7 +274,7 @@ export interface RobotJobHistoryItem {
 
 export interface DispatchCandidate {
   robotCode: string
-  batteryPercent: number
+  batteryPercent: number | null
   status: RobotStatus
   selected: boolean
 }
@@ -390,7 +410,7 @@ export type JobAction = 'PAUSE' | 'CANCEL' | 'REMOTE_CONFIRM'
 /** Job plus data the list/detail screens need from other modules (Fleet, Warehouse, Transportation). */
 export interface JobView extends Job {
   /** Active JobAssignment's Robot. */
-  assignedRobot: { code: string; batteryPercent: number; status: RobotStatus } | null
+  assignedRobot: { code: string; batteryPercent: number | null; status: RobotStatus } | null
   /** Container of the current movement. Job has no ContainerId; this is a snapshot from TransportData. */
   container: { barcode: string; productLabel: string } | null
   routeLabel?: string
@@ -502,7 +522,12 @@ export interface RobotStatistics {
   enabled: number
   online: number
   lowBattery: number
+  /** Over enabled robots with a known battery only. */
   averageBatteryPercent: number | null
+  /** Enabled robots whose battery is UNKNOWN (not part of lowBattery / the average). */
+  unknownBattery?: number
+  /** Fleet:Battery:LowPercent. */
+  lowBatteryPercent?: number
   byStatus: { status: RobotStatus; count: number }[]
   assignments: {
     completed: number
@@ -520,7 +545,7 @@ export interface RobotStatistics {
     status: RobotStatus
     isEnabled: boolean
     isOnline: boolean
-    batteryPercent: number
+    batteryPercent: number | null
     jobsCompleted: number
     interrupted: number
   }[]

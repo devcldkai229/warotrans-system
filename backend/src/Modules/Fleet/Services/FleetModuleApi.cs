@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
+using WaroTrans.Fleet.Battery;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Features.DispatchRobot;
@@ -15,6 +17,8 @@ public sealed class FleetModuleApi(
     FleetDbContext db,
     IssueNavigateCommandHandler issueNavigateCommandHandler,
     IMqttRobotInteractionPublisher interactionPublisher,
+    IOptions<BatteryOptions> batteryOptions,
+    TimeProvider clock,
     ILogger<FleetModuleApi> logger) : IFleetModule
 {
     public async Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default)
@@ -32,7 +36,8 @@ public sealed class FleetModuleApi(
             .Where(r => r.CurrentMapVersionId == mapVersionId)
             .ToListAsync(cancellationToken);
 
-        // Same ordering rule as DispatchRobotSelector (highest battery, then code).
+        // Same ordering rule as DispatchRobotSelector (highest known battery, then code). Every AVAILABLE robot is
+        // listed with its battery gate so the caller can tell "none free" from "none with a usable battery".
         var candidates = new List<RobotSnapshot>();
         var remaining = robots.ToList();
         while (DispatchRobotSelector.Select(remaining) is { } best)
@@ -131,7 +136,10 @@ public sealed class FleetModuleApi(
             cancellationToken);
     }
 
-    private static RobotSnapshot ToSnapshot(Robot r) => new(
+    private RobotSnapshot ToSnapshot(Robot r)
+    {
+        var battery = BatteryDispatchPolicy.Evaluate(r, clock.GetUtcNow(), batteryOptions.Value);
+        return new RobotSnapshot(
         r.Id,
         r.Code,
         r.WarehouseId,
@@ -145,5 +153,9 @@ public sealed class FleetModuleApi(
         r.LastTelemetryAt,
         r.PoseX,
         r.PoseY,
-        r.PoseYaw);
+        r.PoseYaw,
+        battery.Status.ToString(),
+        battery.Allowed,
+        battery.IsStale);
+    }
 }

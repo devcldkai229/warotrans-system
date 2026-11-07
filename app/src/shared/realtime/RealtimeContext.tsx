@@ -114,7 +114,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
             next[robot.code] = {
               robotId: robot.id, robotCode: robot.code,
               poseX: robot.poseX ?? 0, poseY: robot.poseY ?? 0, poseYaw: robot.poseYaw ?? 0,
-              batteryPercent: robot.batteryPercent ?? 0,
+              // null = UNKNOWN: never default it to 0 %.
+              batteryPercent: robot.batteryPercent ?? null,
+              battery: robot.battery ?? null,
               navigationStatus: robot.navigationStatus,
               localizationStatus: robot.localizationStatus,
               lastTelemetryAt: robot.lastTelemetryAt,

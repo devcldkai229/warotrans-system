@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import type { JobStatus, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
+import { ApiError } from '@/shared/api/client'
 import { listRobots } from '@/shared/api/fleet'
 import { listJobs, resumeJob, startJob, type JobSummaryDto } from '@/shared/api/jobs'
 import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
@@ -10,6 +11,7 @@ import { cx } from '@/shared/lib/cx'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
+import { BATTERY_START_ERRORS } from '@/shared/ui/battery'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
@@ -110,7 +112,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
       navigate(`/monitor/jobs/${jobId}`)
     },
     onError: async (err: Error) => {
-      setError(err.message)
+      setError(startErrorMessage(err))
       await refresh()
     },
   })
@@ -123,7 +125,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
       navigate(`/monitor/jobs/${jobId}`)
     },
     onError: async (err: Error) => {
-      setError(err.message)
+      setError(startErrorMessage(err))
       await refresh()
     },
   })
@@ -135,7 +137,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
       await refresh()
       navigate(`/monitor/jobs/${jobId}`)
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setError(startErrorMessage(err)),
   })
 
   const resume = useMutation({
@@ -145,7 +147,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
       await refresh()
       navigate(`/monitor/jobs/${jobId}`)
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setError(startErrorMessage(err)),
   })
 
   const busy = run.isPending || start.isPending || again.isPending || resume.isPending
@@ -185,6 +187,11 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
       {error ? <p className="text-xs text-red-ink">{error}</p> : null}
     </>
   )
+}
+
+/** Battery-gate refusals (Fleet:Battery) get a sentence an operator can act on; anything else as the server said. */
+function startErrorMessage(err: Error): string {
+  return (err instanceof ApiError && err.code ? BATTERY_START_ERRORS[err.code] : undefined) ?? err.message
 }
 
 export function TransportRequestsPage() {

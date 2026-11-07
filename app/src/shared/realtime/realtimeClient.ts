@@ -1,3 +1,4 @@
+import type { RobotBattery } from '../types/contracts';
 import {
   HubConnection,
   HubConnectionBuilder,
@@ -34,7 +35,9 @@ export interface RobotTelemetryEvent {
   poseX: number;
   poseY: number;
   poseYaw: number;
-  batteryPercent: number;
+  /** null = UNKNOWN, never 0 %. */
+  batteryPercent: number | null;
+  battery?: RobotBattery | null;
   linearVelocity?: number | null;
   angularVelocity?: number | null;
   navigationStatus: string | null;

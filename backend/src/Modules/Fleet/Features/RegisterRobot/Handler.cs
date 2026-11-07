@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using WaroTrans.Fleet.Battery;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using WaroTrans.BuildingBlocks.Exceptions;
@@ -13,7 +15,9 @@ namespace WaroTrans.Fleet.Features.RegisterRobot;
 public sealed class RegisterRobotHandler(
     FleetDbContext db,
     IWarehouseModule warehouseModule,
-    INavigationModule navigationModule)
+    INavigationModule navigationModule,
+    IOptions<BatteryOptions> batteryOptions,
+    TimeProvider clock)
 {
     public async Task<RobotResponse> HandleAsync(RegisterRobotRequest request, CancellationToken cancellationToken)
     {
@@ -50,7 +54,7 @@ public sealed class RegisterRobotHandler(
                 "robot_code_exists");
         }
 
-        return RobotResponse.From(robot);
+        return RobotResponse.From(robot, batteryOptions.Value, clock.GetUtcNow());
     }
 
     private async Task EnsureWarehouseAsync(Guid warehouseId, CancellationToken cancellationToken)

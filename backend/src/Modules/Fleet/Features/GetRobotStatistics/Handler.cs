@@ -1,15 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Statistics;
+using WaroTrans.Fleet.Battery;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.GetRobotStatistics;
 
-public sealed class GetRobotStatisticsHandler(FleetDbContext db)
+public sealed class GetRobotStatisticsHandler(FleetDbContext db, IOptions<BatteryOptions> batteryOptions)
 {
-    /// <summary>A robot at or below this charge is counted as low on battery.</summary>
-    public const decimal LowBatteryPercent = 20m;
-
     public async Task<RobotStatisticsResponse> HandleAsync(StatisticsRange range, CancellationToken cancellationToken)
     {
         var robots = await db.Robots.AsNoTracking()
@@ -25,6 +24,9 @@ public sealed class GetRobotStatisticsHandler(FleetDbContext db)
         int Count(AssignmentEndReason reason) => ended.Count(a => a.Reason == reason);
 
         var enabled = robots.Where(r => r.IsEnabled).ToList();
+        // Only known SOCs count: an unknown battery is neither low nor part of the average.
+        var known = enabled.Where(r => r.BatteryPercent is not null).Select(r => r.BatteryPercent!.Value).ToList();
+        var lowPercent = batteryOptions.Value.LowPercent;
 
         return new RobotStatisticsResponse(
             range.From,
@@ -32,8 +34,8 @@ public sealed class GetRobotStatisticsHandler(FleetDbContext db)
             robots.Count,
             enabled.Count,
             robots.Count(r => r.IsOnline),
-            enabled.Count(r => r.BatteryPercent <= LowBatteryPercent),
-            enabled.Count == 0 ? null : (double)enabled.Average(r => r.BatteryPercent),
+            known.Count(p => p <= lowPercent),
+            known.Count == 0 ? null : (double)known.Average(),
             Enum.GetValues<RobotStatus>()
                 .Select(status => new RobotStatusCount(status.ToString(), robots.Count(r => r.Status == status)))
                 .ToList(),
@@ -56,6 +58,8 @@ public sealed class GetRobotStatisticsHandler(FleetDbContext db)
                     r.BatteryPercent,
                     ended.Count(a => a.RobotId == r.Id && a.Reason == AssignmentEndReason.COMPLETED),
                     ended.Count(a => a.RobotId == r.Id && a.Reason != AssignmentEndReason.COMPLETED)))
-                .ToList());
+                .ToList(),
+            enabled.Count - known.Count,
+            lowPercent);
     }
 }

@@ -343,13 +343,14 @@ public sealed class RobotInteractionConfirmedHandlerTests
         public List<(Guid RobotId, Guid JobStepId, string InteractionType, Guid ContainerId, Guid EndpointId)> InteractionRequests { get; } = [];
         public List<(Guid RobotId, Guid JobStepId, Guid ConfirmMessageId, bool Accepted, string? ReasonCode)> InteractionResults { get; } = [];
         public Guid RobotId { get; private set; }
-        public decimal Battery { get; set; } = 90m;
+        public decimal? Battery { get; set; } = 90m;
 
         public Guid AddRobot(Guid mapVersionId)
         {
             var id = Guid.NewGuid();
             Robots[id] = new RobotSnapshot(id, "RBT-SIM-01", Guid.NewGuid(), mapVersionId, RobotStatus.AVAILABLE, true, true,
-                LocalizationStatus.LOCALIZED, NavigationStatus.IDLE, 90m, DateTimeOffset.UtcNow, 0, 0, 0);
+                LocalizationStatus.LOCALIZED, NavigationStatus.IDLE, 90m, DateTimeOffset.UtcNow, 0, 0, 0,
+                BatteryDispatchStatus: "ELIGIBLE", BatteryDispatchAllowed: true, BatteryIsStale: false);
             RobotId = id;
             return id;
         }

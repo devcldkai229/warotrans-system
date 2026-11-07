@@ -220,6 +220,67 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
+    public async Task Unknown_battery_fails_the_check_instead_of_reading_zero()
+    {
+        var jobId = await ProvisionAsync();
+        _fleet.Battery = null;
+
+        await Engine().StartAsync(jobId, null);
+
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.FAILED, job.Status);
+        Assert.Equal("check_failed_battery_min", job.FailureCode);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Theory]
+    [InlineData("UNKNOWN")]
+    [InlineData("STALE")]
+    [InlineData("LOW")]
+    public async Task Automatic_dispatch_skips_robots_without_a_usable_battery_and_keeps_the_job_queued(string battery)
+    {
+        var jobId = await ProvisionAsync();
+        SetRobot(r => r with { BatteryDispatchStatus = battery, BatteryDispatchAllowed = false });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Engine().StartAsync(jobId, null));
+
+        Assert.Equal("no_robot_battery_eligible", ex.Code);
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.True(job.Status is JobStatus.CREATED or JobStatus.QUEUED);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Theory]
+    [InlineData("UNKNOWN", "robot_battery_unknown")]
+    [InlineData("STALE", "robot_battery_stale")]
+    [InlineData("LOW", "robot_battery_low")]
+    public async Task Requested_robot_without_a_usable_battery_is_refused(string battery, string code)
+    {
+        var jobId = await ProvisionAsync();
+        SetRobot(r => r with { BatteryDispatchStatus = battery, BatteryDispatchAllowed = false });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Engine().StartAsync(jobId, _fleet.RobotId));
+
+        Assert.Equal(code, ex.Code);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task Development_override_lets_an_unknown_battery_robot_start()
+    {
+        // Fleet sets BatteryDispatchAllowed = true for UNKNOWN when Fleet:Battery:AllowUnknownBatteryDispatch is on.
+        var jobId = await ProvisionAsync();
+        SetRobot(r => r with { BatteryDispatchStatus = "UNKNOWN", BatteryDispatchAllowed = true, BatteryPercent = null });
+        _fleet.Battery = null;
+
+        await Engine().StartAsync(jobId, null);
+
+        // Dispatched, then the workflow's own CHECK BATTERY_MIN still refuses an unknown battery.
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal("check_failed_battery_min", job.FailureCode);
+    }
+
+    [Fact]
     public async Task Inactive_request_fails_the_request_check()
     {
         var jobId = await ProvisionAsync();
@@ -417,13 +478,14 @@ public sealed class JobExecutionEngineTests
         public List<(Guid RobotId, Guid JobStepId, string InteractionType, Guid ContainerId, Guid EndpointId)> InteractionRequests { get; } = [];
         public List<(Guid RobotId, Guid JobStepId, Guid ConfirmMessageId, bool Accepted, string? ReasonCode)> InteractionResults { get; } = [];
         public Guid RobotId { get; private set; }
-        public decimal Battery { get; set; } = 90m;
+        public decimal? Battery { get; set; } = 90m;
 
         public Guid AddRobot(Guid mapVersionId)
         {
             var id = Guid.NewGuid();
             Robots[id] = new RobotSnapshot(id, "RBT-SIM-01", Guid.NewGuid(), mapVersionId, RobotStatus.AVAILABLE, true, true,
-                LocalizationStatus.LOCALIZED, NavigationStatus.IDLE, 90m, DateTimeOffset.UtcNow, 0, 0, 0);
+                LocalizationStatus.LOCALIZED, NavigationStatus.IDLE, 90m, DateTimeOffset.UtcNow, 0, 0, 0,
+                BatteryDispatchStatus: "ELIGIBLE", BatteryDispatchAllowed: true, BatteryIsStale: false);
             if (RobotId == Guid.Empty)
             {
                 RobotId = id;

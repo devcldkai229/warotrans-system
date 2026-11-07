@@ -11,6 +11,7 @@ import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { WarehouseMap, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { useNotificationsHub, type JobUpdatedMessage, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
 import { Button } from '@/shared/ui/Button'
+import { formatBatteryPercent } from '@/shared/ui/battery'
 import { buttonClass } from '@/shared/ui/buttonClass'
 import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
@@ -439,7 +440,7 @@ export function JobDetailPage() {
             <dl className="mt-4 flex gap-8 text-xs">
               <div>
                 <dt className="text-muted">Battery</dt>
-                <dd className="mt-0.5 font-medium">{robot ? `${Math.round(robot.batteryPercent)}%` : '—'}</dd>
+                <dd className="mt-0.5 font-medium">{robot ? formatBatteryPercent(robot.batteryPercent) : '—'}</dd>
               </div>
               <div>
                 <dt className="text-muted">{containerLabels.length > 1 ? 'Containers' : 'Container'}</dt>

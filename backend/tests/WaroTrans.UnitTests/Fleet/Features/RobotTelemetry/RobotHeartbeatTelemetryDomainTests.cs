@@ -72,7 +72,7 @@ public class RobotHeartbeatTelemetryDomainTests
             1.5,
             2.5,
             0.3,
-            77.5m,
+            new RobotBatteryReading(77.5m, 11.9m, BatteryEstimationMode.VOLTAGE_ONLY, BatteryConfidence.MEDIUM),
             NavigationStatus.NAVIGATING,
             LocalizationStatus.LOCALIZED,
             0.4,
@@ -88,6 +88,10 @@ public class RobotHeartbeatTelemetryDomainTests
         Assert.Equal(2.5, robot.PoseY);
         Assert.Equal(0.3, robot.PoseYaw);
         Assert.Equal(77.5m, robot.BatteryPercent);
+        Assert.Equal(11.9m, robot.BatteryVoltage);
+        Assert.Equal(BatteryEstimationMode.VOLTAGE_ONLY, robot.BatteryEstimationMode);
+        Assert.Equal(BatteryChargingState.UNKNOWN, robot.BatteryChargingState);
+        Assert.NotNull(robot.BatteryUpdatedAt);
         Assert.Equal(NavigationStatus.NAVIGATING, robot.NavigationStatus);
         Assert.Equal(LocalizationStatus.LOCALIZED, robot.LocalizationStatus);
     }
@@ -99,12 +103,12 @@ public class RobotHeartbeatTelemetryDomainTests
         var boot = Guid.NewGuid();
         Assert.True(robot.TryApplyTelemetry(
             boot, 2, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
-            9, 8, 7, 50m, NavigationStatus.IDLE, LocalizationStatus.LOCALIZED,
+            9, 8, 7, new RobotBatteryReading(50m), NavigationStatus.IDLE, LocalizationStatus.LOCALIZED,
             0, 0, null, null, null));
 
         var applied = robot.TryApplyTelemetry(
             boot, 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
-            0, 0, 0, 10m, NavigationStatus.FAILED, LocalizationStatus.LOST,
+            0, 0, 0, new RobotBatteryReading(10m), NavigationStatus.FAILED, LocalizationStatus.LOST,
             0, 0, null, null, null);
 
         Assert.False(applied);
@@ -114,24 +118,27 @@ public class RobotHeartbeatTelemetryDomainTests
     }
 
     [Fact]
-    public void ApplyTelemetry_null_pose_and_battery_when_LOST_does_not_overwrite_pose()
+    public void ApplyTelemetry_null_pose_keeps_pose_but_null_battery_becomes_unknown()
     {
         var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-001", "A", DateTimeOffset.UtcNow);
         var boot = Guid.NewGuid();
         Assert.True(robot.TryApplyTelemetry(
             boot, 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
-            3, 4, 0.5, 60m, NavigationStatus.IDLE, LocalizationStatus.LOCALIZED,
+            3, 4, 0.5, new RobotBatteryReading(60m), NavigationStatus.IDLE, LocalizationStatus.LOCALIZED,
             0, 0, null, null, null));
 
         Assert.True(robot.TryApplyTelemetry(
             boot, 2, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
-            null, null, null, null, NavigationStatus.IDLE, LocalizationStatus.LOST,
+            null, null, null, RobotBatteryReading.Unknown, NavigationStatus.IDLE, LocalizationStatus.LOST,
             0, 0, null, null, null));
 
         Assert.Equal(3, robot.PoseX);
         Assert.Equal(4, robot.PoseY);
         Assert.Equal(0.5, robot.PoseYaw);
-        Assert.Equal(60m, robot.BatteryPercent);
+        // Battery null = UNKNOWN now: the old 60 % is not kept and nothing becomes 0 %.
+        Assert.Null(robot.BatteryPercent);
+        Assert.Equal(BatteryEstimationMode.UNAVAILABLE, robot.BatteryEstimationMode);
+        Assert.Null(robot.BatteryUpdatedAt);
         Assert.Equal(LocalizationStatus.LOST, robot.LocalizationStatus);
     }
 }

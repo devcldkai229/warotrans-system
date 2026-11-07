@@ -1,5 +1,6 @@
 import type { ContainerSlot, JobDetailResponse, JobStatus, JobStepResponse, JobStepSummary, JobSummary, JobTaskResponse, WorkflowCode } from '../../shared/types/contracts';
 import type { SemanticTone } from '../../shared/theme/colors';
+import { formatBatteryPercent } from '../../shared/utils/battery';
 export interface JobStopStep { type: string; label: string; status: 'done' | 'waiting' | 'running' | 'future'; timeRemaining?: string }
 export interface JobStopItem { id: number; name: string; description: string; state: 'done' | 'active' | 'future'; current?: boolean; steps?: JobStopStep[] }
 export interface JobContainerItem {
@@ -119,7 +120,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
     containerCount: detail.containers.length, slots, steps, tasks, createdAtUtc: detail.createdAt,
     target: destination, route: `${source} ➔ ${destination}`, robot,
     isMine: Boolean(currentStaffId && assignedStaffId === currentStaffId && !isTerminalJobStatus(detail.status)),
-    battery: typeof context.batteryPercent === 'number' ? `${Math.round(context.batteryPercent)}%` : '—',
+    battery: robot === 'Unassigned' ? '—' : formatBatteryPercent(typeof context.batteryPercent === 'number' ? context.batteryPercent : null),
     speed: typeof context.linearVelocity === 'number' ? `${context.linearVelocity.toFixed(2)} m/s` : '—',
     progressPercent: allSteps.length ? Math.round(completed / allSteps.length * 100) : 0,
     completedAt: detail.completedAt || undefined, currentStop: String(context.currentStop || ''),

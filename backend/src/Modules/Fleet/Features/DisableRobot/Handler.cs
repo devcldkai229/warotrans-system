@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using WaroTrans.Fleet.Battery;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Features.Shared;
@@ -5,7 +7,7 @@ using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.DisableRobot;
 
-public sealed class DisableRobotHandler(FleetDbContext db)
+public sealed class DisableRobotHandler(FleetDbContext db, IOptions<BatteryOptions> batteryOptions, TimeProvider clock)
 {
     public async Task<RobotResponse> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -18,6 +20,6 @@ public sealed class DisableRobotHandler(FleetDbContext db)
         robot.Disable();
         await db.SaveChangesAsync(cancellationToken);
 
-        return RobotResponse.From(robot);
+        return RobotResponse.From(robot, batteryOptions.Value, clock.GetUtcNow());
     }
 }

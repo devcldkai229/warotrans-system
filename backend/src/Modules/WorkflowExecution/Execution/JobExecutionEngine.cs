@@ -92,10 +92,22 @@ public sealed class JobExecutionEngine(
         else
         {
             var candidates = await fleet.GetDispatchCandidatesAsync(job.MapVersionId, cancellationToken);
-            robot = candidates.FirstOrDefault(r => !busyRobots.Contains(r.Id))
-                ?? throw new ConflictException(
+            var free = candidates.Where(r => !busyRobots.Contains(r.Id)).ToList();
+            if (free.Count == 0)
+            {
+                throw new ConflictException(
                     "No AVAILABLE robot on the Job's map version is free to take this Job.",
                     "no_robot_available");
+            }
+
+            // Battery gate (Fleet:Battery): UNKNOWN / stale / low batteries are not dispatched. The Job stays
+            // CREATED/QUEUED and can be started again once a robot reports a usable battery.
+            robot = free.FirstOrDefault(r => r.BatteryDispatchAllowed)
+                ?? throw new ConflictException(
+                    "No free robot has a usable battery for this Job: "
+                    + string.Join(", ", free.Select(r => $"{r.Code} battery {r.BatteryDispatchStatus}"))
+                    + ". The Job stays queued.",
+                    "no_robot_battery_eligible");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -933,10 +945,18 @@ public sealed class JobExecutionEngine(
             {
                 var robot = await fleet.GetRobotAsync(inputs["robotId"].GetGuid(), cancellationToken);
                 var required = inputs["minimumBatteryPercent"].GetDecimal();
-                var actual = robot?.BatteryPercent ?? 0m;
-                passed = robot is not null && actual >= required;
-                reason = passed ? "battery_ok" : $"battery {actual}% < required {required}%";
-                outputs["actualBatteryPercent"] = JsonSerializer.SerializeToElement(actual);
+                // UNKNOWN or stale never passes (no development override here) and is never read as 0 %.
+                var actual = robot is { BatteryIsStale: false } ? robot.BatteryPercent : null;
+                passed = actual is { } known && known >= required;
+                reason = robot is null ? "robot_not_found"
+                    : robot.BatteryPercent is null ? "battery_unknown"
+                    : robot.BatteryIsStale ? "battery_stale"
+                    : passed ? "battery_ok"
+                    : $"battery {actual}% < required {required}%";
+                if (actual is { } observed)
+                {
+                    outputs["actualBatteryPercent"] = JsonSerializer.SerializeToElement(observed);
+                }
                 outputs["requiredBatteryPercent"] = JsonSerializer.SerializeToElement(required);
                 break;
             }
@@ -1145,6 +1165,20 @@ public sealed class JobExecutionEngine(
         if (busyRobots.Contains(robot.Id))
         {
             throw new ConflictException($"Robot {robot.Code} is already running another Job.", "robot_assigned_to_other_job");
+        }
+
+        if (!robot.BatteryDispatchAllowed)
+        {
+            var code = robot.BatteryDispatchStatus switch
+            {
+                "LOW" => "robot_battery_low",
+                "STALE" => "robot_battery_stale",
+                _ => "robot_battery_unknown"
+            };
+            throw new ConflictException(
+                $"Robot {robot.Code} cannot take a Job: battery {robot.BatteryDispatchStatus}"
+                + (robot.BatteryPercent is { } p ? $" ({p:0}%)." : "."),
+                code);
         }
     }
 

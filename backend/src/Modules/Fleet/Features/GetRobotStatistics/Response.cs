@@ -14,7 +14,11 @@ public sealed record RobotStatisticsResponse(
     double? AverageBatteryPercent,
     IReadOnlyList<RobotStatusCount> ByStatus,
     AssignmentOutcomes Assignments,
-    IReadOnlyList<RobotStatisticsRow> Robots);
+    IReadOnlyList<RobotStatisticsRow> Robots,
+    // Enabled robots whose battery is UNKNOWN (not counted in LowBattery / AverageBatteryPercent).
+    int UnknownBattery,
+    // Fleet:Battery:LowPercent, so clients do not hard-code the threshold.
+    decimal LowBatteryPercent);
 
 public sealed record RobotStatusCount(string Status, int Count);
 
@@ -35,6 +39,6 @@ public sealed record RobotStatisticsRow(
     string Status,
     bool IsEnabled,
     bool IsOnline,
-    decimal BatteryPercent,
+    decimal? BatteryPercent,
     int JobsCompleted,
     int Interrupted);

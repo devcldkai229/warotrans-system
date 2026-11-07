@@ -15,6 +15,21 @@ public sealed class RobotTelemetryMessageValidator : AbstractValidator<RobotTele
         "LOCALIZED", "LOST", "UNKNOWN"
     ];
 
+    private static readonly HashSet<string> BatteryEstimationModes =
+    [
+        "VOLTAGE_ONLY", "SIMULATED", "UNAVAILABLE"
+    ];
+
+    private static readonly HashSet<string> BatteryConfidences =
+    [
+        "MEDIUM", "LOW", "NONE"
+    ];
+
+    private static readonly HashSet<string> BatteryChargingStates =
+    [
+        "UNKNOWN", "CHARGING", "NOT_CHARGING"
+    ];
+
     public RobotTelemetryMessageValidator()
     {
         RuleFor(x => x.SchemaVersion).Equal(1);
@@ -26,6 +41,25 @@ public sealed class RobotTelemetryMessageValidator : AbstractValidator<RobotTele
         RuleFor(x => x.BatteryPercent)
             .InclusiveBetween(0, 100)
             .When(x => x.BatteryPercent.HasValue);
+        RuleFor(x => x.BatteryVoltage)
+            .InclusiveBetween(0, 30)
+            .When(x => x.BatteryVoltage.HasValue);
+        RuleFor(x => x.BatteryEstimationMode)
+            .Must(s => BatteryEstimationModes.Contains(s!))
+            .When(x => x.BatteryEstimationMode is not null)
+            .WithMessage("BatteryEstimationMode must be a known value.");
+        RuleFor(x => x.BatteryPercent)
+            .Null()
+            .When(x => x.BatteryEstimationMode == "UNAVAILABLE")
+            .WithMessage("BatteryPercent must be null when BatteryEstimationMode is UNAVAILABLE.");
+        RuleFor(x => x.BatteryConfidence)
+            .Must(s => BatteryConfidences.Contains(s!))
+            .When(x => x.BatteryConfidence is not null)
+            .WithMessage("BatteryConfidence must be a known value.");
+        RuleFor(x => x.BatteryChargingState)
+            .Must(s => BatteryChargingStates.Contains(s!))
+            .When(x => x.BatteryChargingState is not null)
+            .WithMessage("BatteryChargingState must be a known value.");
         RuleFor(x => x.NavigationStatus)
             .NotEmpty()
             .Must(s => NavigationStatuses.Contains(s))

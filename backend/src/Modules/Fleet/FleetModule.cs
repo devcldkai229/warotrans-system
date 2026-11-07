@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Mqtt;
+using WaroTrans.Fleet.Battery;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Features.DisableRobot;
 using WaroTrans.Fleet.Features.EnableRobot;
@@ -40,6 +41,7 @@ public static class FleetModule
 
         services.Configure<TrafficOptions>(configuration.GetSection(TrafficOptions.SectionName));
         services.Configure<TrafficFootprintOptions>(configuration.GetSection(TrafficFootprintOptions.SectionName));
+        services.Configure<BatteryOptions>(configuration.GetSection(BatteryOptions.SectionName));
 
         services.AddValidatorsFromAssembly(typeof(FleetModule).Assembly);
 

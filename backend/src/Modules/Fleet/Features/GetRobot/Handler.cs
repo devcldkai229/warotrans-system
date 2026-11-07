@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using WaroTrans.Fleet.Battery;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Features.Shared;
@@ -5,7 +7,7 @@ using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.GetRobot;
 
-public sealed class GetRobotHandler(FleetDbContext db)
+public sealed class GetRobotHandler(FleetDbContext db, IOptions<BatteryOptions> batteryOptions, TimeProvider clock)
 {
     public async Task<RobotResponse> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -17,6 +19,6 @@ public sealed class GetRobotHandler(FleetDbContext db)
             throw new NotFoundException($"Robot '{id}' was not found.", "robot_not_found");
         }
 
-        return RobotResponse.From(robot);
+        return RobotResponse.From(robot, batteryOptions.Value, clock.GetUtcNow());
     }
 }

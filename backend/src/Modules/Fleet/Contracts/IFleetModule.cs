@@ -70,7 +70,11 @@ public sealed record RobotSnapshot(
     DateTimeOffset? LastTelemetryAt,
     double PoseX,
     double PoseY,
-    double PoseYaw);
+    double PoseYaw,
+    // Battery gate for automatic dispatch (Fleet:Battery). Defaults keep older callers compiling.
+    string BatteryDispatchStatus = "UNKNOWN",
+    bool BatteryDispatchAllowed = false,
+    bool BatteryIsStale = true);
 
 /// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
 public sealed record RouteGrantSnapshot(string GraphHash, IReadOnlyList<int> EdgeIds);

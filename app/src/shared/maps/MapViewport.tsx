@@ -6,6 +6,7 @@ import { MapPin, ParkingSquare, X, Zap } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto } from '../api/navigationApi';
 import { getApiBaseUrl } from '../api/client';
 import type { RobotResponse } from '../types/contracts';
+import { formatBatteryPercent } from '../utils/battery';
 import { colors } from '../theme/colors';
 import { Button, Text } from '../ui';
 import { BottomSheet } from '../ui/BottomSheet';
@@ -158,7 +159,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
         </>:sheet==='robot'&&robot&&state?<>
           <Text variant="title">{robot.code}</Text><Text>{robot.status} · {robot.navigationStatus}</Text><Text>{robot.localizationStatus} · {state.label}</Text>
           <Text variant="caption">{robot.lastTelemetryAt?`Reported ${robot.lastTelemetryAt}`:'No Telemetry Timestamp'} · {sampleAgeLabel(state.ageSeconds)}</Text>
-          <Text variant="code">X {robot.poseX.toFixed(3)} m · Y {robot.poseY.toFixed(3)} m</Text><Text>Yaw {robot.poseYaw.toFixed(3)} rad · Battery {Math.round(robot.batteryPercent)}%</Text>
+          <Text variant="code">X {robot.poseX.toFixed(3)} m · Y {robot.poseY.toFixed(3)} m</Text><Text>Yaw {robot.poseYaw.toFixed(3)} rad · Battery {formatBatteryPercent(robot.batteryPercent)}</Text>
           <Button title="Follow Robot" disabled={!state.canFollow||!active} onPress={()=>{setFollowing(true);close();}}/>
         </>:<Text>The selected object is no longer available on this map.</Text>}
       </ScrollView>

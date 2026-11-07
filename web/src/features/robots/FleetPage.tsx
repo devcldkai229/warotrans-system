@@ -78,6 +78,9 @@ export function FleetPage() {
                 poseY: live.poseY,
                 poseYaw: live.poseYaw,
                 navigationStatus: (live.navigationStatus as Robot['navigationStatus']) ?? robot.navigationStatus,
+                // null = UNKNOWN: take it as is (an old percent must not linger, nothing becomes 0 %).
+                batteryPercent: live.batteryPercent,
+                battery: live.battery ?? robot.battery,
               }
             : robot,
         )

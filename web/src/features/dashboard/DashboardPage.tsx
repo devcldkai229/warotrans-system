@@ -6,6 +6,8 @@ import { cx } from '@/shared/lib/cx'
 import { formatRelativeTime, humanize } from '@/shared/lib/format'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
+import { BatteryIndicator } from '@/shared/ui/BatteryIndicator'
+import { DEFAULT_LOW_BATTERY_PERCENT } from '@/shared/ui/battery'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
 import { Table, Td, Th, Tr } from '@/shared/ui/Table'
@@ -345,6 +347,8 @@ function RobotsSection({ stats }: { stats: RobotStatistics }) {
     { label: 'Went offline', value: stats.assignments.robotOffline, tone: 'red' },
     { label: 'Rejected by robot', value: stats.assignments.robotRejected, tone: 'amber' },
   ]
+  const lowPercent = stats.lowBatteryPercent ?? DEFAULT_LOW_BATTERY_PERCENT
+  const unknownBattery = stats.unknownBattery ?? 0
   return (
     <>
       <div className="grid grid-cols-4 gap-px overflow-hidden rounded-lg bg-outline-soft">
@@ -352,10 +356,15 @@ function RobotsSection({ stats }: { stats: RobotStatistics }) {
         <Card label="Enabled" value={`${stats.enabled} / ${stats.total}`} />
         <Card
           label="Average battery"
-          value={stats.averageBatteryPercent === null ? '—' : `${Math.round(stats.averageBatteryPercent)}%`}
-          hint="Enabled robots"
+          value={stats.averageBatteryPercent === null ? 'Unknown' : `${Math.round(stats.averageBatteryPercent)}%`}
+          hint={unknownBattery > 0 ? `Known batteries only · ${unknownBattery} unknown` : 'Enabled robots'}
         />
-        <Card label="Low battery" value={String(stats.lowBattery)} tone={stats.lowBattery > 0 ? 'red' : 'grey'} hint="At or below 20%" />
+        <Card
+          label="Low battery"
+          value={String(stats.lowBattery)}
+          tone={stats.lowBattery > 0 ? 'red' : 'grey'}
+          hint={`At or below ${lowPercent}%`}
+        />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4">
@@ -408,14 +417,7 @@ function RobotsSection({ stats }: { stats: RobotStatistics }) {
                     {!robot.isEnabled ? <span className="ml-2 text-xs text-muted">disabled</span> : null}
                   </Td>
                   <Td>
-                    <span className="flex items-center gap-3">
-                      <span className="w-10 tabular-nums">{Math.round(robot.batteryPercent)}%</span>
-                      <Meter
-                        percent={robot.batteryPercent}
-                        tone={robot.batteryPercent <= 20 ? 'red' : robot.batteryPercent <= 40 ? 'amber' : 'green'}
-                        className="w-28"
-                      />
-                    </span>
+                    <BatteryIndicator percent={robot.batteryPercent} lowPercent={lowPercent} meterClassName="w-28" />
                   </Td>
                   <Td align="right">{robot.jobsCompleted}</Td>
                   <Td align="right">{robot.interrupted}</Td>

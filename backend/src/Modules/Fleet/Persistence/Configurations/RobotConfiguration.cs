@@ -15,6 +15,10 @@ public sealed class RobotConfiguration : IEntityTypeConfiguration<Robot>
         builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.BatteryPercent).HasPrecision(5, 2);
+        builder.Property(x => x.BatteryVoltage).HasPrecision(6, 3);
+        builder.Property(x => x.BatteryEstimationMode).HasConversion<string>().HasMaxLength(30);
+        builder.Property(x => x.BatteryConfidence).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.BatteryChargingState).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.IsOnline).IsRequired();
         builder.Property(x => x.NavigationStatus).HasConversion<string>().HasMaxLength(50);
         builder.Property(x => x.LocalizationStatus).HasConversion<string>().HasMaxLength(50);

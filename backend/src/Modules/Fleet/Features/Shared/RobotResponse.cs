@@ -1,3 +1,4 @@
+using WaroTrans.Fleet.Battery;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Enums;
 
@@ -11,7 +12,8 @@ public sealed record RobotResponse(
     string Name,
     RobotStatus Status,
     bool IsOnline,
-    decimal BatteryPercent,
+    decimal? BatteryPercent,
+    RobotBatteryResponse Battery,
     double PoseX,
     double PoseY,
     double PoseYaw,
@@ -28,7 +30,7 @@ public sealed record RobotResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
-    public static RobotResponse From(Robot robot) => new(
+    public static RobotResponse From(Robot robot, BatteryOptions batteryOptions, DateTimeOffset utcNow) => new(
         robot.Id,
         robot.WarehouseId,
         robot.CurrentMapVersionId,
@@ -37,6 +39,7 @@ public sealed record RobotResponse(
         robot.Status,
         robot.IsOnline,
         robot.BatteryPercent,
+        RobotBatteryResponse.From(robot, batteryOptions, utcNow),
         robot.PoseX,
         robot.PoseY,
         robot.PoseYaw,

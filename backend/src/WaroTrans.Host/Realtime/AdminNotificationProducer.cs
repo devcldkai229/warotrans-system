@@ -21,6 +21,8 @@ public sealed class AdminNotificationProducer(
         IIntegrationEventHandler<RobotConnectivityChanged>,
         IIntegrationEventHandler<RobotCommandLifecycleChanged>,
         IIntegrationEventHandler<RobotBatteryLow>,
+        IIntegrationEventHandler<RobotBatteryCritical>,
+        IIntegrationEventHandler<RobotBatteryRecovered>,
         IIntegrationEventHandler<RobotErrorReported>,
         IIntegrationEventHandler<JobStepStatusChanged>,
         IIntegrationEventHandler<JobWaitingToStart>,
@@ -119,11 +121,30 @@ public sealed class AdminNotificationProducer(
                 NotificationType.WARNING,
                 "ROBOT_BATTERY_LOW",
                 $"Robot {e.RobotCode} battery is low",
-                $"{e.BatteryPercent:0}% left and the robot is not charging.",
+                $"About {e.BatteryPercent:0}% left. New Jobs need a charged robot.",
                 Robot,
                 e.RobotId,
                 $"robot:{e.RobotId}:battery"),
             cancellationToken));
+
+    public Task HandleAsync(RobotBatteryCritical e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(() => notifications.PublishAsync(
+            new NotificationDraft(
+                NotificationType.ALERT,
+                "ROBOT_BATTERY_CRITICAL",
+                $"Robot {e.RobotCode} battery is critical",
+                $"About {e.BatteryPercent:0}% left. Charge the robot before it runs out.",
+                Robot,
+                e.RobotId,
+                $"robot:{e.RobotId}:battery:critical"),
+            cancellationToken));
+
+    public Task HandleAsync(RobotBatteryRecovered e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(async () =>
+        {
+            await notifications.ResolveAsync($"robot:{e.RobotId}:battery", cancellationToken);
+            await notifications.ResolveAsync($"robot:{e.RobotId}:battery:critical", cancellationToken);
+        });
 
     public Task HandleAsync(RobotErrorReported e, CancellationToken cancellationToken = default) =>
         SafelyAsync(() => notifications.PublishAsync(

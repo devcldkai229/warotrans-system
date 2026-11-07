@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using WaroTrans.Fleet.Abstractions;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Features.Shared;
 using WaroTrans.Host.Hubs;
 
 namespace WaroTrans.Host.Realtime;
@@ -34,13 +35,14 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
         double poseX,
         double poseY,
         double poseYaw,
-        decimal batteryPercent,
+        decimal? batteryPercent,
         NavigationStatus? navigationStatus,
         LocalizationStatus? localizationStatus,
         DateTimeOffset? lastTelemetryAt,
         CancellationToken cancellationToken = default,
         double? linearVelocity = null,
-        double? angularVelocity = null)
+        double? angularVelocity = null,
+        RobotBatteryResponse? battery = null)
     {
         return hub.Clients.All.SendAsync(
             "robotTelemetryUpdated",
@@ -57,7 +59,9 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
                 lastTelemetryAt,
                 // Manual control speedometer (m/s, rad/s) — from the robot's odometry.
                 linearVelocity,
-                angularVelocity
+                angularVelocity,
+                // batteryPercent null = UNKNOWN; details (mode, confidence, stale, dispatch) in battery.
+                battery
             },
             cancellationToken);
     }
