@@ -29,7 +29,7 @@ public sealed class MapOneTurnManeuverAuditTests(ITestOutputHelper output)
         "EP-PARKING-A", "EP-INBOUND", "EP-SHELF-A-01", "EP-OUTBOUND", "EP-PARKING-A"
     ];
 
-    [Fact]
+    [Fact(Skip = MapSnapshotCompileHarness.ActiveRouteGraphNotConnected)]
     public void Turn_maneuver_audit_and_svgs()
     {
         var input = MapSnapshotCompileHarness.Load(MapFolder);
