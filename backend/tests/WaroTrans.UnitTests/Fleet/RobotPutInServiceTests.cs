@@ -64,4 +64,21 @@ public class RobotPutInServiceTests
         var ex = Assert.Throws<ConflictException>(() => robot.PutInService(DateTimeOffset.UtcNow));
         Assert.Equal("robot_not_offline", ex.Code);
     }
+
+    [Fact]
+    public void Changing_map_needs_a_new_localization_and_is_refused_while_the_robot_has_a_command()
+    {
+        var robot = ConnectedRobot();
+        robot.LocalizationStatus = LocalizationStatus.LOCALIZED;
+        var newMap = Guid.NewGuid();
+
+        robot.ChangeMap(newMap, DateTimeOffset.UtcNow);
+
+        Assert.Equal(newMap, robot.CurrentMapVersionId);
+        Assert.Equal(LocalizationStatus.UNKNOWN, robot.LocalizationStatus);
+
+        robot.MarkExecuting(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var ex = Assert.Throws<ConflictException>(() => robot.ChangeMap(Guid.NewGuid(), DateTimeOffset.UtcNow));
+        Assert.Equal("robot_busy", ex.Code);
+    }
 }

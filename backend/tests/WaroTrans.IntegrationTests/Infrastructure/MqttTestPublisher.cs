@@ -40,7 +40,7 @@ public static class MqttTestPublisher
 
     public static Task PublishHeartbeatAsync(string robotCode, Guid bootId, long sequence, CancellationToken cancellationToken = default) =>
         PublishAsync(
-            RobotMqttTopics.Heartbeat("warotrans/v1", robotCode),
+            RobotMqttTopics.Heartbeat(WaroTransWebApplicationFactory.TestTopicPrefix, robotCode),
             new
             {
                 schemaVersion = 1,
@@ -59,7 +59,7 @@ public static class MqttTestPublisher
         string? reasonCode = null,
         CancellationToken cancellationToken = default) =>
         PublishAsync(
-            RobotMqttTopics.CommandAck("warotrans/v1", robotCode),
+            RobotMqttTopics.CommandAck(WaroTransWebApplicationFactory.TestTopicPrefix, robotCode),
             new
             {
                 schemaVersion = 1,
@@ -79,7 +79,7 @@ public static class MqttTestPublisher
         string? errorCode = null,
         CancellationToken cancellationToken = default) =>
         PublishAsync(
-            RobotMqttTopics.CommandResult("warotrans/v1", robotCode),
+            RobotMqttTopics.CommandResult(WaroTransWebApplicationFactory.TestTopicPrefix, robotCode),
             new
             {
                 schemaVersion = 1,
@@ -103,7 +103,7 @@ public static class MqttTestPublisher
         string localizationStatus = "LOCALIZED",
         CancellationToken cancellationToken = default) =>
         PublishAsync(
-            RobotMqttTopics.Telemetry("warotrans/v1", robotCode),
+            RobotMqttTopics.Telemetry(WaroTransWebApplicationFactory.TestTopicPrefix, robotCode),
             new
             {
                 schemaVersion = 1,

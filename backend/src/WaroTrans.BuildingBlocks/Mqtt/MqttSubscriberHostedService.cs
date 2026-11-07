@@ -14,6 +14,7 @@ namespace WaroTrans.BuildingBlocks.Mqtt;
 public sealed class MqttSubscriberHostedService(
     IOptions<MqttOptions> options,
     IServiceScopeFactory scopeFactory,
+    RobotIngressGate ingressGate,
     ILogger<MqttSubscriberHostedService> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -116,6 +117,11 @@ public sealed class MqttSubscriberHostedService(
 
     private async Task OnMessageAsync(MqttApplicationMessageReceivedEventArgs e, CancellationToken cancellationToken)
     {
+        if (!ingressGate.IsActive)
+        {
+            return; // standby host: the coordinator lease holder handles robot uplink
+        }
+
         var topic = e.ApplicationMessage.Topic;
         var mqtt = options.Value;
         if (!RobotMqttTopics.TryParse(topic, mqtt.TopicPrefix, out var robotCodeFromTopic, out var kind))
@@ -147,6 +153,8 @@ public sealed class MqttSubscriberHostedService(
             return;
         }
 
+        // Messages are handled one at a time: a slow handler delays every robot's heartbeat behind it (false OFFLINE).
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             switch (kind)
@@ -195,6 +203,15 @@ public sealed class MqttSubscriberHostedService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed processing MQTT message on {Topic}", topic);
+        }
+        finally
+        {
+            var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            if (elapsed > TimeSpan.FromMilliseconds(500))
+            {
+                logger.LogWarning("Slow MQTT handler {Kind} for {RobotCode}: {ElapsedMs:F0} ms", kind, robotCodeFromTopic,
+                    elapsed.TotalMilliseconds);
+            }
         }
     }
 

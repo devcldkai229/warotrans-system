@@ -142,6 +142,24 @@ Schema version stays **1**. Shadow Mode may omit `authority` and keep using `rou
 See ADR 0010. New commands: `EXTEND_AUTHORITY`, `RENEW_AUTHORITY`, `REVOKE_AUTHORITY`.
 Uplink topics: `…/traffic_progress`, `…/authority_state` (QoS1).
 
+#### Semantic Mode (`Traffic:Mode=Semantic`, robot `traffic_mode=semantic_active`)
+
+All additive, schema version stays 1.
+
+- **`…/robots/{code}/traffic_plan`** (robot → backend, QoS1): `planRevision` (> 0), `planHash` (robot hash of
+  `poses`), `commandId` (the open backend NAVIGATE; a plan without one is never granted), `poses`, `goal`.
+- **`EXTEND_AUTHORITY`** payload adds `planHash` (echo) and `geometry`
+  (`cellSizeMeters`, `horizonMeters`, `sampleStepMeters`, `reserveRadiusMeters`, `footprintRadiusMeters`);
+  `targetCommandId` is the NAVIGATE the plan belongs to. The robot moves only while its footprint stays inside the
+  granted `resourceIds` (cells/zones computed with that geometry, same algorithm as the backend).
+- The robot **ACKs** EXTEND / RENEW / REVOKE on `command_ack` (terminal; a refused grant carries `reasonCode`, e.g.
+  `STALE_PLAN_REVISION`, `PLAN_HASH_MISMATCH`, `STALE_EPOCH`, `EXPIRED_ON_ARRIVAL`, `DUPLICATE_OR_OLDER`).
+- **`{prefix}/traffic/epoch`** (backend → all, QoS1, **retained**): `{epoch, coordinatorId, startedAt}`. Published
+  once the host holds the coordinator lease, before any grant of that epoch. A robot drops every grant of an older
+  epoch when it sees a newer one.
+- **`authority_state`** adds `poseX`, `poseY`, `localizationOk` (the robot's own pose; sent on boot, reconnect and
+  epoch change).
+
 ### CANCEL
 
 ```json
@@ -265,6 +283,9 @@ or terminal `reasonCode` (`interaction_not_current`, `interaction_wrong_robot`, 
 ```
 
 ## Teleop (backend → robot, manual drive)
+
+Off in Semantic Mode (`teleop_enabled: false`, `robot_gateway_semantic.yaml`): with the authority gate on, the ESP32
+bridge drives only from `/cmd_vel_motor` and only while the gate is its sole publisher, so no teleop reaches the motors.
 
 Not a command: no `commandId`, no ACK / RESULT, nothing persisted. The web console sends a setpoint every
 ~200 ms while a direction is held and `{0, 0}` on release (`POST /api/fleet/robots/{id}/teleop`).

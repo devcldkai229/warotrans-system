@@ -151,12 +151,12 @@ public sealed class MapOneV001AcceptanceTests(ITestOutputHelper output)
         string[][] legs =
         [
             ["EP-PARKING-A", "EP-INBOUND"],
-            ["EP-INBOUND", "EP-SHELFA01"],
-            ["EP-SHELFA01", "EP-OUTBOUND"],
+            ["EP-INBOUND", "EP-SHELF-A-01"],
+            ["EP-SHELF-A-01", "EP-OUTBOUND"],
             ["EP-OUTBOUND", "EP-PARKING-A"],
             ["EP-PARKING-A", "EP-OUTBOUND"],
-            ["EP-OUTBOUND", "EP-SHELFA01"],
-            ["EP-SHELFA01", "EP-INBOUND"],
+            ["EP-OUTBOUND", "EP-SHELF-A-01"],
+            ["EP-SHELF-A-01", "EP-INBOUND"],
             ["EP-INBOUND", "EP-PARKING-A"],
             ["EP-CHARGING-A", "EP-INBOUND"],
             ["EP-INBOUND", "EP-CHARGING-A"],
@@ -219,7 +219,7 @@ public sealed class MapOneV001AcceptanceTests(ITestOutputHelper output)
 
     private static void DumpConnectivity(TrafficCompileResult result, StringBuilder dump)
     {
-        string[] business = ["EP-PARKING-A", "EP-PARKING-B", "EP-CHARGING-A", "EP-INBOUND", "EP-OUTBOUND", "EP-SHELFA01"];
+        string[] business = ["EP-PARKING-A", "EP-PARKING-B", "EP-CHARGING-A", "EP-INBOUND", "EP-OUTBOUND", "EP-SHELF-A-01"];
         var stations = result.Graph.Stations.ToDictionary(s => s.EndpointCode, s => s.NodeId, StringComparer.Ordinal);
         foreach (var a in business.Where(stations.ContainsKey))
         {

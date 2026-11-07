@@ -22,6 +22,12 @@ public sealed class TrafficState
     private Guid _mapVersionId;
     private long _enqueueSeq;
     private bool _ready;
+    private bool _reconciled;
+    // Semantic start-up seeds that arrived before the zone/cell policy was bound (applied by BindSemanticPolicy).
+    private IReadOnlyList<TrafficReconcileSeed>? _pendingSemanticSeeds;
+    // One coordinator per resource domain: closed until the host holds the coordinator lease and has told every
+    // robot the new epoch (TrafficCoordinatorLeaseHostedService). Open from the start when no lease is required.
+    private bool _open;
 
     public TrafficState(TrafficOptions options, TimeProvider? clock = null)
     {
@@ -29,8 +35,24 @@ public sealed class TrafficState
         _clock = clock ?? TimeProvider.System;
         _eventCap = Math.Max(16, options.EventLogCapacity);
         _events = new Queue<string>(_eventCap);
+        _open = !options.RequireCoordinatorLease;
         Epoch = 1;
         Phase = "Reconciling";
+    }
+
+    /// <summary>Grants are refused (NOT_LEADER) until the lease is held and the epoch announced.</summary>
+    public bool IsOpenForGrants => _open;
+
+    public void SetOpenForGrants(bool open, string reason)
+    {
+        if (_open == open)
+        {
+            return;
+        }
+
+        _open = open;
+        StateVersion++;
+        Log($"coordinator-{(open ? "open" : "closed")}:{reason}");
     }
 
     public long Epoch { get; private set; }
@@ -44,6 +66,8 @@ public sealed class TrafficState
         Epoch = forcedEpoch ?? Epoch + 1;
         Phase = "Reconciling";
         _ready = false;
+        _reconciled = false;
+        _pendingSemanticSeeds = null;
         _robots.Clear();
         _holders.Clear();
         _queues.Clear();
@@ -72,9 +96,12 @@ public sealed class TrafficState
             _semanticCapacities[$"zone:{z.Code}"] = 1;
         }
 
-        // Empty compiled graph not required; mark ready for semantic acquires.
-        if (_graph is null)
+        // No compiled graph needed, but never Ready before start-up reconciliation: until then the coordinator does
+        // not know what the robots stand on, and a grant could overlap a robot it has not seeded yet.
+        if (_graph is null && _reconciled && !_ready)
         {
+            ApplySemanticSeeds(_pendingSemanticSeeds ?? []);
+            _pendingSemanticSeeds = null;
             Phase = "Ready";
             _ready = true;
         }
@@ -99,36 +126,49 @@ public sealed class TrafficState
             return AcquireResult.Reject("FINGERPRINT_MISMATCH");
         }
 
+        if (!_open)
+        {
+            return AcquireResult.Reject("NOT_LEADER");
+        }
+
         if (!_ready)
         {
             return AcquireResult.Reject("NOT_READY");
         }
 
-        var robot = GetOrCreate(request.RobotId);
-        robot.JobStepId = request.JobStepId;
-        robot.ProposedPath = request.Poses;
-        robot.PlanRevision = request.PlanRevision;
-        if (request.Goal is { } g)
+        if (request.PlanRevision <= 0 || request.Poses.IsDefaultOrEmpty)
         {
-            robot.RouteGoal = new TrafficRouteGoal(g.X, g.Y, g.Yaw);
-            robot.PendingSegments = [];
+            return AcquireResult.Reject("INVALID_PLAN");
         }
+
+        if (request.CommandId is null && !_options.AllowStandaloneSemanticPlans)
+        {
+            // Only motion the backend commanded is authorized (no grant for an RViz / CLI goal).
+            return AcquireResult.Reject("NO_ACTIVE_COMMAND");
+        }
+
+        var robot = GetOrCreate(request.RobotId);
 
         // OFFLINE / LOCALIZATION_LOSS must NOT clear from traffic_plan alone — only verified
         // progress / health evidence may recover those faults (Stage-3 safety).
-
         if (robot.Phase == TrafficRobotPhase.Quarantined)
         {
-            // #region agent log
             Log($"semantic-reject-quarantined:{robot.RobotId}:{robot.QuarantineReason}");
-            // #endregion
             return AcquireResult.Reject(
                 $"QUARANTINED:{robot.QuarantineReason ?? "?"}",
                 TrafficWaitingReason.QuarantinedPeer);
         }
 
+        // A plan revision older than the one already accepted is a delayed / reordered message.
+        if (request.CommandId == robot.ActiveCommandId && request.PlanRevision < robot.PlanRevision)
+        {
+            return AcquireResult.Reject("STALE_PLAN_REVISION");
+        }
+
         if (robot.Authority is not null
             && robot.Authority.PlanRevision == request.PlanRevision
+            && robot.Authority.CommandId == request.CommandId
+            && string.Equals(robot.Authority.PlanHash, request.PlanHash, StringComparison.Ordinal)
             && string.Equals(robot.Authority.SemanticMapFingerprint, request.SemanticMapFingerprint, StringComparison.Ordinal))
         {
             // Same plan: nothing new to reserve, but the grant still has to be refreshed.
@@ -143,52 +183,98 @@ public sealed class TrafficState
             return AcquireResult.Grant(robot.Authority);
         }
 
-        // Replan: drop previous authority resources that are clear, then re-acquire.
-        if (robot.Authority is not null)
+        robot.JobStepId = request.JobStepId;
+        robot.ActiveCommandId = request.CommandId;
+        robot.ProposedPath = request.Poses;
+        robot.PlanRevision = request.PlanRevision;
+        robot.PlanHash = request.PlanHash;
+        // Nav2 plans from the robot's localized pose: the first pose is the freshest position evidence there is.
+        robot.X = request.Poses[0].X;
+        robot.Y = request.Poses[0].Y;
+        if (request.Goal is { } g)
+        {
+            robot.RouteGoal = new TrafficRouteGoal(g.X, g.Y, g.Yaw);
+            robot.PendingSegments = [];
+        }
+
+        // Replan: the old grant reserved another path. It is withdrawn here; if the new path is granted the robot
+        // gets the new EXTEND, otherwise an explicit revoke (below) so it never keeps driving on the old one.
+        var previous = robot.Authority;
+        if (previous is not null)
         {
             RevokeAuthorityKeepOccupancy(robot, "REPLAN");
         }
 
         var resources = SemanticReservation.CollectResources(_semantic, request.Poses);
-        if (resources.IsDefaultOrEmpty)
-        {
-            // Empty conflict set still gets a motion authority so the gate can open.
-            resources = [];
-        }
 
         // Diff-release occupancy left behind by prior horizons (prevents corridor-wide lock).
         ReleaseSemanticOccupancyOutside(robot, resources);
 
         EnsureSemanticCapacities(resources);
 
+        var result = TryGrantSemantic(robot, request, resources);
+        if (!result.Granted && previous is not null)
+        {
+            _pendingEvents.Add(new TrafficEvent(
+                TrafficEventKind.AuthorityRevoked, robot.RobotId, string.Empty, previous, previous.CommandId, null,
+                robot.JobStepId, null, null, null, null, IsFirstSegment: false));
+            Log($"revoke-replan-wait:{robot.RobotId}:{previous.AuthorityId}:{result.Reason}");
+        }
+
+        return result;
+    }
+
+    private AcquireResult TryGrantSemantic(
+        RobotRuntime robot, SemanticPlanProposeRequest request, ImmutableArray<string> resources)
+    {
+        var candidate = new RouteSegmentCandidate(
+            request.RequestId,
+            request.RobotId,
+            _mapVersionId,
+            _semantic!.SemanticMapFingerprint,
+            0,
+            0,
+            [],
+            resources,
+            [],
+            0,
+            StateVersion,
+            request.Priority,
+            request.JobStepId,
+            request.JobId);
+
         if (WouldCreateWaitForCycle(robot.RobotId, resources))
         {
+            robot.WaitingReason = TrafficWaitingReason.DeadlockRisk;
+            robot.Phase = TrafficRobotPhase.Waiting;
+            StateVersion++;
             Log($"deadlock-reject-semantic:{robot.RobotId}");
             return AcquireResult.Reject("DEADLOCK_RISK", TrafficWaitingReason.DeadlockRisk);
         }
 
-        if (!CanAcquire(resources, robot.RobotId, out var blocker, out var waitReason))
+        Guid? blocker;
+        TrafficWaitingReason waitReason;
+        // No barging: a robot queued earlier (or with more aged priority) for any of these resources goes first.
+        if (FindPriorWaiter(robot.RobotId, resources, request.Priority) is { } prior)
         {
-            var candidate = new RouteSegmentCandidate(
-                request.RequestId,
-                request.RobotId,
-                _mapVersionId,
-                _semantic.SemanticMapFingerprint,
-                0,
-                0,
-                [],
-                resources,
-                [],
-                0,
-                StateVersion,
-                request.Priority,
-                request.JobStepId,
-                request.JobId);
-            Enqueue(robot, candidate, waitReason, blocker);
-            var detail = blocker is Guid b
-                ? $"{waitReason}:blocker={b:N}"
-                : waitReason.ToString();
-            return AcquireResult.Queue(waitReason, blocker, detail);
+            blocker = prior;
+            waitReason = TrafficWaitingReason.Capacity;
+        }
+        else if (CanAcquire(resources, robot.RobotId, out blocker, out waitReason))
+        {
+            blocker = null;
+        }
+        else
+        {
+            blocker ??= Guid.Empty;
+        }
+
+        if (blocker is not null)
+        {
+            var b = blocker == Guid.Empty ? (Guid?)null : blocker;
+            Enqueue(robot, candidate, waitReason, b);
+            var detail = b is Guid bb ? $"{waitReason}:blocker={bb:N}" : waitReason.ToString();
+            return AcquireResult.Queue(waitReason, b, detail);
         }
 
         Occupy(robot, resources);
@@ -205,9 +291,11 @@ public sealed class TrafficState
             robot.LastSeq,
             Epoch,
             _semantic.SemanticMapFingerprint,
-            default,
+            [],
             request.PlanRevision,
-            _semantic.SemanticMapFingerprint);
+            _semantic.SemanticMapFingerprint,
+            request.PlanHash,
+            request.CommandId);
         robot.Authority = authority;
         robot.Phase = TrafficRobotPhase.Authorized;
         robot.WaitingReason = TrafficWaitingReason.None;
@@ -215,23 +303,69 @@ public sealed class TrafficState
         RemoveFromAllQueues(robot.RobotId);
         StateVersion++;
         Log($"grant-semantic:{robot.RobotId}:auth:{authority.AuthorityId}:rev:{request.PlanRevision}:n={resources.Length}");
-        var synth = new RouteSegmentCandidate(
-            request.RequestId,
-            request.RobotId,
-            _mapVersionId,
-            _semantic.SemanticMapFingerprint,
-            0,
-            0,
-            [],
-            resources,
-            [],
-            0,
-            StateVersion,
-            request.Priority,
-            request.JobStepId,
-            request.JobId);
-        EmitSegmentEvent(TrafficEventKind.AuthorityGranted, robot, authority, synth, isFirstSegment: true);
+        EmitSegmentEvent(TrafficEventKind.AuthorityGranted, robot, authority, candidate, isFirstSegment: true);
         return AcquireResult.Grant(authority);
+    }
+
+    /// <summary>
+    /// A waiter of another robot that is ahead of this request on one of <paramref name="resources"/> (higher effective
+    /// priority, or same priority and queued earlier). Waiters that are themselves waiting on this robot are skipped:
+    /// deferring to them could never be resolved (they need what this robot holds).
+    /// </summary>
+    private Guid? FindPriorWaiter(Guid robotId, ImmutableArray<string> resources, int requestPriority)
+    {
+        var own = FindWaiter(robotId);
+        var ownPriority = own is null ? requestPriority : EffectivePriority(own);
+        var ownSeq = own?.EnqueueSeq ?? long.MaxValue;
+        foreach (var rid in resources)
+        {
+            if (!_queues.TryGetValue(rid, out var q))
+            {
+                continue;
+            }
+
+            foreach (var w in q)
+            {
+                if (w.RobotId == robotId)
+                {
+                    continue;
+                }
+
+                var p = EffectivePriority(w);
+                var ahead = p > ownPriority || (Math.Abs(p - ownPriority) < 1e-9 && w.EnqueueSeq < ownSeq);
+                if (ahead && !WaitsOn(w.RobotId, robotId))
+                {
+                    return w.RobotId;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Wait-for reachability: <paramref name="from"/> transitively waits on <paramref name="to"/>.</summary>
+    private bool WaitsOn(Guid from, Guid to)
+    {
+        var seen = new HashSet<Guid>();
+        var stack = new Stack<Guid>();
+        stack.Push(from);
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            if (!seen.Add(current) || !_robots.TryGetValue(current, out var r) || r.BlockingOwner is not Guid next)
+            {
+                continue;
+            }
+
+            if (next == to)
+            {
+                return true;
+            }
+
+            stack.Push(next);
+        }
+
+        return false;
     }
 
     private void EnsureSemanticCapacities(ImmutableArray<string> resourceIds)
@@ -266,12 +400,6 @@ public sealed class TrafficState
             return;
         }
 
-        var yaw = 0.0;
-        if (!robot.ProposedPath.IsDefaultOrEmpty && robot.ProposedPath.Length > 0)
-        {
-            yaw = robot.ProposedPath[0].Yaw;
-        }
-
         var candidates = robot.OccupiedResourceIds
             .Where(rid => !keep.Contains(rid) && !robot.ServiceHoldIds.Contains(rid))
             .Where(rid => rid.StartsWith("cell:", StringComparison.Ordinal)
@@ -285,7 +413,7 @@ public sealed class TrafficState
         var released = new List<string>();
         foreach (var rid in candidates)
         {
-            if (!IsPhysicallyClear(robot, rid, rx, ry, yaw))
+            if (!IsPhysicallyClear(robot, rid, rx, ry))
             {
                 continue;
             }
@@ -340,12 +468,25 @@ public sealed class TrafficState
 
     public void CompleteReconciliation(IReadOnlyList<TrafficReconcileSeed> seeds)
     {
+        _reconciled = true;
         if (_graph is null)
         {
+            if (_semantic is null)
+            {
+                // Semantic Mode binds its policy separately; until then the seeds cannot be turned into
+                // zone/cell occupancy, so they wait and the coordinator stays not-ready.
+                _pendingSemanticSeeds = seeds;
+                Phase = "AwaitingPolicy";
+                StateVersion++;
+                Log($"reconcile:awaiting-policy:seeds={seeds.Count}");
+                return;
+            }
+
+            ApplySemanticSeeds(seeds);
             Phase = "Ready";
             _ready = true;
             StateVersion++;
-            Log("reconcile:empty-graph");
+            Log("reconcile:complete-semantic");
             return;
         }
 
@@ -394,6 +535,61 @@ public sealed class TrafficState
         _ready = true;
         StateVersion++;
         Log("reconcile:complete");
+    }
+
+    /// <summary>
+    /// Semantic start-up (audit T8 for Stage-3): every robot occupies the zones/cells under it; one that may have been
+    /// driving under the previous epoch, or whose pose is unknown, is quarantined until it reports a verified state.
+    /// </summary>
+    private void ApplySemanticSeeds(IReadOnlyList<TrafficReconcileSeed> seeds)
+    {
+        foreach (var seed in seeds.OrderBy(s => s.RobotId))
+        {
+            var robot = GetOrCreate(seed.RobotId);
+            robot.JobStepId = seed.JobStepId;
+            robot.LocalizationOk = seed.LocalizationOk;
+            robot.X = seed.PoseX;
+            robot.Y = seed.PoseY;
+            if (!seed.PoseKnown || !seed.LocalizationOk || seed.PoseX is not double x || seed.PoseY is not double y)
+            {
+                Quarantine(robot, "RECONCILE_UNCERTAIN");
+                continue;
+            }
+
+            if (!TryOccupy(robot, ResourcesUnder(x, y), out var reason))
+            {
+                Quarantine(robot, $"RECONCILE_CONFLICT:{reason}");
+                continue;
+            }
+
+            if (seed.InMotion)
+            {
+                Quarantine(robot, "RECONCILE_IN_MOTION");
+                continue;
+            }
+
+            robot.Phase = TrafficRobotPhase.Idle;
+            robot.QuarantineReason = null;
+            Log($"reconcile-semantic:ok:{robot.RobotId}");
+        }
+    }
+
+    /// <summary>What a robot standing at (x, y) occupies: graph resources, or Stage-3 zones/cells (any heading).</summary>
+    private ImmutableArray<string> ResourcesUnder(double x, double y)
+    {
+        if (_graph is not null)
+        {
+            return ResourcesAtPose(x, y);
+        }
+
+        if (_semantic is null)
+        {
+            return [];
+        }
+
+        var under = SemanticReservation.CollectResources(_semantic, [new SemanticPlanPose(x, y, 0)]);
+        EnsureSemanticCapacities(under);
+        return under;
     }
 
     public AcquireResult AcquireAtomic(RouteSegmentCandidate candidate, long? clientEpoch, long? clientSeq)
@@ -679,7 +875,11 @@ public sealed class TrafficState
     /// NAVIGATE finished. Success clears authority + route and releases what is physically clear; anything else
     /// quarantines (fail-closed, occupancy kept until verified exit / operator).
     /// </summary>
-    public TrafficOpResult CompleteRoute(Guid robotId, bool succeeded, string? reason, Guid? authorityId = null)
+    /// <param name="commandId">Stage-3: the NAVIGATE that finished; a result of another command is ignored.</param>
+    /// <param name="poseX">Fresh localized pose at the result (null = unknown: nothing is released).</param>
+    public TrafficOpResult CompleteRoute(
+        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null,
+        Guid? commandId = null, double? poseX = null, double? poseY = null)
     {
         var robot = GetOrCreate(robotId);
         var previous = robot.Authority;
@@ -689,6 +889,27 @@ public sealed class TrafficState
             Log($"route-complete-ignored:{robotId}:{id}");
             return TrafficOpResult.Fail("AUTHORITY_MISMATCH");
         }
+
+        if (commandId is Guid cmd && robot.ActiveCommandId is Guid active && active != cmd)
+        {
+            Log($"route-complete-ignored:{robotId}:cmd:{cmd}");
+            return TrafficOpResult.Fail("COMMAND_MISMATCH");
+        }
+
+        robot.ActiveCommandId = null;
+        if (poseX is double px && poseY is double py)
+        {
+            robot.X = px;
+            robot.Y = py;
+        }
+        else if (_graph is null)
+        {
+            // Semantic: the stored pose is the start of the last plan, not where the robot is now. Releasing against it
+            // could free the cells it stands on; without a fresh pose keep everything (verified exits release later).
+            robot.X = null;
+            robot.Y = null;
+        }
+
         ClearRoute(robot);
         if (!succeeded)
         {
@@ -985,24 +1206,17 @@ public sealed class TrafficState
             }
         }
 
-        // Station / service holds are released by their workflow step, never by a progress report.
-        var exits = resourceIds.Where(rid => !robot.ServiceHoldIds.Contains(rid)).ToImmutableArray();
-        foreach (var rid in exits)
+        // Station / service holds are released by their workflow step, never by a progress report. Each reported
+        // resource is judged on its own: one still under the footprint (or still ahead on the path) stays held, the
+        // others are released — a batch with one early report must not pin everything the robot really left.
+        var exits = resourceIds
+            .Where(rid => !robot.ServiceHoldIds.Contains(rid) && robot.OccupiedResourceIds.Contains(rid))
+            .Where(rid => stillAhead is null || !stillAhead.Contains(rid))
+            .Where(rid => IsPhysicallyClear(robot, rid, poseX, poseY))
+            .ToImmutableArray();
+        if (exits.IsEmpty)
         {
-            if (!robot.OccupiedResourceIds.Contains(rid))
-            {
-                continue;
-            }
-
-            if (stillAhead is not null && stillAhead.Contains(rid))
-            {
-                return TrafficOpResult.Fail("NOT_CLEARED");
-            }
-
-            if (!IsPhysicallyClear(robot, rid, poseX, poseY))
-            {
-                return TrafficOpResult.Fail("NOT_CLEARED");
-            }
+            return TrafficOpResult.Fail("NOT_CLEARED");
         }
 
         foreach (var rid in exits)
@@ -1148,6 +1362,7 @@ public sealed class TrafficState
 
         var robot = GetOrCreate(robotId);
         RemoveFromAllQueues(robotId);
+        robot.ActiveCommandId = null;
         // Cancel does NOT release occupancy — uncertain until verified exit / operator.
         if (robot.OccupiedResourceIds.Count > 0 || robot.Authority is not null)
         {
@@ -1180,25 +1395,39 @@ public sealed class TrafficState
     }
 
     /// <summary>
-    /// Verified connectivity recovery (fresh heartbeat / MQTT uplink).
-    /// Clears OFFLINE and soft navigate faults. Does not clear localization/pose uncertainty —
-    /// those require verified pose progress (Stage-3 safety).
+    /// Verified connectivity recovery (fresh heartbeat / MQTT uplink). Clears OFFLINE and soft navigate faults.
+    /// Does not clear localization/pose uncertainty — those require verified pose progress or a reconcile.
+    /// With a semantic policy bound, an OFFLINE robot is only trusted again when a fresh localized pose shows it still
+    /// stands inside what it holds (or, holding nothing, its spot can be seeded): it may have been pushed or have
+    /// driven while unreachable. Otherwise it stays quarantined as RECONNECT_UNVERIFIED (operator / robot reconcile).
     /// </summary>
-    public TrafficOpResult MarkOnline(Guid robotId)
+    public TrafficOpResult MarkOnline(Guid robotId, double? poseX = null, double? poseY = null, bool localizationOk = false)
     {
         var robot = GetOrCreate(robotId);
         if (robot.Phase != TrafficRobotPhase.Quarantined)
         {
+            SeedIfHoldingNothing(robot, poseX, poseY, localizationOk);
             return TrafficOpResult.Success();
         }
 
         var reason = robot.QuarantineReason ?? "";
         // Pose/localization faults need telemetry evidence, not HB alone.
         if (reason is "LOCALIZATION_LOSS" or "RECONCILE_LOCALIZATION" or "POSE_UNCERTAIN"
-            or "RECONCILE_UNCERTAIN" or "EXIT_UNCERTAIN")
+            or "RECONCILE_UNCERTAIN" or "EXIT_UNCERTAIN" or "RECONNECT_UNVERIFIED" or "RECONCILE_IN_MOTION")
         {
             Log($"mark-online-keep:{robot.RobotId}:{reason}");
             return TrafficOpResult.Success();
+        }
+
+        if (_semantic is not null && reason.StartsWith("OFFLINE", StringComparison.Ordinal))
+        {
+            if (!VerifiedWhereItHolds(robot, poseX, poseY, localizationOk))
+            {
+                robot.QuarantineReason = "RECONNECT_UNVERIFIED";
+                StateVersion++;
+                Log($"mark-online-unverified:{robot.RobotId}");
+                return TrafficOpResult.Fail("RECONNECT_UNVERIFIED");
+            }
         }
 
         // OFFLINE + NAVIGATE:* + CANCEL_* + unknown soft faults: verified HB recovers.
@@ -1214,12 +1443,78 @@ public sealed class TrafficState
     }
 
     /// <summary>
+    /// A robot that came online after start-up (or was released by an operator) occupies the floor it stands on even
+    /// before its first MOVE: seed it from its verified pose so no other robot is granted through it. A conflict
+    /// (someone already holds that spot) quarantines it as SEED_CONFLICT.
+    /// </summary>
+    private void SeedIfHoldingNothing(RobotRuntime robot, double? poseX, double? poseY, bool localizationOk)
+    {
+        if (!_ready || _semantic is null || robot.OccupiedResourceIds.Count > 0 || robot.Authority is not null
+            || !localizationOk || poseX is not double x || poseY is not double y)
+        {
+            return;
+        }
+
+        robot.X = x;
+        robot.Y = y;
+        robot.LocalizationOk = true;
+        var under = ResourcesUnder(x, y);
+        if (!TryOccupy(robot, under, out var reason))
+        {
+            Quarantine(robot, $"SEED_CONFLICT:{reason}");
+            return;
+        }
+
+        StateVersion++;
+        Log($"seed-online:{robot.RobotId}:n={under.Length}");
+    }
+
+    private bool VerifiedWhereItHolds(RobotRuntime robot, double? poseX, double? poseY, bool localizationOk)
+    {
+        if (!localizationOk || poseX is not double x || poseY is not double y)
+        {
+            return false;
+        }
+
+        var radius = _semantic!.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
+        var under = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.DiscCells(x, y, radius, _semantic.EffectiveCellSize, under);
+        foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, radius, z.Ring)))
+        {
+            under.Add($"zone:{z.Code}");
+        }
+
+        if (robot.OccupiedResourceIds.Count == 0)
+        {
+            // Held nothing: its spot must still be free to seed.
+            if (!TryOccupy(robot, ResourcesUnder(x, y), out _))
+            {
+                return false;
+            }
+        }
+        else if (!under.IsSubsetOf(robot.OccupiedResourceIds))
+        {
+            return false;
+        }
+
+        robot.X = x;
+        robot.Y = y;
+        robot.LocalizationOk = true;
+        return true;
+    }
+
+    /// <summary>
     /// Active MOVE start (audit T1). Never releases occupancy and never lifts a quarantine: what the robot holds
     /// from its previous move or station hold stays held. A robot the coordinator has not seen yet (host restart,
     /// first move) is seeded with the resources under its footprint so its physical spot is reserved.
     /// </summary>
     public TrafficOpResult EnsureTracked(Guid robotId, double? poseX, double? poseY, bool localizationOk)
     {
+        if (!_open)
+        {
+            return TrafficOpResult.Fail("NOT_LEADER"); // standby host: nothing may start from here
+        }
+
         // Semantic mode binds zone/cell policy and no RouteGraph (BindSemanticPolicy marks the state Ready
         // without one), so tracking must not depend on a compiled graph there.
         if (_graph is null && _semantic is null)
@@ -1251,14 +1546,7 @@ public sealed class TrafficState
         if (robot.OccupiedResourceIds.Count == 0)
         {
             // Seed what the robot physically stands on, so another robot cannot be granted into it.
-            var under = _graph is not null
-                ? ResourcesAtPose(x, y)
-                : SemanticReservation.CollectResources(_semantic!, [new SemanticPlanPose(x, y, 0)]);
-            if (_graph is null)
-            {
-                EnsureSemanticCapacities(under);
-            }
-
+            var under = ResourcesUnder(x, y);
             if (!TryOccupy(robot, under, out var reason))
             {
                 Quarantine(robot, $"SEED_CONFLICT:{reason}");
@@ -1282,7 +1570,7 @@ public sealed class TrafficState
         Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,
         bool robotReportsIdle = true)
     {
-        if (_graph is null)
+        if (_graph is null && _semantic is null)
         {
             return TrafficOpResult.Fail("NO_GRAPH");
         }
@@ -1304,18 +1592,18 @@ public sealed class TrafficState
         robot.X = poseX;
         robot.Y = poseY;
         robot.LocalizationOk = true;
-        robot.NodeId = RoutePlanner.NearestNode(_graph, poseX, poseY);
+        robot.NodeId = _graph is null ? null : RoutePlanner.NearestNode(_graph, poseX, poseY);
 
-        if (!robotReportsIdle && robot.Authority is not null)
+        if (!robotReportsIdle && (robot.Authority is not null || robot.Phase != TrafficRobotPhase.Quarantined))
         {
-            // Robot still executing the authority we granted: nothing to rebuild.
+            // Robot still executing what we granted, or only waiting for a grant: nothing to rebuild.
             StateVersion++;
             Log($"reconcile-robot:{robotId}:executing");
             return TrafficOpResult.Success();
         }
 
-        var keep = ResourcesAtPose(poseX, poseY)
-            .Concat(occupiedEdges.Length > 0 ? _graph.ResourcesCovering(occupiedEdges) : [])
+        var keep = ResourcesUnder(poseX, poseY)
+            .Concat(occupiedEdges.Length > 0 && _graph is not null ? _graph.ResourcesCovering(occupiedEdges) : [])
             .Concat(robot.ServiceHoldIds)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -1336,6 +1624,7 @@ public sealed class TrafficState
         }
 
         robot.Authority = null;
+        robot.ActiveCommandId = null;
         ClearRoute(robot);
         robot.Phase = robot.ServiceHoldIds.Count > 0 ? TrafficRobotPhase.HoldingService : TrafficRobotPhase.Idle;
         robot.QuarantineReason = null;
@@ -1467,14 +1756,15 @@ public sealed class TrafficState
                 r.Y,
                 r.LocalizationOk,
                 r.OccupiedResourceIds.Order(StringComparer.Ordinal).ToImmutableArray(),
-                r.Authority,
+                // A default ImmutableArray cannot be serialized (the snapshot API answered 500 under a grant).
+                r.Authority is { Maneuvers.IsDefault: true } a ? a with { Maneuvers = [] } : r.Authority,
                 r.LastSeq,
                 r.WaitingReason,
                 r.BlockingOwner,
                 r.QuarantineReason,
                 r.JobStepId,
                 r.PlanRevision,
-                r.ProposedPath))
+                r.ProposedPath.IsDefault ? [] : r.ProposedPath))
             .ToImmutableArray();
 
         var resources = (_graph?.Resources ?? [])
@@ -1589,7 +1879,9 @@ public sealed class TrafficState
                     null,
                     robot.JobStepId,
                     waiter.Candidate.JobId,
-                    waiter.Candidate.Priority);
+                    waiter.Candidate.Priority,
+                    robot.PlanHash,
+                    robot.ActiveCommandId);
                 var semanticResult = AcquireSemanticPlan(req);
                 if (semanticResult.Granted)
                 {
@@ -1637,7 +1929,12 @@ public sealed class TrafficState
         robot.Phase = TrafficRobotPhase.Waiting;
         robot.WaitingReason = reason;
         robot.BlockingOwner = blocker;
-        var waiter = new Waiter(robot.RobotId, candidate, reason, blocker, ++_enqueueSeq, _clock.GetUtcNow());
+        // A robot that re-proposes while queued keeps its place and its aging (no starvation by re-proposal).
+        var existing = FindWaiter(robot.RobotId);
+        var waiter = existing is null
+            ? new Waiter(robot.RobotId, candidate, reason, blocker, ++_enqueueSeq, _clock.GetUtcNow())
+            : new Waiter(robot.RobotId, candidate, reason, blocker, existing.EnqueueSeq, existing.EnqueuedAt);
+        RemoveFromAllQueues(robot.RobotId);
 
         foreach (var rid in candidate.ResourceIds.Concat(wakeOn.IsDefault ? [] : wakeOn).Distinct(StringComparer.Ordinal))
         {
@@ -1807,17 +2104,16 @@ public sealed class TrafficState
         return (path[best..], Math.Sqrt(bestD2));
     }
 
-    private bool IsPhysicallyClear(RobotRuntime robot, string resourceId, double x, double y, double? yaw = null)
+    private bool IsPhysicallyClear(RobotRuntime robot, string resourceId, double x, double y)
     {
         if (_semantic is not null
             && (resourceId.StartsWith("cell:", StringComparison.Ordinal)
                 || resourceId.StartsWith("zone:", StringComparison.Ordinal)
                 || resourceId.StartsWith("bay:", StringComparison.Ordinal)))
         {
-            var resolvedYaw = yaw
-                ?? (!robot.ProposedPath.IsDefaultOrEmpty ? robot.ProposedPath[0].Yaw : 0.0);
+            // Footprint at any heading, grown by the localization uncertainty (fail closed: too small releases early).
             return SemanticReservation.IsPhysicallyClearOfResources(
-                _semantic, x, y, resolvedYaw, [resourceId], margin: ClearRadius * 0.25);
+                _semantic, x, y, [resourceId], margin: Math.Max(0, _options.LocalizationMarginMeters));
         }
 
         if (_graph is null || !_graph.ResourceById.TryGetValue(resourceId, out var res))
@@ -2116,6 +2412,9 @@ public sealed class TrafficState
         public string? QuarantineReason { get; set; }
         public Guid? JobStepId { get; set; }
         public long PlanRevision { get; set; }
+        public string? PlanHash { get; set; }
+        /// <summary>Stage-3: the backend NAVIGATE the robot's proposals belong to.</summary>
+        public Guid? ActiveCommandId { get; set; }
         public ImmutableArray<SemanticPlanPose> ProposedPath { get; set; } = [];
     }
 

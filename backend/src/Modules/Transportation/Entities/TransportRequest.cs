@@ -34,8 +34,9 @@ public sealed class TransportRequest
 
     /// <summary>
     /// Re-aggregates the Request status from its Detail lines (rules/02):
-    /// all COMPLETED → COMPLETED; all FAILED → FAILED; some COMPLETED (or FAILED) with others still open or
-    /// FAILED → PARTIALLY_COMPLETED; any IN_PROGRESS → IN_PROGRESS. CANCELLED / REJECTED requests are not touched.
+    /// all COMPLETED → COMPLETED; all FAILED → FAILED; all CANCELLED → CANCELLED; some COMPLETED (or FAILED) with
+    /// others still open or FAILED → PARTIALLY_COMPLETED; any IN_PROGRESS → IN_PROGRESS.
+    /// CANCELLED / REJECTED requests are not touched.
     /// </summary>
     public void ApplyDetailProgress(DateTimeOffset now)
     {
@@ -57,6 +58,10 @@ public sealed class TransportRequest
         {
             next = TransportRequestStatus.FAILED;
         }
+        else if (All(TransportRequestDetailStatus.CANCELLED))
+        {
+            next = TransportRequestStatus.CANCELLED;
+        }
         else if (Any(TransportRequestDetailStatus.COMPLETED) || Any(TransportRequestDetailStatus.FAILED))
         {
             next = TransportRequestStatus.PARTIALLY_COMPLETED;
@@ -73,7 +78,7 @@ public sealed class TransportRequest
 
         Status = next;
         UpdatedAt = now;
-        if (next is TransportRequestStatus.COMPLETED or TransportRequestStatus.FAILED)
+        if (next is TransportRequestStatus.COMPLETED or TransportRequestStatus.FAILED or TransportRequestStatus.CANCELLED)
         {
             CompletedAt = now;
         }

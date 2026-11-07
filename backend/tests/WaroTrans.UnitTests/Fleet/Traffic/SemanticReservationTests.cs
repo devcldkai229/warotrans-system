@@ -17,6 +17,21 @@ public class SemanticReservationTests
             zones.ToImmutableArray(),
             []);
 
+    /// <summary>Bound, reconciled and open: the state a running Semantic host is in.</summary>
+    private static TrafficState Ready(SemanticTrafficPolicy policy)
+    {
+        var state = new TrafficState(new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 });
+        state.BeginEpoch(1);
+        Assert.True(state.BindSemanticPolicy(policy).Ok);
+        state.CompleteReconciliation([]);
+        return state;
+    }
+
+    private static SemanticPlanProposeRequest Plan(
+        SemanticTrafficPolicy policy, Guid robot, long revision, ImmutableArray<SemanticPlanPose> poses, Guid? command = null) =>
+        new(Guid.NewGuid(), robot, "RBT", policy.SemanticMapFingerprint, revision, poses, null, null, null,
+            CommandId: command ?? Guid.Empty);
+
     [Fact]
     public void CollectResources_hits_single_occupancy_zone()
     {
@@ -33,40 +48,81 @@ public class SemanticReservationTests
     }
 
     [Fact]
+    public void CollectResources_reserves_a_zone_the_robot_reaches_when_turning()
+    {
+        // Path runs 0.2 m beside the zone: the centre never enters it, a corner of the turning robot (0.23 m) does.
+        var zone = new SemanticZonePoly("Z", ImmutableArray.Create((0.0, 0.2), (3.0, 0.2), (3.0, 2.0), (0.0, 2.0)));
+        var policy = Policy(zone) with { PathToleranceMeters = 0 };
+        var ids = SemanticReservation.CollectResources(
+            policy, ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(2, 0, 0)));
+        Assert.Contains("zone:Z", ids);
+    }
+
+    [Fact]
     public void CollectResources_horizon_limits_cells()
     {
         var policy = Policy() with { HorizonMeters = 1.0, CellSizeMeters = 0.5 };
         var poses = ImmutableArray.Create(
             new SemanticPlanPose(0, 0, 0),
             new SemanticPlanPose(0.4, 0, 0),
+            new SemanticPlanPose(1.2, 0, 0),
             new SemanticPlanPose(10, 0, 0)); // beyond horizon
         var ids = SemanticReservation.CollectResources(policy, poses);
-        // Far cell at x=10 should not appear when horizon is 1 m.
-        Assert.DoesNotContain(ids, id => id.Contains(":20:") || id.EndsWith(":20", StringComparison.Ordinal));
+        Assert.DoesNotContain(ids, id => id.StartsWith("cell:19:", StringComparison.Ordinal) || id.StartsWith("cell:20:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Sparse_path_is_interpolated_so_no_cell_between_poses_is_skipped()
+    {
+        var policy = Policy() with { CellSizeMeters = 0.25, PathToleranceMeters = 0 };
+        // Two poses 3 m apart: every cell under the straight line between them must be reserved.
+        var ids = SemanticReservation.CollectResources(
+            policy, ImmutableArray.Create(new SemanticPlanPose(0.1, 0.1, 0), new SemanticPlanPose(3.1, 0.1, 0)))
+            .ToHashSet();
+        for (var ix = 0; ix <= 12; ix++)
+        {
+            Assert.Contains(SemanticReservation.CellId(ix, 0), ids);
+        }
+    }
+
+    [Fact]
+    public void Reservation_covers_the_footprint_at_any_heading_anywhere_along_the_path()
+    {
+        var policy = Policy() with { CellSizeMeters = 0.25, PathToleranceMeters = 0.1 };
+        var path = ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(2, 1, 0));
+        var reserved = SemanticReservation.CollectResources(policy, path).ToHashSet();
+        // The robot (any heading) up to the tolerance off the path is inside what was reserved.
+        for (var t = 0.0; t <= 1.0; t += 0.01)
+        {
+            var (x, y) = (2 * t, t);
+            var nx = -1 / Math.Sqrt(5) * 0.1;
+            var ny = 2 / Math.Sqrt(5) * 0.1;
+            foreach (var (px, py) in new[] { (x, y), (x + nx, y + ny), (x - nx, y - ny) })
+            {
+                var under = new HashSet<string>();
+                SemanticReservation.DiscCells(px, py, policy.FootprintRadiusMeters, policy.EffectiveCellSize, under);
+                Assert.True(under.IsSubsetOf(reserved), $"footprint at ({px:F2},{py:F2}) leaves the reservation");
+            }
+        }
     }
 
     [Fact]
     public void AcquireSemanticPlan_exclusive_zone_second_robot_queues()
     {
-        var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 };
-        var state = new TrafficState(options);
-        state.BeginEpoch(1);
         var zone = new SemanticZonePoly(
             "Z1",
             ImmutableArray.Create((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)));
         var policy = Policy(zone);
-        Assert.True(state.BindSemanticPolicy(policy).Ok);
+        var state = Ready(policy);
 
         var r1 = Guid.NewGuid();
         var r2 = Guid.NewGuid();
         var poses = ImmutableArray.Create(new SemanticPlanPose(1, 1, 0), new SemanticPlanPose(1.2, 1, 0));
-        var g1 = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), r1, "RBT-1", policy.SemanticMapFingerprint, 1, poses, null, null, null));
+        var g1 = state.AcquireSemanticPlan(Plan(policy, r1, 1, poses));
         Assert.True(g1.Granted);
         Assert.Contains("zone:Z1", g1.Authority!.ResourceIds);
 
-        var g2 = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), r2, "RBT-2", policy.SemanticMapFingerprint, 1, poses, null, null, null));
+        var g2 = state.AcquireSemanticPlan(Plan(policy, r2, 1, poses));
         Assert.False(g2.Granted);
         Assert.True(g2.Queued);
     }
@@ -74,17 +130,26 @@ public class SemanticReservationTests
     [Fact]
     public void AcquireSemanticPlan_fingerprint_mismatch_rejects()
     {
-        var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic };
-        var state = new TrafficState(options);
-        state.BeginEpoch(1);
         var policy = Policy();
-        Assert.True(state.BindSemanticPolicy(policy).Ok);
-        var bad = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), Guid.NewGuid(), "R", "wrong-fp", 1,
-            ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(1, 0, 0)),
-            null, null, null));
+        var state = Ready(policy);
+        var bad = state.AcquireSemanticPlan(Plan(policy, Guid.NewGuid(), 1,
+            ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(1, 0, 0))) with
+        {
+            SemanticMapFingerprint = "wrong-fp"
+        });
         Assert.False(bad.Granted);
         Assert.Equal("FINGERPRINT_MISMATCH", bad.Reason);
+    }
+
+    [Fact]
+    public void Plan_without_a_backend_command_is_not_granted()
+    {
+        var policy = Policy();
+        var state = Ready(policy);
+        var standalone = state.AcquireSemanticPlan(Plan(policy, Guid.NewGuid(), 1,
+            ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(1, 0, 0))) with { CommandId = null });
+        Assert.False(standalone.Granted);
+        Assert.Equal("NO_ACTIVE_COMMAND", standalone.Reason);
     }
 
     [Fact]
@@ -92,57 +157,61 @@ public class SemanticReservationTests
     {
         var policy = Policy();
         var cells = new HashSet<string>(StringComparer.Ordinal);
-        SemanticReservation.SampleFootprintCells(0, 0, 0, 0.18, 0.15, 0.5, cells);
+        SemanticReservation.DiscCells(0, 0, policy.FootprintRadiusMeters, 0.5, cells);
         Assert.NotEmpty(cells);
-        var farClear = SemanticReservation.IsPhysicallyClearOfResources(
-            policy, 10, 10, 0, cells, margin: 0.05);
-        Assert.True(farClear);
-        var stillInside = SemanticReservation.IsPhysicallyClearOfResources(
-            policy, 0, 0, 0, cells, margin: 0.05);
-        Assert.False(stillInside);
+        Assert.True(SemanticReservation.IsPhysicallyClearOfResources(policy, 10, 10, cells, margin: 0.05));
+        Assert.False(SemanticReservation.IsPhysicallyClearOfResources(policy, 0, 0, cells, margin: 0.05));
+        Assert.False(SemanticReservation.IsPhysicallyClearOfResources(policy, 10, 10, ["bay:X"], margin: 0.05));
     }
 
     [Fact]
-    public void MarkOnline_clears_OFFLINE_but_traffic_plan_does_not()
+    public void Reconnect_after_offline_needs_a_localized_pose_inside_what_the_robot_holds()
     {
-        var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 };
-        var state = new TrafficState(options);
-        state.BeginEpoch(1);
         var policy = Policy();
-        Assert.True(state.BindSemanticPolicy(policy).Ok);
-
+        var state = Ready(policy);
         var robot = Guid.NewGuid();
+        Assert.True(state.EnsureTracked(robot, 0, 0, true).Ok);
         Assert.True(state.MarkOffline(robot).Ok);
-        Assert.Equal(TrafficRobotPhase.Quarantined, state.Snapshot().Robots.Single(r => r.RobotId == robot).Phase);
 
         var poses = ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(1, 0, 0));
-        var rejected = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), robot, "RBT-1", policy.SemanticMapFingerprint, 1, poses, null, null, null));
-        Assert.Equal("QUARANTINED", rejected.Reason);
+        var rejected = state.AcquireSemanticPlan(Plan(policy, robot, 1, poses));
+        Assert.Equal("QUARANTINED:OFFLINE", rejected.Reason);
 
-        Assert.True(state.MarkOnline(robot).Ok);
-        var recovered = state.Snapshot().Robots.Single(r => r.RobotId == robot);
-        Assert.Equal(TrafficRobotPhase.Idle, recovered.Phase);
-        Assert.Null(recovered.QuarantineReason);
+        // Heartbeat alone (no fresh localized pose) does not lift it.
+        Assert.False(state.MarkOnline(robot).Ok);
+        Assert.Equal("RECONNECT_UNVERIFIED", state.Snapshot().Robots.Single(r => r.RobotId == robot).QuarantineReason);
+        // And it now needs a reconcile, not another heartbeat.
+        Assert.True(state.MarkOnline(robot, 0, 0, true).Ok);
+        Assert.Equal(TrafficRobotPhase.Quarantined, state.Snapshot().Robots.Single(r => r.RobotId == robot).Phase);
 
-        var granted = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), robot, "RBT-1", policy.SemanticMapFingerprint, 2, poses, null, null, null));
-        Assert.True(granted.Granted);
+        Assert.True(state.ReconcileRobot(robot, 0, 0, true, []).Ok);
+        Assert.True(state.AcquireSemanticPlan(Plan(policy, robot, 2, poses)).Granted);
+    }
+
+    [Fact]
+    public void Reconnect_inside_its_occupancy_recovers_but_somewhere_else_does_not()
+    {
+        var policy = Policy();
+        var state = Ready(policy);
+        var robot = Guid.NewGuid();
+        Assert.True(state.EnsureTracked(robot, 0, 0, true).Ok);
+        Assert.True(state.MarkOffline(robot).Ok);
+        Assert.True(state.MarkOnline(robot, 0.02, 0.01, true).Ok);
+        Assert.Equal(TrafficRobotPhase.Idle, state.Snapshot().Robots.Single(r => r.RobotId == robot).Phase);
+
+        Assert.True(state.MarkOffline(robot).Ok);
+        Assert.False(state.MarkOnline(robot, 4, 4, true).Ok); // pushed away while unreachable
+        Assert.Equal("RECONNECT_UNVERIFIED", state.Snapshot().Robots.Single(r => r.RobotId == robot).QuarantineReason);
     }
 
     [Fact]
     public void AcquireSemanticPlan_does_not_clear_LOCALIZATION_LOSS_quarantine()
     {
-        var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 };
-        var state = new TrafficState(options);
-        state.BeginEpoch(1);
         var policy = Policy();
-        Assert.True(state.BindSemanticPolicy(policy).Ok);
-
+        var state = Ready(policy);
         var robot = Guid.NewGuid();
         var poses = ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(1, 0, 0));
-        var grant = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), robot, "RBT-1", policy.SemanticMapFingerprint, 1, poses, null, null, null));
+        var grant = state.AcquireSemanticPlan(Plan(policy, robot, 1, poses));
         Assert.True(grant.Granted);
 
         // Pose-less progress with localizationOk=false quarantines.
@@ -152,10 +221,9 @@ public class SemanticReservationTests
         Assert.Equal("LOCALIZATION_LOSS", lost.QuarantineReason);
 
         // Fresh traffic_plan alone must NOT clear quarantine.
-        var again = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), robot, "RBT-1", policy.SemanticMapFingerprint, 2, poses, null, null, null));
+        var again = state.AcquireSemanticPlan(Plan(policy, robot, 2, poses));
         Assert.False(again.Granted);
-        Assert.Equal("QUARANTINED", again.Reason);
+        Assert.Equal("QUARANTINED:LOCALIZATION_LOSS", again.Reason);
         var still = state.Snapshot().Robots.Single(r => r.RobotId == robot);
         Assert.Equal(TrafficRobotPhase.Quarantined, still.Phase);
         Assert.Equal("LOCALIZATION_LOSS", still.QuarantineReason);
@@ -164,65 +232,43 @@ public class SemanticReservationTests
     [Fact]
     public void AcquireSemanticPlan_replan_diff_releases_far_cells_and_promotes_waiter()
     {
-        var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 };
-        var state = new TrafficState(options);
-        state.BeginEpoch(1);
         var policy = Policy() with { HorizonMeters = 1.0, CellSizeMeters = 0.5 };
-        Assert.True(state.BindSemanticPolicy(policy).Ok);
+        var state = Ready(policy);
 
         var r1 = Guid.NewGuid();
         var r2 = Guid.NewGuid();
-        // First grant covers cells near origin.
         var pathA = ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(0.8, 0, 0));
-        var g1 = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), r1, "RBT-1", policy.SemanticMapFingerprint, 1, pathA, null, null, null));
+        var g1 = state.AcquireSemanticPlan(Plan(policy, r1, 1, pathA));
         Assert.True(g1.Granted);
 
-        // Seed pose so diff-release can prove clearance of abandoned cells.
-        Assert.True(state.ReportProgress(r1, g1.Authority!.Seq + 1, 1, null, 5.0, 0, localizationOk: true).Ok);
-
         // Second robot wants overlapping first horizon → queues.
-        var g2q = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), r2, "RBT-2", policy.SemanticMapFingerprint, 1, pathA, null, null, null));
+        var g2q = state.AcquireSemanticPlan(Plan(policy, r2, 1, pathA));
         Assert.True(g2q.Queued);
 
-        // R1 replans far away; old cells near origin should diff-release and promote R2.
+        // R1 (now at x=5, where its new plan starts) replans; the cells it left near origin are released and R2 is
+        // promoted in the same step.
         var pathB = ImmutableArray.Create(new SemanticPlanPose(5.0, 0, 0), new SemanticPlanPose(5.5, 0, 0));
-        var g1b = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), r1, "RBT-1", policy.SemanticMapFingerprint, 2, pathB, null, null, null));
-        Assert.True(g1b.Granted);
+        Assert.True(state.AcquireSemanticPlan(Plan(policy, r1, 2, pathB)).Granted);
 
-        var g2 = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), r2, "RBT-2", policy.SemanticMapFingerprint, 2, pathA, null, null, null));
-        Assert.True(g2.Granted);
+        var r2View = state.Snapshot().Robots.Single(r => r.RobotId == r2);
+        Assert.Equal(TrafficRobotPhase.Authorized, r2View.Phase);
+        Assert.NotNull(r2View.Authority);
     }
 
     [Fact]
     public void ReportVerifiedExit_works_without_graph_when_semantic_bound()
     {
-        var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 };
-        var state = new TrafficState(options);
-        state.BeginEpoch(1);
         var policy = Policy();
-        Assert.True(state.BindSemanticPolicy(policy).Ok);
-
+        var state = Ready(policy);
         var robot = Guid.NewGuid();
         var poses = ImmutableArray.Create(new SemanticPlanPose(0, 0, 0), new SemanticPlanPose(0.5, 0, 0));
-        var grant = state.AcquireSemanticPlan(new SemanticPlanProposeRequest(
-            Guid.NewGuid(), robot, "RBT-1", policy.SemanticMapFingerprint, 1, poses, null, null, null));
+        var grant = state.AcquireSemanticPlan(Plan(policy, robot, 1, poses));
         Assert.True(grant.Granted);
         var cells = grant.Authority!.ResourceIds.Where(id => id.StartsWith("cell:", StringComparison.Ordinal)).ToImmutableArray();
         Assert.NotEmpty(cells);
 
         // Move far away and exit cells that are no longer in remaining horizon.
-        var exit = state.ReportVerifiedExit(
-            robot,
-            grant.Authority.Seq + 1,
-            1,
-            cells,
-            poseX: 20,
-            poseY: 20,
-            localizationOk: true);
+        var exit = state.ReportVerifiedExit(robot, grant.Authority.Seq + 1, 1, cells, poseX: 20, poseY: 20, localizationOk: true);
         Assert.True(exit.Ok);
         Assert.Empty(state.Snapshot().Robots.Single(r => r.RobotId == robot).OccupiedResourceIds);
     }

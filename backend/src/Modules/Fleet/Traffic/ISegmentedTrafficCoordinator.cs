@@ -56,7 +56,8 @@ public interface ISegmentedTrafficCoordinator
     /// authority than the current one (late / duplicate) is ignored.
     /// </summary>
     Task<TrafficOpResult> CompleteRouteAsync(
-        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default);
+        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default,
+        Guid? commandId = null, double? poseX = null, double? poseY = null);
 
     Task<TrafficOpResult> RenewAuthorityAsync(Guid robotId, Guid authorityId, long epoch, CancellationToken ct = default);
 
@@ -95,7 +96,17 @@ public interface ISegmentedTrafficCoordinator
     Task<TrafficOpResult> MarkOfflineAsync(Guid robotId, CancellationToken ct = default);
 
     /// <summary>Clear OFFLINE quarantine after a verified fresh heartbeat (not traffic_plan).</summary>
-    Task<TrafficOpResult> MarkOnlineAsync(Guid robotId, CancellationToken ct = default);
+    Task<TrafficOpResult> MarkOnlineAsync(
+        Guid robotId, CancellationToken ct = default, double? poseX = null, double? poseY = null, bool localizationOk = false);
+
+    /// <summary>
+    /// Lease takeover: a new epoch strictly above every earlier one, occupancy rebuilt from the seeds. Whatever this
+    /// host knew before it held the lease is void; robots drop older grants when the epoch is announced.
+    /// </summary>
+    Task<long> TakeOverAsync(IReadOnlyList<TrafficReconcileSeed> seeds, CancellationToken ct = default);
+
+    /// <summary>Opens/closes grants: one coordinator per resource domain (lease) that has announced its epoch.</summary>
+    Task SetOpenForGrantsAsync(bool open, string reason, CancellationToken ct = default);
 
     /// <summary>
     /// Rebuilds occupancy from a trusted pose: keeps what the robot's footprint (plus margin) still covers, releases

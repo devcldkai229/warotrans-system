@@ -71,4 +71,15 @@ public class SemanticTrackingTests
     public void Uplink_from_another_robot_topic_is_rejected() =>
         // A RESULT on RBT-002's topic must not complete a command of RBT-001.
         Assert.Throws<ValidationException>(() => MqttSubscriberHostedService.MatchTopicRobotCode("RBT-001", "RBT-002"));
+
+    [Theory]
+    [InlineData("""{"x":1,"y":2,"yaw":0,"frameId":"map","route":null,"authority":null,"timeoutSeconds":60}""")]
+    [InlineData("""{"route":{"edgeIds":null}}""")]
+    [InlineData("null")]
+    public void Open_semantic_navigate_payload_does_not_break_start_up_reconciliation(string payload)
+    {
+        // A Semantic NAVIGATE has no route/authority. Reconciliation parsed it at start-up and the Host crashed.
+        Assert.Empty(TrafficShadowObserver.ParseRouteEdgeIds(payload));
+        Assert.Empty(TrafficShadowObserver.ParseAuthorityEdgeIds(payload));
+    }
 }

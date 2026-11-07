@@ -61,7 +61,13 @@ public sealed class ProcessRobotHeartbeatHandler(
         // IsOnline=true, so becameOnline stays false. Every verified HB must sync MarkOnline.
         if (isOnline && trafficShadow is not null)
         {
-            await trafficShadow.OnOnlineAsync(robot.Id, cancellationToken).ConfigureAwait(false);
+            await trafficShadow.OnOnlineAsync(
+                robot.Id,
+                cancellationToken,
+                robot.PoseX,
+                robot.PoseY,
+                robot.LocalizationStatus == Enums.LocalizationStatus.LOCALIZED,
+                robot.LastTelemetryAt).ConfigureAwait(false);
         }
 
         if (becameOnline)

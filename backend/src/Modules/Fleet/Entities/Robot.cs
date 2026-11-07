@@ -240,6 +240,22 @@ public sealed class Robot
         UpdatedAt = utcNow;
     }
 
+    /// <summary>
+    /// Admin: the robot now runs on another published map version. Only while it has no command; its pose and
+    /// localization belong to the old map, so it must localize again (reported by its next telemetry).
+    /// </summary>
+    public void ChangeMap(Guid mapVersionId, DateTimeOffset utcNow)
+    {
+        if (CurrentCommandId is not null)
+        {
+            throw new ConflictException($"Robot {Code} still has command {CurrentCommandId}.", "robot_busy");
+        }
+
+        CurrentMapVersionId = mapVersionId;
+        LocalizationStatus = Enums.LocalizationStatus.UNKNOWN;
+        UpdatedAt = utcNow;
+    }
+
     /// <summary>Backend-owned: clear command and return to AVAILABLE.</summary>
     public void MarkAvailable(DateTimeOffset utcNow)
     {

@@ -9,6 +9,8 @@ namespace WaroTrans.IntegrationTests.Infrastructure;
 
 public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Program>
 {
+    public const string TestTopicPrefix = "warotrans-it/v1";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("environment", "Development");
@@ -20,7 +22,8 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
         builder.UseSetting("Mqtt:Host", "localhost");
         builder.UseSetting("Mqtt:Port", "1883");
         builder.UseSetting("Mqtt:ClientId", $"warotrans-test-{Guid.NewGuid():N}");
-        builder.UseSetting("Mqtt:TopicPrefix", "warotrans/v1");
+        // Own topic tree: never the live warotrans/v1 that real robots (RBT-001) listen and publish on.
+        builder.UseSetting("Mqtt:TopicPrefix", TestTopicPrefix);
         builder.UseSetting("Mqtt:HeartbeatTimeoutSeconds", "2");
         builder.UseSetting("Mqtt:CommandAckTimeoutSeconds", "60");
         // Host Development may use S3; integration import/preview asserts local /map-assets/ static files.
@@ -51,6 +54,8 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
             services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotTeleopPublisher>(
                 sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
             services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttRobotInteractionPublisher>(
+                sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
+            services.AddSingleton<WaroTrans.BuildingBlocks.Mqtt.IMqttTrafficEpochPublisher>(
                 sp => sp.GetRequiredService<CapturingMqttRobotCommandPublisher>());
         });
     }

@@ -63,8 +63,13 @@ public sealed class IssueNavigateCommandHandler(
             throw new DomainValidationException("Robot is offline.", "robot_offline");
         }
 
+        // Traffic-channel messages (EXTEND / RENEW / REVOKE_AUTHORITY) never make the robot busy: they are sent
+        // every second while it drives and are acknowledged on their own.
         var hasInFlight = await db.RobotCommands.AnyAsync(
             c => c.RobotId == robotId
+                 && c.Type != RobotCommandType.EXTEND_AUTHORITY
+                 && c.Type != RobotCommandType.RENEW_AUTHORITY
+                 && c.Type != RobotCommandType.REVOKE_AUTHORITY
                  && (c.Status == RobotCommandStatus.SENT
                      || c.Status == RobotCommandStatus.ACKED
                      || c.Status == RobotCommandStatus.RUNNING),
