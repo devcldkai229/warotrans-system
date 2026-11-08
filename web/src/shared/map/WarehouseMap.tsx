@@ -894,7 +894,7 @@ export function WarehouseMap({
         <div data-map-ui className={cx(CHROME, 'pointer-events-none bottom-3 left-3 rounded-full px-3 py-1 font-mono text-xs text-ink-2')}>
           {cursor && cursor.x >= bounds.minX && cursor.x <= bounds.maxX && cursor.y >= bounds.minY && cursor.y <= bounds.maxY
             ? `x ${cursor.x.toFixed(1)} m, y ${cursor.y.toFixed(1)} m`
-            : `${width} × ${height} m`}
+            : `${Number(width.toFixed(1))} × ${Number(height.toFixed(1))} m`}
         </div>
       ) : null}
     </div>
