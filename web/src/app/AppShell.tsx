@@ -2,16 +2,25 @@ import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { cx } from '@/shared/lib/cx'
 import { Icon } from '@/shared/ui/Icon'
-import { initialsOf, useAuth } from '@/features/auth/authContext'
+import { initialsOf, roleLabel, useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS, type Permission } from '@/shared/auth/permissions'
 import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { useTheme } from '@/shared/theme/theme'
 import { Wordmark } from './Wordmark'
+
+interface NavItem {
+  label: string
+  to: string
+  /** Shown only when the session holds this permission (the API would refuse the screen's calls otherwise). */
+  requires: Permission
+}
 
 interface NavGroup {
   label: string
   /** Route prefix: the group is active on every screen under it. */
   to: string
-  items?: { label: string; to: string }[]
+  requires?: Permission
+  items?: NavItem[]
 }
 
 const NAV: NavGroup[] = [
@@ -19,29 +28,37 @@ const NAV: NavGroup[] = [
     label: 'Monitor',
     to: '/monitor',
     items: [
-      { label: 'Fleet', to: '/monitor/fleet' },
-      { label: 'Transport requests', to: '/monitor/requests' },
+      { label: 'Fleet', to: '/monitor/fleet', requires: PERMISSIONS.robotRead },
+      { label: 'Transport requests', to: '/monitor/requests', requires: PERMISSIONS.transportRead },
     ],
   },
   {
     label: 'Configure',
     to: '/configure',
     items: [
-      { label: 'Facility', to: '/configure/facility' },
-      { label: 'Workflows', to: '/configure/workflows' },
+      { label: 'Facility', to: '/configure/facility', requires: PERMISSIONS.mapRead },
+      { label: 'Workflows', to: '/configure/workflows', requires: PERMISSIONS.workflowRead },
     ],
   },
-  { label: 'Statistics', to: '/dashboard' },
+  { label: 'Statistics', to: '/dashboard', requires: PERMISSIONS.statisticsRead },
 ]
 
 const MENU_ITEM = 'flex h-9 w-full items-center rounded-sm px-3 text-left text-sm transition-colors duration-200 hover:bg-container-high'
 
 export function AppShell() {
   const { pathname } = useLocation()
-  const { account, signOut } = useAuth()
+  const { account, signOut, can } = useAuth()
   const { theme, toggle: toggleTheme } = useTheme()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   if (!account) return null
+
+  const nav = NAV.flatMap((group) => {
+    if (group.requires && !can(group.requires)) return []
+    const items = group.items?.filter((item) => can(item.requires))
+    if (group.items && !items?.length) return []
+    return [{ ...group, items }]
+  })
+  const mayManage = can(PERMISSIONS.userManage) || can(PERMISSIONS.warehouseWrite)
 
   return (
     <div className="flex h-svh min-w-[1100px] flex-col bg-surface">
@@ -51,7 +68,7 @@ export function AppShell() {
         </Link>
 
         <nav className="flex items-center gap-1" aria-label="Main">
-          {NAV.map((group) => {
+          {nav.map((group) => {
             const active = pathname.startsWith(group.to)
             return (
               <div key={group.label} className="group relative">
@@ -87,7 +104,7 @@ export function AppShell() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <NotificationBell />
+          {can(PERMISSIONS.notificationRead) ? <NotificationBell /> : null}
 
           <div className="relative">
             <button
@@ -110,14 +127,17 @@ export function AppShell() {
                   <div className="mb-2 border-b border-outline-soft px-3 pt-1 pb-3">
                     <p className="font-medium">{account.fullName}</p>
                     <p className="text-xs text-muted">
-                      {account.username}, {account.role === 'ADMIN' ? 'administrator' : 'staff'}
+                      {account.username}, {roleLabel(account.role)}
                     </p>
                   </div>
-                  {account.role === 'ADMIN' ? (
+                  {mayManage ? (
                     <Link to="/management" role="menuitem" className={MENU_ITEM} onClick={() => setUserMenuOpen(false)}>
                       Management
                     </Link>
                   ) : null}
+                  <Link to="/change-password" role="menuitem" className={MENU_ITEM} onClick={() => setUserMenuOpen(false)}>
+                    Change password
+                  </Link>
                   <button type="button" role="menuitem" className={cx(MENU_ITEM, 'gap-2.5')} onClick={toggleTheme}>
                     <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} className="text-ink-2" />
                     {theme === 'dark' ? 'Light mode' : 'Dark mode'}

@@ -18,7 +18,8 @@ public static class PutRobotInServiceEndpoint
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequirePermission(Permissions.RobotConfigure)
+            .RequireRobotScope();
 
         return group;
     }

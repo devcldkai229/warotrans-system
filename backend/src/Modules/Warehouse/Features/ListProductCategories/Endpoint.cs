@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Warehouse.Features.ListProductCategories;
 
@@ -12,6 +13,7 @@ public static class ListProductCategoriesEndpoint
             ListProductCategoriesHandler handler,
             CancellationToken cancellationToken) =>
             Results.Ok(await handler.HandleAsync(cancellationToken)))
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("ListProductCategories")
         .WithSummary("List product categories")
         .WithDescription("All categories ordered by code.");

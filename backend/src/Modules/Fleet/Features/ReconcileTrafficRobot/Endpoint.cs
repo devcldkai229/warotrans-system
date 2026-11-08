@@ -34,9 +34,10 @@ public static class Endpoint
                     .ConfigureAwait(false);
                 return result.Ok ? Results.Ok(result) : Results.Conflict(result);
             })
+            .RequirePermission(Permissions.TrafficManage)
+            .RequireRobotScope("robotId")
             .WithName("ReconcileTrafficRobot")
-            .WithTags("Traffic")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Traffic");
 
         group.MapPost("/traffic/robots/{robotId:guid}/release-after-clearance", async (
                 Guid robotId,
@@ -49,9 +50,10 @@ public static class Endpoint
                     robotId, body.OperatorId, resources, ct).ConfigureAwait(false);
                 return result.Ok ? Results.Ok(result) : Results.Conflict(result);
             })
+            .RequirePermission(Permissions.TrafficManage)
+            .RequireRobotScope("robotId")
             .WithName("ReleaseTrafficAfterClearance")
-            .WithTags("Traffic")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Traffic");
 
         return group;
     }

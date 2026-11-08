@@ -18,9 +18,9 @@ public static class Endpoint
                 var snap = await coordinator.GetTrafficSnapshotAsync(ct).ConfigureAwait(false);
                 return Results.Ok(snap);
             })
+            .RequirePermission(Permissions.TrafficRead)
             .WithName("GetTrafficSnapshot")
-            .WithTags("Traffic")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Traffic");
 
         group.MapGet("/traffic/diagnostics", async (
                 ISegmentedTrafficCoordinator coordinator,
@@ -41,16 +41,16 @@ public static class Endpoint
                     resourceCount = snap.Resources.Length
                 });
             })
+            .RequirePermission(Permissions.TrafficRead)
             .WithName("GetTrafficDiagnostics")
-            .WithTags("Traffic")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Traffic");
 
         group.MapGet("/traffic/ops-log", (
                 ITrafficOpsLog opsLog,
                 int? take) => Results.Ok(opsLog.Recent(take ?? 100)))
+            .RequirePermission(Permissions.TrafficRead)
             .WithName("GetTrafficOpsLog")
-            .WithTags("Traffic")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Traffic");
 
         return group;
     }

@@ -37,8 +37,8 @@ export type JsonValue =
 /* Identity                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** `Identity/Enums/AccountRole.cs` — ADMIN, STAFF. */
-export type AccountRole = 'ADMIN' | 'STAFF';
+/** `Identity/Enums/AccountRole.cs` — ADMIN, STAFF, TECHNICIAN. */
+export type AccountRole = 'ADMIN' | 'STAFF' | 'TECHNICIAN';
 
 /** `Identity/Enums/AccountStatus.cs`. */
 export type AccountStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED';
@@ -672,6 +672,10 @@ export interface UserSession {
   role: AccountRole;
   zone: string;
   avatarInitials: string;
+  /** Server-enforced permissions (GET /api/identity/me/capabilities); screens render from these, not from `role`. */
+  permissions?: string[];
+  /** True while the account still holds a temporary password: only the change-password screen opens. */
+  mustChangePassword?: boolean;
 }
 
 export interface RobotSummary {

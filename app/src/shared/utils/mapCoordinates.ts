@@ -18,10 +18,19 @@ export function fitMapViewport(map: MapGeometry, width: number, height: number) 
   return { width: map.imageWidthPixels * scale, height: map.imageHeightPixels * scale };
 }
 
-export function resolveMapPreviewUri(uri: string | null | undefined, apiBaseUrl: string): string | null {
+/**
+ * Map files need a signed-in user (POL-04) and an image request cannot carry the Authorization header on every
+ * platform, so a backend-relative asset gets the access token in the query (as SignalR does).
+ */
+export function resolveMapPreviewUri(
+  uri: string | null | undefined,
+  apiBaseUrl: string,
+  accessToken?: string | null,
+): string | null {
   if (!uri || uri.startsWith('pending://') || uri.startsWith('s3://')) return null;
   if (/^https?:\/\//i.test(uri)) return uri;
-  return `${apiBaseUrl.replace(/\/+$/, '')}/${uri.replace(/^\/+/, '')}`;
+  const url = `${apiBaseUrl.replace(/\/+$/, '')}/${uri.replace(/^\/+/, '')}`;
+  return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(accessToken)}` : url;
 }
 
 /** ROS map origin is the lower-left pixel; screen coordinates start at the top left. */

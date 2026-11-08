@@ -1,14 +1,23 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Fleet.Features.Shared;
 using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.ListRobots;
 
-public sealed class ListRobotsHandler(FleetDbContext db)
+public sealed class ListRobotsHandler(FleetDbContext db, IRobotAccessScope robotAccessScope)
 {
     public async Task<ListRobotsResponse> HandleAsync(ListRobotsRequest request, CancellationToken cancellationToken)
     {
         var query = db.Robots.AsNoTracking().AsQueryable();
+
+        // A Technician only sees the robots assigned to them (RB-01).
+        var scope = await robotAccessScope.GetCurrentAsync(cancellationToken);
+        if (!scope.AllRobots)
+        {
+            var allowed = scope.RobotIds.ToList();
+            query = query.Where(r => allowed.Contains(r.Id));
+        }
 
         if (request.WarehouseId is { } warehouseId)
         {

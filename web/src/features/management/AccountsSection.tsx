@@ -7,7 +7,8 @@ import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
-import { createAccount, setAccountStatus, updateAccount } from '@/features/accounts/api'
+import { createAccount, resetAccountPassword, setAccountStatus, updateAccount } from '@/features/accounts/api'
+import { RobotScopeDialog } from '@/features/accounts/RobotScopeDialog'
 import { AccountFormDialog, type AccountFormValues } from '@/features/accounts/AccountFormDialog'
 import { TemporaryPasswordDialog } from '@/features/accounts/TemporaryPasswordDialog'
 import { useAuth } from '@/features/auth/authContext'
@@ -15,6 +16,7 @@ import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AddButton, SectionHead } from './SectionHead'
 
 const STATUS_TONE: Record<AccountStatus, Tone> = { ACTIVE: 'green', INACTIVE: 'grey', LOCKED: 'red' }
+const ROLE_TONE: Record<AccountRole, Tone> = { ADMIN: 'blue', STAFF: 'grey', TECHNICIAN: 'amber' }
 
 interface AccountsSectionProps {
   accounts: Account[]
@@ -29,7 +31,8 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [issued, setIssued] = useState<{ username: string; password: string } | null>(null)
+  const [issued, setIssued] = useState<{ username: string; password: string; reason: 'created' | 'reset' } | null>(null)
+  const [scopeFor, setScopeFor] = useState<Account | null>(null)
   const { account: me } = useAuth()
 
   const visible = useMemo(() => {
@@ -60,6 +63,21 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
     }
   }
 
+  async function resetPassword(account: Account) {
+    if (!window.confirm(`Reset the password of ${account.username}? They will be signed out on every device.`)) return
+    setBusyId(account.id)
+    setNotice(null)
+    try {
+      const reset = await resetAccountPassword(account)
+      replace(reset.account)
+      setIssued({ username: reset.account.username, password: reset.temporaryPassword, reason: 'reset' })
+    } catch (failure) {
+      setNotice(failure instanceof Error ? failure.message : 'The password could not be reset.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   // Rejects when the API refuses (e.g. the username is taken): the dialog shows the message and stays open.
   async function save(values: AccountFormValues) {
     if (editing && editing !== 'new') {
@@ -67,7 +85,7 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
     } else {
       const created = await createAccount(values)
       setAccounts((current) => [...current, created.account].sort((a, b) => a.username.localeCompare(b.username)))
-      setIssued({ username: created.account.username, password: created.temporaryPassword })
+      setIssued({ username: created.account.username, password: created.temporaryPassword, reason: 'created' })
     }
     setNotice(null)
     setEditing(null)
@@ -118,7 +136,8 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
               <Td tone="strong">{account.fullName}</Td>
               <Td>{account.email}</Td>
               <Td>
-                <StatusBadge tone={account.role === 'ADMIN' ? 'blue' : 'grey'}>{account.role}</StatusBadge>
+                <StatusBadge tone={ROLE_TONE[account.role]}>{account.role}</StatusBadge>
+                {account.mustChangePassword ? <span className="ml-2 text-xs text-muted">temporary password</span> : null}
               </Td>
               <Td tone="faint" className="tabular-nums">
                 {formatIsoDateTime(account.lastLoginAt)}
@@ -132,6 +151,20 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
                 <div className="flex justify-end gap-1.5">
                   <Button size="sm" onClick={() => setEditing(account)}>
                     Edit
+                  </Button>
+                  {account.role === 'TECHNICIAN' ? (
+                    <Button size="sm" variant="ghost" onClick={() => setScopeFor(account)}>
+                      Robots
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busyId === account.id || account.id === me?.id}
+                    title={account.id === me?.id ? 'Use Change password for your own account.' : undefined}
+                    onClick={() => resetPassword(account)}
+                  >
+                    Reset password
                   </Button>
                   {account.status === 'ACTIVE' ? (
                     <Button
@@ -174,7 +207,16 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
         />
       ) : null}
 
-      {issued ? <TemporaryPasswordDialog username={issued.username} password={issued.password} onClose={() => setIssued(null)} /> : null}
+      {issued ? (
+        <TemporaryPasswordDialog
+          username={issued.username}
+          password={issued.password}
+          reason={issued.reason}
+          onClose={() => setIssued(null)}
+        />
+      ) : null}
+
+      {scopeFor ? <RobotScopeDialog account={scopeFor} onClose={() => setScopeFor(null)} /> : null}
     </>
   )
 }

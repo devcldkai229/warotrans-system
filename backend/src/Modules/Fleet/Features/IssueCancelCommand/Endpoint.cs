@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Fleet.Features.IssueCancelCommand;
 
@@ -19,7 +20,9 @@ public static class IssueCancelCommandEndpoint
                 request ?? new IssueCancelCommandRequest(null),
                 cancellationToken);
             return Results.Accepted($"/api/fleet/robots/{id}/commands/{response.CommandId}", response);
-        });
+        })
+            .RequirePermission(Permissions.RobotStop)
+            .RequireRobotScope();
 
         return group;
     }

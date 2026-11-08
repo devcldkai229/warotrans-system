@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.WorkflowExecution.Features.PublishWorkflow;
 
@@ -15,7 +16,8 @@ public static class PublishWorkflowEndpoint
         {
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
-        });
+        })
+            .RequirePermission(Permissions.WorkflowWrite);
 
         return group;
     }

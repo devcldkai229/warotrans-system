@@ -63,6 +63,12 @@ internal sealed class UpdateAccountHandler(
             return Result.Failure<AccountResponse>(IdentityErrors.EmailTaken);
         }
 
+        if (roleChanges && account.Role != AccountRole.TECHNICIAN)
+        {
+            // A robot scope only means something for a Technician; do not let it come back with a later promotion.
+            await dbContext.TechnicianRobotScopes.Where(s => s.AccountId == account.Id).ExecuteDeleteAsync(cancellationToken);
+        }
+
         if (roleChanges)
         {
             // The access token carries the old role for up to its lifetime; ending the sessions makes the next

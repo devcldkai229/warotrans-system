@@ -5,7 +5,7 @@ import {
   LogLevel,
   HttpTransportType,
 } from '@microsoft/signalr';
-import { getApiBaseUrl, getAccessToken, getBearerToken } from '../api/client';
+import { getApiBaseUrl, getAccessToken, getBearerToken, getFreshAccessToken } from '../api/client';
 
 export interface JobUpdatedRealtimeEvent {
   jobId: string;
@@ -95,7 +95,8 @@ class RealtimeClient {
     try {
       this.connection = new HubConnectionBuilder()
         .withUrl(hubUrl, {
-          accessTokenFactory: () => getAccessToken() ?? '',
+          // Refreshed first when about to expire: the server closes the connection when its token expires (RTM-01).
+          accessTokenFactory: async () => (await getFreshAccessToken()) ?? '',
           transport: HttpTransportType.WebSockets | HttpTransportType.LongPolling,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])

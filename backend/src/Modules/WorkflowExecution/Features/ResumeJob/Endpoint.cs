@@ -18,7 +18,7 @@ public static class ResumeJobEndpoint
             var response = await handler.HandleAsync(id, request ?? new ResumeJobRequest(null), cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.JobOperate)
         .WithName("ResumeJob")
         .WithSummary("Continue a PAUSED / REASSIGNING Job from the step that stopped it")
         .WithDescription("Re-opens the failed step on the same robot (default) or another AVAILABLE robot on the Job's map. " +

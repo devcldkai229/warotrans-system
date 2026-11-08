@@ -15,7 +15,7 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
         DateTimeOffset? lastHeartbeatAt,
         CancellationToken cancellationToken = default)
     {
-        return hub.Clients.All.SendAsync(
+        return hub.Clients.Groups(RealtimeGroups.ForRobot(robotId)).SendAsync(
             "robotConnectivityChanged",
             new
             {
@@ -42,7 +42,7 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
         double? linearVelocity = null,
         double? angularVelocity = null)
     {
-        return hub.Clients.All.SendAsync(
+        return hub.Clients.Groups(RealtimeGroups.ForRobot(robotId)).SendAsync(
             "robotTelemetryUpdated",
             new
             {

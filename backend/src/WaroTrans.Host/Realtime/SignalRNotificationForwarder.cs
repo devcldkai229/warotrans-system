@@ -5,12 +5,12 @@ using WaroTrans.Operations.Contracts;
 
 namespace WaroTrans.Host.Realtime;
 
-/// <summary>Pushes a new notification to the admins' browsers as "notificationCreated"; clients add it to their bell.</summary>
+/// <summary>Pushes a new notification to users with notification.read as "notificationCreated"; clients add it to their bell.</summary>
 public sealed class SignalRNotificationForwarder(IHubContext<NotificationsHub> hub)
     : IIntegrationEventHandler<NotificationCreated>
 {
     public Task HandleAsync(NotificationCreated e, CancellationToken cancellationToken = default) =>
-        hub.Clients.Group(NotificationsHub.AdminsGroup).SendAsync(
+        hub.Clients.Group(RealtimeGroups.Notifications).SendAsync(
             "notificationCreated",
             new
             {

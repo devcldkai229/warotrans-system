@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetTrafficGraphValidation;
 
@@ -35,6 +36,7 @@ public static class GetTrafficGraphValidationEndpoint
                 })
             });
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetTrafficGraphValidation")
         .WithSummary("Validate compiled traffic graph (clearance, reachability, corridors)")
         .WithDescription(

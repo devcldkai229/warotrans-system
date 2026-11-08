@@ -15,10 +15,10 @@ public static class SetStorageLocationStatusEndpoint
             SetStorageLocationStatusHandler handler,
             CancellationToken cancellationToken) =>
             Results.Ok(await handler.HandleAsync(id, request, cancellationToken)))
+        .RequirePermission(Permissions.WarehouseWrite)
         .WithName("SetStorageLocationStatus")
         .WithSummary("Activate or deactivate a storage location")
-        .WithDescription("A location that still holds Containers cannot be deactivated.")
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        .WithDescription("A location that still holds Containers cannot be deactivated.");
 
         return group;
     }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.UpdateZone;
 
@@ -17,6 +18,7 @@ public static class UpdateZoneEndpoint
             var response = await handler.HandleAsync(id, request, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapWrite)
         .WithName("UpdateZone")
         .WithSummary("Update a zone on a draft map")
         .WithDescription("Updates Zone geometry and traffic policy. DRAFT maps only.");

@@ -76,13 +76,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Events = new JwtBearerEvents
         {
             // Browsers cannot set the Authorization header on WebSocket requests (SignalR) or on an <img> (robot
-            // camera MJPEG stream), so those send the token here.
+            // camera MJPEG stream, map occupancy images), so those send the token here.
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
                 if (!string.IsNullOrEmpty(accessToken)
                     && (path.StartsWithSegments("/hubs")
+                        || path.StartsWithSegments(MapAssetsPath)
                         || (path.StartsWithSegments("/api/fleet/robots")
                             && path.Value!.EndsWith(StreamRobotCameraEndpoint.PathSuffix, StringComparison.Ordinal))))
                 {
@@ -94,8 +95,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddPermissionAuthorization();
 builder.Services.AddAuthorization(options =>
 {
+    // Legacy role policies, kept for code that has not moved to RequirePermission(...) yet.
     options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
         policy.RequireAuthenticatedUser().RequireRole("ADMIN"));
     options.AddPolicy(AuthorizationPolicies.StaffOrAdmin, policy =>
@@ -152,8 +155,32 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 
-// Map occupancy assets are referenced by <img>/<image> without an Authorization header.
-// Serve them before auth so PreviewImageUri works in the Admin Map Editor.
+app.UseAuthentication();
+
+// A temporary password opens only "who am I", change password and sign out (IDN-01).
+app.UsePasswordChangeGate();
+
+// Map files (occupancy PGM/YAML and the preview PNG of the same occupancy) are warehouse layout data: they need a
+// signed-in user with map.read (POL-04). <img> tags cannot send a header, so clients append ?access_token=.
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments(MapAssetsPath),
+    branch => branch.Use(async (context, next) =>
+    {
+        if (context.User.Identity?.IsAuthenticated != true)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        if (!RolePermissionMatrix.UserHas(context.User, Permissions.MapRead))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        await next(context);
+    }));
+
 var mapAssetsRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "data", "maps"));
 Directory.CreateDirectory(mapAssetsRoot);
 var mapContentTypes = new FileExtensionContentTypeProvider();
@@ -163,15 +190,18 @@ mapContentTypes.Mappings[".yml"] = "text/yaml";
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(mapAssetsRoot),
-    RequestPath = "/map-assets",
-    ContentTypeProvider = mapContentTypes
+    RequestPath = MapAssetsPath,
+    ContentTypeProvider = mapContentTypes,
+    // Per user, never in a shared cache.
+    OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "private, max-age=300"
 });
 
-app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health").AllowAnonymous();
-app.MapHub<NotificationsHub>("/hubs/notifications");
+app.MapHub<NotificationsHub>("/hubs/notifications", options =>
+    // Ends the connection when its access token expires; the client reconnects with a fresh one (RTM-01).
+    options.CloseOnAuthenticationExpiration = true);
 
 app.MapIdentityEndpoints();
 app.MapWarehouseEndpoints();
@@ -183,4 +213,7 @@ app.MapOperationsEndpoints();
 
 app.Run();
 
-public partial class Program;
+public partial class Program
+{
+    private const string MapAssetsPath = "/map-assets";
+}

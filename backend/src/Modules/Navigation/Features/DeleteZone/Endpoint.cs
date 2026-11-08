@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.DeleteZone;
 
@@ -16,6 +17,7 @@ public static class DeleteZoneEndpoint
             await handler.HandleAsync(id, cancellationToken);
             return Results.NoContent();
         })
+        .RequirePermission(Permissions.MapWrite)
         .WithName("DeleteZone")
         .WithSummary("Delete a zone from a draft map")
         .WithDescription("Deletes a Zone. DRAFT maps only.");

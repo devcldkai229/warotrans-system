@@ -17,10 +17,10 @@ public static class CreateProductCategoryEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Created($"/api/warehouse/product-categories/{response.Id}", response);
         })
+        .RequirePermission(Permissions.WarehouseWrite)
         .WithName("CreateProductCategory")
         .WithSummary("Create a product category")
-        .WithDescription("Adds a category products can be grouped under. The code must be unique.")
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        .WithDescription("Adds a category products can be grouped under. The code must be unique.");
 
         return group;
     }

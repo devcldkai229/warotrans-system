@@ -26,6 +26,21 @@ internal sealed class TokenIssuer(IOptions<JwtOptions> options, TimeProvider tim
         var now = timeProvider.GetUtcNow();
         var expiresAt = now.AddMinutes(jwt.AccessTokenMinutes);
 
+        var claims = new Dictionary<string, object>
+        {
+            [AppClaimTypes.Subject] = account.Id.ToString(),
+            [AppClaimTypes.Name] = account.Username,
+            [AppClaimTypes.Role] = account.Role.ToString(),
+            [JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString()
+        };
+
+        // Permissions are not copied into the token: they follow from the role (RolePermissionMatrix), and a role
+        // change already revokes the account's sessions.
+        if (account.MustChangePassword)
+        {
+            claims[AppClaimTypes.PasswordChangeRequired] = "true";
+        }
+
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = jwt.Issuer,
@@ -33,13 +48,7 @@ internal sealed class TokenIssuer(IOptions<JwtOptions> options, TimeProvider tim
             IssuedAt = now.UtcDateTime,
             NotBefore = now.UtcDateTime,
             Expires = expiresAt.UtcDateTime,
-            Claims = new Dictionary<string, object>
-            {
-                [AppClaimTypes.Subject] = account.Id.ToString(),
-                [AppClaimTypes.Name] = account.Username,
-                [AppClaimTypes.Role] = account.Role.ToString(),
-                [JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString()
-            },
+            Claims = claims,
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
                 SecurityAlgorithms.HmacSha256)

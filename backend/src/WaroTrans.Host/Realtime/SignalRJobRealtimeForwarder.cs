@@ -13,13 +13,13 @@ public sealed class SignalRJobRealtimeForwarder(IHubContext<NotificationsHub> hu
     : IIntegrationEventHandler<JobStatusChanged>, IIntegrationEventHandler<JobStepStatusChanged>
 {
     public Task HandleAsync(JobStatusChanged e, CancellationToken cancellationToken = default) =>
-        hub.Clients.All.SendAsync(
+        hub.Clients.Group(RealtimeGroups.Jobs).SendAsync(
             "jobUpdated",
             new { e.JobId, kind = "job", e.JobNo, e.Status, e.RobotId, e.FailureCode, e.OccurredAt },
             cancellationToken);
 
     public Task HandleAsync(JobStepStatusChanged e, CancellationToken cancellationToken = default) =>
-        hub.Clients.All.SendAsync(
+        hub.Clients.Group(RealtimeGroups.Jobs).SendAsync(
             "jobUpdated",
             new { e.JobId, kind = "step", e.JobStepId, e.StepKey, e.Status, e.ErrorCode, e.OccurredAt },
             cancellationToken);

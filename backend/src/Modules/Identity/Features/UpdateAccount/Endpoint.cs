@@ -27,7 +27,7 @@ internal static class UpdateAccountEndpoint
                 var result = await handler.HandleAsync(id, request, cancellationToken);
                 return result.IsSuccess ? TypedResults.Ok(result.Value) : result.Error.ToProblem();
             })
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.UserManage)
             .WithName("UpdateAccount")
             .Produces<AccountResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)

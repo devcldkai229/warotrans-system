@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Fleet.Features.ListRobots;
 
@@ -32,7 +33,8 @@ public static class ListRobotsEndpoint
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
-        });
+        })
+            .RequirePermission(Permissions.RobotRead);
 
         return group;
     }

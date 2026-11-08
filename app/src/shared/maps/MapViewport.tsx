@@ -26,7 +26,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto } from '../api/navigationApi';
-import { getApiBaseUrl } from '../api/client';
+import { getAccessToken, getApiBaseUrl } from '../api/client';
 import type { RobotResponse } from '../types/contracts';
 import { colors } from '../theme/colors';
 import { radii } from '../theme/radii';
@@ -197,7 +197,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
   const [imageLoaded, setImageLoaded] = useState('');
   const [imageFailed, setImageFailed] = useState('');
   const model = useMemo(() => findMapModel(map), [map]);
-  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl());
+  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl(), getAccessToken());
   const imageKey = `${map.id}:${uri}:${imageAttempt}`;
   const loaded = useCallback(() => setImageLoaded(imageKey), [imageKey]);
   const failed = useCallback(() => setImageFailed(imageKey), [imageKey]);

@@ -9,7 +9,8 @@ internal sealed record AccountResponse(
     string FullName,
     string Role,
     string Status,
-    DateTimeOffset? LastLoginAt)
+    DateTimeOffset? LastLoginAt,
+    bool MustChangePassword)
 {
     public static AccountResponse From(Account account) => new(
         account.Id,
@@ -18,5 +19,6 @@ internal sealed record AccountResponse(
         account.FullName,
         account.Role.ToString(),
         account.Status.ToString(),
-        account.LastLoginAt);
+        account.LastLoginAt,
+        account.MustChangePassword);
 }

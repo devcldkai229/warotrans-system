@@ -18,10 +18,10 @@ public static class CancelJobEndpoint
                 var response = await handler.HandleAsync(id, request ?? new CancelJobRequest(null), cancellationToken);
                 return Results.Ok(response);
             })
+            .RequirePermission(Permissions.JobCancel)
             .WithName("CancelJob")
             .WithSummary("Cancel a running job; traffic occupancy is quarantined until verified clearance")
-            .WithTags("Jobs")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Jobs");
 
         return group;
     }

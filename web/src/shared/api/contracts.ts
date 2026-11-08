@@ -6,7 +6,7 @@
 // Anything marked `TODO(backend)` is shown by the Figma design but has NO source in the backend yet. Those
 // fields are optional so the UI keeps working when the real API does not return them.
 
-export type AccountRole = 'ADMIN' | 'STAFF'
+export type AccountRole = 'ADMIN' | 'STAFF' | 'TECHNICIAN'
 
 export type RobotStatus =
   | 'OFFLINE'
@@ -135,6 +135,26 @@ export interface Account {
   role: AccountRole
   status: AccountStatus
   lastLoginAt: string | null
+  /** True while the account holds a temporary password (new account or Admin reset). */
+  mustChangePassword?: boolean
+}
+
+/**
+ * GET /api/identity/me/capabilities: what the server enforces for this token. Render from `permissions`, never from
+ * the role name (BOTH-07). Empty while `mustChangePassword` is true.
+ */
+export interface Capabilities {
+  accountId: string
+  role: AccountRole
+  mustChangePassword: boolean
+  permissions: string[]
+  robotScope: { allRobots: boolean; robotIds: string[] }
+}
+
+/** GET/PUT /api/identity/accounts/{id}/robot-scope: the robots a TECHNICIAN may act on. */
+export interface AccountRobotScope {
+  accountId: string
+  robotIds: string[]
 }
 
 /** Response of POST /api/identity/login and /refresh. The web client asks for the refresh token as an HttpOnly cookie, so `refreshToken` is null here. */

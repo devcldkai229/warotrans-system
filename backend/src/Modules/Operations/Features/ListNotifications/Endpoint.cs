@@ -15,7 +15,7 @@ public static class ListNotificationsEndpoint
             ListNotificationsHandler handler,
             CancellationToken cancellationToken) =>
                 Results.Ok(await handler.HandleAsync(unreadOnly ?? false, take, cancellationToken)))
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.NotificationRead)
             .WithName("ListNotifications")
             .WithSummary("Admin notifications, newest first, with the number still unread")
             .WithDescription(

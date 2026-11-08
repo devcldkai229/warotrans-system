@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.CreateMapVersion;
 
@@ -17,6 +18,7 @@ public static class CreateMapVersionEndpoint
             var response = await handler.HandleAsync(warehouseId, request, cancellationToken);
             return Results.Created($"/api/navigation/maps/{response.Id}", response);
         })
+        .RequirePermission(Permissions.MapWrite)
         .WithName("CreateMapVersion")
         .WithSummary("Create a draft map version (metadata)")
         .WithDescription(

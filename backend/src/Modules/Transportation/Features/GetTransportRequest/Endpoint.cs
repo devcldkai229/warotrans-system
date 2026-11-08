@@ -17,7 +17,7 @@ public static class GetTransportRequestEndpoint
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.TransportRead)
         .WithName("GetTransportRequest")
         .WithSummary("Get TransportRequest by id")
         .WithDescription(

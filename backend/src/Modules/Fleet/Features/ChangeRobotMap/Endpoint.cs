@@ -18,7 +18,7 @@ public static class ChangeRobotMapEndpoint
             var response = await handler.HandleAsync(id, request, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequirePermission(Permissions.RobotManage);
 
         return group;
     }

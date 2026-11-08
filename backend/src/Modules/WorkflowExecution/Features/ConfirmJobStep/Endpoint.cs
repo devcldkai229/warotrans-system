@@ -18,7 +18,7 @@ public static class ConfirmJobStepEndpoint
             var response = await handler.HandleAsync(id, request, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.JobOperate)
         .WithName("ConfirmJobStep")
         .WithSummary("Staff confirms a waiting HUMAN_INTERACTION step (PICKUP_CONFIRM / DROPOFF_CONFIRM)")
         .WithDescription("Records a HandoverConfirmation for the scanned container, moves the JobContainer to ONBOARD / DELIVERED and lets the Job continue.");

@@ -16,7 +16,7 @@ public static class MarkAllNotificationsReadEndpoint
                 await handler.HandleAsync(cancellationToken);
                 return Results.NoContent();
             })
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.NotificationRead)
             .WithName("MarkAllNotificationsRead")
             .WithSummary("Mark every unread notification as read");
 

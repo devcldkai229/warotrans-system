@@ -33,7 +33,7 @@ internal static class CreateAccountEndpoint
                 httpContext.Response.Headers.CacheControl = "no-store";
                 return TypedResults.Created($"/api/identity/accounts/{result.Value.Account.Id}", result.Value);
             })
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.UserManage)
             .WithName("CreateAccount")
             .Produces<CreateAccountResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)

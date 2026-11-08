@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.WorkflowExecution.Features.CreateWorkflow;
 
@@ -18,7 +19,8 @@ public static class CreateWorkflowEndpoint
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Created($"/api/workflow-execution/workflows/{response.Id}", response);
-        });
+        })
+            .RequirePermission(Permissions.WorkflowWrite);
 
         return group;
     }

@@ -17,7 +17,7 @@ public static class QueueTransportRequestEndpoint
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.TransportCreate)
         .WithName("QueueTransportRequest")
         .WithSummary("Plan a submitted TransportRequest into Jobs and queue it")
         .WithDescription("Builds the execution snapshot from the persisted Details, plans JobBatchPlans (collect first, deliver after; one batch in V1) and provisions the Job runtime graph. Idempotent: calling again returns the same Jobs. Does not assign Robots or start execution.");

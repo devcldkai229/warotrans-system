@@ -17,7 +17,7 @@ public static class CreateTransportRequestEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Created($"/api/transportation/transport-requests/{response.Id}", response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.TransportCreate)
         .WithName("CreateTransportRequest")
         .WithSummary("Submit a TransportRequest with its Container movement Details")
         .WithDescription("Validates Warehouse, MapVersion, Endpoints, Containers and the selected PUBLISHED Workflow, then persists the request (SUBMITTED) and all Details (PENDING) atomically. Does not plan or create Jobs.");

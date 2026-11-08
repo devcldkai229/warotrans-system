@@ -27,7 +27,7 @@ internal static class ChangeAccountStatusEndpoint
                 var result = await handler.HandleAsync(id, request, cancellationToken);
                 return result.IsSuccess ? TypedResults.Ok(result.Value) : result.Error.ToProblem();
             })
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.UserManage)
             .WithName("ChangeAccountStatus")
             .Produces<AccountResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)

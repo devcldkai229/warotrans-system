@@ -1,4 +1,4 @@
-import { ApiError, apiFetch, apiRequest } from './client'
+import { ApiError, apiFetch, apiRequest, getAccessToken } from './client'
 import type {
   EdgeDirection,
   EndpointType,
@@ -374,7 +374,10 @@ export function deleteZone(id: string) {
   return apiRequest<void>(`/api/navigation/zones/${id}`, { method: 'DELETE' })
 }
 
-/** Resolve a public map-asset path against the API origin when needed. */
+/**
+ * Resolve a map-asset path against the API origin. Map files need a signed-in user (POL-04) and an `<img>` cannot
+ * send the Authorization header, so the current access token goes in the query, as for the camera stream.
+ */
 export function resolveMapAssetUrl(uri: string | null | undefined): string | null {
   if (!uri) return null
   if (uri.startsWith('pending://')) return null
@@ -382,5 +385,7 @@ export function resolveMapAssetUrl(uri: string | null | undefined): string | nul
   const path = uri.startsWith('/') ? uri : `/${uri}`
   // Empty VITE_API_URL → same-origin (Vite proxies /map-assets in dev).
   const apiUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
-  return apiUrl ? `${apiUrl}${path}` : path
+  const token = getAccessToken()
+  const withToken = token ? `${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : path
+  return apiUrl ? `${apiUrl}${withToken}` : withToken
 }

@@ -43,6 +43,7 @@ internal sealed class CreateAccountHandler(
             FullName = request.FullName.Trim(),
             Role = role,
             Status = AccountStatus.ACTIVE,
+            MustChangePassword = true,
             CreatedAt = now,
             UpdatedAt = now
         };
