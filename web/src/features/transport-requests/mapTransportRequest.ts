@@ -58,7 +58,7 @@ export function listItemToView(
       destinationLabel: detail.destinationEndpointCode ?? detail.destinationEndpointId.slice(0, 8),
     })),
     jobs: [],
-    availableActions: item.status === 'SUBMITTED' || item.status === 'QUEUED' ? ['CANCEL'] : [],
+    availableActions: item.availableActions ?? [],
   }
 }
 
@@ -108,7 +108,9 @@ export function detailToView(
       ),
     })),
     jobs: [],
-    availableActions: detail.status === 'SUBMITTED' || detail.status === 'QUEUED' ? ['CANCEL'] : [],
+    availableActions: detail.availableActions ?? [],
+    cancelReason: detail.cancelReason,
+    rejectReason: detail.rejectReason,
   }
 }
 

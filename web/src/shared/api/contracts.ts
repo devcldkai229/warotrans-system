@@ -61,8 +61,24 @@ export type TransportRequestStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'REJECTED'
+  /** Cancel accepted, cargo still on a robot (WH-04); terminal once it is unloaded or delivered. */
+  | 'CANCELLING'
 
-export type TransportRequestDetailStatus = 'PENDING' | 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+export type TransportRequestDetailStatus =
+  | 'PENDING'
+  | 'QUEUED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'CANCEL_PENDING_RECOVERY'
+
+/** BOTH-04: an action the server says this user may (or may not, and why) take on a resource now. */
+export interface ActionAvailability<A extends string = string> {
+  action: A
+  allowed: boolean
+  reason: string | null
+}
 
 export type HandoverType =
   | 'PICKUP'
@@ -722,7 +738,7 @@ export interface TransportRequest {
   failureMessage: string | null
 }
 
-export type TransportRequestAction = 'CANCEL'
+export type TransportRequestAction = 'QUEUE' | 'CANCEL' | 'REJECT'
 
 /**
  * A Request as the console lists it. TODO(backend): needs a read endpoint that joins the names, the Container
@@ -737,5 +753,8 @@ export interface TransportRequestView extends TransportRequest {
     destinationLabel: string
   })[]
   jobs: { jobNo: string; status: JobStatus; robotCode: string | null }[]
-  availableActions: TransportRequestAction[]
+  /** Server-decided (BOTH-04); the endpoint re-checks with the same rule. */
+  availableActions: ActionAvailability<TransportRequestAction>[]
+  cancelReason?: string | null
+  rejectReason?: string | null
 }

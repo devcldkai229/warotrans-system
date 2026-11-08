@@ -39,9 +39,32 @@ export interface NotificationCreatedMessage {
   createdAt: string
 }
 
+/** RTM-02: a TransportRequest moved (a Detail changed, it was re-aggregated, cancelled or rejected). Refetch it. */
+export interface TransportRequestUpdatedMessage {
+  transportRequestId: string
+  kind: 'request' | 'detail' | 'cancelled' | 'rejected'
+  requestCode: string
+  status: string
+  containerId?: string | null
+  detailStatus?: string | null
+  occurredAt: string
+}
+
+/** RTM-02: a traffic decision for a robot (grant, wait, block, quarantine …). Refetch the traffic snapshot. */
+export interface TrafficUpdatedMessage {
+  eventType: string
+  robotId: string | null
+  jobId: string | null
+  resourceId: string | null
+  reason: string | null
+  occurredAt: string
+}
+
 export interface HubHandlers {
   robotTelemetryUpdated?: (message: RobotTelemetryMessage) => void
   jobUpdated?: (message: JobUpdatedMessage) => void
+  transportRequestUpdated?: (message: TransportRequestUpdatedMessage) => void
+  trafficUpdated?: (message: TrafficUpdatedMessage) => void
   notificationCreated?: (message: NotificationCreatedMessage) => void
 }
 
@@ -97,7 +120,7 @@ function ensureStarted(): Promise<void> {
  */
 export function useNotificationsHub(handlers: HubHandlers): boolean {
   const [connected, setConnected] = useState(false)
-  const { robotTelemetryUpdated, jobUpdated, notificationCreated } = handlers
+  const { robotTelemetryUpdated, jobUpdated, notificationCreated, transportRequestUpdated, trafficUpdated } = handlers
 
   useEffect(() => {
     const hub = getConnection()
@@ -106,6 +129,8 @@ export function useNotificationsHub(handlers: HubHandlers): boolean {
     if (robotTelemetryUpdated) hub.on('robotTelemetryUpdated', robotTelemetryUpdated)
     if (jobUpdated) hub.on('jobUpdated', jobUpdated)
     if (notificationCreated) hub.on('notificationCreated', notificationCreated)
+    if (transportRequestUpdated) hub.on('transportRequestUpdated', transportRequestUpdated)
+    if (trafficUpdated) hub.on('trafficUpdated', trafficUpdated)
 
     const sync = () => !cancelled && setConnected(hub.state === HubConnectionState.Connected)
     hub.onreconnected(sync)
@@ -119,8 +144,10 @@ export function useNotificationsHub(handlers: HubHandlers): boolean {
       if (robotTelemetryUpdated) hub.off('robotTelemetryUpdated', robotTelemetryUpdated)
       if (jobUpdated) hub.off('jobUpdated', jobUpdated)
       if (notificationCreated) hub.off('notificationCreated', notificationCreated)
+      if (transportRequestUpdated) hub.off('transportRequestUpdated', transportRequestUpdated)
+      if (trafficUpdated) hub.off('trafficUpdated', trafficUpdated)
     }
-  }, [robotTelemetryUpdated, jobUpdated, notificationCreated])
+  }, [robotTelemetryUpdated, jobUpdated, notificationCreated, transportRequestUpdated, trafficUpdated])
 
   return connected
 }

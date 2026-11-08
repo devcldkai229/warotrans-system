@@ -28,6 +28,7 @@ public static class TransportationModule
         services.AddScoped<GetTransportRequestHandler>();
         services.AddScoped<QueueTransportRequestHandler>();
         services.AddScoped<GetRequestStatisticsHandler>();
+        services.AddScoped<Features.CloseTransportRequest.CloseTransportRequestHandler>();
 
         // Job execution feedback (WorkflowExecution → Transportation)
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.ITransportRequestActivityQuery, Services.TransportRequestActivityQuery>();
@@ -48,6 +49,7 @@ public static class TransportationModule
         ListTransportRequestsEndpoint.Map(group);
         GetTransportRequestEndpoint.Map(group);
         QueueTransportRequestEndpoint.Map(group);
+        Features.CloseTransportRequest.CloseTransportRequestEndpoints.Map(group);
         group.MapGetRequestStatistics();
 
         return endpoints;

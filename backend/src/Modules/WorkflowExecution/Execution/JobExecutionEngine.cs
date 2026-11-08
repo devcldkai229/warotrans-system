@@ -83,9 +83,9 @@ public sealed class JobExecutionEngine(
             return job; // idempotent
         }
 
-        if (job.Status is not (JobStatus.CREATED or JobStatus.QUEUED))
+        if (JobActionPolicy.StateReason(JobActionPolicy.Start, job.Status) is { } notStartable)
         {
-            throw new ConflictException($"Job {job.JobNo} cannot be started from status {job.Status}.", "job_not_startable");
+            throw new ConflictException($"Job {job.JobNo} cannot be started from status {job.Status}.", notStartable);
         }
 
         var busyRobots = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
@@ -138,11 +138,11 @@ public sealed class JobExecutionEngine(
     public async Task<Job> ResumeAsync(Guid jobId, Guid? robotId, CancellationToken cancellationToken = default)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
-        if (job.Status is not (JobStatus.PAUSED or JobStatus.REASSIGNING))
+        if (JobActionPolicy.StateReason(JobActionPolicy.Resume, job.Status) is { } notResumable)
         {
             throw new ConflictException(
                 $"Job {job.JobNo} cannot be resumed from status {job.Status} (only PAUSED or REASSIGNING).",
-                "job_not_resumable");
+                notResumable);
         }
 
         var previousRobot = AssignedRobot(job);
@@ -152,7 +152,8 @@ public sealed class JobExecutionEngine(
             ?? throw new NotFoundException($"Robot '{targetRobotId}' was not found.", "robot_not_found");
 
         // WFX-03: the operator's pause held the robot; resuming the job releases that hold first.
-        if (robot.MotionHeld && job.FailureCode == OperatorPausedCode && robot.Id == previousRobot)
+        // A request cancelled with cargo on board held the robot the same way; resuming delivers that cargo.
+        if (robot.MotionHeld && job.FailureCode is OperatorPausedCode or CargoOnboardCancelCode && robot.Id == previousRobot)
         {
             await fleet.ResumeRobotAsync(robot.Id, cancellationToken);
             robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken) ?? robot;
@@ -1451,9 +1452,9 @@ public sealed class JobExecutionEngine(
     public async Task<Job> PauseAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
-        if (job.Status != JobStatus.RUNNING)
+        if (JobActionPolicy.StateReason(JobActionPolicy.Pause, job.Status) is { } notPausable)
         {
-            throw new ConflictException($"Job {job.JobNo} is {job.Status}; only a RUNNING job can be paused.", "job_not_running");
+            throw new ConflictException($"Job {job.JobNo} is {job.Status}; only a RUNNING job can be paused.", notPausable);
         }
 
         var workflowSteps = await db.WorkflowSteps.AsNoTracking()
@@ -1488,9 +1489,18 @@ public sealed class JobExecutionEngine(
     public async Task<Job> CancelJobAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
-        if (job.Status is JobStatus.COMPLETED or JobStatus.CANCELLED or JobStatus.FAILED)
+        if (JobActionPolicy.StateReason(JobActionPolicy.Cancel, job.Status) is { } terminal)
         {
-            throw new ConflictException($"Job {job.JobNo} is already terminal ({job.Status}).", "job_already_terminal");
+            throw new ConflictException($"Job {job.JobNo} is already terminal ({job.Status}).", terminal);
+        }
+
+        // WH-04: cargo on the robot is not "returned" by cancelling. Whoever cancels says where it went.
+        var onboard = job.JobContainers.Count(c => c.Status == JobContainerStatus.ONBOARD);
+        if (onboard > 0 && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new DomainValidationException(
+                $"Job {job.JobNo} has {onboard} container(s) on the robot. Give a reason that says where they are now.",
+                "cargo_onboard_reason_required");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -1555,6 +1565,93 @@ public sealed class JobExecutionEngine(
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
         await SaveAndPublishAsync(cancellationToken);
         return job;
+    }
+
+    /// <summary>FailureCode of a Job paused because its request was cancelled while cargo was on the robot (WH-04).</summary>
+    public const string CargoOnboardCancelCode = "request_cancelled_cargo_onboard";
+
+    /// <summary>
+    /// TRN-01 / WH-04: the request this Job carries was cancelled. Nothing picked up yet → the Job is cancelled and the
+    /// warehouse is unchanged. Cargo ONBOARD → the Job is NOT cancelled (that would pretend the cargo was returned): the
+    /// robot is stopped, the Job is PAUSED with <see cref="CargoOnboardCancelCode"/> and an issue asks someone to unload
+    /// or deliver it; the operator then resumes (deliver) or cancels the Job with a reason. Idempotent.
+    /// </summary>
+    public async Task<IReadOnlyList<ContainerCancelOutcome>> CancelForTransportRequestAsync(
+        Guid jobId,
+        Guid transportRequestId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        var mine = job.JobContainers.Where(c => c.TransportRequestId == transportRequestId).ToList();
+
+        if (JobActionPolicy.StateReason(JobActionPolicy.Cancel, job.Status) is not null)
+        {
+            return Outcomes(mine, _ => ContainerCancelOutcome.AlreadyFinished);
+        }
+
+        var onboard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).ToList();
+        if (onboard.Count == 0)
+        {
+            var finishedBefore = mine.Where(c => c.Status is JobContainerStatus.DELIVERED or JobContainerStatus.FAILED).Select(c => c.Id).ToHashSet();
+            await CancelJobAsync(jobId, $"Transport request cancelled: {reason}", cancellationToken);
+            return Outcomes(mine, c => finishedBefore.Contains(c.Id) ? ContainerCancelOutcome.AlreadyFinished : ContainerCancelOutcome.Cancelled);
+        }
+
+        var robotId = AssignedRobot(job);
+        if (job.FailureCode != CargoOnboardCancelCode)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (job.Status == JobStatus.RUNNING)
+            {
+                var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+                    .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                    .ToDictionaryAsync(s => s.Id, cancellationToken);
+                foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
+                {
+                    ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+                }
+
+                if (robotId is { } rid)
+                {
+                    await fleet.StopRobotAsync(rid, "PAUSE", $"Request cancelled; Job {job.JobNo} has cargo on board", cancellationToken);
+                }
+
+                job.Status = JobStatus.PAUSED;
+            }
+
+            job.FailureCode = CargoOnboardCancelCode;
+            job.FailureMessage =
+                $"The transport request was cancelled while {onboard.Count} container(s) were on the robot. "
+                + "Unload them and cancel this Job with where they are now, or resume it to deliver them.";
+            _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
+            await SaveAndPublishAsync(cancellationToken);
+            logger.LogWarning("Job {JobNo}: request cancelled with {Count} container(s) on board; held for recovery", job.JobNo, onboard.Count);
+        }
+
+        if (issueReporter is not null)
+        {
+            await issueReporter.ReportAsync(
+                new SystemIssueDraft(
+                    $"cargo-onboard:{job.Id}",
+                    job.Id,
+                    job.JobNo,
+                    null,
+                    robotId,
+                    onboard.Count == 1 ? onboard[0].ContainerId : null,
+                    $"Transport request cancelled while Job {job.JobNo} had {onboard.Count} container(s) on the robot. "
+                    + $"Reason: {reason}. Unload or deliver them, then cancel or resume the Job.",
+                    High: true,
+                    TransportRequestId: transportRequestId),
+                cancellationToken);
+        }
+
+        return Outcomes(mine, c => c.Status is JobContainerStatus.DELIVERED or JobContainerStatus.FAILED or JobContainerStatus.CANCELLED
+            ? ContainerCancelOutcome.AlreadyFinished
+            : ContainerCancelOutcome.RecoveryRequired);
+
+        static IReadOnlyList<ContainerCancelOutcome> Outcomes(IEnumerable<JobContainer> containers, Func<JobContainer, string> outcome) =>
+            containers.Select(c => new ContainerCancelOutcome(c.ContainerId, c.JobId, outcome(c))).ToList();
     }
 
     /// <summary>

@@ -85,11 +85,15 @@ export function toLiveNotification(data: ServerNotificationEvent): LiveNotificat
   };
 }
 
+/** RTM-02 "transportRequestUpdated": the request moved; refetch it from the API (the event carries no full state). */
 export interface TransportStatusEvent {
   transportRequestId: string;
+  kind: 'request' | 'detail' | 'cancelled' | 'rejected';
   requestCode: string;
   status: string;
-  timestamp: string;
+  containerId?: string | null;
+  detailStatus?: string | null;
+  occurredAt: string;
 }
 
 export type RealtimeEventHandler<T> = (data: T) => void;
@@ -149,7 +153,7 @@ class RealtimeClient {
         this.notificationListeners.forEach((fn) => fn(event));
       });
 
-      this.connection.on('transportRequestStatusChanged', (data: TransportStatusEvent) => {
+      this.connection.on('transportRequestUpdated', (data: TransportStatusEvent) => {
         this.transportStatusListeners.forEach((fn) => fn(data));
       });
 

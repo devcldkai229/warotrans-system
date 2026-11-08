@@ -554,7 +554,9 @@ export type TransportRequestStatus =
   | 'COMPLETED'
   | 'FAILED'
   | 'CANCELLED'
-  | 'REJECTED';
+  | 'REJECTED'
+  /** Cancel accepted, cargo still on a robot (WH-04). */
+  | 'CANCELLING';
 
 /** `Transportation/Enums/TransportRequestDetailStatus.cs`. */
 export type TransportRequestDetailStatus =
@@ -563,7 +565,15 @@ export type TransportRequestDetailStatus =
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'FAILED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'CANCEL_PENDING_RECOVERY';
+
+/** BOTH-04: `BuildingBlocks/Abstractions/ActionAvailability.cs` — what the server lets this user do now, and why not. */
+export interface ActionAvailability {
+  action: string;
+  allowed: boolean;
+  reason: string | null;
+}
 
 /** `Transportation/Features/CreateTransportRequest/Request.cs` (per movement line). */
 export interface CreateTransportRequestDetailRequest {

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using WaroTrans.BuildingBlocks.Abstractions;
@@ -22,7 +22,7 @@ namespace WaroTrans.UnitTests.WorkflowExecution.Execution;
 
 /// <summary>
 /// Job engine end-to-end on InMemory DB with fake Fleet / Navigation / Transportation:
-/// C1 A→D, C2 A→E (shared pickup A) using the INTERNAL_RELOCATION template.
+/// C1 Aâ†’D, C2 Aâ†’E (shared pickup A) using the INTERNAL_RELOCATION template.
 /// </summary>
 public sealed class JobExecutionEngineTests
 {
@@ -141,18 +141,18 @@ public sealed class JobExecutionEngineTests
         var engine = Engine();
         await engine.StartAsync(jobId, null);
 
-        // Robot arrives at A → two PICKUP_CONFIRM (C1, C2) wait for Staff.
+        // Robot arrives at A â†’ two PICKUP_CONFIRM (C1, C2) wait for Staff.
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
         await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff, "scan C1"));
         await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
 
-        // Both on board → robot sent to D.
+        // Both on board â†’ robot sent to D.
         Assert.Equal(2, _fleet.Commands.Count);
         Assert.Equal(9.0, _fleet.Commands[^1].X);
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
         await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
 
-        // → E
+        // â†’ E
         Assert.Equal(3, _fleet.Commands.Count);
         Assert.Equal(9.5, _fleet.Commands[^1].X);
         await RobotResultAsync(_fleet.Commands[^1].JobStepId);
@@ -178,6 +178,51 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(A, move.OutputValues["arrivedEndpointId"].GetGuid());
     }
 
+    [Fact]
+    public async Task Cancelling_the_request_before_pickup_cancels_the_job_and_its_containers()
+    {
+        var jobId = await ProvisionAsync();
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+
+        var outcomes = await Engine().CancelForTransportRequestAsync(jobId, requestId, "wrong pallets");
+
+        Assert.All(outcomes, o => Assert.Equal(ContainerCancelOutcome.Cancelled, o.Outcome));
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.CANCELLED, job.Status);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.CANCELLED, c.Status));
+        Assert.Empty(_fleet.Stops);
+    }
+
+    [Fact]
+    public async Task Cancelling_the_request_with_cargo_on_board_holds_the_job_for_recovery()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        var requestId = (await _db.JobContainers.FirstAsync(c => c.JobId == jobId)).TransportRequestId;
+        var reporter = new RecordingIssueReporter();
+
+        var outcomes = await EngineWith(reporter).CancelForTransportRequestAsync(jobId, requestId, "customer cancelled");
+        var again = await EngineWith(reporter).CancelForTransportRequestAsync(jobId, requestId, "customer cancelled");
+
+        Assert.All(outcomes.Concat(again), o => Assert.Equal(ContainerCancelOutcome.RecoveryRequired, o.Outcome));
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Equal(JobExecutionEngine.CargoOnboardCancelCode, job.FailureCode);
+        // Nothing is treated as returned: the containers are still on the robot.
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.ONBOARD, c.Status));
+        Assert.Equal((_fleet.RobotId, "PAUSE"), Assert.Single(_fleet.Stops));
+        Assert.All(reporter.SystemDrafts, d => Assert.Equal($"cargo-onboard:{jobId}", d.SourceKey));
+
+        // Closing the Job needs someone to say where the cargo is.
+        var refused = await Assert.ThrowsAsync<DomainValidationException>(() => Engine().CancelJobAsync(jobId, null));
+        Assert.Equal("cargo_onboard_reason_required", refused.Code);
+        await Engine().CancelJobAsync(jobId, "unloaded back at A by hand");
+        Assert.Equal(JobStatus.CANCELLED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+    }
+
     private sealed class RecordingIssueReporter(Exception? failWith = null) : IIssueReporter
     {
         public List<StepIssueDraft> Drafts { get; } = [];
@@ -187,6 +232,14 @@ public sealed class JobExecutionEngineTests
         {
             if (failWith is not null) throw failWith;
             Drafts.Add(draft);
+            return Task.FromResult(IssueId);
+        }
+
+        public List<SystemIssueDraft> SystemDrafts { get; } = [];
+
+        public Task<Guid> ReportAsync(SystemIssueDraft draft, CancellationToken cancellationToken = default)
+        {
+            SystemDrafts.Add(draft);
             return Task.FromResult(IssueId);
         }
     }
@@ -692,10 +745,10 @@ public sealed class JobExecutionEngineTests
         await SemanticRobotResultAsync(_fleet.Commands[^1].JobStepId);                  // at A
         await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
         await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
-        Assert.Equal(9.0, _fleet.Commands[^1].X);                                       // → D
+        Assert.Equal(9.0, _fleet.Commands[^1].X);                                       // â†’ D
         await SemanticRobotResultAsync(_fleet.Commands[^1].JobStepId);
         await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
-        Assert.Equal(9.5, _fleet.Commands[^1].X);                                       // → E
+        Assert.Equal(9.5, _fleet.Commands[^1].X);                                       // â†’ E
         await SemanticRobotResultAsync(_fleet.Commands[^1].JobStepId);
         await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
 

@@ -26,7 +26,8 @@ public sealed class AdminNotificationProducer(
         IIntegrationEventHandler<JobStepStatusChanged>,
         IIntegrationEventHandler<JobWaitingToStart>,
         IIntegrationEventHandler<JobStepWaitingForPerson>,
-        IIntegrationEventHandler<TransportRequestProgressed>
+        IIntegrationEventHandler<TransportRequestProgressed>,
+        IIntegrationEventHandler<TransportRequestClosedByOperator>
 {
     private const string Job = "JOB";
     private const string Robot = "ROBOT";
@@ -217,7 +218,51 @@ public sealed class AdminNotificationProducer(
 
                 case TransportRequestStatus.COMPLETED:
                     await notifications.ResolveAsync($"request:{e.RequestId}:partial", cancellationToken);
+                    await notifications.ResolveAsync($"request:{e.RequestId}:recovery", cancellationToken);
                     break;
+
+                // A cancelled request whose cargo has been recovered: nobody has to act on it any more.
+                case TransportRequestStatus.CANCELLED or TransportRequestStatus.PARTIALLY_COMPLETED or TransportRequestStatus.FAILED:
+                    await notifications.ResolveAsync($"request:{e.RequestId}:recovery", cancellationToken);
+                    break;
+            }
+        });
+
+    /// <summary>TRN-01 / TRN-02: the requester hears that their request was closed and why; cargo left on a robot is the floor's job.</summary>
+    public Task HandleAsync(TransportRequestClosedByOperator e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(async () =>
+        {
+            var rejected = e.Status == TransportRequestStatus.REJECTED;
+            if (e.ActorId != e.RequestedBy)
+            {
+                await notifications.PublishAsync(
+                    new NotificationDraft(
+                        rejected ? NotificationType.WARNING : NotificationType.INFO,
+                        rejected ? "REQUEST_REJECTED" : "REQUEST_CANCELLED",
+                        $"Transport request {e.RequestCode} was {(rejected ? "rejected" : "cancelled")}",
+                        $"Reason: {e.Reason}",
+                        Request,
+                        e.RequestId,
+                        $"request:{e.RequestId}:{(rejected ? "rejected" : "cancelled")}",
+                        OncePerSituation: true,
+                        Audience: NotificationAudience.Person(e.RequestedBy)),
+                    cancellationToken);
+            }
+
+            if (e.ContainersInRecovery > 0)
+            {
+                await notifications.PublishAsync(
+                    new NotificationDraft(
+                        NotificationType.ALERT,
+                        "REQUEST_CANCEL_RECOVERY",
+                        $"Cancelled request {e.RequestCode} still has cargo on a robot",
+                        $"{e.ContainersInRecovery} container(s) are on a robot. Unload them and cancel the Job, or resume it to deliver them.",
+                        Request,
+                        e.RequestId,
+                        $"request:{e.RequestId}:recovery",
+                        OncePerSituation: true,
+                        Audience: NotificationAudience.Floor),
+                    cancellationToken);
             }
         });
 

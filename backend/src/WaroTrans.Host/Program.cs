@@ -122,6 +122,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRobotRealtimeNotifier, SignalRRobotRealtimeNotifier>();
+builder.Services.AddSingleton<WaroTrans.Fleet.Traffic.ITrafficRealtimeNotifier, SignalRTrafficRealtimeNotifier>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStatusChanged>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<NotificationCreated>, SignalRNotificationForwarder>();
@@ -134,6 +135,9 @@ builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, Admin
 builder.Services.AddScoped<IIntegrationEventHandler<JobWaitingToStart>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepWaitingForPerson>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestClosedByOperator>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, SignalRJobRealtimeForwarder>();
+builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestClosedByOperator>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobContainerStatusChanged>, AuditEventRecorder>();
 builder.Services.AddOpenApi();
 

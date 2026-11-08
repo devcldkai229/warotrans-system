@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { JobContainerStatus, JobStatus, JobStepStatus } from './contracts'
+import type { ActionAvailability, JobContainerStatus, JobStatus, JobStepStatus } from './contracts'
 
 /** GET /api/workflow-execution/jobs item. */
 export interface JobSummaryDto {
@@ -64,6 +64,8 @@ export interface JobDetailDto extends Omit<JobSummaryDto, 'containerCount'> {
   failureMessage: string | null
   containers: JobContainerDto[]
   tasks: JobTaskDto[]
+  /** BOTH-04: START / PAUSE / RESUME / CANCEL as the server decides them for this user. */
+  availableActions: ActionAvailability<'START' | 'PAUSE' | 'RESUME' | 'CANCEL'>[]
 }
 
 export function listJobs(params: { status?: JobStatus; transportRequestId?: string; take?: number } = {}) {

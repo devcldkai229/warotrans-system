@@ -15,7 +15,7 @@ export function TransportRequestDetailScreen() {
   const { params, navigate, goBack } = useNavigation();
   const requestId = typeof params?.requestId === 'string' ? params.requestId : '';
   const insets = useSafeAreaInsets();
-  const { lastJobUpdate } = useRealtime();
+  const { lastJobUpdate, lastTransportStatus } = useRealtime();
   const queryClient = useQueryClient();
   const requestKey = ['transport-request', requestId];
   const jobsKey = ['transport-request-jobs', requestId];
@@ -42,6 +42,13 @@ export function TransportRequestDetailScreen() {
     void queryClient.invalidateQueries({ queryKey: ['transport-request', requestId] });
     void queryClient.invalidateQueries({ queryKey: ['transport-request-jobs', requestId] });
   }, [lastJobUpdate, requestId, queryClient]);
+
+  // RTM-02: this request moved (detail delivered, cancelled, rejected …): refetch it from the API.
+  useEffect(() => {
+    if (!lastTransportStatus || lastTransportStatus.transportRequestId !== requestId) return;
+    void queryClient.invalidateQueries({ queryKey: ['transport-request', requestId] });
+    void queryClient.invalidateQueries({ queryKey: ['transport-request-jobs', requestId] });
+  }, [lastTransportStatus, requestId, queryClient]);
 
   const refresh = () => { void request.refetch(); void jobs.refetch(); };
   const data = request.data;

@@ -422,7 +422,7 @@ export function JobDetailPage() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <JobOperatorActions jobId={job.id} status={job.status} failureCode={job.failureCode} />
+            <JobOperatorActions jobId={job.id} actions={job.availableActions ?? []} failureCode={job.failureCode} />
             <p className="text-sm text-muted">
               Created at <span className="text-ink tabular-nums">{formatClock(job.createdAt)}</span>
             </p>

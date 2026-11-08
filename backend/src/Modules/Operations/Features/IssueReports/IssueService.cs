@@ -73,23 +73,47 @@ public sealed class IssueService(
     public async Task<Guid> ReportFromStepAsync(StepIssueDraft draft, CancellationToken cancellationToken = default)
     {
         var sourceKey = $"step:{draft.JobStepId}";
+        return await CreateOnceAsync(sourceKey, draft.ReportedBy, now =>
+        {
+            var issue = NewIssue(draft.ReportedBy ?? Guid.Empty, now);
+            issue.IssueType = draft.RobotId is null ? IssueType.JOB : IssueType.ROBOT;
+            issue.Severity = IssueSeverity.MEDIUM;
+            issue.Description = draft.Description;
+            issue.JobId = draft.JobId;
+            issue.JobStepId = draft.JobStepId;
+            issue.RobotId = draft.RobotId;
+            issue.ContainerId = draft.ContainerId;
+            issue.Metadata = new MongoDB.Bson.BsonDocument { ["jobNo"] = draft.JobNo, ["stepKey"] = draft.StepKey };
+            return issue;
+        }, cancellationToken);
+    }
+
+    /// <summary>An issue the system raises (e.g. cargo on a robot of a cancelled request). Idempotent on the source key.</summary>
+    public Task<Guid> ReportAsync(SystemIssueDraft draft, CancellationToken cancellationToken = default) =>
+        CreateOnceAsync($"system:{draft.SourceKey}", draft.ReportedBy, now =>
+        {
+            var issue = NewIssue(draft.ReportedBy ?? Guid.Empty, now);
+            issue.IssueType = draft.TransportRequestId is not null ? IssueType.TRANSPORT : IssueType.JOB;
+            issue.TransportRequestId = draft.TransportRequestId;
+            issue.Severity = draft.High ? IssueSeverity.HIGH : IssueSeverity.MEDIUM;
+            issue.Description = draft.Description;
+            issue.JobId = draft.JobId;
+            issue.RobotId = draft.RobotId;
+            issue.ContainerId = draft.ContainerId;
+            issue.Metadata = new MongoDB.Bson.BsonDocument { ["jobNo"] = draft.JobNo, ["source"] = draft.SourceKey };
+            return issue;
+        }, cancellationToken);
+
+    private async Task<Guid> CreateOnceAsync(string sourceKey, Guid? reportedBy, Func<DateTimeOffset, IssueReport> build, CancellationToken cancellationToken)
+    {
         var existing = await mongo.IssueReports.Find(i => i.SourceKey == sourceKey).Project(i => i.Id).FirstOrDefaultAsync(cancellationToken);
         if (existing != Guid.Empty)
         {
             return existing;
         }
 
-        var now = clock.GetUtcNow();
-        var issue = NewIssue(draft.ReportedBy ?? Guid.Empty, now);
-        issue.IssueType = draft.RobotId is null ? IssueType.JOB : IssueType.ROBOT;
-        issue.Severity = IssueSeverity.MEDIUM;
-        issue.Description = draft.Description;
-        issue.JobId = draft.JobId;
-        issue.JobStepId = draft.JobStepId;
-        issue.RobotId = draft.RobotId;
-        issue.ContainerId = draft.ContainerId;
+        var issue = build(clock.GetUtcNow());
         issue.SourceKey = sourceKey;
-        issue.Metadata = new MongoDB.Bson.BsonDocument { ["jobNo"] = draft.JobNo, ["stepKey"] = draft.StepKey };
 
         try
         {
