@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Account, Product, ProductCategory } from '@/shared/api/contracts'
 import { listWarehouses } from '@/shared/api/warehouses'
 import { cx } from '@/shared/lib/cx'
+import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
 import { listAccounts } from '@/features/accounts/api'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AccountsSection } from './AccountsSection'
@@ -13,7 +14,7 @@ import { InventorySection } from './InventorySection'
 import { LocationsSection } from './LocationsSection'
 import { ProductsSection } from './ProductsSection'
 import { RolesSection } from './RolesSection'
-import { useStockVouchers } from './stockVouchers'
+import { VOUCHERS_KEY, useStockVouchers } from './stockVouchers'
 import { VouchersSection } from './VouchersSection'
 import { WarehousesSection } from './WarehousesSection'
 import {
@@ -132,37 +133,68 @@ export function ManagementPage() {
     }
   }, [])
 
+  // Containers and stock change when a robot delivers, so both lists reload in place (no "Loading" flash): on mount, when
+  // their tab is opened, and shortly after any Job update (the stock write lands just after the dropoff is confirmed).
+  const mounted = useRef(true)
   useEffect(() => {
-    let cancelled = false
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  const reloadContainers = useCallback(() => {
     listManagedContainers()
       .then((listing) => {
-        if (cancelled) return
+        if (!mounted.current) return
         setContainers(listing)
         setContainerState('ready')
       })
       .catch(() => {
-        if (!cancelled) setContainerState('error')
+        if (mounted.current) setContainerState((current) => (current === 'ready' ? current : 'error'))
       })
-    return () => {
-      cancelled = true
-    }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
+  const reloadInventory = useCallback(() => {
     listManagedInventory()
       .then((listing) => {
-        if (cancelled) return
+        if (!mounted.current) return
         setInventory(listing)
         setInventoryState('ready')
       })
       .catch(() => {
-        if (!cancelled) setInventoryState('error')
+        if (mounted.current) setInventoryState((current) => (current === 'ready' ? current : 'error'))
       })
-    return () => {
-      cancelled = true
-    }
   }, [])
+
+  useEffect(() => {
+    reloadContainers()
+    reloadInventory()
+  }, [reloadContainers, reloadInventory])
+
+  useEffect(() => {
+    if (tab === 'containers') reloadContainers()
+    if (tab === 'inventory') reloadInventory()
+  }, [tab, reloadContainers, reloadInventory])
+
+  const queryClient = useQueryClient()
+  const reloadTimer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current)
+    },
+    [],
+  )
+  const onJobUpdated = useCallback(() => {
+    if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current)
+    reloadTimer.current = window.setTimeout(() => {
+      reloadTimer.current = null
+      reloadContainers()
+      reloadInventory()
+      void queryClient.invalidateQueries({ queryKey: VOUCHERS_KEY })
+    }, 1500)
+  }, [reloadContainers, reloadInventory, queryClient])
+  useNotificationsHub({ jobUpdated: onJobUpdated })
 
   useEffect(() => {
     let cancelled = false
