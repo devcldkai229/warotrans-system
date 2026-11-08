@@ -18,11 +18,14 @@ interface RobotDetailPanelProps {
   onManual?: () => void
 }
 
-const ACTIONS: { label: string; icon: IconName }[] = [
+/**
+ * Robot commands. Taking a robot out of dispatch is the Disable button above. An action the backend cannot run yet is
+ * shown disabled with its reason instead of doing nothing.
+ */
+const ACTIONS: { label: string; icon: IconName; unavailable?: string }[] = [
   { label: 'Manual', icon: 'gamepad' },
-  { label: 'Pause', icon: 'pause' },
-  { label: 'Unavailable', icon: 'stop' },
-  { label: 'Localize', icon: 'crosshair' },
+  { label: 'Pause', icon: 'pause', unavailable: 'Pausing a robot needs the Pause Job API, which is not available yet.' },
+  { label: 'Localize', icon: 'crosshair', unavailable: 'The robot does not accept a re-localize command yet.' },
 ]
 
 const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
@@ -349,21 +352,30 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
           </div>
         ) : null}
 
-        <div className="my-6 grid grid-cols-4 gap-2">
+        <div className="mt-6 grid grid-cols-3 gap-2">
           {ACTIONS.map((action) => (
             <button
               key={action.label}
               type="button"
-              className="group flex flex-col items-center gap-2 text-xs text-ink-2"
+              className="group flex flex-col items-center gap-2 text-xs text-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={Boolean(action.unavailable) || (action.label === 'Manual' && !onManual)}
+              title={action.unavailable}
               onClick={action.label === 'Manual' ? onManual : undefined}
             >
-              <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-hover:bg-container-higher">
+              <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-enabled:group-hover:bg-container-higher">
                 <Icon name={action.icon} size={18} />
               </span>
               {action.label}
             </button>
           ))}
         </div>
+        <ul className="mt-3 mb-6 flex flex-col gap-1 text-xs text-muted">
+          {ACTIONS.filter((action) => action.unavailable).map((action) => (
+            <li key={action.label}>
+              <span className="font-medium text-ink-2">{action.label}:</span> {action.unavailable}
+            </li>
+          ))}
+        </ul>
 
         {navigationState ? (
           <p className="mb-4 flex items-baseline justify-between gap-4 text-sm">
