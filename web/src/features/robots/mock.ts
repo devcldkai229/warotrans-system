@@ -119,9 +119,6 @@ export const ROBOTS: RobotView[] = [
   },
 ]
 
-// TODO(backend): the live-map label has no endpoint yet.
-export const LIVE_MAP_LABEL = 'Live › map v7 : latest'
-
 // TODO(backend): fleet.robot_state_events has no read endpoint yet. Newest first.
 const event = (
   robot: number,
