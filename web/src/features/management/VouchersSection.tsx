@@ -513,7 +513,7 @@ function AddContainersDialog({
   })
 
   const onVoucher = useMemo(() => new Set(voucher.lines.map((line) => line.containerId)), [voucher.lines])
-  // Inbound takes received Containers that are not on a shelf yet; outbound takes shelved ones of this warehouse.
+  // Inbound takes received Containers (CREATED/PACKED, wherever they were received); outbound takes stored ones.
   // Containers a robot is already moving stay listed (so staff see why they are missing) but cannot be ticked.
   const candidates = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -522,7 +522,7 @@ function AddContainersDialog({
         (container) =>
           !onVoucher.has(container.id) &&
           (inbound
-            ? (container.status === 'CREATED' || container.status === 'PACKED') && container.currentStorageLocationId === null
+            ? container.status === 'CREATED' || container.status === 'PACKED'
             : container.status === 'STORED' && container.currentStorageLocationId !== null) &&
           (needle === '' ||
             container.barcode.toLowerCase().includes(needle) ||
