@@ -105,6 +105,7 @@ public static class WorkflowExecutionModule
         group.MapGetJob();
         group.MapGetJobStatistics();
         group.MapStartJob();
+        WaroTrans.WorkflowExecution.Features.Dispatch.DispatchEndpoints.Map(group);
         group.MapResumeJob();
         group.MapCancelJob();
         WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobEndpoint.MapPauseJob(group);

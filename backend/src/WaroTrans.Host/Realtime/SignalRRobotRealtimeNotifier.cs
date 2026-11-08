@@ -34,7 +34,7 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
         double poseX,
         double poseY,
         double poseYaw,
-        decimal batteryPercent,
+        decimal? batteryPercent,
         NavigationStatus? navigationStatus,
         LocalizationStatus? localizationStatus,
         DateTimeOffset? lastTelemetryAt,

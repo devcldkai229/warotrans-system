@@ -201,7 +201,8 @@ export interface RobotResponse {
   name: string;
   status: RobotStatus;
   isOnline: boolean;
-  batteryPercent: number;
+  /** HW-04: null = never reported (Unknown), never 0 %. */
+  batteryPercent: number | null;
   poseX: number;
   poseY: number;
   poseYaw: number;

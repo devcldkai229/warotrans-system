@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { ActionAvailability, JobContainerStatus, JobStatus, JobStepStatus } from './contracts'
+import type { ActionAvailability, DispatchCandidate, DispatchDecision, JobContainerStatus, JobStatus, JobStepStatus } from './contracts'
 
 /** GET /api/workflow-execution/jobs item. */
 export interface JobSummaryDto {
@@ -116,4 +116,22 @@ export function pauseJob(id: string, reason?: string) {
 /** Operator cancel (existing backend endpoint, job.cancel). */
 export function cancelJob(id: string, reason?: string) {
   return apiRequest<unknown>(`/api/workflow-execution/jobs/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) })
+}
+
+/** FL-01: every robot on the Job's map, eligible or not and why, best first. */
+export function getDispatchCandidates(jobId: string) {
+  return apiRequest<DispatchCandidate[]>(`/api/workflow-execution/jobs/${jobId}/dispatch-candidates`)
+}
+
+/** FLT-01: the Job's dispatch decisions, newest first. */
+export function getDispatchDecisions(jobId: string) {
+  return apiRequest<DispatchDecision[]>(`/api/workflow-execution/jobs/${jobId}/dispatch-decisions`)
+}
+
+/** FL-02: start the Job on a robot (or the best one). overrideReason needs dispatch.override. */
+export function dispatchJob(jobId: string, body: { robotId?: string; overrideReason?: string }) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/jobs/${jobId}/dispatch`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }

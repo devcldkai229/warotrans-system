@@ -217,7 +217,9 @@ export interface Robot {
   name: string
   status: RobotStatus
   isOnline: boolean
-  batteryPercent: number
+  /** HW-04: null = the robot never reported a battery value. Show "Unknown", never 0 %. */
+  batteryPercent: number | null
+  batteryMeasuredAt?: string | null
   /** Map coordinates in metres (same frame as Endpoint.x / Endpoint.y). */
   poseX: number
   poseY: number
@@ -299,19 +301,33 @@ export interface RobotJobHistoryItem {
   endReason: AssignmentEndReason | null
 }
 
+/** FL-01: one robot as dispatch sees it (GET /jobs/{id}/dispatch-candidates). Lower score = better. */
 export interface DispatchCandidate {
+  robotId: string
   robotCode: string
-  batteryPercent: number
-  status: RobotStatus
-  selected: boolean
+  eligible: boolean
+  /** Stable codes: robot_offline, robot_in_maintenance, battery_low, battery_unknown … */
+  reasons: string[]
+  /** Only battery_unknown / battery_stale: an operator with dispatch.override may use the robot with a reason. */
+  overridable: boolean
+  batteryPercent: number | null
+  batteryState: 'OK' | 'LOW' | 'CRITICAL' | 'UNKNOWN' | 'STALE'
+  distanceMeters: number | null
+  idleSeconds: number | null
+  score: number | null
+  status: string
+  isOnline: boolean
 }
 
-/** DispatchDecision.candidateEvaluations. TODO(backend): JSON shape is not finalized; this is the minimum the UI needs. */
+/** FLT-01: GET /jobs/{id}/dispatch-decisions. */
 export interface DispatchDecision {
   id: string
   jobId: string
-  robotId: string | null
+  selectedRobotId: string | null
   type: DispatchDecisionType
+  trigger: 'START' | 'RESUME'
+  actorId: string | null
+  overrideReason: string | null
   createdAt: string
   candidates: DispatchCandidate[]
 }

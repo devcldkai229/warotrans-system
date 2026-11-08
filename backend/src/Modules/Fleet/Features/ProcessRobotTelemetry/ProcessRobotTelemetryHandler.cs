@@ -43,7 +43,8 @@ public sealed class ProcessRobotTelemetryHandler(
         }
 
         var utcNow = DateTimeOffset.UtcNow;
-        var batteryBefore = robot.BatteryPercent;
+        // A robot that never reported its battery has not "dropped" to low on its first reading: treat it as full.
+        var batteryBefore = robot.BatteryMeasuredAt is null ? 100m : robot.BatteryPercent;
         var errorBefore = robot.ErrorCode;
         var applied = robot.TryApplyTelemetry(
             message.BootId,
@@ -61,6 +62,11 @@ public sealed class ProcessRobotTelemetryHandler(
             message.MapVersionCode,
             message.CurrentCommandId,
             message.ErrorCode);
+
+        if (applied)
+        {
+            robot.ApplyBatteryMetadata(message.BatteryVoltage, message.BatteryEstimationMode, message.BatteryConfidence);
+        }
 
         if (!applied)
         {
@@ -88,6 +94,10 @@ public sealed class ProcessRobotTelemetryHandler(
                     .SetProperty(r => r.PoseY, robot.PoseY)
                     .SetProperty(r => r.PoseYaw, robot.PoseYaw)
                     .SetProperty(r => r.BatteryPercent, robot.BatteryPercent)
+                    .SetProperty(r => r.BatteryMeasuredAt, robot.BatteryMeasuredAt)
+                    .SetProperty(r => r.BatteryVoltage, robot.BatteryVoltage)
+                    .SetProperty(r => r.BatteryEstimationMode, robot.BatteryEstimationMode)
+                    .SetProperty(r => r.BatteryConfidence, robot.BatteryConfidence)
                     .SetProperty(r => r.NavigationStatus, robot.NavigationStatus)
                     .SetProperty(r => r.LocalizationStatus, robot.LocalizationStatus)
                     .SetProperty(r => r.LinearVelocity, robot.LinearVelocity)
@@ -103,6 +113,7 @@ public sealed class ProcessRobotTelemetryHandler(
 
         // Admin notifications: only the moment something starts, not every reading while it lasts.
         if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent
+            && message.BatteryPercent is not null
             && robot.BatteryPercent <= GetRobotStatisticsHandler.LowBatteryPercent
             && robot.Status != RobotStatus.CHARGING)
         {
@@ -125,7 +136,7 @@ public sealed class ProcessRobotTelemetryHandler(
             robot.PoseX,
             robot.PoseY,
             robot.PoseYaw,
-            robot.BatteryPercent,
+            robot.BatteryMeasuredAt is null ? null : robot.BatteryPercent,
             robot.NavigationStatus,
             robot.LocalizationStatus,
             robot.LastTelemetryAt,

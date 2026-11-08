@@ -9,7 +9,7 @@ export interface RobotTelemetryMessage {
   poseX: number
   poseY: number
   poseYaw: number
-  batteryPercent: number
+  batteryPercent: number | null
   navigationStatus: string | null
   localizationStatus: string | null
   lastTelemetryAt: string | null

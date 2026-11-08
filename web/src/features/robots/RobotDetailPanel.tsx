@@ -6,7 +6,7 @@ import { disableRobot, enableRobot } from '@/shared/api/fleet'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
-import { formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
+import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
@@ -112,13 +112,14 @@ function buildSections(robot: RobotView): Section[] {
     {
       id: 'telemetry',
       label: 'Telemetry',
-      summary: hasTelemetry ? `${robot.batteryPercent}%` : 'No telemetry yet',
+      summary: hasTelemetry ? formatBattery(robot.batteryPercent) : 'No telemetry yet',
       body: (
         <dl>
           <Field label="Battery">
             {hasTelemetry ? (
               <>
-                {robot.batteryPercent}% <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
+                {formatBattery(robot.batteryPercent)}{' '}
+                {robot.batteryPercent === null ? null : <Meter percent={robot.batteryPercent} tone="green" className="w-12" />}
               </>
             ) : (
               '—'

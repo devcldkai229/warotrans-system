@@ -11,7 +11,8 @@ public sealed record RobotResponse(
     string Name,
     RobotStatus Status,
     bool IsOnline,
-    decimal BatteryPercent,
+    // HW-04: null = the robot never reported a battery value (Unknown), never a fake 0 %.
+    decimal? BatteryPercent,
     double PoseX,
     double PoseY,
     double PoseYaw,
@@ -33,7 +34,11 @@ public sealed record RobotResponse(
     DateTimeOffset? ManualLeaseUntil = null,
     string? MaintenanceReason = null,
     DateTimeOffset? MaintenanceSince = null,
-    IReadOnlyList<string>? Capabilities = null)
+    IReadOnlyList<string>? Capabilities = null,
+    DateTimeOffset? BatteryMeasuredAt = null,
+    double? BatteryVoltage = null,
+    string? BatteryEstimationMode = null,
+    string? BatteryConfidence = null)
 {
     public static RobotResponse From(Robot robot) => new(
         robot.Id,
@@ -43,7 +48,7 @@ public sealed record RobotResponse(
         robot.Name,
         robot.Status,
         robot.IsOnline,
-        robot.BatteryPercent,
+        robot.BatteryMeasuredAt is null ? null : robot.BatteryPercent,
         robot.PoseX,
         robot.PoseY,
         robot.PoseYaw,
@@ -65,5 +70,9 @@ public sealed record RobotResponse(
         robot.HasActiveManualLease(DateTimeOffset.UtcNow) ? robot.ManualLeaseUntil : null,
         robot.MaintenanceReason,
         robot.MaintenanceSince,
-        robot.Capabilities?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? []);
+        robot.Capabilities?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [],
+        robot.BatteryMeasuredAt,
+        robot.BatteryVoltage,
+        robot.BatteryEstimationMode,
+        robot.BatteryConfidence);
 }

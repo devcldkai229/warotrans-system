@@ -31,6 +31,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
                     b.Property<JsonDocument>("CandidateEvaluations")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -44,9 +48,19 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
 
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("override_reason");
+
                     b.Property<Guid?>("RobotId")
                         .HasColumnType("uuid")
                         .HasColumnName("robot_id");
+
+                    b.Property<string>("Trigger")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("trigger");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -193,10 +207,28 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("angular_velocity");
 
+                    b.Property<string>("BatteryConfidence")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("battery_confidence");
+
+                    b.Property<string>("BatteryEstimationMode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("battery_estimation_mode");
+
+                    b.Property<DateTimeOffset?>("BatteryMeasuredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("battery_measured_at");
+
                     b.Property<decimal>("BatteryPercent")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("battery_percent");
+
+                    b.Property<double?>("BatteryVoltage")
+                        .HasColumnType("double precision")
+                        .HasColumnName("battery_voltage");
 
                     b.Property<string>("Capabilities")
                         .HasMaxLength(200)

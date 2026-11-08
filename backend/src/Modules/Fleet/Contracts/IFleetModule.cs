@@ -10,10 +10,28 @@ public interface IFleetModule
 {
     Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default);
 
-    /// <summary>Robots that may take new work on a map: enabled, online, AVAILABLE; best first.</summary>
+    /// <summary>Robots that may take new work on a map (FL-01 eligible, ignoring other Jobs); best first.</summary>
     Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// FL-01: every robot of the map's warehouse with its eligibility, reasons and score, eligible best-first.
+    /// The default treats the plain candidates as eligible (test doubles); Fleet evaluates the full policy.
+    /// </summary>
+    async Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(DispatchQuery query, CancellationToken cancellationToken = default) =>
+        (await GetDispatchCandidatesAsync(query.MapVersionId, cancellationToken))
+        .Select(r => new DispatchCandidate(
+            r.Id, r.Code, !query.BusyRobotIds.Contains(r.Id),
+            query.BusyRobotIds.Contains(r.Id) ? [DispatchReasons.Busy] : [],
+            r.BatteryPercent, "OK", null, null, 0, r.Status.ToString(), r.IsOnline))
+        .ToList();
+
+    /// <summary>FLT-01: stores what dispatch decided and on which candidates. Default: not recorded.</summary>
+    Task RecordDispatchDecisionAsync(DispatchDecisionRecord record, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    Task<IReadOnlyList<DispatchDecisionView>> GetDispatchDecisionsAsync(Guid jobId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<DispatchDecisionView>>([]);
 
     /// <summary>
     /// Sends NAVIGATE_TO_POSE to the robot for one Job step. Progress comes back asynchronously as
@@ -90,7 +108,8 @@ public sealed record RobotSnapshot(
     double PoseY,
     double PoseYaw,
     bool MotionHeld = false,
-    bool InManualMode = false);
+    bool InManualMode = false,
+    DateTimeOffset? BatteryMeasuredAt = null);
 
 /// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
 public sealed record RouteGrantSnapshot(string GraphHash, IReadOnlyList<int> EdgeIds);

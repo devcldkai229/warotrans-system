@@ -74,13 +74,49 @@ public sealed class JobExecutionEngine(
     // ------------------------------------------------------------------ start
 
     /// <summary>Assigns a robot (given or best available on the Job's map) and starts executing.</summary>
-    public async Task<Job> StartAsync(Guid jobId, Guid? robotId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// FL-02: choosing a robot and saving the assignment is one critical section, so two Jobs started at the same
+    /// moment cannot both take the same free robot (single backend instance; the busy check reads committed Jobs).
+    /// </summary>
+    private static readonly SemaphoreSlim DispatchGate = new(1, 1);
+
+    public async Task<Job> StartAsync(
+        Guid jobId,
+        Guid? robotId,
+        CancellationToken cancellationToken = default,
+        DispatchOverride? dispatchOverride = null)
+    {
+        Job job;
+        bool assigned;
+        await DispatchGate.WaitAsync(cancellationToken);
+        try
+        {
+            (job, assigned) = await AssignRobotAsync(jobId, robotId, dispatchOverride, cancellationToken);
+        }
+        finally
+        {
+            DispatchGate.Release();
+        }
+
+        if (assigned)
+        {
+            await AdvanceAsync(job.Id, cancellationToken);
+        }
+
+        return job;
+    }
+
+    private async Task<(Job Job, bool Assigned)> AssignRobotAsync(
+        Guid jobId,
+        Guid? robotId,
+        DispatchOverride? dispatchOverride,
+        CancellationToken cancellationToken)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
 
         if (job.Status == JobStatus.RUNNING)
         {
-            return job; // idempotent
+            return (job, false); // idempotent
         }
 
         if (JobActionPolicy.StateReason(JobActionPolicy.Start, job.Status) is { } notStartable)
@@ -89,20 +125,30 @@ public sealed class JobExecutionEngine(
         }
 
         var busyRobots = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
+        // FL-01 / FLT-01: every robot is evaluated (eligible or not, and why) and the decision is stored.
+        var candidates = await EvaluateDispatchAsync(job, busyRobots, cancellationToken);
         RobotSnapshot robot;
         if (robotId is { } requested)
         {
             robot = await fleet.GetRobotAsync(requested, cancellationToken)
                 ?? throw new NotFoundException($"Robot '{requested}' was not found.", "robot_not_found");
             EnsureRobotCanTakeJob(robot, job, busyRobots);
+            EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
         }
         else
         {
-            var candidates = await fleet.GetDispatchCandidatesAsync(job.MapVersionId, cancellationToken);
-            robot = candidates.FirstOrDefault(r => !busyRobots.Contains(r.Id))
-                ?? throw new ConflictException(
-                    "No AVAILABLE robot on the Job's map version is free to take this Job.",
+            var best = candidates.FirstOrDefault(c => c.Eligible);
+            if (best is null)
+            {
+                await fleet.RecordDispatchDecisionAsync(
+                    new DispatchDecisionRecord(job.Id, null, DispatchTriggers.Start, dispatchOverride?.ActorId, null, candidates), cancellationToken);
+                throw new ConflictException(
+                    "No robot on the Job's map version is eligible to take this Job" + DescribeRejections(candidates) + ".",
                     "no_robot_available");
+            }
+
+            robot = await fleet.GetRobotAsync(best.RobotId, cancellationToken)
+                ?? throw new NotFoundException($"Robot '{best.RobotId}' was not found.", "robot_not_found");
         }
 
         await EnsureRobotAtHomeForFirstJobAsync(robot, job, cancellationToken);
@@ -122,10 +168,11 @@ public sealed class JobExecutionEngine(
 
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robot.Id, null));
         await SaveAndPublishAsync(cancellationToken);
+        await fleet.RecordDispatchDecisionAsync(
+            new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Start, dispatchOverride?.ActorId, dispatchOverride?.Reason, candidates),
+            cancellationToken);
         logger.LogInformation("Job {JobNo} started on robot {RobotCode}", job.JobNo, robot.Code);
-
-        await AdvanceAsync(job.Id, cancellationToken);
-        return job;
+        return (job, true);
     }
 
     // ------------------------------------------------------------------ resume
@@ -159,8 +206,20 @@ public sealed class JobExecutionEngine(
             robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken) ?? robot;
         }
 
-        EnsureRobotCanTakeJob(robot, job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken));
+        var busyForResume = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
+        EnsureRobotCanTakeJob(robot, job, busyForResume);
         EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
+        // A robot whose battery is known to be low takes no more work; an unknown battery does not block a resume
+        // (the robot was already on this job), it is recorded in the decision.
+        var resumeCandidates = await EvaluateDispatchAsync(job, busyForResume, cancellationToken);
+        if (resumeCandidates.FirstOrDefault(c => c.RobotId == robot.Id) is { } resumeCandidate
+            && resumeCandidate.Reasons.Contains(DispatchReasons.BatteryLow))
+        {
+            throw new ConflictException($"Robot {robot.Code} battery is below the dispatch minimum.", DispatchReasons.BatteryLow);
+        }
+
+        await fleet.RecordDispatchDecisionAsync(
+            new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Resume, null, null, resumeCandidates), cancellationToken);
 
         if (previousRobot is { } previous && previous != robot.Id
             && job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
@@ -1153,9 +1212,13 @@ public sealed class JobExecutionEngine(
             {
                 var robot = await fleet.GetRobotAsync(inputs["robotId"].GetGuid(), cancellationToken);
                 var required = inputs["minimumBatteryPercent"].GetDecimal();
-                var actual = robot?.BatteryPercent ?? 0m;
-                passed = robot is not null && actual >= required;
-                reason = passed ? "battery_ok" : $"battery {actual}% < required {required}%";
+                // HW-04: an unknown battery fails the check; it is never read as 0 % or as full.
+                var actual = robot?.BatteryPercent;
+                passed = actual is { } known && known >= required;
+                reason = passed ? "battery_ok"
+                    : robot is null ? "robot_not_found"
+                    : actual is null ? "battery_unknown"
+                    : $"battery {actual}% < required {required}%";
                 outputs["actualBatteryPercent"] = JsonSerializer.SerializeToElement(actual);
                 outputs["requiredBatteryPercent"] = JsonSerializer.SerializeToElement(required);
                 break;
@@ -1361,6 +1424,63 @@ public sealed class JobExecutionEngine(
 
         return outputs;
     }
+
+    /// <summary>An operator who dispatches a robot the policy would not pick automatically (FL-02).</summary>
+    public sealed record DispatchOverride(Guid? ActorId, string? Reason);
+
+    /// <summary>FL-01 evaluation for this Job: pickup = the stop of its first task, busy = robots on other active Jobs.</summary>
+    public async Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(Job job, IReadOnlySet<Guid> busyRobots, CancellationToken cancellationToken)
+    {
+        double? px = null, py = null;
+        var firstStop = job.JobTasks.OrderBy(t => t.SequenceNo)
+            .Select(t => t.ContextValues.TryGetValue("stopEndpointId", out var v) && v.ValueKind == JsonValueKind.String ? v.GetGuid() : (Guid?)null)
+            .FirstOrDefault(id => id is not null);
+        if (firstStop is { } stopId && await navigation.GetEndpointPoseAsync(stopId, cancellationToken) is { } pose)
+        {
+            px = pose.X;
+            py = pose.Y;
+        }
+
+        return await fleet.EvaluateDispatchAsync(new DispatchQuery(job.MapVersionId, px, py, busyRobots), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        return await EvaluateDispatchAsync(job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// HW-04: a known low battery always blocks. An unknown or stale battery blocks unless an operator overrides it
+    /// with a reason (the endpoint checks dispatch.override).
+    /// </summary>
+    private static void EnsureBatteryAllowsDispatch(DispatchCandidate? candidate, RobotSnapshot robot, DispatchOverride? dispatchOverride)
+    {
+        var battery = candidate?.Reasons
+            .Where(r => r is DispatchReasons.BatteryLow or DispatchReasons.BatteryUnknown or DispatchReasons.BatteryStale)
+            .ToList() ?? [];
+        if (battery.Count == 0)
+        {
+            return;
+        }
+
+        if (battery.Contains(DispatchReasons.BatteryLow))
+        {
+            throw new ConflictException($"Robot {robot.Code} battery is below the dispatch minimum.", DispatchReasons.BatteryLow);
+        }
+
+        if (string.IsNullOrWhiteSpace(dispatchOverride?.Reason))
+        {
+            throw new ConflictException(
+                $"Robot {robot.Code} has no {(battery[0] == DispatchReasons.BatteryStale ? "recent " : "")}battery reading. "
+                + "Dispatch it with an override and a reason if you know it is charged.",
+                battery[0]);
+        }
+    }
+
+    private static string DescribeRejections(IReadOnlyList<DispatchCandidate> candidates) =>
+        candidates.Count == 0 ? " (no robot on this map)"
+        : ": " + string.Join("; ", candidates.Take(5).Select(c => $"{c.RobotCode} {string.Join(", ", c.Reasons)}"));
 
     private static Guid? AssignedRobot(Job job) =>
         job.ContextValues.TryGetValue(AssignedRobotKey, out var value) && value.ValueKind == JsonValueKind.String

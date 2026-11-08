@@ -8,6 +8,8 @@ public sealed class RobotConfiguration : IEntityTypeConfiguration<Robot>
 {
     public void Configure(EntityTypeBuilder<Robot> builder)
     {
+        builder.Property(x => x.BatteryEstimationMode).HasMaxLength(30);
+        builder.Property(x => x.BatteryConfidence).HasMaxLength(30);
         builder.ToTable("robots");
         builder.HasKey(x => x.Id);
 

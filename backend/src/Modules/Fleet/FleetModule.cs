@@ -67,6 +67,9 @@ public static class FleetModule
         services.AddSingleton<WaroTrans.Fleet.Features.RobotHealth.RobotHealthStore>();
         services.AddScoped<WaroTrans.Fleet.Features.RobotHealth.ProcessRobotHealthHandler>();
         services.Configure<RobotCameraOptions>(configuration.GetSection(RobotCameraOptions.SectionName));
+        services.Configure<Features.Dispatch.BatteryOptions>(configuration.GetSection(Features.Dispatch.BatteryOptions.SectionName));
+        services.Configure<Features.Dispatch.DispatchOptions>(configuration.GetSection(Features.Dispatch.DispatchOptions.SectionName));
+        services.AddScoped<Features.Dispatch.DispatchService>();
         services.AddHttpClient(StreamRobotCameraHandler.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddScoped<StreamRobotCameraHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();

@@ -12,6 +12,28 @@ public sealed class Robot
     public string Name { get; set; } = string.Empty;
     public RobotStatus Status { get; set; }
     public decimal BatteryPercent { get; set; }
+
+    /// <summary>
+    /// HW-04: when the robot last reported a battery value. Null = never measured (a robot without a battery sensor
+    /// reports null), so <see cref="BatteryPercent"/> is meaningless and must be shown as Unknown, never as 0 %.
+    /// </summary>
+    public DateTimeOffset? BatteryMeasuredAt { get; set; }
+
+    /// <summary>HW-04: how the last value was obtained, as the robot reported it (shown next to the percentage).</summary>
+    public double? BatteryVoltage { get; set; }
+    public string? BatteryEstimationMode { get; set; }
+    public string? BatteryConfidence { get; set; }
+
+    /// <summary>Keeps the robot's own description of its battery estimate; unknown fields stay null.</summary>
+    public void ApplyBatteryMetadata(double? voltage, string? mode, string? confidence)
+    {
+        BatteryVoltage = voltage;
+        BatteryEstimationMode = Clip(mode);
+        BatteryConfidence = Clip(confidence);
+
+        static string? Clip(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Length > 30 ? value[..30] : value;
+    }
     public double PoseX { get; set; }
     public double PoseY { get; set; }
     public double PoseYaw { get; set; }
@@ -190,6 +212,7 @@ public sealed class Robot
         if (batteryPercent is not null)
         {
             BatteryPercent = batteryPercent.Value;
+            BatteryMeasuredAt = utcNow;
         }
 
         NavigationStatus = navigationStatus;
