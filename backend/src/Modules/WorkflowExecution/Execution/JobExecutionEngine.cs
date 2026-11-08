@@ -26,7 +26,8 @@ namespace WaroTrans.WorkflowExecution.Execution;
 ///   MOVE               NAVIGATE_TO_POSE through Fleet → step EXECUTING; finished by the robot RESULT
 ///                      (RobotCommandLifecycleJobStepHandler → AdvanceAsync)
 ///   HUMAN_INTERACTION  step WAITING; finished by ConfirmHumanStepAsync (Staff App or robot button)
-///   WAIT               not supported in V1 → step FAILED
+///   WAIT               DURATION: step WAITING with a waitUntil; WaitStepWakeupHostedService completes it once due
+///                      (WFX-01). EVENT / ROBOT_STATE are refused at publish and fail at runtime.
 ///
 /// The engine is event driven: it advances until it reaches a step that waits for something
 /// external, then returns. It never assigns robots itself except in StartAsync.
@@ -692,11 +693,94 @@ public sealed class JobExecutionEngine(
                 step.OutputValues = timeoutOutputs;
                 return false;
 
+            case StepType.WAIT when operation == nameof(WaitMode.DURATION):
+            {
+                var seconds = step.ResolvedInputs.TryGetValue("durationSeconds", out var d) && d.ValueKind == JsonValueKind.Number
+                    ? d.GetInt32()
+                    : -1;
+                if (seconds is < 0 or > MaxWaitSeconds)
+                {
+                    Fail(job, task, step, workflowStep.StepKey, "wait_duration_invalid",
+                        $"durationSeconds must be between 0 and {MaxWaitSeconds}.", now);
+                    return true;
+                }
+
+                // Durable: the deadline is stored on the step; no thread or resource is held while waiting.
+                step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(seconds)),
+                    ["waitStartedAt"] = JsonSerializer.SerializeToElement(now)
+                };
+                SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.WAITING, now);
+                return false;
+            }
+
             default:
                 Fail(job, task, step, workflowStep.StepKey, "step_type_not_supported",
                     $"{step.StepType}.{operation} is not executable in V1.", now);
                 return true;
         }
+    }
+
+    public const string WaitUntilKey = "waitUntil";
+
+    /// <summary>A WAIT longer than a day is a scheduling problem, not a step.</summary>
+    private const int MaxWaitSeconds = 86_400;
+
+    /// <summary>
+    /// WFX-01: completes WAIT.DURATION steps whose deadline passed and continues their Jobs. Only RUNNING Jobs are
+    /// woken (a paused Job continues after Resume; the deadline is wall-clock, a pause does not extend it). A step is
+    /// woken exactly once: it must still be WAITING when re-read, and the save is followed by AdvanceAsync.
+    /// </summary>
+    public async Task<int> WakeDueWaitStepsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var jobIds = await db.Jobs.AsNoTracking()
+            .Where(j => j.Status == JobStatus.RUNNING
+                        && j.JobTasks.Any(t => t.JobSteps.Any(s => s.StepType == StepType.WAIT && s.Status == JobStepStatus.WAITING)))
+            .Select(j => j.Id)
+            .ToListAsync(cancellationToken);
+
+        var woken = 0;
+        foreach (var jobId in jobIds)
+        {
+            var job = await LoadJobAsync(jobId, cancellationToken);
+            if (job.Status != JobStatus.RUNNING)
+            {
+                continue;
+            }
+
+            var due = OrderedSteps(job)
+                .Where(x => x.Step.StepType == StepType.WAIT && x.Step.Status == JobStepStatus.WAITING
+                            && x.Step.OutputValues.TryGetValue(WaitUntilKey, out var until)
+                            && until.GetDateTimeOffset() <= now)
+                .ToList();
+            if (due.Count == 0)
+            {
+                continue;
+            }
+
+            var keys = await db.WorkflowSteps.AsNoTracking()
+                .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                .ToDictionaryAsync(s => s.Id, s => s.StepKey, cancellationToken);
+            foreach (var (task, step) in due)
+            {
+                var started = step.OutputValues.TryGetValue("waitStartedAt", out var s) ? s.GetDateTimeOffset() : step.StartedAt ?? now;
+                step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    ["resumeReason"] = JsonSerializer.SerializeToElement("DURATION_ELAPSED"),
+                    ["resumedAt"] = JsonSerializer.SerializeToElement(now),
+                    ["actualWaitSeconds"] = JsonSerializer.SerializeToElement((int)Math.Round((now - started).TotalSeconds))
+                };
+                SetStepStatus(job, task, step, keys.GetValueOrDefault(step.WorkflowStepId, step.Id.ToString("N")), JobStepStatus.COMPLETED, now);
+                woken++;
+            }
+
+            await SaveAndPublishAsync(cancellationToken);
+            await AdvanceAsync(job.Id, cancellationToken);
+        }
+
+        return woken;
     }
 
     private async Task<bool> StartMoveAsync(Job job, JobTask task, JobStep step, string stepKey, CancellationToken cancellationToken)

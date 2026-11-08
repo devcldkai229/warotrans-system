@@ -35,6 +35,26 @@ public class WorkflowDefinitionValidatorTests
             b => Assert.Equal(BindingSourceType.CURRENT_MOVEMENT, b.SourceType));
     }
 
+    [Theory]
+    [InlineData("DURATION", "durationSeconds", true)]
+    [InlineData("EVENT", "eventCode", false)]
+    public void Only_wait_duration_can_be_published(string mode, string input, bool valid)
+    {
+        var model = InternalRelocationWorkflowFactory.CreateValid();
+        var step = model.Tasks.SelectMany(t => t.Steps).First(s => s.StepKey == "CHECK_REQUEST");
+        step.StepType = StepType.WAIT;
+        step.OperationCode = mode;
+        step.InputBindings = new Dictionary<string, StepInputBinding>
+        {
+            [input] = new() { SourceType = BindingSourceType.CONSTANT, ConstantValue = System.Text.Json.JsonSerializer.SerializeToElement(mode == "EVENT" ? "DOOR_OPEN" : (object)5) }
+        };
+
+        var result = WorkflowDefinitionValidator.ValidateForPublish(model);
+
+        Assert.Equal(valid, result.IsValid);
+        if (!valid) Assert.Contains(result.Errors, e => e.Message.Contains("not supported yet", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Publish_fails_on_unknown_current_movement_path()
     {

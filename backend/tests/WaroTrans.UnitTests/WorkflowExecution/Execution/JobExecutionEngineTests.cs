@@ -223,6 +223,72 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(JobStatus.CANCELLED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
     }
 
+    /// <summary>Turns the workflow step <paramref name="stepKey"/> into WAIT.DURATION of <paramref name="seconds"/>.</summary>
+    private async Task MakeWaitStepAsync(string stepKey, int seconds)
+    {
+        var workflowStep = await _db.WorkflowSteps.FirstAsync(w => w.StepKey == stepKey);
+        workflowStep.StepType = StepType.WAIT;
+        workflowStep.Config = new WaroTrans.WorkflowExecution.ValueObjects.WorkflowStepConfig { OperationCode = nameof(WaitMode.DURATION) };
+        workflowStep.InputBindings = new Dictionary<string, WaroTrans.WorkflowExecution.ValueObjects.StepInputBinding>
+        {
+            ["durationSeconds"] = new()
+            {
+                SourceType = WaroTrans.BuildingBlocks.Enums.BindingSourceType.CONSTANT,
+                ConstantValue = JsonSerializer.SerializeToElement(seconds)
+            }
+        };
+        foreach (var jobStep in await _db.JobSteps.Where(s => s.WorkflowStepId == workflowStep.Id).ToListAsync())
+        {
+            jobStep.StepType = StepType.WAIT;
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task A_wait_step_holds_the_job_until_its_deadline_and_then_advances_once()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeWaitStepAsync("CHECK_REQUEST", 3600);
+
+        await Engine().StartAsync(jobId, null);
+
+        Assert.Equal(JobStepStatus.WAITING, (await StepsAsync(jobId)).Single(s => s.Key == "CHECK_REQUEST").Status);
+        Assert.Empty(_fleet.Commands); // nothing after the WAIT ran
+        Assert.Equal(0, await Engine().WakeDueWaitStepsAsync()); // not due yet
+
+        // The deadline passes (stored on the step, so this survives a restart).
+        var wait = await _db.JobSteps.SingleAsync(s => s.Id == _db.JobSteps
+            .Where(x => x.StepType == StepType.WAIT).Select(x => x.Id).First());
+        wait.OutputValues = new Dictionary<string, JsonElement>(wait.OutputValues)
+        {
+            [JobExecutionEngine.WaitUntilKey] = JsonSerializer.SerializeToElement(DateTimeOffset.UtcNow.AddSeconds(-1))
+        };
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(1, await Engine().WakeDueWaitStepsAsync());
+        Assert.Equal(0, await Engine().WakeDueWaitStepsAsync()); // exactly once
+
+        var woken = await _db.JobSteps.SingleAsync(s => s.Id == wait.Id);
+        Assert.Equal(JobStepStatus.COMPLETED, woken.Status);
+        Assert.Equal("DURATION_ELAPSED", woken.OutputValues["resumeReason"].GetString());
+        Assert.Single(_fleet.Commands); // the job moved on to MOVE_PICKUP
+    }
+
+    [Fact]
+    public async Task A_cancelled_job_is_never_woken()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeWaitStepAsync("CHECK_REQUEST", 0);
+        await Engine().StartAsync(jobId, null);
+
+        await Engine().CancelJobAsync(jobId, "not needed");
+
+        Assert.Equal(0, await Engine().WakeDueWaitStepsAsync());
+        Assert.Equal(JobStepStatus.CANCELLED, (await StepsAsync(jobId)).Single(s => s.Key == "CHECK_REQUEST").Status);
+        Assert.Empty(_fleet.Commands);
+    }
+
     private sealed class RecordingIssueReporter(Exception? failWith = null) : IIssueReporter
     {
         public List<StepIssueDraft> Drafts { get; } = [];

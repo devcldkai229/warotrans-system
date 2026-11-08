@@ -389,3 +389,40 @@ export function resolveMapAssetUrl(uri: string | null | undefined): string | nul
   const withToken = token ? `${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : path
   return apiUrl ? `${apiUrl}${withToken}` : withToken
 }
+
+/** NV-01: a named set of endpoints of one map version (e.g. parking spots). */
+export interface EndpointGroup {
+  id: string
+  mapVersionId: string
+  code: string
+  name: string
+  selectionPolicy: 'FIRST_AVAILABLE' | 'NEAREST'
+  isActive: boolean
+  members: { endpointId: string; code: string; name: string }[]
+}
+
+export function listEndpointGroups(mapVersionId: string) {
+  return apiRequest<EndpointGroup[]>(`/api/navigation/maps/${mapVersionId}/endpoint-groups`)
+}
+
+/** DRAFT map only; members must be endpoints of the same map version. */
+export function createEndpointGroup(
+  mapVersionId: string,
+  body: { code: string; name: string; selectionPolicy?: EndpointGroup['selectionPolicy']; endpointIds: string[] },
+) {
+  return apiRequest<EndpointGroup>(`/api/navigation/maps/${mapVersionId}/endpoint-groups`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateEndpointGroup(
+  id: string,
+  body: { name?: string; selectionPolicy?: EndpointGroup['selectionPolicy']; isActive?: boolean; endpointIds?: string[] },
+) {
+  return apiRequest<EndpointGroup>(`/api/navigation/endpoint-groups/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export function deleteEndpointGroup(id: string) {
+  return apiRequest<void>(`/api/navigation/endpoint-groups/${id}`, { method: 'DELETE' })
+}

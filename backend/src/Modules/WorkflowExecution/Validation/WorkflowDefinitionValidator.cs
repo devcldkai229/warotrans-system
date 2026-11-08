@@ -248,6 +248,16 @@ public static class WorkflowDefinitionValidator
             return;
         }
 
+        // WFX-01: only WAIT.DURATION has a runtime. EVENT / ROBOT_STATE have no event source yet, so a workflow that
+        // uses them would publish fine and then fail on the floor; refuse it here instead.
+        if (full && step.StepType == StepType.WAIT && step.OperationCode != nameof(WaitMode.DURATION))
+        {
+            result.Add(
+                $"{stepPath}.operationCode",
+                $"WAIT.{step.OperationCode} is not supported yet; only WAIT.DURATION can run.");
+            return;
+        }
+
         if (!OperationExecutionScopeCatalog.TryGet(step.StepType, step.OperationCode, out var scopeDef))
         {
             result.Add(

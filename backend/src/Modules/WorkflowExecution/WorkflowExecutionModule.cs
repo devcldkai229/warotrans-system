@@ -76,6 +76,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
         services.AddHostedService<HumanConfirmTimeoutHostedService>();
+        services.AddHostedService<Services.WaitStepWakeupHostedService>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
         services.AddScoped<IIntegrationEventHandler<RobotInteractionConfirmed>, RobotInteractionConfirmedHandler>();
