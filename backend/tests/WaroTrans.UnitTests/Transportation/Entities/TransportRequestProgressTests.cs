@@ -38,6 +38,31 @@ public sealed class TransportRequestProgressTests
     }
 
     [Fact]
+    public void All_details_cancelled_ends_the_request_as_cancelled()
+    {
+        var request = Request(TransportRequestDetailStatus.CANCELLED, TransportRequestDetailStatus.CANCELLED);
+        request.Status = TransportRequestStatus.IN_PROGRESS;
+
+        request.ApplyDetailProgress(DateTimeOffset.UtcNow);
+
+        Assert.Equal(TransportRequestStatus.CANCELLED, request.Status);
+        Assert.NotNull(request.CompletedAt);
+    }
+
+    [Theory]
+    [InlineData(TransportRequestDetailStatus.IN_PROGRESS, TransportRequestStatus.IN_PROGRESS)]
+    [InlineData(TransportRequestDetailStatus.COMPLETED, TransportRequestStatus.PARTIALLY_COMPLETED)]
+    public void One_cancelled_detail_does_not_cancel_the_request(TransportRequestDetailStatus other, TransportRequestStatus expected)
+    {
+        var request = Request(TransportRequestDetailStatus.CANCELLED, other);
+
+        request.ApplyDetailProgress(DateTimeOffset.UtcNow);
+
+        Assert.Equal(expected, request.Status);
+        Assert.Null(request.CompletedAt);
+    }
+
+    [Fact]
     public void Cancelled_request_is_not_changed_by_detail_progress()
     {
         var request = Request(TransportRequestDetailStatus.COMPLETED);

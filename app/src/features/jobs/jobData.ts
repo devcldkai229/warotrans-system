@@ -7,6 +7,7 @@ export interface JobContainerItem {
   action: 'UNLOAD' | 'KEEP ONBOARD' | 'PICKUP' | 'DELIVERED'; location: string; product: string; qty: number;
 }
 export interface AppJobItem extends JobSummary {
+  mapVersionId: string;
   tasks: AppJobTaskItem[];
   activeTaskId?: string; assignedStaffId?: string; activeStepId?: string; activeStepOperation?: string;
   hasWaitingHandover?: boolean; assignedRobotId?: string; target: string; route: string; robot: string; isMine: boolean;
@@ -42,7 +43,7 @@ export const JOB_STATUS_PRESENTATION: Record<JobStatus, JobStatusPresentation> =
   FAILED: { label: 'Failed', tone: 'danger' }, CANCELLED: { label: 'Cancelled', tone: 'neutral' },
 };
 export const EMPTY_JOB: AppJobItem = {
-  id: '', jobNo: '', workflowCode: '' as WorkflowCode, workflowName: '', status: 'CREATED',
+  id: '', jobNo: '', mapVersionId: '', workflowCode: '' as WorkflowCode, workflowName: '', status: 'CREATED',
   sourceEndpointCode: '', destinationEndpointCode: '', containerCount: 0, slots: [], steps: [], createdAtUtc: '',
   target: '', route: '', robot: '', isMine: false, battery: '—', speed: '—', currentStop: '',
   stopsCount: 0, routeText: '', payloadSummary: '', containers: [], stopsList: [], tasks: [],
@@ -107,7 +108,7 @@ export function mapJobDetailToAppJobItem(detail: JobDetailResponse, currentStaff
   const completed = allSteps.filter(({ step }) => step.status === 'COMPLETED').length;
   const assignedStaffId = typeof context.assignedStaffId === 'string' ? context.assignedStaffId : undefined;
   return {
-    ...EMPTY_JOB, id: detail.id, jobNo: detail.jobNo, workflowCode: String(context.workflowCode || '') as WorkflowCode,
+    ...EMPTY_JOB, id: detail.id, mapVersionId: detail.mapVersionId, jobNo: detail.jobNo, workflowCode: String(context.workflowCode || '') as WorkflowCode,
     workflowName: String(context.workflowName || 'Workflow'), status: detail.status,
     activeTaskId: typeof context.activeTaskId === 'string' ? context.activeTaskId : undefined, assignedStaffId,
     activeStepId: typeof context.activeStepId === 'string' ? context.activeStepId : undefined,

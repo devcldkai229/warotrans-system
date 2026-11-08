@@ -336,6 +336,7 @@ export function TransportHistoryScreen() {
             <View style={styles.searchBox}>
               <Search size={16} color={colors.textMuted} style={styles.searchIcon} />
               <TextInput
+                accessibilityLabel="Search transport requests"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholder="Search TR, route or container..."

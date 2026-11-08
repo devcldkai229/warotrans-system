@@ -41,7 +41,11 @@ public sealed record MotionAuthority(
     ImmutableArray<TrafficManeuverStep> Maneuvers = default,
     /// <summary>Stage-3 Nav2 plan revision this grant authorizes (0 = edge-based Active).</summary>
     long PlanRevision = 0,
-    string? SemanticMapFingerprint = null);
+    string? SemanticMapFingerprint = null,
+    /// <summary>Stage-3: robot hash of the plan this grant covers (echoed back so the robot can match it).</summary>
+    string? PlanHash = null,
+    /// <summary>Stage-3: the backend NAVIGATE the grant belongs to.</summary>
+    Guid? CommandId = null);
 
 public sealed record RobotTrafficView(
     Guid RobotId,
@@ -171,4 +175,6 @@ public sealed record TrafficReconcileSeed(
     double? PoseX,
     double? PoseY,
     bool LocalizationOk,
-    bool PoseKnown);
+    bool PoseKnown,
+    /// <summary>An open NAVIGATE existed: the robot may have been driving under the previous epoch's authority.</summary>
+    bool InMotion = false);

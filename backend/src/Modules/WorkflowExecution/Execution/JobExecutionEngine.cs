@@ -57,6 +57,12 @@ public sealed class JobExecutionEngine(
 
     private const string RobotCommandIdKey = "robotCommandId";
     private const string SupersededCommandIdsKey = "supersededRobotCommandIds";
+
+    /// <summary>
+    /// MOVE could not start because traffic quarantined / could not place the robot (unlocalized, quarantine, seed
+    /// conflict). Recoverable once an operator reconciles the robot, so the Job pauses instead of failing.
+    /// </summary>
+    private const string TrafficRobotUnavailable = "traffic_robot_unavailable";
     private const string PendingTrafficKey = "pendingTraffic";
 
     /// <summary>Resume needs a pose this fresh: a robot that came back online may be somewhere else.</summary>
@@ -97,6 +103,8 @@ public sealed class JobExecutionEngine(
                     "No AVAILABLE robot on the Job's map version is free to take this Job.",
                     "no_robot_available");
         }
+
+        await EnsureRobotAtHomeForFirstJobAsync(robot, job, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
@@ -651,16 +659,8 @@ public sealed class JobExecutionEngine(
                     return true;
                 }
 
-                // Apply horizon/cell overrides from options.
                 // Same overrides as SemanticPolicyBootstrapHostedService, so both binds describe the same robot.
-                var footprint = trafficOptions!.Value.Footprint;
-                policy = policy with
-                {
-                    HorizonMeters = trafficOptions.Value.SemanticHorizonMeters,
-                    CellSizeMeters = trafficOptions.Value.SemanticCellSizeMeters,
-                    FootprintHalfLength = Math.Max(0.01, footprint.LengthMeters / 2.0 + footprint.PaddingMeters),
-                    FootprintHalfWidth = Math.Max(0.01, footprint.WidthMeters / 2.0 + footprint.PaddingMeters)
-                };
+                policy = trafficOptions!.Value.ApplySemanticOverrides(policy);
 
                 var bind = await segmentedTraffic.BindSemanticPolicyAsync(policy, cancellationToken);
                 if (!bind.Ok)
@@ -670,12 +670,21 @@ public sealed class JobExecutionEngine(
                     return true;
                 }
 
+                // A stored pose is evidence only while fresh: stale telemetry means we do not know where it is.
+                var poseAge = DateTimeOffset.UtcNow - (robot.LastTelemetryAt ?? DateTimeOffset.MinValue);
+                if (poseAge > TimeSpan.FromSeconds(Math.Max(0.5, trafficOptions.Value.PoseMaxAgeSec)))
+                {
+                    Fail(job, task, step, stepKey, TrafficRobotUnavailable,
+                        $"Semantic Mode cannot move the robot: no telemetry for {poseAge.TotalSeconds:F0} s.", DateTimeOffset.UtcNow);
+                    return true;
+                }
+
                 var locOk = robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
                 var tracked = await segmentedTraffic.EnsureTrackedAsync(
                     robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken);
                 if (!tracked.Ok)
                 {
-                    Fail(job, task, step, stepKey, "traffic_robot_unavailable",
+                    Fail(job, task, step, stepKey, TrafficRobotUnavailable,
                         $"Semantic Mode cannot move the robot: {tracked.Reason}", DateTimeOffset.UtcNow);
                     return true;
                 }
@@ -749,7 +758,7 @@ public sealed class JobExecutionEngine(
                     robotId, robot.PoseX, robot.PoseY, locOk, cancellationToken);
                 if (!tracked.Ok)
                 {
-                    Fail(job, task, step, stepKey, "traffic_robot_unavailable",
+                    Fail(job, task, step, stepKey, TrafficRobotUnavailable,
                         $"Active Mode cannot move the robot: {tracked.Reason}", DateTimeOffset.UtcNow);
                     return true;
                 }
@@ -1151,7 +1160,9 @@ public sealed class JobExecutionEngine(
 
         // OnFailure policy. No automatic reassignment: the Job stops in that state until an operator resumes it
         // (POST /jobs/{id}/resume → ResumeAsync) or it is cancelled.
-        job.Status = workflowStep.OnFailure switch
+        // A safety wait (traffic quarantine) is not a failure of the work: hold the Job for the operator whatever the
+        // step's OnFailure says; containers stay as they are. POST /jobs/{id}/resume continues after a reconcile.
+        job.Status = step.ErrorCode == TrafficRobotUnavailable ? JobStatus.PAUSED : workflowStep.OnFailure switch
         {
             StepFailurePolicy.PAUSE_FOR_OPERATOR => JobStatus.PAUSED,
             StepFailurePolicy.REQUEST_REASSIGN => JobStatus.REASSIGNING,
@@ -1321,6 +1332,40 @@ public sealed class JobExecutionEngine(
             .Where(j => j.Id != jobId && ActiveJobStatuses.Contains(j.Status))
             .ToListAsync(cancellationToken);
         return active.Select(AssignedRobot).OfType<Guid>().ToHashSet();
+    }
+
+    /// <summary>
+    /// A robot with a configured home (Traffic:RobotHomeEndpoints) starts its first Job after this host started from
+    /// there, localized: its map pose must agree with where the operator placed it. Later Jobs start wherever the last
+    /// one ended (the workflow has no return-to-parking step). "First" = the coordinator has seen no plan from it yet.
+    /// </summary>
+    private async Task EnsureRobotAtHomeForFirstJobAsync(RobotSnapshot robot, Job job, CancellationToken cancellationToken)
+    {
+        if (trafficOptions?.Value is not { Mode: TrafficCoordinatorMode.Semantic } options
+            || segmentedTraffic is null
+            || !options.RobotHomeEndpoints.TryGetValue(robot.Code, out var homeCode))
+        {
+            return;
+        }
+
+        var snapshot = await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken);
+        if (snapshot.Robots.Any(r => r.RobotId == robot.Id && r.PlanRevision > 0))
+        {
+            return;
+        }
+
+        EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
+        var pose = await navigation.GetEndpointPoseByCodeAsync(job.MapVersionId, homeCode, cancellationToken)
+            ?? throw new ConflictException(
+                $"Robot {robot.Code} has home endpoint '{homeCode}', which is not on the Job's map.", "robot_home_not_on_map");
+        var distance = Math.Sqrt(Math.Pow(robot.PoseX - pose.X, 2) + Math.Pow(robot.PoseY - pose.Y, 2));
+        if (distance > options.RobotHomeToleranceMeters)
+        {
+            throw new ConflictException(
+                $"Robot {robot.Code} must start at {homeCode}, but it is localized {distance:F2} m away from it "
+                + $"(({robot.PoseX:F2}, {robot.PoseY:F2}) vs ({pose.X:F2}, {pose.Y:F2})). Place it there and set its pose.",
+                "robot_not_at_home");
+        }
     }
 
     private static void EnsureRobotCanTakeJob(RobotSnapshot robot, Job job, HashSet<Guid> busyRobots)

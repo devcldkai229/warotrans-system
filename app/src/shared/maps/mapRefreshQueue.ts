@@ -2,14 +2,18 @@ import type { RobotConnectivityEvent, RobotTelemetryEvent } from '../realtime/re
 
 interface RefreshClock {
   now: () => number;
-  setTimeout: typeof setTimeout;
-  clearTimeout: typeof clearTimeout;
+  setTimeout: (handler: () => void, timeout?: number) => any;
+  clearTimeout: (id: any) => void;
 }
 
+const DEFAULT_CLOCK: RefreshClock = {
+  now: () => Date.now(),
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (id) => clearTimeout(id),
+};
+
 /** One request at a time; keep one trailing refresh when more events arrive. */
-export function createMapRefreshQueue(refresh: () => Promise<unknown>, intervalMs = 250, clock: RefreshClock = {
-  now: Date.now, setTimeout, clearTimeout,
-}) {
+export function createMapRefreshQueue(refresh: () => Promise<unknown>, intervalMs = 250, clock: RefreshClock = DEFAULT_CLOCK) {
   let disposed = false;
   let pending = false;
   let running = false;
@@ -60,11 +64,11 @@ interface MapUpdateSource {
   onConnectivityChanged: (callback: (event: RobotConnectivityEvent) => void) => () => void;
 }
 
-export function subscribeMapFleetUpdates(source: MapUpdateSource, refresh: () => Promise<unknown>, clock?: RefreshClock) {
+export function subscribeMapFleetUpdates(source: MapUpdateSource, refresh: () => Promise<unknown>, clock: RefreshClock = DEFAULT_CLOCK) {
   const queue = createMapRefreshQueue(refresh, 250, clock);
   const timestamps = new Map<string, number>();
   const telemetry = source.onTelemetryUpdated(event => {
-    if (!source.isConnected || !isMapTelemetryEvent(event, clock?.now())) return;
+    if (!source.isConnected || !isMapTelemetryEvent(event, clock.now())) return;
     const timestamp = Date.parse(event.lastTelemetryAt!);
     if (timestamps.get(event.robotId) === timestamp) return;
     timestamps.set(event.robotId, timestamp);

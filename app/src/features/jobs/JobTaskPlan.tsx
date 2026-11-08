@@ -25,6 +25,8 @@ export function JobTaskPlan({ tasks, jobStatus, onSelectTask }: JobTaskPlanProps
         </View>
       </View>
       {jobStatus === 'PAUSED' && <View style={styles.pauseBanner}><Text variant="caption" color={colors.warningText}>Job Paused · Execution Is On Hold</Text></View>}
+      {jobStatus === 'COMPLETED' && tasks.some(task => task.status === 'RUNNING' || task.status === 'PENDING' || task.status === 'READY') &&
+        <View style={styles.pauseBanner}><Text variant="caption" color={colors.warningText}>The server reports this Job completed, but some Task statuses are still open. Contact the supervisor to reconcile them before repeating any work.</Text></View>}
       {!tasks.length && <Text variant="body" color={colors.textSecondary}>No tasks are available for this job.</Text>}
       <View>
         {tasks.map((task, index) => {

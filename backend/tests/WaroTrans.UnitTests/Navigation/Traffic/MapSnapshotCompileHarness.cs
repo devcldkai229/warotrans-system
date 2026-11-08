@@ -11,6 +11,11 @@ namespace WaroTrans.UnitTests.Navigation.Traffic;
 /// </summary>
 public static class MapSnapshotCompileHarness
 {
+    /// <summary>Why the MAP-ONE route proofs do not run. Remove the Skip once a map's route graph connects again.</summary>
+    public const string ActiveRouteGraphNotConnected =
+        "Known gap: the route graph does not connect the workflow stops on MAP-ONE-V001 or V004 (CONN_FAIL), " +
+        "so Traffic:Mode=Active is unverified on these maps. Semantic mode does not use the route graph.";
+
     public static string ResolveSampleDir(string mapFolderName)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

@@ -16,6 +16,7 @@ import { AppNavigator } from './src/app/navigation/AppNavigator';
 import { NavigationProvider } from './src/app/navigation/NavigationContext';
 import { QueryProvider } from './src/app/providers/QueryProvider';
 import { AuthProvider, useAuth } from './src/features/auth/authContext';
+import { AuthConnectionScreen } from './src/features/auth/AuthConnectionScreen';
 import { SafetyHoldProvider } from './src/shared/context/SafetyHoldContext';
 import { ToastProvider } from './src/shared/context/ToastContext';
 import { RealtimeProvider } from './src/shared/realtime';
@@ -24,7 +25,8 @@ import { SIMULATED_STATUS_BAR } from './src/shared/theme/layout';
 import { typography } from './src/shared/theme/typography';
 
 function AuthenticatedShell() {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, connectionError, retrySession, logout } = useAuth();
+  if (connectionError) return <AuthConnectionScreen message={connectionError} loading={isLoading} onRetry={retrySession} onSignOut={logout} />;
   if (isLoading) return <View style={{ flex: 1 }} />;
   return (
     <NavigationProvider key={session?.id || 'signed-out'}>
@@ -63,7 +65,6 @@ export default function App() {
         style.id = styleId;
         style.innerHTML = `
           *, *:before, *:after {
-            outline: none !important;
             -webkit-tap-highlight-color: transparent !important;
             -webkit-font-smoothing: antialiased !important;
             -moz-osx-font-smoothing: grayscale !important;
@@ -78,11 +79,6 @@ export default function App() {
           * {
             scrollbar-width: none !important;
             -ms-overflow-style: none !important;
-          }
-          /* Prevent accidental blue text selection when dragging with mouse during demo */
-          body, #web-phone-frame, #web-phone-frame * {
-            -webkit-user-select: none !important;
-            user-select: none !important;
           }
           input, textarea {
             -webkit-user-select: text !important;
@@ -103,15 +99,14 @@ export default function App() {
           code, pre, kbd, samp {
             font-family: 'JetBrains Mono', Menlo, 'SF Mono', Consolas, 'Roboto Mono', monospace !important;
           }
-          *:focus, *:focus-visible, *:focus-within {
-            outline: none !important;
-            box-shadow: none !important;
+          :focus-visible {
+            outline: auto !important;
+            outline-offset: 3px;
           }
           button, [role="button"], a {
             cursor: pointer !important;
           }
           button, [role="button"], a, input, select, textarea {
-            outline: none !important;
             -webkit-tap-highlight-color: transparent !important;
           }
           .r-backgroundColor-1vo7fp,

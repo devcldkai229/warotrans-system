@@ -13,6 +13,12 @@ public interface INavigationModule
         IReadOnlyCollection<Guid> endpointIds,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Map-frame pose of the endpoint with this code on a map version, or null when there is none.</summary>
+    Task<EndpointPoseSnapshot?> GetEndpointPoseByCodeAsync(
+        Guid mapVersionId,
+        string code,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Map-frame pose of an endpoint (where a robot must stop), or null when unknown.</summary>
     Task<EndpointPoseSnapshot?> GetEndpointPoseAsync(Guid endpointId, CancellationToken cancellationToken = default);
 }

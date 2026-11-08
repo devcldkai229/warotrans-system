@@ -117,15 +117,23 @@ public sealed class ProcessRobotCommandResultHandler(
                 shadowMoverGuard?.Exit(robot.CurrentMapVersionId, robot.Id);
             }
 
-            if (trafficOptions?.Value.Mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
+            if (trafficOptions?.Value.Mode is TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic
+                && segmentedTraffic is not null)
             {
-                // Active route finished: clear authority (stops RENEW) or quarantine on failure (fail-closed).
+                // Route finished: clear authority (stops RENEW) or quarantine on failure (fail-closed). Semantic grants
+                // are tied to this NAVIGATE; the pose is passed only when fresh and localized (else nothing is released).
+                var maxAge = TimeSpan.FromSeconds(Math.Max(0.5, trafficOptions.Value.PoseMaxAgeSec));
+                var poseFresh = robot is { LocalizationStatus: LocalizationStatus.LOCALIZED, LastTelemetryAt: { } at }
+                                && utcNow - at <= maxAge;
                 await segmentedTraffic.CompleteRouteAsync(
                     command.RobotId,
                     message.Outcome == RobotCommandOutcomes.Succeeded,
                     message.ErrorCode ?? message.Outcome,
                     NavigateAuthorityId(command.PayloadJson),
-                    cancellationToken);
+                    cancellationToken,
+                    command.Id,
+                    poseFresh ? robot!.PoseX : null,
+                    poseFresh ? robot!.PoseY : null);
             }
         }
         else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } targetCommandId)

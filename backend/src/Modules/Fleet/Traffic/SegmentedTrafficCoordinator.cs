@@ -187,10 +187,11 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         }, ct);
 
     public Task<TrafficOpResult> CompleteRouteAsync(
-        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default) =>
+        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default,
+        Guid? commandId = null, double? poseX = null, double? poseY = null) =>
         EnqueueAsync(s =>
         {
-            var result = s.CompleteRoute(robotId, succeeded, reason, authorityId);
+            var result = s.CompleteRoute(robotId, succeeded, reason, authorityId, commandId, poseX, poseY);
             PublishGranted(s);
             return result;
         }, ct);
@@ -318,8 +319,24 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
     public Task<TrafficOpResult> MarkOfflineAsync(Guid robotId, CancellationToken ct = default) =>
         EnqueueAsync(s => s.MarkOffline(robotId), ct);
 
-    public Task<TrafficOpResult> MarkOnlineAsync(Guid robotId, CancellationToken ct = default) =>
-        EnqueueAsync(s => s.MarkOnline(robotId), ct);
+    public Task<TrafficOpResult> MarkOnlineAsync(
+        Guid robotId, CancellationToken ct = default, double? poseX = null, double? poseY = null, bool localizationOk = false) =>
+        EnqueueAsync(s => s.MarkOnline(robotId, poseX, poseY, localizationOk), ct);
+
+    public Task<long> TakeOverAsync(IReadOnlyList<TrafficReconcileSeed> seeds, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            s.BeginEpoch(Math.Max(s.Epoch + 1, _clock.GetUtcNow().ToUnixTimeSeconds()));
+            s.CompleteReconciliation(seeds);
+            return s.Epoch;
+        }, ct);
+
+    public Task SetOpenForGrantsAsync(bool open, string reason, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            s.SetOpenForGrants(open, reason);
+            return TrafficOpResult.Success();
+        }, ct);
 
     public Task<TrafficOpResult> ReconcileRobotAsync(
         Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,

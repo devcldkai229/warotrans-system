@@ -57,6 +57,15 @@ public sealed class TrafficOptions
     /// <summary>Telemetry older than this is not trusted to seed or reconcile occupancy.</summary>
     public double PoseMaxAgeSec { get; set; } = 5.0;
 
+    /// <summary>
+    /// Robot code → endpoint code where that robot must physically stand when it starts its first Job after this host
+    /// started (where the operator placed and localized it). Robots not listed are not checked.
+    /// </summary>
+    public Dictionary<string, string> RobotHomeEndpoints { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>How far (m) a robot's localized pose may be from its home endpoint and still count as being there.</summary>
+    public double RobotHomeToleranceMeters { get; set; } = 0.30;
+
     /// <summary>Directory with Stage-2/3 adapter artifacts (lanes/zones/manifest). Empty = unset.</summary>
     public string SemanticMapDirectory { get; set; } = "";
 
@@ -65,6 +74,31 @@ public sealed class TrafficOptions
 
     /// <summary>Spatial cell size (m) for dynamic conflict resources.</summary>
     public double SemanticCellSizeMeters { get; set; } = 0.5;
+
+    /// <summary>Sideways drift off the proposed path still covered by the reservation (the robot stops beyond it).</summary>
+    public double SemanticPathToleranceMeters { get; set; } = 0.15;
+
+    /// <summary>
+    /// Grant a traffic_plan that belongs to no open backend NAVIGATE (an RViz / CLI goal). Off on real robots: only
+    /// motion the backend commanded is authorized.
+    /// </summary>
+    public bool AllowStandaloneSemanticPlans { get; set; }
+
+    /// <summary>
+    /// Grants wait until this host holds the coordinator lease (one coordinator per map) and has announced its epoch
+    /// to the robots. Off for in-process tests; on in every deployed host.
+    /// </summary>
+    public bool RequireCoordinatorLease { get; set; }
+
+    /// <summary>The one Semantic policy shape both binds (bootstrap and MOVE start) use.</summary>
+    public SemanticTrafficPolicy ApplySemanticOverrides(SemanticTrafficPolicy policy) => policy with
+    {
+        HorizonMeters = SemanticHorizonMeters,
+        CellSizeMeters = SemanticCellSizeMeters,
+        PathToleranceMeters = SemanticPathToleranceMeters,
+        FootprintHalfLength = Math.Max(0.01, Footprint.LengthMeters / 2.0 + Footprint.PaddingMeters),
+        FootprintHalfWidth = Math.Max(0.01, Footprint.WidthMeters / 2.0 + Footprint.PaddingMeters)
+    };
 
     public IReadOnlyList<TrafficStationMeta> ResolveStationMeta()
     {

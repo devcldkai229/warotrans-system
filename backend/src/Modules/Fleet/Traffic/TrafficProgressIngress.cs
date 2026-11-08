@@ -32,6 +32,26 @@ public sealed class TrafficProgressIngress(
             return;
         }
 
+        // A grant is tied to the backend NAVIGATE the plan executes: it must be this robot's open one.
+        if (message.CommandId is Guid commandId)
+        {
+            var open = await db.RobotCommands.AsNoTracking()
+                .AnyAsync(c => c.Id == commandId
+                               && c.RobotId == robot.Id
+                               && c.Type == RobotCommandType.NAVIGATE_TO_POSE
+                               && (c.Status == RobotCommandStatus.SENT
+                                   || c.Status == RobotCommandStatus.ACKED
+                                   || c.Status == RobotCommandStatus.RUNNING), ct)
+                .ConfigureAwait(false);
+            if (!open)
+            {
+                logger.LogWarning(
+                    "traffic_plan robot={RobotCode} rev={Rev} for command {CommandId} that is not its open NAVIGATE; ignored",
+                    message.RobotCode, message.PlanRevision, commandId);
+                return;
+            }
+        }
+
         var poses = message.Poses
             .Select(p => new SemanticPlanPose(p.X, p.Y, p.Yaw))
             .ToImmutableArray();
@@ -47,7 +67,9 @@ public sealed class TrafficProgressIngress(
             poses,
             goal,
             message.JobStepId,
-            message.JobId);
+            message.JobId,
+            PlanHash: message.PlanHash,
+            CommandId: message.CommandId);
         var result = await coordinator.AcquireSemanticPlanAsync(req, ct).ConfigureAwait(false);
         logger.LogInformation(
             "traffic_plan robot={RobotCode} rev={Rev} granted={Granted} queued={Queued} reason={Reason} wait={Wait} blocker={Blocker}",
@@ -156,16 +178,24 @@ public sealed class TrafficProgressIngress(
 
         // Boot / reconnect / post-fault sync (audit T2). Occupancy is rebuilt only from a fresh, localized pose;
         // otherwise the robot is quarantined and keeps everything it held.
+        // The robot's own pose in the message is the freshest evidence (sent at reconnect, before new telemetry has
+        // reached the database); otherwise the stored telemetry, only while fresh.
         var maxAge = TimeSpan.FromSeconds(Math.Max(0.5, options.Value.PoseMaxAgeSec));
-        var poseFresh = robot.LastTelemetryAt is { } at && DateTimeOffset.UtcNow - at <= maxAge;
-        var localized = poseFresh && robot.LocalizationStatus == LocalizationStatus.LOCALIZED;
+        var reported = message is { LocalizationOk: true, PoseX: double, PoseY: double };
+        var poseFresh = reported || (robot.LastTelemetryAt is { } at && DateTimeOffset.UtcNow - at <= maxAge);
+        // A robot that says it is not localized is believed over any telemetry stored before it said so.
+        var localized = reported
+                        || (message.LocalizationOk != false
+                            && poseFresh && robot.LocalizationStatus == LocalizationStatus.LOCALIZED);
+        var poseX = reported ? message.PoseX!.Value : robot.PoseX;
+        var poseY = reported ? message.PoseY!.Value : robot.PoseY;
         var faulted = string.Equals(message.State, "FAULTED", StringComparison.OrdinalIgnoreCase);
         var idle = faulted || string.Equals(message.State, "IDLE", StringComparison.OrdinalIgnoreCase);
         var edges = message.GrantedEdgeIds?.ToImmutableArray() ?? [];
         var result = await coordinator.ReconcileRobotAsync(
             robot.Id,
-            robot.PoseX,
-            robot.PoseY,
+            poseX,
+            poseY,
             localized,
             edges,
             robotReportsIdle: idle,

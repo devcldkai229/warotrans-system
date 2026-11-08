@@ -14,7 +14,26 @@ public sealed record SemanticTrafficPolicy(
     double FootprintHalfLength,
     double FootprintHalfWidth,
     ImmutableArray<SemanticZonePoly> SingleOccupancyZones,
-    ImmutableArray<SemanticZonePoly> NoStopZones);
+    ImmutableArray<SemanticZonePoly> NoStopZones,
+    /// <summary>How far the robot may drift sideways off its proposed path and stay inside what it reserved.</summary>
+    double PathToleranceMeters = 0.15)
+{
+    /// <summary>Circumscribed radius of the (padded) footprint: covers the robot at any heading, so turning in place.</summary>
+    public double FootprintRadiusMeters =>
+        Math.Sqrt(FootprintHalfLength * FootprintHalfLength + FootprintHalfWidth * FootprintHalfWidth);
+
+    public double EffectiveCellSize => Math.Max(0.1, CellSizeMeters);
+
+    /// <summary>Spacing of the samples taken along a path: consecutive samples are at most this far apart.</summary>
+    public double SampleStepMeters => EffectiveCellSize / 4.0;
+
+    /// <summary>
+    /// Disc radius reserved around every path sample: footprint + path tolerance + half a sample step, so the
+    /// footprint anywhere between two samples (at any heading, up to the tolerance off the path) is covered.
+    /// </summary>
+    public double ReserveRadiusMeters =>
+        FootprintRadiusMeters + Math.Max(0, PathToleranceMeters) + SampleStepMeters / 2.0;
+}
 
 public sealed record SemanticZonePoly(
     string Code,
@@ -32,9 +51,16 @@ public sealed record SemanticPlanProposeRequest(
     SemanticPlanPose? Goal,
     Guid? JobStepId,
     Guid? JobId,
-    int Priority = 0);
+    int Priority = 0,
+    /// <summary>Robot-computed hash of the proposed path, echoed in the grant so the robot knows which plan it covers.</summary>
+    string? PlanHash = null,
+    /// <summary>The backend NAVIGATE this plan executes; the grant is tied to it.</summary>
+    Guid? CommandId = null);
 
-/// <summary>Pure geometry helpers for zone + swept-cell resources (no IO).</summary>
+/// <summary>
+/// Pure geometry for zone + swept-cell resources (no IO). The robot gateway (semantic_traffic_client.py) runs the
+/// same arithmetic to know which cells a grant covers; both sides are checked against semantic_cells_vectors.json.
+/// </summary>
 public static class SemanticReservation
 {
     public static bool PointInRing(double x, double y, ImmutableArray<(double X, double Y)> ring)
@@ -59,22 +85,17 @@ public static class SemanticReservation
         return inside;
     }
 
-    public static bool FootprintHitsZone(
-        double x, double y, double yaw,
-        ImmutableArray<(double X, double Y)> ring,
-        double halfL, double halfW)
+    /// <summary>A disc touches a polygon: its centre is inside, or an edge passes within the radius.</summary>
+    public static bool DiscHitsZone(double x, double y, double radius, ImmutableArray<(double X, double Y)> ring)
     {
-        var c = Math.Cos(yaw);
-        var s = Math.Sin(yaw);
-        ReadOnlySpan<(double Lx, double Ly)> corners =
-        [
-            (halfL, halfW), (halfL, -halfW), (-halfL, halfW), (-halfL, -halfW), (0, 0)
-        ];
-        foreach (var (lx, ly) in corners)
+        if (PointInRing(x, y, ring))
         {
-            var wx = x + c * lx - s * ly;
-            var wy = y + s * lx + c * ly;
-            if (PointInRing(wx, wy, ring))
+            return true;
+        }
+
+        for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+        {
+            if (PointToSegmentDistance(x, y, ring[j].X, ring[j].Y, ring[i].X, ring[i].Y) <= radius)
             {
                 return true;
             }
@@ -83,116 +104,149 @@ public static class SemanticReservation
         return false;
     }
 
+    public static string CellId(int ix, int iy) => string.Create(CultureInfo.InvariantCulture, $"cell:{ix}:{iy}");
+
+    /// <summary>Every grid cell the disc touches (exact: distance from the centre to the cell square ≤ radius).</summary>
+    public static void DiscCells(double x, double y, double radius, double cellSize, HashSet<string> into)
+    {
+        var ix0 = (int)Math.Floor((x - radius) / cellSize);
+        var ix1 = (int)Math.Floor((x + radius) / cellSize);
+        var iy0 = (int)Math.Floor((y - radius) / cellSize);
+        var iy1 = (int)Math.Floor((y + radius) / cellSize);
+        for (var ix = ix0; ix <= ix1; ix++)
+        {
+            for (var iy = iy0; iy <= iy1; iy++)
+            {
+                var dx = Math.Max(Math.Max(ix * cellSize - x, 0), x - (ix + 1) * cellSize);
+                var dy = Math.Max(Math.Max(iy * cellSize - y, 0), y - (iy + 1) * cellSize);
+                if (dx * dx + dy * dy <= radius * radius)
+                {
+                    into.Add(CellId(ix, iy));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Points along the path at most <paramref name="step"/> apart, until the travelled distance passes the horizon.
+    /// </summary>
+    public static List<(double X, double Y)> SamplePath(ImmutableArray<SemanticPlanPose> poses, double step, double horizon)
+    {
+        var samples = new List<(double X, double Y)>();
+        if (poses.IsDefaultOrEmpty)
+        {
+            return samples;
+        }
+
+        samples.Add((poses[0].X, poses[0].Y));
+        var traveled = 0.0;
+        for (var i = 1; i < poses.Length && traveled <= horizon; i++)
+        {
+            var (ax, ay) = (poses[i - 1].X, poses[i - 1].Y);
+            var (bx, by) = (poses[i].X, poses[i].Y);
+            var len = Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+            if (len <= 0)
+            {
+                continue;
+            }
+
+            var n = (int)Math.Ceiling(len / step);
+            for (var k = 1; k <= n; k++)
+            {
+                var t = (double)k / n;
+                samples.Add((ax + (bx - ax) * t, ay + (by - ay) * t));
+            }
+
+            traveled += len;
+        }
+
+        return samples;
+    }
+
+    /// <summary>Zones and cells the robot sweeps along the first <c>HorizonMeters</c> of its proposed path.</summary>
     public static ImmutableArray<string> CollectResources(
         SemanticTrafficPolicy policy,
         ImmutableArray<SemanticPlanPose> poses)
     {
-        if (poses.IsDefaultOrEmpty || poses.Length == 0)
+        if (poses.IsDefaultOrEmpty)
         {
             return [];
         }
 
-        var cellSize = Math.Max(0.1, policy.CellSizeMeters);
+        var cellSize = policy.EffectiveCellSize;
         var horizon = Math.Max(cellSize, policy.HorizonMeters);
-        var halfL = policy.FootprintHalfLength;
-        var halfW = policy.FootprintHalfWidth;
+        var radius = policy.ReserveRadiusMeters;
         var resources = new HashSet<string>(StringComparer.Ordinal);
-        var traveled = 0.0;
-
-        for (var i = 0; i < poses.Length; i++)
+        foreach (var (x, y) in SamplePath(poses, policy.SampleStepMeters, horizon))
         {
-            var p = poses[i];
-            if (i > 0)
-            {
-                var prev = poses[i - 1];
-                var dx = p.X - prev.X;
-                var dy = p.Y - prev.Y;
-                traveled += Math.Sqrt(dx * dx + dy * dy);
-                if (traveled > horizon)
-                {
-                    break;
-                }
-            }
-
             foreach (var z in policy.SingleOccupancyZones)
             {
-                if (FootprintHitsZone(p.X, p.Y, p.Yaw, z.Ring, halfL, halfW))
+                if (DiscHitsZone(x, y, radius, z.Ring))
                 {
                     resources.Add($"zone:{z.Code}");
                 }
             }
 
-            // Swept corridor cells (exclusive capacity 1).
-            SampleFootprintCells(p.X, p.Y, p.Yaw, halfL, halfW, cellSize, resources);
+            DiscCells(x, y, radius, cellSize, resources);
         }
 
         return resources.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
     }
 
-    public static void SampleFootprintCells(
-        double x, double y, double yaw,
-        double halfL, double halfW,
-        double cellSize,
-        HashSet<string> into)
-    {
-        var c = Math.Cos(yaw);
-        var s = Math.Sin(yaw);
-        // Coarse sample of footprint AABB in map frame.
-        for (var u = -halfL; u <= halfL + 1e-9; u += Math.Min(halfL, cellSize * 0.5))
-        {
-            for (var v = -halfW; v <= halfW + 1e-9; v += Math.Min(halfW, cellSize * 0.5))
-            {
-                var wx = x + c * u - s * v;
-                var wy = y + s * u + c * v;
-                var ix = (int)Math.Floor(wx / cellSize);
-                var iy = (int)Math.Floor(wy / cellSize);
-                into.Add(string.Create(CultureInfo.InvariantCulture, $"cell:{ix}:{iy}"));
-            }
-        }
-    }
-
+    /// <summary>
+    /// The robot footprint (any heading) grown by <paramref name="margin"/> no longer touches any of the resources.
+    /// Unknown ids and station bays are never clear here (fail closed).
+    /// </summary>
     public static bool IsPhysicallyClearOfResources(
         SemanticTrafficPolicy policy,
-        double x, double y, double yaw,
+        double x, double y,
         IEnumerable<string> resourceIds,
         double margin)
     {
-        var halfL = policy.FootprintHalfLength + margin;
-        var halfW = policy.FootprintHalfWidth + margin;
-        var cellSize = Math.Max(0.1, policy.CellSizeMeters);
+        var radius = policy.FootprintRadiusMeters + Math.Max(0, margin);
+        HashSet<string>? under = null;
         foreach (var rid in resourceIds)
         {
             if (rid.StartsWith("zone:", StringComparison.Ordinal))
             {
                 var code = rid["zone:".Length..];
-                var zone = policy.SingleOccupancyZones.FirstOrDefault(z => z.Code == code);
-                if (zone is null)
-                {
-                    return false; // uncertain → fail closed
-                }
-
-                if (FootprintHitsZone(x, y, yaw, zone.Ring, halfL, halfW))
+                var rings = policy.SingleOccupancyZones.Where(z => z.Code == code).ToList();
+                if (rings.Count == 0 || rings.Any(z => DiscHitsZone(x, y, radius, z.Ring)))
                 {
                     return false;
                 }
             }
             else if (rid.StartsWith("cell:", StringComparison.Ordinal))
             {
-                var held = new HashSet<string>(StringComparer.Ordinal);
-                SampleFootprintCells(x, y, yaw, halfL, halfW, cellSize, held);
-                if (held.Contains(rid))
+                if (under is null)
+                {
+                    under = new HashSet<string>(StringComparer.Ordinal);
+                    DiscCells(x, y, radius, policy.EffectiveCellSize, under);
+                }
+
+                if (under.Contains(rid))
                 {
                     return false;
                 }
             }
-            else if (rid.StartsWith("bay:", StringComparison.Ordinal))
+            else
             {
-                // Bay clearance is pose-based at station; keep held until explicit release.
                 return false;
             }
         }
 
         return true;
+    }
+
+    public static double PointToSegmentDistance(double px, double py, double ax, double ay, double bx, double by)
+    {
+        var vx = bx - ax;
+        var vy = by - ay;
+        var c2 = vx * vx + vy * vy;
+        var t = c2 <= 0 ? 0 : Math.Clamp((vx * (px - ax) + vy * (py - ay)) / c2, 0, 1);
+        var ex = px - (ax + t * vx);
+        var ey = py - (ay + t * vy);
+        return Math.Sqrt(ex * ex + ey * ey);
     }
 
     /// <summary>The map version a semantic bundle was exported from (<c>semantic_manifest.json</c> mapVersionId).</summary>

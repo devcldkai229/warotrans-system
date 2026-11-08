@@ -78,6 +78,10 @@ public static class RobotMqttTopics
     public static string AuthorityState(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/authority_state";
 
+    /// <summary>Backend → all robots (retained): the traffic coordinator epoch now in charge.</summary>
+    public static string TrafficEpoch(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/traffic/epoch";
+
     public static bool TryParse(string topic, string topicPrefix, out string robotCode, out string kind)
     {
         robotCode = string.Empty;
