@@ -121,6 +121,67 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                     b.ToTable("job_assignments", "fleet");
                 });
 
+            modelBuilder.Entity("WaroTrans.Fleet.Entities.MaintenanceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ChecklistJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("checklist_json");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid?>("CompletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("completed_by");
+
+                    b.Property<string>("CompletedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("completed_by_name");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<Guid?>("StartedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("started_by");
+
+                    b.Property<string>("StartedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("started_by_name");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_maintenance_records");
+
+                    b.HasIndex("RobotId", "StartedAt")
+                        .HasDatabaseName("i_x_maintenance_records_robot_id_started_at");
+
+                    b.ToTable("maintenance_records", "fleet");
+                });
+
             modelBuilder.Entity("WaroTrans.Fleet.Entities.Robot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -136,6 +197,11 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("battery_percent");
+
+                    b.Property<string>("Capabilities")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("capabilities");
 
                     b.Property<string>("Code")
                         .IsRequired()
@@ -201,10 +267,40 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("localization_status");
 
+                    b.Property<string>("MaintenanceReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("maintenance_reason");
+
+                    b.Property<DateTimeOffset?>("MaintenanceSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("maintenance_since");
+
+                    b.Property<Guid?>("ManualLeaseHolderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("manual_lease_holder_id");
+
+                    b.Property<string>("ManualLeaseHolderName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("manual_lease_holder_name");
+
+                    b.Property<DateTimeOffset?>("ManualLeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("manual_lease_until");
+
                     b.Property<string>("MapVersionCode")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("map_version_code");
+
+                    b.Property<bool>("MotionHeld")
+                        .HasColumnType("boolean")
+                        .HasColumnName("motion_held");
+
+                    b.Property<DateTimeOffset?>("MotionHoldChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("motion_hold_changed_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -404,6 +500,16 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasDatabaseName("i_x_robot_state_events_robot_id");
 
                     b.ToTable("robot_state_events", "fleet");
+                });
+
+            modelBuilder.Entity("WaroTrans.Fleet.Entities.MaintenanceRecord", b =>
+                {
+                    b.HasOne("WaroTrans.Fleet.Entities.Robot", null)
+                        .WithMany()
+                        .HasForeignKey("RobotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_maintenance_records_robots_robot_id");
                 });
 #pragma warning restore 612, 618
         }

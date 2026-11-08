@@ -378,6 +378,57 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
+    public async Task Operator_pause_stops_the_robot_and_resume_sends_a_new_move()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        var (_, _, _, moveStepId, oldCommand) = _fleet.Commands[0];
+
+        await Engine().PauseAsync(jobId, "pallet in the aisle");
+
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Equal(JobExecutionEngine.OperatorPausedCode, job.FailureCode);
+        Assert.Equal((_fleet.RobotId, "PAUSE"), Assert.Single(_fleet.Stops));
+        Assert.Equal(JobStepStatus.PENDING, (await StepsAsync(jobId)).First(s => s.Key == "MOVE_PICKUP").Status);
+
+        // The robot cancels its goal: that CANCELED result belongs to the superseded command and changes nothing.
+        await RobotResultAsync(moveStepId, outcome: "CANCELED", commandId: oldCommand);
+        Assert.Equal(JobStatus.PAUSED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+
+        // Resume releases the hold first, then drives on with a new command.
+        SetRobot(r => r with { MotionHeld = true });
+        await Engine().ResumeAsync(jobId, null);
+
+        Assert.Equal([_fleet.RobotId], _fleet.Resumes);
+        Assert.Equal(2, _fleet.Commands.Count);
+        Assert.NotEqual(oldCommand, _fleet.Commands[^1].CommandId);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+    }
+
+    [Fact]
+    public async Task Only_a_running_job_can_be_paused()
+    {
+        var jobId = await ProvisionAsync();
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Engine().PauseAsync(jobId, null));
+
+        Assert.Equal("job_not_running", ex.Code);
+        Assert.Empty(_fleet.Stops);
+    }
+
+    [Fact]
+    public async Task A_held_robot_cannot_start_a_job()
+    {
+        var jobId = await ProvisionAsync();
+        SetRobot(r => r with { MotionHeld = true });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Engine().StartAsync(jobId, _fleet.RobotId));
+
+        Assert.Equal("robot_motion_held", ex.Code);
+    }
+
+    [Fact]
     public async Task Resume_drives_back_to_the_stop_when_the_robot_came_back_elsewhere()
     {
         var jobId = await ProvisionAsync();
@@ -799,6 +850,26 @@ public sealed class JobExecutionEngineTests
         {
             Cancels.Add((robotId, navigateCommandId));
             return Task.FromResult(true);
+        }
+
+        public List<(Guid RobotId, string Mode)> Stops { get; } = [];
+        public List<Guid> Resumes { get; } = [];
+
+        public Task<Guid?> StopRobotAsync(Guid robotId, string mode, string? reason, CancellationToken cancellationToken = default)
+        {
+            Stops.Add((robotId, mode));
+            return Task.FromResult<Guid?>(Guid.NewGuid());
+        }
+
+        public Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default)
+        {
+            Resumes.Add(robotId);
+            if (Robots.TryGetValue(robotId, out var robot))
+            {
+                Robots[robotId] = robot with { MotionHeld = false };
+            }
+
+            return Task.FromResult<Guid?>(Guid.NewGuid());
         }
 
         public Task RequestHumanInteractionAsync(

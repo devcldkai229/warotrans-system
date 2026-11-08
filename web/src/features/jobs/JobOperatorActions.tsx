@@ -1,0 +1,72 @@
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/authContext'
+import { ApiError } from '@/shared/api/client'
+import type { JobStatus } from '@/shared/api/contracts'
+import { cancelJob, pauseJob, resumeJob } from '@/shared/api/jobs'
+import { PERMISSIONS } from '@/shared/auth/permissions'
+import { Button } from '@/shared/ui/Button'
+
+const TERMINAL: JobStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED']
+
+/**
+ * WFX-03: operator pause / resume / cancel. A pause stops the robot (STOP mode PAUSE); whether it really stopped is
+ * shown in the robot's Control card (requested → accepted → verified, or unknown).
+ */
+export function JobOperatorActions({ jobId, status, failureCode }: { jobId: string; status: JobStatus; failureCode: string | null }) {
+  const { can } = useAuth()
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+  const act = useMutation({
+    mutationFn: (action: () => Promise<unknown>) => action(),
+    onSuccess: () => {
+      setError(null)
+      void queryClient.invalidateQueries({ queryKey: ['job', jobId] })
+    },
+    onError: (failure) => setError(failure instanceof ApiError ? failure.message : 'The job could not be changed.'),
+  })
+
+  const mayPause = can(PERMISSIONS.jobPause) && status === 'RUNNING'
+  const mayResume = can(PERMISSIONS.jobOperate) && status === 'PAUSED'
+  const mayCancel = can(PERMISSIONS.jobCancel) && !TERMINAL.includes(status)
+  if (!mayPause && !mayResume && !mayCancel) return null
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex gap-2">
+        {mayPause ? (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={act.isPending}
+            onClick={() => {
+              const reason = window.prompt('Why pause this job? (optional)') ?? undefined
+              act.mutate(() => pauseJob(jobId, reason || undefined))
+            }}
+          >
+            Pause
+          </Button>
+        ) : null}
+        {mayResume ? (
+          <Button size="sm" variant="surface" disabled={act.isPending} onClick={() => act.mutate(() => resumeJob(jobId))}>
+            {failureCode === 'operator_paused' ? 'Resume (release the robot)' : 'Resume'}
+          </Button>
+        ) : null}
+        {mayCancel ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={act.isPending}
+            onClick={() => {
+              const reason = window.prompt('Cancel this job? Give a reason.')
+              if (reason) act.mutate(() => cancelJob(jobId, reason))
+            }}
+          >
+            Cancel job
+          </Button>
+        ) : null}
+      </div>
+      {error ? <p className="text-xs text-red-ink">{error}</p> : null}
+    </div>
+  )
+}

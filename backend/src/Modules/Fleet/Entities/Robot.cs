@@ -28,6 +28,31 @@ public sealed class Robot
     public Guid? CurrentCommandId { get; set; }
     public Guid? LastHeartbeatBootId { get; set; }
     public long? LastHeartbeatSequence { get; set; }
+    /// <summary>
+    /// The robot holds every motion (STOP/PAUSE accepted, not resumed yet). Reported by the robot in telemetry
+    /// (<c>motionHold</c>); a held robot is never dispatched, navigated or driven (RB-03).
+    /// </summary>
+    public bool MotionHeld { get; set; }
+    public DateTimeOffset? MotionHoldChangedAt { get; set; }
+
+    /// <summary>Exclusive manual-drive lease (RB-04): one holder at a time, renewed while the joystick is used.</summary>
+    public Guid? ManualLeaseHolderId { get; set; }
+    public string? ManualLeaseHolderName { get; set; }
+    public DateTimeOffset? ManualLeaseUntil { get; set; }
+
+    /// <summary>Why the robot is in MAINTENANCE, and since when (RB-08).</summary>
+    public string? MaintenanceReason { get; set; }
+    public DateTimeOffset? MaintenanceSince { get; set; }
+
+    /// <summary>System actions the robot announced in its heartbeat (RESTART_STACK, REBOOT, SHUTDOWN), comma separated.</summary>
+    public string? Capabilities { get; set; }
+
+    public bool HasActiveManualLease(DateTimeOffset now) => ManualLeaseHolderId is not null && ManualLeaseUntil > now;
+
+    public bool Supports(string capability) =>
+        Capabilities is { } list && list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Contains(capability, StringComparer.Ordinal);
+
     public Guid? LastTelemetryBootId { get; set; }
     public long? LastTelemetrySequence { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -259,7 +284,12 @@ public sealed class Robot
     /// <summary>Backend-owned: clear command and return to AVAILABLE.</summary>
     public void MarkAvailable(DateTimeOffset utcNow)
     {
-        Status = RobotStatus.AVAILABLE;
+        // A command finishing does not end a maintenance session: only an authorized Technician does (RB-08).
+        if (Status != RobotStatus.MAINTENANCE)
+        {
+            Status = RobotStatus.AVAILABLE;
+        }
+
         CurrentCommandId = null;
         UpdatedAt = utcNow;
     }

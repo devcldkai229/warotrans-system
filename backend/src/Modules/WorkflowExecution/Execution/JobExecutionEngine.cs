@@ -150,6 +150,14 @@ public sealed class JobExecutionEngine(
             ?? throw new DomainValidationException($"Job {job.JobNo} has no robot; pass robotId.", "robot_required");
         var robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken)
             ?? throw new NotFoundException($"Robot '{targetRobotId}' was not found.", "robot_not_found");
+
+        // WFX-03: the operator's pause held the robot; resuming the job releases that hold first.
+        if (robot.MotionHeld && job.FailureCode == OperatorPausedCode && robot.Id == previousRobot)
+        {
+            await fleet.ResumeRobotAsync(robot.Id, cancellationToken);
+            robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken) ?? robot;
+        }
+
         EnsureRobotCanTakeJob(robot, job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken));
         EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
 
@@ -1419,6 +1427,59 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException($"Robot {robot.Code} is already running another Job.", "robot_assigned_to_other_job");
         }
+
+        if (robot.MotionHeld)
+        {
+            throw new ConflictException($"Robot {robot.Code} holds motion after a STOP; resume the robot first.", "robot_motion_held");
+        }
+
+        if (robot.InManualMode)
+        {
+            throw new ConflictException($"Robot {robot.Code} is being driven by hand.", "robot_in_manual_mode");
+        }
+    }
+
+    /// <summary>FailureCode of a Job an operator paused (WFX-03); Resume also releases the robot's motion hold.</summary>
+    public const string OperatorPausedCode = "operator_paused";
+
+    /// <summary>
+    /// WFX-03: an operator pauses a RUNNING Job. The robot gets STOP mode PAUSE (cancel the goal, hold motion); the
+    /// MOVE in progress is reopened and its command marked superseded, so the robot's CANCELED result is ignored and
+    /// Resume sends a NEW move. Traffic reservations are kept: the robot is still where it stopped.
+    /// The stop itself is followed through GET /api/fleet/robots/{id}/stop-state (requested / accepted / verified).
+    /// </summary>
+    public async Task<Job> PauseAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        if (job.Status != JobStatus.RUNNING)
+        {
+            throw new ConflictException($"Job {job.JobNo} is {job.Status}; only a RUNNING job can be paused.", "job_not_running");
+        }
+
+        var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+            .ToDictionaryAsync(s => s.Id, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
+        {
+            ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+        }
+
+        var robotId = AssignedRobot(job);
+        Guid? stopCommand = robotId is { } rid
+            ? await fleet.StopRobotAsync(rid, "PAUSE", string.IsNullOrWhiteSpace(reason) ? $"Job {job.JobNo} paused" : reason, cancellationToken)
+            : null;
+
+        job.Status = JobStatus.PAUSED;
+        job.FailureCode = OperatorPausedCode;
+        job.FailureMessage = string.IsNullOrWhiteSpace(reason)
+            ? (stopCommand is null ? "Paused by an operator; the robot could not be reached (state unknown)." : "Paused by an operator.")
+            : reason.Trim();
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
+        await SaveAndPublishAsync(cancellationToken);
+        logger.LogInformation("Job {JobNo} paused by operator; STOP command {CommandId}", job.JobNo, stopCommand);
+        return job;
     }
 
     /// <summary>

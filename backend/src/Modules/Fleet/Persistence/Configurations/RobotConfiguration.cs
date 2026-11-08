@@ -20,6 +20,9 @@ public sealed class RobotConfiguration : IEntityTypeConfiguration<Robot>
         builder.Property(x => x.LocalizationStatus).HasConversion<string>().HasMaxLength(50);
         builder.Property(x => x.ErrorCode).HasMaxLength(100);
         builder.Property(x => x.MapVersionCode).HasMaxLength(100);
+        builder.Property(x => x.ManualLeaseHolderName).HasMaxLength(255);
+        builder.Property(x => x.MaintenanceReason).HasMaxLength(500);
+        builder.Property(x => x.Capabilities).HasMaxLength(200);
         builder.Property(x => x.UpdatedAt).IsConcurrencyToken();
 
         builder.HasIndex(x => x.Code).IsUnique();

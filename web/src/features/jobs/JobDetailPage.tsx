@@ -5,6 +5,7 @@ import { ApiError } from '@/shared/api/client'
 import { getRobot } from '@/shared/api/fleet'
 import { confirmJobStep, getJob, type JobDetailDto, type JobStepDto, type JobTaskDto } from '@/shared/api/jobs'
 import { getTransportRequest } from '@/shared/api/transportRequests'
+import { JobOperatorActions } from './JobOperatorActions'
 import { cx } from '@/shared/lib/cx'
 import { formatClock, formatDuration, humanize, secondsBetween } from '@/shared/lib/format'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
@@ -420,9 +421,12 @@ export function JobDetailPage() {
               {waiting ? <StatusBadge tone="amber">Step waiting</StatusBadge> : null}
             </div>
           </div>
-          <p className="text-sm text-muted">
-            Created at <span className="text-ink tabular-nums">{formatClock(job.createdAt)}</span>
-          </p>
+          <div className="flex flex-col items-end gap-2">
+            <JobOperatorActions jobId={job.id} status={job.status} failureCode={job.failureCode} />
+            <p className="text-sm text-muted">
+              Created at <span className="text-ink tabular-nums">{formatClock(job.createdAt)}</span>
+            </p>
+          </div>
         </header>
 
         <div className="mt-8 grid grid-cols-[1fr_1.2fr_1fr] gap-4">

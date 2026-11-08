@@ -72,6 +72,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<StartJobHandler>();
         services.AddScoped<ResumeJobHandler>();
         services.AddScoped<CancelJobHandler>();
+        services.AddScoped<WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
         services.AddHostedService<HumanConfirmTimeoutHostedService>();
 
@@ -105,6 +106,7 @@ public static class WorkflowExecutionModule
         group.MapStartJob();
         group.MapResumeJob();
         group.MapCancelJob();
+        WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobEndpoint.MapPauseJob(group);
         group.MapConfirmJobStep();
         
         return endpoints;

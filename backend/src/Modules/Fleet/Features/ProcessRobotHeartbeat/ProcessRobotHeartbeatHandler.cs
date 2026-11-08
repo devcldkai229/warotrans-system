@@ -45,6 +45,9 @@ public sealed class ProcessRobotHeartbeatHandler(
         var bootId = robot.LastHeartbeatBootId;
         var sequence = robot.LastHeartbeatSequence;
         var isOnline = robot.IsOnline;
+        var capabilities = message.Capabilities is null
+            ? robot.Capabilities
+            : string.Join(',', message.Capabilities.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct());
         await db.Robots
             .Where(r => r.Id == robot.Id)
             .ExecuteUpdateAsync(
@@ -53,6 +56,7 @@ public sealed class ProcessRobotHeartbeatHandler(
                     .SetProperty(r => r.LastHeartbeatBootId, bootId)
                     .SetProperty(r => r.LastHeartbeatSequence, sequence)
                     .SetProperty(r => r.IsOnline, isOnline)
+                    .SetProperty(r => r.Capabilities, capabilities)
                     .SetProperty(r => r.UpdatedAt, utcNow),
                 cancellationToken);
         db.ChangeTracker.Clear();

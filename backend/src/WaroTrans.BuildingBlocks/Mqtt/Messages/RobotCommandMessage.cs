@@ -22,6 +22,30 @@ public static class RobotCommandTypes
     public const string ExtendAuthority = "EXTEND_AUTHORITY";
     public const string RenewAuthority = "RENEW_AUTHORITY";
     public const string RevokeAuthority = "REVOKE_AUTHORITY";
+    public const string Stop = "STOP";
+    public const string Resume = "RESUME";
+    public const string SystemAction = "SYSTEM_ACTION";
+}
+
+/// <summary>STOP payload. PAUSE is the same hold, named so the robot can report why it stopped.</summary>
+public sealed class StopCommandPayload
+{
+    public const string ModeStop = "STOP";
+    public const string ModePause = "PAUSE";
+
+    public string Mode { get; set; } = ModeStop;
+    public string? Reason { get; set; }
+}
+
+/// <summary>SYSTEM_ACTION payload (RB-09).</summary>
+public sealed class SystemActionPayload
+{
+    public const string RestartStack = "RESTART_STACK";
+    public const string Reboot = "REBOOT";
+    public const string Shutdown = "SHUTDOWN";
+    public static readonly string[] All = [RestartStack, Reboot, Shutdown];
+
+    public string Action { get; set; } = string.Empty;
 }
 
 public sealed class NavigateToPosePayload

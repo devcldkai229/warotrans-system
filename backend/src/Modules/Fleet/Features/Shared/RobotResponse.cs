@@ -26,7 +26,14 @@ public sealed record RobotResponse(
     Guid? CurrentCommandId,
     bool IsEnabled,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    bool MotionHeld = false,
+    string? ManualLeaseHolderName = null,
+    Guid? ManualLeaseHolderId = null,
+    DateTimeOffset? ManualLeaseUntil = null,
+    string? MaintenanceReason = null,
+    DateTimeOffset? MaintenanceSince = null,
+    IReadOnlyList<string>? Capabilities = null)
 {
     public static RobotResponse From(Robot robot) => new(
         robot.Id,
@@ -51,5 +58,12 @@ public sealed record RobotResponse(
         robot.CurrentCommandId,
         robot.IsEnabled,
         robot.CreatedAt,
-        robot.UpdatedAt);
+        robot.UpdatedAt,
+        robot.MotionHeld,
+        robot.HasActiveManualLease(DateTimeOffset.UtcNow) ? robot.ManualLeaseHolderName : null,
+        robot.HasActiveManualLease(DateTimeOffset.UtcNow) ? robot.ManualLeaseHolderId : null,
+        robot.HasActiveManualLease(DateTimeOffset.UtcNow) ? robot.ManualLeaseUntil : null,
+        robot.MaintenanceReason,
+        robot.MaintenanceSince,
+        robot.Capabilities?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? []);
 }

@@ -14,8 +14,12 @@ public sealed class RobotMqttIngress(
     ProcessRobotCommandAckHandler commandAckHandler,
     ProcessRobotCommandResultHandler commandResultHandler,
     ProcessRobotInteractionConfirmHandler interactionConfirmHandler,
-    Traffic.TrafficProgressIngress? trafficProgressIngress = null) : IRobotMqttIngress
+    Traffic.TrafficProgressIngress? trafficProgressIngress = null,
+    Features.RobotHealth.ProcessRobotHealthHandler? healthHandler = null) : IRobotMqttIngress
 {
+    public Task HandleHealthAsync(RobotHealthMessage message, CancellationToken cancellationToken) =>
+        healthHandler?.HandleAsync(message, cancellationToken) ?? Task.CompletedTask;
+
     public Task HandleHeartbeatAsync(RobotHeartbeatMessage message, CancellationToken cancellationToken) =>
         heartbeatHandler.HandleAsync(message, cancellationToken);
 

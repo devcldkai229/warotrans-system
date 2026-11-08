@@ -63,6 +63,7 @@ public sealed class MqttSubscriberHostedService(
                     .WithTopicFilter(RobotMqttTopics.TrafficProgressFilter(mqtt.TopicPrefix), reliable)
                     .WithTopicFilter(RobotMqttTopics.TrafficPlanFilter(mqtt.TopicPrefix), reliable)
                     .WithTopicFilter(RobotMqttTopics.AuthorityStateFilter(mqtt.TopicPrefix), reliable)
+                    .WithTopicFilter(RobotMqttTopics.HealthFilter(mqtt.TopicPrefix))
                     .Build();
 
                 await client.SubscribeAsync(subscribeOptions, stoppingToken).ConfigureAwait(false);
@@ -186,6 +187,12 @@ public sealed class MqttSubscriberHostedService(
                 case RobotMqttTopics.TrafficPlanSuffix:
                     await HandleTrafficPlanAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)
                         .ConfigureAwait(false);
+                    break;
+                case RobotMqttTopics.HealthSuffix:
+                    var health = JsonSerializer.Deserialize<RobotHealthMessage>(payload, JsonOptions)
+                                 ?? throw new InvalidOperationException($"Invalid health JSON on {topic}");
+                    health.RobotCode = MatchTopicRobotCode(health.RobotCode, robotCodeFromTopic);
+                    await ingress.HandleHealthAsync(health, cancellationToken).ConfigureAwait(false);
                     break;
                 case RobotMqttTopics.AuthorityStateSuffix:
                     await HandleAuthorityStateAsync(ingress, payload, topic, robotCodeFromTopic, cancellationToken)

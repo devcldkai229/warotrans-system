@@ -17,4 +17,7 @@ public sealed class RobotTelemetryMessage
     public double AngularVelocity { get; set; }
     public Guid? CurrentCommandId { get; set; }
     public string? ErrorCode { get; set; }
+
+    /// <summary>True while the robot holds all motion after STOP/PAUSE (RB-03). Null from robots that predate it.</summary>
+    public bool? MotionHold { get; set; }
 }

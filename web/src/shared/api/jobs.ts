@@ -105,3 +105,13 @@ export function confirmJobStep(stepId: string, containerId: string | null, note?
     body: JSON.stringify({ containerId, note: note ?? null }),
   })
 }
+
+/** WFX-03: operator pause. The robot gets STOP mode PAUSE; follow it with getStopState(robotId). */
+export function pauseJob(id: string, reason?: string) {
+  return apiRequest<unknown>(`/api/workflow-execution/jobs/${id}/pause`, { method: 'POST', body: JSON.stringify({ reason }) })
+}
+
+/** Operator cancel (existing backend endpoint, job.cancel). */
+export function cancelJob(id: string, reason?: string) {
+  return apiRequest<unknown>(`/api/workflow-execution/jobs/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) })
+}

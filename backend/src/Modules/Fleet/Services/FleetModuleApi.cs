@@ -16,6 +16,7 @@ public sealed class FleetModuleApi(
     FleetDbContext db,
     IssueNavigateCommandHandler issueNavigateCommandHandler,
     IssueCancelCommandHandler issueCancelCommandHandler,
+    WaroTrans.Fleet.Features.RobotControl.RobotControlService robotControl,
     IMqttRobotInteractionPublisher interactionPublisher,
     ILogger<FleetModuleApi> logger) : IFleetModule
 {
@@ -154,6 +155,32 @@ public sealed class FleetModuleApi(
             cancellationToken);
     }
 
+    public async Task<Guid?> StopRobotAsync(Guid robotId, string mode, string? reason, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return (await robotControl.StopAsync(robotId, mode, reason, cancellationToken)).CommandId;
+        }
+        catch (AppException ex)
+        {
+            logger.LogWarning("STOP for robot {RobotId} not sent: {Code} {Message}", robotId, ex.Code, ex.Message);
+            return null;
+        }
+    }
+
+    public async Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return (await robotControl.ResumeAsync(robotId, cancellationToken)).CommandId;
+        }
+        catch (AppException ex)
+        {
+            logger.LogWarning("RESUME for robot {RobotId} not sent: {Code} {Message}", robotId, ex.Code, ex.Message);
+            return null;
+        }
+    }
+
     private static RobotSnapshot ToSnapshot(Robot r) => new(
         r.Id,
         r.Code,
@@ -168,5 +195,7 @@ public sealed class FleetModuleApi(
         r.LastTelemetryAt,
         r.PoseX,
         r.PoseY,
-        r.PoseYaw);
+        r.PoseYaw,
+        r.MotionHeld,
+        r.HasActiveManualLease(DateTimeOffset.UtcNow));
 }

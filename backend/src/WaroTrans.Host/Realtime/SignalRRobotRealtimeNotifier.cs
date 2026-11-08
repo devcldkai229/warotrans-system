@@ -61,4 +61,10 @@ public sealed class SignalRRobotRealtimeNotifier(IHubContext<NotificationsHub> h
             },
             cancellationToken);
     }
+
+    public Task NotifyHealthUpdatedAsync(Guid robotId, string robotCode, string overall, CancellationToken cancellationToken = default) =>
+        hub.Clients.Groups(RealtimeGroups.ForRobot(robotId)).SendAsync(
+            "robotHealthUpdated",
+            new { robotId, robotCode, overall },
+            cancellationToken);
 }

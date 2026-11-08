@@ -41,6 +41,15 @@ public interface IFleetModule
     Task<bool> CancelNavigationAsync(Guid robotId, Guid navigateCommandId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// RB-03 / WFX-03: STOP (or PAUSE) — the robot cancels its goal and holds all motion until RESUME.
+    /// Returns the command id, or null when the robot is offline and nothing could be sent (state UNKNOWN).
+    /// </summary>
+    Task<Guid?> StopRobotAsync(Guid robotId, string mode, string? reason, CancellationToken cancellationToken = default);
+
+    /// <summary>Releases the motion hold. Returns the command id, or null when the robot is offline.</summary>
+    Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Arms the physical HUMAN_INTERACTION confirm button on the robot (MQTT interaction_request).
     /// Not a RobotCommand.
     /// </summary>
@@ -79,7 +88,9 @@ public sealed record RobotSnapshot(
     DateTimeOffset? LastTelemetryAt,
     double PoseX,
     double PoseY,
-    double PoseYaw);
+    double PoseYaw,
+    bool MotionHeld = false,
+    bool InManualMode = false);
 
 /// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
 public sealed record RouteGrantSnapshot(string GraphHash, IReadOnlyList<int> EdgeIds);

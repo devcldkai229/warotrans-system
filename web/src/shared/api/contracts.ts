@@ -218,6 +218,17 @@ export interface Robot {
   isEnabled: boolean
   createdAt?: string
   updatedAt?: string
+  /** RB-03: the robot holds all motion after STOP/PAUSE (reported by the robot). */
+  motionHeld?: boolean
+  /** RB-04: who drives the robot by hand right now, if anyone. */
+  manualLeaseHolderName?: string | null
+  manualLeaseHolderId?: string | null
+  manualLeaseUntil?: string | null
+  /** RB-08 */
+  maintenanceReason?: string | null
+  maintenanceSince?: string | null
+  /** RB-09: system actions the robot announced. */
+  capabilities?: string[]
 }
 
 /** The Job a Robot is working on, joined from JobAssignment. TODO(backend): needs a fleet read endpoint. */

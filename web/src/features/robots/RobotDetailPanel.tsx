@@ -5,6 +5,7 @@ import { ApiError } from '@/shared/api/client'
 import { disableRobot, enableRobot } from '@/shared/api/fleet'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
+import { RobotControlCard } from './RobotControlCard'
 import { formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
@@ -22,8 +23,6 @@ interface RobotDetailPanelProps {
 
 const ACTIONS: { label: string; icon: IconName }[] = [
   { label: 'Manual', icon: 'gamepad' },
-  { label: 'Pause', icon: 'pause' },
-  { label: 'Unavailable', icon: 'stop' },
   { label: 'Localize', icon: 'crosshair' },
 ]
 
@@ -343,6 +342,8 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
           )}
         </div>
         {actionError ? <p className="mb-4 text-xs text-red-ink">{actionError}</p> : null}
+
+        <RobotControlCard robotId={robot.id} robotCode={robot.code} />
 
         {error ? (
           <div className="flex gap-3 rounded-md bg-red-soft p-4 text-red-ink">
