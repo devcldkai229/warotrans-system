@@ -1,15 +1,16 @@
 import { useState, type ReactNode } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import type { RobotView } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import { disableRobot, enableRobot } from '@/shared/api/fleet'
+import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_CONTAINER_STATUS_TONE, JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
-import { ROBOT_JOB_HISTORY, ROBOT_STATE_EVENTS } from './mock'
 
 interface RobotDetailPanelProps {
   robot: RobotView
@@ -27,8 +28,6 @@ const ACTIONS: { label: string; icon: IconName; unavailable?: string }[] = [
   { label: 'Pause', icon: 'pause', unavailable: 'Pausing a robot needs the Pause Job API, which is not available yet.' },
   { label: 'Localize', icon: 'crosshair', unavailable: 'The robot does not accept a re-localize command yet.' },
 ]
-
-const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
 
 const TIMELINE = 'divide-y divide-outline-soft'
 const TIMELINE_NOTE = 'mt-1 block text-xs text-muted'
@@ -53,13 +52,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-// Every section is backed by persisted data: fleet.robots, the active JobAssignment and fleet.robot_state_events.
-function buildSections(robot: RobotView): Section[] {
+type RecentJobs = { state: 'loading' | 'error' | 'ready'; items: JobSummaryDto[] }
+
+// Every section is backed by persisted data: fleet.robots, the active JobAssignment and the robot's Job assignments.
+function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
   const activity = robot.activity
-  const events = ROBOT_STATE_EVENTS.filter((event) => event.robotId === robot.id)
-  const recentJobs = ROBOT_JOB_HISTORY.filter((item) => item.robotId === robot.id)
-    .sort((a, b) => b.assignedAt.localeCompare(a.assignedAt))
-    .slice(0, 5)
+  const recentJobs = recent.items
   const hasTelemetry = Boolean(robot.lastTelemetryAt)
 
   return [
@@ -215,62 +213,58 @@ function buildSections(robot: RobotView): Section[] {
     {
       id: 'recent',
       label: 'Recent jobs',
-      summary: recentJobs.length ? `Last ${recentJobs.length}` : 'No jobs yet',
+      summary: recent.state === 'loading' ? 'Loading…' : recent.state === 'error' ? 'Unavailable' : recentJobs.length ? `Last ${recentJobs.length}` : 'No jobs yet',
       body: recentJobs.length ? (
         <ol className={TIMELINE}>
           {recentJobs.map((item) => {
-            const seconds = secondsBetween(item.assignedAt, item.endedAt)
+            const seconds = secondsBetween(item.startedAt, item.completedAt)
             return (
               <li key={item.id} className="py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  <strong className="font-medium">{item.jobNo}</strong>
-                  <StatusBadge tone={JOB_STATUS_TONE[item.jobStatus]}>{item.jobStatus}</StatusBadge>
+                  <Link to={`/monitor/jobs/${item.id}`} className="font-medium hover:underline">
+                    {item.jobNo}
+                  </Link>
+                  <StatusBadge tone={JOB_STATUS_TONE[item.status]}>{item.status}</StatusBadge>
                 </div>
                 <span className={TIMELINE_NOTE}>
-                  {item.requestCode}, {formatRelativeTime(item.assignedAt)}
-                  {item.endedAt && seconds !== null ? `, ${formatDuration(seconds)}` : ', in progress'}
-                  {item.endReason && item.endReason !== 'COMPLETED' ? `, ${titleCase(item.endReason).toLowerCase()}` : ''}
+                  {formatRelativeTime(item.createdAt)}, {item.containerCount} container{item.containerCount === 1 ? '' : 's'}
+                  {item.completedAt && seconds !== null ? `, ${formatDuration(seconds)}` : item.completedAt ? '' : ', in progress'}
                 </span>
               </li>
             )
           })}
         </ol>
       ) : (
-        <p className={EMPTY}>This robot has not been assigned any job yet.</p>
+        <p className={EMPTY}>
+          {recent.state === 'loading'
+            ? 'Loading jobs…'
+            : recent.state === 'error'
+              ? 'The jobs of this robot could not be loaded.'
+              : 'This robot has not been assigned any job yet.'}
+        </p>
       ),
     },
     {
       id: 'history',
       label: 'State history',
-      summary: events.length ? `${events.length} events` : 'No events',
-      body: events.length ? (
-        <ol className={TIMELINE}>
-          {events.map((event) => (
-            <li key={event.id} className="py-2.5">
-              <div className="flex items-baseline justify-between gap-3">
-                <strong className="font-medium">
-                  {event.fromStatus ? `${titleCase(event.fromStatus)} → ` : ''}
-                  {titleCase(event.toStatus)}
-                </strong>
-                <span className="shrink-0 text-xs text-muted">{formatRelativeTime(event.occurredAt)}</span>
-              </div>
-              <span className={TIMELINE_NOTE}>
-                {titleCase(event.source)}
-                {event.reason ? `: ${event.reason}` : ''}
-              </span>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className={EMPTY}>No state changes recorded.</p>
-      ),
+      // TODO(backend): nothing writes fleet.robot_state_events yet, so there is no history to show.
+      summary: 'Not recorded',
+      body: <p className={EMPTY}>State changes of this robot are not recorded yet.</p>,
     },
   ]
 }
 
 export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelProps) {
   const queryClient = useQueryClient()
-  const sections = buildSections(robot)
+  const recentQuery = useQuery({
+    queryKey: ['jobs', 'by-robot', robot.id],
+    queryFn: () => listJobs({ robotId: robot.id, take: 5 }),
+    refetchInterval: 10_000,
+  })
+  const sections = buildSections(robot, {
+    state: recentQuery.isError ? 'error' : recentQuery.data ? 'ready' : 'loading',
+    items: recentQuery.data?.items ?? [],
+  })
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
   const [confirmed, setConfirmed] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)

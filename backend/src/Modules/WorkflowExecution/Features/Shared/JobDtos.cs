@@ -153,9 +153,15 @@ public sealed class JobQueries(WorkflowExecutionDbContext db)
         JobStatus? status,
         Guid? transportRequestId,
         int take,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? jobIds = null)
     {
         var query = db.Jobs.AsNoTracking().AsQueryable();
+        if (jobIds is not null)
+        {
+            query = query.Where(j => jobIds.Contains(j.Id));
+        }
+
         if (status is { } s)
         {
             query = query.Where(j => j.Status == s);

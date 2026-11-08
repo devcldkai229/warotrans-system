@@ -10,6 +10,12 @@ public interface IFleetModule
 {
     Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The Jobs the robot was assigned to, most recently assigned first, one entry per Job (a Job handed over to
+    /// another robot still counts for this one). Empty for an unknown robot.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default);
+
     /// <summary>Robots that may take new work on a map: enabled, online, AVAILABLE; best first.</summary>
     Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,
