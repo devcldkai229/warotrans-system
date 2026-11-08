@@ -87,6 +87,9 @@ public static class WarehouseModule
         group.MapListInventory();
         group.MapListProducts();
         group.MapCreateProduct();
+        // Receiving: scanned supplier barcode / SKU -> Product, and where that Product is stored.
+        ResolveProductEndpoint.Map(group);
+        GetProductInventoryContextEndpoint.Map(group);
         group.MapSetProductStatus();
         group.MapListProductCategories();
         group.MapCreateProductCategory();

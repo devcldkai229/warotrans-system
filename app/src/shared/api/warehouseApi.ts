@@ -77,7 +77,8 @@ export function listProductCategories() {
 }
 export function resolveProduct(params: { barcode?: string; search?: string }) {
   requireMobileCapability('resolveProduct');
-  return apiFetch<{ exactMatch: ProductItem | null; items: ProductItem[] }>(`/api/warehouse/products/resolve${queryString(params)}`);
+  // The API names the keyword `query`.
+  return apiFetch<{ exactMatch: ProductItem | null; items: ProductItem[] }>(`/api/warehouse/products/resolve${queryString({ barcode: params.barcode, query: params.search })}`);
 }
 export async function listStorageLocations(params: { warehouseId: string; activeOnly?: boolean }): Promise<ListStorageLocationsResponse> {
   const response = await apiFetch<{ items: Omit<StorageLocationListItem, 'shelfSlots' | 'zone' | 'zoneLabel'>[]; total: number }>(

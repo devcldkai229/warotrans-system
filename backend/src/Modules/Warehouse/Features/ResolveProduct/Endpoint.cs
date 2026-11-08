@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Warehouse.Features.ResolveProduct;
 
@@ -18,6 +19,7 @@ public static class ResolveProductEndpoint
         })
         .WithName("ResolveProduct")
         .WithSummary("Resolve a product by supplier barcode or search keyword")
-        .WithDescription("Resolves an active Product via supplier barcode / SKU, or searches products by keyword.");
+        .WithDescription("Resolves an active Product via supplier barcode / SKU, or searches products by keyword.")
+        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
     }
 }
