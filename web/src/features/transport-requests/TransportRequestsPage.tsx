@@ -560,6 +560,8 @@ export function TransportRequestsPage() {
                 {selectedJob ? (
                   <JobSummaryPanel
                     jobRef={selectedJob}
+                    jobId={selectedJobId}
+                    containerBarcodes={new Map(selected.details.map((detail) => [detail.containerId, detail.containerBarcode]))}
                     onClose={() => setSelectedJobNo(null)}
                     onOpenFull={selectedJobId ? () => navigate(`/monitor/jobs/${selectedJobId}`) : undefined}
                   />
