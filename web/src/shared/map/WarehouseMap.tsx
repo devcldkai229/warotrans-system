@@ -30,7 +30,7 @@ import {
 } from './mapStyle'
 import { lineStringToPoints, polygonToPoints } from './geoJson'
 import { CHEVRON_PATH, laneGlyphs } from './laneGlyphs'
-import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES, pointInPolygon } from './scene'
+import { pointInPolygon } from './scene'
 
 /** A Robot as the map draws it: pose from fleet.robots, status for the colour. */
 export interface MapRobot {
@@ -149,9 +149,9 @@ const ZOOM_BUTTON =
 
 /** One map for every screen: an SVG square in metres plus an HTML overlay in the same square. */
 export function WarehouseMap({
-  zones = SCENE_ZONES,
-  edges = SCENE_EDGES,
-  endpoints = SCENE_ENDPOINTS,
+  zones = [],
+  edges = [],
+  endpoints = [],
   bounds = DEFAULT_MAP_BOUNDS,
   robots = [],
   layers = {},
