@@ -36,8 +36,9 @@ public static class ListJobsEndpoint
             }
 
             var limit = Math.Clamp(take ?? 50, 1, 200);
-            // A Job does not store its robot as a column; Fleet's assignments say which Jobs a robot ran.
-            var jobIds = robotId is { } id ? await fleet.GetRecentJobIdsAsync(id, limit, cancellationToken) : null;
+            // A Job does not store its robot as a column; Fleet's assignments say which Jobs a robot ran. Assignments
+            // can outlive a deleted Job (no cross-module FK), so ask for spare ids; the query keeps `limit` real Jobs.
+            var jobIds = robotId is { } id ? await fleet.GetRecentJobIdsAsync(id, limit * 2, cancellationToken) : null;
             var (items, total) = await queries.ListAsync(parsed, transportRequestId, limit, cancellationToken, jobIds);
             return Results.Ok(new { items, total });
         })

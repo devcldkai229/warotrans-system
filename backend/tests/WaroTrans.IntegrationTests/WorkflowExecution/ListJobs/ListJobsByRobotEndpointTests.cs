@@ -108,6 +108,25 @@ public sealed class ListJobsByRobotEndpointTests(WaroTransWebApplicationFactory 
     }
 
     [Fact]
+    public async Task An_assignment_whose_job_was_deleted_does_not_eat_into_take()
+    {
+        var (robotA, _, _, handedOver, _, failed) = await SeedAsync();
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            // Newest assignment of robot A points at a Job that no longer exists (e.g. a demo reseed deleted it).
+            var fleet = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+            var orphan = JobAssignment.CreatePending(Guid.NewGuid(), robotA, T0.AddMinutes(40));
+            orphan.TryEnd(AssignmentEndReason.COMPLETED, T0.AddMinutes(41));
+            fleet.JobAssignments.Add(orphan);
+            await fleet.SaveChangesAsync();
+        }
+
+        var latestTwo = await ListAsync($"robotId={robotA}&take=2");
+
+        Assert.Equal([failed.JobNo, handedOver.JobNo], latestTwo.Items.Select(j => j.JobNo));
+    }
+
+    [Fact]
     public async Task Robot_filter_combines_with_the_status_filter()
     {
         var (robotA, _, _, _, _, failed) = await SeedAsync();
