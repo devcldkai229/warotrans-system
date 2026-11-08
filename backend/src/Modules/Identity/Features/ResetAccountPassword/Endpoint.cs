@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Results;
 using WaroTrans.Identity.Features.CreateAccount;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Identity.Features.ResetAccountPassword;
 
@@ -27,6 +28,7 @@ internal static class ResetAccountPasswordEndpoint
                 return TypedResults.Ok(result.Value);
             })
             .RequirePermission(Permissions.UserManage)
+            .Audited("account.password_reset", "ACCOUNT", "id")
             .WithName("ResetAccountPassword")
             .Produces<CreateAccountResponse>()
             .ProducesProblem(StatusCodes.Status401Unauthorized)

@@ -12,6 +12,7 @@ internal sealed class ChangeAccountStatusHandler(
     IdentityDbContext dbContext,
     TimeProvider timeProvider,
     ICurrentUser currentUser,
+    IAuditTrail audit,
     ILogger<ChangeAccountStatusHandler> logger)
 {
     public async Task<Result<AccountResponse>> HandleAsync(Guid id, ChangeAccountStatusRequest request, CancellationToken cancellationToken)
@@ -44,6 +45,7 @@ internal sealed class ChangeAccountStatusHandler(
             }
         }
 
+        var previous = account.Status;
         var now = timeProvider.GetUtcNow();
         account.Status = status;
         account.UpdatedAt = now;
@@ -57,6 +59,15 @@ internal sealed class ChangeAccountStatusHandler(
         }
 
         await transaction.CommitAsync(cancellationToken);
+
+        await audit.RecordAsync(
+            new AuditEntry(
+                "account.status_changed",
+                "ACCOUNT",
+                account.Id,
+                Before: new Dictionary<string, object?> { ["status"] = previous.ToString() },
+                After: new Dictionary<string, object?> { ["status"] = status.ToString() }),
+            cancellationToken);
 
         logger.LogInformation(
             "Account {AccountId} set to {Status} by {ChangedBy}",

@@ -19,7 +19,7 @@ public static class MarkNotificationReadEndpoint
             })
             .RequirePermission(Permissions.NotificationRead)
             .WithName("MarkNotificationRead")
-            .WithSummary("Mark one notification as read (for every admin)");
+            .WithSummary("Mark one notification as read for the signed-in person only");
 
         return group;
     }

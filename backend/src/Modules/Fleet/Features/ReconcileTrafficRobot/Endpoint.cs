@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Fleet.Traffic;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Fleet.Features.ReconcileTrafficRobot;
 
@@ -36,6 +37,7 @@ public static class Endpoint
             })
             .RequirePermission(Permissions.TrafficManage)
             .RequireRobotScope("robotId")
+            .Audited("traffic.robot_reconciled", "ROBOT", "robotId")
             .WithName("ReconcileTrafficRobot")
             .WithTags("Traffic");
 
@@ -52,6 +54,7 @@ public static class Endpoint
             })
             .RequirePermission(Permissions.TrafficManage)
             .RequireRobotScope("robotId")
+            .Audited("traffic.released_after_clearance", "ROBOT", "robotId")
             .WithName("ReleaseTrafficAfterClearance")
             .WithTags("Traffic");
 

@@ -53,6 +53,38 @@ export interface LiveNotificationEvent {
   isRead: boolean;
 }
 
+/** Payload of the hub's "notificationCreated". */
+export interface ServerNotificationEvent {
+  id: string;
+  type: string;
+  kind: string;
+  title: string;
+  content: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  route?: string | null;
+  createdAt: string;
+}
+
+/** Maps a server notification onto the app's live-notification shape. */
+export function toLiveNotification(data: ServerNotificationEvent): LiveNotificationEvent {
+  const category: LiveNotificationEvent['category'] =
+    data.kind === 'ROBOT_BATTERY_LOW' ? 'BATTERY_LOW'
+      : data.kind === 'ISSUE_ASSIGNED' || data.kind === 'JOB_STEP_WAITING_FOR_PERSON' ? 'JOB_ASSIGNED'
+        : data.kind.startsWith('ISSUE') ? 'HAZARD'
+          : 'SYSTEM';
+  return {
+    id: data.id,
+    category,
+    title: data.title,
+    message: data.content,
+    timeLabel: 'now',
+    robotId: data.entityType === 'ROBOT' ? data.entityId ?? undefined : undefined,
+    jobId: data.entityType === 'JOB' ? data.entityId ?? undefined : undefined,
+    isRead: false,
+  };
+}
+
 export interface TransportStatusEvent {
   transportRequestId: string;
   requestCode: string;
@@ -111,8 +143,10 @@ class RealtimeClient {
         this.telemetryListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.on('notificationReceived', (data: LiveNotificationEvent) => {
-        this.notificationListeners.forEach((fn) => fn(data));
+      // Backend NotificationsHub sends "notificationCreated" to the person / role it is for (OPS-03).
+      this.connection.on('notificationCreated', (data: ServerNotificationEvent) => {
+        const event = toLiveNotification(data);
+        this.notificationListeners.forEach((fn) => fn(event));
       });
 
       this.connection.on('transportRequestStatusChanged', (data: TransportStatusEvent) => {

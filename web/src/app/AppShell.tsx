@@ -40,6 +40,14 @@ const NAV: NavGroup[] = [
       { label: 'Workflows', to: '/configure/workflows', requires: PERMISSIONS.workflowRead },
     ],
   },
+  {
+    label: 'Operations',
+    to: '/operations',
+    items: [
+      { label: 'Issues', to: '/operations/issues', requires: PERMISSIONS.issueRead },
+      { label: 'Audit log', to: '/operations/audit', requires: PERMISSIONS.auditRead },
+    ],
+  },
   { label: 'Statistics', to: '/dashboard', requires: PERMISSIONS.statisticsRead },
 ]
 

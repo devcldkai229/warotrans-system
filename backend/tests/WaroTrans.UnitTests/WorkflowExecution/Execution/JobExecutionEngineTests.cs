@@ -178,6 +178,72 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(A, move.OutputValues["arrivedEndpointId"].GetGuid());
     }
 
+    private sealed class RecordingIssueReporter(Exception? failWith = null) : IIssueReporter
+    {
+        public List<StepIssueDraft> Drafts { get; } = [];
+        public Guid IssueId { get; } = Guid.NewGuid();
+
+        public Task<Guid> ReportFromStepAsync(StepIssueDraft draft, CancellationToken cancellationToken = default)
+        {
+            if (failWith is not null) throw failWith;
+            Drafts.Add(draft);
+            return Task.FromResult(IssueId);
+        }
+    }
+
+    private JobExecutionEngine EngineWith(IIssueReporter reporter) =>
+        new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance,
+            issueReporter: reporter);
+
+    /// <summary>Turns the HUMAN step that is waiting now into a REPORT_ISSUE step.</summary>
+    private async Task<Guid> WaitingReportIssueStepAsync(Guid jobId)
+    {
+        var stepId = await CurrentStepIdAsync(jobId);
+        var step = await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+        var workflowStep = await _db.WorkflowSteps.SingleAsync(w => w.Id == step.WorkflowStepId);
+        workflowStep.Config = new WaroTrans.WorkflowExecution.ValueObjects.WorkflowStepConfig
+        {
+            OperationCode = nameof(HumanActionCode.REPORT_ISSUE)
+        };
+        await _db.SaveChangesAsync();
+        return stepId;
+    }
+
+    [Fact]
+    public async Task Report_issue_step_opens_an_issue_before_it_completes()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        var stepId = await WaitingReportIssueStepAsync(jobId);
+        var reporter = new RecordingIssueReporter();
+
+        await EngineWith(reporter).ConfirmHumanStepAsync(stepId, null, HumanConfirmationSource.StaffApp(_staff, "Box crushed"));
+
+        var draft = Assert.Single(reporter.Drafts);
+        Assert.Equal(stepId, draft.JobStepId);
+        Assert.Equal("Box crushed", draft.Description);
+        Assert.Equal(_staff, draft.ReportedBy);
+        var step = await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+        Assert.Equal(JobStepStatus.COMPLETED, step.Status);
+        Assert.Equal(reporter.IssueId, step.OutputValues["issueId"].GetGuid());
+    }
+
+    [Fact]
+    public async Task Report_issue_step_stays_waiting_when_the_issue_cannot_be_opened()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        var stepId = await WaitingReportIssueStepAsync(jobId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            EngineWith(new RecordingIssueReporter(new InvalidOperationException("mongo down")))
+                .ConfirmHumanStepAsync(stepId, null, HumanConfirmationSource.StaffApp(_staff)));
+
+        Assert.Equal(JobStepStatus.WAITING, (await _db.JobSteps.SingleAsync(s => s.Id == stepId)).Status);
+    }
+
     [Fact]
     public async Task Confirming_the_wrong_container_is_rejected()
     {

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Results;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Identity.Features.CreateAccount;
 
@@ -34,6 +35,7 @@ internal static class CreateAccountEndpoint
                 return TypedResults.Created($"/api/identity/accounts/{result.Value.Account.Id}", result.Value);
             })
             .RequirePermission(Permissions.UserManage)
+            .Audited("account.created", "ACCOUNT", null)
             .WithName("CreateAccount")
             .Produces<CreateAccountResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)

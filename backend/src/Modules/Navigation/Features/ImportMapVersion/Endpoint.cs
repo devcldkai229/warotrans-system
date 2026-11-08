@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Navigation.Features.ImportMapVersion;
 
@@ -36,6 +37,7 @@ public static class ImportMapVersionEndpoint
             return Results.Created($"/api/navigation/maps/{response.Id}", response);
         })
         .RequirePermission(Permissions.MapWrite)
+        .Audited("map.imported", "MAP", null)
         .DisableAntiforgery()
         .WithName("ImportMapVersion")
         .WithSummary("Import a ROS/Nav2 occupancy map (yaml + pgm)")

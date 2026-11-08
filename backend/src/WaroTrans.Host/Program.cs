@@ -134,6 +134,7 @@ builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, Admin
 builder.Services.AddScoped<IIntegrationEventHandler<JobWaitingToStart>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepWaitingForPerson>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<JobContainerStatusChanged>, AuditEventRecorder>();
 builder.Services.AddOpenApi();
 
 var postgresConnection = builder.Configuration.GetConnectionString("PostgreSQL")

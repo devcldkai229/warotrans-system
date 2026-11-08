@@ -8,8 +8,12 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Conventions;
 using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
+using FluentValidation;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Operations.Contracts;
+using WaroTrans.Operations.Features.IssueReports;
+using WaroTrans.Operations.Features.ListAuditLogs;
 using WaroTrans.Operations.Features.ListNotifications;
 using WaroTrans.Operations.Features.MarkAllNotificationsRead;
 using WaroTrans.Operations.Features.MarkNotificationRead;
@@ -47,6 +51,18 @@ public static class OperationsModule
         services.AddScoped<MarkNotificationReadHandler>();
         services.AddScoped<MarkAllNotificationsReadHandler>();
 
+        // Audit trail (SY-05 / OPS-02): any module records through BuildingBlocks' IAuditTrail.
+        services.Configure<AuditOptions>(configuration.GetSection(AuditOptions.SectionName));
+        services.AddScoped<IAuditTrail, MongoAuditTrail>();
+        services.AddScoped<ListAuditLogsHandler>();
+
+        // Issue reports (OPS-01); WorkflowExecution raises them through IIssueReporter (WFX-05).
+        services.AddScoped<IssueService>();
+        services.AddScoped<IIssueReporter>(sp => sp.GetRequiredService<IssueService>());
+        services.AddScoped<IValidator<CreateIssueRequest>, CreateIssueValidator>();
+        services.AddScoped<IValidator<TransitionIssueRequest>, TransitionIssueValidator>();
+        services.AddScoped<IValidator<AddEvidenceRequest>, AddEvidenceValidator>();
+
         return services;
     }
 
@@ -57,6 +73,8 @@ public static class OperationsModule
         group.MapListNotifications();
         group.MapMarkNotificationRead();
         group.MapMarkAllNotificationsRead();
+        group.MapListAuditLogs();
+        group.MapIssueReports();
         return endpoints;
     }
 

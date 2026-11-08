@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.WorkflowExecution.Features.CancelJob;
 
@@ -19,6 +20,7 @@ public static class CancelJobEndpoint
                 return Results.Ok(response);
             })
             .RequirePermission(Permissions.JobCancel)
+            .Audited("job.cancelled", "JOB", "id")
             .WithName("CancelJob")
             .WithSummary("Cancel a running job; traffic occupancy is quarantined until verified clearance")
             .WithTags("Jobs");

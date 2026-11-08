@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.WorkflowExecution.Features.DeleteWorkflow;
 
@@ -18,6 +19,7 @@ public static class DeleteWorkflowEndpoint
             return Results.NoContent();
         })
         .RequirePermission(Permissions.WorkflowWrite)
+        .Audited("workflow.deleted", "WORKFLOW", "id")
         .WithName("DeleteWorkflow")
         .WithSummary("Delete a Workflow version")
         .WithDescription(

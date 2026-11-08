@@ -13,4 +13,5 @@ public sealed record NotificationDto(
     DateTimeOffset CreatedAt,
     bool IsRead,
     DateTimeOffset? ReadAt,
-    DateTimeOffset? ResolvedAt);
+    DateTimeOffset? ResolvedAt,
+    string? Route = null);

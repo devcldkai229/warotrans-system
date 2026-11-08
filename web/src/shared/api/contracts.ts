@@ -575,6 +575,8 @@ export interface AdminNotification {
   readAt: string | null
   /** Set when the situation is over (the robot came back, the job moved on). */
   resolvedAt: string | null
+  /** Client route that opens the entity (SY-04), e.g. /monitor/jobs/{id}. */
+  route?: string | null
 }
 
 export interface NotificationInbox {

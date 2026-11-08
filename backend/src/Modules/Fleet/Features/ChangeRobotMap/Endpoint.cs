@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Fleet.Features.ChangeRobotMap;
 
@@ -18,7 +19,8 @@ public static class ChangeRobotMapEndpoint
             var response = await handler.HandleAsync(id, request, cancellationToken);
             return Results.Ok(response);
         })
-            .RequirePermission(Permissions.RobotManage);
+            .RequirePermission(Permissions.RobotManage)
+            .Audited("robot.map_changed", "ROBOT", "id");
 
         return group;
     }

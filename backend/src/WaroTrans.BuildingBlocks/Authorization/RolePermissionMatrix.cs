@@ -23,7 +23,8 @@ public static class RolePermissionMatrix
                 Permissions.TransportRead, Permissions.TransportCreate,
                 Permissions.WorkflowRead, Permissions.JobRead, Permissions.JobOperate, Permissions.JobPause,
                 Permissions.RobotRead, Permissions.RobotStop,
-                Permissions.IssueRead, Permissions.IssueCreate
+                Permissions.IssueRead, Permissions.IssueCreate,
+                Permissions.NotificationRead
             }.ToFrozenSet(StringComparer.Ordinal),
 
             // Robot technician: robot-level rights, limited to the robots in their scope (IRobotAccessScope).
@@ -40,7 +41,8 @@ public static class RolePermissionMatrix
                 Permissions.RobotDiagnostics,
                 Permissions.TrafficRead, Permissions.TrafficManage,
                 Permissions.IssueRead, Permissions.IssueCreate, Permissions.IssueManage,
-                Permissions.AuditRead
+                Permissions.AuditRead,
+                Permissions.NotificationRead
             }.ToFrozenSet(StringComparer.Ordinal)
         }.ToFrozenDictionary(StringComparer.Ordinal);
 

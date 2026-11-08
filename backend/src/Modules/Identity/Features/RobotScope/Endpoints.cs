@@ -34,6 +34,7 @@ internal sealed class AccountRobotScopeHandler(
     IdentityDbContext dbContext,
     TimeProvider timeProvider,
     ICurrentUser currentUser,
+    IAuditTrail audit,
     ILogger<AccountRobotScopeHandler> logger)
 {
     public async Task<Result<AccountRobotScopeResponse>> GetAsync(Guid accountId, CancellationToken cancellationToken)
@@ -71,6 +72,12 @@ internal sealed class AccountRobotScopeHandler(
         }
 
         var wanted = request.RobotIds.Distinct().ToHashSet();
+        var existingBefore = await dbContext.TechnicianRobotScopes
+            .AsNoTracking()
+            .Where(s => s.AccountId == accountId)
+            .OrderBy(s => s.RobotId)
+            .Select(s => s.RobotId)
+            .ToListAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -96,6 +103,15 @@ internal sealed class AccountRobotScopeHandler(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        await audit.RecordAsync(
+            new AuditEntry(
+                "account.robot_scope_set",
+                "ACCOUNT",
+                accountId,
+                Before: new Dictionary<string, object?> { ["robotIds"] = existingBefore },
+                After: new Dictionary<string, object?> { ["robotIds"] = wanted.Order().ToList() }),
+            cancellationToken);
 
         logger.LogInformation(
             "Robot scope of technician {AccountId} set to {RobotCount} robot(s) by {ChangedBy}",

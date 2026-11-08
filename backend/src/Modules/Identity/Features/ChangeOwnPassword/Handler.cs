@@ -17,6 +17,7 @@ internal sealed class ChangeOwnPasswordHandler(
     TokenIssuer tokenIssuer,
     TimeProvider timeProvider,
     ICurrentUser currentUser,
+    IAuditTrail audit,
     ILogger<ChangeOwnPasswordHandler> logger)
 {
     /// <summary>
@@ -45,6 +46,7 @@ internal sealed class ChangeOwnPasswordHandler(
             == PasswordVerificationResult.Failed)
         {
             logger.LogWarning("Account {AccountId} failed to change its password: wrong current password", account.Id);
+            await audit.RecordAsync(new AuditEntry("account.password_change_failed", "ACCOUNT", account.Id), cancellationToken);
             return Result.Failure<IssuedSession>(IdentityErrors.CurrentPasswordIncorrect);
         }
 
@@ -53,6 +55,7 @@ internal sealed class ChangeOwnPasswordHandler(
             return Result.Failure<IssuedSession>(IdentityErrors.PasswordContainsUsername);
         }
 
+        var mustChangeBefore = account.MustChangePassword;
         var now = timeProvider.GetUtcNow();
         account.PasswordHash = passwordHasher.HashPassword(account, request.NewPassword);
         account.MustChangePassword = false;
@@ -67,6 +70,10 @@ internal sealed class ChangeOwnPasswordHandler(
         await transaction.CommitAsync(cancellationToken);
 
         logger.LogInformation("Account {AccountId} changed its password; all other sessions revoked", account.Id);
+        await audit.RecordAsync(
+            new AuditEntry("account.password_changed", "ACCOUNT", account.Id,
+                Context: new Dictionary<string, object?> { ["wasTemporary"] = mustChangeBefore }),
+            cancellationToken);
 
         return Result.Success(IssuedSession.From(account, tokenIssuer.CreateAccessToken(account), refreshToken));
     }

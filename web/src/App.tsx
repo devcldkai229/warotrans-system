@@ -7,6 +7,8 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { JobDetailPage } from '@/features/jobs/JobDetailPage'
 import { ManagementPage } from '@/features/management/ManagementPage'
+import { AuditLogPage } from '@/features/operations/AuditLogPage'
+import { IssuesPage } from '@/features/operations/IssuesPage'
 import { FacilityPage } from '@/features/maps/FacilityPage'
 import { MapEditorPage } from '@/features/maps/MapEditorPage'
 import { FleetPage } from '@/features/robots/FleetPage'
@@ -45,6 +47,9 @@ function App() {
             <Route path="/configure/workflows/new" element={<WorkflowEditorPage />} />
             <Route path="/configure/workflows/:id" element={<WorkflowEditorPage />} />
             <Route path="/management" element={<ManagementPage />} />
+            <Route path="/operations/issues" element={<IssuesPage />} />
+            <Route path="/operations/issues/:issueId" element={<IssuesPage />} />
+            <Route path="/operations/audit" element={<AuditLogPage />} />
           </Route>
 
           {/* Full-screen editor: has its own header instead of the app shell. */}

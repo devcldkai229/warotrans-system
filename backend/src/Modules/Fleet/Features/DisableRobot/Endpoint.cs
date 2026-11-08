@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Fleet.Features.DisableRobot;
 
@@ -18,7 +19,8 @@ public static class DisableRobotEndpoint
             return Results.Ok(response);
         })
             .RequirePermission(Permissions.RobotConfigure)
-            .RequireRobotScope();
+            .RequireRobotScope()
+            .Audited("robot.disabled", "ROBOT", "id");
 
         return group;
     }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.WorkflowExecution.Features.ConfirmJobStep;
 
@@ -19,6 +20,7 @@ public static class ConfirmJobStepEndpoint
             return Results.Ok(response);
         })
         .RequirePermission(Permissions.JobOperate)
+        .Audited("job_step.confirmed", "JOB_STEP", "id")
         .WithName("ConfirmJobStep")
         .WithSummary("Staff confirms a waiting HUMAN_INTERACTION step (PICKUP_CONFIRM / DROPOFF_CONFIRM)")
         .WithDescription("Records a HandoverConfirmation for the scanned container, moves the JobContainer to ONBOARD / DELIVERED and lets the Job continue.");

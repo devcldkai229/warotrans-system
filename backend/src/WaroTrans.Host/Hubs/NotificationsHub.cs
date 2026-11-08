@@ -9,7 +9,8 @@ namespace WaroTrans.Host.Hubs;
 /// Client methods pushed by the server:
 /// - robotConnectivityChanged, robotTelemetryUpdated (to the robots the user may see: <see cref="RealtimeGroups.Robot"/>)
 /// - jobUpdated (Job / JobStep status change; clients refetch the Job) — users with job.read
-/// - notificationCreated (a new item for the notification bell) — users with notification.read
+/// - notificationCreated (a new item for the notification bell) — to its receiver (<see cref="RealtimeGroups.User"/>) or
+///   to its roles (<see cref="RealtimeGroups.Role"/>); robot notifications for Technicians go to <see cref="RealtimeGroups.Robot"/>
 ///
 /// Group membership is fixed when the connection opens (RTM-01). The connection is closed when the access token
 /// expires (<c>CloseOnAuthenticationExpiration</c>), so a reconnect with a fresh token re-evaluates role and robot
@@ -37,7 +38,7 @@ public sealed class NotificationsHub(IRobotAccessScope robotAccessScope) : Hub
 
         if (RolePermissionMatrix.UserHas(user, Permissions.NotificationRead))
         {
-            groups.Add(RealtimeGroups.Notifications);
+            groups.AddRange(AppRoles.All.Where(user.IsInRole).Select(RealtimeGroups.Role));
         }
 
         if (RolePermissionMatrix.UserHas(user, Permissions.RobotRead))
@@ -66,7 +67,6 @@ public sealed class NotificationsHub(IRobotAccessScope robotAccessScope) : Hub
 public static class RealtimeGroups
 {
     public const string Jobs = "perm:job.read";
-    public const string Notifications = "perm:notification.read";
 
     /// <summary>Everyone who may see the whole fleet (all roles except a scoped Technician).</summary>
     public const string AllRobots = "robots:all";
@@ -74,6 +74,9 @@ public static class RealtimeGroups
     public static string Robot(Guid robotId) => $"robot:{robotId:D}";
 
     public static string User(Guid accountId) => $"user:{accountId:D}";
+
+    /// <summary>Everyone signed in with this role who may read notifications.</summary>
+    public static string Role(string role) => $"role:{role}";
 
     /// <summary>Groups that should receive an event about <paramref name="robotId"/>.</summary>
     public static IReadOnlyList<string> ForRobot(Guid robotId) => [AllRobots, Robot(robotId)];

@@ -48,7 +48,8 @@ public sealed class JobExecutionEngine(
     TrafficShadowObserver? trafficShadow = null,
     ShadowSingleMoverGuard? shadowMoverGuard = null,
     ISegmentedTrafficCoordinator? segmentedTraffic = null,
-    ITrafficOpsLog? trafficOpsLog = null)
+    ITrafficOpsLog? trafficOpsLog = null,
+    IIssueReporter? issueReporter = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -447,9 +448,40 @@ public sealed class JobExecutionEngine(
                 now);
         }
 
+        // WFX-05: REPORT_ISSUE has a real side effect. The issue is opened before the step completes; if that fails the
+        // step stays WAITING and the caller gets the error. Idempotent on the step, so a retry reuses the same issue.
+        Guid? issueId = null;
+        if (operation == nameof(HumanActionCode.REPORT_ISSUE))
+        {
+            if (issueReporter is null)
+            {
+                throw new AppException("Issue reporting is not available.", 503, "issue_reporting_unavailable");
+            }
+
+            var stepContainer = step.ResolvedInputs.TryGetValue("containerId", out var sc) && sc.ValueKind == JsonValueKind.String
+                ? sc.GetGuid()
+                : (Guid?)null;
+            issueId = await issueReporter.ReportFromStepAsync(
+                new StepIssueDraft(
+                    step.Id,
+                    job.Id,
+                    job.JobNo,
+                    workflowStep.StepKey,
+                    source.UserId,
+                    AssignedRobot(job),
+                    stepContainer,
+                    string.IsNullOrWhiteSpace(note)
+                        ? $"Reported at step \"{workflowStep.StepKey}\" of job {job.JobNo}."
+                        : note.Trim()),
+                cancellationToken);
+        }
+
         step.OutputValues = new Dictionary<string, JsonElement>
         {
             ["confirmed"] = JsonSerializer.SerializeToElement(true),
+            ["issueId"] = issueId is { } openedIssue
+                ? JsonSerializer.SerializeToElement(openedIssue)
+                : JsonSerializer.SerializeToElement((object?)null),
             ["confirmedBy"] = source.UserId is { } uid
                 ? JsonSerializer.SerializeToElement(uid)
                 : JsonSerializer.SerializeToElement((object?)null),

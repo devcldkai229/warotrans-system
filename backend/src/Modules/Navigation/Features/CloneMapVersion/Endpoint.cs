@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Navigation.Features.CloneMapVersion;
 
@@ -19,6 +20,7 @@ public static class CloneMapVersionEndpoint
             return Results.Created($"/api/navigation/maps/{response.Id}", response);
         })
         .RequirePermission(Permissions.MapWrite)
+        .Audited("map.cloned", "MAP", null)
         .WithName("CloneMapVersion")
         .WithSummary("Copy a map version into a new editable DRAFT")
         .WithDescription(

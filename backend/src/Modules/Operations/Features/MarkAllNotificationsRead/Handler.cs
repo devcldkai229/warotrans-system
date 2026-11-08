@@ -1,16 +1,31 @@
 using MongoDB.Driver;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Operations.Documents;
 using WaroTrans.Operations.Persistence;
+using WaroTrans.Operations.Services;
 
 namespace WaroTrans.Operations.Features.MarkAllNotificationsRead;
 
-public sealed class MarkAllNotificationsReadHandler(OperationsMongoContext mongo, TimeProvider clock)
+public sealed class MarkAllNotificationsReadHandler(
+    OperationsMongoContext mongo,
+    ICurrentUser currentUser,
+    IRobotAccessScope robotAccessScope,
+    TimeProvider clock)
 {
-    public Task HandleAsync(CancellationToken cancellationToken) =>
-        mongo.Notifications.UpdateManyAsync(
+    public async Task HandleAsync(CancellationToken cancellationToken)
+    {
+        if (currentUser.AccountId is not { } me)
+        {
+            return;
+        }
+
+        var scope = await robotAccessScope.GetCurrentAsync(cancellationToken);
+        await mongo.Notifications.UpdateManyAsync(
             Builders<Notification>.Filter.And(
-                Builders<Notification>.Filter.Eq(n => n.ReceiverAccountId, Notification.EveryAdmin),
-                Builders<Notification>.Filter.Eq(n => n.IsRead, false)),
-            Builders<Notification>.Update.Set(n => n.IsRead, true).Set(n => n.ReadAt, clock.GetUtcNow()),
+                NotificationVisibility.VisibleTo(me, currentUser.Role, scope),
+                NotificationVisibility.UnreadBy(me)),
+            Builders<Notification>.Update.Push(n => n.Reads, new NotificationRead { AccountId = me, ReadAt = clock.GetUtcNow() }),
             cancellationToken: cancellationToken);
+    }
 }

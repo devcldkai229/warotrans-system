@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Navigation.Features.DeleteZone;
 
@@ -18,6 +19,7 @@ public static class DeleteZoneEndpoint
             return Results.NoContent();
         })
         .RequirePermission(Permissions.MapWrite)
+        .Audited("map.zone_deleted", "ZONE", "id")
         .WithName("DeleteZone")
         .WithSummary("Delete a zone from a draft map")
         .WithDescription("Deletes a Zone. DRAFT maps only.");
