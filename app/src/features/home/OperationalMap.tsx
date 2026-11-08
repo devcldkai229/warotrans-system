@@ -29,12 +29,11 @@ interface Props {
 /** A read-only operational view. All business geometry and robot identity come from this map version. */
 export function OperationalMap(props: Props) {
   return interactiveMapEnabled ? <MapViewport map={props.map} robots={props.fleet} selectedRobot={props.selectedRobotId}
-    onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={{top:0,bottom:props.bottomInset}}/> : <LegacyOperationalMap {...props}/>;
+    onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={{top:0,bottom:props.bottomInset}} showHeader={false} fullBleed={true}/> : <LegacyOperationalMap {...props}/>;
 }
 
 function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bottomInset, updateMode = 'polling' }: Props) {
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
-  const [headerHeight, setHeaderHeight] = useState(0);
   const [layersOpen, setLayersOpen] = useState(false);
   const [endpointId, setEndpointId] = useState<string | null>(null);
   const [showScan, setShowScan] = useState(false);
@@ -42,11 +41,10 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
   const [loaded, setLoaded] = useState('');
   const [failed, setFailed] = useState('');
   const model = useMemo(() => findMapModel(map), [map]);
-  const top = headerHeight + 12;
-  const availableHeight = Math.max(0, bounds.height - top - bottomInset - 44);
-  const viewport = mapViewport(map, Math.max(0, bounds.width - 52), availableHeight, bounds.height > bounds.width);
+  const availableHeight = bounds.height || 680;
+  const viewport = mapViewport(map, bounds.width || 390, availableHeight, availableHeight > (bounds.width || 390));
   const left = (bounds.width - viewport.width) / 2;
-  const sceneTop = top + Math.max(0, (availableHeight - viewport.height) / 2);
+  const sceneTop = (availableHeight - viewport.height) / 2;
   const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl());
   const imageKey = `${map.id}:${uri}:${imageAttempt}`;
   const raster = !model || showScan;
@@ -81,16 +79,8 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
       <Defs><Pattern id="operational-dots" width="20" height="20" patternUnits="userSpaceOnUse"><Circle cx="1" cy="1" r="0.7" fill={colors.borderStrong} opacity={0.45} /></Pattern></Defs>
       <Rect width="100%" height="100%" fill="url(#operational-dots)" />
     </Svg>
-    <View style={styles.heading} onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)}>
-      <View style={styles.headingRow}>
-        <View style={styles.titleGroup}><Text variant="headline">Warehouse Overview</Text><Text variant="caption">{map.code} · V{map.versionNo}</Text></View>
-        <Pressable style={styles.tool} accessibilityRole="button" accessibilityLabel="Map layers and locations" onPress={() => setLayersOpen(true)}><Layers size={19} color={colors.textPrimary} /></Pressable>
-      </View>
-      {selectedRobot ? <Pressable style={styles.telemetry} accessibilityRole="button" accessibilityLabel={`Robot ${selectedRobot.code} status`} onPress={() => onSelectRobot(selectedRobot.code)}>
-        <View style={[styles.dot, { backgroundColor: selectedRobot.isOnline ? colors.success : colors.textMuted }]} /><Text variant="caption" fontWeight="700">{selectedRobot.code}</Text>
-        <Text variant="caption" color={selectedRobot.isOnline ? 'successText' : 'textSecondary'}>{selectedRobot.isOnline ? 'Online' : 'Offline'}</Text>
-        <BatteryMedium size={14} color={colors.textSecondary} /><Text variant="caption">{typeof selectedPose?.batteryPercent === 'number' ? `${Math.round(selectedPose.batteryPercent)}%` : '—'}</Text>
-      </Pressable> : <Text variant="caption">No Robot Linked To This Map</Text>}
+    <View style={styles.floatingTool}>
+      <Pressable style={styles.tool} accessibilityRole="button" accessibilityLabel="Map layers and locations" onPress={() => setLayersOpen(true)}><Layers size={19} color={colors.textPrimary} /></Pressable>
     </View>
     {sceneVisible && viewport.width > 0 && viewport.height > 0 ? <View style={[styles.floor, { position: 'absolute', left, top: sceneTop, width: viewport.width, height: viewport.height }]}>
       {raster && uri ? <Image key={imageKey} source={{ uri }} accessibilityLabel={`Published occupancy map ${map.code}`} resizeMode="stretch"
@@ -156,7 +146,7 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
       <View style={styles.scale}><View style={[styles.scaleLine,{width:scaleWidth}]} /><Text variant="caption">{scaleMeters} m</Text></View>
       <Text variant="caption" style={styles.legendText}>{selectedPose ? mapRobotState(selectedPose,map,Date.now(),updateMode).label : mapUpdateLabel(updateMode)}{viewport.rotated ? ' · Rotated View' : ''}</Text>
     </View> : null}
-    {raster && (!uri || failed === imageKey) ? <View style={[styles.imageError,{top:top+12}]}><Text variant="caption">{uri ? 'Map Image Could Not Be Loaded' : 'Map Preview Is Not Available'}</Text>{uri ? <Button title="Retry Image" variant="outline" size="sm" onPress={() => setImageAttempt(v=>v+1)} /> : null}</View> : null}
+    {raster && (!uri || failed === imageKey) ? <View style={[styles.imageError,{top:24}]}><Text variant="caption">{uri ? 'Map Image Could Not Be Loaded' : 'Map Preview Is Not Available'}</Text>{uri ? <Button title="Retry Image" variant="outline" size="sm" onPress={() => setImageAttempt(v=>v+1)} /> : null}</View> : null}
     {layersOpen ? <BottomSheet onClose={() => setLayersOpen(false)} accessibilityLabel="map layers">
       <View style={styles.sheetTitle}><Text variant="title" style={styles.flex}>Map Layers</Text><Button title="Close" icon={X} variant="ghost" size="sm" onPress={() => setLayersOpen(false)} /></View>
       <ScrollView contentContainerStyle={styles.sheetContent}>
@@ -180,6 +170,7 @@ function LocationSheet({endpoint,onClose}:{endpoint:EndpointDto;onClose:()=>void
 
 const styles = StyleSheet.create({
   root:{...StyleSheet.absoluteFill,backgroundColor:colors.background,overflow:'hidden'},
+  floatingTool:{position:'absolute',top:12,right:16,zIndex:10},
   heading:{position:'absolute',top:0,left:0,right:0,padding:16,gap:12}, headingRow:{flexDirection:'row',gap:12,alignItems:'center'}, titleGroup:{flex:1,minWidth:0,gap:3},
   tool:{width:44,height:44,borderRadius:radii.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,alignItems:'center',justifyContent:'center',...shadows.sm},
   telemetry:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',alignSelf:'flex-start',gap:7,minHeight:44,paddingHorizontal:12,paddingVertical:8,borderRadius:radii.pill,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},dot:{width:6,height:6,borderRadius:3},

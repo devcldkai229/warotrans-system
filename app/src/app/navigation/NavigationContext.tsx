@@ -26,7 +26,7 @@ function normalizeEntry(screen: AppScreen, params: Record<string, any> = {}): En
   if (screen === 'point_to_point') return { screen: 'transport_create', params: { ...params, workflow: 'POINT_TO_POINT_TRANSPORT' } };
   return { screen, params };
 }
-function parseUrl(url: string): Entry {
+export function parseNavigationUrl(url: string): Entry {
   const query = new URL(url).searchParams;
   const raw = query.get('screen') || 'home';
   const aliases: Record<string, AppScreen> = {
@@ -44,13 +44,14 @@ function parseUrl(url: string): Entry {
   }
   if (query.get('job') || query.get('jobId')) params.jobId = query.get('job') || query.get('jobId');
   if (raw === 'jobs-global') params.view = 'global';
+  if (raw === 'jobs-my') params.view = 'mine';
   if (raw === 'jobs-history') params.view = 'history';
   if (raw === 'handover-hud') params.modal = 'verify';
   if (raw === 'mismatch-modal') params.modal = 'mismatch';
   return normalizeEntry(screen, params);
 }
 function initialEntry(): Entry {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') return parseUrl(window.location.href);
+  if (Platform.OS === 'web' && typeof window !== 'undefined') return parseNavigationUrl(window.location.href);
   return { screen: 'home', params: {} };
 }
 export function NavigationProvider({ children }: { children: ReactNode }) {
@@ -91,7 +92,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       applyStack(stackRef.current, 'replace');
-      const onPop = (event: PopStateEvent) => applyStack(event.state?.waroTransStack || [parseUrl(window.location.href)]);
+      const onPop = (event: PopStateEvent) => applyStack(event.state?.waroTransStack || [parseNavigationUrl(window.location.href)]);
       window.addEventListener('popstate', onPop);
       return () => window.removeEventListener('popstate', onPop);
     }
@@ -100,7 +101,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       goBack(); return true;
     });
     let mounted = true;
-    const open = (url: string) => { try { applyStack([parseUrl(url)]); } catch {} };
+    const open = (url: string) => { try { applyStack([parseNavigationUrl(url)]); } catch {} };
     void Linking.getInitialURL().then(url => { if (url && mounted) open(url); });
     const links = Linking.addEventListener('url', ({ url }) => open(url));
     return () => { mounted = false; hardware.remove(); links.remove(); };

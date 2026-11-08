@@ -30,6 +30,8 @@ import {
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime } from '../../shared/realtime';
+import { getOperatingContext } from '../../shared/api/operatingContextApi';
+import { homeFleetOnMap } from './homeFleet';
 import { listJobs } from '../../shared/api';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from '../jobs/jobData';
 import { HomeMapPanel } from './HomeMapPanel';
@@ -41,13 +43,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const INITIAL_JOB = EMPTY_JOB;
-
-interface MapRobot {
-  id: string;
-  status: 'EN_ROUTE' | 'STANDBY' | 'PAUSED' | 'UNKNOWN';
-  battery: number | null;
-  speed: string;
-}
 
 /**
  * Modern "Command Center" HomeScreen.
@@ -67,7 +62,8 @@ export function HomeScreen() {
   const [selectedRobotId, setSelectedRobotId] = useState<string>('');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
-  const { robotTelemetry, lastJobUpdate } = useRealtime();
+  const { lastJobUpdate } = useRealtime();
+  const operating = useQuery({ queryKey: ['operating-context'], queryFn: () => getOperatingContext(), staleTime: 0, refetchInterval: 30_000 });
   const jobsQuery = useQuery({ queryKey: ['home-jobs', session?.id], queryFn: () => listJobs(), refetchInterval: 5_000 });
   const { refetch: refetchJobs } = jobsQuery;
 
@@ -84,19 +80,11 @@ export function HomeScreen() {
     return mapped.sort((a, b) => priority(a) - priority(b))[0] || INITIAL_JOB;
   }, [jobsQuery.data, session?.id]);
 
-  const robots = useMemo<MapRobot[]>(() => rawFleet.map(robot => {
-    const live = robotTelemetry[robot.code];
-    const navigation = live?.navigationStatus || robot.navigationStatus;
-    const battery = live?.batteryPercent ?? robot.batteryPercent;
-    const velocity = live?.linearVelocity ?? robot.linearVelocity;
-    return {
-      id: robot.code,
-      status: navigation === 'NAVIGATING' ? 'EN_ROUTE' : navigation === 'PAUSED' ? 'PAUSED'
-        : navigation === 'STANDBY' ? 'STANDBY' : 'UNKNOWN',
-      battery: typeof battery === 'number' ? Math.round(battery) : null,
-      speed: typeof velocity === 'number' ? `${velocity.toFixed(2)} m/s` : '—',
-    };
-  }), [rawFleet, robotTelemetry]);
+  const fleetUpdateMode = fleetQuery.isError || fleetQuery.isPaused ? 'unavailable' : fleetQuery.updateMode;
+  const fleetStatusCurrent = fleetUpdateMode !== 'unavailable' && fleetUpdateMode !== 'paused';
+  const robots = useMemo(() => homeFleetOnMap(rawFleet, operating.data, fleetUpdateMode), [rawFleet, operating.data, fleetUpdateMode]);
+  const activeRobotCount = robots.filter(robot => robot.active).length;
+  const fleetCountLabel = operating.data ? `${fleetStatusCurrent ? activeRobotCount : '—'}/${robots.length}` : '…';
 
   const isWaitingHandover = Boolean(activeJob.hasWaitingHandover);
   const isQueuedOrCreated = activeJob.status === 'CREATED' || activeJob.status === 'QUEUED';
@@ -140,7 +128,7 @@ export function HomeScreen() {
           setSelectedRobotId(id);
           const r = robots.find((item) => item.id === id);
           if (r) {
-            toast.info(`${r.id}: Battery ${r.battery == null ? '—' : `${r.battery}%`}, Speed ${r.speed}`);
+            toast.info(`${r.id}${r.lastReported ? ' · Last Reported' : ''}: Battery ${r.battery == null ? '—' : `${r.battery}%`}, Speed ${r.speed}`);
           }
         }}
         style={styles.mapCanvas}
@@ -226,7 +214,7 @@ export function HomeScreen() {
                   style={({ pressed }) => [styles.fleetToggleBtn, pressed && styles.pressed]}
                 >
                   <Text variant="caption" color={colors.primaryText} style={styles.fleetToggleText}>
-                    {isFleetExpanded ? 'Hide Fleet' : `Fleet (${robots.length})`}
+                    {isFleetExpanded ? 'Hide Fleet' : `Fleet (${fleetCountLabel})`}
                   </Text>
                   {isFleetExpanded ? (
                     <ChevronDown size={14} color={colors.primaryText} />
@@ -299,7 +287,7 @@ export function HomeScreen() {
               <View style={styles.expandedFleetSection}>
                 <View style={styles.fleetHeaderWithAction}>
                   <Text variant="label" color={colors.textSecondary} style={styles.fleetSectionTitle}>
-                    Active Fleet Status
+                    Fleet On This Map
                   </Text>
                   <Pressable
                     onPress={() => {
@@ -317,6 +305,12 @@ export function HomeScreen() {
                   </Pressable>
                 </View>
 
+                <Text variant="caption" color={colors.textSecondary}>
+                  {operating.isPending ? 'Loading Fleet Context…' : operating.error ? 'Fleet context could not be refreshed.'
+                    : !fleetStatusCurrent ? `${robots.length} Registered · ${fleetUpdateMode === 'paused' ? 'Updates Paused' : 'Live Status Unavailable'}`
+                    : `${activeRobotCount} Online & Enabled · ${robots.length} Registered`}
+                </Text>
+                {!operating.isPending && !operating.error && !robots.length && <Text variant="caption">No robots are registered on this map.</Text>}
                 <View style={styles.fleetRow}>
                   {robots.map((r) => (
                     <View key={r.id} style={styles.fleetItemCard}>
@@ -327,19 +321,16 @@ export function HomeScreen() {
                         <View
                           style={[
                             styles.statusDot,
-                            r.status === 'EN_ROUTE'
-                              ? styles.statusDotRunning
-                              : r.status === 'PAUSED'
-                              ? styles.statusDotWarning
-                              : styles.statusDotStandby,
+                            { backgroundColor: r.tone === 'danger' ? colors.dangerText : r.tone === 'warning' ? colors.warningText
+                              : r.tone === 'success' ? colors.successText : r.tone === 'info' ? colors.primaryText : colors.textMuted },
                           ]}
                         />
                         <Text variant="caption" color={colors.textSecondary} style={styles.statusLabel}>
-                          {r.status === 'EN_ROUTE' ? 'In Transit' : r.status === 'PAUSED' ? 'Paused' : r.status === 'STANDBY' ? 'Standby' : 'Unknown'}
+                          {r.statusLabel}
                         </Text>
                       </View>
                       <View style={styles.fleetTelemetryRow}>
-                        <Text variant="caption" color={colors.textSecondary}>Speed: {r.speed}</Text>
+                        <Text variant="caption" color={colors.textSecondary}>{r.lastReported ? 'Last Speed' : 'Speed'}: {r.speed}</Text>
                         <View style={styles.batteryRow}>
                           <BatteryMedium size={13} color={r.battery != null && r.battery < 20 ? '#dc2626' : colors.successText} />
                           <Text variant="caption" color={colors.textSecondary}>{r.battery == null ? '—' : `${r.battery}%`}</Text>
@@ -556,10 +547,13 @@ const styles = StyleSheet.create({
   },
   fleetRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   fleetItemCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 0,
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.sm,
     padding: 9,
@@ -594,11 +588,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#64748b',
   },
   statusLabel: {
-    fontSize: 11,
+    fontSize: 12,
+    flexShrink: 1,
     fontWeight: '600',
   },
   fleetTelemetryRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 4,

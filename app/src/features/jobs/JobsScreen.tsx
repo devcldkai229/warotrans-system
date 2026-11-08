@@ -1,5 +1,6 @@
 import { Filter, Inbox, MapPin, Search, SearchX, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
@@ -12,9 +13,8 @@ import {
   Text,
   TextField,
 } from '../../shared/ui';
-import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { acceptHumanTask, listJobs, startJob } from '../../shared/api';
+import { listJobs } from '../../shared/api';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { JobCard } from './JobCard';
 import { AppJobItem, isTerminalJobStatus, mapJobDetailToAppJobItem } from './jobData';
@@ -193,33 +193,21 @@ export function JobsScreen() {
   const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'fleet');
   const [query, setQuery] = useState('');
   const [isZoneOnly, setIsZoneOnly] = useState(false);
-  const [jobsList, setJobsList] = useState<AppJobItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const loadJobs = React.useCallback(async () => {
-    try {
-      const res = await listJobs();
-      setJobsList(res.map(detail => mapJobDetailToAppJobItem(detail, session?.id)));
-    } catch (err) {
-      console.warn('JobsScreen loadJobs error:', err);
-    }
-  }, [session?.id]);
-
-  useEffect(() => {
-    loadJobs();
-  }, [loadJobs]);
-
-  useEffect(() => {
-    if (lastJobUpdate) {
-      loadJobs();
-    }
-  }, [lastJobUpdate, loadJobs]);
+  const jobsQuery = useQuery({
+    queryKey: ['jobs-list', session?.id],
+    queryFn: () => listJobs(),
+    enabled: !!session?.id,
+    refetchInterval: 5_000,
+  });
+  const jobsList = useMemo(() => (jobsQuery.data ?? []).map(detail => mapJobDetailToAppJobItem(detail, session?.id)), [jobsQuery.data, session?.id]);
+  const { refetch } = jobsQuery;
+  useEffect(() => { if (lastJobUpdate) void refetch(); }, [lastJobUpdate, refetch]);
 
   const onRefresh = async () => {
     triggerHaptic('tap');
     setIsRefreshing(true);
-    await loadJobs();
-    setIsRefreshing(false);
+    try { await refetch(); } finally { setIsRefreshing(false); }
   };
 
   useEffect(() => {
@@ -256,11 +244,11 @@ export function JobsScreen() {
   const options = useMemo(
     () =>
       SCOPES.map((entry) =>
-        entry.value === 'history'
+        entry.value === 'history' || jobsQuery.data === undefined
           ? entry
           : { ...entry, label: `${entry.label} (${counts[entry.value]})` }
       ),
-    [counts]
+    [counts, jobsQuery.data]
   );
 
   const handleScopeChange = (next: JobScope) => {
@@ -276,38 +264,6 @@ export function JobsScreen() {
   const openJob = (job: AppJobItem) => {
     triggerHaptic('tap');
     navigate('job_detail', { jobId: job.id });
-  };
-
-  const handleAcceptTask = async (job: AppJobItem) => {
-    triggerHaptic('success');
-    try {
-      if (job.status === 'CREATED' || job.status === 'QUEUED') {
-        const updated = await startJob(job.id);
-        if (!updated) throw new Error('Job could not be started');
-        toast.success(`Job ${job.jobNo || job.id} started!`);
-        await loadJobs();
-        navigate('job_detail', { jobId: job.id });
-        return;
-      }
-      if (!job.activeTaskId) throw new Error('This job has no waiting human task to claim.');
-      await acceptHumanTask(job.activeTaskId);
-      await loadJobs();
-      toast.success(`Task ${job.id} accepted! Moved to My Tasks.`);
-      setJobsList((prev) =>
-        prev.map((j) =>
-          j.id === job.id
-            ? {
-                ...j,
-                isMine: true,
-                status: j.status === 'CREATED' || j.status === 'QUEUED' ? 'ASSIGNED' : j.status,
-              }
-            : j
-        )
-      );
-      setScope('mine');
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to accept task');
-    }
   };
 
   const topInset = useTopInset();
@@ -409,7 +365,6 @@ export function JobsScreen() {
           <JobCard
             job={item}
             onPress={() => openJob(item)}
-            onAccept={['CREATED', 'QUEUED'].includes(item.status) ? () => handleAcceptTask(item) : undefined}
           />
         )}
         ItemSeparatorComponent={ListSeparator}
@@ -423,7 +378,13 @@ export function JobsScreen() {
             tintColor={colors.primary}
           />
         }
-        ListEmptyComponent={
+        ListHeaderComponent={jobsQuery.error && jobsQuery.data !== undefined ? <EmptyState compact tone="warning"
+          title="Could Not Refresh Jobs" message="Showing the last loaded jobs. Refresh before acting on an old status."
+          actionTitle="Retry" onAction={() => { void refetch(); }} /> : null}
+        ListEmptyComponent={jobsQuery.data === undefined ? <EmptyState compact
+          title={jobsQuery.error ? 'Jobs Unavailable' : jobsQuery.fetchStatus === 'paused' ? 'Waiting For Connection' : 'Loading Jobs…'}
+          message={jobsQuery.error ? jobsQuery.error.message : 'The queue has not loaded yet.'}
+          actionTitle={jobsQuery.error ? 'Retry' : undefined} onAction={() => { void refetch(); }} /> :
           <ListEmpty
             scope={scope}
             hasQuery={query.trim().length > 0}

@@ -1,754 +1,217 @@
-import { mobileCapabilities } from '../../shared/api/capabilities';
-import { toast } from '../../shared/context/ToastContext';
-import React, { useEffect, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  Box,
-  Check,
-  Layers,
-  PackageCheck,
-  Printer,
-  Rocket,
-} from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Box, Check, CheckCircle2, ChevronRight, MapPin, Minus, Plus, ScanLine, Search, X } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { Button } from '../../shared/components/Button';
-import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
+import { BottomSheet } from '../../shared/ui/BottomSheet';
+import { Button, Card, EmptyState, Text, TextField } from '../../shared/ui';
+import { createContainer, getMapVersionDetail, listProductCategories, listProducts, listStorageLocations } from '../../shared/api';
+import type { ProductItem } from '../../shared/api/warehouseApi';
+import { getOperatingContext } from '../../shared/api/operatingContextApi';
+import { getUserErrorMessage } from '../../shared/api/client';
+import { mobileCapabilities } from '../../shared/api/capabilities';
 import { colors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
-import { typography } from '../../shared/theme/typography';
-import { triggerHaptic } from '../../shared/utils/haptics';
-import { createContainer, listProducts, listProductCategories } from '../../shared/api';
-
-interface ProductCatalogEntry {
-  name: string;
-  productId: string;
-  sku: string;
-}
-
+import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
+import { productForScannedBarcode, receivingCount, receivingLocations, registerReceivingBatch } from './receivingData';
 
 export function CreateContainerScreen() {
   const { goBack, navigate } = useNavigation();
-  const [mode, setMode] = useState<'single' | 'batch'>('single');
-  const [category, setCategory] = useState<string>('');
-  const [product, setProduct] = useState<string>('');
-  const [productCatalog, setProductCatalog] = useState<Record<string, ProductCatalogEntry>>({});
-  const [quantity, setQuantity] = useState<string>('1');
-  const [batchCount, setBatchCount] = useState<string>('10');
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const [generatedBarcode, setGeneratedBarcode] = useState<string>('');
-  const [batchGenerated, setBatchGenerated] = useState<{
-    start: string;
-    end: string;
-    count: number;
-    totalUnits: number;
-  } | null>(null);
-  const [categoryProducts, setCategoryProducts] = useState<Record<string, string[]>>({});
-  const [createdBarcodes, setCreatedBarcodes] = useState<string[]>([]);
+  const insets = useSafeAreaInsets();
+  const [product, setProduct] = useState<ProductItem | null>(null);
+  const [productPicker, setProductPicker] = useState(false);
+  const [search, setSearch] = useState('');
+  const [serverSearch, setServerSearch] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [supplierBarcode, setSupplierBarcode] = useState('');
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [printFeedback, setPrintFeedback] = useState<string | null>(null);
-
+  const [count, setCount] = useState('1');
+  const [locationId, setLocationId] = useState('');
+  const [locationPicker, setLocationPicker] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [receipt, setReceipt] = useState<{ barcodes: string[]; requested: number; error: string | null } | null>(null);
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    let mounted = true;
-    Promise.all([listProducts({ isActive: true, take: 100 }), listProductCategories()]).then(([products, categories]) => {
-      if (!mounted) return;
-      const catalog: Record<string, ProductCatalogEntry> = {};
-      const groups: Record<string, string[]> = {};
-      products.items.forEach(item => {
-        const label = `${item.name} (${item.sku})`;
-        catalog[label] = { name: item.name, productId: item.id, sku: item.sku };
-        const categoryName = categories.items.find(category => category.id === item.categoryId)?.name || 'Products';
-        (groups[categoryName] ||= []).push(label);
-      });
-      setProductCatalog(catalog); setCategoryProducts(groups);
-      const firstCategory = Object.keys(groups)[0] || '';
-      setCategory(firstCategory); setProduct(groups[firstCategory]?.[0] || '');
-    }).catch(error => { if (mounted) setCatalogError(error.message || 'Product catalog could not be loaded.'); });
-    return () => { mounted = false; };
-  }, []);
-  const productOptions = categoryProducts[category] || [];
+    const timer = setTimeout(() => setServerSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const packQty = Number(quantity) || 0;
-  const numContainers = Number(batchCount) || 0;
-  const totalBatchUnits = packQty * numContainers;
-  const batchCountLabel = batchCount.trim() || '0';
+  const operating = useQuery({ queryKey: ['operating-context'], queryFn: () => getOperatingContext(), refetchInterval: 30_000 });
+  const context = operating.data;
+  const receiving = useQuery({
+    queryKey: ['receiving-locations', context?.warehouse.id, context?.map.id],
+    enabled: !!context,
+    queryFn: async () => {
+      if (!context) throw new Error('The receiving warehouse is not available.');
+      const [locations, map] = await Promise.all([
+        listStorageLocations({ warehouseId: context.warehouse.id, activeOnly: true }),
+        getMapVersionDetail(context.map.id),
+      ]);
+      return receivingLocations(locations.items, map);
+    },
+  });
+  const locations = receiving.data ?? [];
+  const location = locations.find(item => item.id === locationId);
+  const contextKey = `${context?.warehouse.id ?? ''}:${context?.map.id ?? ''}`;
+  const latestContext = useRef(contextKey);
+  latestContext.current = contextKey;
+  const categories = useQuery({ queryKey: ['receiving-product-categories'], queryFn: listProductCategories, enabled: productPicker });
+  const products = useQuery({
+    queryKey: ['receiving-products', serverSearch, categoryId],
+    queryFn: () => listProducts({ isActive: true, take: 100, search: serverSearch || undefined, categoryId: categoryId || undefined }),
+    enabled: productPicker,
+  });
+  useEffect(() => {
+    if (!scannedCode || serverSearch !== scannedCode || products.isFetching || !products.data || products.data.total > products.data.items.length) return;
+    const match = productForScannedBarcode(products.data.items, scannedCode);
+    if (match) { setProduct(match); setProductPicker(false); setScannedCode(null); setFormError(null); }
+  }, [scannedCode, serverSearch, products.data, products.isFetching]);
 
-  const handleGenerate = async () => {
-    const item = productCatalog[product];
-    const count = mode === 'single' ? 1 : Number(batchCount);
-    if (!item) { toast.error('Select an active product from the server catalog.'); return; }
-    if (!Number.isInteger(count) || count < 1 || count > 10) { toast.error('Enter between 1 and 10 containers.'); return; }
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    const created: string[] = [];
+  const beginScan = () => { setProductPicker(false); setScannerOpen(true); };
+  const handleScan = (barcode: string) => {
+    const code = barcode.trim();
+    setScannerOpen(false); setCategoryId(''); setSearch(code); setScannedCode(code); setSupplierBarcode(code); setProductPicker(true);
+  };
+  const handleRegister = async () => {
+    if (pending.current || !mobileCapabilities.createContainer) return;
+    setFormError(null);
+    if (!product) { setFormError('Select a product first.'); setProductPicker(true); return; }
+    const requested = receivingCount(count);
+    if (requested === null) { setFormError('Enter between 1 and 10 containers.'); return; }
+    if (!location || !context || operating.error || receiving.error) { setFormError('Choose a configured receiving location before registering goods.'); setLocationPicker(true); return; }
+    pending.current = true; setSubmitting(true);
+    const registrationContext = contextKey;
     try {
-      for (let index = 0; index < count; index++) {
-        const response = await createContainer({ productId: item.productId, supplierPackageBarcode: supplierBarcode.trim() || null });
-        created.push(response.barcode);
-      }
-    } catch (error: any) {
-      toast.error(`${created.length} of ${count} containers registered. ${error.message || 'Registration failed.'}`);
+      const result = await registerReceivingBatch(requested, () => {
+        if (latestContext.current !== registrationContext) throw new Error('Receiving context changed.');
+        return createContainer({ productId: product.id, supplierPackageBarcode: supplierBarcode.trim() || null, initialStorageLocationId: location.id });
+      });
+      if (!mounted.current) return;
+      const error = result.error ? getUserErrorMessage(result.error, 'Registration could not be completed.') : null;
+      if (result.barcodes.length) setReceipt({ barcodes: result.barcodes, requested, error });
+      else setFormError(`${error || 'No registration was confirmed.'} Check Inventory before trying again.`);
     } finally {
-      if (created.length) {
-        setCreatedBarcodes(created); setGeneratedBarcode(created[0]);
-        setBatchGenerated(mode === 'batch' ? { start: created[0], end: created[created.length - 1], count: created.length, totalUnits: created.length } : null);
-        setIsSuccess(true);
-      }
-      setIsSubmitting(false);
+      pending.current = false;
+      if (mounted.current) setSubmitting(false);
     }
   };
-  const handlePrint = () => {
-    setPrintFeedback('Printer integration is not configured. Use the registered container code for manual entry.');
-    setTimeout(() => setPrintFeedback(null), 4000);
-  };
-  const handleDispatchInbound = () => {
-    if (!createdBarcodes.length) return;
-    navigate('transport_create', { workflow: 'INBOUND_PUTAWAY', container: createdBarcodes[0], containers: createdBarcodes });
-  };
 
-  const barcodeBars = [3, 1, 2, 1, 4, 1, 2, 3, 2, 1, 1, 3, 4, 1, 2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 3, 1, 2, 3, 1, 2, 4, 1];
+  const locationError = operating.error || receiving.error;
+  const locationMessage = location ? `${location.code} · ${location.endpointCode}`
+    : locationError ? 'Receiving locations could not be loaded'
+    : !context || receiving.isPending ? 'Loading receiving locations…'
+    : 'No location selected';
+  const canRegister = mobileCapabilities.createContainer && !locationError && receiving.data !== undefined && locations.length > 0;
+  const locationNeedle = locationSearch.trim().toLowerCase();
+  const filteredLocations = locations.filter(item => [item.name, item.code, item.endpointCode].some(value => value.toLowerCase().includes(locationNeedle)));
 
-  return (
-    <View style={styles.container}>
-      <SubScreenHeader
-        label={isSuccess ? 'Inbound Receiving · Registered' : 'Cargo induction'}
-        title="Pack & Ingest Container"
-        onBack={goBack}
-      />
-
-      {/* Mode Switcher */}
-      {!isSuccess && (
-        <View style={styles.modeBar}>
-          <View style={styles.modeSwitcher}>
-            <Pressable
-              onPress={() => setMode('single')}
-              style={[styles.modeBtn, mode === 'single' && styles.modeBtnActive]}
-            >
-              <Box size={16} color={mode === 'single' ? colors.textPrimary : colors.textMuted} />
-              <Text style={[styles.modeText, mode === 'single' && styles.modeTextActive]}>
-                Single tote
-              </Text>
+  return <View style={styles.screen}>
+    <SubScreenHeader label="Inbound Receiving" title={receipt ? 'Registered Containers' : 'Receive Goods'} onBack={goBack} />
+    <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {context ? <Text variant="caption" color={colors.textSecondary}>{context.warehouse.name} · {context.map.code}</Text> : null}
+        {receipt ? <>
+          <Card gap={12}>
+            <View style={styles.sectionHeading}><CheckCircle2 size={22} color={receipt.error ? colors.warningText : colors.successText} /><Text variant="headline">{receipt.barcodes.length} Of {receipt.requested} Registered</Text></View>
+            <Text variant="body" color={colors.textSecondary}>{product?.name}</Text>
+            {receipt.barcodes.map(barcode => <View key={barcode} style={styles.receiptCode}><Text selectable variant="code">{barcode}</Text></View>)}
+            {receipt.error ? <Text variant="caption" color={colors.dangerText}>{receipt.error} Check Inventory before registering the remaining containers.</Text> : null}
+            <Text variant="caption" color={colors.textSecondary}>Barcode labels and printing are not configured. Use the registered codes for manual entry.</Text>
+          </Card>
+          <Button title="Continue To Putaway" onPress={() => navigate('transport_create', { workflow: 'INBOUND_PUTAWAY', container: receipt.barcodes[0], containers: receipt.barcodes })} />
+          <Button title="Receive More Goods" variant="secondary" onPress={() => { setReceipt(null); setCount('1'); setSupplierBarcode(''); setFormError(null); }} />
+        </> : <>
+          <Card padding="none">
+            <View style={styles.groupHeader}><Text variant="label">Product</Text><Pressable accessibilityRole="button" accessibilityLabel="Scan product barcode" disabled={submitting} onPress={beginScan} style={styles.scanAction}><ScanLine size={18} color={colors.primaryText} /><Text variant="label" color={colors.primaryText}>Scan</Text></Pressable></View>
+            <Pressable accessibilityRole="button" accessibilityLabel={product ? `Change product ${product.name}` : 'Choose product'} disabled={submitting} onPress={() => { setProductPicker(true); setScannedCode(null); }} style={({ pressed }) => [styles.choiceRow, pressed && styles.pressed]}>
+              <Box size={20} color={colors.textSecondary} />
+              <View style={styles.flex}><Text variant="bodyMedium">{product?.name || 'Choose A Product'}</Text><Text variant="caption" color={colors.textSecondary}>{product?.sku || 'Search the catalog or scan a supplier barcode'}</Text></View>
+              <ChevronRight size={18} color={colors.textMuted} />
             </Pressable>
-            <Pressable
-              onPress={() => setMode('batch')}
-              style={[styles.modeBtn, mode === 'batch' && styles.modeBtnActive]}
-            >
-              <Layers size={16} color={mode === 'batch' ? colors.textPrimary : colors.textMuted} />
-              <Text style={[styles.modeText, mode === 'batch' && styles.modeTextActive]}>
-                Batch mode (multi-tote)
-              </Text>
+          </Card>
+
+          <Card gap={14}>
+            <View style={styles.sectionHeading}><MapPin size={18} color={colors.textSecondary} /><Text variant="label">Receive At</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Choose receiving location" disabled={submitting} onPress={() => setLocationPicker(true)} style={styles.locationChoice}>
+              <View style={styles.flex}><Text variant="bodyMedium">{location?.name || 'Receiving Location'}</Text><Text variant="caption" color={colors.textSecondary}>{locationMessage}</Text></View><ChevronRight size={18} color={colors.textMuted} />
             </Pressable>
-          </View>
-        </View>
-      )}
+            {locationError ? <Button title="Retry Locations" variant="secondary" size="sm" onPress={() => { void operating.refetch(); void receiving.refetch(); }} /> : receiving.data?.length === 0 ? <Text variant="caption" color={colors.textSecondary}>No receiving location is configured on this map. Ask the warehouse administrator to configure one.</Text> : null}
+          </Card>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {!mobileCapabilities.createContainer && <Text style={{ color: colors.textSecondary }}>Container registration is not available on the current backend. Product browsing remains available.</Text>}
-        {catalogError && <Text style={{ color: colors.danger }}>{catalogError}</Text>}
-        {printFeedback && (
-          <View style={styles.printToast}>
-            <Printer size={16} color={colors.primary} />
-            <Text style={styles.printToastText}>{printFeedback}</Text>
-          </View>
-        )}
-
-        {isSuccess ? (
-          <View style={styles.successCard}>
-            <View style={styles.successHeader}>
-              <View style={styles.successIconBadge}>
-                <Check size={20} color="#16a34a" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.successTitle}>
-                  {batchGenerated ? `${batchGenerated.count} containers registered` : 'Container registered'}
-                </Text>
-                <Text style={styles.successSub}>
-                  {batchGenerated
-                    ? 'Batch containers registered to Central Registry in the backend registry.'
-                    : 'Tote container registered to Central Registry in the backend registry.'}
-                </Text>
-              </View>
+          <Card gap={16}>
+            <View style={styles.countRow}><View style={styles.flex}><Text variant="label">Number Of Containers</Text><Text variant="caption" color={colors.textSecondary}>One code for each package</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Decrease container count" disabled={submitting || (receivingCount(count) ?? 1) <= 1} onPress={() => setCount(String(Math.max(1, (receivingCount(count) ?? 1) - 1)))} style={styles.countButton}><Minus size={18} color={colors.textPrimary} /></Pressable>
+              <TextField accessibilityLabel="Number of containers" value={count} onChangeText={setCount} editable={!submitting} keyboardType="number-pad" maxLength={2} containerStyle={styles.countField} inputStyle={styles.countInput} />
+              <Pressable accessibilityRole="button" accessibilityLabel="Increase container count" disabled={submitting || (receivingCount(count) ?? 1) >= 10} onPress={() => setCount(String(Math.min(10, (receivingCount(count) ?? 1) + 1)))} style={styles.countButton}><Plus size={18} color={colors.textPrimary} /></Pressable>
             </View>
-
-            {/* Industrial Simulated Shipping Barcode Label */}
-            <View style={styles.barcodeTicket}>
-              <View style={styles.ticketTop}>
-                <Text style={styles.ticketMetaTag}>
-                  {batchGenerated
-                    ? `BATCH TOTE LABELS · ${batchGenerated.count} SEQUENTIAL`
-                    : 'CONTAINER REFERENCE · MANUAL ENTRY'}
-                </Text>
-                <Text style={styles.ticketDpi}>203 DPI</Text>
-              </View>
-
-              <View style={styles.barcodeArt}>
-                {barcodeBars.map((w, idx) => (
-                  <View
-                    key={idx}
-                    style={[styles.barcodeBar, { width: w * 2 }]}
-                  />
-                ))}
-              </View>
-
-              <Text style={styles.barcodeCodeText}>
-                {batchGenerated
-                  ? `${batchGenerated.start} ➔ ${batchGenerated.end}`
-                  : generatedBarcode}
-              </Text>
-              <Text style={styles.barcodeProductText}>
-                {batchGenerated ? (
-                  <>
-                    <Text style={styles.boldQty}>{batchGenerated.count} Totes × {packQty} containers</Text> ({batchGenerated.totalUnits} Total Containers)
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.boldQty}>{quantity} containers</Text> · {product}
-                  </>
-                )}
-              </Text>
-
-              <View style={styles.ticketFooter}>
-                <View style={styles.stagedLoc}>
-                  <Text style={styles.stagedLocLabel}>Staged location</Text>
-                  <Text style={styles.stagedLocVal}>Inbound Dock 01</Text>
-                </View>
-                <View style={styles.stagedLocRight}>
-                  <Text style={styles.stagedLocLabel}>Induction terminal</Text>
-                  <Text style={styles.stagedLocVal}>Handheld Staff 01</Text>
-                </View>
-              </View>
-              <View style={styles.ticketFooter}>
-                <Text style={styles.stagedLocLabel}>Registry Mode</Text>
-                <Text style={styles.stagedLocVal}>
-                  Warehouse DB · Live
-                </Text>
-              </View>
-            </View>
-
-            {/* Direct Thermal Zebra Printer Card */}
-            <View style={styles.zebraPrinterCard}>
-              <View style={styles.zebraHeader}>
-                <View style={styles.zebraIconWrap}>
-                  <Printer size={18} color={colors.textPrimary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.zebraStatusRow}>
-                    <Text style={styles.zebraTitle}>Direct Thermal Mobile Printer</Text>
-                    <View style={styles.printerStatusPill}>
-                      <View style={styles.printerDotReady} />
-                      <Text style={styles.printerStatusText}>Ready</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.zebraSub}>Zebra ZT411 · Bluetooth Connected · ZPL II</Text>
-                </View>
-              </View>
-              <Button
-                label={batchGenerated ? `Print Labels (${batchGenerated.count})` : 'Print Label'}
-                icon={<Printer size={16} color={colors.textPrimary} />}
-                onPress={handlePrint}
-                variant="outline"
-                size="md"
-              />
-            </View>
-
-            {/* Next Steps CTA */}
-            <View style={styles.successActions}>
-              <Button
-                label="Dispatch Putaway"
-                icon={<Rocket size={18} color="#ffffff" />}
-                onPress={handleDispatchInbound}
-                variant="primary"
-                size="lg"
-              />
-              <Button
-                label="Ingest Another Container"
-                onPress={() => setIsSuccess(false)}
-                variant="outline"
-                size="md"
-              />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.formCard}>
-            {/* Step 1: Category Picker */}
-            <Text style={styles.fieldLabelFirst}>Product category</Text>
-            <View style={styles.categoryChips}>
-              {Object.keys(categoryProducts).map((cat) => {
-                const isSelected = category === cat;
-                return (
-                  <Pressable
-                    key={cat}
-                    onPress={() => {
-                      setCategory(cat);
-                      setProduct(categoryProducts[cat][0]);
-                    }}
-                    style={[styles.chip, isSelected && styles.chipSelected]}
-                  >
-                    <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                      {cat}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Step 2: Product SKU Picker */}
-            <Text style={styles.fieldLabel}>Target SKU</Text>
-            <View style={styles.productChips}>
-              {productOptions.map((p) => {
-                const isSelected = product === p;
-                return (
-                  <Pressable
-                    key={p}
-                    onPress={() => setProduct(p)}
-                    style={[styles.productItem, isSelected && styles.productItemSelected]}
-                  >
-                    <View style={styles.productItemLeft}>
-                      <View style={[styles.radioDot, isSelected && styles.radioDotSelected]}>
-                        {isSelected && <View style={styles.radioDotInner} />}
-                      </View>
-                      <Text style={[styles.productItemText, isSelected && styles.productItemTextSelected]}>
-                        {p}
-                      </Text>
-                    </View>
-                    <View style={styles.skuTag}>
-                      <Text style={styles.skuTagText}>Standard SKU</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Step 3: Quantity */}
-            <Text style={styles.fieldLabel}>Supplier Package</Text>
-            <Input
-              label="Supplier Package Barcode (Optional)"
-              value={supplierBarcode}
-              onChangeText={setSupplierBarcode}
-              placeholder="Supplier package barcode"
-            />
-
-            {mode === 'batch' && (
-              <Input
-                label="Number of continuous totes"
-                value={batchCount}
-                onChangeText={setBatchCount}
-                keyboardType="numeric"
-                placeholder="e.g. 10"
-              />
-            )}
-
-            <Button
-              label={
-                mode === 'single'
-                  ? 'Generate & Ingest Barcode'
-                  : `Generate Batch (${batchCountLabel} Totes)`
-              }
-              icon={<PackageCheck size={18} color="#ffffff" />}
-              loading={isSubmitting}
-              disabled={isSubmitting || !productCatalog[product] || !mobileCapabilities.createContainer}
-              onPress={handleGenerate}
-              variant="primary"
-              size="lg"
-              style={{ marginTop: 14 }}
-            />
-          </View>
-        )}
+            <TextField label="Supplier Package Barcode (Optional)" value={supplierBarcode} onChangeText={setSupplierBarcode} editable={!submitting} maxLength={128} autoCapitalize="none" autoCorrect={false} placeholder="Enter the supplier’s code" />
+          </Card>
+          {formError ? <Text accessibilityRole="alert" variant="body" color={colors.dangerText}>{formError}</Text> : null}
+        </>}
       </ScrollView>
-    </View>
-  );
+      {!receipt ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        {!mobileCapabilities.createContainer ? <Text variant="caption" color={colors.textSecondary}>Registration is not available yet. You can still browse the product catalog.</Text> : !canRegister ? <Text variant="caption" color={colors.textSecondary}>A configured receiving location is required.</Text> : null}
+        <Button title={mobileCapabilities.createContainer ? 'Register Containers' : 'Registration Unavailable'} onPress={handleRegister} disabled={!canRegister} loading={submitting} fullWidth />
+      </View> : null}
+    </KeyboardAvoidingView>
+
+    {productPicker ? <BottomSheet onClose={() => { setProductPicker(false); setScannedCode(null); }} accessibilityLabel="product catalog">
+      <View style={styles.sheetHeader}><Text variant="headline">Choose Product</Text><Pressable accessibilityRole="button" accessibilityLabel="Close product catalog" onPress={() => { setProductPicker(false); setScannedCode(null); }} style={styles.closeButton}><X size={20} color={colors.textPrimary} /></Pressable></View>
+      <View style={styles.sheetSearch}><TextField accessibilityLabel="Search product catalog" value={search} onChangeText={value => { setSearch(value); setScannedCode(null); }} placeholder="Product, SKU, or supplier barcode" autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={18} color={colors.textMuted} />} onSubmitEditing={() => setScannedCode(search.trim())} /></View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryRow}>
+        {[{ id: '', name: 'All Products' }, ...(categories.data?.items ?? [])].map(category => <Pressable key={category.id} accessibilityRole="button" accessibilityState={{ selected: categoryId === category.id }} onPress={() => { setCategoryId(category.id); setScannedCode(null); }} style={[styles.categoryChip, categoryId === category.id && styles.categorySelected]}><Text variant="caption" color={categoryId === category.id ? colors.primaryText : colors.textSecondary}>{category.name}</Text></Pressable>)}
+      </ScrollView>
+      <FlatList style={styles.catalogList} contentContainerStyle={styles.catalogContent} keyboardShouldPersistTaps="handled" data={products.data?.items ?? []} keyExtractor={item => item.id}
+        ListHeaderComponent={products.error && products.data ? <EmptyState compact title="Could Not Refresh Catalog" message="Showing the last loaded products." actionTitle="Retry" onAction={() => { void products.refetch(); }} /> : null}
+        renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: product?.id === item.id }} accessibilityLabel={`${item.name}, ${item.sku}`} onPress={() => { setProduct(item); setProductPicker(false); setScannedCode(null); setFormError(null); }} style={[styles.catalogRow, product?.id === item.id && styles.catalogSelected]}><View style={styles.flex}><Text variant="bodyMedium">{item.name}</Text><Text variant="code" color={colors.textSecondary}>{item.sku}</Text></View>{product?.id === item.id ? <Check size={18} color={colors.primaryText} /> : null}</Pressable>}
+        ListEmptyComponent={<EmptyState compact title={products.data === undefined ? products.error ? 'Catalog Unavailable' : 'Loading Products…' : 'No Products Found'} message={products.error ? getUserErrorMessage(products.error, 'The product catalog could not be loaded.') : products.data ? 'Try a product name, SKU, or supplier barcode.' : undefined} actionTitle={products.error ? 'Retry' : undefined} onAction={() => { void products.refetch(); }} />}
+        ListFooterComponent={products.data && products.data.total > products.data.items.length ? <Text variant="caption" color={colors.textSecondary}>Showing {products.data.items.length} of {products.data.total}. Refine your search to find another product.</Text> : null} />
+    </BottomSheet> : null}
+
+    {locationPicker ? <BottomSheet onClose={() => setLocationPicker(false)} accessibilityLabel="receiving locations">
+      <View style={styles.sheetHeader}><Text variant="headline">Receive At</Text><Pressable accessibilityRole="button" accessibilityLabel="Close receiving locations" onPress={() => setLocationPicker(false)} style={styles.closeButton}><X size={20} color={colors.textPrimary} /></Pressable></View>
+      <View style={styles.sheetSearch}><TextField accessibilityLabel="Search receiving locations" value={locationSearch} onChangeText={setLocationSearch} placeholder="Location or endpoint code" showClearButton leftIcon={<Search size={18} color={colors.textMuted} />} /></View>
+      <FlatList style={styles.catalogList} contentContainerStyle={styles.catalogContent} data={filteredLocations} keyboardShouldPersistTaps="handled" keyExtractor={item => item.id}
+        renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: locationId === item.id }} onPress={() => { setLocationId(item.id); setLocationPicker(false); setFormError(null); }} style={[styles.catalogRow, locationId === item.id && styles.catalogSelected]}><View style={styles.flex}><Text variant="bodyMedium">{item.name}</Text><Text variant="caption" color={colors.textSecondary}>{item.code} · {item.endpointCode}</Text></View>{locationId === item.id ? <Check size={18} color={colors.primaryText} /> : null}</Pressable>}
+        ListEmptyComponent={<EmptyState compact title={locationError ? 'Locations Unavailable' : receiving.data === undefined ? 'Loading Locations…' : 'No Matching Receiving Locations'} message={locationError ? getUserErrorMessage(locationError, 'Receiving locations could not be loaded.') : 'Only configured locations on the current warehouse map can be used.'} actionTitle={locationError ? 'Retry' : undefined} onAction={() => { void operating.refetch(); void receiving.refetch(); }} />} />
+    </BottomSheet> : null}
+    <BarcodeScannerHUD visible={scannerOpen} title="Scan product barcode" manualLabel="Product or supplier barcode" placeholder="Enter Product Or Supplier Barcode" onClose={() => setScannerOpen(false)} onScanResult={handleScan} />
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  modeBar: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  modeSwitcher: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    padding: 3,
-    gap: 4,
-  },
-  modeBtn: {
-    flex: 1,
-    minHeight: 40,
-    borderRadius: radii.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  modeBtnActive: {
-    backgroundColor: '#ffffff',
-    ...shadows.panel,
-  },
-  modeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  modeTextActive: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-    fontFamily: typography.fontSans,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 48,
-  },
-  printToast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    padding: 14,
-    borderRadius: radii.md,
-    marginBottom: 14,
-  },
-  printToastText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.primary,
-    flex: 1,
-    fontFamily: typography.fontSans,
-  },
-  successCard: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#ffffff',
-    padding: 18,
-    ...shadows.panel,
-  },
-  successHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 16,
-  },
-  successIconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(22, 163, 74, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  successTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  successSub: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: colors.textSecondary,
-    lineHeight: 18,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
-  barcodeTicket: {
-    width: '100%',
-    backgroundColor: '#fafbfc',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderDark,
-    padding: 18,
-    alignItems: 'center',
-  },
-  ticketTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 12,
-  },
-  ticketMetaTag: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
-  },
-  ticketDpi: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    fontFamily: typography.fontMono,
-  },
-  barcodeArt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    height: 52,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 14,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    width: '100%',
-    maxWidth: 300,
-  },
-  barcodeBar: {
-    height: '100%',
-    backgroundColor: '#0f172a',
-    borderRadius: 0.5,
-  },
-  barcodeCodeText: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: 2,
-    color: colors.textPrimary,
-    marginTop: 12,
-    fontFamily: typography.fontMono,
-  },
-  barcodeProductText: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: colors.textSecondary,
-    marginTop: 4,
-    fontFamily: typography.fontSans,
-  },
-  boldQty: {
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  ticketFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    marginTop: 16,
-    paddingTop: 12,
-  },
-  stagedLoc: {
-    alignItems: 'flex-start',
-  },
-  stagedLocRight: {
-    alignItems: 'flex-end',
-  },
-  stagedLocLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
-  stagedLocVal: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontMono,
-    marginTop: 2,
-  },
-  zebraPrinterCard: {
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    marginTop: 14,
-    gap: 12,
-  },
-  zebraHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  zebraIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  zebraStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  zebraTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  printerStatusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  printerDotReady: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#16a34a',
-  },
-  printerStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#16a34a',
-    fontFamily: typography.fontSans,
-  },
-  zebraSub: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: colors.textMuted,
-    marginTop: 2,
-    fontFamily: typography.fontSans,
-  },
-  successActions: {
-    width: '100%',
-    marginTop: 18,
-    gap: 10,
-  },
-  formCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
-    ...shadows.panel,
-  },
-  fieldLabelFirst: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 8,
-    fontFamily: typography.fontSans,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 8,
-    marginTop: 14,
-    fontFamily: typography.fontSans,
-  },
-  categoryChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  chip: {
-    paddingHorizontal: 14,
-    minHeight: 38,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-  },
-  chipTextSelected: {
-    color: colors.primary,
-    fontWeight: '700',
-    fontFamily: typography.fontSans,
-  },
-  productChips: {
-    gap: 8,
-    marginBottom: 14,
-  },
-  productItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    minHeight: 48,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  productItemSelected: {
-    backgroundColor: '#ffffff',
-    borderColor: colors.darkAction,
-    borderWidth: 1.5,
-  },
-  productItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  radioDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: colors.borderDark,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioDotSelected: {
-    borderColor: colors.darkAction,
-  },
-  radioDotInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.darkAction,
-  },
-  productItemText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  productItemTextSelected: {
-    color: colors.textPrimary,
-    fontWeight: '700',
-  },
-  skuTag: {
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  skuTagText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textMuted,
-    fontFamily: typography.fontSans,
-  },
+  screen: { flex: 1, backgroundColor: colors.background },
+  body: { flex: 1 },
+  content: { padding: 16, gap: 16, paddingBottom: 24 },
+  flex: { flex: 1, minWidth: 0, gap: 3 },
+  groupHeader: { paddingLeft: 16, paddingRight: 8, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
+  scanAction: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, minHeight: 44 },
+  choiceRow: { flexDirection: 'row', gap: 12, alignItems: 'center', minHeight: 76, padding: 16 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  locationChoice: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  countRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  countButton: { minWidth: 44, minHeight: 44, borderRadius: radii.control, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+  countField: { width: 52 },
+  countInput: { textAlign: 'center', paddingHorizontal: 0 },
+  footer: { padding: 16, gap: 10, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
+  receiptCode: { padding: 12, backgroundColor: colors.surfaceSubtle, borderRadius: radii.sm },
+  sheetHeader: { paddingHorizontal: 18, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  closeButton: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  sheetSearch: { paddingHorizontal: 18, paddingBottom: 10 },
+  categoryScroll: { flexGrow: 0 },
+  categoryRow: { paddingHorizontal: 18, gap: 8, paddingBottom: 10 },
+  categoryChip: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  categorySelected: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  catalogList: { flex: 1, minHeight: 0 },
+  catalogContent: { padding: 18, gap: 8, paddingBottom: 32 },
+  catalogRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 12, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border },
+  catalogSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  pressed: { opacity: 0.8 },
 });

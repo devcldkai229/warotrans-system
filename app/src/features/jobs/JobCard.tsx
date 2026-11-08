@@ -47,9 +47,9 @@ interface JobAction {
 const ACTION_BY_STATUS: Record<JobStatus, JobAction> = {
   CREATED: { title: 'View Details', variant: 'outline' },
   QUEUED: { title: 'View Details', variant: 'outline' },
-  ASSIGNED: { title: 'Start Handover', variant: 'primary', icon: ArrowRight, iconPosition: 'right' },
+  ASSIGNED: { title: 'View Details', variant: 'outline' },
   RUNNING: { title: 'View Details', variant: 'outline' },
-  PAUSED: { title: 'Resume Handover', variant: 'primary', icon: ArrowRight, iconPosition: 'right' },
+  PAUSED: { title: 'View Paused Job', variant: 'outline' },
   REASSIGNING: { title: 'View Details', variant: 'outline' },
   RECOVERY_REQUIRED: { title: 'Inspect Issue', variant: 'danger' },
   COMPLETED: { title: 'View Summary', variant: 'ghost' },
@@ -92,9 +92,11 @@ function workflowTag(workflowName: string): string {
  * concern, no second "kind" field to drift out of sync with it.
  */
 export function JobCard({ job, onPress, onAccept }: JobCardProps) {
-  const effectiveStatus = job.hasWaitingHandover ? 'ASSIGNED' : job.status;
+  const effectiveStatus = job.status;
   const status = JOB_STATUS_PRESENTATION[effectiveStatus];
-  const action = ACTION_BY_STATUS[effectiveStatus];
+  const action: JobAction = job.hasWaitingHandover
+    ? { title: 'View Handover', variant: 'primary', icon: ArrowRight, iconPosition: 'right' }
+    : ACTION_BY_STATUS[effectiveStatus];
   const primaryCode = job.containers?.[0]?.code ?? job.payloadSummary;
   const extraCount = (job.containers?.length ?? 0) > 1 ? job.containers!.length - 1 : 0;
   const containerCode = extraCount > 0 ? `${primaryCode} (+${extraCount})` : primaryCode;
@@ -122,7 +124,7 @@ export function JobCard({ job, onPress, onAccept }: JobCardProps) {
           </View>
           <StatusPill
             status={effectiveStatus}
-            label={status.label}
+            label={job.hasWaitingHandover ? 'Awaiting Handover' : status.label}
             tone={status.tone}
             size="sm"
             dot
