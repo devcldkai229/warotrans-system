@@ -63,6 +63,7 @@ public sealed class JobExecutionEngine(
     /// conflict). Recoverable once an operator reconciles the robot, so the Job pauses instead of failing.
     /// </summary>
     private const string TrafficRobotUnavailable = "traffic_robot_unavailable";
+    private const string NavigationBlocked = "NAVIGATION_BLOCKED";
     private const string PendingTrafficKey = "pendingTraffic";
 
     /// <summary>Resume needs a pose this fresh: a robot that came back online may be somewhere else.</summary>
@@ -1162,7 +1163,9 @@ public sealed class JobExecutionEngine(
         // (POST /jobs/{id}/resume → ResumeAsync) or it is cancelled.
         // A safety wait (traffic quarantine) is not a failure of the work: hold the Job for the operator whatever the
         // step's OnFailure says; containers stay as they are. POST /jobs/{id}/resume continues after a reconcile.
-        job.Status = step.ErrorCode == TrafficRobotUnavailable ? JobStatus.PAUSED : workflowStep.OnFailure switch
+        // Safety waits (traffic quarantine, obstacle blocked ≥60s): PAUSE for resume — not a permanent failure.
+        var pauseForSafety = step.ErrorCode is TrafficRobotUnavailable or NavigationBlocked;
+        job.Status = pauseForSafety ? JobStatus.PAUSED : workflowStep.OnFailure switch
         {
             StepFailurePolicy.PAUSE_FOR_OPERATOR => JobStatus.PAUSED,
             StepFailurePolicy.REQUEST_REASSIGN => JobStatus.REASSIGNING,

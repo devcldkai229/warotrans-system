@@ -184,6 +184,46 @@ public sealed class MqttRobotCommandPublisher
         }
     }
 
+    public async Task PublishPlanRejectAsync(
+        string robotCode,
+        long planRevision,
+        string? reason,
+        string? waitingReason,
+        string? blocker,
+        CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.TrafficPlanReject(_options.Value.TopicPrefix, robotCode);
+        var json = JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            robotCode,
+            planRevision,
+            reason,
+            waitingReason,
+            blocker,
+            sentAt = DateTimeOffset.UtcNow
+        }, JsonOptions);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .Build();
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Published traffic_plan_reject robot={RobotCode} rev={Rev} reason={Reason}",
+                robotCode, planRevision, reason);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>
     /// Opens the connection ahead of the first command (called at startup), so a command never pays for it while its
     /// ACK timeout runs. Throws when the broker cannot be reached within ConnectTimeoutSeconds.

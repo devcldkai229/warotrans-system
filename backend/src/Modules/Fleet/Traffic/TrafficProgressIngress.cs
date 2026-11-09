@@ -2,8 +2,10 @@ using System.Collections.Immutable;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Features.IssueCancelCommand;
 using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Traffic;
@@ -13,6 +15,8 @@ public sealed class TrafficProgressIngress(
     ISegmentedTrafficCoordinator coordinator,
     FleetDbContext db,
     IOptions<TrafficOptions> options,
+    IMqttTrafficEpochPublisher trafficDownlink,
+    IssueCancelCommandHandler cancelCommands,
     ILogger<TrafficProgressIngress> logger)
 {
     public async Task HandlePlanProposeAsync(TrafficPlanProposeMessage message, CancellationToken ct)
@@ -80,6 +84,16 @@ public sealed class TrafficProgressIngress(
             result.Reason,
             result.WaitingReason,
             result.BlockingOwner);
+        if (!result.Granted)
+        {
+            await trafficDownlink.PublishPlanRejectAsync(
+                message.RobotCode,
+                message.PlanRevision,
+                result.Reason,
+                result.WaitingReason.ToString(),
+                result.BlockingOwner?.ToString(),
+                ct).ConfigureAwait(false);
+        }
     }
 
     public async Task HandleProgressAsync(TrafficProgressMessage message, CancellationToken ct)
@@ -210,5 +224,12 @@ public sealed class TrafficProgressIngress(
         logger.LogInformation(
             "authority_state robot={RobotCode} state={State} poseFresh={Fresh} reconcile={Ok}:{Reason}",
             message.RobotCode, message.State, poseFresh, result.Ok, result.Reason);
+
+        if (message.ActiveCommandId is Guid active
+            && await cancelCommands.CancelOrphanAsync(robot.Id, active, ct).ConfigureAwait(false))
+        {
+            logger.LogWarning(
+                "Robot {RobotCode} still executes closed command {CommandId}: CANCEL sent", message.RobotCode, active);
+        }
     }
 }

@@ -78,6 +78,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
         services.AddScoped<IIntegrationEventHandler<RobotInteractionConfirmed>, RobotInteractionConfirmedHandler>();
         services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, RobotConnectivityRearmHandler>();
+        services.AddScoped<IIntegrationEventHandler<RobotGatewayRestarted>, RobotConnectivityRearmHandler>();
 
         return services;
     }

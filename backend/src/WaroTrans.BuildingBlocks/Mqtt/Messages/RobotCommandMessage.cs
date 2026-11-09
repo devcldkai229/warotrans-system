@@ -135,6 +135,10 @@ public sealed class SemanticGeometryPayload
     public double ReserveRadiusMeters { get; set; }
     /// <summary>Footprint radius (any heading) the robot checks against the reserved cells.</summary>
     public double FootprintRadiusMeters { get; set; }
+    /// <summary>Above 0: straight stretches reserve a rectangle this wide per side, and the gate checks the body at its heading.</summary>
+    public double LaneHalfWidthMeters { get; set; }
+    public double FootprintHalfLengthMeters { get; set; }
+    public double FootprintHalfWidthMeters { get; set; }
 }
 
 public sealed class RenewAuthorityPayload

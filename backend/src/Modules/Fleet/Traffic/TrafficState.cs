@@ -114,6 +114,9 @@ public sealed class TrafficState
     /// <summary>
     /// Stage-3: robot proposes Nav2 path; coordinator reserves SINGLE_OCCUPANCY + swept cells (horizon-limited).
     /// </summary>
+    /// <summary>A shorter grant is not worth it: the robot would stop again before it got anywhere.</summary>
+    private const double MinPrefixMeters = 0.25;
+
     public AcquireResult AcquireSemanticPlan(SemanticPlanProposeRequest request)
     {
         if (_semantic is null)
@@ -171,6 +174,11 @@ public sealed class TrafficState
             && string.Equals(robot.Authority.PlanHash, request.PlanHash, StringComparison.Ordinal)
             && string.Equals(robot.Authority.SemanticMapFingerprint, request.SemanticMapFingerprint, StringComparison.Ordinal))
         {
+            if (TryExtendPartialGrant(robot, request) is { } extended)
+            {
+                return extended;
+            }
+
             // Same plan: nothing new to reserve, but the grant still has to be refreshed.
             // Returning it untouched emitted no event, so no EXTEND/RENEW reached the robot
             // and expiresAt never moved — a robot that stopped republishing new revisions
@@ -180,6 +188,29 @@ public sealed class TrafficState
                 robot.Authority.AuthorityId,
                 Epoch,
                 TimeSpan.FromSeconds(Math.Max(5, _options.AuthorityTtlSec)));
+            // The robot only re-proposes an unchanged plan while it has no working grant. If the EXTEND was lost it
+            // holds nothing, so it ignores the RENEW above: send the grant again, or it waits forever on a plan the
+            // backend considers granted. A robot that does hold it drops this as a duplicate.
+            EmitSegmentEvent(
+                TrafficEventKind.AuthorityExtended,
+                robot,
+                robot.Authority,
+                new RouteSegmentCandidate(
+                    request.RequestId,
+                    request.RobotId,
+                    _mapVersionId,
+                    _semantic.SemanticMapFingerprint,
+                    0,
+                    0,
+                    [],
+                    robot.Authority.ResourceIds,
+                    [],
+                    0,
+                    StateVersion,
+                    request.Priority,
+                    request.JobStepId,
+                    request.JobId),
+                isFirstSegment: false);
             return AcquireResult.Grant(robot.Authority);
         }
 
@@ -203,6 +234,19 @@ public sealed class TrafficState
         if (previous is not null)
         {
             RevokeAuthorityKeepOccupancy(robot, "REPLAN");
+        }
+
+        if (SemanticReservation.PlanHitsKeepout(_semantic, request.Poses))
+        {
+            Log($"semantic-reject-keepout:{robot.RobotId}:rev={request.PlanRevision}");
+            if (previous is not null)
+            {
+                _pendingEvents.Add(new TrafficEvent(
+                    TrafficEventKind.AuthorityRevoked, robot.RobotId, string.Empty, previous, previous.CommandId, null,
+                    robot.JobStepId, null, null, null, null, IsFirstSegment: false));
+            }
+
+            return AcquireResult.Reject("KEEPOUT_VIOLATION");
         }
 
         var resources = SemanticReservation.CollectResources(_semantic, request.Poses);
@@ -272,11 +316,36 @@ public sealed class TrafficState
         if (blocker is not null)
         {
             var b = blocker == Guid.Empty ? (Guid?)null : blocker;
+            var prefix = _options.SemanticPrefixGrant ? GrantablePrefix(robot, request) : [];
+            if (prefix.Length > 0)
+            {
+                var partial = IssueSemanticAuthority(robot, request, candidate, prefix);
+                robot.PartialAuthorityId = partial.AuthorityId;
+                // Stays queued for the whole plan; still authorized for the part it holds.
+                Enqueue(robot, candidate, waitReason, b);
+                robot.Phase = TrafficRobotPhase.Authorized;
+                return AcquireResult.Grant(partial);
+            }
+
             Enqueue(robot, candidate, waitReason, b);
             var detail = b is Guid bb ? $"{waitReason}:blocker={bb:N}" : waitReason.ToString();
             return AcquireResult.Queue(waitReason, b, detail);
         }
 
+        var authority = IssueSemanticAuthority(robot, request, candidate, resources);
+        robot.PartialAuthorityId = null;
+        robot.WaitingReason = TrafficWaitingReason.None;
+        robot.BlockingOwner = null;
+        RemoveFromAllQueues(robot.RobotId);
+        return AcquireResult.Grant(authority);
+    }
+
+    private MotionAuthority IssueSemanticAuthority(
+        RobotRuntime robot,
+        SemanticPlanProposeRequest request,
+        RouteSegmentCandidate candidate,
+        ImmutableArray<string> resources)
+    {
         Occupy(robot, resources);
         robot.LastSeq = robot.LastSeq + 1;
         robot.ProgressFloorSeq = robot.LastSeq;
@@ -290,7 +359,7 @@ public sealed class TrafficState
             [],
             robot.LastSeq,
             Epoch,
-            _semantic.SemanticMapFingerprint,
+            _semantic!.SemanticMapFingerprint,
             [],
             request.PlanRevision,
             _semantic.SemanticMapFingerprint,
@@ -298,13 +367,102 @@ public sealed class TrafficState
             request.CommandId);
         robot.Authority = authority;
         robot.Phase = TrafficRobotPhase.Authorized;
-        robot.WaitingReason = TrafficWaitingReason.None;
-        robot.BlockingOwner = null;
-        RemoveFromAllQueues(robot.RobotId);
         StateVersion++;
         Log($"grant-semantic:{robot.RobotId}:auth:{authority.AuthorityId}:rev:{request.PlanRevision}:n={resources.Length}");
         EmitSegmentEvent(TrafficEventKind.AuthorityGranted, robot, authority, candidate, isFirstSegment: true);
-        return AcquireResult.Grant(authority);
+        return authority;
+    }
+
+    /// <summary>
+    /// The longest start of the plan this robot can hold now and wait at the end of. Empty when that gains nothing.
+    /// Never reaches into what another moving robot's whole path still needs: waiting there, face to face in a
+    /// corridor or on a crossing, is how two robots lock each other. The current holder keeps priority over the waiter.
+    /// </summary>
+    private ImmutableArray<string> GrantablePrefix(RobotRuntime robot, SemanticPlanProposeRequest request)
+    {
+        var policy = _semantic!;
+        var samples = SemanticReservation.SweptSamples(
+            policy, request.Poses, Math.Max(policy.EffectiveCellSize, policy.HorizonMeters));
+        if (samples.Count == 0)
+        {
+            return [];
+        }
+
+        var needed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var other in _robots.Values)
+        {
+            if (other.RobotId != robot.RobotId && other.ActiveCommandId is not null)
+            {
+                needed.UnionWith(SemanticReservation.WholePathResources(policy, other.ProposedPath));
+            }
+        }
+
+        var zonesAtStart = samples[0].Resources
+            .Where(rid => rid.StartsWith("zone:", StringComparison.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
+        var held = new HashSet<string>(StringComparer.Ordinal);
+        ImmutableArray<string> best = [];
+        var minSamples = (int)Math.Ceiling(MinPrefixMeters / policy.SampleStepMeters);
+        for (var i = 0; i < samples.Count; i++)
+        {
+            var here = samples[i].Resources;
+            var ids = here.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
+            if (here.Overlaps(needed)
+                || FindPriorWaiter(robot.RobotId, ids, request.Priority) is not null
+                || !CanAcquire(ids, robot.RobotId, out _, out _))
+            {
+                break;
+            }
+
+            held.UnionWith(here);
+            if (i >= minSamples && SemanticReservation.MayWaitAt(policy, samples[i].X, samples[i].Y, zonesAtStart))
+            {
+                best = held.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// A robot holding part of its plan, re-evaluated (something was freed, or it asked again). The rest of the plan or
+    /// a longer part of it replaces the grant; null when nothing more can be granted.
+    /// </summary>
+    private AcquireResult? TryExtendPartialGrant(RobotRuntime robot, SemanticPlanProposeRequest request)
+    {
+        if (robot.Authority is not { } current || robot.PartialAuthorityId != current.AuthorityId)
+        {
+            return null;
+        }
+
+        var candidate = new RouteSegmentCandidate(
+            request.RequestId, request.RobotId, _mapVersionId, _semantic!.SemanticMapFingerprint, 0, 0, [],
+            SemanticReservation.CollectResources(_semantic, request.Poses), [], 0, StateVersion, request.Priority,
+            request.JobStepId, request.JobId);
+        var whole = candidate.ResourceIds;
+        if (FindPriorWaiter(robot.RobotId, whole, request.Priority) is null
+            && CanAcquire(whole, robot.RobotId, out _, out _))
+        {
+            var full = IssueSemanticAuthority(robot, request, candidate, whole);
+            robot.PartialAuthorityId = null;
+            robot.WaitingReason = TrafficWaitingReason.None;
+            robot.BlockingOwner = null;
+            RemoveFromAllQueues(robot.RobotId);
+            return AcquireResult.Grant(full);
+        }
+
+        var prefix = GrantablePrefix(robot, request);
+        if (prefix.IsDefaultOrEmpty || prefix.All(current.ResourceIds.Contains))
+        {
+            return null;
+        }
+
+        // Union: what it was already given may lie behind it, and the gate must not close under its feet.
+        var longer = IssueSemanticAuthority(
+            robot, request, candidate,
+            prefix.Union(current.ResourceIds, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray());
+        robot.PartialAuthorityId = longer.AuthorityId;
+        return AcquireResult.Grant(longer);
     }
 
     /// <summary>
@@ -1859,8 +2017,30 @@ public sealed class TrafficState
         foreach (var waiter in ordered)
         {
             var robot = GetOrCreate(waiter.RobotId);
-            if (robot.Phase == TrafficRobotPhase.Quarantined || robot.Authority is not null)
+            if (robot.Phase == TrafficRobotPhase.Quarantined)
             {
+                continue;
+            }
+
+            if (robot.Authority is not null)
+            {
+                if (_semantic is not null && robot.PartialAuthorityId == robot.Authority.AuthorityId)
+                {
+                    TryExtendPartialGrant(robot, new SemanticPlanProposeRequest(
+                        Guid.NewGuid(),
+                        robot.RobotId,
+                        robot.RobotId.ToString("N"),
+                        _semantic.SemanticMapFingerprint,
+                        robot.PlanRevision,
+                        robot.ProposedPath,
+                        null,
+                        robot.JobStepId,
+                        waiter.Candidate.JobId,
+                        waiter.Candidate.Priority,
+                        robot.PlanHash,
+                        robot.ActiveCommandId));
+                }
+
                 continue;
             }
 
@@ -2416,6 +2596,8 @@ public sealed class TrafficState
         /// <summary>Stage-3: the backend NAVIGATE the robot's proposals belong to.</summary>
         public Guid? ActiveCommandId { get; set; }
         public ImmutableArray<SemanticPlanPose> ProposedPath { get; set; } = [];
+        /// <summary>The current authority covers only the start of the plan; the robot is also queued for the rest.</summary>
+        public Guid? PartialAuthorityId { get; set; }
     }
 
     private sealed record Waiter(

@@ -165,6 +165,25 @@ public sealed class RobotCommand
         return true;
     }
 
+    /// <summary>ACKED/RUNNING NAVIGATE with no RESULT within the watchdog window.</summary>
+    public bool TryMarkResultTimeout(DateTimeOffset utcNow)
+    {
+        if (IsAuthorityControl || Type == RobotCommandType.CANCEL)
+        {
+            return false;
+        }
+
+        if (Status is not (RobotCommandStatus.ACKED or RobotCommandStatus.RUNNING))
+        {
+            return false;
+        }
+
+        Status = RobotCommandStatus.TIMEOUT;
+        CompletedAt = utcNow;
+        ErrorCode = "RESULT_TIMEOUT";
+        return true;
+    }
+
     public bool TryAbortOffline(DateTimeOffset utcNow)
     {
         if (!IsInFlight)

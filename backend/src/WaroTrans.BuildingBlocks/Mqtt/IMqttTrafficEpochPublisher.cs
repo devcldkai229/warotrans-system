@@ -6,4 +6,13 @@ namespace WaroTrans.BuildingBlocks.Mqtt;
 public interface IMqttTrafficEpochPublisher
 {
     Task PublishEpochAsync(TrafficEpochMessage message, CancellationToken cancellationToken = default);
+
+    /// <summary>Tell one robot why its traffic_plan was not granted (KEEPOUT, conflict, …).</summary>
+    Task PublishPlanRejectAsync(
+        string robotCode,
+        long planRevision,
+        string? reason,
+        string? waitingReason,
+        string? blocker,
+        CancellationToken cancellationToken = default);
 }

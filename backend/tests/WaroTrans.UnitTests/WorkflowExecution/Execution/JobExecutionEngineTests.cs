@@ -540,6 +540,27 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
+    public async Task Semantic_move_blocked_by_obstacle_pauses_the_job_for_resume()
+    {
+        var jobId = await ProvisionAsync();
+        await SemanticEngine().StartAsync(jobId, null);
+        var move = await _db.JobSteps.FirstAsync(s => s.Id == _fleet.Commands[0].JobStepId);
+
+        await SemanticResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
+            _fleet.Commands[0].CommandId, _fleet.RobotId, "RBT-SIM-01",
+            "NAVIGATE_TO_POSE", "COMPLETED", null, move.Id, "FAILED", "NAVIGATION_BLOCKED",
+            RobotCommandLifecycleChanged.Phases.Result));
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Equal("NAVIGATION_BLOCKED", job.FailureCode);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.ASSIGNED, c.Status));
+
+        await SemanticEngine().ResumeAsync(jobId, null);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+    }
+
+    [Fact]
     public async Task Semantic_move_waits_for_the_robot_before_asking_staff()
     {
         var jobId = await ProvisionAsync();
