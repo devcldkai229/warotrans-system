@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.UpdateEndpoint;
 
@@ -17,6 +18,7 @@ public static class UpdateEndpointEndpoint
             var response = await handler.HandleAsync(id, request, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapWrite)
         .WithName("UpdateEndpoint")
         .WithSummary("Update an Endpoint on a draft map version")
         .WithDescription("Updates name, type, pose and tolerances of an Endpoint. Only allowed when its MapVersion is DRAFT. The Endpoint code is not changed.");

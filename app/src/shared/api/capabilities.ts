@@ -1,13 +1,12 @@
 import { ApiError } from './client';
 
-// Checked against the registered BE routes and authorization policies (27/10/2026).
-// Warehouse create/resolve are not mapped; Operations inbox is AdminOnly and no
-// issue-report route is mapped. Enable Staff commands only after both are ready.
+// Which backend features exist (not who may use them: that is the session's permissions).
+// 08/11/2026: issue reports are served by POST /api/operations/issues (OPS-01).
 export const mobileCapabilities = {
   createContainer: false,
   resolveProduct: false,
   claimHumanTask: false,
-  reportIssue: false,
+  reportIssue: true,
   pauseJob: false,
   resumeJob: true,
   payloadRecovery: false,

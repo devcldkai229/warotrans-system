@@ -31,6 +31,20 @@ internal static class IdentityErrors
     public static readonly Error LastActiveAdmin =
         Error.Conflict("last_active_admin", "At least one active administrator must remain.");
 
+    // Password lifecycle.
+    public static readonly Error CurrentPasswordIncorrect =
+        Error.Validation("current_password_incorrect", "The current password is incorrect.");
+
+    public static readonly Error PasswordContainsUsername =
+        Error.Validation("password_contains_username", "The new password must not contain the username.");
+
+    public static readonly Error CannotResetOwnPassword =
+        Error.Forbidden("cannot_reset_own_password", "Use change password for your own account.");
+
+    // Technician robot scope.
+    public static readonly Error RobotScopeRequiresTechnician =
+        Error.Conflict("robot_scope_requires_technician", "Only TECHNICIAN accounts have a robot scope.");
+
     public static Error AccountNotActive(AccountStatus status) =>
         status == AccountStatus.LOCKED
             ? Error.Forbidden("account_locked", "This account is locked.")

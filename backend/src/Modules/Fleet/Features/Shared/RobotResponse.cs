@@ -11,7 +11,8 @@ public sealed record RobotResponse(
     string Name,
     RobotStatus Status,
     bool IsOnline,
-    decimal BatteryPercent,
+    // HW-04: null = the robot never reported a battery value (Unknown), never a fake 0 %.
+    decimal? BatteryPercent,
     double PoseX,
     double PoseY,
     double PoseYaw,
@@ -26,7 +27,18 @@ public sealed record RobotResponse(
     Guid? CurrentCommandId,
     bool IsEnabled,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    bool MotionHeld = false,
+    string? ManualLeaseHolderName = null,
+    Guid? ManualLeaseHolderId = null,
+    DateTimeOffset? ManualLeaseUntil = null,
+    string? MaintenanceReason = null,
+    DateTimeOffset? MaintenanceSince = null,
+    IReadOnlyList<string>? Capabilities = null,
+    DateTimeOffset? BatteryMeasuredAt = null,
+    double? BatteryVoltage = null,
+    string? BatteryEstimationMode = null,
+    string? BatteryConfidence = null)
 {
     public static RobotResponse From(Robot robot) => new(
         robot.Id,
@@ -36,7 +48,7 @@ public sealed record RobotResponse(
         robot.Name,
         robot.Status,
         robot.IsOnline,
-        robot.BatteryPercent,
+        robot.BatteryMeasuredAt is null ? null : robot.BatteryPercent,
         robot.PoseX,
         robot.PoseY,
         robot.PoseYaw,
@@ -51,5 +63,16 @@ public sealed record RobotResponse(
         robot.CurrentCommandId,
         robot.IsEnabled,
         robot.CreatedAt,
-        robot.UpdatedAt);
+        robot.UpdatedAt,
+        robot.MotionHeld,
+        robot.HasActiveManualLease(DateTimeOffset.UtcNow) ? robot.ManualLeaseHolderName : null,
+        robot.HasActiveManualLease(DateTimeOffset.UtcNow) ? robot.ManualLeaseHolderId : null,
+        robot.HasActiveManualLease(DateTimeOffset.UtcNow) ? robot.ManualLeaseUntil : null,
+        robot.MaintenanceReason,
+        robot.MaintenanceSince,
+        robot.Capabilities?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [],
+        robot.BatteryMeasuredAt,
+        robot.BatteryVoltage,
+        robot.BatteryEstimationMode,
+        robot.BatteryConfidence);
 }

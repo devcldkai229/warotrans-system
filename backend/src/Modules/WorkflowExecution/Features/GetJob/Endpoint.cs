@@ -14,7 +14,7 @@ public static class GetJobEndpoint
             Guid id,
             JobQueries queries,
             CancellationToken cancellationToken) => Results.Ok(await queries.GetDetailAsync(id, cancellationToken)))
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.JobRead)
         .WithName("GetJob")
         .WithSummary("Job runtime detail: tasks, steps (status, resolved inputs, outputs), containers, progress");
 

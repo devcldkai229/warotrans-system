@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Warehouse.Features.ListWarehouses;
 
@@ -22,6 +23,7 @@ public static class ListWarehousesEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("ListWarehouses")
         .WithSummary("List warehouses")
         .WithDescription("Returns warehouses for Admin selectors. Optionally filter by isActive.");

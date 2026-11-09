@@ -41,8 +41,17 @@ public interface ITrafficOpsLog
     IReadOnlyList<TrafficOpsEvent> Recent(int take = 100);
 }
 
+/// <summary>
+/// RTM-02: hears every traffic ops event (grant, wait, block, quarantine …) so live pages can show why a robot holds.
+/// Must not block or throw: it is called on the traffic path.
+/// </summary>
+public interface ITrafficRealtimeNotifier
+{
+    void Publish(TrafficOpsEvent evt);
+}
+
 /// <summary>Structured correlation log for traffic ops. In-memory ring + ILogger; no AI in path.</summary>
-public sealed class TrafficOpsLog(ILogger<TrafficOpsLog> logger) : ITrafficOpsLog
+public sealed class TrafficOpsLog(ILogger<TrafficOpsLog> logger, ITrafficRealtimeNotifier? realtime = null) : ITrafficOpsLog
 {
     private const int Capacity = 2048;
     private readonly ConcurrentQueue<TrafficOpsEvent> _ring = new();
@@ -72,6 +81,15 @@ public sealed class TrafficOpsLog(ILogger<TrafficOpsLog> logger) : ITrafficOpsLo
             evt.BackendEpoch,
             evt.Seq,
             evt.Detail);
+
+        try
+        {
+            realtime?.Publish(evt);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Traffic realtime push failed for {EventType}", evt.EventType);
+        }
     }
 
     public IReadOnlyList<TrafficOpsEvent> Recent(int take = 100) =>

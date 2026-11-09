@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Fleet.Features.EnableRobot;
 
@@ -15,7 +17,10 @@ public static class EnableRobotEndpoint
         {
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
-        });
+        })
+            .RequirePermission(Permissions.RobotConfigure)
+            .RequireRobotScope()
+            .Audited("robot.enabled", "ROBOT", "id");
 
         return group;
     }

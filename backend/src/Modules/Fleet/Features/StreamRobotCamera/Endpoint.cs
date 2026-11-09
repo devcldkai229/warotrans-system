@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Fleet.Features.StreamRobotCamera;
 
@@ -19,7 +20,9 @@ public static class StreamRobotCameraEndpoint
         {
             await handler.StreamAsync(id, context, cancellationToken);
             return Results.Empty;
-        });
+        })
+            .RequirePermission(Permissions.RobotRead)
+            .RequireRobotScope();
 
         return group;
     }

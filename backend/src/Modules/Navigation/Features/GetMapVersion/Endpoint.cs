@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetMapVersion;
 
@@ -16,6 +17,7 @@ public static class GetMapVersionEndpoint
             var response = await handler.GetByWarehouseIdAsync(warehouseId, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetWarehouseMapVersions")
         .WithSummary("Get all map versions for a warehouse")
         .WithDescription("Retrieves the list of all map versions associated with a warehouse, ordered by VersionNo descending.");
@@ -28,6 +30,7 @@ public static class GetMapVersionEndpoint
             var response = await handler.GetByIdAsync(id, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetMapVersionById")
         .WithSummary("Get map version by ID")
         .WithDescription("Retrieves details of a specific map version by its ID.");
@@ -40,6 +43,7 @@ public static class GetMapVersionEndpoint
             var response = await handler.GetDetailByIdAsync(id, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetMapVersionDetail")
         .WithSummary("Get map version detail with endpoints, edges, and zones")
         .WithDescription("Returns MapVersion ROS metadata plus child geometry for the Admin Map Editor.");

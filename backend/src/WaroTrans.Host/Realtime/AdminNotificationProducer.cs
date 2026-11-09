@@ -10,7 +10,8 @@ using WaroTrans.WorkflowExecution.Contracts;
 namespace WaroTrans.Host.Realtime;
 
 /// <summary>
-/// Turns the few business events an admin has to act on into notifications. The Host does this because it is the one
+/// Turns the few business events someone has to act on into notifications: admins by default, robot problems also to
+/// the Technicians of that robot, a step waiting for a person also to Staff. The Host does this because it is the one
 /// place that may know about Fleet, WorkflowExecution and Operations together. Anything that is merely progress
 /// (a job completing, a step moving on, telemetry) is left to the live pages.
 /// </summary>
@@ -25,7 +26,8 @@ public sealed class AdminNotificationProducer(
         IIntegrationEventHandler<JobStepStatusChanged>,
         IIntegrationEventHandler<JobWaitingToStart>,
         IIntegrationEventHandler<JobStepWaitingForPerson>,
-        IIntegrationEventHandler<TransportRequestProgressed>
+        IIntegrationEventHandler<TransportRequestProgressed>,
+        IIntegrationEventHandler<TransportRequestClosedByOperator>
 {
     private const string Job = "JOB";
     private const string Robot = "ROBOT";
@@ -86,7 +88,8 @@ public sealed class AdminNotificationProducer(
                     "No heartbeat from the robot. A job it was running may need to be reassigned.",
                     Robot,
                     e.RobotId,
-                    key),
+                    key,
+                    Audience: NotificationAudience.RobotCare(e.RobotId)),
                 cancellationToken);
         });
 
@@ -99,11 +102,11 @@ public sealed class AdminNotificationProducer(
                 RobotCommandLifecycleChanged.Phases.AckTimeout => new(
                     NotificationType.WARNING, "ROBOT_COMMAND_TIMEOUT", $"Robot {e.RobotCode} did not answer a command",
                     $"The {e.Type} command timed out waiting for the robot to acknowledge it.",
-                    Robot, e.RobotId, $"robot:{e.RobotId}:command:{e.Phase}"),
+                    Robot, e.RobotId, $"robot:{e.RobotId}:command:{e.Phase}", Audience: NotificationAudience.RobotCare(e.RobotId)),
                 RobotCommandLifecycleChanged.Phases.AckRejected => new(
                     NotificationType.WARNING, "ROBOT_COMMAND_REJECTED", $"Robot {e.RobotCode} rejected a command",
                     $"The {e.Type} command was refused{(string.IsNullOrWhiteSpace(e.ErrorCode) ? "" : $" ({e.ErrorCode})")}.",
-                    Robot, e.RobotId, $"robot:{e.RobotId}:command:{e.Phase}"),
+                    Robot, e.RobotId, $"robot:{e.RobotId}:command:{e.Phase}", Audience: NotificationAudience.RobotCare(e.RobotId)),
                 _ => null
             };
 
@@ -122,7 +125,8 @@ public sealed class AdminNotificationProducer(
                 $"{e.BatteryPercent:0}% left and the robot is not charging.",
                 Robot,
                 e.RobotId,
-                $"robot:{e.RobotId}:battery"),
+                $"robot:{e.RobotId}:battery",
+                Audience: NotificationAudience.RobotCare(e.RobotId)),
             cancellationToken));
 
     public Task HandleAsync(RobotErrorReported e, CancellationToken cancellationToken = default) =>
@@ -134,7 +138,8 @@ public sealed class AdminNotificationProducer(
                 $"Error code: {e.ErrorCode}.",
                 Robot,
                 e.RobotId,
-                $"robot:{e.RobotId}:error:{e.ErrorCode}"),
+                $"robot:{e.RobotId}:error:{e.ErrorCode}",
+                Audience: NotificationAudience.RobotCare(e.RobotId)),
             cancellationToken));
 
     public Task HandleAsync(JobStepStatusChanged e, CancellationToken cancellationToken = default) =>
@@ -170,7 +175,9 @@ public sealed class AdminNotificationProducer(
                 Job,
                 e.JobId,
                 $"step:{e.JobStepId}:person",
-                OncePerSituation: true),
+                OncePerSituation: true,
+                // Someone on the floor has to confirm it: Staff hear about it too.
+                Audience: NotificationAudience.Floor),
             cancellationToken));
 
     public Task HandleAsync(TransportRequestProgressed e, CancellationToken cancellationToken = default) =>
@@ -211,7 +218,51 @@ public sealed class AdminNotificationProducer(
 
                 case TransportRequestStatus.COMPLETED:
                     await notifications.ResolveAsync($"request:{e.RequestId}:partial", cancellationToken);
+                    await notifications.ResolveAsync($"request:{e.RequestId}:recovery", cancellationToken);
                     break;
+
+                // A cancelled request whose cargo has been recovered: nobody has to act on it any more.
+                case TransportRequestStatus.CANCELLED or TransportRequestStatus.PARTIALLY_COMPLETED or TransportRequestStatus.FAILED:
+                    await notifications.ResolveAsync($"request:{e.RequestId}:recovery", cancellationToken);
+                    break;
+            }
+        });
+
+    /// <summary>TRN-01 / TRN-02: the requester hears that their request was closed and why; cargo left on a robot is the floor's job.</summary>
+    public Task HandleAsync(TransportRequestClosedByOperator e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(async () =>
+        {
+            var rejected = e.Status == TransportRequestStatus.REJECTED;
+            if (e.ActorId != e.RequestedBy)
+            {
+                await notifications.PublishAsync(
+                    new NotificationDraft(
+                        rejected ? NotificationType.WARNING : NotificationType.INFO,
+                        rejected ? "REQUEST_REJECTED" : "REQUEST_CANCELLED",
+                        $"Transport request {e.RequestCode} was {(rejected ? "rejected" : "cancelled")}",
+                        $"Reason: {e.Reason}",
+                        Request,
+                        e.RequestId,
+                        $"request:{e.RequestId}:{(rejected ? "rejected" : "cancelled")}",
+                        OncePerSituation: true,
+                        Audience: NotificationAudience.Person(e.RequestedBy)),
+                    cancellationToken);
+            }
+
+            if (e.ContainersInRecovery > 0)
+            {
+                await notifications.PublishAsync(
+                    new NotificationDraft(
+                        NotificationType.ALERT,
+                        "REQUEST_CANCEL_RECOVERY",
+                        $"Cancelled request {e.RequestCode} still has cargo on a robot",
+                        $"{e.ContainersInRecovery} container(s) are on a robot. Unload them and cancel the Job, or resume it to deliver them.",
+                        Request,
+                        e.RequestId,
+                        $"request:{e.RequestId}:recovery",
+                        OncePerSituation: true,
+                        Audience: NotificationAudience.Floor),
+                    cancellationToken);
             }
         });
 

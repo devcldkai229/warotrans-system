@@ -379,6 +379,12 @@ public sealed class RobotInteractionConfirmedHandlerTests
         public Task<bool> CancelNavigationAsync(Guid robotId, Guid navigateCommandId, CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
 
+        public Task<Guid?> StopRobotAsync(Guid robotId, string mode, string? reason, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
+
+        public Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
+
         public Task RequestHumanInteractionAsync(Guid robotId, Guid jobId, Guid jobStepId, string interactionType, Guid containerId, Guid endpointId, CancellationToken cancellationToken = default)
         {
             InteractionRequests.Add((robotId, jobStepId, interactionType, containerId, endpointId));

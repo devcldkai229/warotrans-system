@@ -63,7 +63,9 @@ function build(seed: Seed): TransportRequestView {
       status,
       robotCode,
     })),
-    availableActions: ['SUBMITTED', 'QUEUED', 'IN_PROGRESS'].includes(seed.status) ? ['CANCEL'] : [],
+    availableActions: [
+      { action: 'CANCEL', allowed: ['SUBMITTED', 'QUEUED', 'IN_PROGRESS'].includes(seed.status), reason: null },
+    ],
   }
 }
 

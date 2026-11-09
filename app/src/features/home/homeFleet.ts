@@ -29,7 +29,7 @@ export function homeFleetOnMap(robots: RobotResponse[], context?: OperatingConte
     return {
       id: robot.code, statusLabel: current ? reportedStatus : `Last Reported · ${reportedStatus}`,
       active, tone, lastReported: !current || !robot.isOnline,
-      battery: Number.isFinite(robot.batteryPercent) ? Math.round(robot.batteryPercent) : null,
+      battery: typeof robot.batteryPercent === "number" && Number.isFinite(robot.batteryPercent) ? Math.round(robot.batteryPercent) : null,
       speed: typeof robot.linearVelocity === 'number' && Number.isFinite(robot.linearVelocity)
         ? `${robot.linearVelocity.toFixed(2)} m/s` : '—',
     };

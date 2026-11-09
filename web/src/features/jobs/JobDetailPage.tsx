@@ -5,8 +5,10 @@ import { ApiError } from '@/shared/api/client'
 import { getRobot } from '@/shared/api/fleet'
 import { confirmJobStep, getJob, type JobDetailDto, type JobStepDto, type JobTaskDto } from '@/shared/api/jobs'
 import { getTransportRequest } from '@/shared/api/transportRequests'
+import { DispatchPanel } from './DispatchPanel'
+import { JobOperatorActions } from './JobOperatorActions'
 import { cx } from '@/shared/lib/cx'
-import { formatClock, formatDuration, humanize, secondsBetween } from '@/shared/lib/format'
+import { formatBattery, formatClock, formatDuration, humanize, secondsBetween } from '@/shared/lib/format'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { WarehouseMap, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { useNotificationsHub, type JobUpdatedMessage, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
@@ -420,9 +422,12 @@ export function JobDetailPage() {
               {waiting ? <StatusBadge tone="amber">Step waiting</StatusBadge> : null}
             </div>
           </div>
-          <p className="text-sm text-muted">
-            Created at <span className="text-ink tabular-nums">{formatClock(job.createdAt)}</span>
-          </p>
+          <div className="flex flex-col items-end gap-2">
+            <JobOperatorActions jobId={job.id} actions={job.availableActions ?? []} failureCode={job.failureCode} />
+            <p className="text-sm text-muted">
+              Created at <span className="text-ink tabular-nums">{formatClock(job.createdAt)}</span>
+            </p>
+          </div>
         </header>
 
         <div className="mt-8 grid grid-cols-[1fr_1.2fr_1fr] gap-4">
@@ -439,7 +444,7 @@ export function JobDetailPage() {
             <dl className="mt-4 flex gap-8 text-xs">
               <div>
                 <dt className="text-muted">Battery</dt>
-                <dd className="mt-0.5 font-medium">{robot ? `${Math.round(robot.batteryPercent)}%` : '—'}</dd>
+                <dd className="mt-0.5 font-medium">{robot ? formatBattery(robot.batteryPercent) : '—'}</dd>
               </div>
               <div>
                 <dt className="text-muted">{containerLabels.length > 1 ? 'Containers' : 'Container'}</dt>
@@ -479,6 +484,8 @@ export function JobDetailPage() {
             ) : null}
           </section>
         </div>
+
+        <DispatchPanel job={job} />
 
         <div className="mt-4 grid flex-1 grid-cols-[1fr_1.05fr] items-start gap-4">
           <section className="rounded-lg border border-outline-soft border-l-4 border-l-purple bg-surface p-6 shadow-float">

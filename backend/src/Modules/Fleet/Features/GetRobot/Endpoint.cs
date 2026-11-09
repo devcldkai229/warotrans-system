@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Fleet.Features.GetRobot;
 
@@ -15,7 +16,9 @@ public static class GetRobotEndpoint
         {
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
-        });
+        })
+            .RequirePermission(Permissions.RobotRead)
+            .RequireRobotScope();
 
         return group;
     }

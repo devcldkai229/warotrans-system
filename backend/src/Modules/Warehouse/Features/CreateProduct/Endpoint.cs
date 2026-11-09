@@ -17,10 +17,10 @@ public static class CreateProductEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Created($"/api/warehouse/products/{response.Id}", response);
         })
+        .RequirePermission(Permissions.WarehouseWrite)
         .WithName("CreateProduct")
         .WithSummary("Create a product")
-        .WithDescription("Adds an active product to the master catalog. SKU and supplier barcode must be unique.")
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        .WithDescription("Adds an active product to the master catalog. SKU and supplier barcode must be unique.");
 
         return group;
     }

@@ -17,6 +17,9 @@ public sealed class TransportRequestConfiguration : IEntityTypeConfiguration<Tra
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.FailureCode).HasMaxLength(50);
         builder.Property(x => x.FailureMessage).HasMaxLength(500);
+        builder.Property(x => x.CancelReason).HasMaxLength(500);
+        builder.Property(x => x.RejectReason).HasMaxLength(500);
+        builder.Ignore(x => x.IsClosed);
         builder.Property(x => x.Version).IsConcurrencyToken();
 
         builder.Property(x => x.WorkflowInputs)

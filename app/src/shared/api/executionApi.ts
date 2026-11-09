@@ -166,10 +166,36 @@ export function acceptHumanTask(taskId: string, _staffId?: string): Promise<Acce
   requireMobileCapability('claimHumanTask');
   return apiFetch<AcceptTaskResponse>(`/api/workflow-execution/tasks/${taskId}/accept`, { method: 'POST' });
 }
-export function reportTaskProblem(taskId: string, body: ReportTaskProblemBody, jobStepId?: string) {
+/** Staff incident categories → backend IssueReport type and severity (OPS-01). */
+const ISSUE_MAPPING: Record<string, { issueType: string; severity: string }> = {
+  CONTAINER_DAMAGED: { issueType: 'CONTAINER', severity: 'HIGH' },
+  BARCODE_UNREADABLE: { issueType: 'CONTAINER', severity: 'MEDIUM' },
+  QUANTITY_MISMATCH: { issueType: 'CONTAINER', severity: 'MEDIUM' },
+  SHELF_BLOCKED: { issueType: 'STORAGE', severity: 'MEDIUM' },
+  AMR_PATH_BLOCKED: { issueType: 'JOB', severity: 'HIGH' },
+};
+
+/**
+ * Opens an IssueReport for a job (`POST /api/operations/issues`). Admins (and the robot's Technicians) are notified;
+ * the job and the robot are not changed.
+ */
+export function reportTaskProblem(
+  _taskId: string | undefined,
+  body: ReportTaskProblemBody,
+  jobStepId?: string,
+  context: { jobId?: string; containerId?: string } = {},
+) {
   requireMobileCapability('reportIssue');
-  return apiFetch<unknown>(`/api/workflow-execution/tasks/${taskId}/report-problem`, {
-    method: 'POST', body: JSON.stringify(body),
+  const mapped = ISSUE_MAPPING[body.reason] ?? { issueType: 'OTHER', severity: 'MEDIUM' };
+  return apiFetch<{ id: string; code: string; status: string }>('/api/operations/issues', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...mapped,
+      description: `[${body.reason}] ${body.note ?? ''}`.trim(),
+      jobId: context.jobId ?? null,
+      jobStepId: jobStepId ?? null,
+      containerId: context.containerId ?? null,
+    }),
   });
 }
 export function completePayloadRecoveryJob(_jobId: string, _robotCode: string): never {

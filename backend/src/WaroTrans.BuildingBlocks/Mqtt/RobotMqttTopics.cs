@@ -13,6 +13,10 @@ public static class RobotMqttTopics
     public const string TrafficProgressSuffix = "traffic_progress";
     public const string TrafficPlanSuffix = "traffic_plan";
     public const string AuthorityStateSuffix = "authority_state";
+    public const string HealthSuffix = "health";
+
+    public static string HealthFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/health";
 
     public static string HeartbeatFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/heartbeat";
@@ -112,7 +116,8 @@ public static class RobotMqttTopics
             or InteractionResultSuffix
             or TrafficProgressSuffix
             or TrafficPlanSuffix
-            or AuthorityStateSuffix;
+            or AuthorityStateSuffix
+            or HealthSuffix;
     }
 
     public static string NormalizePrefix(string topicPrefix) =>

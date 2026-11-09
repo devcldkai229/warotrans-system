@@ -26,7 +26,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto } from '../api/navigationApi';
-import { getApiBaseUrl } from '../api/client';
+import { getAccessToken, getApiBaseUrl } from '../api/client';
 import type { RobotResponse } from '../types/contracts';
 import { colors } from '../theme/colors';
 import { radii } from '../theme/radii';
@@ -48,6 +48,7 @@ import { createMapFrame, metricScale, worldToBase, type MapFrame } from './mapTr
 import { zoneColor, zoneLabel } from './mapPresentation';
 import { useMapCamera } from './hooks/useMapCamera';
 import { useMapEnvironment } from './hooks/useMapEnvironment';
+import { formatBattery } from '../formatBattery';
 
 interface Props {
   map:MapVersionDetailDto; robots:RobotResponse[]; selectedRobot:string; onSelectRobot:(code:string)=>void;
@@ -197,7 +198,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
   const [imageLoaded, setImageLoaded] = useState('');
   const [imageFailed, setImageFailed] = useState('');
   const model = useMemo(() => findMapModel(map), [map]);
-  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl());
+  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl(), getAccessToken());
   const imageKey = `${map.id}:${uri}:${imageAttempt}`;
   const loaded = useCallback(() => setImageLoaded(imageKey), [imageKey]);
   const failed = useCallback(() => setImageFailed(imageKey), [imageKey]);
@@ -516,8 +517,8 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                                   <Text variant="caption" color="textSecondary">{rState.label}</Text>
                                   <Text variant="caption" color="textMuted">·</Text>
                                   <View style={styles.batteryInline}>
-                                    <BatteryMedium size={12} color={r.batteryPercent > 20 ? colors.successText : colors.dangerText} />
-                                    <Text variant="caption" color="textSecondary">{Math.round(r.batteryPercent)}%</Text>
+                                    <BatteryMedium size={12} color={r.batteryPercent === null ? colors.textSecondary : r.batteryPercent > 20 ? colors.successText : colors.dangerText} />
+                                    <Text variant="caption" color="textSecondary">{formatBattery(r.batteryPercent)}</Text>
                                   </View>
                                 </View>
                               </View>
@@ -696,7 +697,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                 <View style={styles.specRow}>
                   <Text variant="caption" color="textSecondary">Battery Level</Text>
                   <Text variant="bodyMedium" fontWeight="700">
-                    {Math.round(robot.batteryPercent)}%
+                    {formatBattery(robot.batteryPercent)}
                   </Text>
                 </View>
                 <View style={styles.specRow}>

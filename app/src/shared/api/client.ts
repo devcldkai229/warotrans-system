@@ -217,6 +217,40 @@ async function parseApiError(response: Response): Promise<ApiError> {
 
 let refreshPromise: Promise<string | null> | null = null;
 
+/** Seconds until `token` expires (its `exp` claim), or null when it cannot be read. */
+export function tokenSecondsLeft(token: string | null, nowMs: number = Date.now()): number | null {
+  if (!token) return null;
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = part + '='.repeat((4 - (part.length % 4)) % 4);
+    const json = JSON.parse(globalThis.atob(padded)) as { exp?: number };
+    return typeof json.exp === 'number' ? json.exp - nowMs / 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The access token, refreshed first when it expires within `minSeconds`. For callers that cannot retry on 401
+ * themselves: the SignalR connection (the server closes it when the token expires) and map image URLs.
+ */
+export async function getFreshAccessToken(minSeconds = 30): Promise<string | null> {
+  const token = inMemoryToken;
+  if (!token) return null;
+  const left = tokenSecondsLeft(token);
+  if (left !== null && left > minSeconds) return token;
+  if (!refreshPromise) {
+    refreshPromise = performTokenRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  try {
+    return await refreshPromise;
+  } catch {
+    return inMemoryToken;
+  }
+}
+
 async function performTokenRefresh(): Promise<string | null> {
   const version = tokenVersion;
   try {

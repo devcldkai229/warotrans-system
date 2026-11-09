@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Enums;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Registry;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.WorkflowExecution.Features.GetWorkflowMetadata;
 
@@ -57,7 +58,8 @@ public static class GetWorkflowMetadataEndpoint
                     m.IsRequiredCapable)).ToList());
 
             return Results.Ok(response);
-        });
+        })
+            .RequirePermission(Permissions.WorkflowRead);
 
         return group;
     }

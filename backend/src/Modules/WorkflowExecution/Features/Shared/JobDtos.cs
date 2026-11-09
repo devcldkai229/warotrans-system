@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
@@ -41,7 +42,9 @@ public sealed record JobDetailDto(
     string? FailureCode,
     string? FailureMessage,
     IReadOnlyList<JobContainerDto> Containers,
-    IReadOnlyList<JobTaskDto> Tasks);
+    IReadOnlyList<JobTaskDto> Tasks,
+    // BOTH-04: what this caller may do to the Job now, decided by the same rule the endpoints enforce.
+    IReadOnlyList<ActionAvailability> AvailableActions);
 
 public sealed record JobContainerDto(
     Guid Id,
@@ -80,7 +83,7 @@ public sealed record JobStepDto(
     DateTimeOffset? CompletedAt);
 
 /// <summary>Read model for Job APIs (list / detail). JobBatchPlan is never exposed.</summary>
-public sealed class JobQueries(WorkflowExecutionDbContext db)
+public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser currentUser)
 {
     public async Task<JobDetailDto> GetDetailAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -146,7 +149,8 @@ public sealed class JobQueries(WorkflowExecutionDbContext db)
                                 s.ErrorCode, s.ErrorMessage, s.StartedAt, s.CompletedAt);
                         })
                         .ToList()))
-                .ToList());
+                .ToList(),
+            JobActionPolicy.Evaluate(job.Status, currentUser.Can));
     }
 
     public async Task<(IReadOnlyList<JobSummaryDto> Items, int Total)> ListAsync(

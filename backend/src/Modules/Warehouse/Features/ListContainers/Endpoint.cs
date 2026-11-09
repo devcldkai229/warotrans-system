@@ -28,7 +28,7 @@ public static class ListContainersEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("ListContainers")
         .WithSummary("List containers for a warehouse")
         .WithDescription(

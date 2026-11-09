@@ -2,6 +2,8 @@ using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Fleet.Features.IssueNavigateCommand;
 
@@ -19,7 +21,10 @@ public static class IssueNavigateCommandEndpoint
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(id, request, cancellationToken);
             return Results.Accepted($"/api/fleet/robots/{id}/commands/{response.CommandId}", response);
-        });
+        })
+            .RequirePermission(Permissions.RobotCommand)
+            .RequireRobotScope()
+            .Audited("robot.navigate_commanded", "ROBOT", "id");
 
         return group;
     }

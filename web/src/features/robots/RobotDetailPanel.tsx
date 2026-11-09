@@ -3,7 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { RobotView } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import { disableRobot, enableRobot } from '@/shared/api/fleet'
-import { formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
+import { useAuth } from '@/features/auth/authContext'
+import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
+import { RobotControlCard } from './RobotControlCard'
+import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
@@ -20,8 +23,6 @@ interface RobotDetailPanelProps {
 
 const ACTIONS: { label: string; icon: IconName }[] = [
   { label: 'Manual', icon: 'gamepad' },
-  { label: 'Pause', icon: 'pause' },
-  { label: 'Unavailable', icon: 'stop' },
   { label: 'Localize', icon: 'crosshair' },
 ]
 
@@ -111,13 +112,14 @@ function buildSections(robot: RobotView): Section[] {
     {
       id: 'telemetry',
       label: 'Telemetry',
-      summary: hasTelemetry ? `${robot.batteryPercent}%` : 'No telemetry yet',
+      summary: hasTelemetry ? formatBattery(robot.batteryPercent) : 'No telemetry yet',
       body: (
         <dl>
           <Field label="Battery">
             {hasTelemetry ? (
               <>
-                {robot.batteryPercent}% <Meter percent={robot.batteryPercent} tone="green" className="w-12" />
+                {formatBattery(robot.batteryPercent)}{' '}
+                {robot.batteryPercent === null ? null : <Meter percent={robot.batteryPercent} tone="green" className="w-12" />}
               </>
             ) : (
               '—'
@@ -267,6 +269,9 @@ function buildSections(robot: RobotView): Section[] {
 
 export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelProps) {
   const queryClient = useQueryClient()
+  const { capabilities } = useAuth()
+  const mayConfigure = canActOnRobot(capabilities, PERMISSIONS.robotConfigure, robot.id)
+  const mayDrive = canActOnRobot(capabilities, PERMISSIONS.robotManualDrive, robot.id)
   const sections = buildSections(robot)
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
   const [confirmed, setConfirmed] = useState(false)
@@ -317,7 +322,7 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
         </p>
 
         <div className="mb-4 flex flex-wrap gap-2">
-          {robot.isEnabled ? (
+          {!mayConfigure ? null : robot.isEnabled ? (
             <Button
               variant="surface"
               size="sm"
@@ -339,6 +344,8 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
         </div>
         {actionError ? <p className="mb-4 text-xs text-red-ink">{actionError}</p> : null}
 
+        <RobotControlCard robotId={robot.id} robotCode={robot.code} />
+
         {error ? (
           <div className="flex gap-3 rounded-md bg-red-soft p-4 text-red-ink">
             <Icon name="alert" size={18} className="mt-0.5" />
@@ -354,7 +361,9 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
             <button
               key={action.label}
               type="button"
-              className="group flex flex-col items-center gap-2 text-xs text-ink-2"
+              className="group flex flex-col items-center gap-2 text-xs text-ink-2 disabled:opacity-40"
+              disabled={action.label === 'Manual' && !mayDrive}
+              title={action.label === 'Manual' && !mayDrive ? 'You may not drive this robot.' : undefined}
               onClick={action.label === 'Manual' ? onManual : undefined}
             >
               <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-hover:bg-container-higher">

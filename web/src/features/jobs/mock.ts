@@ -1,5 +1,4 @@
 import type {
-  DispatchDecision,
   InputBinding,
   JobAction,
   JobStatus,
@@ -237,22 +236,6 @@ export const JOBS: JobView[] = [
     createdMinutesAgo: 14,
   }),
 ]
-
-/** DispatchDecision per Job id. TODO(backend): candidateEvaluations JSON shape is not finalized. */
-export const DISPATCH_DECISIONS: Record<string, DispatchDecision> = {
-  [JOBS[0].id]: {
-    id: 'dd-0001',
-    jobId: JOBS[0].id,
-    robotId: '0d7f3b60-0000-4000-8000-000000000001',
-    type: 'SELECTED',
-    createdAt: minutesAgo(7),
-    candidates: [
-      { robotCode: 'RBT-001', batteryPercent: 84, status: 'AVAILABLE', selected: true },
-      { robotCode: 'RBT-002', batteryPercent: 71, status: 'AVAILABLE', selected: false },
-      { robotCode: 'RBT-004', batteryPercent: 96, status: 'RESERVED', selected: false },
-    ],
-  },
-}
 
 // TODO(backend): live-map label and cursor coordinates are client/realtime values with no endpoint.
 export const JOBS_MAP = {

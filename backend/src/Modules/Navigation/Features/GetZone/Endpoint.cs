@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetZone;
 
@@ -16,6 +17,7 @@ public static class GetZoneEndpoint
             var response = await handler.HandleByIdAsync(id, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetZoneById")
         .WithSummary("Get a zone by id");
 
@@ -27,6 +29,7 @@ public static class GetZoneEndpoint
             var response = await handler.HandleByMapAsync(mapVersionId, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("ListZonesByMap")
         .WithSummary("List zones for a map version");
     }

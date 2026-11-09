@@ -43,7 +43,7 @@ public static class ListTransportRequestsEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.TransportRead)
         .WithName("ListTransportRequests")
         .WithSummary("List TransportRequests")
         .WithDescription("Returns TransportRequests with enriched container and endpoint labels. Does not create Jobs.");

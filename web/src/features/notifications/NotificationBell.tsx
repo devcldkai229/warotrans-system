@@ -19,15 +19,17 @@ const TYPE_TONE: Record<AdminNotification['type'], Tone> = {
   SYSTEM: 'grey',
 }
 
-/** Where a notification leads: the detail page of its job, the fleet for a robot, the request list for a request. */
+/** Where a notification leads: the route the server gave it (SY-04), else derived from what it is about. */
 function targetOf(notification: AdminNotification): string | null {
+  if (notification.route) return notification.route
   if (notification.entityType === 'JOB' && notification.entityId) return `/monitor/jobs/${notification.entityId}`
+  if (notification.entityType === 'ISSUE' && notification.entityId) return `/operations/issues/${notification.entityId}`
   if (notification.entityType === 'ROBOT') return '/monitor/fleet'
   if (notification.entityType === 'REQUEST') return '/monitor/requests'
   return null
 }
 
-/** The bell in the top bar: unread count, and a list of what needs an admin (failed jobs, offline robots …). */
+/** The bell in the top bar: the signed-in person's unread count and inbox (failed jobs, offline robots, issues …). */
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
