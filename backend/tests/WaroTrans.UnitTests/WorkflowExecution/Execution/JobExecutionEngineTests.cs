@@ -7,6 +7,8 @@ using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Navigation.Contracts;
+using WaroTrans.Warehouse.Contracts;
+using WaroTrans.Warehouse.Enums;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
@@ -34,11 +36,12 @@ public sealed class JobExecutionEngineTests
     private readonly FakeRequestActivity _requests = new();
     private readonly RecordingEvents _events = new();
     private readonly Guid _staff = Guid.NewGuid();
+    private readonly FakeWarehouse _warehouse = new();
     private WorkflowExecutionDbContext _db = null!;
     private Guid _mapVersionId;
 
     private JobExecutionEngine Engine() =>
-        new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance);
+        new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance, warehouse: _warehouse);
 
     private RobotCommandLifecycleJobStepHandler ResultHandler() =>
         new(_db, Engine(), _events, NullLogger<RobotCommandLifecycleJobStepHandler>.Instance);
@@ -366,6 +369,274 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(0, await Engine().WakeDueWaitStepsAsync());
         Assert.Equal(JobStepStatus.CANCELLED, (await StepsAsync(jobId)).Single(s => s.Key == "CHECK_REQUEST").Status);
         Assert.Empty(_fleet.Commands);
+    }
+
+    private sealed class FakeWarehouse : IWarehouseModule
+    {
+        public Dictionary<Guid, ContainerSnapshot> Containers { get; } = [];
+
+        public void Set(Guid id, ContainerStatus status, Guid? location = null, short? level = null) =>
+            Containers[id] = new ContainerSnapshot(id, "BC-" + id.ToString("N")[..4], status, location, level);
+
+        public Task<IReadOnlyList<ContainerSnapshot>> GetContainersAsync(IReadOnlyCollection<Guid> containerIds, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ContainerSnapshot>>(containerIds.Where(Containers.ContainsKey).Select(id => Containers[id]).ToList());
+
+        public Task<WarehouseSnapshot?> GetWarehouseAsync(Guid warehouseId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsAsync(IReadOnlyCollection<Guid> storageLocationIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsByEndpointsAsync(Guid warehouseId, IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ContainerVoucherSnapshot>> GetConfirmedVoucherLinesAsync(IReadOnlyCollection<Guid> containerIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private static WaroTrans.WorkflowExecution.ValueObjects.StepInputBinding Constant(object value) => new()
+    {
+        SourceType = WaroTrans.BuildingBlocks.Enums.BindingSourceType.CONSTANT,
+        ConstantValue = JsonSerializer.SerializeToElement(value)
+    };
+
+    /// <summary>Turns the first CHECK of the workflow into the given operation. Nothing runs after it until it passes.</summary>
+    private async Task MakeCheckAsync(
+        string operation,
+        Dictionary<string, WaroTrans.WorkflowExecution.ValueObjects.StepInputBinding> inputs,
+        int maxAttempts = 1,
+        int backoffSeconds = 0,
+        int timeoutSeconds = 0)
+    {
+        var workflowStep = await _db.WorkflowSteps.FirstAsync(w => w.StepKey == "CHECK_REQUEST");
+        workflowStep.Config = new WaroTrans.WorkflowExecution.ValueObjects.WorkflowStepConfig { OperationCode = operation };
+        workflowStep.InputBindings = inputs;
+        workflowStep.MaxAttempts = maxAttempts;
+        workflowStep.RetryBackoffSeconds = backoffSeconds;
+        workflowStep.TimeoutSeconds = timeoutSeconds;
+        await _db.SaveChangesAsync();
+    }
+
+    private Task MakeInventoryCheckAsync(int maxAttempts = 1, int backoffSeconds = 0, int timeoutSeconds = 0) =>
+        MakeCheckAsync(
+            nameof(CheckConditionCode.INVENTORY_AVAILABLE),
+            new() { ["containerId"] = Constant(C1) },
+            maxAttempts, backoffSeconds, timeoutSeconds);
+
+    private async Task<WaroTrans.WorkflowExecution.Entities.JobStep> CheckStepAsync(Guid jobId)
+    {
+        var definition = await _db.WorkflowSteps.FirstAsync(w => w.StepKey == "CHECK_REQUEST");
+        return await _db.JobSteps.FirstAsync(s => s.WorkflowStepId == definition.Id && s.JobTask.JobId == jobId);
+    }
+
+    private async Task MakeRetryDueAsync(Guid jobId)
+    {
+        var step = await CheckStepAsync(jobId);
+        step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+        {
+            [JobExecutionEngine.WaitUntilKey] = JsonSerializer.SerializeToElement(DateTimeOffset.UtcNow.AddSeconds(-1))
+        };
+        await _db.SaveChangesAsync();
+    }
+
+    [Theory]
+    [InlineData(ContainerStatus.IN_TRANSIT, "container_in_transit")]
+    [InlineData(ContainerStatus.HOLD, "container_hold")]
+    [InlineData(ContainerStatus.ISSUED, "container_issued")]
+    public async Task A_container_that_is_not_available_fails_the_check_and_nothing_moves(ContainerStatus status, string reason)
+    {
+        var jobId = await ProvisionAsync();
+        await MakeInventoryCheckAsync();
+        _warehouse.Set(C1, status);
+
+        await Engine().StartAsync(jobId, null);
+
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.FAILED, job.Status);
+        Assert.Equal("check_failed_inventory_available", job.FailureCode);
+        Assert.Contains(reason, job.FailureMessage);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task An_unknown_container_fails_the_check()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeInventoryCheckAsync();
+
+        await Engine().StartAsync(jobId, null);
+
+        Assert.Contains("container_not_found", (await _db.Jobs.SingleAsync(j => j.Id == jobId)).FailureMessage);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task A_stored_container_that_was_moved_away_from_the_source_fails_the_check()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeInventoryCheckAsync();
+        var expected = Guid.NewGuid();
+        var step = await CheckStepAsync(jobId);
+        var task = await _db.JobTasks.SingleAsync(t => t.Id == step.JobTaskId);
+        task.ContextValues = new Dictionary<string, JsonElement>(task.ContextValues)
+        {
+            ["source.storageLocationId"] = JsonSerializer.SerializeToElement(expected),
+            ["source.levelNo"] = JsonSerializer.SerializeToElement(2)
+        };
+        await _db.SaveChangesAsync();
+        _warehouse.Set(C1, ContainerStatus.STORED, Guid.NewGuid(), 2);
+
+        await Engine().StartAsync(jobId, null);
+
+        Assert.Contains("container_not_at_source", (await _db.Jobs.SingleAsync(j => j.Id == jobId)).FailureMessage);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task A_stored_container_at_the_source_passes_and_the_job_moves_on()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeInventoryCheckAsync();
+        var shelf = Guid.NewGuid();
+        var step = await CheckStepAsync(jobId);
+        var task = await _db.JobTasks.SingleAsync(t => t.Id == step.JobTaskId);
+        task.ContextValues = new Dictionary<string, JsonElement>(task.ContextValues)
+        {
+            ["source.storageLocationId"] = JsonSerializer.SerializeToElement(shelf),
+            ["source.levelNo"] = JsonSerializer.SerializeToElement(1)
+        };
+        await _db.SaveChangesAsync();
+        _warehouse.Set(C1, ContainerStatus.STORED, shelf, 1);
+
+        await Engine().StartAsync(jobId, null);
+
+        Assert.Equal(JobStepStatus.COMPLETED, (await CheckStepAsync(jobId)).Status);
+        Assert.Single(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task A_container_on_another_live_job_fails_the_check()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeInventoryCheckAsync();
+        _warehouse.Set(C1, ContainerStatus.STORED);
+        var mine = await _db.Jobs.AsNoTracking().SingleAsync(j => j.Id == jobId);
+        var other = new WaroTrans.WorkflowExecution.Entities.Job
+        {
+            Id = Guid.NewGuid(),
+            JobNo = "JOB-OTHER",
+            ProvisioningKey = "other",
+            WorkflowId = mine.WorkflowId,
+            MapVersionId = mine.MapVersionId,
+            Status = JobStatus.RUNNING,
+            ContextValues = new Dictionary<string, JsonElement>(),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        other.JobContainers.Add(new WaroTrans.WorkflowExecution.Entities.JobContainer
+        {
+            Id = Guid.NewGuid(),
+            JobId = other.Id,
+            TransportRequestId = Guid.NewGuid(),
+            ContainerId = C1,
+            Status = JobContainerStatus.ONBOARD,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        _db.Jobs.Add(other);
+        await _db.SaveChangesAsync();
+
+        await Engine().StartAsync(jobId, null);
+
+        Assert.Contains("container_on_another_job", (await _db.Jobs.SingleAsync(j => j.Id == jobId)).FailureMessage);
+    }
+
+    [Fact]
+    public async Task A_check_waits_for_its_next_attempt_and_sees_the_change_made_meanwhile()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeInventoryCheckAsync(maxAttempts: 3, backoffSeconds: 3600);
+        _warehouse.Set(C1, ContainerStatus.HOLD);
+
+        await Engine().StartAsync(jobId, null);
+
+        var waiting = await CheckStepAsync(jobId);
+        Assert.Equal(JobStepStatus.WAITING, waiting.Status);
+        Assert.Equal(1, waiting.OutputValues[JobExecutionEngine.CheckAttemptKey].GetInt32());
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Empty(_fleet.Commands);
+        Assert.Equal(0, await Engine().WakeDueWaitStepsAsync()); // not due
+
+        // The Container is released between the two attempts.
+        _warehouse.Set(C1, ContainerStatus.STORED);
+        await MakeRetryDueAsync(jobId);
+        Assert.Equal(1, await Engine().WakeDueWaitStepsAsync());
+        Assert.Equal(0, await Engine().WakeDueWaitStepsAsync()); // exactly once
+
+        var done = await CheckStepAsync(jobId);
+        Assert.Equal(JobStepStatus.COMPLETED, done.Status);
+        Assert.Equal(2, done.OutputValues[JobExecutionEngine.CheckAttemptKey].GetInt32());
+        Assert.Single(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task A_check_that_uses_all_its_attempts_fails_and_a_timeout_stops_it_earlier()
+    {
+        var jobId = await ProvisionAsync();
+        await MakeInventoryCheckAsync(maxAttempts: 2);
+        _warehouse.Set(C1, ContainerStatus.HOLD);
+        await Engine().StartAsync(jobId, null);
+        await MakeRetryDueAsync(jobId);
+        await Engine().WakeDueWaitStepsAsync();
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.FAILED, job.Status);
+        Assert.Equal("check_failed_inventory_available", job.FailureCode);
+        Assert.Contains("after 2 attempts", job.FailureMessage);
+
+        var timed = await ProvisionAsync();
+        await MakeInventoryCheckAsync(maxAttempts: 5, timeoutSeconds: 60);
+        await Engine().StartAsync(timed, null);
+        var step = await CheckStepAsync(timed);
+        step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+        {
+            [JobExecutionEngine.WaitUntilKey] = JsonSerializer.SerializeToElement(DateTimeOffset.UtcNow.AddSeconds(-1)),
+            [JobExecutionEngine.CheckFirstAttemptKey] = JsonSerializer.SerializeToElement(DateTimeOffset.UtcNow.AddMinutes(-2))
+        };
+        await _db.SaveChangesAsync();
+        await Engine().WakeDueWaitStepsAsync();
+        Assert.Equal("check_timeout", (await _db.Jobs.SingleAsync(j => j.Id == timed)).FailureCode);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Theory]
+    [InlineData("EMPTY", null, false, true)]
+    [InlineData("LOADED", null, false, false)]
+    [InlineData("LOADED", null, true, true)]
+    [InlineData("EMPTY", null, true, false)]
+    [InlineData("LOADED", "C1", true, true)]
+    [InlineData("LOADED", "C2", true, false)]
+    public async Task Load_state_reads_the_confirmed_handovers(string expected, string? container, bool c1OnBoard, bool passes)
+    {
+        var jobId = await ProvisionAsync();
+        var inputs = new Dictionary<string, WaroTrans.WorkflowExecution.ValueObjects.StepInputBinding>
+        {
+            ["robotId"] = Constant(_fleet.RobotId),
+            ["expectedLoadState"] = Constant(expected)
+        };
+        if (container is not null)
+        {
+            inputs["containerId"] = Constant(container == "C1" ? C1 : C2);
+        }
+
+        await MakeCheckAsync(nameof(CheckConditionCode.LOAD_STATE), inputs);
+        if (c1OnBoard)
+        {
+            (await _db.JobContainers.SingleAsync(c => c.JobId == jobId && c.ContainerId == C1)).Status = JobContainerStatus.ONBOARD;
+            await _db.SaveChangesAsync();
+        }
+
+        await Engine().StartAsync(jobId, null);
+
+        var step = await CheckStepAsync(jobId);
+        Assert.Equal(passes ? JobStepStatus.COMPLETED : JobStepStatus.FAILED, step.Status);
+        Assert.Equal("CONFIRMED_HANDOVER", step.OutputValues["loadStateSource"].GetString());
+        if (!passes)
+        {
+            Assert.Equal("check_failed_load_state", (await _db.Jobs.SingleAsync(j => j.Id == jobId)).FailureCode);
+            Assert.Empty(_fleet.Commands);
+        }
     }
 
     private sealed class RecordingIssueReporter(Exception? failWith = null) : IIssueReporter

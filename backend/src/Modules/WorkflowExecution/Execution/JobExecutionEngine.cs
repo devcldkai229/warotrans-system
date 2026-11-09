@@ -12,6 +12,8 @@ using WaroTrans.Fleet.Traffic;
 using WaroTrans.Fleet.Traffic.StationPolicies;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Traffic;
+using WaroTrans.Warehouse.Contracts;
+using WaroTrans.Warehouse.Enums;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
@@ -24,7 +26,8 @@ namespace WaroTrans.WorkflowExecution.Execution;
 /// <summary>
 /// Runs a provisioned Job: walks JobTasks / JobSteps in order and executes each step.
 ///
-///   CHECK              evaluated immediately (Fleet / Navigation / Transportation contracts)
+///   CHECK              evaluated immediately (Fleet / Navigation / Transportation / Warehouse contracts); when it does not
+///                      pass and the step allows more attempts it waits (WAITING + waitUntil) and is evaluated again
 ///   MOVE               NAVIGATE_TO_POSE through Fleet → step EXECUTING; finished by the robot RESULT
 ///                      (RobotCommandLifecycleJobStepHandler → AdvanceAsync)
 ///   HUMAN_INTERACTION  step WAITING; finished by ConfirmHumanStepAsync (Staff App or robot button)
@@ -52,7 +55,8 @@ public sealed class JobExecutionEngine(
     ShadowSingleMoverGuard? shadowMoverGuard = null,
     ISegmentedTrafficCoordinator? segmentedTraffic = null,
     ITrafficOpsLog? trafficOpsLog = null,
-    IIssueReporter? issueReporter = null)
+    IIssueReporter? issueReporter = null,
+    IWarehouseModule? warehouse = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -816,17 +820,37 @@ public sealed class JobExecutionEngine(
         switch (step.StepType)
         {
             case StepType.CHECK:
-                var (passed, outputs, reason) = await EvaluateCheckAsync(job, operation, step.ResolvedInputs, cancellationToken);
+                var (passed, outputs, reason) = await EvaluateCheckAsync(job, task, operation, step.ResolvedInputs, cancellationToken);
+                var attempt = (step.OutputValues.TryGetValue(CheckAttemptKey, out var previous) && previous.TryGetInt32(out var count) ? count : 0) + 1;
+                var firstAttempt = step.OutputValues.TryGetValue(CheckFirstAttemptKey, out var first) ? first.GetDateTimeOffset() : now;
+                outputs[CheckAttemptKey] = JsonSerializer.SerializeToElement(attempt);
+                outputs[CheckFirstAttemptKey] = JsonSerializer.SerializeToElement(firstAttempt);
                 step.OutputValues = outputs;
                 if (passed)
                 {
                     SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.COMPLETED, now);
-                }
-                else
-                {
-                    Fail(job, task, step, workflowStep.StepKey, $"check_failed_{operation.ToLowerInvariant()}", reason, now);
+                    return true;
                 }
 
+                // WH-05: the condition may still become true (stock being put back, a robot freeing up). The attempt
+                // count and deadline live on the step, so a restart loses nothing and no thread waits for it.
+                var timedOut = workflowStep.TimeoutSeconds > 0 && (now - firstAttempt).TotalSeconds >= workflowStep.TimeoutSeconds;
+                if (attempt < workflowStep.MaxAttempts && !timedOut)
+                {
+                    outputs[WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(Math.Max(0, workflowStep.RetryBackoffSeconds)));
+                    step.OutputValues = outputs;
+                    SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.WAITING, now);
+                    return false;
+                }
+
+                Fail(
+                    job,
+                    task,
+                    step,
+                    workflowStep.StepKey,
+                    timedOut ? "check_timeout" : $"check_failed_{operation.ToLowerInvariant()}",
+                    attempt > 1 ? $"{reason} (after {attempt} attempts)" : reason,
+                    now);
                 return true;
 
             case StepType.MOVE:
@@ -875,6 +899,8 @@ public sealed class JobExecutionEngine(
     }
 
     public const string WaitUntilKey = "waitUntil";
+    public const string CheckAttemptKey = "checkAttempt";
+    public const string CheckFirstAttemptKey = "checkFirstAttemptAt";
 
     /// <summary>A WAIT longer than a day is a scheduling problem, not a step.</summary>
     private const int MaxWaitSeconds = 86_400;
@@ -883,13 +909,14 @@ public sealed class JobExecutionEngine(
     /// WFX-01: completes WAIT.DURATION steps whose deadline passed and continues their Jobs. Only RUNNING Jobs are
     /// woken (a paused Job continues after Resume; the deadline is wall-clock, a pause does not extend it). A step is
     /// woken exactly once: it must still be WAITING when re-read, and the save is followed by AdvanceAsync.
+    /// WH-05: a CHECK waiting for its next attempt goes back to READY, so it is evaluated again.
     /// </summary>
     public async Task<int> WakeDueWaitStepsAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
         var jobIds = await db.Jobs.AsNoTracking()
             .Where(j => j.Status == JobStatus.RUNNING
-                        && j.JobTasks.Any(t => t.JobSteps.Any(s => s.StepType == StepType.WAIT && s.Status == JobStepStatus.WAITING)))
+                        && j.JobTasks.Any(t => t.JobSteps.Any(s => (s.StepType == StepType.WAIT || s.StepType == StepType.CHECK) && s.Status == JobStepStatus.WAITING)))
             .Select(j => j.Id)
             .ToListAsync(cancellationToken);
 
@@ -903,7 +930,7 @@ public sealed class JobExecutionEngine(
             }
 
             var due = OrderedSteps(job)
-                .Where(x => x.Step.StepType == StepType.WAIT && x.Step.Status == JobStepStatus.WAITING
+                .Where(x => x.Step.StepType is StepType.WAIT or StepType.CHECK && x.Step.Status == JobStepStatus.WAITING
                             && x.Step.OutputValues.TryGetValue(WaitUntilKey, out var until)
                             && until.GetDateTimeOffset() <= now)
                 .ToList();
@@ -917,6 +944,16 @@ public sealed class JobExecutionEngine(
                 .ToDictionaryAsync(s => s.Id, s => s.StepKey, cancellationToken);
             foreach (var (task, step) in due)
             {
+                if (step.StepType == StepType.CHECK)
+                {
+                    var kept = new Dictionary<string, JsonElement>(step.OutputValues);
+                    kept.Remove(WaitUntilKey);
+                    step.OutputValues = kept;
+                    SetStepStatus(job, task, step, keys.GetValueOrDefault(step.WorkflowStepId, step.Id.ToString("N")), JobStepStatus.READY, now);
+                    woken++;
+                    continue;
+                }
+
                 var started = step.OutputValues.TryGetValue("waitStartedAt", out var s) ? s.GetDateTimeOffset() : step.StartedAt ?? now;
                 step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
                 {
@@ -1419,6 +1456,7 @@ public sealed class JobExecutionEngine(
 
     private async Task<(bool Passed, Dictionary<string, JsonElement> Outputs, string Reason)> EvaluateCheckAsync(
         Job job,
+        JobTask task,
         string operation,
         IReadOnlyDictionary<string, JsonElement> inputs,
         CancellationToken cancellationToken)
@@ -1478,6 +1516,15 @@ public sealed class JobExecutionEngine(
                 break;
             }
 
+            case nameof(CheckConditionCode.LOAD_STATE):
+                (passed, reason) = await EvaluateLoadStateAsync(job, inputs, outputs, cancellationToken);
+                break;
+
+            case nameof(CheckConditionCode.INVENTORY_AVAILABLE):
+                (passed, reason) = await EvaluateInventoryAvailableAsync(job, task, inputs, cancellationToken);
+                break;
+
+            // Publish refuses any other operation (CheckOperations.Executable), so this only guards old definitions.
             default:
                 passed = false;
                 reason = $"{operation} is not evaluated in V1";
@@ -1487,6 +1534,98 @@ public sealed class JobExecutionEngine(
         outputs["passed"] = JsonSerializer.SerializeToElement(passed);
         outputs["reason"] = JsonSerializer.SerializeToElement(reason);
         return (passed, outputs, reason);
+    }
+
+    /// <summary>
+    /// WFX-02: what the robot carries according to the handovers people confirmed (JobContainer ONBOARD). The robot has
+    /// no load sensor, so this is custody as the software knows it, not a physical measurement: outputs say so.
+    /// </summary>
+    private async Task<(bool Passed, string Reason)> EvaluateLoadStateAsync(
+        Job job,
+        IReadOnlyDictionary<string, JsonElement> inputs,
+        Dictionary<string, JsonElement> outputs,
+        CancellationToken cancellationToken)
+    {
+        var robotId = inputs["robotId"].GetGuid();
+        var expected = inputs["expectedLoadState"].GetString();
+        Guid? containerId = inputs.TryGetValue("containerId", out var c) && c.ValueKind == JsonValueKind.String ? c.GetGuid() : null;
+
+        IReadOnlyList<Guid> onBoard;
+        if (AssignedRobot(job) == robotId)
+        {
+            onBoard = job.JobContainers.Where(x => x.Status == JobContainerStatus.ONBOARD).Select(x => x.ContainerId).ToList();
+        }
+        else
+        {
+            var heldJob = await db.JobRobotAssignments.AsNoTracking()
+                .Where(a => a.RobotId == robotId && a.EndedAt == null)
+                .Select(a => (Guid?)a.JobId)
+                .FirstOrDefaultAsync(cancellationToken);
+            onBoard = heldJob is { } id
+                ? await db.JobContainers.AsNoTracking()
+                    .Where(x => x.JobId == id && x.Status == JobContainerStatus.ONBOARD)
+                    .Select(x => x.ContainerId)
+                    .ToListAsync(cancellationToken)
+                : [];
+        }
+
+        var loaded = containerId is { } container ? onBoard.Contains(container) : onBoard.Count > 0;
+        var actual = loaded ? "LOADED" : "EMPTY";
+        outputs["actualLoadState"] = JsonSerializer.SerializeToElement(actual);
+        outputs["loadStateSource"] = JsonSerializer.SerializeToElement("CONFIRMED_HANDOVER");
+        return actual == expected
+            ? (true, "load_state_matches")
+            : (false, containerId is null
+                ? $"load_state_mismatch: robot is {actual}, expected {expected}"
+                : $"load_state_mismatch: container is {(loaded ? "on" : "not on")} the robot, expected {expected}");
+    }
+
+    /// <summary>
+    /// WFX-02: read when the step runs, not when the request was made, because a Container can change in between. In V1
+    /// this is about the Container, never item quantities (rules/12). A Container not stored yet (inbound) has no
+    /// location to compare; once STORED it must be where this movement expects to pick it up.
+    /// </summary>
+    private async Task<(bool Passed, string Reason)> EvaluateInventoryAvailableAsync(
+        Job job,
+        JobTask task,
+        IReadOnlyDictionary<string, JsonElement> inputs,
+        CancellationToken cancellationToken)
+    {
+        if (warehouse is null)
+        {
+            return (false, "warehouse_unavailable");
+        }
+
+        var containerId = inputs["containerId"].GetGuid();
+        var container = (await warehouse.GetContainersAsync([containerId], cancellationToken)).FirstOrDefault();
+        if (container is null)
+        {
+            return (false, "container_not_found");
+        }
+
+        if (container.Status is ContainerStatus.IN_TRANSIT or ContainerStatus.HOLD or ContainerStatus.EMPTY
+            or ContainerStatus.OUT_OF_SERVICE or ContainerStatus.ISSUED)
+        {
+            return (false, $"container_{container.Status.ToString().ToLowerInvariant()}");
+        }
+
+        var movement = CurrentMovementContextFactory.FromJobTaskContext(task.ContextValues);
+        if (container.Status == ContainerStatus.STORED
+            && movement.SourceStorageLocationId is { } source
+            && (container.CurrentStorageLocationId != source
+                || (movement.SourceLevelNo is { } level && container.CurrentLevelNo != level)))
+        {
+            return (false, "container_not_at_source");
+        }
+
+        var onAnotherJob = await db.JobContainers.AsNoTracking()
+            .AnyAsync(
+                x => x.ContainerId == containerId
+                     && x.JobId != job.Id
+                     && ActiveJobStatuses.Contains(x.Job.Status)
+                     && (x.Status == JobContainerStatus.ASSIGNED || x.Status == JobContainerStatus.ONBOARD),
+                cancellationToken);
+        return onAnotherJob ? (false, "container_on_another_job") : (true, "available");
     }
 
     // ------------------------------------------------------------------ job / task outcome
