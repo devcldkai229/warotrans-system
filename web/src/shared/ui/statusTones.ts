@@ -62,6 +62,7 @@ export const REQUEST_STATUS_TONE: Record<TransportRequestStatus, Tone> = {
   FAILED: 'red',
   CANCELLED: 'grey',
   REJECTED: 'rose',
+  CANCELLING: 'red',
 }
 
 export const REQUEST_DETAIL_STATUS_TONE: Record<TransportRequestDetailStatus, Tone> = {
@@ -71,6 +72,7 @@ export const REQUEST_DETAIL_STATUS_TONE: Record<TransportRequestDetailStatus, To
   COMPLETED: 'green',
   FAILED: 'red',
   CANCELLED: 'grey',
+  CANCEL_PENDING_RECOVERY: 'red',
 }
 
 export const CONTAINER_STATUS_TONE: Record<ContainerStatus, Tone> = {

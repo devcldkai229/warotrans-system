@@ -23,7 +23,7 @@ public static class ListInventoryEndpoint
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             return Results.Ok(await handler.HandleAsync(request, cancellationToken));
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("ListInventory")
         .WithSummary("List inventory stock for a warehouse")
         .WithDescription(

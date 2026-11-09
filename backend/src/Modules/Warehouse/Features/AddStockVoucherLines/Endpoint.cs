@@ -15,7 +15,7 @@ public static class AddStockVoucherLinesEndpoint
             AddStockVoucherLinesHandler handler,
             CancellationToken cancellationToken) =>
             Results.Ok(await handler.HandleAsync(id, request, cancellationToken)))
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.VoucherWrite)
         .WithName("AddStockVoucherLines")
         .WithSummary("Add Containers to a DRAFT stock voucher")
         .WithDescription(

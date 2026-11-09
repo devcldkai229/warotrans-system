@@ -15,7 +15,7 @@ public static class RemoveStockVoucherLineEndpoint
             RemoveStockVoucherLineHandler handler,
             CancellationToken cancellationToken) =>
             Results.Ok(await handler.HandleAsync(id, lineId, cancellationToken)))
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.VoucherWrite)
         .WithName("RemoveStockVoucherLine")
         .WithSummary("Take a Container off a DRAFT stock voucher")
         .WithDescription("The Container itself is not changed.");

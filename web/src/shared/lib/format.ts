@@ -62,3 +62,8 @@ export function humanize(value: string): string {
   const text = value.replaceAll('_', ' ').toLowerCase()
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
+
+/** HW-04: a battery the robot never reported is "Unknown", never 0 %. */
+export function formatBattery(percent: number | null | undefined): string {
+  return percent === null || percent === undefined ? 'Unknown' : `${Math.round(percent)}%`
+}

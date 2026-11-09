@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { JobStatus, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
@@ -11,6 +11,7 @@ import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
+import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
@@ -28,6 +29,7 @@ import { REQUEST_STATUS_GROUPS } from './constants'
 import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
 import { detailToView, listItemToView } from './mapTransportRequest'
+import { RequestCloseActions } from './RequestCloseActions'
 import { RequestDetailPanel } from './RequestDetailPanel'
 import { queueAndStart, runAgain } from './runOnRobot'
 
@@ -42,7 +44,6 @@ function RequestCard({
 }) {
   const progress = detailProgress(request)
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
-  const canCancel = request.availableActions.includes('CANCEL')
   const facts = [
     { label: 'Route', value: routeSummary(request) },
     { label: 'Containers', value: request.details.length },
@@ -74,19 +75,13 @@ function RequestCard({
         <span className="text-xs text-muted">
           {progress.done} of {progress.total} delivered{elapsed === null ? '' : `, ${formatDuration(elapsed)}`}
         </span>
-        {canCancel ? (
-          <span onClick={(event) => event.stopPropagation()}>
-            <Button variant="danger" size="sm">
-              Cancel
-            </Button>
-          </span>
-        ) : null}
+        <RequestCloseActions request={request} />
       </footer>
     </article>
   )
 }
 
-const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED']
+const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED']
 const TERMINAL_JOB_STATUSES: JobStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED']
 
 /**
@@ -231,6 +226,18 @@ export function TransportRequestsPage() {
     queryKey: ['transport-requests', 'list', query],
     queryFn: () => listTransportRequests({ search: query.trim() || undefined, take: 100 }),
   })
+
+  // RTM-02: a pushed change only says "this request moved"; the data always comes from the API. After a reconnect
+  // everything is refetched, so events missed while offline cannot leave the page stale.
+  const queryClient = useQueryClient()
+  const onRequestUpdated = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: ['transport-requests'] }),
+    [queryClient],
+  )
+  const hubConnected = useNotificationsHub({ transportRequestUpdated: onRequestUpdated })
+  useEffect(() => {
+    if (hubConnected) onRequestUpdated()
+  }, [hubConnected, onRequestUpdated])
 
   const workflowsQuery = useQuery({
     queryKey: ['workflows', 'published'],

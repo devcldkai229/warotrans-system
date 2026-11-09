@@ -14,7 +14,7 @@ public static class CancelStockVoucherEndpoint
             CancelStockVoucherHandler handler,
             CancellationToken cancellationToken) =>
             Results.Ok(await handler.HandleAsync(id, cancellationToken)))
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.VoucherWrite)
         .WithName("CancelStockVoucher")
         .WithSummary("Cancel a DRAFT stock voucher")
         .WithDescription("A CONFIRMED voucher cannot be cancelled. Its Containers are freed for other vouchers.");

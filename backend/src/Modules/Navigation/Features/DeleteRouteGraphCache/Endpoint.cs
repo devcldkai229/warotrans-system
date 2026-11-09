@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.DeleteRouteGraphCache;
 
@@ -16,6 +17,7 @@ public static class DeleteRouteGraphCacheEndpoint
             await handler.HandleAsync(id, cancellationToken);
             return Results.NoContent();
         })
+        .RequirePermission(Permissions.MapWrite)
         .WithName("DeleteRouteGraphCache")
         .WithSummary("Clear in-memory compiled route/traffic graph cache for a map")
         .WithDescription(

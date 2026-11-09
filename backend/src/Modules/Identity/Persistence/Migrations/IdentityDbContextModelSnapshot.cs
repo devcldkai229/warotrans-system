@@ -50,6 +50,14 @@ namespace WaroTrans.Identity.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
 
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("boolean")
+                        .HasColumnName("must_change_password");
+
+                    b.Property<DateTimeOffset?>("PasswordChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("password_changed_at");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -141,6 +149,33 @@ namespace WaroTrans.Identity.Persistence.Migrations
                     b.ToTable("refresh_tokens", "identity");
                 });
 
+            modelBuilder.Entity("WaroTrans.Identity.Entities.TechnicianRobotScope", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<DateTimeOffset>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<Guid?>("AssignedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_by");
+
+                    b.HasKey("AccountId", "RobotId")
+                        .HasName("p_k_technician_robot_scopes");
+
+                    b.HasIndex("RobotId")
+                        .HasDatabaseName("i_x_technician_robot_scopes_robot_id");
+
+                    b.ToTable("technician_robot_scopes", "identity");
+                });
+
             modelBuilder.Entity("WaroTrans.Identity.Entities.RefreshToken", b =>
                 {
                     b.HasOne("WaroTrans.Identity.Entities.Account", "Account")
@@ -151,6 +186,16 @@ namespace WaroTrans.Identity.Persistence.Migrations
                         .HasConstraintName("f_k_refresh_tokens_accounts_account_id");
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("WaroTrans.Identity.Entities.TechnicianRobotScope", b =>
+                {
+                    b.HasOne("WaroTrans.Identity.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_technician_robot_scopes_accounts_account_id");
                 });
 #pragma warning restore 612, 618
         }

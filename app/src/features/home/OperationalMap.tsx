@@ -4,7 +4,7 @@ import Svg, { Circle, Defs, G, Path, Pattern, Rect } from 'react-native-svg';
 import { BatteryMedium, Bot, Layers, MapPin, ParkingSquare, X, Zap } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto, ZoneDto } from '../../shared/api/navigationApi';
 import type { RobotDto } from '../../shared/api';
-import { getApiBaseUrl } from '../../shared/api/client';
+import { getAccessToken, getApiBaseUrl } from '../../shared/api/client';
 import { displayPoint, findMapModel, mapHeading, mapRobotSnapshots, mapViewport, spacedLocations } from '../../shared/maps/mapModel';
 import { zoneColor, zoneLabel } from '../../shared/maps/mapPresentation';
 import { resolveMapPreviewUri, worldToMapPercent } from '../../shared/utils/mapCoordinates';
@@ -45,7 +45,7 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
   const viewport = mapViewport(map, bounds.width || 390, availableHeight, availableHeight > (bounds.width || 390));
   const left = (bounds.width - viewport.width) / 2;
   const sceneTop = (availableHeight - viewport.height) / 2;
-  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl());
+  const uri = resolveMapPreviewUri(map.previewImageUri, getApiBaseUrl(), getAccessToken());
   const imageKey = `${map.id}:${uri}:${imageAttempt}`;
   const raster = !model || showScan;
   const endpoints = map.endpoints.filter(e => e.mapVersionId === map.id && e.isEnabled);

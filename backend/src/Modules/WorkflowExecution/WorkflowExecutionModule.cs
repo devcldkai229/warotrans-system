@@ -69,15 +69,19 @@ public static class WorkflowExecutionModule
         // Job execution (GĐ 3)
         services.AddScoped<JobExecutionEngine>();
         services.AddScoped<JobQueries>();
+        services.AddScoped<ITransportRequestJobControl, Services.TransportRequestJobControl>();
         services.AddScoped<StartJobHandler>();
         services.AddScoped<ResumeJobHandler>();
         services.AddScoped<CancelJobHandler>();
+        services.AddScoped<WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
         services.AddHostedService<HumanConfirmTimeoutHostedService>();
+        services.AddHostedService<Services.WaitStepWakeupHostedService>();
 
         services.AddScoped<IIntegrationEventHandler<RobotCommandLifecycleChanged>, RobotCommandLifecycleJobStepHandler>();
         services.AddScoped<IIntegrationEventHandler<RobotInteractionConfirmed>, RobotInteractionConfirmedHandler>();
         services.AddScoped<IIntegrationEventHandler<RobotConnectivityChanged>, RobotConnectivityRearmHandler>();
+        services.AddScoped<IIntegrationEventHandler<RobotGatewayRestarted>, RobotConnectivityRearmHandler>();
 
         return services;
     }
@@ -103,8 +107,10 @@ public static class WorkflowExecutionModule
         group.MapGetJob();
         group.MapGetJobStatistics();
         group.MapStartJob();
+        WaroTrans.WorkflowExecution.Features.Dispatch.DispatchEndpoints.Map(group);
         group.MapResumeJob();
         group.MapCancelJob();
+        WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobEndpoint.MapPauseJob(group);
         group.MapConfirmJobStep();
         
         return endpoints;

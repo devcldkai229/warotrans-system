@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.Transportation.Entities;
 using WaroTrans.Transportation.Enums;
+using WaroTrans.Transportation.Features.Shared;
 using WaroTrans.Transportation.IntegrationEvents;
 using WaroTrans.Transportation.Persistence;
 using WaroTrans.Warehouse.Contracts;
@@ -49,6 +50,13 @@ public sealed class JobContainerStatusChangedHandler(
             return;
         }
 
+        // WH-04: a container waiting for recovery after a cancel only leaves that state when its Job ends it
+        // (delivered, failed or cancelled), never by being picked up again.
+        if (detail.Status == TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY && mapped == TransportRequestDetailStatus.IN_PROGRESS)
+        {
+            return;
+        }
+
         var now = DateTimeOffset.UtcNow;
         detail.Status = mapped.Value;
         detail.UpdatedAt = now;
@@ -67,15 +75,7 @@ public sealed class JobContainerStatusChangedHandler(
             await RecordDeliveryAsync(request.RequestCode, detail, cancellationToken);
         }
 
-        await events.PublishAsync(
-            new TransportRequestProgressed(
-                request.Id,
-                request.RequestCode,
-                request.Status,
-                request.Details.Count,
-                request.Details.Count(d => d.Status == TransportRequestDetailStatus.COMPLETED),
-                request.Details.Count(d => d.Status == TransportRequestDetailStatus.FAILED)),
-            cancellationToken);
+        await events.PublishAsync(TransportRequestEvents.Progressed(request, detail), cancellationToken);
     }
 
     /// <summary>

@@ -38,7 +38,19 @@ public sealed class OperationsMongoContext
                 new CreateIndexModel<IssueReport>(
                     Builders<IssueReport>.IndexKeys.Ascending(x => x.JobId)),
                 new CreateIndexModel<IssueReport>(
-                    Builders<IssueReport>.IndexKeys.Ascending(x => x.TransportRequestId))
+                    Builders<IssueReport>.IndexKeys.Ascending(x => x.TransportRequestId)),
+                new CreateIndexModel<IssueReport>(
+                    Builders<IssueReport>.IndexKeys.Ascending(x => x.AssigneeId)),
+                new CreateIndexModel<IssueReport>(
+                    Builders<IssueReport>.IndexKeys.Ascending(x => x.RobotId)),
+                // A workflow step opens at most one issue, even when its confirmation is retried.
+                new CreateIndexModel<IssueReport>(
+                    Builders<IssueReport>.IndexKeys.Ascending(x => x.SourceKey),
+                    new CreateIndexOptions<IssueReport>
+                    {
+                        Unique = true,
+                        PartialFilterExpression = Builders<IssueReport>.Filter.Type(x => x.SourceKey, MongoDB.Bson.BsonType.String)
+                    })
             ],
             cancellationToken);
 
@@ -55,6 +67,11 @@ public sealed class OperationsMongoContext
                 Builders<Notification>.IndexKeys.Ascending(x => x.DedupeKey).Descending(x => x.CreatedAt)),
             cancellationToken: cancellationToken);
 
+        await Notifications.Indexes.CreateOneAsync(
+            new CreateIndexModel<Notification>(
+                Builders<Notification>.IndexKeys.Ascending(x => x.RecipientRoles).Descending(x => x.CreatedAt)),
+            cancellationToken: cancellationToken);
+
         await AuditLogs.Indexes.CreateManyAsync(
             [
                 new CreateIndexModel<AuditLog>(
@@ -66,7 +83,13 @@ public sealed class OperationsMongoContext
                 new CreateIndexModel<AuditLog>(
                     Builders<AuditLog>.IndexKeys.Ascending(x => x.CorrelationId)),
                 new CreateIndexModel<AuditLog>(
-                    Builders<AuditLog>.IndexKeys.Descending(x => x.OccurredAt))
+                    Builders<AuditLog>.IndexKeys.Descending(x => x.OccurredAt)),
+                new CreateIndexModel<AuditLog>(
+                    Builders<AuditLog>.IndexKeys.Ascending(x => x.Action)),
+                // Retention: each entry carries its own expiry date (Operations:Audit:RetentionDays).
+                new CreateIndexModel<AuditLog>(
+                    Builders<AuditLog>.IndexKeys.Ascending(x => x.ExpireAt),
+                    new CreateIndexOptions { ExpireAfter = TimeSpan.Zero })
             ],
             cancellationToken);
     }

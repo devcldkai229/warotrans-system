@@ -42,7 +42,7 @@ public static class ListJobsEndpoint
             var (items, total) = await queries.ListAsync(parsed, transportRequestId, limit, cancellationToken, jobIds);
             return Results.Ok(new { items, total });
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.JobRead)
         .WithName("ListJobs")
         .WithSummary("List Jobs, optionally by status, TransportRequest and robot (the robot's most recent Jobs)");
 

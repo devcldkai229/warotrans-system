@@ -6,7 +6,7 @@
 // Anything marked `TODO(backend)` is shown by the Figma design but has NO source in the backend yet. Those
 // fields are optional so the UI keeps working when the real API does not return them.
 
-export type AccountRole = 'ADMIN' | 'STAFF'
+export type AccountRole = 'ADMIN' | 'STAFF' | 'TECHNICIAN'
 
 export type RobotStatus =
   | 'OFFLINE'
@@ -61,8 +61,24 @@ export type TransportRequestStatus =
   | 'FAILED'
   | 'CANCELLED'
   | 'REJECTED'
+  /** Cancel accepted, cargo still on a robot (WH-04); terminal once it is unloaded or delivered. */
+  | 'CANCELLING'
 
-export type TransportRequestDetailStatus = 'PENDING' | 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+export type TransportRequestDetailStatus =
+  | 'PENDING'
+  | 'QUEUED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'CANCEL_PENDING_RECOVERY'
+
+/** BOTH-04: an action the server says this user may (or may not, and why) take on a resource now. */
+export interface ActionAvailability<A extends string = string> {
+  action: A
+  allowed: boolean
+  reason: string | null
+}
 
 export type HandoverType =
   | 'PICKUP'
@@ -135,6 +151,26 @@ export interface Account {
   role: AccountRole
   status: AccountStatus
   lastLoginAt: string | null
+  /** True while the account holds a temporary password (new account or Admin reset). */
+  mustChangePassword?: boolean
+}
+
+/**
+ * GET /api/identity/me/capabilities: what the server enforces for this token. Render from `permissions`, never from
+ * the role name (BOTH-07). Empty while `mustChangePassword` is true.
+ */
+export interface Capabilities {
+  accountId: string
+  role: AccountRole
+  mustChangePassword: boolean
+  permissions: string[]
+  robotScope: { allRobots: boolean; robotIds: string[] }
+}
+
+/** GET/PUT /api/identity/accounts/{id}/robot-scope: the robots a TECHNICIAN may act on. */
+export interface AccountRobotScope {
+  accountId: string
+  robotIds: string[]
 }
 
 /** Response of POST /api/identity/login and /refresh. The web client asks for the refresh token as an HttpOnly cookie, so `refreshToken` is null here. */
@@ -181,7 +217,9 @@ export interface Robot {
   name: string
   status: RobotStatus
   isOnline: boolean
-  batteryPercent: number
+  /** HW-04: null = the robot never reported a battery value. Show "Unknown", never 0 %. */
+  batteryPercent: number | null
+  batteryMeasuredAt?: string | null
   /** Map coordinates in metres (same frame as Endpoint.x / Endpoint.y). */
   poseX: number
   poseY: number
@@ -198,6 +236,17 @@ export interface Robot {
   isEnabled: boolean
   createdAt?: string
   updatedAt?: string
+  /** RB-03: the robot holds all motion after STOP/PAUSE (reported by the robot). */
+  motionHeld?: boolean
+  /** RB-04: who drives the robot by hand right now, if anyone. */
+  manualLeaseHolderName?: string | null
+  manualLeaseHolderId?: string | null
+  manualLeaseUntil?: string | null
+  /** RB-08 */
+  maintenanceReason?: string | null
+  maintenanceSince?: string | null
+  /** RB-09: system actions the robot announced. */
+  capabilities?: string[]
 }
 
 /** The Job a Robot is working on, joined from JobAssignment. TODO(backend): needs a fleet read endpoint. */
@@ -252,19 +301,33 @@ export interface RobotJobHistoryItem {
   endReason: AssignmentEndReason | null
 }
 
+/** FL-01: one robot as dispatch sees it (GET /jobs/{id}/dispatch-candidates). Lower score = better. */
 export interface DispatchCandidate {
+  robotId: string
   robotCode: string
-  batteryPercent: number
-  status: RobotStatus
-  selected: boolean
+  eligible: boolean
+  /** Stable codes: robot_offline, robot_in_maintenance, battery_low, battery_unknown … */
+  reasons: string[]
+  /** Only battery_unknown / battery_stale: an operator with dispatch.override may use the robot with a reason. */
+  overridable: boolean
+  batteryPercent: number | null
+  batteryState: 'OK' | 'LOW' | 'CRITICAL' | 'UNKNOWN' | 'STALE'
+  distanceMeters: number | null
+  idleSeconds: number | null
+  score: number | null
+  status: string
+  isOnline: boolean
 }
 
-/** DispatchDecision.candidateEvaluations. TODO(backend): JSON shape is not finalized; this is the minimum the UI needs. */
+/** FLT-01: GET /jobs/{id}/dispatch-decisions. */
 export interface DispatchDecision {
   id: string
   jobId: string
-  robotId: string | null
+  selectedRobotId: string | null
   type: DispatchDecisionType
+  trigger: 'START' | 'RESUME'
+  actorId: string | null
+  overrideReason: string | null
   createdAt: string
   candidates: DispatchCandidate[]
 }
@@ -555,6 +618,8 @@ export interface AdminNotification {
   readAt: string | null
   /** Set when the situation is over (the robot came back, the job moved on). */
   resolvedAt: string | null
+  /** Client route that opens the entity (SY-04), e.g. /monitor/jobs/{id}. */
+  route?: string | null
 }
 
 export interface NotificationInbox {
@@ -699,7 +764,7 @@ export interface TransportRequest {
   failureMessage: string | null
 }
 
-export type TransportRequestAction = 'CANCEL'
+export type TransportRequestAction = 'QUEUE' | 'CANCEL' | 'REJECT'
 
 /**
  * A Request as the console lists it. TODO(backend): needs a read endpoint that joins the names, the Container
@@ -714,5 +779,8 @@ export interface TransportRequestView extends TransportRequest {
     destinationLabel: string
   })[]
   jobs: { jobNo: string; status: JobStatus; robotCode: string | null }[]
-  availableActions: TransportRequestAction[]
+  /** Server-decided (BOTH-04); the endpoint re-checks with the same rule. */
+  availableActions: ActionAvailability<TransportRequestAction>[]
+  cancelReason?: string | null
+  rejectReason?: string | null
 }

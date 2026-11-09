@@ -30,11 +30,20 @@ test('unsupported BE commands cannot send a request or report success', async ()
   let requests = 0;
   const load = modules(async () => { requests++; throw new Error('Unexpected network call'); });
   for (const action of [() => load('src/shared/api/warehouseApi.ts').createContainer({ productId: 'product' }),
-    () => load('src/shared/api/executionApi.ts').acceptHumanTask('task'),
-    () => load('src/shared/api/executionApi.ts').reportTaskProblem('task', { reason: 'DAMAGE' })]) {
+    () => load('src/shared/api/executionApi.ts').acceptHumanTask('task')]) {
     await assert.rejects(async () => action(), error => error.status === 501 && error.code === 'backend_capability_unavailable');
   }
   assert.equal(requests, 0);
+});
+test('a staff incident becomes an IssueReport on the operations API', async () => {
+  let request;
+  const load = modules(async (url, init) => { request = { url, body: JSON.parse(init.body) }; return { id: 'issue', code: 'ISS-1', status: 'OPEN' }; });
+  const issue = await load('src/shared/api/executionApi.ts').reportTaskProblem(undefined, { reason: 'CONTAINER_DAMAGED', note: 'torn' }, 'step-1', { jobId: 'job-1' });
+  assert.equal(issue.code, 'ISS-1');
+  assert.match(request.url, /\/api\/operations\/issues$/);
+  assert.deepEqual(plain({ type: request.body.issueType, severity: request.body.severity, jobId: request.body.jobId, step: request.body.jobStepId }),
+    { type: 'CONTAINER', severity: 'HIGH', jobId: 'job-1', step: 'step-1' });
+  assert.match(request.body.description, /torn/);
 });
 test('transport submits the chosen workflow and preserves storage locations and levels', async () => {
   let request;

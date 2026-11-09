@@ -81,6 +81,7 @@ public static class NavigationModule
         services.AddScoped<DeleteZoneHandler>();
         services.AddScoped<ImportMapVersionHandler>();
         services.AddScoped<CloneMapVersionHandler>();
+        services.AddScoped<Features.EndpointGroups.EndpointGroupService>();
         RegisterMapAssetStore(services, configuration);
 
         services.AddScoped<INavigationModule, NavigationModuleApi>();
@@ -129,6 +130,7 @@ public static class NavigationModule
         GetEdgeEndpoint.Map(group);
         UpdateEdgeEndpoint.Map(group);
         DeleteEdgeEndpoint.Map(group);
+        Features.EndpointGroups.EndpointGroupEndpoints.Map(group);
         CreateZoneEndpoint.Map(group);
         GetZoneEndpoint.Map(group);
         UpdateZoneEndpoint.Map(group);

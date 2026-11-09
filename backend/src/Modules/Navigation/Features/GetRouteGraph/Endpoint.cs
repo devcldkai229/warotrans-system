@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.Navigation.RouteGraph;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetRouteGraph;
 
@@ -55,6 +56,7 @@ public static class GetRouteGraphEndpoint
                 RouteGraphGeoJsonWriter.Write(result.Graph, export.GraphHash),
                 RouteGraphGeoJsonWriter.ContentType);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetRouteGraph")
         .WithSummary("Nav2 Route Server graph (GeoJSON) built from the map's Edges and Endpoints")
         .WithDescription(

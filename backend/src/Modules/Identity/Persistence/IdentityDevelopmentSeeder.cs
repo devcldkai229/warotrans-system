@@ -31,7 +31,14 @@ internal sealed class IdentityDevelopmentSeeder(
             "staff@warotrans.local",
             "Warehouse Staff",
             AccountRole.STAFF,
-            "Staff@123")
+            "Staff@123"),
+        new(
+            Guid.Parse("a0000000-0000-4000-8000-000000000003"),
+            "technician",
+            "technician@warotrans.local",
+            "Robot Technician",
+            AccountRole.TECHNICIAN,
+            "Technician@123")
     ];
 
     public async Task SeedAsync(CancellationToken cancellationToken)

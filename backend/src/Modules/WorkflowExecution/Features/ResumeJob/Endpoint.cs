@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.WorkflowExecution.Features.ResumeJob;
 
@@ -18,7 +19,8 @@ public static class ResumeJobEndpoint
             var response = await handler.HandleAsync(id, request ?? new ResumeJobRequest(null), cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.JobOperate)
+        .Audited("job.resumed", "JOB", "id")
         .WithName("ResumeJob")
         .WithSummary("Continue a PAUSED / REASSIGNING Job from the step that stopped it")
         .WithDescription("Re-opens the failed step on the same robot (default) or another AVAILABLE robot on the Job's map. " +

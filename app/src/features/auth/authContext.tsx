@@ -2,9 +2,13 @@ import { Platform } from 'react-native';
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { UserSession } from '../../shared/types/contracts';
 import {
+  changeOwnPassword,
+  getCapabilities,
   loginWithCredentials,
   logoutSession,
+  type SessionResponse,
 } from '../../shared/api/identityApi';
+import { initialsFor } from '../../shared/auth/permissions';
 import { setAccessToken, onSessionExpired } from '../../shared/api/client';
 import {
   clearAllStoredAuth,
@@ -27,6 +31,8 @@ interface AuthContextType {
   loginAsync: (username: string, password?: string, zone?: string) => Promise<UserSession>;
   logout: () => void;
   updateZone: (zone: string) => void;
+  /** Replaces the password; rejects with the API error so the form can show it. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -69,23 +75,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const trimmed = username.trim();
     if (!password) throw new Error('A password is required.');
     const res = await loginWithCredentials(trimmed, password);
-    const fullName = res.account.fullName || res.account.username;
-    const nextSession: UserSession = {
-      id: res.account.id, username: res.account.username, fullName,
-      role: res.account.role === 'ADMIN' ? 'ADMIN' : 'STAFF', zone: zone || 'Inbound Dock 01',
-      avatarInitials: fullName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'OP',
-    };
     authVersion.current += 1;
     clearWarehouseSnapshots();
     queryClient.clear();
     await clearAllStoredAuth();
+    return adoptSession(res, zone || 'Inbound Dock 01');
+  };
+
+  /** Stores a token pair and builds the UI session from the server's capabilities for it. */
+  const adoptSession = async (res: SessionResponse, zone: string): Promise<UserSession> => {
     await saveStoredAccessToken(res.accessToken);
     if (res.refreshToken) await saveStoredRefreshToken(res.refreshToken);
-    await saveStoredUserSession(nextSession);
     setAccessToken(res.accessToken);
+    const capabilities = await getCapabilities();
+    const fullName = res.account.fullName || res.account.username;
+    const nextSession: UserSession = {
+      id: res.account.id, username: res.account.username, fullName,
+      role: res.account.role as UserSession['role'], zone,
+      avatarInitials: initialsFor(fullName),
+      permissions: capabilities.permissions,
+      mustChangePassword: capabilities.mustChangePassword,
+    };
+    await saveStoredUserSession(nextSession);
     setSession(nextSession);
     setConnectionError(null);
     return nextSession;
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+    const res = await changeOwnPassword(currentPassword, newPassword);
+    await adoptSession(res, session?.zone || 'Inbound Dock 01');
   };
 
   const login = async (identifier: string, zone?: string, password?: string): Promise<boolean> => {
@@ -136,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginAsync,
         logout,
         updateZone,
+        changePassword,
       }}
     >
       {children}

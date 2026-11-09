@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../../features/auth/authContext';
+import { ChangePasswordScreen } from '../../features/auth/ChangePasswordScreen';
 import { LoginScreen } from '../../features/auth/LoginScreen';
 import { HomeScreen } from '../../features/home/HomeScreen';
 import { CreateContainerScreen } from '../../features/inventory/CreateContainerScreen';
@@ -28,6 +29,11 @@ export function AppNavigator() {
 
   if (!isAuthenticated || !session) {
     return <LoginScreen />;
+  }
+
+  // A temporary password opens nothing else (the API answers password_change_required everywhere).
+  if (session.mustChangePassword) {
+    return <ChangePasswordScreen />;
   }
 
   /**
@@ -89,7 +95,7 @@ export function AppNavigator() {
       {currentScreen === 'home' && (
         <AppHeader
           operatorName={session.fullName}
-          operatorRole={session.role === 'ADMIN' ? 'Admin' : 'Staff'}
+          operatorRole={session.role === 'ADMIN' ? 'Admin' : session.role === 'TECHNICIAN' ? 'Technician' : 'Staff'}
           initials={session.avatarInitials}
           zone={session.zone}
           onLogout={logout}

@@ -15,6 +15,7 @@ warotrans/v1/robots/{robotCode}/teleop                 # backend → robot (QoS0
 warotrans/v1/robots/{robotCode}/interaction_request    # backend → robot (QoS1), arm HUMAN_CONFIRM button
 warotrans/v1/robots/{robotCode}/interaction_confirm    # robot → backend (QoS1), button confirmation
 warotrans/v1/robots/{robotCode}/interaction_result     # backend → robot (QoS1), business accept/reject
+warotrans/v1/robots/{robotCode}/health                 # robot → backend (QoS0), diagnostics snapshot — see "Health"
 ```
 
 `robotCode` example: `RBT-001`.
@@ -22,6 +23,8 @@ warotrans/v1/robots/{robotCode}/interaction_result     # backend → robot (QoS1
 HUMAN_INTERACTION is **not** a RobotCommand. The physical button is a confirmation input for a waiting JobStep.
 
 ## Heartbeat (~1 Hz)
+
+Optional `capabilities` (array of strings, RB-09): the system actions this robot performs.
 
 ```json
 {
@@ -57,7 +60,8 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
   "linearVelocity": 0.0,
   "angularVelocity": 0.0,
   "currentCommandId": null,
-  "errorCode": null
+  "errorCode": null,
+  "motionHold": false
 }
 ```
 
@@ -183,6 +187,53 @@ Robot accept/reject rules:
 - `NAVIGATE_TO_POSE`: reject if not `LOCALIZED`, or another command is already active (`BUSY`)
 - `CANCEL`: reject if `targetCommandId` is not the active command (`UNKNOWN_TARGET`)
 - Duplicate delivery of the same `commandId`: ACK `accepted=true` with `reasonCode=ALREADY_ACCEPTED` if already accepted/running/completed for that id
+
+### STOP / RESUME (RB-03)
+
+```json
+{ "type": "STOP", "payload": { "mode": "STOP", "reason": "person in aisle" } }
+{ "type": "RESUME", "payload": {} }
+```
+
+- `mode`: `STOP` or `PAUSE` (same hold; PAUSE is what an operator Job pause sends). Anything else → `INVALID_PAYLOAD`.
+- STOP is never refused for being busy. After the ACK the robot cancels its running goal (that goal reports its own
+  RESULT `CANCELED`) and **holds every motion**: zero velocity on the hold topic, `authority_ok=false` for the
+  authority gate, NAVIGATE refused with `MOTION_HELD`, teleop setpoints dropped.
+- RESULT `SUCCEEDED` (`result.stoppedVerified=true`) only once odometry showed |v| ≤ 0.02 m/s and |ω| ≤ 0.05 rad/s for
+  0.5 s. Otherwise after 5 s: `FAILED` / `STOP_UNVERIFIED` — the hold stays, the robot never claims a stop it did not see.
+- RESUME releases the hold, RESULT `SUCCEEDED`.
+- Telemetry field `motionHold` (bool) is the truth the backend shows; a held robot is never dispatched.
+- Backend view (`GET /api/fleet/robots/{id}/stop-state`): `REQUESTED` (sent) → `ACCEPTED` (ACK) → `STOPPED_VERIFIED`
+  (RESULT SUCCEEDED), or `REJECTED`, or `UNKNOWN` (no ACK/RESULT, robot offline, unverified).
+- A software stop is not an E-stop.
+
+### SYSTEM_ACTION (RB-09)
+
+```json
+{ "type": "SYSTEM_ACTION", "payload": { "action": "RESTART_STACK" } }
+```
+
+- `action`: `RESTART_STACK`, `REBOOT`, `SHUTDOWN`. Only those enabled on the robot (`system_actions_enabled` + a
+  configured command) and announced in the heartbeat `capabilities`; else `SYSTEM_ACTION_DISABLED`.
+- Accepted only while motion is held and no goal runs (`NOT_STOPPED`). RESULT `SUCCEEDED` is sent before the action
+  runs (after a reboot nobody could report it). There is no remote power-on.
+
+## Health (robot → backend, RB-10)
+
+```json
+{
+  "schemaVersion": 1, "robotCode": "RBT-001", "sentAt": "2026-11-08T08:00:00.000Z",
+  "items": [
+    { "name": "lidar", "level": "OK", "value": 6.8, "unit": "Hz", "message": null, "measuredAt": "…" },
+    { "name": "cpu_temperature", "level": "UNKNOWN", "value": null, "unit": "C", "message": "no thermal sensor" }
+  ]
+}
+```
+
+- Every 5 s. `level`: `OK`, `WARN`, `ERROR`, `STALE` (source stopped), `UNKNOWN` (not measured; value null — never
+  invented). Items: configured sensor topics (lidar, odometry, imu, ultrasonic …), `tf_localization`, `nav2`,
+  `cpu_load`, `cpu_temperature`, `memory_available`.
+- The backend keeps the latest snapshot; older than 15 s it is shown `STALE`.
 
 ## CommandAck (robot → backend)
 

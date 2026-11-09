@@ -182,6 +182,18 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
     }
 
     [Fact]
+    public async Task A_technician_may_not_open_a_voucher()
+    {
+        var (warehouse, _, _) = await SeedAsync();
+        var (client, token) = await SignInAsync(AccountRole.TECHNICIAN, "tess");
+
+        var response = await client.SendWithTokenAsync(HttpMethod.Post, "/api/warehouse/stock-vouchers", token,
+            new { warehouseId = warehouse.Id, type = "INBOUND" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Vouchers_are_closed_to_anonymous_callers()
     {
         var (warehouse, _, _) = await SeedAsync();

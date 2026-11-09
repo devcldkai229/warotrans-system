@@ -16,6 +16,7 @@ import { HeadingDial } from '../../maps/HeadingDial'
 import { CameraPanel } from './CameraPanel'
 import { Joystick } from './Joystick'
 import { Speedometer } from './Speedometer'
+import { useManualLease } from './useManualLease'
 import { useTeleopLoop } from './useTeleopLoop'
 
 interface Target {
@@ -87,7 +88,9 @@ export function RobotManualPage() {
   const [target, setTarget] = useState<Target | null>(null)
 
   const navigating = Boolean(restRobot?.currentCommandId)
-  const canDrive = manualOn && Boolean(restRobot?.isOnline) && Boolean(restRobot?.isEnabled) && !navigating
+  const manualLease = useManualLease(restRobot?.id ?? null, manualOn)
+  const canDrive =
+    manualOn && manualLease.heldByMe && Boolean(restRobot?.isOnline) && Boolean(restRobot?.isEnabled) && !navigating && !restRobot?.motionHeld
   const drive = useTeleopLoop(restRobot?.id ?? null, assist)
   // set / stop are stable (useCallback): depend on them, not on `drive`, which is a new object every render.
   const { set: driveSet, stop: driveStop } = drive
@@ -295,6 +298,14 @@ export function RobotManualPage() {
       {message ? (
         <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-red-soft px-4 py-2 text-sm text-red-ink shadow-float">
           {message}
+        </p>
+      ) : manualOn && manualLease.error ? (
+        <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-red-soft px-4 py-2 text-sm text-red-ink shadow-float">
+          {manualLease.error}
+        </p>
+      ) : manualOn && restRobot?.motionHeld ? (
+        <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-red-soft px-4 py-2 text-sm text-red-ink shadow-float">
+          The robot holds motion after a STOP. Resume it from the Fleet page before driving.
         </p>
       ) : navigating ? (
         <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-blue-soft px-4 py-2 text-sm text-blue-ink shadow-float">

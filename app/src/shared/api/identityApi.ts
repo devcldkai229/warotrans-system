@@ -11,9 +11,19 @@ export interface AccountDto {
   username: string;
   email: string;
   fullName: string;
-  role: 'STAFF' | 'ADMIN' | string;
+  role: 'STAFF' | 'ADMIN' | 'TECHNICIAN' | string;
   status: string;
   lastLoginAt: string | null;
+  mustChangePassword?: boolean;
+}
+
+/** `GET /api/identity/me/capabilities`: what the server enforces for this token (BOTH-07). */
+export interface CapabilitiesDto {
+  accountId: string;
+  role: string;
+  mustChangePassword: boolean;
+  permissions: string[];
+  robotScope: { allRobots: boolean; robotIds: string[] };
 }
 
 export interface SessionResponse {
@@ -74,5 +84,21 @@ export async function logoutSession(refreshToken?: string | null): Promise<void>
     body: JSON.stringify({
       refreshToken: refreshToken || null,
     }),
+  });
+}
+
+/** `GET /api/identity/me/capabilities`. Works with a temporary password too (then `permissions` is empty). */
+export async function getCapabilities(): Promise<CapabilitiesDto> {
+  return apiFetch<CapabilitiesDto>('/api/identity/me/capabilities', { method: 'GET' });
+}
+
+/**
+ * `POST /api/identity/me/change-password`. Ends every other session and returns a new token pair for this device.
+ * Rejects with `current_password_incorrect`, `password_contains_username` or `validation_failed`.
+ */
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<SessionResponse> {
+  return apiFetch<SessionResponse>('/api/identity/me/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword, useCookie: false }),
   });
 }

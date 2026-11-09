@@ -43,7 +43,8 @@ public sealed class ProcessRobotTelemetryHandler(
         }
 
         var utcNow = DateTimeOffset.UtcNow;
-        var batteryBefore = robot.BatteryPercent;
+        // A robot that never reported its battery has not "dropped" to low on its first reading: treat it as full.
+        var batteryBefore = robot.BatteryMeasuredAt is null ? 100m : robot.BatteryPercent;
         var errorBefore = robot.ErrorCode;
         var applied = robot.TryApplyTelemetry(
             message.BootId,
@@ -62,6 +63,11 @@ public sealed class ProcessRobotTelemetryHandler(
             message.CurrentCommandId,
             message.ErrorCode);
 
+        if (applied)
+        {
+            robot.ApplyBatteryMetadata(message.BatteryVoltage, message.BatteryEstimationMode, message.BatteryConfidence);
+        }
+
         if (!applied)
         {
             logger.LogDebug(
@@ -71,6 +77,10 @@ public sealed class ProcessRobotTelemetryHandler(
                 message.Sequence);
             return;
         }
+
+        // RB-03: the robot is the truth about whether it holds motion. Older robots send no field: keep the value.
+        var motionHeld = message.MotionHold ?? robot.MotionHeld;
+        var holdChangedAt = motionHeld != robot.MotionHeld ? utcNow : robot.MotionHoldChangedAt;
 
         // Same concurrency-safe path as heartbeat: avoid stale UpdatedAt dropping liveness.
         await db.Robots
@@ -84,6 +94,10 @@ public sealed class ProcessRobotTelemetryHandler(
                     .SetProperty(r => r.PoseY, robot.PoseY)
                     .SetProperty(r => r.PoseYaw, robot.PoseYaw)
                     .SetProperty(r => r.BatteryPercent, robot.BatteryPercent)
+                    .SetProperty(r => r.BatteryMeasuredAt, robot.BatteryMeasuredAt)
+                    .SetProperty(r => r.BatteryVoltage, robot.BatteryVoltage)
+                    .SetProperty(r => r.BatteryEstimationMode, robot.BatteryEstimationMode)
+                    .SetProperty(r => r.BatteryConfidence, robot.BatteryConfidence)
                     .SetProperty(r => r.NavigationStatus, robot.NavigationStatus)
                     .SetProperty(r => r.LocalizationStatus, robot.LocalizationStatus)
                     .SetProperty(r => r.LinearVelocity, robot.LinearVelocity)
@@ -91,12 +105,15 @@ public sealed class ProcessRobotTelemetryHandler(
                     .SetProperty(r => r.MapVersionCode, robot.MapVersionCode)
                     .SetProperty(r => r.CurrentCommandId, robot.CurrentCommandId)
                     .SetProperty(r => r.ErrorCode, robot.ErrorCode)
+                    .SetProperty(r => r.MotionHeld, motionHeld)
+                    .SetProperty(r => r.MotionHoldChangedAt, holdChangedAt)
                     .SetProperty(r => r.UpdatedAt, robot.UpdatedAt),
                 cancellationToken);
         db.ChangeTracker.Clear();
 
         // Admin notifications: only the moment something starts, not every reading while it lasts.
         if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent
+            && message.BatteryPercent is not null
             && robot.BatteryPercent <= GetRobotStatisticsHandler.LowBatteryPercent
             && robot.Status != RobotStatus.CHARGING)
         {
@@ -119,7 +136,7 @@ public sealed class ProcessRobotTelemetryHandler(
             robot.PoseX,
             robot.PoseY,
             robot.PoseYaw,
-            robot.BatteryPercent,
+            robot.BatteryMeasuredAt is null ? null : robot.BatteryPercent,
             robot.NavigationStatus,
             robot.LocalizationStatus,
             robot.LastTelemetryAt,

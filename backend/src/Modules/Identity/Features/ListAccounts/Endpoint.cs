@@ -10,7 +10,7 @@ internal static class ListAccountsEndpoint
     public static void MapListAccounts(this IEndpointRouteBuilder group) =>
         group.MapGet("/accounts", async (ListAccountsHandler handler, CancellationToken cancellationToken) =>
                 TypedResults.Ok(await handler.HandleAsync(cancellationToken)))
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.UserManage)
             .WithName("ListAccounts")
             .Produces<ListAccountsResponse>()
             .ProducesProblem(StatusCodes.Status401Unauthorized)

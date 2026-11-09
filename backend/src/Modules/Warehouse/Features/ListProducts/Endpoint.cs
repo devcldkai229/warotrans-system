@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Warehouse.Features.ListProducts;
 
@@ -23,6 +24,7 @@ public static class ListProductsEndpoint
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             return Results.Ok(await handler.HandleAsync(request, cancellationToken));
         })
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("ListProducts")
         .WithSummary("List products")
         .WithDescription("Product master catalog, ordered by SKU. Filter by category, active flag or a search text.");

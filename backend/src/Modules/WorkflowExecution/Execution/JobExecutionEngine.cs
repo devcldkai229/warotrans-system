@@ -26,7 +26,8 @@ namespace WaroTrans.WorkflowExecution.Execution;
 ///   MOVE               NAVIGATE_TO_POSE through Fleet → step EXECUTING; finished by the robot RESULT
 ///                      (RobotCommandLifecycleJobStepHandler → AdvanceAsync)
 ///   HUMAN_INTERACTION  step WAITING; finished by ConfirmHumanStepAsync (Staff App or robot button)
-///   WAIT               not supported in V1 → step FAILED
+///   WAIT               DURATION: step WAITING with a waitUntil; WaitStepWakeupHostedService completes it once due
+///                      (WFX-01). EVENT / ROBOT_STATE are refused at publish and fail at runtime.
 ///
 /// The engine is event driven: it advances until it reaches a step that waits for something
 /// external, then returns. It never assigns robots itself except in StartAsync.
@@ -48,7 +49,8 @@ public sealed class JobExecutionEngine(
     TrafficShadowObserver? trafficShadow = null,
     ShadowSingleMoverGuard? shadowMoverGuard = null,
     ISegmentedTrafficCoordinator? segmentedTraffic = null,
-    ITrafficOpsLog? trafficOpsLog = null)
+    ITrafficOpsLog? trafficOpsLog = null,
+    IIssueReporter? issueReporter = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -63,6 +65,7 @@ public sealed class JobExecutionEngine(
     /// conflict). Recoverable once an operator reconciles the robot, so the Job pauses instead of failing.
     /// </summary>
     private const string TrafficRobotUnavailable = "traffic_robot_unavailable";
+    private const string NavigationBlocked = "NAVIGATION_BLOCKED";
     private const string PendingTrafficKey = "pendingTraffic";
 
     /// <summary>Resume needs a pose this fresh: a robot that came back online may be somewhere else.</summary>
@@ -73,35 +76,81 @@ public sealed class JobExecutionEngine(
     // ------------------------------------------------------------------ start
 
     /// <summary>Assigns a robot (given or best available on the Job's map) and starts executing.</summary>
-    public async Task<Job> StartAsync(Guid jobId, Guid? robotId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// FL-02: choosing a robot and saving the assignment is one critical section, so two Jobs started at the same
+    /// moment cannot both take the same free robot (single backend instance; the busy check reads committed Jobs).
+    /// </summary>
+    private static readonly SemaphoreSlim DispatchGate = new(1, 1);
+
+    public async Task<Job> StartAsync(
+        Guid jobId,
+        Guid? robotId,
+        CancellationToken cancellationToken = default,
+        DispatchOverride? dispatchOverride = null)
+    {
+        Job job;
+        bool assigned;
+        await DispatchGate.WaitAsync(cancellationToken);
+        try
+        {
+            (job, assigned) = await AssignRobotAsync(jobId, robotId, dispatchOverride, cancellationToken);
+        }
+        finally
+        {
+            DispatchGate.Release();
+        }
+
+        if (assigned)
+        {
+            await AdvanceAsync(job.Id, cancellationToken);
+        }
+
+        return job;
+    }
+
+    private async Task<(Job Job, bool Assigned)> AssignRobotAsync(
+        Guid jobId,
+        Guid? robotId,
+        DispatchOverride? dispatchOverride,
+        CancellationToken cancellationToken)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
 
         if (job.Status == JobStatus.RUNNING)
         {
-            return job; // idempotent
+            return (job, false); // idempotent
         }
 
-        if (job.Status is not (JobStatus.CREATED or JobStatus.QUEUED))
+        if (JobActionPolicy.StateReason(JobActionPolicy.Start, job.Status) is { } notStartable)
         {
-            throw new ConflictException($"Job {job.JobNo} cannot be started from status {job.Status}.", "job_not_startable");
+            throw new ConflictException($"Job {job.JobNo} cannot be started from status {job.Status}.", notStartable);
         }
 
         var busyRobots = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
+        // FL-01 / FLT-01: every robot is evaluated (eligible or not, and why) and the decision is stored.
+        var candidates = await EvaluateDispatchAsync(job, busyRobots, cancellationToken);
         RobotSnapshot robot;
         if (robotId is { } requested)
         {
             robot = await fleet.GetRobotAsync(requested, cancellationToken)
                 ?? throw new NotFoundException($"Robot '{requested}' was not found.", "robot_not_found");
             EnsureRobotCanTakeJob(robot, job, busyRobots);
+            EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
         }
         else
         {
-            var candidates = await fleet.GetDispatchCandidatesAsync(job.MapVersionId, cancellationToken);
-            robot = candidates.FirstOrDefault(r => !busyRobots.Contains(r.Id))
-                ?? throw new ConflictException(
-                    "No AVAILABLE robot on the Job's map version is free to take this Job.",
+            var best = candidates.FirstOrDefault(c => c.Eligible);
+            if (best is null)
+            {
+                await fleet.RecordDispatchDecisionAsync(
+                    new DispatchDecisionRecord(job.Id, null, DispatchTriggers.Start, dispatchOverride?.ActorId, null, candidates), cancellationToken);
+                throw new ConflictException(
+                    "No robot on the Job's map version is eligible to take this Job" + DescribeRejections(candidates) + ".",
                     "no_robot_available");
+            }
+
+            robot = await fleet.GetRobotAsync(best.RobotId, cancellationToken)
+                ?? throw new NotFoundException($"Robot '{best.RobotId}' was not found.", "robot_not_found");
         }
 
         await EnsureRobotAtHomeForFirstJobAsync(robot, job, cancellationToken);
@@ -121,10 +170,11 @@ public sealed class JobExecutionEngine(
 
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robot.Id, null));
         await SaveAndPublishAsync(cancellationToken);
+        await fleet.RecordDispatchDecisionAsync(
+            new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Start, dispatchOverride?.ActorId, dispatchOverride?.Reason, candidates),
+            cancellationToken);
         logger.LogInformation("Job {JobNo} started on robot {RobotCode}", job.JobNo, robot.Code);
-
-        await AdvanceAsync(job.Id, cancellationToken);
-        return job;
+        return (job, true);
     }
 
     // ------------------------------------------------------------------ resume
@@ -137,11 +187,11 @@ public sealed class JobExecutionEngine(
     public async Task<Job> ResumeAsync(Guid jobId, Guid? robotId, CancellationToken cancellationToken = default)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
-        if (job.Status is not (JobStatus.PAUSED or JobStatus.REASSIGNING))
+        if (JobActionPolicy.StateReason(JobActionPolicy.Resume, job.Status) is { } notResumable)
         {
             throw new ConflictException(
                 $"Job {job.JobNo} cannot be resumed from status {job.Status} (only PAUSED or REASSIGNING).",
-                "job_not_resumable");
+                notResumable);
         }
 
         var previousRobot = AssignedRobot(job);
@@ -149,8 +199,29 @@ public sealed class JobExecutionEngine(
             ?? throw new DomainValidationException($"Job {job.JobNo} has no robot; pass robotId.", "robot_required");
         var robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken)
             ?? throw new NotFoundException($"Robot '{targetRobotId}' was not found.", "robot_not_found");
-        EnsureRobotCanTakeJob(robot, job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken));
+
+        // WFX-03: the operator's pause held the robot; resuming the job releases that hold first.
+        // A request cancelled with cargo on board held the robot the same way; resuming delivers that cargo.
+        if (robot.MotionHeld && job.FailureCode is OperatorPausedCode or CargoOnboardCancelCode && robot.Id == previousRobot)
+        {
+            await fleet.ResumeRobotAsync(robot.Id, cancellationToken);
+            robot = await fleet.GetRobotAsync(targetRobotId, cancellationToken) ?? robot;
+        }
+
+        var busyForResume = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
+        EnsureRobotCanTakeJob(robot, job, busyForResume);
         EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
+        // A robot whose battery is known to be low takes no more work; an unknown battery does not block a resume
+        // (the robot was already on this job), it is recorded in the decision.
+        var resumeCandidates = await EvaluateDispatchAsync(job, busyForResume, cancellationToken);
+        if (resumeCandidates.FirstOrDefault(c => c.RobotId == robot.Id) is { } resumeCandidate
+            && resumeCandidate.Reasons.Contains(DispatchReasons.BatteryLow))
+        {
+            throw new ConflictException($"Robot {robot.Code} battery is below the dispatch minimum.", DispatchReasons.BatteryLow);
+        }
+
+        await fleet.RecordDispatchDecisionAsync(
+            new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Resume, null, null, resumeCandidates), cancellationToken);
 
         if (previousRobot is { } previous && previous != robot.Id
             && job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
@@ -447,9 +518,40 @@ public sealed class JobExecutionEngine(
                 now);
         }
 
+        // WFX-05: REPORT_ISSUE has a real side effect. The issue is opened before the step completes; if that fails the
+        // step stays WAITING and the caller gets the error. Idempotent on the step, so a retry reuses the same issue.
+        Guid? issueId = null;
+        if (operation == nameof(HumanActionCode.REPORT_ISSUE))
+        {
+            if (issueReporter is null)
+            {
+                throw new AppException("Issue reporting is not available.", 503, "issue_reporting_unavailable");
+            }
+
+            var stepContainer = step.ResolvedInputs.TryGetValue("containerId", out var sc) && sc.ValueKind == JsonValueKind.String
+                ? sc.GetGuid()
+                : (Guid?)null;
+            issueId = await issueReporter.ReportFromStepAsync(
+                new StepIssueDraft(
+                    step.Id,
+                    job.Id,
+                    job.JobNo,
+                    workflowStep.StepKey,
+                    source.UserId,
+                    AssignedRobot(job),
+                    stepContainer,
+                    string.IsNullOrWhiteSpace(note)
+                        ? $"Reported at step \"{workflowStep.StepKey}\" of job {job.JobNo}."
+                        : note.Trim()),
+                cancellationToken);
+        }
+
         step.OutputValues = new Dictionary<string, JsonElement>
         {
             ["confirmed"] = JsonSerializer.SerializeToElement(true),
+            ["issueId"] = issueId is { } openedIssue
+                ? JsonSerializer.SerializeToElement(openedIssue)
+                : JsonSerializer.SerializeToElement((object?)null),
             ["confirmedBy"] = source.UserId is { } uid
                 ? JsonSerializer.SerializeToElement(uid)
                 : JsonSerializer.SerializeToElement((object?)null),
@@ -592,11 +694,94 @@ public sealed class JobExecutionEngine(
                 step.OutputValues = timeoutOutputs;
                 return false;
 
+            case StepType.WAIT when operation == nameof(WaitMode.DURATION):
+            {
+                var seconds = step.ResolvedInputs.TryGetValue("durationSeconds", out var d) && d.ValueKind == JsonValueKind.Number
+                    ? d.GetInt32()
+                    : -1;
+                if (seconds is < 0 or > MaxWaitSeconds)
+                {
+                    Fail(job, task, step, workflowStep.StepKey, "wait_duration_invalid",
+                        $"durationSeconds must be between 0 and {MaxWaitSeconds}.", now);
+                    return true;
+                }
+
+                // Durable: the deadline is stored on the step; no thread or resource is held while waiting.
+                step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(seconds)),
+                    ["waitStartedAt"] = JsonSerializer.SerializeToElement(now)
+                };
+                SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.WAITING, now);
+                return false;
+            }
+
             default:
                 Fail(job, task, step, workflowStep.StepKey, "step_type_not_supported",
                     $"{step.StepType}.{operation} is not executable in V1.", now);
                 return true;
         }
+    }
+
+    public const string WaitUntilKey = "waitUntil";
+
+    /// <summary>A WAIT longer than a day is a scheduling problem, not a step.</summary>
+    private const int MaxWaitSeconds = 86_400;
+
+    /// <summary>
+    /// WFX-01: completes WAIT.DURATION steps whose deadline passed and continues their Jobs. Only RUNNING Jobs are
+    /// woken (a paused Job continues after Resume; the deadline is wall-clock, a pause does not extend it). A step is
+    /// woken exactly once: it must still be WAITING when re-read, and the save is followed by AdvanceAsync.
+    /// </summary>
+    public async Task<int> WakeDueWaitStepsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var jobIds = await db.Jobs.AsNoTracking()
+            .Where(j => j.Status == JobStatus.RUNNING
+                        && j.JobTasks.Any(t => t.JobSteps.Any(s => s.StepType == StepType.WAIT && s.Status == JobStepStatus.WAITING)))
+            .Select(j => j.Id)
+            .ToListAsync(cancellationToken);
+
+        var woken = 0;
+        foreach (var jobId in jobIds)
+        {
+            var job = await LoadJobAsync(jobId, cancellationToken);
+            if (job.Status != JobStatus.RUNNING)
+            {
+                continue;
+            }
+
+            var due = OrderedSteps(job)
+                .Where(x => x.Step.StepType == StepType.WAIT && x.Step.Status == JobStepStatus.WAITING
+                            && x.Step.OutputValues.TryGetValue(WaitUntilKey, out var until)
+                            && until.GetDateTimeOffset() <= now)
+                .ToList();
+            if (due.Count == 0)
+            {
+                continue;
+            }
+
+            var keys = await db.WorkflowSteps.AsNoTracking()
+                .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                .ToDictionaryAsync(s => s.Id, s => s.StepKey, cancellationToken);
+            foreach (var (task, step) in due)
+            {
+                var started = step.OutputValues.TryGetValue("waitStartedAt", out var s) ? s.GetDateTimeOffset() : step.StartedAt ?? now;
+                step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+                {
+                    ["resumeReason"] = JsonSerializer.SerializeToElement("DURATION_ELAPSED"),
+                    ["resumedAt"] = JsonSerializer.SerializeToElement(now),
+                    ["actualWaitSeconds"] = JsonSerializer.SerializeToElement((int)Math.Round((now - started).TotalSeconds))
+                };
+                SetStepStatus(job, task, step, keys.GetValueOrDefault(step.WorkflowStepId, step.Id.ToString("N")), JobStepStatus.COMPLETED, now);
+                woken++;
+            }
+
+            await SaveAndPublishAsync(cancellationToken);
+            await AdvanceAsync(job.Id, cancellationToken);
+        }
+
+        return woken;
     }
 
     private async Task<bool> StartMoveAsync(Job job, JobTask task, JobStep step, string stepKey, CancellationToken cancellationToken)
@@ -1112,9 +1297,13 @@ public sealed class JobExecutionEngine(
             {
                 var robot = await fleet.GetRobotAsync(inputs["robotId"].GetGuid(), cancellationToken);
                 var required = inputs["minimumBatteryPercent"].GetDecimal();
-                var actual = robot?.BatteryPercent ?? 0m;
-                passed = robot is not null && actual >= required;
-                reason = passed ? "battery_ok" : $"battery {actual}% < required {required}%";
+                // HW-04: an unknown battery fails the check; it is never read as 0 % or as full.
+                var actual = robot?.BatteryPercent;
+                passed = actual is { } known && known >= required;
+                reason = passed ? "battery_ok"
+                    : robot is null ? "robot_not_found"
+                    : actual is null ? "battery_unknown"
+                    : $"battery {actual}% < required {required}%";
                 outputs["actualBatteryPercent"] = JsonSerializer.SerializeToElement(actual);
                 outputs["requiredBatteryPercent"] = JsonSerializer.SerializeToElement(required);
                 break;
@@ -1162,7 +1351,9 @@ public sealed class JobExecutionEngine(
         // (POST /jobs/{id}/resume → ResumeAsync) or it is cancelled.
         // A safety wait (traffic quarantine) is not a failure of the work: hold the Job for the operator whatever the
         // step's OnFailure says; containers stay as they are. POST /jobs/{id}/resume continues after a reconcile.
-        job.Status = step.ErrorCode == TrafficRobotUnavailable ? JobStatus.PAUSED : workflowStep.OnFailure switch
+        // Safety waits (traffic quarantine, obstacle blocked ≥60s): PAUSE for resume — not a permanent failure.
+        var pauseForSafety = step.ErrorCode is TrafficRobotUnavailable or NavigationBlocked;
+        job.Status = pauseForSafety ? JobStatus.PAUSED : workflowStep.OnFailure switch
         {
             StepFailurePolicy.PAUSE_FOR_OPERATOR => JobStatus.PAUSED,
             StepFailurePolicy.REQUEST_REASSIGN => JobStatus.REASSIGNING,
@@ -1321,6 +1512,63 @@ public sealed class JobExecutionEngine(
         return outputs;
     }
 
+    /// <summary>An operator who dispatches a robot the policy would not pick automatically (FL-02).</summary>
+    public sealed record DispatchOverride(Guid? ActorId, string? Reason);
+
+    /// <summary>FL-01 evaluation for this Job: pickup = the stop of its first task, busy = robots on other active Jobs.</summary>
+    public async Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(Job job, IReadOnlySet<Guid> busyRobots, CancellationToken cancellationToken)
+    {
+        double? px = null, py = null;
+        var firstStop = job.JobTasks.OrderBy(t => t.SequenceNo)
+            .Select(t => t.ContextValues.TryGetValue("stopEndpointId", out var v) && v.ValueKind == JsonValueKind.String ? v.GetGuid() : (Guid?)null)
+            .FirstOrDefault(id => id is not null);
+        if (firstStop is { } stopId && await navigation.GetEndpointPoseAsync(stopId, cancellationToken) is { } pose)
+        {
+            px = pose.X;
+            py = pose.Y;
+        }
+
+        return await fleet.EvaluateDispatchAsync(new DispatchQuery(job.MapVersionId, px, py, busyRobots), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        return await EvaluateDispatchAsync(job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// HW-04: a known low battery always blocks. An unknown or stale battery blocks unless an operator overrides it
+    /// with a reason (the endpoint checks dispatch.override).
+    /// </summary>
+    private static void EnsureBatteryAllowsDispatch(DispatchCandidate? candidate, RobotSnapshot robot, DispatchOverride? dispatchOverride)
+    {
+        var battery = candidate?.Reasons
+            .Where(r => r is DispatchReasons.BatteryLow or DispatchReasons.BatteryUnknown or DispatchReasons.BatteryStale)
+            .ToList() ?? [];
+        if (battery.Count == 0)
+        {
+            return;
+        }
+
+        if (battery.Contains(DispatchReasons.BatteryLow))
+        {
+            throw new ConflictException($"Robot {robot.Code} battery is below the dispatch minimum.", DispatchReasons.BatteryLow);
+        }
+
+        if (string.IsNullOrWhiteSpace(dispatchOverride?.Reason))
+        {
+            throw new ConflictException(
+                $"Robot {robot.Code} has no {(battery[0] == DispatchReasons.BatteryStale ? "recent " : "")}battery reading. "
+                + "Dispatch it with an override and a reason if you know it is charged.",
+                battery[0]);
+        }
+    }
+
+    private static string DescribeRejections(IReadOnlyList<DispatchCandidate> candidates) =>
+        candidates.Count == 0 ? " (no robot on this map)"
+        : ": " + string.Join("; ", candidates.Take(5).Select(c => $"{c.RobotCode} {string.Join(", ", c.Reasons)}"));
+
     private static Guid? AssignedRobot(Job job) =>
         job.ContextValues.TryGetValue(AssignedRobotKey, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetGuid()
@@ -1387,6 +1635,59 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException($"Robot {robot.Code} is already running another Job.", "robot_assigned_to_other_job");
         }
+
+        if (robot.MotionHeld)
+        {
+            throw new ConflictException($"Robot {robot.Code} holds motion after a STOP; resume the robot first.", "robot_motion_held");
+        }
+
+        if (robot.InManualMode)
+        {
+            throw new ConflictException($"Robot {robot.Code} is being driven by hand.", "robot_in_manual_mode");
+        }
+    }
+
+    /// <summary>FailureCode of a Job an operator paused (WFX-03); Resume also releases the robot's motion hold.</summary>
+    public const string OperatorPausedCode = "operator_paused";
+
+    /// <summary>
+    /// WFX-03: an operator pauses a RUNNING Job. The robot gets STOP mode PAUSE (cancel the goal, hold motion); the
+    /// MOVE in progress is reopened and its command marked superseded, so the robot's CANCELED result is ignored and
+    /// Resume sends a NEW move. Traffic reservations are kept: the robot is still where it stopped.
+    /// The stop itself is followed through GET /api/fleet/robots/{id}/stop-state (requested / accepted / verified).
+    /// </summary>
+    public async Task<Job> PauseAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        if (JobActionPolicy.StateReason(JobActionPolicy.Pause, job.Status) is { } notPausable)
+        {
+            throw new ConflictException($"Job {job.JobNo} is {job.Status}; only a RUNNING job can be paused.", notPausable);
+        }
+
+        var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+            .ToDictionaryAsync(s => s.Id, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
+        {
+            ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+        }
+
+        var robotId = AssignedRobot(job);
+        Guid? stopCommand = robotId is { } rid
+            ? await fleet.StopRobotAsync(rid, "PAUSE", string.IsNullOrWhiteSpace(reason) ? $"Job {job.JobNo} paused" : reason, cancellationToken)
+            : null;
+
+        job.Status = JobStatus.PAUSED;
+        job.FailureCode = OperatorPausedCode;
+        job.FailureMessage = string.IsNullOrWhiteSpace(reason)
+            ? (stopCommand is null ? "Paused by an operator; the robot could not be reached (state unknown)." : "Paused by an operator.")
+            : reason.Trim();
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
+        await SaveAndPublishAsync(cancellationToken);
+        logger.LogInformation("Job {JobNo} paused by operator; STOP command {CommandId}", job.JobNo, stopCommand);
+        return job;
     }
 
     /// <summary>
@@ -1395,9 +1696,18 @@ public sealed class JobExecutionEngine(
     public async Task<Job> CancelJobAsync(Guid jobId, string? reason, CancellationToken cancellationToken = default)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
-        if (job.Status is JobStatus.COMPLETED or JobStatus.CANCELLED or JobStatus.FAILED)
+        if (JobActionPolicy.StateReason(JobActionPolicy.Cancel, job.Status) is { } terminal)
         {
-            throw new ConflictException($"Job {job.JobNo} is already terminal ({job.Status}).", "job_already_terminal");
+            throw new ConflictException($"Job {job.JobNo} is already terminal ({job.Status}).", terminal);
+        }
+
+        // WH-04: cargo on the robot is not "returned" by cancelling. Whoever cancels says where it went.
+        var onboard = job.JobContainers.Count(c => c.Status == JobContainerStatus.ONBOARD);
+        if (onboard > 0 && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new DomainValidationException(
+                $"Job {job.JobNo} has {onboard} container(s) on the robot. Give a reason that says where they are now.",
+                "cargo_onboard_reason_required");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -1462,6 +1772,93 @@ public sealed class JobExecutionEngine(
         _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
         await SaveAndPublishAsync(cancellationToken);
         return job;
+    }
+
+    /// <summary>FailureCode of a Job paused because its request was cancelled while cargo was on the robot (WH-04).</summary>
+    public const string CargoOnboardCancelCode = "request_cancelled_cargo_onboard";
+
+    /// <summary>
+    /// TRN-01 / WH-04: the request this Job carries was cancelled. Nothing picked up yet → the Job is cancelled and the
+    /// warehouse is unchanged. Cargo ONBOARD → the Job is NOT cancelled (that would pretend the cargo was returned): the
+    /// robot is stopped, the Job is PAUSED with <see cref="CargoOnboardCancelCode"/> and an issue asks someone to unload
+    /// or deliver it; the operator then resumes (deliver) or cancels the Job with a reason. Idempotent.
+    /// </summary>
+    public async Task<IReadOnlyList<ContainerCancelOutcome>> CancelForTransportRequestAsync(
+        Guid jobId,
+        Guid transportRequestId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        var mine = job.JobContainers.Where(c => c.TransportRequestId == transportRequestId).ToList();
+
+        if (JobActionPolicy.StateReason(JobActionPolicy.Cancel, job.Status) is not null)
+        {
+            return Outcomes(mine, _ => ContainerCancelOutcome.AlreadyFinished);
+        }
+
+        var onboard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).ToList();
+        if (onboard.Count == 0)
+        {
+            var finishedBefore = mine.Where(c => c.Status is JobContainerStatus.DELIVERED or JobContainerStatus.FAILED).Select(c => c.Id).ToHashSet();
+            await CancelJobAsync(jobId, $"Transport request cancelled: {reason}", cancellationToken);
+            return Outcomes(mine, c => finishedBefore.Contains(c.Id) ? ContainerCancelOutcome.AlreadyFinished : ContainerCancelOutcome.Cancelled);
+        }
+
+        var robotId = AssignedRobot(job);
+        if (job.FailureCode != CargoOnboardCancelCode)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (job.Status == JobStatus.RUNNING)
+            {
+                var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+                    .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                    .ToDictionaryAsync(s => s.Id, cancellationToken);
+                foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
+                {
+                    ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+                }
+
+                if (robotId is { } rid)
+                {
+                    await fleet.StopRobotAsync(rid, "PAUSE", $"Request cancelled; Job {job.JobNo} has cargo on board", cancellationToken);
+                }
+
+                job.Status = JobStatus.PAUSED;
+            }
+
+            job.FailureCode = CargoOnboardCancelCode;
+            job.FailureMessage =
+                $"The transport request was cancelled while {onboard.Count} container(s) were on the robot. "
+                + "Unload them and cancel this Job with where they are now, or resume it to deliver them.";
+            _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
+            await SaveAndPublishAsync(cancellationToken);
+            logger.LogWarning("Job {JobNo}: request cancelled with {Count} container(s) on board; held for recovery", job.JobNo, onboard.Count);
+        }
+
+        if (issueReporter is not null)
+        {
+            await issueReporter.ReportAsync(
+                new SystemIssueDraft(
+                    $"cargo-onboard:{job.Id}",
+                    job.Id,
+                    job.JobNo,
+                    null,
+                    robotId,
+                    onboard.Count == 1 ? onboard[0].ContainerId : null,
+                    $"Transport request cancelled while Job {job.JobNo} had {onboard.Count} container(s) on the robot. "
+                    + $"Reason: {reason}. Unload or deliver them, then cancel or resume the Job.",
+                    High: true,
+                    TransportRequestId: transportRequestId),
+                cancellationToken);
+        }
+
+        return Outcomes(mine, c => c.Status is JobContainerStatus.DELIVERED or JobContainerStatus.FAILED or JobContainerStatus.CANCELLED
+            ? ContainerCancelOutcome.AlreadyFinished
+            : ContainerCancelOutcome.RecoveryRequired);
+
+        static IReadOnlyList<ContainerCancelOutcome> Outcomes(IEnumerable<JobContainer> containers, Func<JobContainer, string> outcome) =>
+            containers.Select(c => new ContainerCancelOutcome(c.ContainerId, c.JobId, outcome(c))).ToList();
     }
 
     /// <summary>

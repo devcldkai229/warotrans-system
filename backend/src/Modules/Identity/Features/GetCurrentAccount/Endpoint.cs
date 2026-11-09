@@ -17,7 +17,9 @@ internal static class GetCurrentAccountEndpoint
                     ? TypedResults.Ok(result.Value)
                     : result.Error.ToProblem();
             })
-            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+            // Any role, and still open with a temporary password: the client needs it to show "change password".
+            .RequireAuthorization()
+            .AllowWhilePasswordChangeRequired()
             .WithName("GetCurrentAccount")
             .Produces<AccountResponse>()
             .ProducesProblem(StatusCodes.Status401Unauthorized);

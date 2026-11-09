@@ -66,6 +66,9 @@ public sealed class ProcessRobotCommandResultHandler(
 
         if (command.Type == RobotCommandType.NAVIGATE_TO_POSE)
         {
+            logger.LogInformation(
+                "NAVIGATE {CommandId} robot {RobotCode} outcome {Outcome} error {ErrorCode} detail {Detail}",
+                command.Id, message.RobotCode, message.Outcome, message.ErrorCode, message.Result?.GetRawText());
             robot?.MarkAvailable(utcNow);
 
             var endReason = message.Outcome switch

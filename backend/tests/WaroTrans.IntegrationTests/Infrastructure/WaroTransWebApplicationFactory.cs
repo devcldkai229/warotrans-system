@@ -40,9 +40,11 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
                     TestAuthenticationHandler.SchemeName,
                     options =>
                     {
-                        // A request that brings its own token goes through the production JWT validation.
+                        // A request that brings its own token (header, or ?access_token= for hubs / images) goes
+                        // through the production JWT validation.
                         options.ForwardDefaultSelector = context =>
                             context.Request.Headers.ContainsKey("Authorization")
+                            || context.Request.Query.ContainsKey("access_token")
                                 ? JwtBearerDefaults.AuthenticationScheme
                                 : null;
                     });

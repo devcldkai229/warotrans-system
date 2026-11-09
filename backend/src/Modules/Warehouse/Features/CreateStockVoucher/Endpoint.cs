@@ -20,7 +20,7 @@ public static class CreateStockVoucherEndpoint
         .WithName("CreateStockVoucher")
         .WithSummary("Open a DRAFT inbound or outbound stock voucher")
         .WithDescription("Code is generated: PN-YYYYMMDD-SEQ6 for INBOUND, PX-YYYYMMDD-SEQ6 for OUTBOUND.")
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
+        .RequirePermission(Permissions.VoucherWrite);
 
         return group;
     }

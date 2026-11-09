@@ -138,6 +138,8 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
         long seq = 0;
         await ForceOnlineAsync(robot.Code, Guid.NewGuid(), () => ++seq);
         var mqtt = Factory.Services.GetRequiredService<CapturingMqttRobotCommandPublisher>();
+        // RB-04: motion setpoints need the manual-drive lease.
+        (await Client.PostAsJsonAsync($"/api/fleet/robots/{robot.Id}/manual/lease", new { })).EnsureSuccessStatusCode();
 
         var response = await Client.PostAsJsonAsync(
             $"/api/fleet/robots/{robot.Id}/teleop",

@@ -14,7 +14,7 @@ public static class ConfirmStockVoucherEndpoint
             ConfirmStockVoucherHandler handler,
             CancellationToken cancellationToken) =>
             Results.Ok(await handler.HandleAsync(id, cancellationToken)))
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.VoucherWrite)
         .WithName("ConfirmStockVoucher")
         .WithSummary("Confirm a DRAFT stock voucher")
         .WithDescription(

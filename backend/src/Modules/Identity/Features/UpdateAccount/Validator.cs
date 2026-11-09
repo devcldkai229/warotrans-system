@@ -11,6 +11,6 @@ internal sealed class UpdateAccountValidator : AbstractValidator<UpdateAccountRe
         RuleFor(x => x.FullName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.Role)
             .Must(role => AccountRules.TryParseRole(role, out _))
-            .WithMessage("Role must be ADMIN or STAFF.");
+            .WithMessage("Role must be ADMIN, STAFF or TECHNICIAN.");
     }
 }

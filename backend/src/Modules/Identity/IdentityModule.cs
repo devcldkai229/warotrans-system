@@ -6,14 +6,20 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Identity.Entities;
 using WaroTrans.Identity.Features.ChangeAccountStatus;
+using WaroTrans.Identity.Features.ChangeOwnPassword;
 using WaroTrans.Identity.Features.CreateAccount;
+using WaroTrans.Identity.Features.GetAccount;
 using WaroTrans.Identity.Features.GetCurrentAccount;
+using WaroTrans.Identity.Features.GetMyCapabilities;
 using WaroTrans.Identity.Features.ListAccounts;
 using WaroTrans.Identity.Features.Login;
 using WaroTrans.Identity.Features.Logout;
 using WaroTrans.Identity.Features.RefreshSession;
+using WaroTrans.Identity.Features.ResetAccountPassword;
+using WaroTrans.Identity.Features.RobotScope;
 using WaroTrans.Identity.Features.UpdateAccount;
 using WaroTrans.Identity.Persistence;
 using WaroTrans.Identity.Security;
@@ -44,6 +50,12 @@ public static class IdentityModule
         services.AddScoped<UpdateAccountHandler>();
         services.AddScoped<IValidator<ChangeAccountStatusRequest>, ChangeAccountStatusValidator>();
         services.AddScoped<ChangeAccountStatusHandler>();
+        services.AddScoped<IValidator<ChangeOwnPasswordRequest>, ChangeOwnPasswordValidator>();
+        services.AddScoped<ChangeOwnPasswordHandler>();
+        services.AddScoped<ResetAccountPasswordHandler>();
+        services.AddScoped<IValidator<SetAccountRobotScopeRequest>, SetAccountRobotScopeValidator>();
+        services.AddScoped<AccountRobotScopeHandler>();
+        services.AddScoped<IRobotAccessScope, RobotAccessScope>();
 
         return services;
     }
@@ -57,10 +69,15 @@ public static class IdentityModule
         group.MapRefreshSession();
         group.MapLogout();
         group.MapGetCurrentAccount();
+        group.MapGetMyCapabilities();
+        group.MapChangeOwnPassword();
         group.MapListAccounts();
+        group.MapGetAccount();
         group.MapCreateAccount();
         group.MapUpdateAccount();
         group.MapChangeAccountStatus();
+        group.MapResetAccountPassword();
+        group.MapAccountRobotScope();
 
         return endpoints;
     }

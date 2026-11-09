@@ -15,11 +15,11 @@ public static class ListNotificationsEndpoint
             ListNotificationsHandler handler,
             CancellationToken cancellationToken) =>
                 Results.Ok(await handler.HandleAsync(unreadOnly ?? false, take, cancellationToken)))
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.NotificationRead)
             .WithName("ListNotifications")
-            .WithSummary("Admin notifications, newest first, with the number still unread")
+            .WithSummary("The signed-in person's notifications, newest first, with the number they have not read")
             .WithDescription(
-                "One inbox shared by every admin. `unreadOnly` hides the ones already read; `take` defaults to 30 (max 100). " +
+                "Notifications addressed to the caller or to their role (Technicians: only their robots). Read state is per person. `unreadOnly` hides the ones already read; `take` defaults to 30 (max 100). " +
                 "`unreadCount` always counts every unread notification, whatever `take` and `unreadOnly` are.");
 
         return group;

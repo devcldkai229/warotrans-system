@@ -17,6 +17,7 @@ public static class ResolveProductEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("ResolveProduct")
         .WithSummary("Resolve a product by supplier barcode or search keyword")
         .WithDescription("Resolves an active Product via supplier barcode / SKU, or searches products by keyword.")

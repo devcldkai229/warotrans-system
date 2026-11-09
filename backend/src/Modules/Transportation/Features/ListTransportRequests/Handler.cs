@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Transportation.Features.Shared;
 using WaroTrans.Transportation.Persistence;
@@ -9,7 +11,9 @@ namespace WaroTrans.Transportation.Features.ListTransportRequests;
 public sealed class ListTransportRequestsHandler(
     TransportationDbContext dbContext,
     IWarehouseModule warehouseModule,
-    INavigationModule navigationModule)
+    INavigationModule navigationModule,
+    ITransportRequestJobControl jobControl,
+    ICurrentUser currentUser)
 {
     public async Task<ListTransportRequestsResponse> HandleAsync(
         ListTransportRequestsRequest request,
@@ -48,6 +52,8 @@ public sealed class ListTransportRequestsHandler(
             navigationModule,
             cancellationToken);
 
+        var jobs = await jobControl.GetJobsAsync(requests.Select(r => r.Id).ToList(), cancellationToken);
+
         var items = requests.Select(r => new TransportRequestListItemResponse(
             r.Id,
             r.RequestCode,
@@ -77,7 +83,8 @@ public sealed class ListTransportRequestsHandler(
                         destination?.Code,
                         d.Status.ToString());
                 })
-                .ToList()))
+                .ToList(),
+            TransportRequestActionPolicy.Evaluate(r, jobs.GetValueOrDefault(r.Id) ?? [], currentUser.Can)))
             .ToList();
 
         return new ListTransportRequestsResponse(items, total);

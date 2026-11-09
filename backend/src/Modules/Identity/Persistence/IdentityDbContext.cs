@@ -8,6 +8,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
 {
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<TechnicianRobotScope> TechnicianRobotScopes => Set<TechnicianRobotScope>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Warehouse.Features.GetContainer;
 
@@ -16,6 +17,7 @@ public static class GetContainerEndpoint
             var response = await handler.GetByIdAsync(id, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("GetContainerById")
         .WithSummary("Get Container by ID")
         .WithDescription("Retrieves detailed information of a Container by its UUID.");
@@ -28,6 +30,7 @@ public static class GetContainerEndpoint
             var response = await handler.GetByBarcodeAsync(barcode, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("GetContainerByBarcode")
         .WithSummary("Get Container by barcode")
         .WithDescription("Retrieves detailed information of a Container by its internal barcode.");

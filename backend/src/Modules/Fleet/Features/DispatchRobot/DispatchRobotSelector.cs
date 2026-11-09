@@ -11,7 +11,9 @@ public static class DispatchRobotSelector
     public static Robot? Select(IEnumerable<Robot> candidates)
     {
         return candidates
-            .Where(r => r.IsEnabled && r.IsOnline && r.Status == RobotStatus.AVAILABLE)
+            // A robot holding motion (RB-03) or driven by hand (RB-04) is not free, whatever its status says.
+            .Where(r => r.IsEnabled && r.IsOnline && r.Status == RobotStatus.AVAILABLE
+                        && !r.MotionHeld && !r.HasActiveManualLease(DateTimeOffset.UtcNow))
             .OrderByDescending(r => r.BatteryPercent)
             .ThenBy(r => r.Code, StringComparer.Ordinal)
             .FirstOrDefault();

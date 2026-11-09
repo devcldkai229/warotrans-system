@@ -5,14 +5,16 @@ import { Modal } from '@/shared/ui/Dialog'
 interface TemporaryPasswordDialogProps {
   username: string
   password: string
+  /** "created" for a new account, "reset" after an Admin password reset. */
+  reason?: 'created' | 'reset'
   onClose: () => void
 }
 
 /**
- * The one place the temporary password is shown: the server keeps only its hash and there is no reset yet, so a
- * click beside the card does not close this dialog.
+ * The one place the temporary password is shown: the server keeps only its hash, so a click beside the card does
+ * not close this dialog. The person must replace it at the next sign-in.
  */
-export function TemporaryPasswordDialog({ username, password, onClose }: TemporaryPasswordDialogProps) {
+export function TemporaryPasswordDialog({ username, password, reason = 'created', onClose }: TemporaryPasswordDialogProps) {
   const [copied, setCopied] = useState(false)
 
   async function copy() {
@@ -26,8 +28,8 @@ export function TemporaryPasswordDialog({ username, password, onClose }: Tempora
 
   return (
     <Modal
-      title="Account created"
-      subtitle={`Give this temporary password to ${username}. It is shown only once.`}
+      title={reason === 'reset' ? 'Password reset' : 'Account created'}
+      subtitle={`Give this temporary password to ${username}. It is shown only once and must be changed at the next sign-in.`}
       closeOnBackdrop={false}
       onClose={onClose}
     >

@@ -30,6 +30,7 @@ public sealed class ProcessRobotHeartbeatHandler(
         }
 
         var utcNow = DateTimeOffset.UtcNow;
+        var previousBootId = robot.LastHeartbeatBootId;
         if (!robot.TryApplyHeartbeat(message.BootId, message.Sequence, message.SentAt, utcNow, out var becameOnline))
         {
             logger.LogDebug(
@@ -45,6 +46,9 @@ public sealed class ProcessRobotHeartbeatHandler(
         var bootId = robot.LastHeartbeatBootId;
         var sequence = robot.LastHeartbeatSequence;
         var isOnline = robot.IsOnline;
+        var capabilities = message.Capabilities is null
+            ? robot.Capabilities
+            : string.Join(',', message.Capabilities.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct());
         await db.Robots
             .Where(r => r.Id == robot.Id)
             .ExecuteUpdateAsync(
@@ -53,6 +57,7 @@ public sealed class ProcessRobotHeartbeatHandler(
                     .SetProperty(r => r.LastHeartbeatBootId, bootId)
                     .SetProperty(r => r.LastHeartbeatSequence, sequence)
                     .SetProperty(r => r.IsOnline, isOnline)
+                    .SetProperty(r => r.Capabilities, capabilities)
                     .SetProperty(r => r.UpdatedAt, utcNow),
                 cancellationToken);
         db.ChangeTracker.Clear();
@@ -93,6 +98,12 @@ public sealed class ProcessRobotHeartbeatHandler(
                     robot.Status,
                     robot.LastHeartbeatAt),
                 cancellationToken);
+        }
+        else if (previousBootId is not null && previousBootId != bootId)
+        {
+            // A restart quicker than the heartbeat timeout never went offline, but the gateway forgot its armed button.
+            logger.LogInformation("Robot {RobotCode} gateway restarted (new bootId)", robot.Code);
+            await eventPublisher.PublishAsync(new RobotGatewayRestarted(robot.Id, robot.Code), cancellationToken);
         }
         else
         {

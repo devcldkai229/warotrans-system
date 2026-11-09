@@ -30,13 +30,33 @@ public sealed class TransportRequest
     public DateTimeOffset UpdatedAt { get; set; }
     public long Version { get; set; }
 
+    /// <summary>TRN-01: who cancelled the request and why (set when the cancel was accepted).</summary>
+    public Guid? CancelledBy { get; set; }
+    public string? CancelReason { get; set; }
+    public DateTimeOffset? CancelRequestedAt { get; set; }
+
+    /// <summary>TRN-02: who rejected the request and why.</summary>
+    public Guid? RejectedBy { get; set; }
+    public string? RejectReason { get; set; }
+    public DateTimeOffset? RejectedAt { get; set; }
+
     public ICollection<TransportRequestDetail> Details { get; set; } = [];
 
+    /// <summary>Nothing more will happen to this request.</summary>
+    public bool IsClosed =>
+        Status is TransportRequestStatus.COMPLETED or TransportRequestStatus.FAILED or TransportRequestStatus.CANCELLED
+            or TransportRequestStatus.REJECTED
+        || (Status == TransportRequestStatus.PARTIALLY_COMPLETED && CompletedAt is not null);
+
+    public static bool IsTerminal(TransportRequestDetailStatus status) =>
+        status is TransportRequestDetailStatus.COMPLETED or TransportRequestDetailStatus.FAILED or TransportRequestDetailStatus.CANCELLED;
+
     /// <summary>
-    /// Re-aggregates the Request status from its Detail lines (rules/02):
-    /// all COMPLETED → COMPLETED; all FAILED → FAILED; all CANCELLED → CANCELLED; some COMPLETED (or FAILED) with
-    /// others still open or FAILED → PARTIALLY_COMPLETED; any IN_PROGRESS → IN_PROGRESS.
-    /// CANCELLED / REJECTED requests are not touched.
+    /// Re-aggregates the Request status from its Detail lines (rules/02, WH-04).
+    /// Every Detail terminal: all COMPLETED → COMPLETED; some COMPLETED → PARTIALLY_COMPLETED (closed);
+    /// none COMPLETED → CANCELLED when the request was being cancelled or all are CANCELLED, otherwise FAILED.
+    /// Some still open: a CANCELLING request stays CANCELLING; some COMPLETED/FAILED → PARTIALLY_COMPLETED;
+    /// any IN_PROGRESS → IN_PROGRESS. CANCELLED / REJECTED requests are not touched.
     /// </summary>
     public void ApplyDetailProgress(DateTimeOffset now)
     {
@@ -48,40 +68,86 @@ public sealed class TransportRequest
         var statuses = Details.Select(d => d.Status).ToList();
         bool All(TransportRequestDetailStatus s) => statuses.All(x => x == s);
         bool Any(TransportRequestDetailStatus s) => statuses.Contains(s);
+        var allTerminal = statuses.All(IsTerminal);
 
         var next = Status;
-        if (All(TransportRequestDetailStatus.COMPLETED))
+        if (allTerminal)
         {
-            next = TransportRequestStatus.COMPLETED;
+            next = All(TransportRequestDetailStatus.COMPLETED) ? TransportRequestStatus.COMPLETED
+                : Any(TransportRequestDetailStatus.COMPLETED) ? TransportRequestStatus.PARTIALLY_COMPLETED
+                : Status == TransportRequestStatus.CANCELLING || All(TransportRequestDetailStatus.CANCELLED) ? TransportRequestStatus.CANCELLED
+                : TransportRequestStatus.FAILED;
         }
-        else if (All(TransportRequestDetailStatus.FAILED))
+        else if (Status == TransportRequestStatus.CANCELLING)
         {
-            next = TransportRequestStatus.FAILED;
-        }
-        else if (All(TransportRequestDetailStatus.CANCELLED))
-        {
-            next = TransportRequestStatus.CANCELLED;
+            // Waiting for the cargo on a robot to be recovered.
         }
         else if (Any(TransportRequestDetailStatus.COMPLETED) || Any(TransportRequestDetailStatus.FAILED))
         {
             next = TransportRequestStatus.PARTIALLY_COMPLETED;
         }
-        else if (Any(TransportRequestDetailStatus.IN_PROGRESS))
+        else if (Any(TransportRequestDetailStatus.IN_PROGRESS) || Any(TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY))
         {
             next = TransportRequestStatus.IN_PROGRESS;
         }
 
-        if (next == Status)
+        var closesNow = allTerminal && CompletedAt is null;
+        if (next == Status && !closesNow)
         {
             return;
         }
 
         Status = next;
         UpdatedAt = now;
-        if (next is TransportRequestStatus.COMPLETED or TransportRequestStatus.FAILED or TransportRequestStatus.CANCELLED)
+        if (allTerminal)
         {
-            CompletedAt = now;
+            CompletedAt ??= now;
         }
+    }
+
+    /// <summary>
+    /// TRN-01 / WH-04: applies what cancelling did to each container. Containers whose Job has cargo on a robot wait
+    /// in CANCEL_PENDING_RECOVERY (nothing is treated as returned); every other open Detail is CANCELLED. The request
+    /// is CANCELLING until the last Detail is terminal, then aggregates (CANCELLED, or PARTIALLY_COMPLETED when some
+    /// containers had already been delivered).
+    /// </summary>
+    public void ApplyCancel(Guid? actor, string reason, IReadOnlySet<Guid> containersInRecovery, DateTimeOffset now)
+    {
+        CancelledBy = actor;
+        CancelReason = reason;
+        CancelRequestedAt = now;
+        foreach (var detail in Details.Where(d => !IsTerminal(d.Status)))
+        {
+            var next = containersInRecovery.Contains(detail.ContainerId)
+                ? TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY
+                : TransportRequestDetailStatus.CANCELLED;
+            if (detail.Status != next)
+            {
+                detail.Status = next;
+                detail.UpdatedAt = now;
+            }
+        }
+
+        Status = TransportRequestStatus.CANCELLING;
+        UpdatedAt = now;
+        ApplyDetailProgress(now);
+    }
+
+    /// <summary>TRN-02: the request is refused before anything moved. Its Details are cancelled; no Job runs it.</summary>
+    public void Reject(Guid? actor, string reason, DateTimeOffset now)
+    {
+        RejectedBy = actor;
+        RejectReason = reason;
+        RejectedAt = now;
+        foreach (var detail in Details.Where(d => !IsTerminal(d.Status)))
+        {
+            detail.Status = TransportRequestDetailStatus.CANCELLED;
+            detail.UpdatedAt = now;
+        }
+
+        Status = TransportRequestStatus.REJECTED;
+        UpdatedAt = now;
+        CompletedAt = now;
     }
 
     /// <summary>

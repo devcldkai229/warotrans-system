@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.WorkflowExecution.Features.ListWorkflows;
 
@@ -16,7 +17,8 @@ public static class ListWorkflowsEndpoint
         {
             var response = await handler.HandleAsync(code, status, cancellationToken);
             return Results.Ok(response);
-        });
+        })
+            .RequirePermission(Permissions.WorkflowRead);
 
         return group;
     }
