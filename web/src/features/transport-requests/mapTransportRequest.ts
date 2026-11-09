@@ -40,7 +40,7 @@ export function listItemToView(
     failureCode: null,
     failureMessage: null,
     workflowName: workflowNameById.get(item.workflowId) ?? '—',
-    requestedByName: item.requestedBy.slice(0, 8),
+    requestedByName: item.requestedByName ?? item.requestedBy.slice(0, 8),
     details: item.details.map((detail) => ({
       id: detail.id,
       transportRequestId: item.id,
@@ -80,7 +80,7 @@ export function detailToView(
     failureCode: detail.failureCode,
     failureMessage: detail.failureMessage,
     workflowName: workflowNameById.get(detail.workflowId) ?? '—',
-    requestedByName: detail.requestedBy.slice(0, 8),
+    requestedByName: detail.requestedByName ?? detail.requestedBy.slice(0, 8),
     details: detail.details.map((line) => ({
       id: line.id,
       transportRequestId: detail.id,

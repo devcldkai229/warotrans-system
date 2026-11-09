@@ -78,6 +78,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<CancelJobHandler>();
         services.AddScoped<WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
+        services.AddScoped<JobSummaryEnricher>();
         services.AddScoped<Features.FailJobContainer.FailJobContainerHandler>();
         services.AddHostedService<HumanConfirmTimeoutHostedService>();
         services.AddHostedService<Services.WaitStepWakeupHostedService>();

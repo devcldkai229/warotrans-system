@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Enums;
+using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
 using WaroTrans.Transportation.Persistence;
 using WaroTrans.Warehouse.Entities;
@@ -320,6 +321,65 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
 
         await SetAsync(jobs[2].JobId, WaroTrans.WorkflowExecution.Enums.JobStatus.PAUSED);
         Assert.Empty(await NextAsync());
+    }
+
+    [Fact]
+    public async Task Lists_show_real_names_page_correctly_and_hide_a_robot_outside_the_scope()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        await Factory.CreateAccountAsync("namer", WaroTrans.Identity.Enums.AccountRole.ADMIN);
+        await Factory.CreateAccountAsync("no_robots", WaroTrans.Identity.Enums.AccountRole.TECHNICIAN);
+        var client = CreateAnonymousClient();
+        var admin = (await client.LoginAsync("namer")).AccessToken;
+        var tech = (await client.LoginAsync("no_robots")).AccessToken;
+
+        var create = await client.SendWithTokenAsync(HttpMethod.Post, Route, admin, JsonSerializer.SerializeToElement(Body(scenario, workflowId,
+            Detail(1, scenario.Containers[0], scenario.A, scenario.D),
+            Detail(2, scenario.Containers[1], scenario.A, scenario.E)), JsonOptions));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var queued = await client.SendWithTokenAsync(HttpMethod.Post, $"{Route}/{created}/queue", admin);
+        Assert.Equal(HttpStatusCode.OK, queued.StatusCode);
+
+        Guid robot;
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var fleet = scope.ServiceProvider.GetRequiredService<WaroTrans.Fleet.Persistence.FleetDbContext>();
+            var seeded = WaroTrans.Fleet.Entities.Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-NAMED", "Named", DateTimeOffset.UtcNow);
+            fleet.Robots.Add(seeded);
+            await fleet.SaveChangesAsync();
+            robot = seeded.Id;
+            var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+            foreach (var job in await execution.Jobs.ToListAsync())
+            {
+                job.ContextValues[WaroTrans.WorkflowExecution.Execution.JobExecutionEngine.AssignedRobotKey] = JsonSerializer.SerializeToElement(robot);
+                execution.Entry(job).Property(j => j.ContextValues).IsModified = true;
+            }
+
+            await execution.SaveChangesAsync();
+        }
+
+        var request = await (await client.GetWithTokenAsync($"{Route}/{created}", admin)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(string.IsNullOrWhiteSpace(request.GetProperty("requestedByName").GetString()));
+        var requests = await (await client.GetWithTokenAsync($"{Route}?take=1", admin)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(request.GetProperty("requestedByName").GetString(), requests.GetProperty("items")[0].GetProperty("requestedByName").GetString());
+
+        var jobsUrl = $"/api/workflow-execution/jobs?transportRequestId={created}&take=1";
+        var page1 = await (await client.GetWithTokenAsync(jobsUrl, admin)).Content.ReadFromJsonAsync<JsonElement>();
+        var page2 = await (await client.GetWithTokenAsync(jobsUrl + "&skip=1", admin)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, page1.GetProperty("total").GetInt32());
+        var one = page1.GetProperty("items")[0];
+        Assert.NotEqual(one.GetProperty("id").GetGuid(), page2.GetProperty("items")[0].GetProperty("id").GetGuid());
+        Assert.Equal("RBT-NAMED", one.GetProperty("robotCode").GetString());
+        Assert.Equal(robot, one.GetProperty("assignedRobotId").GetGuid());
+        Assert.False(string.IsNullOrWhiteSpace(one.GetProperty("workflowName").GetString()));
+        Assert.StartsWith("REQ-", one.GetProperty("requestCodes")[0].GetString());
+        Assert.Single(one.GetProperty("containerBarcodes").EnumerateArray());
+
+        var foreign = (await (await client.GetWithTokenAsync(jobsUrl, tech)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items")[0];
+        Assert.Equal(JsonValueKind.Null, foreign.GetProperty("robotCode").ValueKind);
+        Assert.Equal(JsonValueKind.Null, foreign.GetProperty("assignedRobotId").ValueKind);
     }
 
     [Fact]

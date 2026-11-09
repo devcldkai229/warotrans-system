@@ -16,6 +16,7 @@ public static class ListTransportRequestsEndpoint
             string? status,
             string? search,
             int? take,
+            int? skip,
             IValidator<ListTransportRequestsRequest> validator,
             ListTransportRequestsHandler handler,
             CancellationToken cancellationToken) =>
@@ -38,7 +39,8 @@ public static class ListTransportRequestsEndpoint
                 warehouseId,
                 parsedStatus,
                 search,
-                take ?? 50);
+                take ?? 50,
+                skip ?? 0);
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);

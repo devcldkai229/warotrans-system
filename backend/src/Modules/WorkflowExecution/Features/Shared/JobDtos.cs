@@ -23,7 +23,11 @@ public sealed record JobSummaryDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
-    string? FailureCode);
+    string? FailureCode,
+    string? WorkflowName = null,
+    string? RobotCode = null,
+    IReadOnlyList<string>? RequestCodes = null,
+    IReadOnlyList<string>? ContainerBarcodes = null);
 
 public sealed record JobDetailDto(
     Guid Id,
@@ -161,7 +165,8 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
         Guid? transportRequestId,
         int take,
         CancellationToken cancellationToken,
-        IReadOnlyCollection<Guid>? jobIds = null)
+        IReadOnlyCollection<Guid>? jobIds = null,
+        int skip = 0)
     {
         var query = db.Jobs.AsNoTracking().AsQueryable();
         if (jobIds is not null)
@@ -182,6 +187,8 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
         var total = await query.CountAsync(cancellationToken);
         var jobs = await query
             .OrderByDescending(j => j.CreatedAt)
+            .ThenBy(j => j.Id)
+            .Skip(skip)
             .Take(take)
             .Include(j => j.JobContainers)
             .Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)

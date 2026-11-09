@@ -638,6 +638,7 @@ export interface CreateTransportRequestResponse {
   workflowId: string;
   planSchemaVersion: number;
   requestedBy: string;
+  requestedByName?: string | null;
   note: string | null;
   workflowInputs: Record<string, JsonValue>;
   submittedAt: UtcDateTime;

@@ -11,6 +11,11 @@ export interface JobSummaryDto {
   assignedRobotId: string | null
   transportRequestIds: string[]
   containerCount: number
+  /** Null when the robot is outside the caller's scope. */
+  robotCode?: string | null
+  workflowName?: string | null
+  requestCodes?: string[] | null
+  containerBarcodes?: string[] | null
   completedSteps: number
   totalSteps: number
   createdAt: string
@@ -70,11 +75,12 @@ export interface JobDetailDto extends Omit<JobSummaryDto, 'containerCount'> {
 }
 
 /** `robotId` lists the Jobs that robot was assigned to, most recent first. */
-export function listJobs(params: { status?: JobStatus; transportRequestId?: string; robotId?: string; take?: number } = {}) {
+export function listJobs(params: { status?: JobStatus; transportRequestId?: string; robotId?: string; skip?: number; take?: number } = {}) {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
   if (params.transportRequestId) query.set('transportRequestId', params.transportRequestId)
   if (params.robotId) query.set('robotId', params.robotId)
+  if (params.skip) query.set('skip', String(params.skip))
   if (params.take) query.set('take', String(params.take))
   const qs = query.toString()
   return apiRequest<{ items: JobSummaryDto[]; total: number }>(`/api/workflow-execution/jobs${qs ? `?${qs}` : ''}`)
