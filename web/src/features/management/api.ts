@@ -90,7 +90,7 @@ export async function setProductStatus(product: Product, isActive: boolean): Pro
 }
 
 /** What the Containers table shows. The API has no creation time, so it is not part of this shape. */
-export type ManagedContainer = Pick<
+export type ManagedContainer = { inActiveTransport?: boolean } & Pick<
   ContainerView,
   'id' | 'barcode' | 'sku' | 'productName' | 'status' | 'locationCode' | 'currentLevelNo' | 'supplierPackageBarcode' | 'updatedAt'
 >
@@ -145,6 +145,7 @@ export async function listManagedContainers(): Promise<ContainerListing> {
       currentLevelNo: item.currentLevelNo,
       supplierPackageBarcode: item.supplierPackageBarcode ?? undefined,
       updatedAt: item.updatedAt,
+      inActiveTransport: item.inActiveTransport,
     })),
   }
 }

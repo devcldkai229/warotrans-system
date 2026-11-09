@@ -30,6 +30,10 @@ public static class TransportationModule
         services.AddScoped<GetRequestStatisticsHandler>();
         services.AddScoped<Features.CloseTransportRequest.CloseTransportRequestHandler>();
 
+        // WH-01: handovers Warehouse still has to post, retried until they land.
+        services.AddScoped<Services.StockPostingProcessor>();
+        services.AddHostedService<Services.StockPostingHostedService>();
+
         // Job execution feedback (WorkflowExecution → Transportation)
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.ITransportRequestActivityQuery, Services.TransportRequestActivityQuery>();
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.IWorkflowUsageQuery, Services.WorkflowUsageQuery>();

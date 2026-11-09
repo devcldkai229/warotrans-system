@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   mapRead: 'map.read',
   warehouseRead: 'warehouse.read',
   containerCreate: 'container.create',
+  containerRecover: 'container.recover',
   transportRead: 'tr.read',
   transportCreate: 'tr.create',
   transportCancel: 'tr.cancel',

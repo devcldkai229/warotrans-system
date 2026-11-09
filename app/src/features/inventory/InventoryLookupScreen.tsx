@@ -21,6 +21,8 @@ import {
   X,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { useAuth } from '../auth/authContext';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
@@ -36,6 +38,8 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 import {
   ContainerListItem,
   getContainerByBarcode,
+  listStorageLocations,
+  recoverContainer,
   listContainers,
   listInventory,
   ApiError,
@@ -46,6 +50,7 @@ export type LevelFilterKey = 'ALL' | number;
 
 export function InventoryLookupScreen() {
   const { goBack, navigate } = useNavigation();
+  const { session } = useAuth();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [inventoryTab, setInventoryTab] = useState<'containers' | 'skus'>('containers');
@@ -76,6 +81,11 @@ export function InventoryLookupScreen() {
       return page.items.length > 0 && loaded < page.total ? loaded : undefined;
     },
     enabled: Boolean(activeWarehouseId) && inventoryTab === 'skus',
+  });
+  const recoverLocations = useQuery({
+    queryKey: ['recover-locations', activeWarehouseId],
+    queryFn: () => listStorageLocations({ warehouseId: activeWarehouseId, activeOnly: true }),
+    enabled: Boolean(activeWarehouseId) && (verifiedContainer?.status === 'IN_TRANSIT' || verifiedContainer?.status === 'HOLD'),
   });
   const containers = containersQuery.data?.items || [];
   const containerTotal = containersQuery.data?.total || 0;
@@ -267,6 +277,31 @@ export function InventoryLookupScreen() {
               </Text>
             </View>
           </View>
+
+          {(verifiedContainer.status === 'IN_TRANSIT' || verifiedContainer.status === 'HOLD')
+            && sessionCan(session, PERMISSIONS.containerRecover) ? (
+            <View style={{ marginTop: 8, gap: 6 }}>
+              <Text style={styles.verifiedLabel}>This container lost its place. Which shelf is it on now? (level 1)</Text>
+              {(recoverLocations.data?.items ?? []).filter(location => location.isActive).map(location => (
+                <Button
+                  key={location.id}
+                  label={`${location.code} · ${location.name}`}
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    recoverContainer(verifiedContainer.id, { storageLocationId: location.id, levelNo: 1 })
+                      .then(() => {
+                        setVerifiedContainer(null);
+                        void containersQuery.refetch();
+                        void inventoryQuery.refetch();
+                      })
+                      .catch((error: Error) => setVerificationError(error.message));
+                  }}
+                />
+              ))}
+            </View>
+          ) : null}
 
           <Button
             label="↗ Relocate Container (INTERNAL_RELOCATION)"

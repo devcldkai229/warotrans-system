@@ -18,6 +18,13 @@ Other valid states:
 
 State changes must go through domain/use-case logic.
 
+### Stock follows custody (WH-01)
+
+- Pickup confirmed: 1 off the source shelf level, Container `IN_TRANSIT` with no location.
+- Delivery confirmed: 1 on the shelf level and `STORED`; off-shelf on a CONFIRMED outbound voucher: `ISSUED`; any other off-shelf drop: its status before the pickup if never shelved, otherwise `HOLD`.
+- A Job that fails or is cancelled with cargo on board leaves it `IN_TRANSIT`. Nothing is assumed returned: a person names the shelf (`POST /api/warehouse/containers/{id}/recover`).
+- Every move writes one `warehouse.container_movements` line with a unique key per Job + Container + move. Transportation queues handovers in `transportation.stock_postings` with the Detail and retries until posted.
+
 ### Inventory
 `InventoryStock` business key:
 ```text

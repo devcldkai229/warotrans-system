@@ -88,6 +88,91 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.ToTable("containers", "warehouse");
                 });
 
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.ContainerMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActorAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_account_id");
+
+                    b.Property<Guid>("ContainerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_id");
+
+                    b.Property<short?>("FromLevelNo")
+                        .HasColumnType("smallint")
+                        .HasColumnName("from_level_no");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("from_status");
+
+                    b.Property<Guid?>("FromStorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_storage_location_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<short?>("ToLevelNo")
+                        .HasColumnType("smallint")
+                        .HasColumnName("to_level_no");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("to_status");
+
+                    b.Property<Guid?>("ToStorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_storage_location_id");
+
+                    b.Property<Guid?>("TransportRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transport_request_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_container_movements");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_container_movements_idempotency_key");
+
+                    b.HasIndex("ContainerId", "OccurredAt")
+                        .HasDatabaseName("i_x_container_movements_container_id_occurred_at");
+
+                    b.ToTable("container_movements", "warehouse");
+                });
+
             modelBuilder.Entity("WaroTrans.Warehouse.Entities.InventoryStock", b =>
                 {
                     b.Property<Guid>("Id")
@@ -461,6 +546,16 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.Navigation("CurrentStorageLocation");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.ContainerMovement", b =>
+                {
+                    b.HasOne("WaroTrans.Warehouse.Entities.Container", null)
+                        .WithMany()
+                        .HasForeignKey("ContainerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("f_k_container_movements_containers_container_id");
                 });
 
             modelBuilder.Entity("WaroTrans.Warehouse.Entities.InventoryStock", b =>

@@ -23,6 +23,80 @@ namespace WaroTrans.Transportation.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("WaroTrans.Transportation.Entities.StockPosting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<Guid>("ContainerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<short?>("DestinationLevelNo")
+                        .HasColumnType("smallint")
+                        .HasColumnName("destination_level_no");
+
+                    b.Property<Guid?>("DestinationStorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("destination_storage_location_id");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<DateTimeOffset?>("PostedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at");
+
+                    b.Property<Guid>("TransportRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transport_request_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_stock_postings");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("i_x_stock_postings_created_at")
+                        .HasFilter("posted_at IS NULL");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_stock_postings_key");
+
+                    b.ToTable("stock_postings", "transportation");
+                });
+
             modelBuilder.Entity("WaroTrans.Transportation.Entities.TransportRequest", b =>
                 {
                     b.Property<Guid>("Id")

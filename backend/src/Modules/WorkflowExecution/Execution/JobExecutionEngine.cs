@@ -1830,7 +1830,7 @@ public sealed class JobExecutionEngine(
             job.FailureCode = CargoOnboardCancelCode;
             job.FailureMessage =
                 $"The transport request was cancelled while {onboard.Count} container(s) were on the robot. "
-                + "Unload them and cancel this Job with where they are now, or resume it to deliver them.";
+                + "Resume it to deliver them, or unload them, cancel this Job and recover each container to the shelf it is on.";
             _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, job.FailureCode));
             await SaveAndPublishAsync(cancellationToken);
             logger.LogWarning("Job {JobNo}: request cancelled with {Count} container(s) on board; held for recovery", job.JobNo, onboard.Count);
@@ -1847,7 +1847,7 @@ public sealed class JobExecutionEngine(
                     robotId,
                     onboard.Count == 1 ? onboard[0].ContainerId : null,
                     $"Transport request cancelled while Job {job.JobNo} had {onboard.Count} container(s) on the robot. "
-                    + $"Reason: {reason}. Unload or deliver them, then cancel or resume the Job.",
+                    + $"Reason: {reason}. Deliver them and resume the Job, or unload them, cancel it and recover each container to its shelf.",
                     High: true,
                     TransportRequestId: transportRequestId),
                 cancellationToken);

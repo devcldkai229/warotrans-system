@@ -11,6 +11,7 @@ public sealed class WarehouseDbContext(DbContextOptions<WarehouseDbContext> opti
     public DbSet<Product> Products => Set<Product>();
     public DbSet<StorageLocation> StorageLocations => Set<StorageLocation>();
     public DbSet<Container> Containers => Set<Container>();
+    public DbSet<ContainerMovement> ContainerMovements => Set<ContainerMovement>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<StockVoucher> StockVouchers => Set<StockVoucher>();
     public DbSet<StockVoucherLine> StockVoucherLines => Set<StockVoucherLine>();
