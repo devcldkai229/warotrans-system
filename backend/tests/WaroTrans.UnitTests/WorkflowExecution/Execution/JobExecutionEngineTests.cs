@@ -371,6 +371,160 @@ public sealed class JobExecutionEngineTests
         Assert.Empty(_fleet.Commands);
     }
 
+    /// <summary>Runs the Job to its first handover: PICKUP_CONFIRM of C1 is waiting, C2 comes next.</summary>
+    private async Task<(Guid JobId, Guid StepId)> AtFirstHandoverAsync()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        return (jobId, await CurrentStepIdAsync(jobId));
+    }
+
+    [Fact]
+    public async Task A_claimed_step_can_only_be_confirmed_by_its_holder()
+    {
+        var (jobId, stepId) = await AtFirstHandoverAsync();
+        var other = Guid.NewGuid();
+        await Engine().ClaimHumanStepAsync(stepId, _staff);
+
+        var taken = await Assert.ThrowsAsync<ConflictException>(() => Engine().ClaimHumanStepAsync(stepId, other));
+        Assert.Equal(JobExecutionEngine.HumanTaskClaimedCode, taken.Code);
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => Engine().ConfirmHumanStepAsync(stepId, C1, HumanConfirmationSource.StaffApp(other)));
+        Assert.Equal(JobExecutionEngine.HumanTaskClaimedCode, refused.Code);
+        var failing = await Assert.ThrowsAsync<ConflictException>(() => Engine().FailContainerAtStepAsync(stepId, C1, "broken", default, other));
+        Assert.Equal(JobExecutionEngine.HumanTaskClaimedCode, failing.Code);
+        var button = await Assert.ThrowsAsync<ConflictException>(() => Engine().ConfirmHumanStepAsync(stepId, C1, HumanConfirmationSource.RobotButton(_fleet.RobotId, Guid.NewGuid())));
+        Assert.Equal(JobExecutionEngine.HumanTaskClaimedCode, button.Code);
+        Assert.Equal(JobContainerStatus.ASSIGNED, (await _db.JobContainers.SingleAsync(c => c.JobId == jobId && c.ContainerId == C1)).Status);
+
+        await Engine().ConfirmHumanStepAsync(stepId, C1, HumanConfirmationSource.StaffApp(_staff));
+        Assert.Equal(JobContainerStatus.ONBOARD, (await _db.JobContainers.SingleAsync(c => c.JobId == jobId && c.ContainerId == C1)).Status);
+    }
+
+    [Fact]
+    public async Task Confirming_a_free_step_records_who_did_it_and_the_robot_button_still_works_on_a_free_step()
+    {
+        var (jobId, stepId) = await AtFirstHandoverAsync();
+        await Engine().ConfirmHumanStepAsync(stepId, C1, HumanConfirmationSource.StaffApp(_staff));
+        Assert.Equal(_staff, (await _db.JobSteps.SingleAsync(s => s.Id == stepId)).ClaimedBy);
+
+        var next = await CurrentStepIdAsync(jobId);
+        await Engine().ConfirmHumanStepAsync(next, C2, HumanConfirmationSource.RobotButton(_fleet.RobotId, Guid.NewGuid()));
+        Assert.Equal(JobStepStatus.COMPLETED, (await _db.JobSteps.SingleAsync(s => s.Id == next)).Status);
+    }
+
+    [Fact]
+    public async Task A_claim_that_runs_out_is_offered_again_and_the_job_does_not_finish_by_itself()
+    {
+        var (jobId, stepId) = await AtFirstHandoverAsync();
+        await Engine().ClaimHumanStepAsync(stepId, _staff);
+        var step = await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+        step.ClaimExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(1, await Engine().EscalateHumanConfirmTimeoutsAsync());
+
+        step = await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+        Assert.Null(step.ClaimedBy);
+        Assert.Equal(JobStepStatus.WAITING, step.Status);
+        var offered = Assert.Single(_events.Of<HumanTaskOffered>());
+        Assert.Equal(_staff, offered.PreviousClaimant);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+
+        // Someone else can take it now.
+        var other = Guid.NewGuid();
+        await Engine().ConfirmHumanStepAsync(stepId, C1, HumanConfirmationSource.StaffApp(other));
+        Assert.Equal(other, (await _db.JobSteps.SingleAsync(s => s.Id == stepId)).ClaimedBy);
+    }
+
+    [Fact]
+    public async Task Past_its_deadline_a_step_is_raised_once_and_nothing_is_confirmed_or_released()
+    {
+        var (jobId, stepId) = await AtFirstHandoverAsync();
+        var reporter = new RecordingIssueReporter();
+        var step = await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+        Assert.NotNull(step.DeadlineAt);
+        step.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(1, await EngineWith(reporter).EscalateHumanConfirmTimeoutsAsync());
+        Assert.Equal(0, await EngineWith(reporter).EscalateHumanConfirmTimeoutsAsync());
+
+        step = await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+        Assert.NotNull(step.EscalatedAt);
+        Assert.Equal(JobStepStatus.WAITING, step.Status);
+        Assert.Single(_events.Of<HumanStepOverdue>());
+        Assert.Equal($"human-step-overdue:{stepId}", Assert.Single(reporter.SystemDrafts).SourceKey);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Empty(_fleet.Cancels);
+    }
+
+    [Fact]
+    public async Task If_the_issue_cannot_be_opened_the_next_scan_tries_again()
+    {
+        var (_, stepId) = await AtFirstHandoverAsync();
+        var step = await _db.JobSteps.SingleAsync(s => s.Id == stepId);
+        step.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        await _db.SaveChangesAsync();
+
+        await EngineWith(new RecordingIssueReporter(new InvalidOperationException("mongo down"))).EscalateHumanConfirmTimeoutsAsync();
+        Assert.Null((await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == stepId)).EscalatedAt);
+
+        await EngineWith(new RecordingIssueReporter()).EscalateHumanConfirmTimeoutsAsync();
+        Assert.NotNull((await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == stepId)).EscalatedAt);
+    }
+
+    [Fact]
+    public async Task Confirm_all_gives_each_container_its_own_result_and_repeating_changes_nothing()
+    {
+        var (jobId, _) = await AtFirstHandoverAsync();
+        var stranger = Guid.NewGuid();
+
+        var results = await Engine().ConfirmHandoverBatchAsync(jobId, HandoverType.PICKUP, [C2, stranger, C1], _staff, null);
+
+        Assert.Equal(HandoverBatchOutcomes.Confirmed, results.Single(r => r.ContainerId == C1).Outcome);
+        Assert.Equal(HandoverBatchOutcomes.Confirmed, results.Single(r => r.ContainerId == C2).Outcome);
+        Assert.Equal(HandoverBatchOutcomes.Mismatch, results.Single(r => r.ContainerId == stranger).Outcome);
+        Assert.All(await _db.JobContainers.Where(c => c.JobId == jobId).ToListAsync(), c => Assert.Equal(JobContainerStatus.ONBOARD, c.Status));
+        var handovers = await _db.HandoverConfirmations.CountAsync();
+
+        var again = await Engine().ConfirmHandoverBatchAsync(jobId, HandoverType.PICKUP, [C1, C2], _staff, null);
+
+        Assert.All(again, r => Assert.Equal(HandoverBatchOutcomes.AlreadyConfirmed, r.Outcome));
+        Assert.Equal(handovers, await _db.HandoverConfirmations.CountAsync());
+    }
+
+    [Fact]
+    public async Task Confirm_all_stops_at_a_step_someone_else_holds_and_leaves_the_rest_alone()
+    {
+        var (jobId, stepId) = await AtFirstHandoverAsync();
+        await Engine().ClaimHumanStepAsync(stepId, Guid.NewGuid());
+
+        var results = await Engine().ConfirmHandoverBatchAsync(jobId, HandoverType.PICKUP, [C1, C2], _staff, null);
+
+        var first = results.Single(r => r.ContainerId == C1);
+        Assert.Equal(HandoverBatchOutcomes.Refused, first.Outcome);
+        Assert.Equal(JobExecutionEngine.HumanTaskClaimedCode, first.Code);
+        Assert.Equal(HandoverBatchOutcomes.NotReached, results.Single(r => r.ContainerId == C2).Outcome);
+        Assert.All(await _db.JobContainers.Where(c => c.JobId == jobId).ToListAsync(), c => Assert.Equal(JobContainerStatus.ASSIGNED, c.Status));
+    }
+
+    [Fact]
+    public async Task A_scanned_barcode_that_is_not_the_container_is_refused()
+    {
+        var (_, stepId) = await AtFirstHandoverAsync();
+        _warehouse.Set(C1, ContainerStatus.STORED);
+        var barcode = _warehouse.Containers[C1].Barcode;
+
+        var wrong = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            Engine().ConfirmHumanStepAsync(stepId, C1, HumanConfirmationSource.StaffApp(_staff, null, "BOX-999")));
+        Assert.Equal("handover_barcode_mismatch", wrong.Code);
+        _db.ChangeTracker.Clear();
+
+        await Engine().ConfirmHumanStepAsync(stepId, C1, HumanConfirmationSource.StaffApp(_staff, null, barcode.ToLowerInvariant()));
+        Assert.Equal(JobStepStatus.COMPLETED, (await _db.JobSteps.SingleAsync(s => s.Id == stepId)).Status);
+    }
+
     private sealed class FakeWarehouse : IWarehouseModule
     {
         public Dictionary<Guid, ContainerSnapshot> Containers { get; } = [];
@@ -655,6 +809,7 @@ public sealed class JobExecutionEngineTests
 
         public Task<Guid> ReportAsync(SystemIssueDraft draft, CancellationToken cancellationToken = default)
         {
+            if (failWith is not null) throw failWith;
             SystemDrafts.Add(draft);
             return Task.FromResult(IssueId);
         }
@@ -662,7 +817,7 @@ public sealed class JobExecutionEngineTests
 
     private JobExecutionEngine EngineWith(IIssueReporter reporter) =>
         new(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events, NullLogger<JobExecutionEngine>.Instance,
-            issueReporter: reporter);
+            issueReporter: reporter, warehouse: _warehouse);
 
     /// <summary>Turns the HUMAN step that is waiting now into a REPORT_ISSUE step.</summary>
     private async Task<Guid> WaitingReportIssueStepAsync(Guid jobId)

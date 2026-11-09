@@ -37,6 +37,13 @@ export interface JobStepDto {
   outputValues: Record<string, unknown>
   errorCode: string | null
   errorMessage: string | null
+  /** WH-03: who holds this human step now. Null when nobody does or the claim ran out. */
+  claimedBy?: string | null
+  claimedByName?: string | null
+  claimExpiresAt?: string | null
+  /** SY-02 */
+  deadlineAt?: string | null
+  escalatedAt?: string | null
   startedAt: string | null
   completedAt: string | null
 }
@@ -123,6 +130,40 @@ export function confirmJobStep(stepId: string, containerId: string | null, note?
     method: 'POST',
     body: JSON.stringify({ containerId, note: note ?? null }),
   })
+}
+
+/** WH-03: take a waiting human step, or extend your own claim. 409 human_task_claimed when someone else holds it. */
+export function claimJobStep(stepId: string) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/job-steps/${stepId}/claim`, { method: 'POST' })
+}
+
+export function releaseJobStep(stepId: string) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/job-steps/${stepId}/release`, { method: 'POST' })
+}
+
+/** WH-03: job.takeover, reason required. */
+export function takeOverJobStep(stepId: string, reason: string) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/job-steps/${stepId}/takeover`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export type HandoverBatchOutcome = 'confirmed' | 'already_confirmed' | 'mismatch' | 'not_reached' | 'refused'
+
+export interface HandoverBatchResult {
+  containerId: string
+  jobStepId: string | null
+  outcome: HandoverBatchOutcome
+  code: string | null
+}
+
+/** APP-OPS-02: partial by design, every container has its own result. */
+export function confirmHandoverBatch(jobId: string, type: 'PICKUP' | 'DROPOFF', containerIds: string[], note?: string) {
+  return apiRequest<{ results: HandoverBatchResult[]; job: JobDetailDto }>(
+    `/api/workflow-execution/jobs/${jobId}/handover/confirm-batch`,
+    { method: 'POST', body: JSON.stringify({ type, containerIds, note: note ?? null }) },
+  )
 }
 
 /** WFX-03: operator pause. The robot gets STOP mode PAUSE; follow it with getStopState(robotId). */

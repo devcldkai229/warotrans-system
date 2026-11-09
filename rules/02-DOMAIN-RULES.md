@@ -138,6 +138,12 @@ CANCELLED
 
 A Job holds one robot at a time and a robot one Job at a time: `execution.job_robot_assignments` has a unique index on each, over rows with no `EndedAt`. Every engine save keeps those rows in line with the Job. Handing a Job to another robot closes one row and opens another, so the history stays. Several robots on one request means several Jobs, and the request ends when they all have.
 
+## Who handles a human step (WH-03, SY-02)
+
+A waiting HUMAN step can be claimed for a limited time (`HumanTasks:ClaimLeaseSeconds`). While a claim is live, only its holder may confirm; everyone else, and the robot button, gets `409 human_task_claimed`. Confirming a free step claims it in the same write. A claim that runs out is offered to everyone again. An Admin can take a step over, with a reason. `JobStep.DeadlineAt` is stored: past it, an issue is opened and the floor is told once. A deadline never confirms a step and never releases the robot or its reservations.
+
+Confirm All (`/jobs/{id}/handover/confirm-batch`) is partial: each Container gets its own result, and a Container whose turn did not come is `not_reached`.
+
 ## Job state machine
 ```text
 CREATED

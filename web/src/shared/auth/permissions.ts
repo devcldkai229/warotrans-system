@@ -22,6 +22,7 @@ export const PERMISSIONS = {
   workflowWrite: 'workflow.write',
   jobRead: 'job.read',
   jobOperate: 'job.operate',
+  jobTakeover: 'job.takeover',
   jobPause: 'job.pause',
   jobCancel: 'job.cancel',
   robotRead: 'robot.read',

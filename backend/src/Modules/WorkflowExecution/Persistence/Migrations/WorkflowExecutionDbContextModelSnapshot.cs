@@ -323,9 +323,30 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("ClaimExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claim_expires_at");
+
+                    b.Property<int>("ClaimVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("claim_version");
+
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<Guid?>("ClaimedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("claimed_by");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset?>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline_at");
 
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(50)
@@ -336,6 +357,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("error_message");
+
+                    b.Property<DateTimeOffset?>("EscalatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_at");
 
                     b.Property<Guid>("JobTaskId")
                         .HasColumnType("uuid")
@@ -384,6 +409,9 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
 
                     b.HasIndex("JobTaskId")
                         .HasDatabaseName("i_x_job_steps_job_task_id");
+
+                    b.HasIndex("Status", "StepType")
+                        .HasDatabaseName("i_x_job_steps_status_step_type");
 
                     b.ToTable("job_steps", "execution");
                 });

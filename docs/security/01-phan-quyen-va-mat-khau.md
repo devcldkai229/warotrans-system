@@ -43,6 +43,7 @@ Role (trong JWT) ──► RolePermissionMatrix (code) ──► permission  ─
 | `container.recover` (khai báo vị trí thùng đang IN_TRANSIT hoặc HOLD) | ✔ | ✔ | – |
 | `tr.read` / `tr.create` | ✔ ✔ | ✔ ✔ | ✔ – |
 | `job.read` / `job.operate` / `job.pause` / `job.cancel` | ✔ ✔ ✔ ✔ | ✔ ✔ ✔ – | ✔ – ✔ – |
+| `job.takeover` (giành bước đang có người giữ, bắt buộc lý do) | ✔ | – | – |
 | `robot.read`, `robot.stop` | ✔ | ✔ | ✔ (theo scope) |
 | `robot.configure`, `robot.command`, `robot.manual.drive`, `robot.maintenance`, `robot.power`, `robot.diagnostics` | ✔ | | ✔ (theo scope) |
 | `robot.manage` (đăng ký robot, đổi map), `dispatch.override` | ✔ | | |

@@ -13,7 +13,7 @@ namespace WaroTrans.WorkflowExecution.Features.FailJobContainer;
 
 public sealed record FailJobContainerRequest(Guid ContainerId, string? Reason);
 
-public sealed class FailJobContainerHandler(JobExecutionEngine engine, JobQueries queries, WorkflowExecutionDbContext db)
+public sealed class FailJobContainerHandler(JobExecutionEngine engine, JobQueries queries, WorkflowExecutionDbContext db, ICurrentUser currentUser)
 {
     public async Task<JobDetailDto> HandleAsync(Guid jobStepId, FailJobContainerRequest request, CancellationToken cancellationToken)
     {
@@ -22,7 +22,7 @@ public sealed class FailJobContainerHandler(JobExecutionEngine engine, JobQuerie
             throw new DomainValidationException("Say why this container cannot go on.", "container_failure_reason_required");
         }
 
-        await engine.FailContainerAtStepAsync(jobStepId, request.ContainerId, request.Reason.Trim(), cancellationToken);
+        await engine.FailContainerAtStepAsync(jobStepId, request.ContainerId, request.Reason.Trim(), cancellationToken, currentUser.AccountId);
 
         var jobId = await db.JobSteps.AsNoTracking()
             .Where(s => s.Id == jobStepId)

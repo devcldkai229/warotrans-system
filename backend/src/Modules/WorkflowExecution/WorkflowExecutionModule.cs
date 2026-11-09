@@ -65,6 +65,8 @@ public static class WorkflowExecutionModule
         services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
         services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
         services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));
+        services.Configure<Execution.HumanTaskOptions>(configuration.GetSection(Execution.HumanTaskOptions.SectionName));
+        services.AddScoped<Features.HumanTasks.HumanTaskQueries>();
         services.AddSingleton<IJobBatchPlanner>(sp => new CollectThenDeliverJobBatchPlanner(
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JobPlanningOptions>>().Value.MaxContainersPerJob));
         services.AddHostedService<Services.JobBatchContinuationHostedService>();
@@ -120,6 +122,7 @@ public static class WorkflowExecutionModule
         group.MapConfirmJobStep();
         Features.FailJobContainer.FailJobContainerEndpoint.MapFailJobContainer(group);
         Features.RobotActivity.RobotActivityEndpoints.Map(group);
+        Features.HumanTasks.HumanTaskEndpoints.Map(group);
         
         return endpoints;
     }

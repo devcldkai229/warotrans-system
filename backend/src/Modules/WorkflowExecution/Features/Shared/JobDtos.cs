@@ -87,10 +87,15 @@ public sealed record JobStepDto(
     string? ErrorCode,
     string? ErrorMessage,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    Guid? ClaimedBy = null,
+    string? ClaimedByName = null,
+    DateTimeOffset? ClaimExpiresAt = null,
+    DateTimeOffset? DeadlineAt = null,
+    DateTimeOffset? EscalatedAt = null);
 
 /// <summary>Read model for Job APIs (list / detail). JobBatchPlan is never exposed.</summary>
-public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser currentUser)
+public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser currentUser, IAccountNameLookup? accountNames = null)
 {
     public async Task<JobDetailDto> GetDetailAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -113,6 +118,11 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
 
         var orderedSteps = job.JobTasks.OrderBy(t => t.SequenceNo).SelectMany(t => t.JobSteps.OrderBy(s => s.SequenceNo)).ToList();
         var current = orderedSteps.FirstOrDefault(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED));
+        var now = DateTimeOffset.UtcNow;
+        var holders = orderedSteps.Where(s => s.ClaimExpiresAt > now).Select(s => s.ClaimedBy).OfType<Guid>().Distinct().ToList();
+        var claimants = holders.Count == 0 || accountNames is null
+            ? new Dictionary<Guid, string>()
+            : new Dictionary<Guid, string>(await accountNames.GetNamesAsync(holders, cancellationToken));
 
         return new JobDetailDto(
             job.Id,
@@ -153,7 +163,13 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                             return new JobStepDto(
                                 s.Id, s.SequenceNo, w.StepKey, w.Name, s.StepType.ToString(), w.OperationCode,
                                 s.Status.ToString(), s.TargetEndpointId, s.ResolvedInputs, s.OutputValues,
-                                s.ErrorCode, s.ErrorMessage, s.StartedAt, s.CompletedAt);
+                                s.ErrorCode, s.ErrorMessage, s.StartedAt, s.CompletedAt,
+                                // A claim that ran out is nobody's: the scan clears it within seconds, the read does not wait.
+                                s.ClaimExpiresAt > now ? s.ClaimedBy : null,
+                                s.ClaimExpiresAt > now && s.ClaimedBy is { } holder ? claimants.GetValueOrDefault(holder) : null,
+                                s.ClaimExpiresAt > now ? s.ClaimExpiresAt : null,
+                                s.DeadlineAt,
+                                s.EscalatedAt);
                         })
                         .ToList()))
                 .ToList(),

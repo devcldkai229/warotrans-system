@@ -56,7 +56,8 @@ public sealed class JobExecutionEngine(
     ISegmentedTrafficCoordinator? segmentedTraffic = null,
     ITrafficOpsLog? trafficOpsLog = null,
     IIssueReporter? issueReporter = null,
-    IWarehouseModule? warehouse = null)
+    IWarehouseModule? warehouse = null,
+    IOptions<HumanTaskOptions>? humanTasks = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -505,6 +506,15 @@ public sealed class JobExecutionEngine(
         }
 
         var now = DateTimeOffset.UtcNow;
+        EnsureNotClaimedByAnother(step, source.UserId, now);
+        if (source.UserId is { } confirmer && step.ClaimedBy != confirmer)
+        {
+            // Confirming a step nobody holds claims it in the same write: two people at once, one wins.
+            step.ClaimedBy = confirmer;
+            step.ClaimedAt = now;
+            step.ClaimVersion++;
+        }
+
         var note = source.Note;
         var handoverType = operation switch
         {
@@ -522,6 +532,8 @@ public sealed class JobExecutionEngine(
                     $"Confirmed container '{containerId}' is not the container of this step ('{expected}').",
                     "handover_container_mismatch");
             }
+
+            await EnsureScannedBarcodeMatchesAsync(source.ScannedBarcode, expected, cancellationToken);
 
             db.HandoverConfirmations.Add(new HandoverConfirmation
             {
@@ -597,6 +609,211 @@ public sealed class JobExecutionEngine(
         return step;
     }
 
+    // ------------------------------------------------------------------ claims (WH-03)
+
+    public const string HumanTaskClaimedCode = "human_task_claimed";
+
+    private static bool ClaimIsLive(JobStep step, DateTimeOffset now) =>
+        step.ClaimedBy is not null && step.ClaimExpiresAt > now;
+
+    /// <summary>A person may act unless someone else holds a live claim. The robot button has no person behind it, so any live claim stops it.</summary>
+    private static void EnsureNotClaimedByAnother(JobStep step, Guid? actor, DateTimeOffset now)
+    {
+        if (ClaimIsLive(step, now) && step.ClaimedBy != actor)
+        {
+            throw new ConflictException("Someone else is handling this step.", HumanTaskClaimedCode);
+        }
+    }
+
+    private async Task EnsureScannedBarcodeMatchesAsync(string? scanned, Guid expected, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(scanned))
+        {
+            return;
+        }
+
+        var container = warehouse is null ? null : (await warehouse.GetContainersAsync([expected], cancellationToken)).FirstOrDefault();
+        if (container is null || !string.Equals(container.Barcode, scanned.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainValidationException(
+                $"Scanned '{scanned.Trim()}' is not the container of this step.",
+                "handover_barcode_mismatch");
+        }
+    }
+
+    private async Task<(Job Job, JobStep Step)> LoadWaitingHumanStepAsync(Guid jobStepId, CancellationToken cancellationToken)
+    {
+        var jobId = await db.JobSteps.AsNoTracking()
+            .Where(s => s.Id == jobStepId)
+            .Select(s => (Guid?)s.JobTask.JobId)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException($"JobStep '{jobStepId}' was not found.", "job_step_not_found");
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        var step = OrderedSteps(job).First(x => x.Step.Id == jobStepId).Step;
+        if (job.Status != JobStatus.RUNNING)
+        {
+            throw new ConflictException($"Job {job.JobNo} is {job.Status}, not RUNNING.", "job_not_running");
+        }
+
+        if (step.StepType != StepType.HUMAN_INTERACTION || step.Status != JobStepStatus.WAITING)
+        {
+            throw new ConflictException("Only a waiting human step can be claimed.", "job_step_not_waiting");
+        }
+
+        return (job, step);
+    }
+
+    private TimeSpan ClaimLease => TimeSpan.FromSeconds(Math.Max(1, humanTasks?.Value.ClaimLeaseSeconds ?? 300));
+
+    /// <summary>Takes a free or expired step, or extends one's own claim. Two people at once: one wins, the other gets 409.</summary>
+    public async Task<JobStep> ClaimHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var (_, step) = await LoadWaitingHumanStepAsync(jobStepId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        EnsureNotClaimedByAnother(step, accountId, now);
+        SetClaim(step, accountId, now);
+        await SaveAndPublishAsync(cancellationToken);
+        return step;
+    }
+
+    public async Task<JobStep> ReleaseHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var (job, step) = await LoadWaitingHumanStepAsync(jobStepId, cancellationToken);
+        if (step.ClaimedBy != accountId || !ClaimIsLive(step, DateTimeOffset.UtcNow))
+        {
+            throw new ConflictException("This step is not claimed by you.", "human_task_not_yours");
+        }
+
+        ClearClaim(step);
+        await OfferAgainAsync(job, step, accountId, cancellationToken);
+        await SaveAndPublishAsync(cancellationToken);
+        return step;
+    }
+
+    /// <summary>An Admin takes over from someone who does not answer. The endpoint checks the permission and records the reason.</summary>
+    public async Task<JobStep> TakeOverHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var (_, step) = await LoadWaitingHumanStepAsync(jobStepId, cancellationToken);
+        SetClaim(step, accountId, DateTimeOffset.UtcNow);
+        await SaveAndPublishAsync(cancellationToken);
+        return step;
+    }
+
+    private void SetClaim(JobStep step, Guid accountId, DateTimeOffset now)
+    {
+        step.ClaimedBy = accountId;
+        step.ClaimedAt = now;
+        step.ClaimExpiresAt = now + ClaimLease;
+        step.ClaimVersion++;
+    }
+
+    private static void ClearClaim(JobStep step)
+    {
+        step.ClaimedBy = null;
+        step.ClaimedAt = null;
+        step.ClaimExpiresAt = null;
+        step.ClaimVersion++;
+    }
+
+    private async Task OfferAgainAsync(Job job, JobStep step, Guid? previous, CancellationToken cancellationToken)
+    {
+        var name = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.Id == step.WorkflowStepId)
+            .Select(s => s.Name)
+            .FirstAsync(cancellationToken);
+        _pendingEvents.Add(new HumanTaskOffered(job.Id, job.JobNo, step.Id, name, previous));
+    }
+
+    // ------------------------------------------------------------------ confirm all (APP-OPS-02)
+
+    /// <summary>
+    /// Confirms the handovers of several Containers. Partial by design: each one is its own confirmation with its own
+    /// result, so a wrong Container changes nothing for the others, and sending the same list again changes nothing.
+    /// Steps run in order, so a Container whose turn never came (after one that was refused) is <c>not_reached</c>.
+    /// </summary>
+    public async Task<IReadOnlyList<HandoverBatchResult>> ConfirmHandoverBatchAsync(
+        Guid jobId,
+        HandoverType type,
+        IReadOnlyList<Guid> containerIds,
+        Guid accountId,
+        string? note,
+        CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        if (job.Status != JobStatus.RUNNING)
+        {
+            throw new ConflictException($"Job {job.JobNo} is {job.Status}, not RUNNING.", "job_not_running");
+        }
+
+        var operation = type == HandoverType.PICKUP ? nameof(HumanActionCode.PICKUP_CONFIRM) : nameof(HumanActionCode.DROPOFF_CONFIRM);
+        var definitions = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+            .ToDictionaryAsync(s => s.Id, s => s.Config.OperationCode, cancellationToken);
+
+        var results = new Dictionary<Guid, HandoverBatchResult>();
+        var pending = containerIds.Distinct().ToList();
+        bool progressed;
+        do
+        {
+            progressed = false;
+            job = await LoadJobAsync(jobId, cancellationToken);
+            foreach (var containerId in pending.ToList())
+            {
+                var match = OrderedSteps(job).FirstOrDefault(x =>
+                    definitions.GetValueOrDefault(x.Step.WorkflowStepId) == operation
+                    && CurrentMovementContextFactory.FromJobTaskContext(x.Task.ContextValues).ContainerId == containerId);
+                if (match.Step is null)
+                {
+                    results[containerId] = new(containerId, null, HandoverBatchOutcomes.Mismatch, "handover_container_mismatch");
+                    pending.Remove(containerId);
+                    continue;
+                }
+
+                switch (match.Step.Status)
+                {
+                    case JobStepStatus.COMPLETED:
+                        results[containerId] = new(containerId, match.Step.Id, HandoverBatchOutcomes.AlreadyConfirmed, null);
+                        pending.Remove(containerId);
+                        continue;
+                    case JobStepStatus.SKIPPED or JobStepStatus.CANCELLED or JobStepStatus.FAILED:
+                        results[containerId] = new(containerId, match.Step.Id, HandoverBatchOutcomes.Refused, "job_step_not_waiting");
+                        pending.Remove(containerId);
+                        continue;
+                    case not JobStepStatus.WAITING:
+                        continue;
+                }
+
+                pending.Remove(containerId);
+                try
+                {
+                    await ConfirmHumanStepAsync(match.Step.Id, containerId, HumanConfirmationSource.StaffApp(accountId, note), cancellationToken);
+                    results[containerId] = new(containerId, match.Step.Id, HandoverBatchOutcomes.Confirmed, null);
+                    progressed = true;
+                }
+                catch (AppException ex)
+                {
+                    db.ChangeTracker.Clear();
+                    var confirmed = await db.JobSteps.AsNoTracking()
+                        .AnyAsync(s => s.Id == match.Step.Id && s.Status == JobStepStatus.COMPLETED, cancellationToken);
+                    results[containerId] = confirmed
+                        ? new(containerId, match.Step.Id, HandoverBatchOutcomes.Confirmed, null)
+                        : new(containerId, match.Step.Id, HandoverBatchOutcomes.Refused, ex.Code);
+                    progressed = confirmed;
+                }
+
+                break;
+            }
+        }
+        while (progressed && pending.Count > 0);
+
+        foreach (var containerId in pending)
+        {
+            results[containerId] = new(containerId, null, HandoverBatchOutcomes.NotReached, null);
+        }
+
+        return containerIds.Distinct().Select(id => results[id]).ToList();
+    }
+
     /// <summary>FailureCode of a Container a person reported failed at its handover (WH-10).</summary>
     public const string ContainerReportedFailedCode = "container_reported_failed";
 
@@ -610,7 +827,8 @@ public sealed class JobExecutionEngine(
         Guid jobStepId,
         Guid containerId,
         string reason,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? actorId = null)
     {
         var stepRef = await db.JobSteps.AsNoTracking()
             .Where(s => s.Id == jobStepId)
@@ -629,6 +847,8 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException("Only a waiting handover step can report its container.", "job_step_not_waiting");
         }
+
+        EnsureNotClaimedByAnother(step, actorId, DateTimeOffset.UtcNow);
 
         var expected = step.ResolvedInputs.TryGetValue("containerId", out var c) && c.ValueKind == JsonValueKind.String
             ? c.GetGuid()
@@ -860,13 +1080,8 @@ public sealed class JobExecutionEngine(
                 await HoldStationForHumanAsync(job, task, step, workflowStep, now, cancellationToken);
                 SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.WAITING, now);
                 // Arm timeout clock — keep hold on miss (no release).
-                var timeoutOutputs = new Dictionary<string, JsonElement>(step.OutputValues)
-                {
-                    ["humanWaitingSince"] = JsonSerializer.SerializeToElement(now),
-                    ["humanConfirmTimeoutSec"] = JsonSerializer.SerializeToElement(
-                        trafficOptions?.Value.HumanConfirmTimeoutSec ?? 300)
-                };
-                step.OutputValues = timeoutOutputs;
+                step.DeadlineAt = now.AddSeconds(trafficOptions?.Value.HumanConfirmTimeoutSec ?? 300);
+                step.EscalatedAt = null;
                 return false;
 
             case StepType.WAIT when operation == nameof(WaitMode.DURATION):
@@ -1758,6 +1973,11 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException("This robot was just given to another Job.", "robot_assigned_to_other_job");
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            _pendingEvents.Clear();
+            throw new ConflictException("Someone else is handling this step.", HumanTaskClaimedCode);
+        }
 
         var toPublish = _pendingEvents.ToList();
         _pendingEvents.Clear();
@@ -1768,6 +1988,8 @@ public sealed class JobExecutionEngine(
                 case JobContainerStatusChanged e: await events.PublishAsync(e, cancellationToken); break;
                 case JobStatusChanged e: await events.PublishAsync(e, cancellationToken); break;
                 case JobStepStatusChanged e: await events.PublishAsync(e, cancellationToken); break;
+                case HumanTaskOffered e: await events.PublishAsync(e, cancellationToken); break;
+                case HumanStepOverdue e: await events.PublishAsync(e, cancellationToken); break;
             }
         }
     }
@@ -2230,65 +2452,91 @@ public sealed class JobExecutionEngine(
     /// </summary>
     public async Task<int> EscalateHumanConfirmTimeoutsAsync(CancellationToken cancellationToken = default)
     {
-        var defaultTimeout = trafficOptions?.Value.HumanConfirmTimeoutSec ?? 300;
         var now = DateTimeOffset.UtcNow;
-        var waiting = await db.Jobs
-            .Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)
-            .Where(j => j.Status == JobStatus.RUNNING)
-            .AsSplitQuery()
+        var jobIds = await db.Jobs.AsNoTracking()
+            .Where(j => j.Status == JobStatus.RUNNING
+                        && j.JobTasks.Any(t => t.JobSteps.Any(s => s.StepType == StepType.HUMAN_INTERACTION && s.Status == JobStepStatus.WAITING)))
+            .Select(j => j.Id)
             .ToListAsync(cancellationToken);
 
-        var escalated = 0;
-        foreach (var job in waiting)
+        var handled = 0;
+        foreach (var jobId in jobIds)
         {
-            foreach (var (task, step) in OrderedSteps(job)
-                         .Where(x => x.Step.Status == JobStepStatus.WAITING && x.Step.StepType == StepType.HUMAN_INTERACTION))
+            var job = await LoadJobAsync(jobId, cancellationToken);
+            if (job.Status != JobStatus.RUNNING)
             {
-                if (step.OutputValues.TryGetValue("humanTimeoutEscalated", out var done) && done.ValueKind == JsonValueKind.True)
+                continue;
+            }
+
+            try
+            {
+            foreach (var (_, step) in OrderedSteps(job)
+                         .Where(x => x.Step.StepType == StepType.HUMAN_INTERACTION && x.Step.Status == JobStepStatus.WAITING))
+            {
+                // A claim ran out: whoever had it did not finish. Offer it again; the robot keeps waiting where it is.
+                if (step.ClaimedBy is { } previous && step.ClaimExpiresAt <= now)
+                {
+                    ClearClaim(step);
+                    await OfferAgainAsync(job, step, previous, cancellationToken);
+                    handled++;
+                }
+
+                step.DeadlineAt ??= (step.StartedAt ?? now).AddSeconds(trafficOptions?.Value.HumanConfirmTimeoutSec ?? 300);
+                if (step.EscalatedAt is not null || step.DeadlineAt > now)
                 {
                     continue;
                 }
 
-                DateTimeOffset since = step.StartedAt ?? now;
-                if (step.OutputValues.TryGetValue("humanWaitingSince", out var sinceEl)
-                    && sinceEl.ValueKind == JsonValueKind.String
-                    && DateTimeOffset.TryParse(sinceEl.GetString(), out var sinceDto))
-                {
-                    since = sinceDto;
-                }
-                var timeoutSec = step.OutputValues.TryGetValue("humanConfirmTimeoutSec", out var tEl)
-                    && tEl.TryGetInt32(out var t)
-                    ? t
-                    : defaultTimeout;
-                if ((now - since).TotalSeconds < timeoutSec)
-                {
-                    continue;
-                }
+                await EscalateOverdueStepAsync(job, step, now, cancellationToken);
+                handled++;
+            }
 
-                var outputs = new Dictionary<string, JsonElement>(step.OutputValues)
-                {
-                    ["humanTimeoutEscalated"] = JsonSerializer.SerializeToElement(true),
-                    ["humanTimeoutAt"] = JsonSerializer.SerializeToElement(now)
-                };
-                step.OutputValues = outputs;
-                trafficOpsLog?.Write(new TrafficOpsEvent(
-                    Guid.NewGuid(), TrafficOpsEventType.Timeout, now,
-                    AssignedRobot(job), job.Id, step.Id, job.MapVersionId, null,
-                    step.OutputValues.TryGetValue("stationResourceId", out var ridEl) ? ridEl.GetString() : null,
-                    null, null, segmentedTraffic?.Epoch, null, "HUMAN_CONFIRM_TIMEOUT"));
-                logger.LogWarning(
-                    "Job {JobNo} step {StepId} HUMAN confirm timeout — hold kept, operator escalation",
-                    job.JobNo, step.Id);
-                escalated++;
+            await SaveAndPublishAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One Job must not hold up the others; the next scan tries it again.
+                logger.LogWarning(ex, "Human step scan failed for Job {JobNo}", job.JobNo);
+                _pendingEvents.Clear();
+                db.ChangeTracker.Clear();
             }
         }
 
-        if (escalated > 0)
+        return handled;
+    }
+
+    /// <summary>
+    /// SY-02: overdue never confirms anything and never releases the robot or its reservations: an owner is told, once.
+    /// The issue is opened first, so if that fails the step is not marked and the next scan tries again (same source key).
+    /// </summary>
+    private async Task EscalateOverdueStepAsync(Job job, JobStep step, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var name = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.Id == step.WorkflowStepId)
+            .Select(s => s.Name)
+            .FirstAsync(cancellationToken);
+        Guid? containerId = step.ResolvedInputs.TryGetValue("containerId", out var c) && c.ValueKind == JsonValueKind.String ? c.GetGuid() : null;
+        if (issueReporter is not null)
         {
-            await db.SaveChangesAsync(cancellationToken);
+            await issueReporter.ReportAsync(
+                new SystemIssueDraft(
+                    $"human-step-overdue:{step.Id}",
+                    job.Id,
+                    job.JobNo,
+                    null,
+                    AssignedRobot(job),
+                    containerId,
+                    $"Nobody finished \"{name}\" of job {job.JobNo} in time. The robot is still waiting there."),
+                cancellationToken);
         }
 
-        return escalated;
+        step.EscalatedAt = now;
+        _pendingEvents.Add(new HumanStepOverdue(job.Id, job.JobNo, step.Id, name, step.ClaimedBy, step.DeadlineAt ?? now));
+        trafficOpsLog?.Write(new TrafficOpsEvent(
+            Guid.NewGuid(), TrafficOpsEventType.Timeout, now,
+            AssignedRobot(job), job.Id, step.Id, job.MapVersionId, null, null, null, null,
+            segmentedTraffic?.Epoch ?? 0, null, "HUMAN_CONFIRM_TIMEOUT"));
+        logger.LogWarning("Job {JobNo}: human step {StepId} is overdue", job.JobNo, step.Id);
     }
 
     private async Task HoldStationForHumanAsync(

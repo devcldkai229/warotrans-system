@@ -42,6 +42,9 @@ public static class Permissions
     /// <summary>Start / resume a Job and confirm its human steps.</summary>
     public const string JobOperate = "job.operate";
     public const string JobPause = "job.pause";
+
+    /// <summary>WH-03: take a human step from whoever holds it. Admin only, with a reason.</summary>
+    public const string HumanTaskTakeover = "job.takeover";
     public const string JobCancel = "job.cancel";
 
     // Fleet
@@ -82,7 +85,7 @@ public static class Permissions
         MapRead, MapWrite,
         WarehouseRead, WarehouseWrite, ContainerCreate, ContainerRecover, VoucherWrite,
         TransportRead, TransportCreate, TransportCancel, TransportReject,
-        WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel,
+        WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel, HumanTaskTakeover,
         RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotStop, RobotManualDrive,
         RobotMaintenance, RobotPower, RobotDiagnostics, TrafficRead, TrafficManage, DispatchOverride,
         NotificationRead, IssueRead, IssueCreate, IssueManage, AuditRead,
