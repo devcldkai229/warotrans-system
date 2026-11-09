@@ -15,6 +15,8 @@ public sealed class JobContainerConfiguration : IEntityTypeConfiguration<JobCont
 
         builder.HasIndex(x => new { x.JobId, x.ContainerId }).IsUnique();
         builder.HasIndex(x => new { x.JobId, x.SequenceNo }).IsUnique();
+        // WH-08: a Detail belongs to exactly one Job (matched by request + Container, rules/02).
+        builder.HasIndex(x => new { x.TransportRequestId, x.ContainerId }).IsUnique();
         builder.HasIndex(x => x.TransportRequestId);
         builder.HasIndex(x => x.ContainerId);
         builder.Property(x => x.FailureCode).HasMaxLength(100);

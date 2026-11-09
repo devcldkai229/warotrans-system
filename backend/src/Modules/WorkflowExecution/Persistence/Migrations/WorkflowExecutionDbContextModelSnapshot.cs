@@ -253,6 +253,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_job_containers_job_id_sequence_no");
 
+                    b.HasIndex("TransportRequestId", "ContainerId")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_job_containers_transport_request_id_container_id");
+
                     b.ToTable("job_containers", "execution");
                 });
 

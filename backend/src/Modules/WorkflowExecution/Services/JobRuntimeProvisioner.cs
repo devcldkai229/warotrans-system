@@ -47,6 +47,24 @@ public sealed class JobRuntimeProvisioner(
         var detailsByContainer = request.Details.ToDictionary(d => d.ContainerId);
         var summaries = new List<ProvisionedJobSummary>();
 
+        // WH-08: queueing again returns the Jobs it already made, even if the limit changed since: never a second set.
+        var existing = await db.Jobs
+            .Include(j => j.JobContainers)
+            .Include(j => j.JobTasks)
+            .ThenInclude(t => t.JobSteps)
+            .AsNoTracking()
+            .Where(j => j.JobContainers.Any(c => c.TransportRequestId == request.TransportRequestId))
+            .ToListAsync(cancellationToken);
+        var covered = existing.SelectMany(j => j.JobContainers).Select(c => c.ContainerId).ToHashSet();
+        if (existing.Count > 0 && request.Details.All(d => covered.Contains(d.ContainerId)))
+        {
+            return new ProvisionJobRuntimeResult(
+                request.TransportRequestId,
+                existing.OrderBy(j => j.ProvisioningKey, StringComparer.Ordinal)
+                    .Select(j => ToSummary(j, j.ProvisioningKey[(j.ProvisioningKey.LastIndexOf(':') + 1)..]))
+                    .ToList());
+        }
+
         foreach (var batch in batches.OrderBy(b => b.SequenceNo))
         {
             summaries.Add(await ProvisionBatchAsync(

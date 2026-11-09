@@ -64,7 +64,10 @@ public static class WorkflowExecutionModule
         services.AddScoped<WorkflowVariableContextBuilder>();
         services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
         services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
-        services.AddSingleton<IJobBatchPlanner, CollectThenDeliverJobBatchPlanner>();
+        services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));
+        services.AddSingleton<IJobBatchPlanner>(sp => new CollectThenDeliverJobBatchPlanner(
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JobPlanningOptions>>().Value.MaxContainersPerJob));
+        services.AddHostedService<Services.JobBatchContinuationHostedService>();
 
         // Job execution (GĐ 3)
         services.AddScoped<JobExecutionEngine>();

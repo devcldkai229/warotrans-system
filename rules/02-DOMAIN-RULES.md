@@ -103,7 +103,7 @@ TransportRequest (+ Details)
   → Job → JobTask → JobStep
 ```
 
-One `TransportRequest` may create **N** `Job`s (batching by robot capacity / zone / priority — planning policy).
+One `TransportRequest` may create **N** `Job`s (batching by robot capacity / zone / priority — planning policy). `JobPlanning:MaxContainersPerJob` limits a Job until each robot has its own capacity (FL-03). A batch has no table of its own: `Job.ProvisioningKey` (`request:BATCH-00n`) and `JobContainer` hold it, and a request + Container is in one Job only. The Jobs of a request run one after the other: after someone starts it, the next starts when the running one ends.
 
 Request↔Job cardinality is expressed only through `JobContainer` (owned by WorkflowExecution / `execution` schema).  
 `Job` must **not** store `TransportRequestId`.  
