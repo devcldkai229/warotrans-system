@@ -105,6 +105,88 @@ public class SemanticCellsParityTests
         };
     }
 
+    private static JsonObject GenerateOriented()
+    {
+        var policy = new TrafficOptions
+        {
+            SemanticCellSizeMeters = 0.1,
+            SemanticHorizonMeters = 4.0,
+            SemanticPathToleranceMeters = 0.15,
+            SemanticLaneHalfWidthMeters = 0.26
+        }.ApplySemanticOverrides(new SemanticTrafficPolicy("fp", Guid.Empty, "", 0, 0, 0, 0, [.. Zones], []));
+        var cases = new JsonArray();
+        foreach (var (name, poses) in Cases.Concat(OrientedCases))
+        {
+            var path = poses.Select(p => new SemanticPlanPose(p[0], p[1], p[2])).ToImmutableArray();
+            cases.Add(new JsonObject
+            {
+                ["name"] = name,
+                ["poses"] = JsonSerializer.SerializeToNode(poses),
+                ["resources"] = JsonSerializer.SerializeToNode(SemanticReservation.CollectResources(policy, path).ToArray())
+            });
+        }
+
+        var bodies = new JsonArray();
+        foreach (var (x, y, heading) in new[] { (0.0, 0.0, 0.0), (1.13, 0.37, 0.4), (-1.5, -1.2, 2.2), (0.25, -0.05, Math.PI / 2) })
+        {
+            var under = new HashSet<string>(StringComparer.Ordinal);
+            SemanticReservation.RectCells(x, y, heading, 0.23, 0.17, policy.EffectiveCellSize, under);
+            bodies.Add(new JsonObject
+            {
+                ["x"] = x,
+                ["y"] = y,
+                ["heading"] = heading,
+                ["halfLength"] = 0.23,
+                ["halfWidth"] = 0.17,
+                ["resources"] = JsonSerializer.SerializeToNode(under.Order(StringComparer.Ordinal).ToArray())
+            });
+        }
+
+        return new JsonObject
+        {
+            ["geometry"] = new JsonObject
+            {
+                ["cellSizeMeters"] = policy.EffectiveCellSize,
+                ["horizonMeters"] = Math.Max(policy.EffectiveCellSize, policy.HorizonMeters),
+                ["sampleStepMeters"] = policy.SampleStepMeters,
+                ["reserveRadiusMeters"] = policy.ReserveRadiusMeters,
+                ["footprintRadiusMeters"] = policy.FootprintRadiusMeters,
+                ["laneHalfWidthMeters"] = policy.LaneHalfWidthMeters,
+                ["footprintHalfLengthMeters"] = policy.FootprintHalfLength,
+                ["footprintHalfWidthMeters"] = policy.FootprintHalfWidth
+            },
+            ["zones"] = JsonSerializer.SerializeToNode(Zones.Select(z => new
+            {
+                code = z.Code,
+                rings = new[] { z.Ring.Select(p => new[] { p.X, p.Y }).ToArray() }
+            }).ToArray()),
+            ["cases"] = cases,
+            ["bodies"] = bodies
+        };
+    }
+
+    private static readonly (string Name, double[][] Poses)[] OrientedCases =
+    [
+        ("along_x_facing", [[0, 0, 0], [3, 0, 0]]),
+        ("start_must_turn", [[0, 0, 1.57], [3, 0, 0]]),
+        ("goal_must_turn", [[0, 0, 0], [3, 0, 1.57]]),
+        ("corner", [[0, 0, 0], [2, 0, 0], [2, 2, 1.57]]),
+        ("diagonal", [[0.03, 0.07, 0.6], [2.03, 1.44, 0.6]])
+    ];
+
+    [Fact]
+    public void Lane_rectangles_match_the_shared_vectors()
+    {
+        var path = Path.Combine(Path.GetDirectoryName(VectorsPath())!, "semantic_oriented_vectors.json");
+        var generated = GenerateOriented();
+        if (Environment.GetEnvironmentVariable("WARO_WRITE_SEMANTIC_VECTORS") == "1")
+        {
+            File.WriteAllText(path, generated.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        Assert.Equal(JsonNode.Parse(File.ReadAllText(path))!.ToJsonString(), generated.ToJsonString());
+    }
+
     [Fact]
     public void Backend_cells_match_the_shared_vectors()
     {

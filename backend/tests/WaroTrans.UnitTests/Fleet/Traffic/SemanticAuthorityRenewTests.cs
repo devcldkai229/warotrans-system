@@ -112,6 +112,97 @@ public class SemanticAuthorityRenewTests
     }
 
     [Fact]
+    public void Unchanged_plan_after_a_lost_extend_sends_the_grant_again()
+    {
+        var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 };
+        var state = new TrafficState(options);
+        state.BeginEpoch(1);
+        var policy = Policy();
+        Assert.True(state.BindSemanticPolicy(policy).Ok);
+        state.CompleteReconciliation([]);
+
+        var robotId = Guid.NewGuid();
+        var first = state.AcquireSemanticPlan(Propose(robotId, policy.SemanticMapFingerprint, 7));
+        Assert.True(first.Granted);
+        state.DrainEvents(); // this EXTEND never reached the robot
+
+        var again = state.AcquireSemanticPlan(Propose(robotId, policy.SemanticMapFingerprint, 7));
+        Assert.True(again.Granted);
+
+        // A RENEW alone is ignored by a robot holding no grant.
+        var resent = state.DrainEvents().Single(e => e.Kind == TrafficEventKind.AuthorityExtended);
+        Assert.Equal(first.Authority!.AuthorityId, resent.Authority.AuthorityId);
+        Assert.True(resent.Authority.Seq > first.Authority.Seq);
+    }
+
+    private static TrafficState BoundWithKeepout()
+    {
+        var state = new TrafficState(new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 });
+        state.BeginEpoch(1);
+        var strip = new SemanticZonePoly(
+            "ZONE-KEEP-OUT",
+            ImmutableArray.Create((0.0, 2.0), (4.0, 2.0), (4.0, 2.05), (0.0, 2.05), (0.0, 2.0)));
+        var policy = Policy() with { KeepoutZones = ImmutableArray.Create(strip) };
+        Assert.True(state.BindSemanticPolicy(policy).Ok);
+        state.CompleteReconciliation([]);
+        return state;
+    }
+
+    private static SemanticPlanProposeRequest ProposeAlong(Guid robotId, long revision, double y) =>
+        new(
+            Guid.NewGuid(), robotId, "RBT-1", "fp-renew", revision,
+            ImmutableArray.Create(new SemanticPlanPose(0.5, y, 0), new SemanticPlanPose(3.5, y, 0)),
+            null, null, null, CommandId: Guid.Empty);
+
+    [Theory]
+    [InlineData(2.02)] // through the strip
+    [InlineData(1.90)] // the body certainly overlaps it at any heading
+    public void Plan_that_overlaps_keep_out_is_rejected(double y)
+    {
+        var result = BoundWithKeepout().AcquireSemanticPlan(ProposeAlong(Guid.NewGuid(), 1, y));
+        Assert.False(result.Granted);
+        Assert.Equal("KEEPOUT_VIOLATION", result.Reason);
+    }
+
+    [Theory]
+    [InlineData(1.75)] // what the planning mask allows
+    [InlineData(1.80)] // same plan after the pose drifted past the mask edge: must not strand the robot
+    public void Plan_clear_of_keep_out_is_granted(double y)
+    {
+        Assert.True(BoundWithKeepout().AcquireSemanticPlan(ProposeAlong(Guid.NewGuid(), 1, y)).Granted);
+    }
+
+    [Fact]
+    public void Keep_out_is_checked_beyond_the_grant_horizon()
+    {
+        var plan = ImmutableArray.Create(
+            new SemanticPlanPose(0.5, -8.0, 0), new SemanticPlanPose(0.5, 2.02, 0));
+        var request = new SemanticPlanProposeRequest(
+            Guid.NewGuid(), Guid.NewGuid(), "RBT-1", "fp-renew", 1, plan, null, null, null, CommandId: Guid.Empty);
+        var result = BoundWithKeepout().AcquireSemanticPlan(request);
+        Assert.Equal("KEEPOUT_VIOLATION", result.Reason);
+    }
+
+    [Fact]
+    public void Robot_blocked_by_an_obstacle_can_run_again_after_it_reports_its_pose()
+    {
+        // NAVIGATION_BLOCKED: the job pauses, the robot is quarantined keeping its cells. Resume sends a new NAVIGATE;
+        // the robot reports its state because it has no grant, and that is what lets it propose again.
+        var state = BoundWithKeepout();
+        var robotId = Guid.NewGuid();
+        var first = Guid.NewGuid();
+        var plan = ProposeAlong(robotId, 1, 1.0) with { CommandId = first };
+        Assert.True(state.AcquireSemanticPlan(plan).Granted);
+        Assert.True(state.CompleteRoute(robotId, false, "NAVIGATION_BLOCKED", null, first, 1.0, 1.0).Ok);
+
+        var resumed = ProposeAlong(robotId, 2, 1.0) with { CommandId = Guid.NewGuid() };
+        Assert.StartsWith("QUARANTINED:", state.AcquireSemanticPlan(resumed).Reason);
+
+        Assert.True(state.ReconcileRobot(robotId, 1.0, 1.0, true, [], robotReportsIdle: false).Ok);
+        Assert.True(state.AcquireSemanticPlan(resumed).Granted);
+    }
+
+    [Fact]
     public void Changed_plan_revision_still_re_acquires()
     {
         var options = new TrafficOptions { Mode = TrafficCoordinatorMode.Semantic, EventLogCapacity = 64 };

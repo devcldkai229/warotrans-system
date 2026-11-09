@@ -59,6 +59,32 @@ public class RobotCommandDomainTests
     }
 
     [Fact]
+    public void Result_timeout_only_from_acked_navigate()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cmd = RobotCommand.CreateNavigate(Guid.NewGuid(), Guid.NewGuid(), "{}", now, null, null);
+        Assert.False(cmd.TryMarkResultTimeout(now)); // still SENT: that is the ACK timeout's job
+        Assert.True(cmd.TryApplyAck(true, null, now));
+        Assert.True(cmd.TryMarkResultTimeout(now));
+        Assert.Equal(RobotCommandStatus.TIMEOUT, cmd.Status);
+        Assert.Equal("RESULT_TIMEOUT", cmd.ErrorCode);
+        Assert.False(cmd.TryMarkResultTimeout(now));
+    }
+
+    [Theory]
+    [InlineData("{}", 600, 600)]
+    [InlineData("not json", 600, 600)]
+    [InlineData("{\"timeoutSeconds\":120}", 600, 600)]
+    [InlineData("{\"timeoutSeconds\":900}", 600, 930)]
+    [InlineData("{}", 5, 30)]
+    public void Result_deadline_leaves_the_robot_its_own_timeout(string payload, int configured, double expected)
+    {
+        Assert.Equal(
+            expected,
+            WaroTrans.Fleet.Services.RobotCommandTimeoutMonitorHostedService.ResultDeadlineSeconds(payload, configured));
+    }
+
+    [Fact]
     public void JobAssignment_lifecycle()
     {
         var now = DateTimeOffset.UtcNow;

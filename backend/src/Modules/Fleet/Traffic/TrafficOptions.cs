@@ -85,6 +85,21 @@ public sealed class TrafficOptions
     public bool AllowStandaloneSemanticPlans { get; set; }
 
     /// <summary>
+    /// 0: every path sample reserves a disc (the body at any heading plus the path tolerance). Above 0: along a straight
+    /// stretch it reserves a rectangle this wide on each side instead, so robots on two lanes side by side do not share
+    /// cells. Needs SemanticCellSizeMeters 0.1: cells must be finer than the gap between the two rectangles. The gate
+    /// then checks the body at its real heading, so it stops a robot that drifts out of the rectangle.
+    /// </summary>
+    public double SemanticLaneHalfWidthMeters { get; set; }
+
+    /// <summary>
+    /// A plan that conflicts is granted up to the conflict instead of not at all, so a robot drives on and waits just
+    /// before the zone or the robot in its way (the gate stops it at the edge of what it holds) rather than where it
+    /// happened to be when the conflict appeared, possibly metres away. Off: all or nothing.
+    /// </summary>
+    public bool SemanticPrefixGrant { get; set; }
+
+    /// <summary>
     /// Grants wait until this host holds the coordinator lease (one coordinator per map) and has announced its epoch
     /// to the robots. Off for in-process tests; on in every deployed host.
     /// </summary>
@@ -93,6 +108,7 @@ public sealed class TrafficOptions
     /// <summary>The one Semantic policy shape both binds (bootstrap and MOVE start) use.</summary>
     public SemanticTrafficPolicy ApplySemanticOverrides(SemanticTrafficPolicy policy) => policy with
     {
+        LaneHalfWidthMeters = SemanticLaneHalfWidthMeters,
         HorizonMeters = SemanticHorizonMeters,
         CellSizeMeters = SemanticCellSizeMeters,
         PathToleranceMeters = SemanticPathToleranceMeters,

@@ -9,6 +9,15 @@ public sealed class CapturingMqttRobotCommandPublisher
 {
     public ConcurrentQueue<TrafficEpochMessage> PublishedEpochs { get; } = new();
 
+    public Task PublishPlanRejectAsync(
+        string robotCode,
+        long planRevision,
+        string? reason,
+        string? waitingReason,
+        string? blocker,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
     public Task PublishEpochAsync(TrafficEpochMessage message, CancellationToken cancellationToken = default)
     {
         PublishedEpochs.Enqueue(message);

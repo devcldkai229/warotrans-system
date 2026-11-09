@@ -15,8 +15,12 @@ public sealed record SemanticTrafficPolicy(
     double FootprintHalfWidth,
     ImmutableArray<SemanticZonePoly> SingleOccupancyZones,
     ImmutableArray<SemanticZonePoly> NoStopZones,
+    /// <summary>KEEP_OUT rings from keepout.json — plans that sweep these are rejected.</summary>
+    ImmutableArray<SemanticZonePoly> KeepoutZones = default,
     /// <summary>How far the robot may drift sideways off its proposed path and stay inside what it reserved.</summary>
-    double PathToleranceMeters = 0.15)
+    double PathToleranceMeters = 0.15,
+    /// <summary>See <see cref="TrafficOptions.SemanticLaneHalfWidthMeters"/>. 0: discs only.</summary>
+    double LaneHalfWidthMeters = 0)
 {
     /// <summary>Circumscribed radius of the (padded) footprint: covers the robot at any heading, so turning in place.</summary>
     public double FootprintRadiusMeters =>
@@ -173,24 +177,190 @@ public static class SemanticReservation
             return [];
         }
 
-        var cellSize = policy.EffectiveCellSize;
-        var horizon = Math.Max(cellSize, policy.HorizonMeters);
-        var radius = policy.ReserveRadiusMeters;
+        var horizon = Math.Max(policy.EffectiveCellSize, policy.HorizonMeters);
         var resources = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (x, y) in SamplePath(poses, policy.SampleStepMeters, horizon))
+        foreach (var sample in SweptSamples(policy, poses, horizon))
         {
+            resources.UnionWith(sample.Resources);
+        }
+
+        return resources.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
+    }
+
+    /// <summary>Every path sample with what is reserved around it: the unit <see cref="CollectResources"/> adds up.</summary>
+    public static List<(double X, double Y, HashSet<string> Resources)> SweptSamples(
+        SemanticTrafficPolicy policy,
+        ImmutableArray<SemanticPlanPose> poses,
+        double horizon)
+    {
+        var samples = SamplePath(poses, policy.SampleStepMeters, horizon);
+        var reachedEnd = samples.Count > 0
+                         && samples[^1].X == poses[^1].X && samples[^1].Y == poses[^1].Y;
+        var swept = new List<(double, double, HashSet<string>)>(samples.Count);
+        for (var i = 0; i < samples.Count; i++)
+        {
+            var (x, y) = samples[i];
+            var resources = new HashSet<string>(StringComparer.Ordinal);
             foreach (var z in policy.SingleOccupancyZones)
             {
-                if (DiscHitsZone(x, y, radius, z.Ring))
+                if (DiscHitsZone(x, y, policy.ReserveRadiusMeters, z.Ring))
                 {
                     resources.Add($"zone:{z.Code}");
                 }
             }
 
-            DiscCells(x, y, radius, cellSize, resources);
+            if (policy.LaneHalfWidthMeters > 0 && StraightHeadingAt(policy, samples, i, poses, reachedEnd) is { } heading)
+            {
+                RectCells(
+                    x, y, heading,
+                    policy.FootprintHalfLength + Math.Max(0, policy.PathToleranceMeters) + policy.SampleStepMeters / 2.0,
+                    policy.LaneHalfWidthMeters,
+                    policy.EffectiveCellSize, resources);
+            }
+            else
+            {
+                DiscCells(x, y, policy.ReserveRadiusMeters, policy.EffectiveCellSize, resources);
+            }
+
+            swept.Add((x, y, resources));
         }
 
-        return resources.OrderBy(x => x, StringComparer.Ordinal).ToImmutableArray();
+        return swept;
+    }
+
+    private const double StraightWindowMeters = 0.25;
+    private static readonly double StraightMaxTurnRad = 15.0 * Math.PI / 180.0;
+
+    private static double AngleBetween(double a, double b) => Math.Abs(Math.Atan2(Math.Sin(a - b), Math.Cos(a - b)));
+
+    /// <summary>
+    /// The heading of the path at this sample, or null where the robot may turn on the spot and needs a disc: near a
+    /// corner, at a start whose pose does not face along the path, at the goal when it has to turn to the final yaw.
+    /// </summary>
+    private static double? StraightHeadingAt(
+        SemanticTrafficPolicy policy,
+        List<(double X, double Y)> samples,
+        int i,
+        ImmutableArray<SemanticPlanPose> poses,
+        bool reachedEnd)
+    {
+        var n = samples.Count;
+        if (n < 2)
+        {
+            return null;
+        }
+
+        var k = (int)Math.Ceiling(StraightWindowMeters / policy.SampleStepMeters);
+        var before = samples[Math.Max(0, i - k)];
+        var after = samples[Math.Min(n - 1, i + k)];
+        var here = samples[i];
+        double? incoming = i > 0 ? Math.Atan2(here.Y - before.Y, here.X - before.X) : null;
+        double? outgoing = i < n - 1 ? Math.Atan2(after.Y - here.Y, after.X - here.X) : null;
+        if (incoming is { } a && outgoing is { } b && AngleBetween(a, b) > StraightMaxTurnRad)
+        {
+            return null;
+        }
+
+        var heading = (outgoing ?? incoming)!.Value;
+        if (i <= k && AngleBetween(poses[0].Yaw, heading) > StraightMaxTurnRad)
+        {
+            return null;
+        }
+
+        if (reachedEnd && i >= n - 1 - k && AngleBetween(poses[^1].Yaw, heading) > StraightMaxTurnRad)
+        {
+            return null;
+        }
+
+        return heading;
+    }
+
+    /// <summary>Every grid cell an oriented rectangle overlaps (separating axes: the grid's two and the rectangle's two).</summary>
+    public static void RectCells(
+        double x, double y, double heading, double halfLength, double halfWidth, double cellSize, HashSet<string> into)
+    {
+        var c = Math.Cos(heading);
+        var s = Math.Sin(heading);
+        var extentX = Math.Abs(c) * halfLength + Math.Abs(s) * halfWidth;
+        var extentY = Math.Abs(s) * halfLength + Math.Abs(c) * halfWidth;
+        var half = cellSize / 2.0;
+        var cellAlong = half * (Math.Abs(c) + Math.Abs(s));
+        for (var ix = (int)Math.Floor((x - extentX) / cellSize); ix <= (int)Math.Floor((x + extentX) / cellSize); ix++)
+        {
+            for (var iy = (int)Math.Floor((y - extentY) / cellSize); iy <= (int)Math.Floor((y + extentY) / cellSize); iy++)
+            {
+                var dx = (ix + 0.5) * cellSize - x;
+                var dy = (iy + 0.5) * cellSize - y;
+                if (Math.Abs(dx * c + dy * s) <= halfLength + cellAlong && Math.Abs(-dx * s + dy * c) <= halfWidth + cellAlong)
+                {
+                    into.Add(CellId(ix, iy));
+                }
+            }
+        }
+    }
+
+    /// <summary>What a whole proposed path needs, beyond the grant horizon: where another robot must not stop and wait.</summary>
+    public static HashSet<string> WholePathResources(SemanticTrafficPolicy policy, ImmutableArray<SemanticPlanPose> poses)
+    {
+        var resources = new HashSet<string>(StringComparer.Ordinal);
+        if (!poses.IsDefaultOrEmpty)
+        {
+            foreach (var sample in SweptSamples(policy, poses, double.PositiveInfinity))
+            {
+                resources.UnionWith(sample.Resources);
+            }
+        }
+
+        return resources;
+    }
+
+    /// <summary>
+    /// A robot held at this sample may stop here: it ends up within the reserve radius of it, which must touch no
+    /// NO_STOP zone and no single-occupancy zone it was not already in (waiting inside one would block it for nothing).
+    /// </summary>
+    public static bool MayWaitAt(SemanticTrafficPolicy policy, double x, double y, IReadOnlySet<string> zonesAtStart)
+    {
+        var radius = policy.ReserveRadiusMeters;
+        if (!policy.NoStopZones.IsDefaultOrEmpty && policy.NoStopZones.Any(z => DiscHitsZone(x, y, radius, z.Ring)))
+        {
+            return false;
+        }
+
+        return policy.SingleOccupancyZones.IsDefaultOrEmpty
+               || policy.SingleOccupancyZones.All(z =>
+                   zonesAtStart.Contains($"zone:{z.Code}") || !DiscHitsZone(x, y, radius, z.Ring));
+    }
+
+    /// <summary>
+    /// True when the body certainly overlaps a KEEP_OUT ring somewhere along the full proposed path, whatever its
+    /// heading: the path centre comes within half the body width of the ring. This is the backstop, not the margin.
+    /// The planner keeps its distance through the inflated planning mask (0.25 m, more than the footprint radius);
+    /// the gap between the two lets a localization offset of some centimetres through. Rejecting at the footprint
+    /// radius would refuse every replan the moment the robot's own pose drifted past that mask edge, and strand it.
+    /// </summary>
+    public static bool PlanHitsKeepout(
+        SemanticTrafficPolicy policy,
+        ImmutableArray<SemanticPlanPose> poses)
+    {
+        if (poses.IsDefaultOrEmpty || policy.KeepoutZones.IsDefaultOrEmpty)
+        {
+            return false;
+        }
+
+        var radius = Math.Min(policy.FootprintHalfLength, policy.FootprintHalfWidth);
+        var horizon = double.PositiveInfinity; // check whole plan, not just grant horizon
+        foreach (var (x, y) in SamplePath(poses, policy.SampleStepMeters, horizon))
+        {
+            foreach (var z in policy.KeepoutZones)
+            {
+                if (DiscHitsZone(x, y, radius, z.Ring))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -281,8 +451,10 @@ public static class SemanticReservation
             ? fpEl.GetString() ?? ""
             : "";
 
+        var keepoutPath = Path.Combine(mapDir, "keepout.json");
         var zones = LoadZones(singlePath);
         var noStop = LoadZones(noStopPath);
+        var keepout = LoadZones(keepoutPath);
         return new SemanticTrafficPolicy(
             fp,
             mapVersionId,
@@ -292,7 +464,8 @@ public static class SemanticReservation
             FootprintHalfLength: 0.18,
             FootprintHalfWidth: 0.15,
             zones,
-            noStop);
+            noStop,
+            keepout);
     }
 
     private static ImmutableArray<SemanticZonePoly> LoadZones(string path)

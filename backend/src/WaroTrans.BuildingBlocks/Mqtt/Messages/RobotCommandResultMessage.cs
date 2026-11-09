@@ -8,6 +8,8 @@ public sealed class RobotCommandResultMessage
     public string RobotCode { get; set; } = string.Empty;
     public string Outcome { get; set; } = string.Empty;
     public string? ErrorCode { get; set; }
+    /// <summary>Robot-side detail: nav2ErrorCode, arrivalErrorXyM, arrivalErrorYawRad (settled pose vs the goal).</summary>
+    public System.Text.Json.JsonElement? Result { get; set; }
     public DateTimeOffset SentAt { get; set; }
 }
 

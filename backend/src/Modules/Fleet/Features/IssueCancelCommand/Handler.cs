@@ -23,6 +23,57 @@ public sealed class IssueCancelCommandHandler(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    /// <summary>
+    /// The robot reports it still executes a NAVIGATE this backend has closed (aborted while the robot was offline):
+    /// tell it to stop. Sent per report until the robot lets go; one at a time, and never for an unknown or open command.
+    /// </summary>
+    public async Task<bool> CancelOrphanAsync(Guid robotId, Guid targetCommandId, CancellationToken cancellationToken)
+    {
+        var target = await db.RobotCommands.AsNoTracking().FirstOrDefaultAsync(
+            c => c.Id == targetCommandId && c.RobotId == robotId && c.Type == RobotCommandType.NAVIGATE_TO_POSE,
+            cancellationToken);
+        if (target is null || target.IsInFlight)
+        {
+            return false;
+        }
+
+        var pending = await db.RobotCommands.AnyAsync(
+            c => c.RobotId == robotId && c.Type == RobotCommandType.CANCEL && c.TargetCommandId == targetCommandId
+                 && c.Status == RobotCommandStatus.SENT,
+            cancellationToken);
+        var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == robotId, cancellationToken);
+        if (pending || robot is null)
+        {
+            return false;
+        }
+
+        var utcNow = DateTimeOffset.UtcNow;
+        var commandId = Guid.NewGuid();
+        var payload = new CancelCommandPayload { TargetCommandId = targetCommandId };
+        db.RobotCommands.Add(RobotCommand.CreateCancel(
+            robotId, commandId, targetCommandId, JsonSerializer.Serialize(payload, JsonOptions), utcNow,
+            target.JobAssignmentId, target.JobStepId));
+        await db.SaveChangesAsync(cancellationToken);
+        await db.PublishAndStampAsync(
+            publisher,
+            new RobotCommandMessage
+            {
+                SchemaVersion = 1,
+                MessageId = Guid.NewGuid(),
+                CommandId = commandId,
+                RobotCode = robot.Code,
+                Type = RobotCommandTypes.Cancel,
+                IssuedAt = utcNow,
+                JobAssignmentId = target.JobAssignmentId,
+                JobStepId = target.JobStepId,
+                Payload = JsonSerializer.SerializeToElement(payload, JsonOptions)
+            },
+            robotId,
+            releasesRobot: false,
+            cancellationToken);
+        return true;
+    }
+
     public async Task<IssueCancelCommandResponse> HandleAsync(
         Guid robotId,
         IssueCancelCommandRequest request,

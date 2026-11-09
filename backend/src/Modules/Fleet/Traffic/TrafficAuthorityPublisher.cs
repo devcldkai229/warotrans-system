@@ -332,7 +332,10 @@ public sealed class TrafficAuthorityPublisher(
             HorizonMeters = Math.Max(policy.EffectiveCellSize, policy.HorizonMeters),
             SampleStepMeters = policy.SampleStepMeters,
             ReserveRadiusMeters = policy.ReserveRadiusMeters,
-            FootprintRadiusMeters = policy.FootprintRadiusMeters
+            FootprintRadiusMeters = policy.FootprintRadiusMeters,
+            LaneHalfWidthMeters = policy.LaneHalfWidthMeters,
+            FootprintHalfLengthMeters = policy.FootprintHalfLength,
+            FootprintHalfWidthMeters = policy.FootprintHalfWidth
         };
     }
 

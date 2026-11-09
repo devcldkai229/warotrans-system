@@ -34,4 +34,9 @@ public sealed class MqttOptions
     public int HeartbeatTimeoutSeconds { get; set; } = 5;
     /// <summary>Max wait for command_ack after publish (counted from RobotCommand.PublishedAt).</summary>
     public int CommandAckTimeoutSeconds { get; set; } = 10;
+    /// <summary>
+    /// Max wait for command_result after ACK/RUNNING (NAVIGATE only). 0 disables.
+    /// Lab default keeps long moves from hanging forever without a RESULT.
+    /// </summary>
+    public int CommandResultTimeoutSeconds { get; set; } = 600;
 }
