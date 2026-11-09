@@ -260,6 +260,62 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.ToTable("job_containers", "execution");
                 });
 
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRobotAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("end_reason");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<string>("StartReason")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("start_reason");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_job_robot_assignments");
+
+                    b.HasIndex("JobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_job_robot_assignments_active_job")
+                        .HasFilter("ended_at IS NULL");
+
+                    b.HasIndex("RobotId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_job_robot_assignments_active_robot")
+                        .HasFilter("ended_at IS NULL");
+
+                    b.HasIndex("JobId", "StartedAt")
+                        .HasDatabaseName("i_x_job_robot_assignments_job_id_started_at");
+
+                    b.HasIndex("RobotId", "StartedAt")
+                        .HasDatabaseName("i_x_job_robot_assignments_robot_id_started_at");
+
+                    b.ToTable("job_robot_assignments", "execution");
+                });
+
             modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobStep", b =>
                 {
                     b.Property<Guid>("Id")
@@ -575,6 +631,18 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("f_k_job_containers_jobs_job_id");
+
+                    b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRobotAssignment", b =>
+                {
+                    b.HasOne("WaroTrans.WorkflowExecution.Entities.Job", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_job_robot_assignments_jobs_job_id");
 
                     b.Navigation("Job");
                 });

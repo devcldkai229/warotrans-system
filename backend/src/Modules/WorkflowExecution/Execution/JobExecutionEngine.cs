@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Contracts;
@@ -15,6 +16,7 @@ using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Persistence;
+using WaroTrans.WorkflowExecution.Persistence.Configurations;
 using WaroTrans.WorkflowExecution.Runtime;
 
 namespace WaroTrans.WorkflowExecution.Execution;
@@ -78,7 +80,7 @@ public sealed class JobExecutionEngine(
     /// <summary>Assigns a robot (given or best available on the Job's map) and starts executing.</summary>
     /// <summary>
     /// FL-02: choosing a robot and saving the assignment is one critical section, so two Jobs started at the same
-    /// moment cannot both take the same free robot (single backend instance; the busy check reads committed Jobs).
+    /// moment normally see each other. FL-04: across instances the unique index on JobRobotAssignment decides.
     /// </summary>
     private static readonly SemaphoreSlim DispatchGate = new(1, 1);
 
@@ -134,8 +136,22 @@ public sealed class JobExecutionEngine(
         {
             robot = await fleet.GetRobotAsync(requested, cancellationToken)
                 ?? throw new NotFoundException($"Robot '{requested}' was not found.", "robot_not_found");
-            EnsureRobotCanTakeJob(robot, job, busyRobots);
-            EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
+            try
+            {
+                EnsureRobotCanTakeJob(robot, job, busyRobots);
+                EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
+            }
+            catch (AppException refused)
+            {
+                // BOTH-03: an operator's choice that was refused is part of the Job's history.
+                await fleet.RecordDispatchDecisionAsync(
+                    new DispatchDecisionRecord(job.Id, requested, DispatchTriggers.Start, dispatchOverride?.ActorId, dispatchOverride?.Reason, candidates)
+                    {
+                        RefusalCode = refused.Code ?? "refused"
+                    },
+                    cancellationToken);
+                throw;
+            }
         }
         else
         {
@@ -220,16 +236,23 @@ public sealed class JobExecutionEngine(
             throw new ConflictException($"Robot {robot.Code} battery is below the dispatch minimum.", DispatchReasons.BatteryLow);
         }
 
-        await fleet.RecordDispatchDecisionAsync(
-            new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Resume, null, null, resumeCandidates), cancellationToken);
-
         if (previousRobot is { } previous && previous != robot.Id
             && job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
         {
+            // BOTH-03: recorded as refused, never as a robot that was selected.
+            await fleet.RecordDispatchDecisionAsync(
+                new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Resume, null, null, resumeCandidates)
+                {
+                    RefusalCode = "payload_recovery_required"
+                },
+                cancellationToken);
             throw new ConflictException(
                 $"Job {job.JobNo} has containers on its previous robot; transfer them first (payload recovery).",
                 "payload_recovery_required");
         }
+
+        await fleet.RecordDispatchDecisionAsync(
+            new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Resume, null, null, resumeCandidates), cancellationToken);
 
         var workflowSteps = await db.WorkflowSteps.AsNoTracking()
             .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
@@ -1584,7 +1607,19 @@ public sealed class JobExecutionEngine(
 
     private async Task SaveAndPublishAsync(CancellationToken cancellationToken)
     {
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await SaveWithAssignmentsAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: JobRobotAssignmentConfiguration.ActivePerRobotIndex or JobRobotAssignmentConfiguration.ActivePerJobIndex
+        })
+        {
+            throw new ConflictException("This robot was just given to another Job.", "robot_assigned_to_other_job");
+        }
+
         var toPublish = _pendingEvents.ToList();
         _pendingEvents.Clear();
         foreach (var integrationEvent in toPublish)
@@ -1638,6 +1673,67 @@ public sealed class JobExecutionEngine(
         }
 
         return outputs;
+    }
+
+    /// <summary>
+    /// FL-04: every save makes JobRobotAssignment agree with the Jobs it changes, whichever path changed them. The old
+    /// row must be closed before the new one is written (EF does not order writes around a filtered index), so a
+    /// hand-over is two saves in one transaction: nothing is seen half done.
+    /// </summary>
+    private async Task SaveWithAssignmentsAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var toAdd = new List<JobRobotAssignment>();
+        var closedOne = false;
+        foreach (var job in db.ChangeTracker.Entries<Job>()
+                     .Where(e => e.State is EntityState.Added or EntityState.Modified)
+                     .Select(e => e.Entity)
+                     .ToList())
+        {
+            var wanted = ActiveJobStatuses.Contains(job.Status) ? AssignedRobot(job) : null;
+            var current = await db.JobRobotAssignments.FirstOrDefaultAsync(a => a.JobId == job.Id && a.EndedAt == null, cancellationToken);
+            if (current?.RobotId == wanted)
+            {
+                continue;
+            }
+
+            if (current is not null)
+            {
+                current.EndedAt = now;
+                current.EndReason = wanted is null ? job.Status.ToString() : JobRobotAssignmentReasons.Reassigned;
+                closedOne = true;
+            }
+
+            if (wanted is { } robotId)
+            {
+                toAdd.Add(new JobRobotAssignment
+                {
+                    Id = Guid.NewGuid(),
+                    JobId = job.Id,
+                    RobotId = robotId,
+                    StartReason = current is null ? JobRobotAssignmentReasons.Start : JobRobotAssignmentReasons.Reassign,
+                    StartedAt = now
+                });
+            }
+        }
+
+        if (!closedOne || toAdd.Count == 0)
+        {
+            db.JobRobotAssignments.AddRange(toAdd);
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await db.SaveChangesAsync(cancellationToken);
+        db.JobRobotAssignments.AddRange(toAdd);
+        await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     /// <summary>An operator who dispatches a robot the policy would not pick automatically (FL-02).</summary>
@@ -1704,10 +1800,11 @@ public sealed class JobExecutionEngine(
 
     private async Task<HashSet<Guid>> RobotsBusyWithOtherJobsAsync(Guid jobId, CancellationToken cancellationToken)
     {
-        var active = await db.Jobs.AsNoTracking()
-            .Where(j => j.Id != jobId && ActiveJobStatuses.Contains(j.Status))
+        var busy = await db.JobRobotAssignments.AsNoTracking()
+            .Where(a => a.EndedAt == null && a.JobId != jobId)
+            .Select(a => a.RobotId)
             .ToListAsync(cancellationToken);
-        return active.Select(AssignedRobot).OfType<Guid>().ToHashSet();
+        return busy.ToHashSet();
     }
 
     /// <summary>

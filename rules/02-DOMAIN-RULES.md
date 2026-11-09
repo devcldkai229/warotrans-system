@@ -134,6 +134,10 @@ CANCELLED
 | DELIVERED | COMPLETED |
 | FAILED | FAILED |
 | CANCELLED | CANCELLED (replan back to QUEUED — decide later) |
+## Job and robot (FL-04)
+
+A Job holds one robot at a time and a robot one Job at a time: `execution.job_robot_assignments` has a unique index on each, over rows with no `EndedAt`. Every engine save keeps those rows in line with the Job. Handing a Job to another robot closes one row and opens another, so the history stays. Several robots on one request means several Jobs, and the request ends when they all have.
+
 ## Job state machine
 ```text
 CREATED

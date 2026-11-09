@@ -103,7 +103,7 @@ export type AssignmentEndReason =
 
 export type RobotStateEventSource = 'SYSTEM' | 'HEARTBEAT' | 'DISPATCHER' | 'OPERATOR' | 'ROBOT'
 
-export type DispatchDecisionType = 'SELECTED' | 'NONE'
+export type DispatchDecisionType = 'SELECTED' | 'NONE' | 'REFUSED'
 
 export type StepType = 'CHECK' | 'MOVE' | 'HUMAN_INTERACTION' | 'WAIT'
 
@@ -329,6 +329,8 @@ export interface DispatchDecision {
   trigger: 'START' | 'RESUME'
   actorId: string | null
   overrideReason: string | null
+  /** Set when the named robot was refused (type REFUSED). */
+  refusalCode?: string | null
   createdAt: string
   candidates: DispatchCandidate[]
 }

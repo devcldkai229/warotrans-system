@@ -14,6 +14,7 @@ public sealed class WorkflowExecutionDbContext(DbContextOptions<WorkflowExecutio
     public DbSet<JobTask> JobTasks => Set<JobTask>();
     public DbSet<JobStep> JobSteps => Set<JobStep>();
     public DbSet<HandoverConfirmation> HandoverConfirmations => Set<HandoverConfirmation>();
+    public DbSet<JobRobotAssignment> JobRobotAssignments => Set<JobRobotAssignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

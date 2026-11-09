@@ -53,6 +53,11 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("override_reason");
 
+                    b.Property<string>("RefusalCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("refusal_code");
+
                     b.Property<Guid?>("RobotId")
                         .HasColumnType("uuid")
                         .HasColumnName("robot_id");

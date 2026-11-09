@@ -16,6 +16,10 @@ public interface IFleetModule
     /// </summary>
     Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default);
 
+    /// <summary>BOTH-01: the robot's most recent command, whatever its kind. Null when it has none.</summary>
+    Task<RobotCommandSummary?> GetLatestCommandAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<RobotCommandSummary?>(null);
+
     /// <summary>Robots that may take new work on a map (FL-01 eligible, ignoring other Jobs); best first.</summary>
     Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,
@@ -116,6 +120,8 @@ public sealed record RobotSnapshot(
     bool MotionHeld = false,
     bool InManualMode = false,
     DateTimeOffset? BatteryMeasuredAt = null);
+
+public sealed record RobotCommandSummary(Guid Id, string Type, string Status, DateTimeOffset IssuedAt, DateTimeOffset? AckedAt, DateTimeOffset? CompletedAt);
 
 /// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
 public sealed record RouteGrantSnapshot(string GraphHash, IReadOnlyList<int> EdgeIds);

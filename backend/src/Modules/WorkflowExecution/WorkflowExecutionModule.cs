@@ -80,6 +80,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<ConfirmJobStepHandler>();
         services.AddScoped<JobSummaryEnricher>();
         services.AddScoped<Features.FailJobContainer.FailJobContainerHandler>();
+        services.AddScoped<Features.RobotActivity.RobotActivityQueries>();
         services.AddHostedService<HumanConfirmTimeoutHostedService>();
         services.AddHostedService<Services.WaitStepWakeupHostedService>();
 
@@ -118,6 +119,7 @@ public static class WorkflowExecutionModule
         WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobEndpoint.MapPauseJob(group);
         group.MapConfirmJobStep();
         Features.FailJobContainer.FailJobContainerEndpoint.MapFailJobContainer(group);
+        Features.RobotActivity.RobotActivityEndpoints.Map(group);
         
         return endpoints;
     }

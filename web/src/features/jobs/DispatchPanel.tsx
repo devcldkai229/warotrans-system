@@ -99,7 +99,7 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
         </thead>
         <tbody>
           {(candidates.data ?? []).map((c) => {
-            const chosen = last?.selectedRobotId === c.robotId
+            const chosen = last?.type === 'SELECTED' && last.selectedRobotId === c.robotId
             return (
               <tr key={c.robotId} className={cx('border-t border-outline-soft', chosen && 'bg-blue-soft/40')}>
                 <td className="py-2 font-mono">

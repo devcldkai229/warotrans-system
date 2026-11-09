@@ -19,5 +19,8 @@ public sealed class DispatchDecision
 
     /// <summary>Set when an operator dispatched a robot that was not eligible (battery unknown / stale only).</summary>
     public string? OverrideReason { get; set; }
+
+    /// <summary>BOTH-03: why the robot was refused, for Type REFUSED.</summary>
+    public string? RefusalCode { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

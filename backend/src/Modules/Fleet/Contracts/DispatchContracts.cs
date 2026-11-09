@@ -54,7 +54,11 @@ public sealed record DispatchDecisionRecord(
     string Trigger,
     Guid? ActorId,
     string? OverrideReason,
-    IReadOnlyList<DispatchCandidate> Candidates);
+    IReadOnlyList<DispatchCandidate> Candidates)
+{
+    /// <summary>Set when <see cref="SelectedRobotId"/> was named but refused; that robot was not assigned.</summary>
+    public string? RefusalCode { get; init; }
+}
 
 public sealed record DispatchDecisionView(
     Guid Id,
@@ -65,7 +69,8 @@ public sealed record DispatchDecisionView(
     Guid? ActorId,
     string? OverrideReason,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<DispatchCandidate> Candidates);
+    IReadOnlyList<DispatchCandidate> Candidates,
+    string? RefusalCode = null);
 
 public static class DispatchTriggers
 {
