@@ -7,19 +7,26 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Warehouse.Contracts;
+using WaroTrans.Warehouse.Features.AddStockVoucherLines;
+using WaroTrans.Warehouse.Features.CancelStockVoucher;
+using WaroTrans.Warehouse.Features.ConfirmStockVoucher;
 using WaroTrans.Warehouse.Features.CreateContainer;
 using WaroTrans.Warehouse.Features.CreateProduct;
 using WaroTrans.Warehouse.Features.CreateProductCategory;
+using WaroTrans.Warehouse.Features.CreateStockVoucher;
 using WaroTrans.Warehouse.Features.CreateStorageLocation;
 using WaroTrans.Warehouse.Features.CreateWarehouse;
 using WaroTrans.Warehouse.Features.GetContainer;
 using WaroTrans.Warehouse.Features.GetProductInventoryContext;
+using WaroTrans.Warehouse.Features.GetStockVoucher;
 using WaroTrans.Warehouse.Features.ListContainers;
 using WaroTrans.Warehouse.Features.ListInventory;
 using WaroTrans.Warehouse.Features.ListProductCategories;
 using WaroTrans.Warehouse.Features.ListProducts;
+using WaroTrans.Warehouse.Features.ListStockVouchers;
 using WaroTrans.Warehouse.Features.ListStorageLocations;
 using WaroTrans.Warehouse.Features.ListWarehouses;
+using WaroTrans.Warehouse.Features.RemoveStockVoucherLine;
 using WaroTrans.Warehouse.Features.ResolveProduct;
 using WaroTrans.Warehouse.Features.SetProductStatus;
 using WaroTrans.Warehouse.Features.SetStorageLocationStatus;
@@ -53,9 +60,16 @@ public static class WarehouseModule
         services.AddScoped<SetProductStatusHandler>();
         services.AddScoped<ListProductCategoriesHandler>();
         services.AddScoped<CreateProductCategoryHandler>();
+        services.AddScoped<CreateStockVoucherHandler>();
+        services.AddScoped<ListStockVouchersHandler>();
+        services.AddScoped<AddStockVoucherLinesHandler>();
+        services.AddScoped<RemoveStockVoucherLineHandler>();
+        services.AddScoped<ConfirmStockVoucherHandler>();
+        services.AddScoped<CancelStockVoucherHandler>();
 
         services.AddScoped<IWarehouseModule, WarehouseModuleApi>();
         services.AddScoped<IStorageLocationEndpointRebinder, StorageLocationEndpointRebinder>();
+        services.AddScoped<IContainerMovementRecorder, ContainerMovementRecorder>();
 
         return services;
     }
@@ -73,9 +87,19 @@ public static class WarehouseModule
         group.MapListInventory();
         group.MapListProducts();
         group.MapCreateProduct();
+        // Receiving: scanned supplier barcode / SKU -> Product, and where that Product is stored.
+        ResolveProductEndpoint.Map(group);
+        GetProductInventoryContextEndpoint.Map(group);
         group.MapSetProductStatus();
         group.MapListProductCategories();
         group.MapCreateProductCategory();
+        group.MapListStockVouchers();
+        group.MapGetStockVoucher();
+        group.MapCreateStockVoucher();
+        group.MapAddStockVoucherLines();
+        group.MapRemoveStockVoucherLine();
+        group.MapConfirmStockVoucher();
+        group.MapCancelStockVoucher();
         GetContainerEndpoint.Map(group);
         // Receiving: was mapped in 3a8dc58 and lost when the module's endpoints were regrouped, so no client could
         // register a container (and therefore never create a Transport Request).

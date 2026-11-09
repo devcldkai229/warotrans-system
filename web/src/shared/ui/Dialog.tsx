@@ -47,18 +47,20 @@ interface DialogProps {
   onSubmit: () => void
   /** True while the save runs: the submit button is disabled and says so. */
   busy?: boolean
+  /** Tailwind width class of the card, for forms that list wide rows. */
+  width?: string
   children: ReactNode
 }
 
 /** Modal form used by the admin screens. The caller owns validation and the actual save. */
-export function Dialog({ title, submitLabel, onClose, onSubmit, busy = false, children }: DialogProps) {
+export function Dialog({ title, submitLabel, onClose, onSubmit, busy = false, width, children }: DialogProps) {
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     onSubmit()
   }
 
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title={title} onClose={onClose} width={width}>
       <form onSubmit={handleSubmit}>
         <div className="flex flex-col gap-4 px-6 py-5">{children}</div>
         <footer className="flex justify-end gap-2 px-6 pb-6">

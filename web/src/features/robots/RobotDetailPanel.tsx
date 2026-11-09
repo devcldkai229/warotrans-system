@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import type { RobotView } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import { disableRobot, enableRobot } from '@/shared/api/fleet'
+import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
@@ -12,7 +14,6 @@ import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_CONTAINER_STATUS_TONE, JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
-import { ROBOT_JOB_HISTORY, ROBOT_STATE_EVENTS } from './mock'
 
 interface RobotDetailPanelProps {
   robot: RobotView
@@ -21,12 +22,14 @@ interface RobotDetailPanelProps {
   onManual?: () => void
 }
 
-const ACTIONS: { label: string; icon: IconName }[] = [
+/**
+ * Robot commands. Taking a robot out of dispatch is the Disable button above. An action the backend cannot run yet is
+ * shown disabled with its reason instead of doing nothing.
+ */
+const ACTIONS: { label: string; icon: IconName; unavailable?: string }[] = [
   { label: 'Manual', icon: 'gamepad' },
-  { label: 'Localize', icon: 'crosshair' },
+  { label: 'Localize', icon: 'crosshair', unavailable: 'The robot does not accept a re-localize command yet.' },
 ]
-
-const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
 
 const TIMELINE = 'divide-y divide-outline-soft'
 const TIMELINE_NOTE = 'mt-1 block text-xs text-muted'
@@ -51,13 +54,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-// Every section is backed by persisted data: fleet.robots, the active JobAssignment and fleet.robot_state_events.
-function buildSections(robot: RobotView): Section[] {
+type RecentJobs = { state: 'loading' | 'error' | 'ready'; items: JobSummaryDto[] }
+
+// Every section is backed by persisted data: fleet.robots, the active JobAssignment and the robot's Job assignments.
+function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
   const activity = robot.activity
-  const events = ROBOT_STATE_EVENTS.filter((event) => event.robotId === robot.id)
-  const recentJobs = ROBOT_JOB_HISTORY.filter((item) => item.robotId === robot.id)
-    .sort((a, b) => b.assignedAt.localeCompare(a.assignedAt))
-    .slice(0, 5)
+  const recentJobs = recent.items
   const hasTelemetry = Boolean(robot.lastTelemetryAt)
 
   return [
@@ -214,55 +216,43 @@ function buildSections(robot: RobotView): Section[] {
     {
       id: 'recent',
       label: 'Recent jobs',
-      summary: recentJobs.length ? `Last ${recentJobs.length}` : 'No jobs yet',
+      summary: recent.state === 'loading' ? 'Loading…' : recent.state === 'error' ? 'Unavailable' : recentJobs.length ? `Last ${recentJobs.length}` : 'No jobs yet',
       body: recentJobs.length ? (
         <ol className={TIMELINE}>
           {recentJobs.map((item) => {
-            const seconds = secondsBetween(item.assignedAt, item.endedAt)
+            const seconds = secondsBetween(item.startedAt, item.completedAt)
             return (
               <li key={item.id} className="py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  <strong className="font-medium">{item.jobNo}</strong>
-                  <StatusBadge tone={JOB_STATUS_TONE[item.jobStatus]}>{item.jobStatus}</StatusBadge>
+                  <Link to={`/monitor/jobs/${item.id}`} className="font-medium hover:underline">
+                    {item.jobNo}
+                  </Link>
+                  <StatusBadge tone={JOB_STATUS_TONE[item.status]}>{item.status}</StatusBadge>
                 </div>
                 <span className={TIMELINE_NOTE}>
-                  {item.requestCode}, {formatRelativeTime(item.assignedAt)}
-                  {item.endedAt && seconds !== null ? `, ${formatDuration(seconds)}` : ', in progress'}
-                  {item.endReason && item.endReason !== 'COMPLETED' ? `, ${titleCase(item.endReason).toLowerCase()}` : ''}
+                  {formatRelativeTime(item.createdAt)}, {item.containerCount} container{item.containerCount === 1 ? '' : 's'}
+                  {item.completedAt && seconds !== null ? `, ${formatDuration(seconds)}` : item.completedAt ? '' : ', in progress'}
                 </span>
               </li>
             )
           })}
         </ol>
       ) : (
-        <p className={EMPTY}>This robot has not been assigned any job yet.</p>
+        <p className={EMPTY}>
+          {recent.state === 'loading'
+            ? 'Loading jobs…'
+            : recent.state === 'error'
+              ? 'The jobs of this robot could not be loaded.'
+              : 'This robot has not been assigned any job yet.'}
+        </p>
       ),
     },
     {
       id: 'history',
       label: 'State history',
-      summary: events.length ? `${events.length} events` : 'No events',
-      body: events.length ? (
-        <ol className={TIMELINE}>
-          {events.map((event) => (
-            <li key={event.id} className="py-2.5">
-              <div className="flex items-baseline justify-between gap-3">
-                <strong className="font-medium">
-                  {event.fromStatus ? `${titleCase(event.fromStatus)} → ` : ''}
-                  {titleCase(event.toStatus)}
-                </strong>
-                <span className="shrink-0 text-xs text-muted">{formatRelativeTime(event.occurredAt)}</span>
-              </div>
-              <span className={TIMELINE_NOTE}>
-                {titleCase(event.source)}
-                {event.reason ? `: ${event.reason}` : ''}
-              </span>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className={EMPTY}>No state changes recorded.</p>
-      ),
+      // TODO(backend): nothing writes fleet.robot_state_events yet, so there is no history to show.
+      summary: 'Not recorded',
+      body: <p className={EMPTY}>State changes of this robot are not recorded yet.</p>,
     },
   ]
 }
@@ -272,7 +262,15 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
   const { capabilities } = useAuth()
   const mayConfigure = canActOnRobot(capabilities, PERMISSIONS.robotConfigure, robot.id)
   const mayDrive = canActOnRobot(capabilities, PERMISSIONS.robotManualDrive, robot.id)
-  const sections = buildSections(robot)
+  const recentQuery = useQuery({
+    queryKey: ['jobs', 'by-robot', robot.id],
+    queryFn: () => listJobs({ robotId: robot.id, take: 5 }),
+    refetchInterval: 10_000,
+  })
+  const sections = buildSections(robot, {
+    state: recentQuery.isError ? 'error' : recentQuery.data ? 'ready' : 'loading',
+    items: recentQuery.data?.items ?? [],
+  })
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
   const [confirmed, setConfirmed] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -356,23 +354,30 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
           </div>
         ) : null}
 
-        <div className="my-6 grid grid-cols-4 gap-2">
+        <div className="mt-6 grid grid-cols-3 gap-2">
           {ACTIONS.map((action) => (
             <button
               key={action.label}
               type="button"
-              className="group flex flex-col items-center gap-2 text-xs text-ink-2 disabled:opacity-40"
-              disabled={action.label === 'Manual' && !mayDrive}
-              title={action.label === 'Manual' && !mayDrive ? 'You may not drive this robot.' : undefined}
+              className="group flex flex-col items-center gap-2 text-xs text-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={Boolean(action.unavailable) || (action.label === 'Manual' && (!onManual || !mayDrive))}
+              title={action.unavailable ?? (action.label === 'Manual' && !mayDrive ? 'You may not drive this robot.' : undefined)}
               onClick={action.label === 'Manual' ? onManual : undefined}
             >
-              <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-hover:bg-container-higher">
+              <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-enabled:group-hover:bg-container-higher">
                 <Icon name={action.icon} size={18} />
               </span>
               {action.label}
             </button>
           ))}
         </div>
+        <ul className="mt-3 mb-6 flex flex-col gap-1 text-xs text-muted">
+          {ACTIONS.filter((action) => action.unavailable).map((action) => (
+            <li key={action.label}>
+              <span className="font-medium text-ink-2">{action.label}:</span> {action.unavailable}
+            </li>
+          ))}
+        </ul>
 
         {navigationState ? (
           <p className="mb-4 flex items-baseline justify-between gap-4 text-sm">

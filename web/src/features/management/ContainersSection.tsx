@@ -9,7 +9,17 @@ import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import type { ContainerListing } from './api'
 import { SectionHead } from './SectionHead'
 
-const STATUSES: ContainerStatus[] = ['CREATED', 'PACKED', 'RESERVED', 'IN_TRANSIT', 'STORED', 'HOLD', 'EMPTY', 'OUT_OF_SERVICE']
+const STATUSES: ContainerStatus[] = [
+  'CREATED',
+  'PACKED',
+  'RESERVED',
+  'IN_TRANSIT',
+  'STORED',
+  'HOLD',
+  'EMPTY',
+  'OUT_OF_SERVICE',
+  'ISSUED',
+]
 
 /**
  * warehouse.containers, read-only: Containers are created by the receiving flow and their status changes only through

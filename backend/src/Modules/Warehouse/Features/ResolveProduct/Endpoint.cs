@@ -20,6 +20,7 @@ public static class ResolveProductEndpoint
         .RequirePermission(Permissions.WarehouseRead)
         .WithName("ResolveProduct")
         .WithSummary("Resolve a product by supplier barcode or search keyword")
-        .WithDescription("Resolves an active Product via supplier barcode / SKU, or searches products by keyword.");
+        .WithDescription("Resolves an active Product via supplier barcode / SKU, or searches products by keyword.")
+        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
     }
 }

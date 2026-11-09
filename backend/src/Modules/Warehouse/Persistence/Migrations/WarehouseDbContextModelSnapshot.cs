@@ -112,6 +112,7 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnName("storage_location_id");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
@@ -220,6 +221,134 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasDatabaseName("i_x_product_categories_code");
 
                     b.ToTable("product_categories", "warehouse");
+                });
+
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.StockVoucher", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancelled_by");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("ReferenceNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("reference_no");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_stock_vouchers");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_stock_vouchers_code");
+
+                    b.HasIndex("WarehouseId", "Type", "Status")
+                        .HasDatabaseName("i_x_stock_vouchers_warehouse_id_type_status");
+
+                    b.ToTable("stock_vouchers", "warehouse");
+                });
+
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.StockVoucherLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ContainerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_no");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid>("StockVoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stock_voucher_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_stock_voucher_lines");
+
+                    b.HasIndex("ContainerId")
+                        .HasDatabaseName("i_x_stock_voucher_lines_container_id");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("i_x_stock_voucher_lines_product_id");
+
+                    b.HasIndex("StockVoucherId", "ContainerId")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_stock_voucher_lines_stock_voucher_id_container_id");
+
+                    b.HasIndex("StockVoucherId", "LineNo")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_stock_voucher_lines_stock_voucher_id_line_no");
+
+                    b.ToTable("stock_voucher_lines", "warehouse");
                 });
 
             modelBuilder.Entity("WaroTrans.Warehouse.Entities.StorageLocation", b =>
@@ -353,6 +482,41 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.Navigation("Product");
 
                     b.Navigation("StorageLocation");
+                });
+
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.StockVoucherLine", b =>
+                {
+                    b.HasOne("WaroTrans.Warehouse.Entities.Container", "Container")
+                        .WithMany()
+                        .HasForeignKey("ContainerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("f_k_stock_voucher_lines_containers_container_id");
+
+                    b.HasOne("WaroTrans.Warehouse.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("f_k_stock_voucher_lines_products_product_id");
+
+                    b.HasOne("WaroTrans.Warehouse.Entities.StockVoucher", "StockVoucher")
+                        .WithMany("Lines")
+                        .HasForeignKey("StockVoucherId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_stock_voucher_lines_stock_vouchers_stock_voucher_id");
+
+                    b.Navigation("Container");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("StockVoucher");
+                });
+
+            modelBuilder.Entity("WaroTrans.Warehouse.Entities.StockVoucher", b =>
+                {
+                    b.Navigation("Lines");
                 });
 #pragma warning restore 612, 618
         }

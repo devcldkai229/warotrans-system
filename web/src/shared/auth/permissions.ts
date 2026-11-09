@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   warehouseRead: 'warehouse.read',
   warehouseWrite: 'warehouse.write',
   containerCreate: 'container.create',
+  voucherWrite: 'voucher.write',
   transportRead: 'tr.read',
   transportCreate: 'tr.create',
   transportCancel: 'tr.cancel',

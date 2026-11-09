@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.Fleet.Contracts;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Features.Shared;
 
@@ -14,8 +15,10 @@ public static class ListJobsEndpoint
         group.MapGet("/jobs", async (
             string? status,
             Guid? transportRequestId,
+            Guid? robotId,
             int? take,
             JobQueries queries,
+            IFleetModule fleet,
             CancellationToken cancellationToken) =>
         {
             JobStatus? parsed = null;
@@ -32,12 +35,16 @@ public static class ListJobsEndpoint
                 parsed = value;
             }
 
-            var (items, total) = await queries.ListAsync(parsed, transportRequestId, Math.Clamp(take ?? 50, 1, 200), cancellationToken);
+            var limit = Math.Clamp(take ?? 50, 1, 200);
+            // A Job does not store its robot as a column; Fleet's assignments say which Jobs a robot ran. Assignments
+            // can outlive a deleted Job (no cross-module FK), so ask for spare ids; the query keeps `limit` real Jobs.
+            var jobIds = robotId is { } id ? await fleet.GetRecentJobIdsAsync(id, limit * 2, cancellationToken) : null;
+            var (items, total) = await queries.ListAsync(parsed, transportRequestId, limit, cancellationToken, jobIds);
             return Results.Ok(new { items, total });
         })
         .RequirePermission(Permissions.JobRead)
         .WithName("ListJobs")
-        .WithSummary("List Jobs, optionally by status and TransportRequest");
+        .WithSummary("List Jobs, optionally by status, TransportRequest and robot (the robot's most recent Jobs)");
 
         return group;
     }

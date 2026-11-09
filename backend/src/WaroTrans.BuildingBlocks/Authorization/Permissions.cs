@@ -22,6 +22,9 @@ public static class Permissions
     public const string WarehouseWrite = "warehouse.write";
     public const string ContainerCreate = "container.create";
 
+    /// <summary>Open, change, confirm and cancel inbound and outbound stock vouchers.</summary>
+    public const string VoucherWrite = "voucher.write";
+
     // Transportation
     public const string TransportRead = "tr.read";
     public const string TransportCreate = "tr.create";
@@ -74,7 +77,7 @@ public static class Permissions
     [
         UserManage, ConsoleAccess,
         MapRead, MapWrite,
-        WarehouseRead, WarehouseWrite, ContainerCreate,
+        WarehouseRead, WarehouseWrite, ContainerCreate, VoucherWrite,
         TransportRead, TransportCreate, TransportCancel, TransportReject,
         WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel,
         RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotStop, RobotManualDrive,

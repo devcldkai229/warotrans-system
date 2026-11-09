@@ -39,6 +39,7 @@ Role (trong JWT) ──► RolePermissionMatrix (code) ──► permission  ─
 | `console.access` (vào web console) | ✔ | | ✔ |
 | `map.read` / `map.write` | ✔ / ✔ | ✔ / – | ✔ / – |
 | `warehouse.read` / `warehouse.write` / `container.create` | ✔ ✔ ✔ | ✔ – ✔ | ✔ – – |
+| `voucher.write` (lập, sửa, xác nhận, hủy phiếu nhập/xuất) | ✔ | ✔ | – |
 | `tr.read` / `tr.create` | ✔ ✔ | ✔ ✔ | ✔ – |
 | `job.read` / `job.operate` / `job.pause` / `job.cancel` | ✔ ✔ ✔ ✔ | ✔ ✔ ✔ – | ✔ – ✔ – |
 | `robot.read`, `robot.stop` | ✔ | ✔ | ✔ (theo scope) |

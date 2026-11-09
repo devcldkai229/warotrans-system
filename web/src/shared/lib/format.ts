@@ -21,9 +21,12 @@ export function formatClock(iso: string | null | undefined): string {
 }
 
 /** `04m 12s`; hours are folded into minutes because Jobs run for minutes, not days. */
+/** `09m 05s` under an hour, then `2h 05m`, then `3d 4h`, so a long run never reads as thousands of minutes. */
 export function formatDuration(totalSeconds: number): string {
   const seconds = Math.max(0, Math.round(totalSeconds))
-  return `${pad(Math.floor(seconds / 60))}m ${pad(seconds % 60)}s`
+  if (seconds < 3600) return `${pad(Math.floor(seconds / 60))}m ${pad(seconds % 60)}s`
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ${pad(Math.floor((seconds % 3600) / 60))}m`
+  return `${Math.floor(seconds / 86_400)}d ${Math.floor((seconds % 86_400) / 3600)}h`
 }
 
 export function secondsBetween(fromIso: string | null | undefined, toIso?: string | null): number | null {

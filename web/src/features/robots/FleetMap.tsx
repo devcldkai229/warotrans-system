@@ -4,10 +4,10 @@ import type { Edge, Endpoint, RobotView, Zone } from '@/shared/api/contracts'
 import { getTrafficSnapshot, type TrafficSnapshot } from '@/shared/api/fleet'
 import type { MapVersionDto } from '@/shared/api/navigation'
 import type { MapBounds } from '@/shared/lib/mapView'
+import { humanize } from '@/shared/lib/format'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot, type MapTrafficOverlay } from '@/shared/map/WarehouseMap'
 import { findEndpointByName } from '@/shared/map/scene'
 import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
-import { LIVE_MAP_LABEL } from './mock'
 import { RobotPreviewCard } from './RobotPreviewCard'
 
 interface FleetMapProps {
@@ -61,6 +61,10 @@ export function FleetMap({
     retry: false,
   })
   const snap = trafficQuery.data as TrafficSnapshot | undefined
+  // The map version the Fleet page is showing; a draft or archived one is said so, since robots run on the published map.
+  const mapLabel = mapVersion
+    ? `${mapVersion.code} · v${mapVersion.versionNo}${mapVersion.status === 'PUBLISHED' ? '' : ` · ${humanize(String(mapVersion.status))}`}`
+    : 'No map selected'
 
   const trafficOverlay = useMemo<MapTrafficOverlay | null>(() => {
     if (!snap) return null
@@ -182,7 +186,7 @@ export function FleetMap({
       </WarehouseMap>
       <div className="absolute top-3 right-3 z-5 flex h-8 items-center gap-2 rounded-full bg-surface/95 px-3.5 text-xs text-ink-2 shadow-float">
         <span className={`size-1.5 rounded-full ${snap ? 'bg-green' : 'bg-amber'}`} />
-        {snap ? `${LIVE_MAP_LABEL} · traffic e${snap.epoch}` : LIVE_MAP_LABEL}
+        {snap ? `${mapLabel} · traffic e${snap.epoch}` : mapLabel}
       </div>
       {alignDebug ? (
         <MapAlignDebugOverlay

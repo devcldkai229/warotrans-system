@@ -29,6 +29,8 @@ export interface ContainerListItem {
   currentLevelNo: number | null
   supplierPackageBarcode: string | null
   updatedAt: string
+  /** On an open Transport Request, so it cannot go on a stock voucher right now. */
+  inActiveTransport: boolean
 }
 
 export interface ListContainersResponse {
@@ -144,6 +146,117 @@ export function setStorageLocationStatus(id: string, isActive: boolean) {
     method: 'POST',
     body: JSON.stringify({ isActive }),
   })
+}
+
+/* ------------------------------------------------------------------------------------------ stock vouchers */
+
+/** INBOUND = phiếu nhập (PN-), OUTBOUND = phiếu xuất (PX-). */
+export type StockVoucherType = 'INBOUND' | 'OUTBOUND'
+/** Set by people only; robot progress is `doneCount`, read from the Containers. */
+export type StockVoucherStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
+
+export interface StockVoucherListItem {
+  id: string
+  code: string
+  type: StockVoucherType
+  status: StockVoucherStatus
+  referenceNo: string | null
+  note: string | null
+  createdBy: string
+  createdAt: string
+  confirmedAt: string | null
+  updatedAt: string
+  /** The voucher quantity: one line per Container. */
+  containerCount: number
+  /** Containers already on a shelf (inbound) or issued (outbound). */
+  doneCount: number
+}
+
+export interface StockVoucherLine {
+  id: string
+  lineNo: number
+  containerId: string
+  containerBarcode: string
+  containerStatus: ContainerStatus
+  productId: string
+  productSku: string
+  productName: string
+  currentStorageLocationId: string | null
+  currentStorageLocationCode: string | null
+  currentEndpointId: string | null
+  currentLevelNo: number | null
+  done: boolean
+}
+
+export interface StockVoucherProductSummary {
+  productId: string
+  productSku: string
+  productName: string
+  containerCount: number
+  doneCount: number
+}
+
+export interface StockVoucherDetail extends StockVoucherListItem {
+  warehouseId: string
+  warehouseCode: string
+  warehouseName: string
+  confirmedBy: string | null
+  cancelledBy: string | null
+  cancelledAt: string | null
+  products: StockVoucherProductSummary[]
+  lines: StockVoucherLine[]
+}
+
+export function listStockVouchers(params: {
+  warehouseId: string
+  type?: StockVoucherType
+  status?: StockVoucherStatus
+  search?: string
+  take?: number
+}) {
+  const query = new URLSearchParams()
+  query.set('warehouseId', params.warehouseId)
+  if (params.type) query.set('type', params.type)
+  if (params.status) query.set('status', params.status)
+  if (params.search) query.set('search', params.search)
+  if (params.take !== undefined) query.set('take', String(params.take))
+  return apiRequest<{ items: StockVoucherListItem[]; total: number }>(`/api/warehouse/stock-vouchers?${query}`)
+}
+
+export function getStockVoucher(id: string) {
+  return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}`)
+}
+
+export function createStockVoucher(body: { warehouseId: string; type: StockVoucherType; referenceNo?: string; note?: string }) {
+  return apiRequest<StockVoucherDetail>('/api/warehouse/stock-vouchers', { method: 'POST', body: JSON.stringify(body) })
+}
+
+/**
+ * Either name Containers, or (outbound only) ask for `count` stored Containers of a product, oldest first.
+ * Rejects with `voucher_container_on_other_voucher` (409), `not_enough_stored_containers`, `voucher_not_draft` (400).
+ */
+export function addStockVoucherLines(
+  id: string,
+  body: { containerIds: string[] } | { productId: string; count: number },
+) {
+  return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/lines`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function removeStockVoucherLine(id: string, lineId: string) {
+  return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/lines/${lineId}`, { method: 'DELETE' })
+}
+
+/** Rejects with `voucher_lines_required` or `voucher_container_not_eligible` (400). */
+export function confirmStockVoucher(id: string) {
+  return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/confirm`, { method: 'POST' })
+}
+
+/** Only a DRAFT can be cancelled. */
+export function cancelStockVoucher(id: string) {
+  return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/cancel`, { method: 'POST' })
 }
 
 export function listStorageLocations(params: { warehouseId: string; activeOnly?: boolean }) {

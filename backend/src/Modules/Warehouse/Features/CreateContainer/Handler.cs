@@ -6,6 +6,7 @@ using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
+using WaroTrans.Warehouse.Features.Shared;
 using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.Warehouse.Features.CreateContainer;
@@ -36,14 +37,24 @@ public sealed class CreateContainerHandler(
             throw new NotFoundException($"Product with ID '{request.ProductId}' was not found or is inactive.", "product_not_found");
         }
 
+        StorageLocation? initialLocation = null;
         if (request.InitialStorageLocationId.HasValue)
         {
-            var locationExists = await dbContext.StorageLocations
-                .AnyAsync(l => l.Id == request.InitialStorageLocationId.Value && l.IsActive, cancellationToken);
+            initialLocation = await dbContext.StorageLocations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(l => l.Id == request.InitialStorageLocationId.Value && l.IsActive, cancellationToken)
+                ?? throw new NotFoundException($"Storage location with ID '{request.InitialStorageLocationId.Value}' was not found or is inactive.", "storage_location_not_found");
+        }
 
-            if (!locationExists)
+        StockVoucher? voucher = null;
+        if (request.StockVoucherId.HasValue)
+        {
+            voucher = await StockVoucherStore.LoadAsync(dbContext, request.StockVoucherId.Value, cancellationToken);
+            if (voucher.Type != StockVoucherType.INBOUND)
             {
-                throw new NotFoundException($"Storage location with ID '{request.InitialStorageLocationId.Value}' was not found or is inactive.", "storage_location_not_found");
+                throw new DomainValidationException(
+                    $"Voucher {voucher.Code} is not an inbound voucher.",
+                    "voucher_not_inbound");
             }
         }
 
@@ -69,7 +80,16 @@ public sealed class CreateContainerHandler(
         };
 
         dbContext.Containers.Add(container);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (voucher is not null)
+        {
+            StockVoucherStore.EnsureSameWarehouse(voucher, container.Barcode, initialLocation?.WarehouseId);
+            dbContext.StockVoucherLines.Add(voucher.AddLine(container, now));
+            await StockVoucherStore.SaveAsync(dbContext, voucher, cancellationToken);
+        }
+        else
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         logger.LogInformation(
             "Container {ContainerId} with barcode {Barcode} created for product {ProductId} by {AccountId}",

@@ -54,13 +54,15 @@ public sealed class CreateTransportRequestHandler(
         var requestedBy = currentUser.AccountId
             ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
 
-        var details = request.Details!;
+        IReadOnlyList<CreateTransportRequestDetailRequest> details = request.Details!;
 
         await EnsureWarehouseAsync(request.WarehouseId, cancellationToken);
         await EnsureMapVersionAsync(request.WarehouseId, request.MapVersionId, cancellationToken);
         await EnsureEndpointsAsync(request.MapVersionId, details, cancellationToken);
+        details = await AttachShelvesAsync(request.WarehouseId, details, cancellationToken);
         await EnsureStorageLocationsAsync(request.WarehouseId, details, cancellationToken);
-        await EnsureContainersAsync(details, cancellationToken);
+        var containers = await EnsureContainersAsync(details, cancellationToken);
+        await EnsureStockVouchersAsync(request.WarehouseId, details, containers, cancellationToken);
 
         var requestCode = await businessCodeGenerator.NextRequestCodeAsync(cancellationToken: cancellationToken);
 
@@ -178,6 +180,48 @@ public sealed class CreateTransportRequestHandler(
         }
     }
 
+    /// <summary>
+    /// A Detail that names a shelf's Endpoint without its StorageLocation still picks up from / drops on that shelf,
+    /// so the shelf is filled in here: stock then follows the move and the stock-voucher check cannot be skipped by
+    /// choosing the bare Endpoint. The level is left empty (the shelf's default).
+    /// </summary>
+    private async Task<IReadOnlyList<CreateTransportRequestDetailRequest>> AttachShelvesAsync(
+        Guid warehouseId,
+        IReadOnlyList<CreateTransportRequestDetailRequest> details,
+        CancellationToken cancellationToken)
+    {
+        var bareEndpoints = details
+            .SelectMany(d => new[]
+            {
+                d.SourceStorageLocationId.HasValue ? (Guid?)null : d.SourceEndpointId,
+                d.DestinationStorageLocationId.HasValue ? (Guid?)null : d.DestinationEndpointId
+            })
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+        if (bareEndpoints.Count == 0)
+        {
+            return details;
+        }
+
+        var shelfByEndpoint = (await warehouseModule.GetStorageLocationsByEndpointsAsync(warehouseId, bareEndpoints, cancellationToken))
+            .ToDictionary(l => l.EndpointId, l => l.Id);
+        if (shelfByEndpoint.Count == 0)
+        {
+            return details;
+        }
+
+        Guid? ShelfAt(Guid endpointId) => shelfByEndpoint.TryGetValue(endpointId, out var shelf) ? shelf : null;
+
+        return details
+            .Select(d => d with
+            {
+                SourceStorageLocationId = d.SourceStorageLocationId ?? ShelfAt(d.SourceEndpointId),
+                DestinationStorageLocationId = d.DestinationStorageLocationId ?? ShelfAt(d.DestinationEndpointId)
+            })
+            .ToList();
+    }
+
     private async Task EnsureStorageLocationsAsync(
         Guid warehouseId,
         IReadOnlyList<CreateTransportRequestDetailRequest> details,
@@ -234,7 +278,7 @@ public sealed class CreateTransportRequestHandler(
         }
     }
 
-    private async Task EnsureContainersAsync(
+    private async Task<IReadOnlyDictionary<Guid, ContainerSnapshot>> EnsureContainersAsync(
         IReadOnlyList<CreateTransportRequestDetailRequest> details,
         CancellationToken cancellationToken)
     {
@@ -270,6 +314,59 @@ public sealed class CreateTransportRequestHandler(
                 $"Container '{containers[alreadyRequested].Barcode}' is already part of an active TransportRequest.",
                 "container_already_requested");
         }
+
+        return containers;
+    }
+
+    /// <summary>
+    /// Stock only enters or leaves the warehouse on a CONFIRMED StockVoucher of the same warehouse: an unshelved
+    /// Container going onto a shelf needs a phiếu nhập, a shelved one going off-shelf needs a phiếu xuất.
+    /// Shelf-to-shelf relocation and off-shelf moves of unshelved Containers need no voucher.
+    /// </summary>
+    private async Task EnsureStockVouchersAsync(
+        Guid warehouseId,
+        IReadOnlyList<CreateTransportRequestDetailRequest> details,
+        IReadOnlyDictionary<Guid, ContainerSnapshot> containers,
+        CancellationToken cancellationToken)
+    {
+        var required = details
+            .Select(d => (Container: containers[d.ContainerId], Type: RequiredVoucherType(containers[d.ContainerId], d)))
+            .Where(x => x.Type.HasValue)
+            .ToList();
+        if (required.Count == 0)
+        {
+            return;
+        }
+
+        var lines = await warehouseModule.GetConfirmedVoucherLinesAsync(
+            required.Select(x => x.Container.Id).ToList(),
+            cancellationToken);
+
+        foreach (var (container, type) in required)
+        {
+            if (!lines.Any(l => l.ContainerId == container.Id && l.Type == type && l.WarehouseId == warehouseId))
+            {
+                var (kind, code) = type == StockVoucherType.INBOUND
+                    ? ("inbound", "inbound_voucher_required")
+                    : ("outbound", "outbound_voucher_required");
+                throw new DomainValidationException(
+                    $"Container '{container.Barcode}' must be on a CONFIRMED {kind} voucher of this warehouse.",
+                    code);
+            }
+        }
+    }
+
+    private static StockVoucherType? RequiredVoucherType(ContainerSnapshot container, CreateTransportRequestDetailRequest detail)
+    {
+        var shelved = container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: not null };
+        var toShelf = detail.DestinationStorageLocationId.HasValue;
+
+        if (!shelved && toShelf && container.Status is ContainerStatus.CREATED or ContainerStatus.PACKED)
+        {
+            return StockVoucherType.INBOUND;
+        }
+
+        return shelved && !toShelf ? StockVoucherType.OUTBOUND : null;
     }
 
     private static CreateTransportRequestResponse ToResponse(TransportRequest request) =>

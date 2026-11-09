@@ -68,10 +68,12 @@ export interface JobDetailDto extends Omit<JobSummaryDto, 'containerCount'> {
   availableActions: ActionAvailability<'START' | 'PAUSE' | 'RESUME' | 'CANCEL'>[]
 }
 
-export function listJobs(params: { status?: JobStatus; transportRequestId?: string; take?: number } = {}) {
+/** `robotId` lists the Jobs that robot was assigned to, most recent first. */
+export function listJobs(params: { status?: JobStatus; transportRequestId?: string; robotId?: string; take?: number } = {}) {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
   if (params.transportRequestId) query.set('transportRequestId', params.transportRequestId)
+  if (params.robotId) query.set('robotId', params.robotId)
   if (params.take) query.set('take', String(params.take))
   const qs = query.toString()
   return apiRequest<{ items: JobSummaryDto[]; total: number }>(`/api/workflow-execution/jobs${qs ? `?${qs}` : ''}`)

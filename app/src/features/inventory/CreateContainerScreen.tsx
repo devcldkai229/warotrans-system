@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Box, Check, CheckCircle2, ChevronRight, MapPin, Minus, Plus, ScanLine, Search, X } from 'lucide-react-native';
+import { Box, Check, CheckCircle2, ChevronRight, FileText, MapPin, Minus, Plus, ScanLine, Search, X } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { Button, Card, EmptyState, Text, TextField } from '../../shared/ui';
-import { createContainer, getMapVersionDetail, listProductCategories, listProducts, listStorageLocations } from '../../shared/api';
+import { confirmStockVoucher, createContainer, getMapVersionDetail, listProductCategories, listProducts, listStockVouchers, listStorageLocations } from '../../shared/api';
 import type { ProductItem } from '../../shared/api/warehouseApi';
 import { getOperatingContext } from '../../shared/api/operatingContextApi';
 import { getUserErrorMessage } from '../../shared/api/client';
@@ -35,6 +35,13 @@ export function CreateContainerScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<{ barcodes: string[]; requested: number; error: string | null } | null>(null);
+  // Draft phiếu nhập the new Containers go on ('' = none). Putaway needs the voucher CONFIRMED.
+  const [voucherId, setVoucherId] = useState('');
+  const [voucherPicker, setVoucherPicker] = useState(false);
+  const [voucherConfirmed, setVoucherConfirmed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const pending = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -57,6 +64,13 @@ export function CreateContainerScreen() {
       return receivingLocations(locations.items, map);
     },
   });
+  const vouchers = useQuery({
+    queryKey: ['receiving-vouchers', context?.warehouse.id],
+    enabled: !!context,
+    queryFn: () => listStockVouchers({ warehouseId: context!.warehouse.id, type: 'INBOUND', status: 'DRAFT', take: 50 }),
+  });
+  const draftVouchers = vouchers.data?.items ?? [];
+  const voucher = draftVouchers.find(item => item.id === voucherId);
   const locations = receiving.data ?? [];
   const location = locations.find(item => item.id === locationId);
   const contextKey = `${context?.warehouse.id ?? ''}:${context?.map.id ?? ''}`;
@@ -91,7 +105,7 @@ export function CreateContainerScreen() {
     try {
       const result = await registerReceivingBatch(requested, () => {
         if (latestContext.current !== registrationContext) throw new Error('Receiving context changed.');
-        return createContainer({ productId: product.id, supplierPackageBarcode: supplierBarcode.trim() || null, initialStorageLocationId: location.id });
+        return createContainer({ productId: product.id, supplierPackageBarcode: supplierBarcode.trim() || null, initialStorageLocationId: location.id, stockVoucherId: voucherId || null });
       });
       if (!mounted.current) return;
       const error = result.error ? getUserErrorMessage(result.error, 'Registration could not be completed.') : null;
@@ -101,6 +115,24 @@ export function CreateContainerScreen() {
       pending.current = false;
       if (mounted.current) setSubmitting(false);
     }
+  };
+
+  const handleConfirmVoucher = async () => {
+    if (!voucher || confirming) return;
+    setConfirming(true); setVoucherError(null);
+    try {
+      await confirmStockVoucher(voucher.id);
+      if (mounted.current) setVoucherConfirmed(true);
+    } catch (failure) {
+      if (mounted.current) setVoucherError(getUserErrorMessage(failure, 'The voucher could not be confirmed.'));
+    } finally {
+      if (mounted.current) setConfirming(false);
+    }
+  };
+  const receiveMore = () => {
+    // A confirmed voucher takes no more Containers, so it leaves the picker.
+    if (voucherConfirmed) { setVoucherId(''); setVoucherConfirmed(false); void queryClient.invalidateQueries({ queryKey: ['receiving-vouchers'] }); }
+    setVoucherError(null); setReceipt(null); setCount('1'); setSupplierBarcode(''); setFormError(null);
   };
 
   const locationError = operating.error || receiving.error;
@@ -125,8 +157,16 @@ export function CreateContainerScreen() {
             {receipt.error ? <Text variant="caption" color={colors.dangerText}>{receipt.error} Check Inventory before registering the remaining containers.</Text> : null}
             <Text variant="caption" color={colors.textSecondary}>Barcode labels and printing are not configured. Use the registered codes for manual entry.</Text>
           </Card>
+          <Card gap={10}>
+            <View style={styles.sectionHeading}><FileText size={18} color={colors.textSecondary} /><Text variant="label">Inbound Voucher</Text></View>
+            <Text variant="body" color={colors.textSecondary}>{voucher
+              ? voucherConfirmed ? `${voucher.code} is confirmed: its Containers can be put away.` : `Added to ${voucher.code} (draft). Confirm it when every Container is registered; putaway needs a confirmed voucher.`
+              : 'Not on an inbound voucher. Putaway needs one: add these Containers to a voucher on the web first.'}</Text>
+            {voucherError ? <Text accessibilityRole="alert" variant="caption" color={colors.dangerText}>{voucherError}</Text> : null}
+            {voucher && !voucherConfirmed ? <Button title={`Confirm ${voucher.code}`} onPress={handleConfirmVoucher} loading={confirming} disabled={confirming} /> : null}
+          </Card>
           <Button title="Continue To Putaway" onPress={() => navigate('transport_create', { workflow: 'INBOUND_PUTAWAY', container: receipt.barcodes[0], containers: receipt.barcodes })} />
-          <Button title="Receive More Goods" variant="secondary" onPress={() => { setReceipt(null); setCount('1'); setSupplierBarcode(''); setFormError(null); }} />
+          <Button title="Receive More Goods" variant="secondary" onPress={receiveMore} />
         </> : <>
           <Card padding="none">
             <View style={styles.groupHeader}><Text variant="label">Product</Text><Pressable accessibilityRole="button" accessibilityLabel="Scan product barcode" disabled={submitting} onPress={beginScan} style={styles.scanAction}><ScanLine size={18} color={colors.primaryText} /><Text variant="label" color={colors.primaryText}>Scan</Text></Pressable></View>
@@ -143,6 +183,15 @@ export function CreateContainerScreen() {
               <View style={styles.flex}><Text variant="bodyMedium">{location?.name || 'Receiving Location'}</Text><Text variant="caption" color={colors.textSecondary}>{locationMessage}</Text></View><ChevronRight size={18} color={colors.textMuted} />
             </Pressable>
             {locationError ? <Button title="Retry Locations" variant="secondary" size="sm" onPress={() => { void operating.refetch(); void receiving.refetch(); }} /> : receiving.data?.length === 0 ? <Text variant="caption" color={colors.textSecondary}>No receiving location is configured on this map. Ask the warehouse administrator to configure one.</Text> : null}
+          </Card>
+
+          <Card gap={14}>
+            <View style={styles.sectionHeading}><FileText size={18} color={colors.textSecondary} /><Text variant="label">Inbound Voucher</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Choose inbound voucher" disabled={submitting} onPress={() => setVoucherPicker(true)} style={styles.locationChoice}>
+              <View style={styles.flex}><Text variant="bodyMedium">{voucher?.code || 'No Voucher'}</Text><Text variant="caption" color={colors.textSecondary}>{voucher
+                ? `${voucher.referenceNo ? `${voucher.referenceNo} · ` : ''}${voucher.containerCount} Containers so far`
+                : vouchers.error ? 'Vouchers could not be loaded' : draftVouchers.length ? `${draftVouchers.length} draft vouchers open` : 'No draft voucher open'}</Text></View><ChevronRight size={18} color={colors.textMuted} />
+            </Pressable>
           </Card>
 
           <Card gap={16}>
@@ -181,6 +230,12 @@ export function CreateContainerScreen() {
       <FlatList style={styles.catalogList} contentContainerStyle={styles.catalogContent} data={filteredLocations} keyboardShouldPersistTaps="handled" keyExtractor={item => item.id}
         renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: locationId === item.id }} onPress={() => { setLocationId(item.id); setLocationPicker(false); setFormError(null); }} style={[styles.catalogRow, locationId === item.id && styles.catalogSelected]}><View style={styles.flex}><Text variant="bodyMedium">{item.name}</Text><Text variant="caption" color={colors.textSecondary}>{item.code} · {item.endpointCode}</Text></View>{locationId === item.id ? <Check size={18} color={colors.primaryText} /> : null}</Pressable>}
         ListEmptyComponent={<EmptyState compact title={locationError ? 'Locations Unavailable' : receiving.data === undefined ? 'Loading Locations…' : 'No Matching Receiving Locations'} message={locationError ? getUserErrorMessage(locationError, 'Receiving locations could not be loaded.') : 'Only configured locations on the current warehouse map can be used.'} actionTitle={locationError ? 'Retry' : undefined} onAction={() => { void operating.refetch(); void receiving.refetch(); }} />} />
+    </BottomSheet> : null}
+    {voucherPicker ? <BottomSheet onClose={() => setVoucherPicker(false)} accessibilityLabel="inbound vouchers">
+      <View style={styles.sheetHeader}><Text variant="headline">Inbound Voucher</Text><Pressable accessibilityRole="button" accessibilityLabel="Close inbound vouchers" onPress={() => setVoucherPicker(false)} style={styles.closeButton}><X size={20} color={colors.textPrimary} /></Pressable></View>
+      <FlatList style={styles.catalogList} contentContainerStyle={styles.catalogContent} data={[{ id: '', code: 'No Voucher', referenceNo: null as string | null, containerCount: 0 }, ...draftVouchers]} keyExtractor={item => item.id || 'none'}
+        renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: voucherId === item.id }} onPress={() => { setVoucherId(item.id); setVoucherConfirmed(false); setVoucherPicker(false); }} style={[styles.catalogRow, voucherId === item.id && styles.catalogSelected]}><View style={styles.flex}><Text variant="bodyMedium">{item.code}</Text><Text variant="caption" color={colors.textSecondary}>{item.id ? `${item.referenceNo ? `${item.referenceNo} · ` : ''}${item.containerCount} Containers so far` : 'Register without a voucher'}</Text></View>{voucherId === item.id ? <Check size={18} color={colors.primaryText} /> : null}</Pressable>}
+        ListFooterComponent={vouchers.error ? <EmptyState compact title="Vouchers Unavailable" message={getUserErrorMessage(vouchers.error, 'Draft vouchers could not be loaded.')} actionTitle="Retry" onAction={() => { void vouchers.refetch(); }} /> : <Text variant="caption" color={colors.textSecondary}>Only draft inbound vouchers of this warehouse are listed. Create one in Management → Stock vouchers on the web.</Text>} />
     </BottomSheet> : null}
     <BarcodeScannerHUD visible={scannerOpen} title="Scan product barcode" manualLabel="Product or supplier barcode" placeholder="Enter Product Or Supplier Barcode" onClose={() => setScannerOpen(false)} onScanResult={handleScan} />
   </View>;

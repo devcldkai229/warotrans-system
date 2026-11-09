@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Account, Product, ProductCategory } from '@/shared/api/contracts'
 import { listWarehouses } from '@/shared/api/warehouses'
 import { cx } from '@/shared/lib/cx'
+import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
 import { listAccounts } from '@/features/accounts/api'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AccountsSection } from './AccountsSection'
@@ -13,6 +14,8 @@ import { InventorySection } from './InventorySection'
 import { LocationsSection } from './LocationsSection'
 import { ProductsSection } from './ProductsSection'
 import { RolesSection } from './RolesSection'
+import { VOUCHERS_KEY, useStockVouchers } from './stockVouchers'
+import { VouchersSection } from './VouchersSection'
 import { WarehousesSection } from './WarehousesSection'
 import {
   listCategories,
@@ -33,6 +36,7 @@ type TabId =
   | 'categories'
   | 'containers'
   | 'inventory'
+  | 'vouchers'
   | 'locations'
 
 const MENU: { label: string; items: { id: TabId; label: string }[] }[] = [
@@ -51,6 +55,7 @@ const MENU: { label: string; items: { id: TabId; label: string }[] }[] = [
       { id: 'categories', label: 'Categories' },
       { id: 'containers', label: 'Containers' },
       { id: 'inventory', label: 'Inventory' },
+      { id: 'vouchers', label: 'Stock vouchers' },
       { id: 'locations', label: 'Storage locations' },
     ],
   },
@@ -64,6 +69,7 @@ const TAB_IDS: TabId[] = [
   'categories',
   'containers',
   'inventory',
+  'vouchers',
   'locations',
 ]
 
@@ -92,6 +98,7 @@ export function ManagementPage() {
     queryKey: ['warehouses', 'all'],
     queryFn: () => listWarehouses({ take: 100 }),
   })
+  const vouchersQuery = useStockVouchers(locationListing.warehouse?.id ?? null)
 
   useEffect(() => {
     let cancelled = false
@@ -126,37 +133,68 @@ export function ManagementPage() {
     }
   }, [])
 
+  // Containers and stock change when a robot delivers, so both lists reload in place (no "Loading" flash): on mount, when
+  // their tab is opened, and shortly after any Job update (the stock write lands just after the dropoff is confirmed).
+  const mounted = useRef(true)
   useEffect(() => {
-    let cancelled = false
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  const reloadContainers = useCallback(() => {
     listManagedContainers()
       .then((listing) => {
-        if (cancelled) return
+        if (!mounted.current) return
         setContainers(listing)
         setContainerState('ready')
       })
       .catch(() => {
-        if (!cancelled) setContainerState('error')
+        if (mounted.current) setContainerState((current) => (current === 'ready' ? current : 'error'))
       })
-    return () => {
-      cancelled = true
-    }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
+  const reloadInventory = useCallback(() => {
     listManagedInventory()
       .then((listing) => {
-        if (cancelled) return
+        if (!mounted.current) return
         setInventory(listing)
         setInventoryState('ready')
       })
       .catch(() => {
-        if (!cancelled) setInventoryState('error')
+        if (mounted.current) setInventoryState((current) => (current === 'ready' ? current : 'error'))
       })
-    return () => {
-      cancelled = true
-    }
   }, [])
+
+  useEffect(() => {
+    reloadContainers()
+    reloadInventory()
+  }, [reloadContainers, reloadInventory])
+
+  useEffect(() => {
+    if (tab === 'containers') reloadContainers()
+    if (tab === 'inventory') reloadInventory()
+  }, [tab, reloadContainers, reloadInventory])
+
+  const queryClient = useQueryClient()
+  const reloadTimer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current)
+    },
+    [],
+  )
+  const onJobUpdated = useCallback(() => {
+    if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current)
+    reloadTimer.current = window.setTimeout(() => {
+      reloadTimer.current = null
+      reloadContainers()
+      reloadInventory()
+      void queryClient.invalidateQueries({ queryKey: VOUCHERS_KEY })
+    }, 1500)
+  }, [reloadContainers, reloadInventory, queryClient])
+  useNotificationsHub({ jobUpdated: onJobUpdated })
 
   useEffect(() => {
     let cancelled = false
@@ -184,9 +222,10 @@ export function ManagementPage() {
       categories: categories.length,
       containers: containers.total,
       inventory: inventory.items.reduce((sum, row) => sum + row.containerCount, 0),
+      vouchers: vouchersQuery.data?.total ?? 0,
       locations: locationListing.items.length,
     }),
-    [accounts, products, categories, locationListing, containers, inventory, warehousesQuery.data],
+    [accounts, products, categories, locationListing, containers, inventory, warehousesQuery.data, vouchersQuery.data],
   )
 
   return (
@@ -233,6 +272,7 @@ export function ManagementPage() {
             ) : null}
             {tab === 'containers' ? <ContainersSection listing={containers} loadState={containerState} /> : null}
             {tab === 'inventory' ? <InventorySection listing={inventory} loadState={inventoryState} /> : null}
+            {tab === 'vouchers' ? <VouchersSection warehouse={locationListing.warehouse} products={products} /> : null}
             {tab === 'locations' ? (
               <LocationsSection
                 listing={locationListing}

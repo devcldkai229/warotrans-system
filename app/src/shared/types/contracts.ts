@@ -80,7 +80,15 @@ export type ContainerStatus =
   | 'STORED'
   | 'HOLD'
   | 'EMPTY'
-  | 'OUT_OF_SERVICE';
+  | 'OUT_OF_SERVICE'
+  /** Left the warehouse on a confirmed outbound stock voucher; it holds no storage location. */
+  | 'ISSUED';
+
+/** `Warehouse/Enums/StockVoucherType.cs`: INBOUND = phiếu nhập (PN-), OUTBOUND = phiếu xuất (PX-). */
+export type StockVoucherType = 'INBOUND' | 'OUTBOUND';
+
+/** `Warehouse/Enums/StockVoucherStatus.cs`. Set by people only; robot progress is `doneCount`. */
+export type StockVoucherStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
 
 /** `Warehouse/Features/ListWarehouses/Response.cs`. */
 export interface WarehouseListItemResponse {

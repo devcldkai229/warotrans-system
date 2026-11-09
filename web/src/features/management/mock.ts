@@ -45,7 +45,7 @@ export const PRODUCTS: Product[] = [
 
 /** Each location points at one Endpoint of the shared map (an Endpoint can serve only one location). */
 function location(code: string, name: string, endpointName: string, isActive = true): StorageLocationView {
-  const endpoint = findEndpointByName(endpointName)
+  const endpoint = findEndpointByName(endpointName, SCENE_ENDPOINTS)
   if (!endpoint) throw new Error(`Unknown endpoint ${endpointName}`)
   return {
     id: `loc-${code.toLowerCase()}`,

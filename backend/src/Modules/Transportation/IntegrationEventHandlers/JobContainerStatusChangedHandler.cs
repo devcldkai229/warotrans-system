@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.Transportation.Entities;
 using WaroTrans.Transportation.Enums;
 using WaroTrans.Transportation.Features.Shared;
 using WaroTrans.Transportation.IntegrationEvents;
 using WaroTrans.Transportation.Persistence;
+using WaroTrans.Warehouse.Contracts;
 using WaroTrans.WorkflowExecution.Contracts;
 
 namespace WaroTrans.Transportation.IntegrationEventHandlers;
@@ -12,9 +14,11 @@ namespace WaroTrans.Transportation.IntegrationEventHandlers;
 /// <summary>
 /// JobContainer lifecycle (WorkflowExecution) → TransportRequestDetail status (match by RequestId + ContainerId),
 /// then the Request status is re-aggregated from its Details (rules/02 "Request status aggregation").
+/// A COMPLETED Detail is also reported to Warehouse so the Container's location and InventoryStock follow it.
 /// </summary>
 public sealed class JobContainerStatusChangedHandler(
     TransportationDbContext db,
+    IContainerMovementRecorder movements,
     IIntegrationEventPublisher events,
     ILogger<JobContainerStatusChangedHandler> logger) : IIntegrationEventHandler<JobContainerStatusChanged>
 {
@@ -66,6 +70,33 @@ public sealed class JobContainerStatusChangedHandler(
             detail.Status,
             request.Status);
 
+        if (detail.Status == TransportRequestDetailStatus.COMPLETED)
+        {
+            await RecordDeliveryAsync(request.RequestCode, detail, cancellationToken);
+        }
+
         await events.PublishAsync(TransportRequestEvents.Progressed(request, detail), cancellationToken);
+    }
+
+    /// <summary>
+    /// Warehouse updates the Container and InventoryStock in its own transaction (rules/04). The Detail is already
+    /// committed, so a failure here is logged rather than thrown back into the Job runtime.
+    /// </summary>
+    private async Task RecordDeliveryAsync(string requestCode, TransportRequestDetail detail, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await movements.RecordDeliveredAsync(
+                new ContainerDelivery(detail.ContainerId, detail.DestinationStorageLocationId, detail.DestinationLevelNo),
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(
+                exception,
+                "TransportRequest {RequestCode}: container {ContainerId} delivered but Warehouse stock was not updated",
+                requestCode,
+                detail.ContainerId);
+        }
     }
 }

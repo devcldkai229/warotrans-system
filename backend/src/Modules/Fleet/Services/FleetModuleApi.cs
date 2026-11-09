@@ -36,6 +36,17 @@ public sealed class FleetModuleApi(
         return robot is null ? null : ToSnapshot(robot);
     }
 
+    public async Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default) =>
+        await db.JobAssignments
+            .AsNoTracking()
+            .Where(a => a.RobotId == robotId)
+            .GroupBy(a => a.JobId)
+            .Select(g => new { JobId = g.Key, LastAssignedAt = g.Max(a => a.AssignedAt) })
+            .OrderByDescending(x => x.LastAssignedAt)
+            .Take(take)
+            .Select(x => x.JobId)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,
         CancellationToken cancellationToken = default)

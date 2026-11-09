@@ -16,6 +16,17 @@ public interface IWarehouseModule
     Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsAsync(
         IReadOnlyCollection<Guid> storageLocationIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>The active StorageLocations of the Warehouse that sit on these Endpoints (one per Endpoint at most).</summary>
+    Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsByEndpointsAsync(
+        Guid warehouseId,
+        IReadOnlyCollection<Guid> endpointIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The CONFIRMED StockVoucher lines that hold these Containers (a Container may be on one of each type).</summary>
+    Task<IReadOnlyList<ContainerVoucherSnapshot>> GetConfirmedVoucherLinesAsync(
+        IReadOnlyCollection<Guid> containerIds,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record WarehouseSnapshot(Guid Id, string Code, bool IsActive);
@@ -34,3 +45,10 @@ public sealed record StorageLocationSnapshot(
     string Code,
     string Name,
     bool IsActive);
+
+public sealed record ContainerVoucherSnapshot(
+    Guid ContainerId,
+    Guid StockVoucherId,
+    string StockVoucherCode,
+    StockVoucherType Type,
+    Guid WarehouseId);

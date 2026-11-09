@@ -122,4 +122,10 @@ public sealed class FakeJobCodeGenerator : IBusinessCodeGenerator
 
     public Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         Task.FromResult($"JOB-TEST-{Interlocked.Increment(ref _n):D4}");
+
+    public Task<string> NextInboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult("PN-20261006-000001");
+
+    public Task<string> NextOutboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult("PX-20261006-000001");
 }

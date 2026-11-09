@@ -376,6 +376,26 @@ export function FacilityPage() {
     )
   }
 
+  // A failed load must not read as "no warehouse yet" or "no map versions yet".
+  if (warehousesQuery.isError || (warehouseId && mapsQuery.isError)) {
+    return (
+      <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
+        <h1 className="text-4xl font-book">Facility</h1>
+        <p role="alert" className="mt-3 max-w-xl text-base text-red-ink">
+          {warehousesQuery.isError ? 'The warehouses could not be loaded.' : 'The map versions of this warehouse could not be loaded.'}{' '}
+          Check that the API is running, then try again.
+        </p>
+        <Button
+          variant="outline"
+          className="mt-6"
+          onClick={() => void (warehousesQuery.isError ? warehousesQuery.refetch() : mapsQuery.refetch())}
+        >
+          Try again
+        </Button>
+      </div>
+    )
+  }
+
   if (!warehouseId) {
     return (
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
