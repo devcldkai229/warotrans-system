@@ -203,6 +203,8 @@ public sealed class JobRuntimeProvisioner(
             MapVersionId = request.MapVersionId,
             ProvisioningKey = provisioningKey,
             Status = JobStatus.CREATED,
+            Priority = request.Priority,
+            DeadlineAt = request.DeadlineAt,
             ContextValues = BuildJobContext(request, batch, variables),
             CreatedAt = now,
             QueuedAt = null,

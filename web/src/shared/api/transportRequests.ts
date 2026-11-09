@@ -19,6 +19,9 @@ export interface CreateTransportRequestBody {
   workflowInputs: Record<string, unknown>
   note: string | null
   details: CreateTransportRequestDetailBody[]
+  /** FL-07: -1 low, 0 normal, 1 high. */
+  priority?: number
+  deadlineAt?: string | null
 }
 
 export interface TransportRequestDetailResponse {

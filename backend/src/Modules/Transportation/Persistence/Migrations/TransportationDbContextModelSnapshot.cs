@@ -125,6 +125,10 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTimeOffset?>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline_at");
+
                     b.Property<string>("FailureCode")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
@@ -147,6 +151,10 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                     b.Property<int>("PlanSchemaVersion")
                         .HasColumnType("integer")
                         .HasColumnName("plan_schema_version");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority");
 
                     b.Property<DateTimeOffset?>("QueuedAt")
                         .HasColumnType("timestamp with time zone")

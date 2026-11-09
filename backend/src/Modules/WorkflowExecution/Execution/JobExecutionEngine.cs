@@ -186,6 +186,7 @@ public sealed class JobExecutionEngine(
         job.Status = JobStatus.RUNNING;
         job.QueuedAt ??= now;
         job.StartedAt = now;
+        job.BlockingReason = null;
         foreach (var container in job.JobContainers.Where(c => c.Status == JobContainerStatus.PENDING))
         {
             SetContainerStatus(job, container, JobContainerStatus.ASSIGNED, now);
@@ -198,6 +199,30 @@ public sealed class JobExecutionEngine(
             cancellationToken);
         logger.LogInformation("Job {JobNo} started on robot {RobotCode}", job.JobNo, robot.Code);
         return (job, true);
+    }
+
+    /// <summary>
+    /// FL-07: a person says this Job may go as soon as a robot is free. The queue starts it then. Nothing enters the
+    /// queue by itself, except the next Job of a request someone already started.
+    /// </summary>
+    public async Task<Job> EnqueueAsync(Guid jobId, CancellationToken cancellationToken = default)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        if (job.Status == JobStatus.QUEUED)
+        {
+            return job;
+        }
+
+        if (job.Status != JobStatus.CREATED)
+        {
+            throw new ConflictException($"Job {job.JobNo} cannot be queued from status {job.Status}.", "job_not_startable");
+        }
+
+        job.Status = JobStatus.QUEUED;
+        job.QueuedAt = DateTimeOffset.UtcNow;
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), null, null));
+        await SaveAndPublishAsync(cancellationToken);
+        return job;
     }
 
     // ------------------------------------------------------------------ resume

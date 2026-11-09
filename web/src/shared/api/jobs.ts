@@ -75,6 +75,11 @@ export interface JobContainerDto {
 export interface JobDetailDto extends Omit<JobSummaryDto, 'containerCount'> {
   currentStepId: string | null
   failureMessage: string | null
+  /** FL-07 */
+  priority?: number
+  deadlineAt?: string | null
+  queuedAt?: string | null
+  blockingReason?: string | null
   containers: JobContainerDto[]
   tasks: JobTaskDto[]
   /** BOTH-04: START / PAUSE / RESUME / CANCEL as the server decides them for this user. */
@@ -203,6 +208,11 @@ export function confirmRecoveryTransfer(jobId: string, containerIds: string[], n
 
 export function resumeRecoveryOnSameRobot(jobId: string, note?: string) {
   return apiRequest<JobDetailDto>(`${recoveryRoot(jobId)}/resume-same-robot`, { method: 'POST', body: JSON.stringify({ note: note ?? null }) })
+}
+
+/** FL-07: start this Job as soon as a robot is free. */
+export function enqueueJob(jobId: string) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/jobs/${jobId}/enqueue`, { method: 'POST' })
 }
 
 /** WFX-03: operator pause. The robot gets STOP mode PAUSE; follow it with getStopState(robotId). */

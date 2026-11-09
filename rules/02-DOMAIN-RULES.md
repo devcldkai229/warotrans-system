@@ -107,6 +107,8 @@ TransportRequest (+ Details)
   → Job → JobTask → JobStep
 ```
 
+A Job a person enqueued (`POST /jobs/{id}/enqueue`) goes as soon as a robot is free: `JobQueue*` options, best score first, where one minute of waiting is one point and priority and deadline add a fixed amount, so nothing waits for ever. `BlockingReason` says why it has not gone. Nothing enters the queue by itself, except the next Job of a request someone started. A schedule's wave does not.
+
 One `TransportRequest` may create **N** `Job`s (batching by robot capacity / zone / priority — planning policy). `JobPlanning:MaxContainersPerJob` limits a Job until each robot has its own capacity (FL-03). A batch has no table of its own: `Job.ProvisioningKey` (`request:BATCH-00n`) and `JobContainer` hold it, and a request + Container is in one Job only. The Jobs of a request run one after the other: after someone starts it, the next starts when the running one ends.
 
 Request↔Job cardinality is expressed only through `JobContainer` (owned by WorkflowExecution / `execution` schema).  

@@ -48,7 +48,11 @@ public sealed record JobDetailDto(
     IReadOnlyList<JobContainerDto> Containers,
     IReadOnlyList<JobTaskDto> Tasks,
     // BOTH-04: what this caller may do to the Job now, decided by the same rule the endpoints enforce.
-    IReadOnlyList<ActionAvailability> AvailableActions);
+    IReadOnlyList<ActionAvailability> AvailableActions,
+    int Priority = 0,
+    DateTimeOffset? DeadlineAt = null,
+    DateTimeOffset? QueuedAt = null,
+    string? BlockingReason = null);
 
 public sealed record JobContainerDto(
     Guid Id,
@@ -173,7 +177,11 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                         })
                         .ToList()))
                 .ToList(),
-            JobActionPolicy.Evaluate(job.Status, currentUser.Can));
+            JobActionPolicy.Evaluate(job.Status, currentUser.Can),
+            job.Priority,
+            job.DeadlineAt,
+            job.QueuedAt,
+            job.BlockingReason);
     }
 
     public async Task<(IReadOnlyList<JobSummaryDto> Items, int Total)> ListAsync(

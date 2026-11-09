@@ -97,6 +97,11 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("BlockingReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("blocking_reason");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -109,6 +114,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline_at");
 
                     b.Property<string>("FailureCode")
                         .HasMaxLength(50)
@@ -129,6 +138,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid>("MapVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("map_version_id");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority");
 
                     b.Property<string>("ProvisioningKey")
                         .IsRequired()

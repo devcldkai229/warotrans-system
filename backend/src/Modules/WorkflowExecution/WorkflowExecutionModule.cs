@@ -73,7 +73,9 @@ public static class WorkflowExecutionModule
         services.AddScoped<WaroTrans.Fleet.Contracts.IRobotWorkQuery, Services.RobotWorkQuery>();
         services.AddSingleton<IJobBatchPlanner>(sp => new CollectThenDeliverJobBatchPlanner(
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JobPlanningOptions>>().Value.MaxContainersPerJob));
-        services.AddHostedService<Services.JobBatchContinuationHostedService>();
+        services.Configure<Execution.JobQueueOptions>(configuration.GetSection(Execution.JobQueueOptions.SectionName));
+        services.AddScoped<Services.JobQueueProcessor>();
+        services.AddHostedService<Services.JobQueueHostedService>();
 
         // Job execution (GĐ 3)
         services.AddScoped<JobExecutionEngine>();
@@ -128,6 +130,7 @@ public static class WorkflowExecutionModule
         Features.RobotActivity.RobotActivityEndpoints.Map(group);
         Features.HumanTasks.HumanTaskEndpoints.Map(group);
         Features.JobRecovery.JobRecoveryEndpoints.Map(group);
+        Features.JobQueue.JobQueueEndpoints.Map(group);
         
         return endpoints;
     }

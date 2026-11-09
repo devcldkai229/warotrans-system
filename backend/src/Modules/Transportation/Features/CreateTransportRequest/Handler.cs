@@ -92,6 +92,8 @@ public sealed class CreateTransportRequestHandler(
                 d.DestinationEndpointId,
                 d.DestinationLevelNo)).ToList(),
             DateTimeOffset.UtcNow);
+        transportRequest.Priority = request.Priority;
+        transportRequest.DeadlineAt = request.DeadlineAt;
 
         await workflowRequestValidator.ValidateAsync(
             transportRequest.WorkflowId,

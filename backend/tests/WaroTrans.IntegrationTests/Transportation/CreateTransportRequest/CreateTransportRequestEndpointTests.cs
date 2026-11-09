@@ -305,7 +305,7 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
         }
 
         Task<IReadOnlyList<Guid>> NextAsync() =>
-            WaroTrans.WorkflowExecution.Services.JobBatchContinuationHostedService.FindNextAsync(execution, default);
+            WaroTrans.WorkflowExecution.Services.JobQueueProcessor.FindNextOfStartedRequestsAsync(execution, default);
 
         Assert.Empty(await NextAsync());
 

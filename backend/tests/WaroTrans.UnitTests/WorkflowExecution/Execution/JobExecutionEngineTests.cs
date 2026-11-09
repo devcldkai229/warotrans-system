@@ -526,6 +526,98 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(JobStepStatus.COMPLETED, (await _db.JobSteps.SingleAsync(s => s.Id == stepId)).Status);
     }
 
+    private async Task<Guid> ProvisionAnotherAsync(int priority = 0, DateTimeOffset? deadline = null)
+    {
+        var workflowId = (await _db.Workflows.AsNoTracking().FirstAsync()).Id;
+        var snapshot = new TransportRequestExecutionSnapshot(
+            Guid.NewGuid(), Guid.NewGuid(), _mapVersionId, workflowId, 1, new Dictionary<string, JsonElement>(),
+            [new TransportRequestDetailSnapshot(Guid.NewGuid(), 1, Guid.NewGuid(), null, A, null, null, D, null)],
+            priority,
+            deadline);
+        var result = await new JobRuntimeProvisioner(_db, new FakeJobCodeGenerator())
+            .ProvisionAsync(snapshot, new CollectThenDeliverJobBatchPlanner().Plan(snapshot));
+        return result.Jobs.Single().JobId;
+    }
+
+    private JobQueueProcessor Queue() => new(
+        _db, Engine(), Microsoft.Extensions.Options.Options.Create(new JobQueueOptions()), NullLogger<JobQueueProcessor>.Instance);
+
+    private async Task QueueSinceAsync(Guid jobId, double minutesAgo)
+    {
+        await Engine().EnqueueAsync(jobId);
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        job.QueuedAt = DateTimeOffset.UtcNow.AddMinutes(-minutesAgo);
+        await _db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task High_priority_goes_first_and_the_other_says_why_it_waits()
+    {
+        await ProvisionAsync();
+        var normal = await ProvisionAnotherAsync();
+        var high = await ProvisionAnotherAsync(priority: 1);
+        await QueueSinceAsync(normal, 5);
+        await QueueSinceAsync(high, 1);
+
+        Assert.Equal(1, await Queue().TickAsync());
+
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.AsNoTracking().SingleAsync(j => j.Id == high)).Status);
+        var waiting = await _db.Jobs.AsNoTracking().SingleAsync(j => j.Id == normal);
+        Assert.Equal(JobStatus.QUEUED, waiting.Status);
+        Assert.Contains("no_robot_available", waiting.BlockingReason);
+        Assert.Contains("robot_busy", waiting.BlockingReason);
+    }
+
+    [Fact]
+    public async Task A_low_priority_job_is_not_starved_by_newcomers()
+    {
+        await ProvisionAsync();
+        var low = await ProvisionAnotherAsync(priority: -1);
+        var high = await ProvisionAnotherAsync(priority: 1);
+        await QueueSinceAsync(low, 60);
+        await QueueSinceAsync(high, 0);
+
+        await Queue().TickAsync();
+
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.AsNoTracking().SingleAsync(j => j.Id == low)).Status);
+    }
+
+    [Fact]
+    public async Task A_near_deadline_moves_a_job_up_and_ties_are_first_come()
+    {
+        await ProvisionAsync();
+        var early = await ProvisionAnotherAsync();
+        var late = await ProvisionAnotherAsync();
+        var urgent = await ProvisionAnotherAsync(deadline: DateTimeOffset.UtcNow.AddMinutes(10));
+        await QueueSinceAsync(early, 10);
+        await QueueSinceAsync(late, 5);
+        await QueueSinceAsync(urgent, 1);
+
+        var order = await Queue().ListAsync(DateTimeOffset.UtcNow, default);
+
+        Assert.Equal([urgent, early, late], order.Select(j => j.JobId));
+        Assert.Equal([1, 2, 3], order.Select(j => j.Position));
+    }
+
+    [Fact]
+    public async Task A_job_nobody_enqueued_never_starts_by_itself_and_enqueue_twice_is_harmless()
+    {
+        var jobId = await ProvisionAsync();
+
+        Assert.Equal(0, await Queue().TickAsync());
+        Assert.Equal(JobStatus.CREATED, (await _db.Jobs.AsNoTracking().SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Empty(_fleet.Commands);
+
+        await Engine().EnqueueAsync(jobId);
+        await Engine().EnqueueAsync(jobId);
+        Assert.Equal(1, await Queue().TickAsync());
+        Assert.Equal(0, await Queue().TickAsync());
+        Assert.Single(_fleet.Commands);
+
+        var running = await Assert.ThrowsAsync<ConflictException>(() => Engine().EnqueueAsync(jobId));
+        Assert.Equal("job_not_startable", running.Code);
+    }
+
     private sealed class FakeWarehouse : IWarehouseModule
     {
         public Dictionary<Guid, ContainerSnapshot> Containers { get; } = [];
