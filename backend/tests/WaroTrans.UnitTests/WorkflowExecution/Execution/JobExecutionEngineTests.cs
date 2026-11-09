@@ -82,7 +82,7 @@ public sealed class JobExecutionEngineTests
         var job = await _db.Jobs.Include(j => j.JobTasks).ThenInclude(t => t.JobSteps).SingleAsync(j => j.Id == jobId);
         return job.JobTasks.OrderBy(t => t.SequenceNo)
             .SelectMany(t => t.JobSteps.OrderBy(s => s.SequenceNo))
-            .First(s => s.Status != JobStepStatus.COMPLETED).Id;
+            .First(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED)).Id;
     }
 
     /// <summary>RESULT of a MOVE step's robot command (default: the latest command issued for that step).</summary>
@@ -176,6 +176,85 @@ public sealed class JobExecutionEngineTests
         var move = await _db.JobSteps.FirstAsync(s => s.Id == _fleet.Commands[0].JobStepId);
         Assert.Equal("SUCCEEDED", move.OutputValues["navigationResult"].GetString());
         Assert.Equal(A, move.OutputValues["arrivedEndpointId"].GetGuid());
+    }
+
+    [Fact]
+    public async Task A_container_failing_before_pickup_leaves_the_other_to_finish_and_its_stop_is_skipped()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C2, "damaged");
+
+        // Only D is left: the robot never drives to E, which only served C2.
+        Assert.Equal(9.0, _fleet.Commands[^1].X);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.COMPLETED, job.Status);
+        Assert.Equal(2, _fleet.Commands.Count);
+        Assert.Equal(JobContainerStatus.DELIVERED, job.JobContainers.Single(c => c.ContainerId == C1).Status);
+        var failed = job.JobContainers.Single(c => c.ContainerId == C2);
+        Assert.Equal(JobContainerStatus.FAILED, failed.Status);
+        Assert.Equal("damaged", failed.FailureMessage);
+        Assert.NotNull(failed.FailedAt);
+        Assert.Contains(_events.Of<JobContainerStatusChanged>(), e => e.ContainerId == C2 && e.Status == "FAILED");
+        Assert.DoesNotContain(_events.Of<JobContainerStatusChanged>(), e => e.ContainerId == C1 && e.Status == "FAILED");
+        Assert.Contains(await StepsAsync(jobId), s => s.Status == JobStepStatus.SKIPPED);
+    }
+
+    [Fact]
+    public async Task A_container_failing_on_the_robot_keeps_what_was_delivered_and_raises_an_issue()
+    {
+        var jobId = await ProvisionAsync();
+        var reporter = new RecordingIssueReporter();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        await EngineWith(reporter).FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C2, "wrong label");
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.COMPLETED, job.Status);
+        Assert.Equal(JobContainerStatus.DELIVERED, job.JobContainers.Single(c => c.ContainerId == C1).Status);
+        Assert.Equal(JobContainerStatus.FAILED, job.JobContainers.Single(c => c.ContainerId == C2).Status);
+        Assert.Equal(C2, Assert.Single(reporter.SystemDrafts).ContainerId);
+    }
+
+    [Fact]
+    public async Task With_every_container_failed_and_none_delivered_the_job_has_failed()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        await Engine().FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C1, "missing");
+        await Engine().FailContainerAtStepAsync(await CurrentStepIdAsync(jobId), C2, "missing");
+
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.FAILED, job.Status);
+        Assert.Equal(JobExecutionEngine.ContainerReportedFailedCode, job.FailureCode);
+        Assert.Single(_fleet.Commands);
+    }
+
+    [Fact]
+    public async Task Only_the_container_of_the_waiting_step_can_be_reported()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        var stepId = await CurrentStepIdAsync(jobId);
+        var error = await Assert.ThrowsAsync<DomainValidationException>(
+            () => Engine().FailContainerAtStepAsync(stepId, Guid.NewGuid(), "nope"));
+        Assert.Equal("handover_container_mismatch", error.Code);
     }
 
     [Fact]

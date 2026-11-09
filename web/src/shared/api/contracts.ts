@@ -49,6 +49,7 @@ export type JobStepStatus =
   | 'COMPLETED'
   | 'FAILED'
   | 'CANCELLED'
+  | 'SKIPPED'
 
 export type JobContainerStatus = 'PENDING' | 'ASSIGNED' | 'ONBOARD' | 'DELIVERED' | 'FAILED' | 'CANCELLED'
 

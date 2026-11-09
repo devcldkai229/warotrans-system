@@ -274,7 +274,8 @@ export type JobStepStatus =
   | 'PAUSED'
   | 'COMPLETED'
   | 'FAILED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'SKIPPED';
 
 /** `WorkflowExecution/Enums/JobContainerStatus.cs`. */
 export type JobContainerStatus =

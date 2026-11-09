@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
 import { getRobot } from '@/shared/api/fleet'
-import { confirmJobStep, getJob, type JobDetailDto, type JobStepDto, type JobTaskDto } from '@/shared/api/jobs'
+import { confirmJobStep, failJobContainer, getJob, type JobDetailDto, type JobStepDto, type JobTaskDto } from '@/shared/api/jobs'
 import { getTransportRequest } from '@/shared/api/transportRequests'
 import { DispatchPanel } from './DispatchPanel'
 import { JobOperatorActions } from './JobOperatorActions'
@@ -98,6 +98,10 @@ function StepRow({
     mutationFn: () => confirmJobStep(step.id, expectedContainer, `confirmed from web (${labels.container(expectedContainer)})`),
     onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
   })
+  const failContainer = useMutation({
+    mutationFn: (reason: string) => failJobContainer(step.id, expectedContainer as string, reason),
+    onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
+  })
 
   return (
     <div className={cx('rounded-md', STEP_SURFACE[tone] ?? 'bg-surface')}>
@@ -156,9 +160,22 @@ function StepRow({
                     <Button variant="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending}>
                       <Icon name="check" size={15} /> {confirm.isPending ? 'Confirming…' : 'Confirm'}
                     </Button>
+                    {expectedContainer ? (
+                      <Button
+                        variant="ghost"
+                        disabled={failContainer.isPending}
+                        onClick={() => {
+                          const reason = window.prompt('Why can this container not go on?')
+                          if (reason?.trim()) failContainer.mutate(reason.trim())
+                        }}
+                      >
+                        Container failed
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
                 {confirm.error ? <p className="text-xs text-red-ink">{errorText(confirm.error)}</p> : null}
+                {failContainer.error ? <p className="text-xs text-red-ink">{errorText(failContainer.error)}</p> : null}
               </div>
             </>
           ) : null}

@@ -53,7 +53,10 @@ public sealed record JobContainerDto(
     int SequenceNo,
     string Status,
     DateTimeOffset? LoadedAt,
-    DateTimeOffset? DeliveredAt);
+    DateTimeOffset? DeliveredAt,
+    string? FailureCode,
+    string? FailureMessage,
+    DateTimeOffset? FailedAt);
 
 public sealed record JobTaskDto(
     Guid Id,
@@ -105,7 +108,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
         var taskKeys = steps.Values.GroupBy(s => s.WorkflowTaskId).ToDictionary(g => g.Key, g => g.First().TaskKey);
 
         var orderedSteps = job.JobTasks.OrderBy(t => t.SequenceNo).SelectMany(t => t.JobSteps.OrderBy(s => s.SequenceNo)).ToList();
-        var current = orderedSteps.FirstOrDefault(s => s.Status != JobStepStatus.COMPLETED);
+        var current = orderedSteps.FirstOrDefault(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED));
 
         return new JobDetailDto(
             job.Id,
@@ -115,7 +118,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
             job.MapVersionId,
             AssignedRobot(job),
             job.JobContainers.Select(c => c.TransportRequestId).Distinct().ToList(),
-            orderedSteps.Count(s => s.Status == JobStepStatus.COMPLETED),
+            orderedSteps.Count(s => s.Status is JobStepStatus.COMPLETED or JobStepStatus.SKIPPED),
             orderedSteps.Count,
             job.Status is JobStatus.COMPLETED ? null : current?.Id,
             job.CreatedAt,
@@ -125,7 +128,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
             job.FailureMessage,
             job.JobContainers
                 .OrderBy(c => c.SequenceNo)
-                .Select(c => new JobContainerDto(c.Id, c.TransportRequestId, c.ContainerId, c.SequenceNo, c.Status.ToString(), c.LoadedAt, c.DeliveredAt))
+                .Select(c => new JobContainerDto(c.Id, c.TransportRequestId, c.ContainerId, c.SequenceNo, c.Status.ToString(), c.LoadedAt, c.DeliveredAt, c.FailureCode, c.FailureMessage, c.FailedAt))
                 .ToList(),
             job.JobTasks
                 .OrderBy(t => t.SequenceNo)
@@ -192,7 +195,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                 j.Id, j.JobNo, j.Status.ToString(), j.WorkflowId, j.MapVersionId, AssignedRobot(j),
                 j.JobContainers.Select(c => c.TransportRequestId).Distinct().ToList(),
                 j.JobContainers.Count,
-                all.Count(x => x.Status == JobStepStatus.COMPLETED),
+                all.Count(x => x.Status is JobStepStatus.COMPLETED or JobStepStatus.SKIPPED),
                 all.Count,
                 j.CreatedAt, j.StartedAt, j.CompletedAt, j.FailureCode);
         }).ToList();

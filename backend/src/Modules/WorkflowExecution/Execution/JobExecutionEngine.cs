@@ -279,7 +279,7 @@ public sealed class JobExecutionEngine(
         // A stop is one ONCE_PER_STOP task (CHECK + MOVE) followed by PER_CONTAINER_AT_STOP tasks (confirmations),
         // all carrying the same stopSequenceNo / stopEndpointId.
         var current = job.JobTasks.OrderBy(t => t.SequenceNo)
-            .FirstOrDefault(t => t.JobSteps.Any(s => s.Status != JobStepStatus.COMPLETED));
+            .FirstOrDefault(t => t.JobSteps.Any(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED)));
         if (current is null
             || !current.ContextValues.TryGetValue("stopSequenceNo", out var stopNo)
             || !current.ContextValues.TryGetValue("stopEndpointId", out var stop) || stop.ValueKind != JsonValueKind.String)
@@ -317,7 +317,7 @@ public sealed class JobExecutionEngine(
             }
         }
 
-        foreach (var task in stopTasks.Where(t => t.JobSteps.Any(s => s.Status != JobStepStatus.COMPLETED)))
+        foreach (var task in stopTasks.Where(t => t.JobSteps.Any(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED))))
         {
             task.Status = JobTaskStatus.RUNNING;
             task.CompletedAt = null;
@@ -398,7 +398,7 @@ public sealed class JobExecutionEngine(
         {
             switch (step.Status)
             {
-                case JobStepStatus.COMPLETED:
+                case JobStepStatus.COMPLETED or JobStepStatus.SKIPPED:
                     // A MOVE is completed by its robot RESULT outside this loop, so its task is closed here.
                     CompleteTaskIfDone(task);
                     continue;
@@ -568,6 +568,134 @@ public sealed class JobExecutionEngine(
 
         await AdvanceAsync(job.Id, cancellationToken);
         return step;
+    }
+
+    /// <summary>FailureCode of a Container a person reported failed at its handover (WH-10).</summary>
+    public const string ContainerReportedFailedCode = "container_reported_failed";
+
+    /// <summary>
+    /// WH-10: this Container cannot go on (missing, damaged), the others can. At its waiting handover step the Container
+    /// is FAILED, what only served it is skipped, and the Job goes on: what was delivered stays delivered. Cargo on the
+    /// robot is not treated as returned: it stays IN_TRANSIT for a person to recover and an issue says so. With no
+    /// Container delivered and none left to carry, the Job itself has failed.
+    /// </summary>
+    public async Task FailContainerAtStepAsync(
+        Guid jobStepId,
+        Guid containerId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var stepRef = await db.JobSteps.AsNoTracking()
+            .Where(s => s.Id == jobStepId)
+            .Select(s => new { s.JobTask.JobId })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException($"JobStep '{jobStepId}' was not found.", "job_step_not_found");
+
+        var job = await LoadJobAsync(stepRef.JobId, cancellationToken);
+        var (_, step) = OrderedSteps(job).First(x => x.Step.Id == jobStepId);
+        if (job.Status != JobStatus.RUNNING)
+        {
+            throw new ConflictException($"Job {job.JobNo} is {job.Status}, not RUNNING.", "job_not_running");
+        }
+
+        if (step.StepType != StepType.HUMAN_INTERACTION || step.Status != JobStepStatus.WAITING)
+        {
+            throw new ConflictException("Only a waiting handover step can report its container.", "job_step_not_waiting");
+        }
+
+        var expected = step.ResolvedInputs.TryGetValue("containerId", out var c) && c.ValueKind == JsonValueKind.String
+            ? c.GetGuid()
+            : (Guid?)null;
+        if (expected != containerId)
+        {
+            throw new DomainValidationException(
+                $"Container '{containerId}' is not the container of this step.",
+                "handover_container_mismatch");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var keys = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+            .ToDictionaryAsync(s => s.Id, s => s.StepKey, cancellationToken);
+        var jobContainer = job.JobContainers.First(jc => jc.ContainerId == containerId);
+        var onBoard = jobContainer.Status == JobContainerStatus.ONBOARD;
+
+        jobContainer.FailureCode = ContainerReportedFailedCode;
+        jobContainer.FailureMessage = reason.Length > 500 ? reason[..500] : reason;
+        jobContainer.FailedAt = now;
+        SetContainerStatus(job, jobContainer, JobContainerStatus.FAILED, now);
+
+        var served = job.JobContainers.Where(jc => jc.Status is not (JobContainerStatus.FAILED or JobContainerStatus.CANCELLED))
+            .Select(jc => jc.ContainerId)
+            .ToHashSet();
+        foreach (var task in job.JobTasks.Where(t => ServesOnlyFailedContainers(t, containerId, served)))
+        {
+            foreach (var open in task.JobSteps.Where(s => s.Status is JobStepStatus.PENDING or JobStepStatus.READY or JobStepStatus.WAITING))
+            {
+                SetStepStatus(job, task, open, keys.GetValueOrDefault(open.WorkflowStepId, open.Id.ToString("N")), JobStepStatus.SKIPPED, now);
+            }
+
+            CompleteTaskIfDone(task);
+        }
+
+        var nothingDelivered = job.JobContainers.All(jc => jc.Status != JobContainerStatus.DELIVERED);
+        if (served.Count == 0 && nothingDelivered)
+        {
+            foreach (var (task, open) in OrderedSteps(job).Where(x => x.Step.Status is JobStepStatus.PENDING or JobStepStatus.READY or JobStepStatus.WAITING))
+            {
+                SetStepStatus(job, task, open, keys.GetValueOrDefault(open.WorkflowStepId, open.Id.ToString("N")), JobStepStatus.CANCELLED, now);
+                task.Status = JobTaskStatus.CANCELLED;
+                task.CompletedAt ??= now;
+            }
+
+            job.Status = JobStatus.FAILED;
+            job.CompletedAt = now;
+            job.FailureCode = ContainerReportedFailedCode;
+            job.FailureMessage = $"Every container failed: {jobContainer.FailureMessage}";
+            _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), AssignedRobot(job), job.FailureCode));
+        }
+
+        await SaveAndPublishAsync(cancellationToken);
+        logger.LogWarning("Job {JobNo}: container {ContainerId} reported failed: {Reason}", job.JobNo, containerId, reason);
+
+        if (onBoard && issueReporter is not null)
+        {
+            await issueReporter.ReportAsync(
+                new SystemIssueDraft(
+                    $"container-failed-onboard:{job.Id}:{containerId}",
+                    job.Id,
+                    job.JobNo,
+                    null,
+                    AssignedRobot(job),
+                    containerId,
+                    $"A container reported failed in Job {job.JobNo} is still on the robot. Reason: {jobContainer.FailureMessage}. "
+                    + "Unload it and recover it to the shelf it is on.",
+                    High: true,
+                    TransportRequestId: jobContainer.TransportRequestId),
+                cancellationToken);
+        }
+
+        await AdvanceAsync(job.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// A confirmation task of the failed Container, or a stop that has nothing left to carry and has not started.
+    /// Job-wide tasks (a stop list is absent) always stay.
+    /// </summary>
+    private static bool ServesOnlyFailedContainers(JobTask task, Guid failed, IReadOnlySet<Guid> served)
+    {
+        if (task.ContextValues.TryGetValue("containerId", out var single) && single.ValueKind == JsonValueKind.String)
+        {
+            return single.GetGuid() == failed;
+        }
+
+        if (!task.ContextValues.TryGetValue("containerIds", out var many) || many.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        return task.JobSteps.All(s => s.Status is JobStepStatus.PENDING or JobStepStatus.READY)
+            && !many.EnumerateArray().Any(id => served.Contains(id.GetGuid()));
     }
 
     /// <summary>
@@ -1410,10 +1538,10 @@ public sealed class JobExecutionEngine(
 
     private static void CompleteTaskIfDone(JobTask task)
     {
-        var allDone = task.JobSteps.All(s => s.Status == JobStepStatus.COMPLETED);
-        if (task.Status != JobTaskStatus.COMPLETED && allDone)
+        var allDone = task.JobSteps.All(s => s.Status is JobStepStatus.COMPLETED or JobStepStatus.SKIPPED);
+        if (task.Status is not (JobTaskStatus.COMPLETED or JobTaskStatus.SKIPPED) && allDone)
         {
-            task.Status = JobTaskStatus.COMPLETED;
+            task.Status = task.JobSteps.All(s => s.Status == JobStepStatus.SKIPPED) ? JobTaskStatus.SKIPPED : JobTaskStatus.COMPLETED;
             task.CompletedAt = DateTimeOffset.UtcNow;
         }
     }
@@ -1430,7 +1558,7 @@ public sealed class JobExecutionEngine(
     private void SetStepStatus(Job job, JobTask task, JobStep step, string stepKey, JobStepStatus status, DateTimeOffset now)
     {
         step.Status = status;
-        if (status is JobStepStatus.COMPLETED or JobStepStatus.FAILED or JobStepStatus.CANCELLED)
+        if (status is JobStepStatus.COMPLETED or JobStepStatus.FAILED or JobStepStatus.CANCELLED or JobStepStatus.SKIPPED)
         {
             step.CompletedAt = now;
         }

@@ -56,6 +56,7 @@ export interface JobContainerDto {
   status: JobContainerStatus
   loadedAt: string | null
   deliveredAt: string | null
+  failureMessage?: string | null
 }
 
 /** GET /api/workflow-execution/jobs/{id}. */
@@ -99,6 +100,14 @@ export function resumeJob(id: string, robotId?: string) {
   return apiRequest<JobDetailDto>(`/api/workflow-execution/jobs/${id}/resume`, {
     method: 'POST',
     body: JSON.stringify({ robotId: robotId ?? null }),
+  })
+}
+
+/** WH-10: the container of this waiting handover cannot go on; the Job continues with the others. */
+export function failJobContainer(stepId: string, containerId: string, reason: string) {
+  return apiRequest<JobDetailDto>(`/api/workflow-execution/job-steps/${stepId}/fail-container`, {
+    method: 'POST',
+    body: JSON.stringify({ containerId, reason }),
   })
 }
 
