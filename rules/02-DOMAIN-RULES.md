@@ -79,6 +79,10 @@ FAILED
 CANCELLED
 ```
 
+### Recurring waves (WH-09)
+
+A `TransportSchedule` stores a rule (product on a shelf, destination, at most N Containers), not Containers: those are physical. Each occurrence is one `TransportWave` (unique on schedule + time). When due it picks the STORED Containers that match and are on no open request, oldest first, creates and queues one request through the normal path. Nothing matched: `SKIPPED`. Down or paused when due: `MISSED`, never run late. Could not create: `FAILED`, never retried. A queued request waits for a person to start it: a schedule does not move a robot by itself.
+
 ### Request status aggregation (via Details)
 Aggregate Request status from Detail lines (not from Job status alone):
 - all PENDING → SUBMITTED / QUEUED

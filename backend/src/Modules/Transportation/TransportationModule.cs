@@ -32,6 +32,12 @@ public static class TransportationModule
 
         // WH-01: handovers Warehouse still has to post, retried until they land.
         services.AddScoped<Services.StockPostingProcessor>();
+
+        // WH-09: recurring waves.
+        services.AddScoped<Features.TransportSchedules.TransportScheduleService>();
+        services.AddScoped<Services.TransportScheduleProcessor>();
+        services.AddHostedService<Services.TransportScheduleHostedService>();
+
         services.AddHostedService<Services.StockPostingHostedService>();
 
         // Job execution feedback (WorkflowExecution → Transportation)
@@ -56,6 +62,7 @@ public static class TransportationModule
         GetTransportRequestEndpoint.Map(group);
         QueueTransportRequestEndpoint.Map(group);
         Features.CloseTransportRequest.CloseTransportRequestEndpoints.Map(group);
+        Features.TransportSchedules.TransportScheduleEndpoints.Map(group);
         group.MapGetRequestStatistics();
 
         return endpoints;

@@ -382,6 +382,156 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
         Assert.Equal(JsonValueKind.Null, foreign.GetProperty("assignedRobotId").ValueKind);
     }
 
+    private async Task<(Guid Schedule, Guid Shelf)> SeedScheduleAsync(Scenario scenario, Guid workflowId, int maxContainers)
+    {
+        var shelf = Guid.NewGuid();
+        var target = Guid.NewGuid();
+        Guid product;
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+            db.StorageLocations.AddRange(
+                new StorageLocation { Id = shelf, WarehouseId = scenario.WarehouseId, EndpointId = scenario.A, Code = "SRC", Name = "Source", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+                new StorageLocation { Id = target, WarehouseId = scenario.WarehouseId, EndpointId = scenario.D, Code = "DST", Name = "Target", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+            var containers = await db.Containers.ToListAsync();
+            product = containers[0].ProductId;
+            foreach (var container in containers)
+            {
+                container.CurrentStorageLocationId = shelf;
+                container.CurrentLevelNo = 1;
+            }
+
+            db.InventoryStocks.Add(new InventoryStock { Id = Guid.NewGuid(), ProductId = product, StorageLocationId = shelf, LevelNo = 1, ContainerCount = containers.Count, UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.PostAsJsonAsync("/api/transportation/schedules", new
+        {
+            name = "Night move",
+            warehouseId = scenario.WarehouseId,
+            mapVersionId = scenario.MapVersionId,
+            workflowId,
+            productId = product,
+            sourceStorageLocationId = shelf,
+            destinationEndpointId = scenario.D,
+            destinationStorageLocationId = target,
+            maxContainersPerWave = maxContainers,
+            recurrence = "DAILY",
+            localTime = "08:30:00",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)).ToString("yyyy-MM-dd"),
+            timezone = "Asia/Ho_Chi_Minh"
+        }, JsonOptions);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return ((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(), shelf);
+    }
+
+    private async Task TickAsync(DateTimeOffset now)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<WaroTrans.Transportation.Services.TransportScheduleProcessor>().TickAsync(now);
+    }
+
+    private async Task<List<WaroTrans.Transportation.Entities.TransportWave>> WavesAsync(Guid schedule)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<TransportationDbContext>().TransportWaves.AsNoTracking()
+            .Where(w => w.TransportScheduleId == schedule).OrderBy(w => w.PlannedAt).ToListAsync();
+    }
+
+    [Fact]
+    public async Task A_schedule_makes_one_request_per_wave_from_what_matches_then_skips_and_misses()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var (schedule, _) = await SeedScheduleAsync(scenario, workflowId, 2);
+
+        await TickAsync(DateTimeOffset.UtcNow);
+        var first = Assert.Single(await WavesAsync(schedule));
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED, first.Status);
+
+        // Three workers at the same moment: one request, two of the three Containers.
+        var at = first.PlannedAt.AddMinutes(1);
+        await Task.WhenAll(TickAsync(at), TickAsync(at), TickAsync(at));
+        var waves = await WavesAsync(schedule);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.STARTED, waves[0].Status);
+        Assert.Equal(2, waves[0].ContainerCount);
+        Assert.NotNull(waves[0].TransportRequestId);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED, Assert.Single(waves, w => w.Id != waves[0].Id).Status);
+
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var requests = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
+            var request = await requests.TransportRequests.Include(r => r.Details).SingleAsync();
+            Assert.Equal(WaroTrans.Transportation.Enums.TransportRequestStatus.QUEUED, request.Status);
+            Assert.Equal(2, request.Details.Count);
+            var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+            Assert.Equal(2, await execution.Jobs.CountAsync());
+            // Queued, not started: nothing moves until a person says so.
+            Assert.True(await execution.Jobs.AllAsync(j => j.StartedAt == null));
+        }
+
+        // Next day: only the one Container not on an open request.
+        var nextDay = waves[1].PlannedAt.AddMinutes(1);
+        await TickAsync(nextDay);
+        waves = await WavesAsync(schedule);
+        Assert.Equal(1, waves[1].ContainerCount);
+
+        // Day after: everything matching is on an open request.
+        await TickAsync(waves[2].PlannedAt.AddMinutes(1));
+        waves = await WavesAsync(schedule);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.SKIPPED, waves[2].Status);
+
+        // The Host was down for a month: one MISSED and one new wave, no burst and no late run.
+        var count = waves.Count;
+        await TickAsync(waves[^1].PlannedAt.AddDays(30));
+        waves = await WavesAsync(schedule);
+        Assert.Equal(count + 1, waves.Count);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.MISSED, waves[^2].Status);
+        Assert.Null(waves[^2].TransportRequestId);
+    }
+
+    [Fact]
+    public async Task One_wave_can_be_cancelled_and_a_paused_schedule_does_not_run()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var (schedule, _) = await SeedScheduleAsync(scenario, workflowId, 1);
+        await TickAsync(DateTimeOffset.UtcNow);
+        var wave = Assert.Single(await WavesAsync(schedule));
+
+        var cancel = await Client.PostAsync($"/api/transportation/schedules/waves/{wave.Id}/cancel", null);
+        Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Client.PostAsync($"/api/transportation/schedules/waves/{wave.Id}/cancel", null)).StatusCode);
+
+        await TickAsync(wave.PlannedAt.AddMinutes(1));
+        var waves = await WavesAsync(schedule);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.CANCELLED, waves[0].Status);
+        Assert.Null(waves[0].TransportRequestId);
+        var next = Assert.Single(waves, w => w.Status == WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED);
+
+        Assert.Equal(HttpStatusCode.OK, (await Client.PostAsync($"/api/transportation/schedules/{schedule}/pause", null)).StatusCode);
+        await TickAsync(next.PlannedAt.AddMinutes(1));
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED, (await WavesAsync(schedule)).Single(w => w.Id == next.Id).Status);
+
+        Assert.Equal(HttpStatusCode.OK, (await Client.PostAsync($"/api/transportation/schedules/{schedule}/resume", null)).StatusCode);
+        await TickAsync(next.PlannedAt.AddHours(2));
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.MISSED, (await WavesAsync(schedule)).Single(w => w.Id == next.Id).Status);
+
+        Assert.Equal(HttpStatusCode.OK, (await Client.PostAsync($"/api/transportation/schedules/{schedule}/cancel", null)).StatusCode);
+        Assert.DoesNotContain(await WavesAsync(schedule), w => w.Status == WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED);
+    }
+
+    [Fact]
+    public async Task A_technician_may_read_schedules_but_not_write_them()
+    {
+        await Factory.CreateAccountAsync("sched_tech", WaroTrans.Identity.Enums.AccountRole.TECHNICIAN);
+        var client = CreateAnonymousClient();
+        var token = (await client.LoginAsync("sched_tech")).AccessToken;
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetWithTokenAsync("/api/transportation/schedules", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendWithTokenAsync(HttpMethod.Post, "/api/transportation/schedules", token, new { })).StatusCode);
+    }
+
     [Fact]
     public async Task Post_queue_unknown_request_returns_not_found()
     {
