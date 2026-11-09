@@ -134,6 +134,10 @@ CANCELLED
 | DELIVERED | COMPLETED |
 | FAILED | FAILED |
 | CANCELLED | CANCELLED (replan back to QUEUED — decide later) |
+## Capacity (FL-03)
+
+A robot declares `MaxPayloadKg`, `MaxContainers`, `LengthM`, `WidthM`; a Container has `WeightKg`, `LengthM`, `WidthM`. All are entered by a person and may be empty. Planning happens before a robot is chosen, so it splits on the smaller of `JobPlanning:MaxContainersPerJob` and the largest robot in service on the map, and refuses a Container no robot can carry. Dispatch, resume and recovery then refuse a robot the load is too much for, and no override exists. A missing figure does not refuse: the decision records `capacity_unknown`. Traffic reserves one footprint for all robots, so a robot larger than it is refused and a smaller one reserves more than it needs. Container size is stored but not yet compared with anything.
+
 ## Job and robot (FL-04)
 
 A Job holds one robot at a time and a robot one Job at a time: `execution.job_robot_assignments` has a unique index on each, over rows with no `EndedAt`. Every engine save keeps those rows in line with the Job. Handing a Job to another robot closes one row and opens another, so the history stays. Several robots on one request means several Jobs, and the request ends when they all have.

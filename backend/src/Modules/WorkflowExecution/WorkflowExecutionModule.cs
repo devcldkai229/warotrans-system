@@ -64,6 +64,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<WorkflowVariableContextBuilder>();
         services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
         services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
+        services.AddScoped<IJobPlanLimitsQuery, JobPlanLimitsQuery>();
         services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));
         services.Configure<Execution.HumanTaskOptions>(configuration.GetSection(Execution.HumanTaskOptions.SectionName));
         services.AddScoped<Features.HumanTasks.HumanTaskQueries>();

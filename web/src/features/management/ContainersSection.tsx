@@ -10,6 +10,7 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import type { ContainerListing, ManagedContainer } from './api'
+import { ContainerPhysicalDialog } from './ContainerPhysicalDialog'
 import { RecoverContainerDialog } from './RecoverContainerDialog'
 import { SectionHead } from './SectionHead'
 
@@ -44,6 +45,7 @@ export function ContainersSection({
   const { capabilities } = useAuth()
   const mayRecover = hasPermission(capabilities, PERMISSIONS.containerRecover)
   const [recovering, setRecovering] = useState<ManagedContainer | null>(null)
+  const [measuring, setMeasuring] = useState<ManagedContainer | null>(null)
   const containers = listing.items
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<ContainerStatus | ''>('')
@@ -121,6 +123,9 @@ export function ContainersSection({
                     Recover
                   </Button>
                 ) : null}
+                <Button size="sm" variant="ghost" onClick={() => setMeasuring(item)}>
+                  Size
+                </Button>
               </Td>
             </Tr>
           ))}
@@ -139,6 +144,7 @@ export function ContainersSection({
           ) : null}
         </tbody>
       </Table>
+      {measuring ? <ContainerPhysicalDialog container={measuring} onClose={() => setMeasuring(null)} /> : null}
       {recovering ? (
         <RecoverContainerDialog
           container={recovering}

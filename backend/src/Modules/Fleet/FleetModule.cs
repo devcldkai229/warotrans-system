@@ -110,6 +110,7 @@ public static class FleetModule
         group.MapEnableRobot();
         group.MapDisableRobot();
         group.MapPutRobotInService();
+        Features.RobotCapacity.RobotCapacityEndpoint.MapSetRobotCapacity(group);
         group.MapChangeRobotMap();
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();

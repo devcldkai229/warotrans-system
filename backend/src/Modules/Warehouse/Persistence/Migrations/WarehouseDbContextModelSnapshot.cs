@@ -52,6 +52,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("current_storage_location_id");
 
+                    b.Property<double?>("LengthM")
+                        .HasColumnType("double precision")
+                        .HasColumnName("length_m");
+
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
@@ -71,6 +75,14 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<decimal?>("WeightKg")
+                        .HasColumnType("numeric")
+                        .HasColumnName("weight_kg");
+
+                    b.Property<double?>("WidthM")
+                        .HasColumnType("double precision")
+                        .HasColumnName("width_m");
 
                     b.HasKey("Id")
                         .HasName("p_k_containers");

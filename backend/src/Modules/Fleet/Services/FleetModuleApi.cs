@@ -47,6 +47,17 @@ public sealed class FleetModuleApi(
             .Select(x => x.JobId)
             .ToListAsync(cancellationToken);
 
+    public async Task<FleetCapacity> GetCapacityAsync(Guid mapVersionId, CancellationToken cancellationToken = default)
+    {
+        var robots = await db.Robots.AsNoTracking()
+            .Where(r => r.CurrentMapVersionId == mapVersionId && r.IsEnabled)
+            .Select(r => new { r.MaxContainers, r.MaxPayloadKg })
+            .ToListAsync(cancellationToken);
+        return new FleetCapacity(
+            robots.Count > 0 && robots.All(r => r.MaxContainers is not null) ? robots.Max(r => r.MaxContainers) : null,
+            robots.Count > 0 && robots.All(r => r.MaxPayloadKg is not null) ? robots.Max(r => r.MaxPayloadKg) : null);
+    }
+
     public async Task<RobotCommandSummary?> GetLatestCommandAsync(Guid robotId, CancellationToken cancellationToken = default) =>
         await db.RobotCommands
             .AsNoTracking()

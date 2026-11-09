@@ -86,6 +86,7 @@ public static class WarehouseModule
         group.MapCreateWarehouse();
         group.MapListContainers();
         group.MapRecoverContainer();
+        Features.ContainerPhysical.ContainerPhysicalEndpoint.MapContainerPhysical(group);
         group.MapListStorageLocations();
         group.MapCreateStorageLocation();
         group.MapSetStorageLocationStatus();

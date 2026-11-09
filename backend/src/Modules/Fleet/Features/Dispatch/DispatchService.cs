@@ -13,7 +13,8 @@ public sealed class DispatchService(
     FleetDbContext db,
     IOptions<BatteryOptions> battery,
     IOptions<DispatchOptions> weights,
-    TimeProvider clock)
+    TimeProvider clock,
+    IOptions<WaroTrans.Fleet.Traffic.TrafficOptions>? traffic = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -37,7 +38,7 @@ public sealed class DispatchService(
 
         var now = clock.GetUtcNow();
         return DispatchEligibility.Rank(robots.Select(r =>
-            DispatchEligibility.Evaluate(r, query, now, lastCommands.TryGetValue(r.Id, out var last) ? last : null, battery.Value, weights.Value)));
+            DispatchEligibility.Evaluate(r, query, now, lastCommands.TryGetValue(r.Id, out var last) ? last : null, battery.Value, weights.Value, traffic?.Value.Footprint)));
     }
 
     public async Task RecordAsync(DispatchDecisionRecord record, CancellationToken cancellationToken)

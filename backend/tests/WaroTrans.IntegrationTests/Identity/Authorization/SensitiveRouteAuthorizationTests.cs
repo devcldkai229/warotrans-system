@@ -46,6 +46,7 @@ public sealed class SensitiveRouteAuthorizationTests(WaroTransWebApplicationFact
         new("POST", "/api/fleet/robots/{id:guid}/maintenance/complete", Permissions.RobotMaintenance, true),
         new("POST", "/api/fleet/robots/{id:guid}/system-actions", Permissions.RobotPower, true),
         new("GET", "/api/fleet/robots/{id:guid}/health", Permissions.RobotDiagnostics, true),
+        new("PUT", "/api/fleet/robots/{id:guid}/capacity", Permissions.RobotConfigure, true),
         new("GET", "/api/fleet/robots/{id:guid}/camera/stream", Permissions.RobotRead, true),
         new("GET", "/api/fleet/statistics/robots", Permissions.StatisticsRead, false),
         new("GET", "/api/fleet/traffic/snapshot", Permissions.TrafficRead, false),

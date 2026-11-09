@@ -248,6 +248,11 @@ export interface Robot {
   maintenanceSince?: string | null
   /** RB-09: system actions the robot announced. */
   capabilities?: string[]
+  /** FL-03: null = not declared. */
+  maxPayloadKg?: number | null
+  maxContainers?: number | null
+  lengthM?: number | null
+  widthM?: number | null
 }
 
 /** The Job a Robot is working on, joined from JobAssignment. TODO(backend): needs a fleet read endpoint. */

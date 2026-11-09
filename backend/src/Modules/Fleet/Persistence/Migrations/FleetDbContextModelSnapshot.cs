@@ -295,6 +295,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("last_telemetry_sequence");
 
+                    b.Property<double?>("LengthM")
+                        .HasColumnType("double precision")
+                        .HasColumnName("length_m");
+
                     b.Property<double?>("LinearVelocity")
                         .HasColumnType("double precision")
                         .HasColumnName("linear_velocity");
@@ -330,6 +334,14 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("map_version_code");
+
+                    b.Property<int?>("MaxContainers")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_containers");
+
+                    b.Property<decimal?>("MaxPayloadKg")
+                        .HasColumnType("numeric")
+                        .HasColumnName("max_payload_kg");
 
                     b.Property<bool>("MotionHeld")
                         .HasColumnType("boolean")
@@ -376,6 +388,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                     b.Property<Guid>("WarehouseId")
                         .HasColumnType("uuid")
                         .HasColumnName("warehouse_id");
+
+                    b.Property<double?>("WidthM")
+                        .HasColumnType("double precision")
+                        .HasColumnName("width_m");
 
                     b.HasKey("Id")
                         .HasName("p_k_robots");

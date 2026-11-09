@@ -16,6 +16,10 @@ public interface IFleetModule
     /// </summary>
     Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default);
 
+    /// <summary>FL-03: the most any enabled robot on this map can carry. Default: unknown (test doubles).</summary>
+    Task<FleetCapacity> GetCapacityAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new FleetCapacity(null, null));
+
     /// <summary>BOTH-01: the robot's most recent command, whatever its kind. Null when it has none.</summary>
     Task<RobotCommandSummary?> GetLatestCommandAsync(Guid robotId, CancellationToken cancellationToken = default) =>
         Task.FromResult<RobotCommandSummary?>(null);

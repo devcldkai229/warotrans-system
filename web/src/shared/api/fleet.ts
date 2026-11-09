@@ -159,6 +159,14 @@ export function releaseTrafficAfterClearance(robotId: string, body: { robotCode:
   })
 }
 
+/** FL-03: what a robot may carry and its size. A field left null means not known. */
+export function setRobotCapacity(
+  robotId: string,
+  body: { maxPayloadKg: number | null; maxContainers: number | null; lengthM: number | null; widthM: number | null },
+) {
+  return apiFetch(`/api/fleet/robots/${robotId}/capacity`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
 /** RB-03: REQUESTED → ACCEPTED → STOPPED_VERIFIED, or REJECTED / UNKNOWN. Never "stopped" without the robot saying so. */
 export type StopStateName = 'NONE' | 'REQUESTED' | 'ACCEPTED' | 'STOPPED_VERIFIED' | 'REJECTED' | 'UNKNOWN'
 

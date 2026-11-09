@@ -145,6 +145,7 @@ public sealed class JobExecutionEngine(
             try
             {
                 EnsureRobotCanTakeJob(robot, job, busyRobots);
+                EnsureCapacityAllows(candidates.FirstOrDefault(c => c.RobotId == requested), robot);
                 EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
             }
             catch (AppException refused)
@@ -241,6 +242,8 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException($"Robot {robot.Code} battery is below the dispatch minimum.", DispatchReasons.BatteryLow);
         }
+
+        EnsureCapacityAllows(resumeCandidates.FirstOrDefault(c => c.RobotId == robot.Id), robot);
 
         if (previousRobot is { } previous && previous != robot.Id
             && job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
@@ -752,8 +755,10 @@ public sealed class JobExecutionEngine(
 
         var robot = await fleet.GetRobotAsync(robotId, cancellationToken)
             ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
-        EnsureRobotCanTakeJob(robot, job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken));
+        var busy = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
+        EnsureRobotCanTakeJob(robot, job, busy);
         EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
+        EnsureCapacityAllows((await EvaluateDispatchAsync(job, busy, cancellationToken)).FirstOrDefault(c => c.RobotId == robotId), robot);
         var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
         if (pose is not { IsEnabled: true } || pose.MapVersionId != job.MapVersionId)
         {
@@ -2460,7 +2465,17 @@ public sealed class JobExecutionEngine(
             py = pose.Y;
         }
 
-        return await fleet.EvaluateDispatchAsync(new DispatchQuery(job.MapVersionId, px, py, busyRobots), cancellationToken);
+        // FL-03: what is still to be carried. One Container with no weight on record means the total is not known.
+        var open = job.JobContainers
+            .Where(c => c.Status is not (JobContainerStatus.DELIVERED or JobContainerStatus.FAILED or JobContainerStatus.CANCELLED))
+            .Select(c => c.ContainerId)
+            .ToList();
+        var weights = warehouse is null || open.Count == 0 ? [] : await warehouse.GetContainersAsync(open, cancellationToken);
+        var total = weights.Count == open.Count && weights.All(w => w.WeightKg is not null) ? weights.Sum(w => w.WeightKg) : null;
+
+        return await fleet.EvaluateDispatchAsync(
+            new DispatchQuery(job.MapVersionId, px, py, busyRobots) { ContainerCount = open.Count, TotalWeightKg = total },
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(Guid jobId, CancellationToken cancellationToken)
@@ -2494,6 +2509,15 @@ public sealed class JobExecutionEngine(
                 $"Robot {robot.Code} has no {(battery[0] == DispatchReasons.BatteryStale ? "recent " : "")}battery reading. "
                 + "Dispatch it with an override and a reason if you know it is charged.",
                 battery[0]);
+        }
+    }
+
+    /// <summary>FL-03: too much for this robot. Nobody can override it: an operator's reason does not make a robot stronger.</summary>
+    private static void EnsureCapacityAllows(DispatchCandidate? candidate, RobotSnapshot robot)
+    {
+        if (candidate?.Reasons.FirstOrDefault(DispatchReasons.IsCapacity) is { } reason)
+        {
+            throw new ConflictException($"Robot {robot.Code} cannot take this load ({reason}).", reason);
         }
     }
 

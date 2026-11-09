@@ -22,11 +22,11 @@ public sealed class CollectThenDeliverJobBatchPlanner(int? maxContainersPerJob =
     /// </summary>
     public const string SingleBatchKey = "BATCH-001";
 
-    public IReadOnlyList<JobBatchPlan> Plan(TransportRequestExecutionSnapshot request)
+    public IReadOnlyList<JobBatchPlan> Plan(TransportRequestExecutionSnapshot request, JobPlanLimits? limits = null)
     {
         var details = request.Details.OrderBy(d => d.SequenceNo).ToList();
 
-        var batches = Split(details)
+        var batches = Split(details, limits)
             .Select((group, index) => ToBatch(group, index + 1))
             .ToList();
 
@@ -34,16 +34,55 @@ public sealed class CollectThenDeliverJobBatchPlanner(int? maxContainersPerJob =
         return batches;
     }
 
-    private IEnumerable<IReadOnlyList<TransportRequestDetailSnapshot>> Split(IReadOnlyList<TransportRequestDetailSnapshot> details)
+    private IEnumerable<IReadOnlyList<TransportRequestDetailSnapshot>> Split(
+        IReadOnlyList<TransportRequestDetailSnapshot> details,
+        JobPlanLimits? limits)
     {
-        if (maxContainersPerJob is not { } limit || details.Count <= Math.Max(limit, 1))
+        // The smaller of the configured limit and what the largest robot carries (FL-03).
+        int? count = (maxContainersPerJob, limits?.MaxContainers) switch
+        {
+            ({ } configured, { } robots) => Math.Min(configured, robots),
+            ({ } configured, null) => configured,
+            (null, { } robots) => robots,
+            _ => null
+        };
+        var payload = limits?.MaxPayloadKg;
+        decimal WeightOf(TransportRequestDetailSnapshot d) => limits?.WeightsKg.GetValueOrDefault(d.ContainerId) ?? 0;
+
+        var fitsOne = (count is null || details.Count <= Math.Max(count.Value, 1))
+                      && (payload is null || details.Sum(WeightOf) <= payload);
+        if (fitsOne)
         {
             return [details];
         }
 
-        return details
-            .GroupBy(d => (d.SourceEndpointId, d.DestinationEndpointId))
-            .SelectMany(route => route.Chunk(Math.Max(limit, 1)));
+        var batches = new List<IReadOnlyList<TransportRequestDetailSnapshot>>();
+        foreach (var route in details.GroupBy(d => (d.SourceEndpointId, d.DestinationEndpointId)))
+        {
+            var current = new List<TransportRequestDetailSnapshot>();
+            decimal weight = 0;
+            foreach (var detail in route)
+            {
+                var full = count is { } most && current.Count >= Math.Max(most, 1);
+                var heavy = payload is { } limit && current.Count > 0 && weight + WeightOf(detail) > limit;
+                if (full || heavy)
+                {
+                    batches.Add(current);
+                    current = [];
+                    weight = 0;
+                }
+
+                current.Add(detail);
+                weight += WeightOf(detail);
+            }
+
+            if (current.Count > 0)
+            {
+                batches.Add(current);
+            }
+        }
+
+        return batches;
     }
 
     private static JobBatchPlan ToBatch(IReadOnlyList<TransportRequestDetailSnapshot> details, int sequenceNo)
