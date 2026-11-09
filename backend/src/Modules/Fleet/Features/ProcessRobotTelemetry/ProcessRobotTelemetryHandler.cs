@@ -80,7 +80,8 @@ public sealed class ProcessRobotTelemetryHandler(
 
         // RB-03: the robot is the truth about whether it holds motion. Older robots send no field: keep the value.
         var motionHeld = message.MotionHold ?? robot.MotionHeld;
-        var holdChangedAt = motionHeld != robot.MotionHeld ? utcNow : robot.MotionHoldChangedAt;
+        var holdChanged = motionHeld != robot.MotionHeld;
+        var holdChangedAt = holdChanged ? utcNow : robot.MotionHoldChangedAt;
 
         // Same concurrency-safe path as heartbeat: avoid stale UpdatedAt dropping liveness.
         await db.Robots
@@ -110,6 +111,10 @@ public sealed class ProcessRobotTelemetryHandler(
                     .SetProperty(r => r.UpdatedAt, robot.UpdatedAt),
                 cancellationToken);
         db.ChangeTracker.Clear();
+        if (holdChanged)
+        {
+            await RobotStateJournal.WriteAsync(db, robot.Id, robot.Status, motionHeld ? "motion_held" : "motion_released", RobotStateEventSource.ROBOT, cancellationToken);
+        }
 
         // Admin notifications: only the moment something starts, not every reading while it lasts.
         if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent

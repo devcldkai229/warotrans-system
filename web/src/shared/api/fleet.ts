@@ -159,6 +159,21 @@ export function releaseTrafficAfterClearance(robotId: string, body: { robotCode:
   })
 }
 
+/** FLT-02: what this robot can be asked now. An unsupported item must not be offered. */
+export interface RobotCommandCatalogItem {
+  code: 'STOP' | 'PAUSE' | 'RESUME' | 'MANUAL_DRIVE' | 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN' | 'LOCALIZE' | 'DOCK' | 'CHARGE'
+  supported: boolean
+  reason: string | null
+  permission: string
+  ackTimeoutSeconds: number | null
+  resultTimeoutSeconds: number | null
+  acknowledgement: 'ACK_AND_RESULT' | 'STATE_FROM_TELEMETRY' | 'LEASE' | 'NONE'
+}
+
+export function getRobotCommandCatalog(robotId: string) {
+  return apiFetch<{ items: RobotCommandCatalogItem[] }>(`/api/fleet/robots/${robotId}/commands/catalog`)
+}
+
 /** FL-03: what a robot may carry and its size. A field left null means not known. */
 export function setRobotCapacity(
   robotId: string,

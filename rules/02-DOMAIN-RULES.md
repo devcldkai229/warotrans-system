@@ -136,6 +136,10 @@ CANCELLED
 | DELIVERED | COMPLETED |
 | FAILED | FAILED |
 | CANCELLED | CANCELLED (replan back to QUEUED — decide later) |
+## Robot history and commands (BOTH-02, FLT-02)
+
+`robot_state_events` gets a row only when a robot's status, connectivity or motion hold changes, never for a heartbeat. `GET /robots/{id}/state-history` merges these with its commands. `GET /robots/{id}/commands/catalog` says what can be asked of this robot now; LOCALIZE, DOCK and CHARGE are listed as unsupported and clients must not offer them. A stop accepted with no result for 30 s reads UNKNOWN rather than ACCEPTED. RESUME still clears the hold in the backend at once: Job resume reads it immediately, and the robot's telemetry corrects it.
+
 ## Capacity (FL-03)
 
 A robot declares `MaxPayloadKg`, `MaxContainers`, `LengthM`, `WidthM`; a Container has `WeightKg`, `LengthM`, `WidthM`. All are entered by a person and may be empty. Planning happens before a robot is chosen, so it splits on the smaller of `JobPlanning:MaxContainersPerJob` and the largest robot in service on the map, and refuses a Container no robot can carry. Dispatch, resume and recovery then refuse a robot the load is too much for, and no override exists. A missing figure does not refuse: the decision records `capacity_unknown`. Traffic reserves one footprint for all robots, so a robot larger than it is refused and a smaller one reserves more than it needs. Container size is stored but not yet compared with anything.

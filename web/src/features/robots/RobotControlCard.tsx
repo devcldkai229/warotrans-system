@@ -6,6 +6,7 @@ import {
   completeMaintenance,
   getRobot,
   getRobotHealth,
+  getRobotCommandCatalog,
   getStopState,
   resumeRobot,
   robotSystemAction,
@@ -49,6 +50,13 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
     queryFn: () => getStopState(robotId),
     refetchInterval: (q) => (q.state.data?.state === 'REQUESTED' || q.state.data?.state === 'ACCEPTED' ? 500 : 5_000),
   })
+  const catalog = useQuery({
+    queryKey: ['robot-command-catalog', robotId],
+    queryFn: () => getRobotCommandCatalog(robotId),
+    refetchInterval: 10_000,
+  })
+  // FLT-02: until the catalog has loaded nothing is hidden, so a stop is never missing because of a slow request.
+  const offered = (code: string) => catalog.data?.items.find((item) => item.code === code)?.supported ?? true
   const mayDiagnose = canActOnRobot(capabilities, PERMISSIONS.robotDiagnostics, robotId)
   const health = useQuery({
     queryKey: ['robot-health', robotId],
@@ -99,12 +107,12 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
       <p className="mt-1 text-xs text-muted">A software stop is not an emergency stop: use the robot's physical E-stop when people are at risk.</p>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {mayStop ? (
+        {mayStop && offered('STOP') ? (
           <Button size="sm" variant="primary" disabled={act.isPending} onClick={() => act.mutate(() => stopRobot(robotId, 'Stopped from the console'))}>
             Stop
           </Button>
         ) : null}
-        {mayResume && held ? (
+        {mayResume && held && offered('RESUME') ? (
           <Button size="sm" variant="surface" disabled={act.isPending} onClick={() => act.mutate(() => resumeRobot(robotId))}>
             Resume
           </Button>

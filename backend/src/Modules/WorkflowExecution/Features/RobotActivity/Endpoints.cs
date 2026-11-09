@@ -142,5 +142,34 @@ public static class RobotActivityEndpoints
             .WithName("GetRobotActivity")
             .WithSummary("The Job this robot holds now; activity is null when it is idle")
             .WithTags("Jobs");
+
+        group.MapGet("/robots/{id:guid}/job-history", async (
+                Guid id, int? skip, int? take, WorkflowExecutionDbContext db, CancellationToken cancellationToken) =>
+            {
+                var first = Math.Max(0, skip ?? 0);
+                var size = Math.Clamp(take ?? 50, 1, 200);
+                var rows = db.JobRobotAssignments.AsNoTracking().Where(a => a.RobotId == id);
+                var items = await rows
+                    .OrderByDescending(a => a.StartedAt)
+                    .Skip(first)
+                    .Take(size)
+                    .Select(a => new
+                    {
+                        a.JobId,
+                        a.Job.JobNo,
+                        JobStatus = a.Job.Status.ToString(),
+                        a.StartedAt,
+                        a.EndedAt,
+                        a.StartReason,
+                        a.EndReason
+                    })
+                    .ToListAsync(cancellationToken);
+                return Results.Ok(new { items, total = await rows.CountAsync(cancellationToken), skip = first, take = size });
+            })
+            .RequirePermission(Permissions.RobotRead)
+            .RequireRobotScope()
+            .WithName("GetRobotJobHistory")
+            .WithSummary("Every Job this robot held, newest first, also ones that never issued a command")
+            .WithTags("Jobs");
     }
 }
