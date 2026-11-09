@@ -166,6 +166,45 @@ export function confirmHandoverBatch(jobId: string, type: 'PICKUP' | 'DROPOFF', 
   )
 }
 
+export interface JobRecovery {
+  id: string
+  jobId: string
+  status: 'OPEN' | 'TARGET_ASSIGNED' | 'TRANSFERRED' | 'RESUMED_SAME_ROBOT' | 'CANCELLED'
+  reason: string
+  fromRobotId: string | null
+  toRobotId: string | null
+  recoveryEndpointId: string | null
+  containerIds: string[]
+  robotArrived: boolean
+  confirmedBy: string | null
+  confirmedAt: string | null
+  note: string | null
+  createdAt: string
+  resolvedAt: string | null
+}
+
+const recoveryRoot = (jobId: string) => `/api/workflow-execution/jobs/${jobId}/recovery`
+
+export function getJobRecovery(jobId: string) {
+  return apiRequest<{ recovery: JobRecovery | null }>(recoveryRoot(jobId))
+}
+
+export function assignRecoveryRobot(jobId: string, robotId: string, endpointId: string) {
+  return apiRequest<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/assign`, { method: 'POST', body: JSON.stringify({ robotId, endpointId }) })
+}
+
+export function unassignRecoveryRobot(jobId: string) {
+  return apiRequest<{ recovery: JobRecovery }>(`${recoveryRoot(jobId)}/unassign`, { method: 'POST' })
+}
+
+export function confirmRecoveryTransfer(jobId: string, containerIds: string[], note: string) {
+  return apiRequest<JobDetailDto>(`${recoveryRoot(jobId)}/transfer-confirm`, { method: 'POST', body: JSON.stringify({ containerIds, note }) })
+}
+
+export function resumeRecoveryOnSameRobot(jobId: string, note?: string) {
+  return apiRequest<JobDetailDto>(`${recoveryRoot(jobId)}/resume-same-robot`, { method: 'POST', body: JSON.stringify({ note: note ?? null }) })
+}
+
 /** WFX-03: operator pause. The robot gets STOP mode PAUSE; follow it with getStopState(robotId). */
 export function pauseJob(id: string, reason?: string) {
   return apiRequest<unknown>(`/api/workflow-execution/jobs/${id}/pause`, { method: 'POST', body: JSON.stringify({ reason }) })

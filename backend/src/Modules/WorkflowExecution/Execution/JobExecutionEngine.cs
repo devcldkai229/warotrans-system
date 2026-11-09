@@ -57,7 +57,8 @@ public sealed class JobExecutionEngine(
     ITrafficOpsLog? trafficOpsLog = null,
     IIssueReporter? issueReporter = null,
     IWarehouseModule? warehouse = null,
-    IOptions<HumanTaskOptions>? humanTasks = null)
+    IOptions<HumanTaskOptions>? humanTasks = null,
+    IOptions<RecoveryOptions>? recoveryOptions = null)
 {
     public const string AssignedRobotKey = "assignedRobotId";
 
@@ -607,6 +608,333 @@ public sealed class JobExecutionEngine(
 
         await AdvanceAsync(job.Id, cancellationToken);
         return step;
+    }
+
+    // ------------------------------------------------------------------ recovery (WFX-04, FL-06)
+
+    private const string PayloadTransferredCode = "payload_transferred";
+
+    /// <summary>
+    /// Holds the Job for a person. Cargo stays ONBOARD and the robot keeps what it occupies in traffic: nothing here
+    /// releases a zone, because the robot may still be standing in it.
+    /// </summary>
+    private async Task OpenRecoveryAsync(Job job, string code, string? message, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+            .ToDictionaryAsync(s => s.Id, cancellationToken);
+        foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
+        {
+            ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+        }
+
+        job.Status = JobStatus.RUNNING; // the entity only enters recovery from a live state
+        job.MarkRecoveryRequired(code, message);
+        var robotId = AssignedRobot(job);
+        var onBoard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToList();
+        db.JobRecoveryCases.Add(new JobRecoveryCase
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            FromRobotId = robotId,
+            Status = JobRecoveryStatuses.Open,
+            Reason = code,
+            ContainerIds = onBoard,
+            CreatedAt = now
+        });
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robotId, code));
+        await SaveAndPublishAsync(cancellationToken);
+        logger.LogWarning("Job {JobNo}: robot failed with {Count} container(s) on board; recovery required", job.JobNo, onBoard.Count);
+
+        if (issueReporter is not null)
+        {
+            await issueReporter.ReportAsync(
+                new SystemIssueDraft(
+                    $"payload-recovery:{job.Id}",
+                    job.Id,
+                    job.JobNo,
+                    null,
+                    robotId,
+                    onBoard.Count == 1 ? onBoard[0] : null,
+                    $"The robot of job {job.JobNo} failed with {onBoard.Count} container(s) on board ({code}). "
+                    + "Someone has to confirm where they are and transfer them.",
+                    High: true),
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// A robot silent for longer than the grace period with its Job still live. With cargo: recovery. Without: the Job
+    /// waits to be resumed on it or another robot (rules/02). Nothing here touches traffic.
+    /// </summary>
+    public async Task<int> HandleOfflineRobotsAsync(CancellationToken cancellationToken = default)
+    {
+        var grace = TimeSpan.FromSeconds(Math.Max(1, recoveryOptions?.Value.OfflineGraceSeconds ?? 120));
+        var now = DateTimeOffset.UtcNow;
+        var rows = await db.JobRobotAssignments.AsNoTracking()
+            .Where(a => a.EndedAt == null)
+            .Select(a => new { a.JobId, a.RobotId })
+            .ToListAsync(cancellationToken);
+
+        var handled = 0;
+        foreach (var row in rows)
+        {
+            var robot = await fleet.GetRobotAsync(row.RobotId, cancellationToken);
+            if (robot is null || robot.IsOnline || (robot.LastTelemetryAt is { } last && now - last < grace))
+            {
+                continue;
+            }
+
+            var job = await LoadJobAsync(row.JobId, cancellationToken);
+            var onBoard = job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD);
+            if (job.Status is not (JobStatus.RUNNING or JobStatus.PAUSED) || (job.Status == JobStatus.PAUSED && !onBoard))
+            {
+                continue;
+            }
+
+            if (onBoard)
+            {
+                await OpenRecoveryAsync(job, "robot_offline", $"Robot {robot.Code} has been offline for over {grace.TotalSeconds:F0} s.", now, cancellationToken);
+            }
+            else
+            {
+                var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+                    .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                    .ToDictionaryAsync(s => s.Id, cancellationToken);
+                foreach (var (task, step) in OrderedSteps(job).Where(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.EXECUTING))
+                {
+                    ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+                }
+
+                job.Status = JobStatus.REASSIGNING;
+                job.FailureCode = "robot_offline";
+                job.FailureMessage = $"Robot {robot.Code} has been offline for over {grace.TotalSeconds:F0} s. Nothing is on board.";
+                _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), robot.Id, job.FailureCode));
+                await SaveAndPublishAsync(cancellationToken);
+            }
+
+            handled++;
+        }
+
+        return handled;
+    }
+
+    private async Task<(Job Job, JobRecoveryCase Case)> LoadRecoveryAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        var job = await LoadJobAsync(jobId, cancellationToken);
+        if (job.Status != JobStatus.RECOVERY_REQUIRED)
+        {
+            throw new ConflictException($"Job {job.JobNo} is {job.Status}, not RECOVERY_REQUIRED.", "job_not_in_recovery");
+        }
+
+        var recovery = await db.JobRecoveryCases.FirstOrDefaultAsync(c => c.JobId == jobId && c.ResolvedAt == null, cancellationToken)
+            ?? throw new ConflictException($"Job {job.JobNo} has no open recovery.", "job_not_in_recovery");
+        return (job, recovery);
+    }
+
+    /// <summary>
+    /// Sends a second robot to a safe endpoint. It goes through traffic like any MOVE, as a step of this Job: its result
+    /// comes back the usual way. It holds no assignment yet: the Job stays with the first robot until a person says the
+    /// cargo moved. It counts as busy meanwhile.
+    /// </summary>
+    public async Task<JobRecoveryCase> AssignRecoveryRobotAsync(Guid jobId, Guid robotId, Guid endpointId, CancellationToken cancellationToken = default)
+    {
+        var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        if (recovery.Status != JobRecoveryStatuses.Open)
+        {
+            throw new ConflictException("A robot is already on its way for this recovery.", "recovery_target_assigned");
+        }
+
+        if (robotId == recovery.FromRobotId)
+        {
+            throw new DomainValidationException("That is the robot that failed. Use resume on the same robot instead.", "recovery_same_robot");
+        }
+
+        var robot = await fleet.GetRobotAsync(robotId, cancellationToken)
+            ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
+        EnsureRobotCanTakeJob(robot, job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken));
+        EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
+        var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
+        if (pose is not { IsEnabled: true } || pose.MapVersionId != job.MapVersionId)
+        {
+            throw new DomainValidationException("That endpoint is disabled or on another map.", "recovery_endpoint_invalid");
+        }
+
+        var moveDefinition = await db.WorkflowSteps.AsNoTracking()
+            .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId && s.StepType == StepType.MOVE)
+            .OrderBy(s => s.SequenceNo)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new ConflictException("This workflow has no MOVE to send a robot with.", "recovery_no_move_step");
+
+        var now = DateTimeOffset.UtcNow;
+        var task = new JobTask
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            WorkflowTaskId = moveDefinition.WorkflowTaskId,
+            SequenceNo = job.JobTasks.Min(t => t.SequenceNo) - 1,
+            Status = JobTaskStatus.RUNNING,
+            StartedAt = now,
+            ContextValues = new Dictionary<string, JsonElement>
+            {
+                ["executionScope"] = JsonSerializer.SerializeToElement("RECOVERY"),
+                ["stopEndpointId"] = JsonSerializer.SerializeToElement(endpointId)
+            }
+        };
+        var step = new JobStep
+        {
+            Id = Guid.NewGuid(),
+            JobTaskId = task.Id,
+            WorkflowStepId = moveDefinition.Id,
+            SequenceNo = 1,
+            StepType = StepType.MOVE,
+            Status = JobStepStatus.PENDING,
+            TargetEndpointId = endpointId,
+            ResolvedInputs = new Dictionary<string, JsonElement>
+            {
+                ["robotId"] = JsonSerializer.SerializeToElement(robotId),
+                ["targetEndpointId"] = JsonSerializer.SerializeToElement(endpointId)
+            },
+            StartedAt = now
+        };
+        task.JobSteps.Add(step);
+        db.JobTasks.Add(task);
+        recovery.Status = JobRecoveryStatuses.TargetAssigned;
+        recovery.ToRobotId = robotId;
+        recovery.RecoveryEndpointId = endpointId;
+        recovery.MoveStepId = step.Id;
+        await SaveAndPublishAsync(cancellationToken);
+
+        await StartMoveAsync(job, task, step, moveDefinition.StepKey, cancellationToken);
+        if (step.Status == JobStepStatus.FAILED)
+        {
+            var problem = step.ErrorMessage;
+            step.Status = JobStepStatus.SKIPPED;
+            task.Status = JobTaskStatus.SKIPPED;
+            recovery.Status = JobRecoveryStatuses.Open;
+            recovery.ToRobotId = null;
+            recovery.RecoveryEndpointId = null;
+            recovery.MoveStepId = null;
+            await SaveAndPublishAsync(cancellationToken);
+            throw new ConflictException($"Robot {robot.Code} could not be sent: {problem}", "recovery_move_failed");
+        }
+
+        await SaveAndPublishAsync(cancellationToken);
+        return recovery;
+    }
+
+    /// <summary>Calls back the robot that was on its way, so another can be sent or the first resumed.</summary>
+    public async Task<JobRecoveryCase> UnassignRecoveryRobotAsync(Guid jobId, CancellationToken cancellationToken = default)
+    {
+        var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        if (recovery.Status != JobRecoveryStatuses.TargetAssigned)
+        {
+            throw new ConflictException("No robot is on its way for this recovery.", "recovery_no_target");
+        }
+
+        await EndRecoveryMoveAsync(job, recovery, cancellationToken);
+        recovery.Status = JobRecoveryStatuses.Open;
+        recovery.ToRobotId = null;
+        recovery.RecoveryEndpointId = null;
+        recovery.MoveStepId = null;
+        await SaveAndPublishAsync(cancellationToken);
+        return recovery;
+    }
+
+    /// <summary>A finished recovery move stays as history; one still running is stopped; neither is run again on resume.</summary>
+    private async Task EndRecoveryMoveAsync(Job job, JobRecoveryCase recovery, CancellationToken cancellationToken)
+    {
+        var entry = OrderedSteps(job).FirstOrDefault(x => x.Step.Id == recovery.MoveStepId);
+        if (entry.Step is null || entry.Step.Status == JobStepStatus.COMPLETED)
+        {
+            return;
+        }
+
+        if (entry.Step.Status == JobStepStatus.EXECUTING
+            && recovery.ToRobotId is { } robotId
+            && entry.Step.OutputValues.TryGetValue(RobotCommandIdKey, out var command)
+            && command.ValueKind == JsonValueKind.String)
+        {
+            await fleet.CancelNavigationAsync(robotId, command.GetGuid(), cancellationToken);
+        }
+
+        entry.Step.Status = JobStepStatus.SKIPPED;
+        entry.Task.Status = JobTaskStatus.SKIPPED;
+    }
+
+    /// <summary>
+    /// A person saw the cargo move to the second robot. In one transaction the Job changes robot and the case closes, so
+    /// no Container ever has two robots. The Job then waits PAUSED: an operator resumes it, and it continues to its
+    /// original destination. Refused until the second robot has arrived.
+    /// </summary>
+    public async Task<JobRecoveryCase> ConfirmRecoveryTransferAsync(
+        Guid jobId,
+        IReadOnlyCollection<Guid> containerIds,
+        Guid confirmedBy,
+        string? note,
+        CancellationToken cancellationToken = default)
+    {
+        var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        if (recovery.Status != JobRecoveryStatuses.TargetAssigned || recovery.ToRobotId is not { } target)
+        {
+            throw new ConflictException("Send a robot first.", "recovery_no_target");
+        }
+
+        var arrived = OrderedSteps(job).Any(x => x.Step.Id == recovery.MoveStepId && x.Step.Status == JobStepStatus.COMPLETED);
+        if (!arrived)
+        {
+            throw new ConflictException("The robot has not reached the recovery endpoint yet.", "recovery_robot_not_arrived");
+        }
+
+        var onBoard = job.JobContainers.Where(c => c.Status == JobContainerStatus.ONBOARD).Select(c => c.ContainerId).ToHashSet();
+        if (!onBoard.SetEquals(containerIds))
+        {
+            throw new DomainValidationException("Name exactly the containers that were on the robot.", "recovery_containers_mismatch");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        job.ContextValues = new Dictionary<string, JsonElement>(job.ContextValues)
+        {
+            [AssignedRobotKey] = JsonSerializer.SerializeToElement(target)
+        };
+        job.Status = JobStatus.PAUSED;
+        job.FailureCode = PayloadTransferredCode;
+        job.FailureMessage = "The cargo is on the new robot. Resume the Job to continue to its destination.";
+        recovery.Status = JobRecoveryStatuses.Transferred;
+        recovery.ConfirmedBy = confirmedBy;
+        recovery.ConfirmedAt = now;
+        recovery.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        recovery.ResolvedAt = now;
+        _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), target, job.FailureCode));
+        await SaveAndPublishAsync(cancellationToken);
+        return recovery;
+    }
+
+    /// <summary>The failed robot came back and can still carry the cargo: same Job, same robot. Normal resume checks apply.</summary>
+    public async Task<Job> ResumeRecoveryOnSameRobotAsync(Guid jobId, Guid confirmedBy, string? note, CancellationToken cancellationToken = default)
+    {
+        var (job, recovery) = await LoadRecoveryAsync(jobId, cancellationToken);
+        if (recovery.Status != JobRecoveryStatuses.Open)
+        {
+            throw new ConflictException("Another robot is on its way; call it back first.", "recovery_target_assigned");
+        }
+
+        var robotId = recovery.FromRobotId
+            ?? throw new ConflictException("This Job had no robot to go back to.", "recovery_no_robot");
+        var robot = await fleet.GetRobotAsync(robotId, cancellationToken)
+            ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
+        EnsureRobotCanTakeJob(robot, job, await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken));
+        EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
+
+        var now = DateTimeOffset.UtcNow;
+        job.Status = JobStatus.PAUSED;
+        recovery.Status = JobRecoveryStatuses.ResumedSameRobot;
+        recovery.ConfirmedBy = confirmedBy;
+        recovery.ConfirmedAt = now;
+        recovery.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        recovery.ResolvedAt = now;
+        await SaveAndPublishAsync(cancellationToken);
+        return await ResumeAsync(jobId, robotId, cancellationToken);
     }
 
     // ------------------------------------------------------------------ claims (WH-03)
@@ -1867,6 +2195,15 @@ public sealed class JobExecutionEngine(
         job.FailureCode = step.ErrorCode;
         job.FailureMessage = $"{workflowStep.StepKey}: {step.ErrorMessage}";
 
+        // WFX-04: cargo on a failed robot has not failed, it is somewhere and someone has to fetch it. Marking it FAILED
+        // or handing the Job to another robot would both misstate who holds it.
+        if (job.Status is JobStatus.FAILED or JobStatus.REASSIGNING
+            && job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
+        {
+            await OpenRecoveryAsync(job, job.FailureCode ?? "robot_failed", job.FailureMessage, now, cancellationToken);
+            return;
+        }
+
         if (job.Status == JobStatus.FAILED)
         {
             job.CompletedAt = now;
@@ -2051,6 +2388,16 @@ public sealed class JobExecutionEngine(
                      .Select(e => e.Entity)
                      .ToList())
         {
+            if (!ActiveJobStatuses.Contains(job.Status))
+            {
+                var openCase = await db.JobRecoveryCases.FirstOrDefaultAsync(c => c.JobId == job.Id && c.ResolvedAt == null, cancellationToken);
+                if (openCase is not null)
+                {
+                    openCase.Status = JobRecoveryStatuses.Cancelled;
+                    openCase.ResolvedAt = now;
+                }
+            }
+
             var wanted = ActiveJobStatuses.Contains(job.Status) ? AssignedRobot(job) : null;
             var current = await db.JobRobotAssignments.FirstOrDefaultAsync(a => a.JobId == job.Id && a.EndedAt == null, cancellationToken);
             if (current?.RobotId == wanted)
@@ -2165,7 +2512,11 @@ public sealed class JobExecutionEngine(
             .Where(a => a.EndedAt == null && a.JobId != jobId)
             .Select(a => a.RobotId)
             .ToListAsync(cancellationToken);
-        return busy.ToHashSet();
+        var fetching = await db.JobRecoveryCases.AsNoTracking()
+            .Where(c => c.ResolvedAt == null && c.JobId != jobId && c.ToRobotId != null)
+            .Select(c => c.ToRobotId!.Value)
+            .ToListAsync(cancellationToken);
+        return busy.Concat(fetching).ToHashSet();
     }
 
     /// <summary>
@@ -2294,6 +2645,12 @@ public sealed class JobExecutionEngine(
             throw new DomainValidationException(
                 $"Job {job.JobNo} has {onboard} container(s) on the robot. Give a reason that says where they are now.",
                 "cargo_onboard_reason_required");
+        }
+
+        var openRecovery = await db.JobRecoveryCases.FirstOrDefaultAsync(c => c.JobId == job.Id && c.ResolvedAt == null, cancellationToken);
+        if (openRecovery is not null)
+        {
+            await EndRecoveryMoveAsync(job, openRecovery, cancellationToken);
         }
 
         var now = DateTimeOffset.UtcNow;

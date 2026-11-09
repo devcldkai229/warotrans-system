@@ -144,6 +144,14 @@ A waiting HUMAN step can be claimed for a limited time (`HumanTasks:ClaimLeaseSe
 
 Confirm All (`/jobs/{id}/handover/confirm-batch`) is partial: each Container gets its own result, and a Container whose turn did not come is `not_reached`.
 
+## Payload recovery (WFX-04, FL-06)
+
+A step failing for good with cargo ONBOARD, or a robot silent past `Recovery:OfflineGraceSeconds` with cargo, sends the Job to `RECOVERY_REQUIRED`, opens a `JobRecoveryCase` and an issue. Cargo stays ONBOARD; it is never marked FAILED for this. The robot keeps what it occupies in traffic.
+
+Then either the same robot resumes, once it is online with a verified pose, or a second robot is sent to a safe endpoint as a MOVE of this Job, and a person confirms the transfer naming the Containers. Only then does the Job change robot, in one transaction. It waits PAUSED until an operator resumes it to the original destination. Same Job, no new request.
+
+Releasing a robot's zones (`release-after-clearance`) rests on a person's word, so it is refused when software can do better: robot online with a pose (reconcile instead), a Job still held, or a navigation running.
+
 ## Job state machine
 ```text
 CREATED

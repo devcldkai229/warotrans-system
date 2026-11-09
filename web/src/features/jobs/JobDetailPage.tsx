@@ -21,6 +21,7 @@ import {
 import { getTransportRequest } from '@/shared/api/transportRequests'
 import { DispatchPanel } from './DispatchPanel'
 import { JobOperatorActions } from './JobOperatorActions'
+import { JobRecoveryPanel } from './JobRecoveryPanel'
 import { cx } from '@/shared/lib/cx'
 import { formatBattery, formatClock, formatDuration, humanize, secondsBetween } from '@/shared/lib/format'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
@@ -627,6 +628,8 @@ export function JobDetailPage() {
         </div>
 
         <DispatchPanel job={job} />
+
+        <JobRecoveryPanel job={job} endpoints={endpoints} containerLabel={labels.container} />
 
         <div className="mt-4 grid flex-1 grid-cols-[1fr_1.05fr] items-start gap-4">
           <section className="rounded-lg border border-outline-soft border-l-4 border-l-purple bg-surface p-6 shadow-float">

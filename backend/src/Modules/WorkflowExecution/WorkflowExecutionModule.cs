@@ -67,6 +67,9 @@ public static class WorkflowExecutionModule
         services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));
         services.Configure<Execution.HumanTaskOptions>(configuration.GetSection(Execution.HumanTaskOptions.SectionName));
         services.AddScoped<Features.HumanTasks.HumanTaskQueries>();
+        services.Configure<Execution.RecoveryOptions>(configuration.GetSection(Execution.RecoveryOptions.SectionName));
+        services.AddHostedService<Services.RobotOfflineJobHostedService>();
+        services.AddScoped<WaroTrans.Fleet.Contracts.IRobotWorkQuery, Services.RobotWorkQuery>();
         services.AddSingleton<IJobBatchPlanner>(sp => new CollectThenDeliverJobBatchPlanner(
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JobPlanningOptions>>().Value.MaxContainersPerJob));
         services.AddHostedService<Services.JobBatchContinuationHostedService>();
@@ -123,6 +126,7 @@ public static class WorkflowExecutionModule
         Features.FailJobContainer.FailJobContainerEndpoint.MapFailJobContainer(group);
         Features.RobotActivity.RobotActivityEndpoints.Map(group);
         Features.HumanTasks.HumanTaskEndpoints.Map(group);
+        Features.JobRecovery.JobRecoveryEndpoints.Map(group);
         
         return endpoints;
     }

@@ -148,11 +148,14 @@ export function getTrafficSnapshot() {
   return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot')
 }
 
-/** Operator clearance after physical verification — audited on backend. */
-export function releaseTrafficAfterClearance(robotId: string, operatorId: string, resourceIds?: string[]) {
+/**
+ * WEB-FLEET-06: frees every zone a robot holds, on the operator's word that they checked. The server refuses when the
+ * robot can report its pose, still holds a Job or is navigating. Audited with the reason.
+ */
+export function releaseTrafficAfterClearance(robotId: string, body: { robotCode: string; clearanceConfirmed: boolean; reason: string }) {
   return apiFetch(`/api/fleet/traffic/robots/${robotId}/release-after-clearance`, {
     method: 'POST',
-    body: JSON.stringify({ operatorId, resourceIds: resourceIds ?? null }),
+    body: JSON.stringify(body),
   })
 }
 

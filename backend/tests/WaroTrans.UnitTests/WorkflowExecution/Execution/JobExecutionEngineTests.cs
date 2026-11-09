@@ -10,6 +10,7 @@ using WaroTrans.Navigation.Contracts;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.WorkflowExecution.Contracts;
+using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
@@ -1123,18 +1124,221 @@ public sealed class JobExecutionEngineTests
     [Fact]
     public async Task Resume_on_another_robot_with_containers_onboard_needs_payload_recovery()
     {
-        var jobId = await ProvisionAsync();
-        await MovesRequestReassignAsync();
-        await Engine().StartAsync(jobId, null);
-        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
-        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
-        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
-        await RobotOfflineAsync();                                    // on the way to D with C1 + C2
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await PauseOperationalAsync(jobId);
         var other = _fleet.AddRobot(_mapVersionId);
 
         var ex = await Assert.ThrowsAsync<ConflictException>(() => Engine().ResumeAsync(jobId, other));
 
         Assert.Equal("payload_recovery_required", ex.Code);
+    }
+
+    /// <summary>Both containers picked up, driving to D.</summary>
+    private async Task<Guid> JobOnTheWayWithCargoAsync(bool reassignPolicy = true)
+    {
+        var jobId = await ProvisionAsync();
+        if (reassignPolicy)
+        {
+            await MovesRequestReassignAsync();
+        }
+
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C2, HumanConfirmationSource.StaffApp(_staff));
+        return jobId;
+    }
+
+    private async Task PauseOperationalAsync(Guid jobId)
+    {
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        job.Status = JobStatus.PAUSED;
+        await _db.SaveChangesAsync();
+    }
+
+    private Guid RecoveryEndpoint()
+    {
+        var id = Guid.NewGuid();
+        _navigation.Poses[id] = new EndpointPoseSnapshot(id, _mapVersionId, "EP-SAFE", 5.0, 5.0, 0.0, true);
+        return id;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_robot_that_fails_with_cargo_opens_recovery_whatever_the_policy(bool reassignPolicy)
+    {
+        var jobId = await JobOnTheWayWithCargoAsync(reassignPolicy);
+        var reporter = new RecordingIssueReporter();
+
+        await new RobotCommandLifecycleJobStepHandler(_db, EngineWith(reporter), _events, NullLogger<RobotCommandLifecycleJobStepHandler>.Instance)
+            .HandleAsync(new RobotCommandLifecycleChanged(
+                _fleet.Commands[^1].CommandId, _fleet.RobotId, "RBT-SIM-01", "NAVIGATE_TO_POSE", "FAILED",
+                null, _fleet.Commands[^1].JobStepId, null, "robot_offline", RobotCommandLifecycleChanged.Phases.OfflineAbort));
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.RECOVERY_REQUIRED, job.Status);
+        Assert.Null(job.CompletedAt);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.ONBOARD, c.Status));
+        var recovery = await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId);
+        Assert.Equal(_fleet.RobotId, recovery.FromRobotId);
+        Assert.Equal(2, recovery.ContainerIds.Count);
+        Assert.Equal($"payload-recovery:{jobId}", Assert.Single(reporter.SystemDrafts).SourceKey);
+
+        // Still the Job's robot, and busy: nothing else may take it while it may hold cargo.
+        Assert.Equal(_fleet.RobotId, (await _db.JobRobotAssignments.SingleAsync(a => a.JobId == jobId && a.EndedAt == null)).RobotId);
+        var ordinary = await Assert.ThrowsAsync<ConflictException>(() => Engine().ResumeAsync(jobId, null));
+        Assert.Equal("job_not_resumable", ordinary.Code);
+    }
+
+    [Fact]
+    public async Task Cargo_moves_to_a_second_robot_only_after_it_arrived_and_a_person_confirmed_and_the_same_job_goes_on()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        var first = _fleet.RobotId;
+        var movesBefore = await _db.JobTasks.CountAsync(t => t.JobId == jobId);
+        await RobotOfflineAsync();
+        var second = _fleet.AddRobot(_mapVersionId);
+        var safe = RecoveryEndpoint();
+
+        var notYet = await Assert.ThrowsAsync<ConflictException>(() => Engine().ConfirmRecoveryTransferAsync(jobId, [C1, C2], _staff, null));
+        Assert.Equal("recovery_no_target", notYet.Code);
+        var same = await Assert.ThrowsAsync<DomainValidationException>(() => Engine().AssignRecoveryRobotAsync(jobId, first, safe));
+        Assert.Equal("recovery_same_robot", same.Code);
+
+        await Engine().AssignRecoveryRobotAsync(jobId, second, safe);
+
+        var sent = _fleet.Commands[^1];
+        Assert.Equal(second, sent.RobotId);
+        Assert.Equal(5.0, sent.X);
+        // The Job still belongs to the first robot.
+        Assert.Equal(first, (await _db.JobRobotAssignments.SingleAsync(a => a.JobId == jobId && a.EndedAt == null)).RobotId);
+        var early = await Assert.ThrowsAsync<ConflictException>(() => Engine().ConfirmRecoveryTransferAsync(jobId, [C1, C2], _staff, null));
+        Assert.Equal("recovery_robot_not_arrived", early.Code);
+
+        await RobotResultAsync(sent.JobStepId);
+        Assert.Equal(JobStatus.RECOVERY_REQUIRED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+
+        var partial = await Assert.ThrowsAsync<DomainValidationException>(() => Engine().ConfirmRecoveryTransferAsync(jobId, [C1], _staff, null));
+        Assert.Equal("recovery_containers_mismatch", partial.Code);
+
+        await Engine().ConfirmRecoveryTransferAsync(jobId, [C1, C2], _staff, "moved by hand");
+
+        var rows = await _db.JobRobotAssignments.Where(a => a.JobId == jobId).ToListAsync();
+        Assert.Equal(second, Assert.Single(rows, a => a.EndedAt == null).RobotId);
+        Assert.Equal(JobRobotAssignmentReasons.Reassigned, Assert.Single(rows, a => a.RobotId == first).EndReason);
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.All(job.JobContainers, c => Assert.Equal(JobContainerStatus.ONBOARD, c.Status));
+        var closed = await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId);
+        Assert.Equal(JobRecoveryStatuses.Transferred, closed.Status);
+        Assert.Equal(_staff, closed.ConfirmedBy);
+
+        // Resume: the second robot drives to the original destination, on the same Job.
+        await Engine().ResumeAsync(jobId, null);
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Equal(second, _fleet.Commands[^1].RobotId);
+        Assert.Equal(9.0, _fleet.Commands[^1].X);
+        Assert.Equal(movesBefore + 1, await _db.JobTasks.CountAsync(t => t.JobId == jobId));
+    }
+
+    [Fact]
+    public async Task A_robot_going_to_fetch_cargo_cannot_be_given_other_work()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await RobotOfflineAsync();
+        var second = _fleet.AddRobot(_mapVersionId);
+        await Engine().AssignRecoveryRobotAsync(jobId, second, RecoveryEndpoint());
+
+        var other = new WaroTrans.WorkflowExecution.Entities.Job
+        {
+            Id = Guid.NewGuid(),
+            JobNo = "JOB-OTHER",
+            ProvisioningKey = "other",
+            WorkflowId = (await _db.Jobs.AsNoTracking().SingleAsync(j => j.Id == jobId)).WorkflowId,
+            MapVersionId = _mapVersionId,
+            Status = JobStatus.CREATED,
+            ContextValues = new Dictionary<string, JsonElement>(),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _db.Jobs.Add(other);
+        await _db.SaveChangesAsync();
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => Engine().StartAsync(other.Id, second));
+        Assert.Equal("robot_assigned_to_other_job", refused.Code);
+    }
+
+    [Fact]
+    public async Task The_failed_robot_can_go_on_once_it_is_back_but_not_while_it_is_offline()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await RobotOfflineAsync();
+        SetRobot(r => r with { IsOnline = false });
+
+        var offline = await Assert.ThrowsAsync<ConflictException>(() => Engine().ResumeRecoveryOnSameRobotAsync(jobId, _staff, null));
+        Assert.Equal("robot_not_available", offline.Code);
+        Assert.Equal(JobStatus.RECOVERY_REQUIRED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+
+        SetRobot(r => r with { IsOnline = true, LastTelemetryAt = DateTimeOffset.UtcNow });
+        await Engine().ResumeRecoveryOnSameRobotAsync(jobId, _staff, "it rebooted");
+
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Equal(JobRecoveryStatuses.ResumedSameRobot, (await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId)).Status);
+        Assert.Equal(_fleet.RobotId, _fleet.Commands[^1].RobotId);
+    }
+
+    [Fact]
+    public async Task A_robot_silent_with_no_command_in_flight_is_noticed_after_the_grace_period()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync(reassignPolicy: false);
+        var move = _fleet.Commands[^1].JobStepId;
+        await RobotResultAsync(move);                         // at D, waiting for a person: no command in flight
+        SetRobot(r => r with { IsOnline = false, LastTelemetryAt = DateTimeOffset.UtcNow });
+
+        Assert.Equal(0, await Engine().HandleOfflineRobotsAsync()); // inside the grace period
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+
+        SetRobot(r => r with { LastTelemetryAt = DateTimeOffset.UtcNow.AddMinutes(-5) });
+        Assert.Equal(1, await Engine().HandleOfflineRobotsAsync());
+
+        Assert.Equal(JobStatus.RECOVERY_REQUIRED, (await _db.Jobs.SingleAsync(j => j.Id == jobId)).Status);
+        Assert.Equal("robot_offline", (await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId)).Reason);
+        Assert.Equal(0, await Engine().HandleOfflineRobotsAsync()); // once
+    }
+
+    [Fact]
+    public async Task A_silent_robot_with_nothing_on_board_leaves_its_job_waiting_for_another_robot()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        SetRobot(r => r with { IsOnline = false, LastTelemetryAt = DateTimeOffset.UtcNow.AddMinutes(-5) });
+
+        Assert.Equal(1, await Engine().HandleOfflineRobotsAsync());
+
+        var job = await _db.Jobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.REASSIGNING, job.Status);
+        Assert.Equal("robot_offline", job.FailureCode);
+        Assert.False(await _db.JobRecoveryCases.AnyAsync(c => c.JobId == jobId));
+
+        var other = _fleet.AddRobot(_mapVersionId);
+        await Engine().ResumeAsync(jobId, other);
+        Assert.Equal(other, _fleet.Commands[^1].RobotId);
+    }
+
+    [Fact]
+    public async Task Cancelling_during_recovery_closes_the_case_and_calls_back_the_second_robot()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await RobotOfflineAsync();
+        var second = _fleet.AddRobot(_mapVersionId);
+        await Engine().AssignRecoveryRobotAsync(jobId, second, RecoveryEndpoint());
+        var sent = _fleet.Commands[^1];
+
+        await Engine().CancelJobAsync(jobId, "unloaded by hand");
+
+        Assert.Contains((second, sent.CommandId), _fleet.Cancels);
+        Assert.Equal(JobRecoveryStatuses.Cancelled, (await _db.JobRecoveryCases.SingleAsync(c => c.JobId == jobId)).Status);
+        Assert.False(await _db.JobRobotAssignments.AnyAsync(a => a.JobId == jobId && a.EndedAt == null));
     }
 
     // ------------------------------------------------------------------ Semantic traffic mode (Nav2 plans, backend grants)

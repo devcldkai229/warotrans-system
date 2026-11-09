@@ -260,6 +260,85 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.ToTable("job_containers", "execution");
                 });
 
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRecoveryCase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<string>("ContainerIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("container_ids");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("FromRobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_robot_id");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<Guid?>("MoveStepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("move_step_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("RecoveryEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recovery_endpoint_id");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("ToRobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_robot_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_job_recovery_cases");
+
+                    b.HasIndex("JobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_job_recovery_cases_open_job")
+                        .HasFilter("resolved_at IS NULL");
+
+                    b.HasIndex("ToRobotId")
+                        .HasDatabaseName("i_x_job_recovery_cases_to_robot_id");
+
+                    b.ToTable("job_recovery_cases", "execution");
+                });
+
             modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRobotAssignment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -659,6 +738,18 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("f_k_job_containers_jobs_job_id");
+
+                    b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRecoveryCase", b =>
+                {
+                    b.HasOne("WaroTrans.WorkflowExecution.Entities.Job", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_job_recovery_cases_jobs_job_id");
 
                     b.Navigation("Job");
                 });

@@ -47,6 +47,7 @@ public static class FleetModule
         services.AddValidatorsFromAssembly(typeof(FleetModule).Assembly);
 
         services.AddScoped<RegisterRobotHandler>();
+        services.AddScoped<Features.ReconcileTrafficRobot.ReleaseAfterClearanceHandler>();
         services.AddScoped<GetRobotHandler>();
         services.AddScoped<ListRobotsHandler>();
         services.AddScoped<GetRobotStatisticsHandler>();

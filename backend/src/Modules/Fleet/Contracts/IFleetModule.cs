@@ -121,6 +121,15 @@ public sealed record RobotSnapshot(
     bool InManualMode = false,
     DateTimeOffset? BatteryMeasuredAt = null);
 
+/// <summary>
+/// FL-06: whether a robot still holds a Job. Fleet owns this contract and WorkflowExecution implements it, because
+/// WorkflowExecution already depends on Fleet.
+/// </summary>
+public interface IRobotWorkQuery
+{
+    Task<bool> HasActiveJobAsync(Guid robotId, CancellationToken cancellationToken = default);
+}
+
 public sealed record RobotCommandSummary(Guid Id, string Type, string Status, DateTimeOffset IssuedAt, DateTimeOffset? AckedAt, DateTimeOffset? CompletedAt);
 
 /// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
