@@ -18,8 +18,7 @@ public static class PublishWorkflowEndpoint
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
         })
-            .RequirePermission(Permissions.WorkflowWrite)
-            .Audited("workflow.published", "WORKFLOW", "id");
+            .RequirePermission(Permissions.WorkflowWrite);
 
         return group;
     }

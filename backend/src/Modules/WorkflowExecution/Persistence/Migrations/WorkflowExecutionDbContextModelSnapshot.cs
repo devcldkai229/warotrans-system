@@ -402,6 +402,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("published_at");
 
+                    b.Property<Guid?>("PublishedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("published_by");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
