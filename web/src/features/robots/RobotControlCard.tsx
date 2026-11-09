@@ -9,6 +9,8 @@ import {
   getRobotCommandCatalog,
   getStopState,
   resumeRobot,
+  returnRobotToPark,
+  sendRobotToCharger,
   robotSystemAction,
   startMaintenance,
   stopRobot,
@@ -116,6 +118,16 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
           <Button size="sm" variant="surface" disabled={act.isPending} onClick={() => act.mutate(() => resumeRobot(robotId))}>
             Resume
           </Button>
+        ) : null}
+        {canActOnRobot(capabilities, PERMISSIONS.robotCommand, robotId) && !held && !inMaintenance ? (
+          <>
+            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate(() => returnRobotToPark(robotId))}>
+              Return to park
+            </Button>
+            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate(() => sendRobotToCharger(robotId))}>
+              Go to charger
+            </Button>
+          </>
         ) : null}
         {mayMaintain && !inMaintenance ? (
           <Button

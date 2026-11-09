@@ -75,6 +75,8 @@ public static class WorkflowExecutionModule
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JobPlanningOptions>>().Value.MaxContainersPerJob));
         services.Configure<Execution.JobQueueOptions>(configuration.GetSection(Execution.JobQueueOptions.SectionName));
         services.AddScoped<Services.JobQueueProcessor>();
+        services.Configure<Features.RobotCare.FleetIdleOptions>(configuration.GetSection(Features.RobotCare.FleetIdleOptions.SectionName));
+        services.AddScoped<Features.RobotCare.RobotCareService>();
         services.AddHostedService<Services.JobQueueHostedService>();
 
         // Job execution (GĐ 3)
@@ -131,6 +133,7 @@ public static class WorkflowExecutionModule
         Features.HumanTasks.HumanTaskEndpoints.Map(group);
         Features.JobRecovery.JobRecoveryEndpoints.Map(group);
         Features.JobQueue.JobQueueEndpoints.Map(group);
+        Features.RobotCare.RobotCareEndpoints.Map(group);
         
         return endpoints;
     }

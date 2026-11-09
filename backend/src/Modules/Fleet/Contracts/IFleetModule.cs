@@ -20,6 +20,10 @@ public interface IFleetModule
     Task<FleetCapacity> GetCapacityAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
         Task.FromResult(new FleetCapacity(null, null));
 
+    /// <summary>FL-08: enabled, online, available, not held and not driven by hand, with when each last got a command.</summary>
+    Task<IReadOnlyList<IdleRobot>> GetIdleRobotsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<IdleRobot>>([]);
+
     /// <summary>BOTH-01: the robot's most recent command, whatever its kind. Null when it has none.</summary>
     Task<RobotCommandSummary?> GetLatestCommandAsync(Guid robotId, CancellationToken cancellationToken = default) =>
         Task.FromResult<RobotCommandSummary?>(null);
@@ -133,6 +137,8 @@ public interface IRobotWorkQuery
 {
     Task<bool> HasActiveJobAsync(Guid robotId, CancellationToken cancellationToken = default);
 }
+
+public sealed record IdleRobot(RobotSnapshot Robot, DateTimeOffset? LastCommandAt);
 
 public sealed record RobotCommandSummary(Guid Id, string Type, string Status, DateTimeOffset IssuedAt, DateTimeOffset? AckedAt, DateTimeOffset? CompletedAt);
 

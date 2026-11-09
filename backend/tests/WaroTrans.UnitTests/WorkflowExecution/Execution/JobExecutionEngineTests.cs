@@ -13,6 +13,7 @@ using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
+using WaroTrans.WorkflowExecution.Features.RobotCare;
 using WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 using WaroTrans.WorkflowExecution.Persistence;
 using WaroTrans.WorkflowExecution.Planning;
@@ -616,6 +617,236 @@ public sealed class JobExecutionEngineTests
 
         var running = await Assert.ThrowsAsync<ConflictException>(() => Engine().EnqueueAsync(jobId));
         Assert.Equal("job_not_startable", running.Code);
+    }
+
+    // ------------------------------------------------------------------ robot care and the workflow catalog (FL-08, WH-06)
+
+    private static WaroTrans.WorkflowExecution.Validation.WorkflowDefinitionModel Sample(string code)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "samples", "workflows")))
+        {
+            dir = dir.Parent;
+        }
+
+        var json = File.ReadAllText(Path.Combine(dir!.FullName, "samples", "workflows", code + ".request.json"));
+        return JsonSerializer.Deserialize<WaroTrans.WorkflowExecution.Validation.WorkflowDefinitionModel>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        })!;
+    }
+
+    private async Task<Guid> PublishSampleAsync(string code)
+    {
+        var workflow = await SeedPublishedAsync(_db, Sample(code));
+        return workflow.Id;
+    }
+
+    [Theory]
+    [InlineData("OUTBOUND_RETRIEVAL")]
+    [InlineData("POINT_TO_POINT_TRANSPORT")]
+    [InlineData("ROBOT_RETURN_TO_PARK")]
+    [InlineData("ROBOT_CHARGING")]
+    [InlineData("MAINTENANCE_ALL_ROBOTS")]
+    public void Every_sample_workflow_can_be_published(string code)
+    {
+        var result = WaroTrans.WorkflowExecution.Validation.WorkflowDefinitionValidator.ValidateForPublish(Sample(code));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors.Select(e => $"{e.Path}: {e.Message}")));
+    }
+
+    private async Task<(Guid JobId, Guid RequestId)> ContainerJobOnSampleAsync(string code)
+    {
+        await ProvisionAsync();
+        var workflowId = await PublishSampleAsync(code);
+        var requestId = Guid.NewGuid();
+        var snapshot = new TransportRequestExecutionSnapshot(
+            requestId, Guid.NewGuid(), _mapVersionId, workflowId, 1, new Dictionary<string, JsonElement>(),
+            [new TransportRequestDetailSnapshot(Guid.NewGuid(), 1, C1, null, A, null, null, D, null)]);
+        var result = await new JobRuntimeProvisioner(_db, new FakeJobCodeGenerator())
+            .ProvisionAsync(snapshot, new CollectThenDeliverJobBatchPlanner().Plan(snapshot));
+        return (result.Jobs.Single().JobId, requestId);
+    }
+
+    [Theory]
+    [InlineData("OUTBOUND_RETRIEVAL")]
+    [InlineData("POINT_TO_POINT_TRANSPORT")]
+    public async Task A_container_workflow_runs_from_pickup_to_delivery(string code)
+    {
+        var (jobId, _) = await ContainerJobOnSampleAsync(code);
+        _warehouse.Set(C1, ContainerStatus.STORED);
+
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.COMPLETED, job.Status);
+        Assert.Equal(JobContainerStatus.DELIVERED, Assert.Single(job.JobContainers).Status);
+        Assert.Equal(["ASSIGNED", "ONBOARD", "DELIVERED"], _events.Of<JobContainerStatusChanged>().Select(e => e.Status));
+    }
+
+    [Fact]
+    public async Task An_outbound_job_stops_at_the_pickup_when_the_container_is_no_longer_there()
+    {
+        var (jobId, _) = await ContainerJobOnSampleAsync("OUTBOUND_RETRIEVAL");
+        _warehouse.Set(C1, ContainerStatus.HOLD);
+
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobStatus.PAUSED, job.Status);
+        Assert.Contains("container_hold", job.FailureMessage);
+        Assert.Equal(JobContainerStatus.ASSIGNED, Assert.Single(job.JobContainers).Status);
+    }
+
+    private RobotCareService Care(FleetIdleOptions? idle = null) => new(
+        _db,
+        new JobRuntimeProvisioner(_db, new FakeJobCodeGenerator()),
+        Engine(),
+        _fleet,
+        _navigation,
+        Microsoft.Extensions.Options.Options.Create(idle ?? new FleetIdleOptions()),
+        TimeProvider.System,
+        NullLogger<RobotCareService>.Instance);
+
+    private Guid AddEndpoint(WaroTrans.Navigation.Enums.EndpointType type, double x)
+    {
+        var id = Guid.NewGuid();
+        _navigation.Poses[id] = new EndpointPoseSnapshot(id, _mapVersionId, "EP-" + type + x, x, 0.0, 0.0, true);
+        _navigation.OnMap.Add(new EndpointPoseWithType(id, "EP-" + type + x, "E", type, true, x, 0.0, 0.25));
+        return id;
+    }
+
+    private async Task<Guid> ReadyForCareAsync(string code)
+    {
+        await ProvisionAsync();
+        await PublishSampleAsync(code);
+        return _fleet.RobotId;
+    }
+
+    [Fact]
+    public async Task Return_to_park_picks_the_nearest_free_place_and_finishes_with_no_request_behind_it()
+    {
+        var robot = await ReadyForCareAsync(RobotCareService.ParkWorkflow);
+        var other = _fleet.AddRobot(_mapVersionId);
+        _fleet.Robots[other] = _fleet.Robots[other] with { PoseX = 2.0, PoseY = 0.0 };
+        AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.PARK, 2.0); // nearest, but taken
+        var far = AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.PARK, 6.0);
+        AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 1.0);
+
+        var job = await Care().ReturnToParkAsync(robot, null, _staff, default);
+
+        Assert.Equal(robot, _fleet.Commands[^1].RobotId);
+        Assert.Equal(_navigation.Poses[far].X, _fleet.Commands[^1].X);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        var done = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == job.Id);
+        Assert.Equal(JobStatus.COMPLETED, done.Status);
+        Assert.Empty(done.JobContainers);
+    }
+
+    [Fact]
+    public async Task A_robot_with_cargo_does_not_go_to_park_and_a_busy_robot_leaves_no_job_behind()
+    {
+        var carrying = await JobOnTheWayWithCargoAsync();
+        await PublishSampleAsync(RobotCareService.ParkWorkflow);
+        var park = AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.PARK, 6.0);
+        var before = await _db.Jobs.CountAsync();
+
+        var busy = await Assert.ThrowsAsync<ConflictException>(() => Care().ReturnToParkAsync(_fleet.RobotId, park, _staff, default));
+
+        Assert.Equal("robot_assigned_to_other_job", busy.Code);
+        Assert.Equal(before, await _db.Jobs.CountAsync());
+        Assert.Equal(JobStatus.RUNNING, (await _db.Jobs.SingleAsync(j => j.Id == carrying)).Status);
+    }
+
+    [Fact]
+    public async Task A_robot_on_a_low_battery_may_still_go_to_the_charger_and_a_person_confirms_connecting()
+    {
+        var robot = await ReadyForCareAsync(RobotCareService.ChargeWorkflow);
+        _fleet.Battery = 5m;
+        var charger = AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.CHARGER, 4.0);
+
+        var job = await Care().GoToChargerAsync(robot, null, _staff, default);
+
+        Assert.Equal(_navigation.Poses[charger].X, _fleet.Commands[^1].X);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        var stepId = await CurrentStepIdAsync(job.Id);
+        Assert.Equal(JobStepStatus.WAITING, (await _db.JobSteps.SingleAsync(s => s.Id == stepId)).Status);
+
+        await Engine().ConfirmHumanStepAsync(stepId, null, HumanConfirmationSource.StaffApp(_staff, "plugged in"));
+        Assert.Equal(JobStatus.COMPLETED, (await _db.Jobs.SingleAsync(j => j.Id == job.Id)).Status);
+    }
+
+    [Fact]
+    public async Task With_no_free_place_it_says_so_and_without_the_workflow_it_says_that()
+    {
+        var robot = await ReadyForCareAsync(RobotCareService.ParkWorkflow);
+        var none = await Assert.ThrowsAsync<ConflictException>(() => Care().ReturnToParkAsync(robot, null, _staff, default));
+        Assert.Equal("no_free_parking", none.Code);
+
+        AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.CHARGER, 4.0);
+        var missing = await Assert.ThrowsAsync<ConflictException>(() => Care().GoToChargerAsync(robot, null, _staff, default));
+        Assert.Equal("workflow_not_published", missing.Code);
+    }
+
+    [Fact]
+    public async Task Idle_robots_stay_put_unless_turned_on_and_never_while_work_is_queued()
+    {
+        var robot = await ReadyForCareAsync(RobotCareService.ParkWorkflow);
+        _fleet.Idle.Add(robot);
+        AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.PARK, 6.0);
+        var on = new FleetIdleOptions { AutoReturnToPark = true, IdleSeconds = 0 };
+
+        Assert.Equal(0, await Care().ReturnIdleRobotsAsync(default));
+        Assert.Empty(_fleet.Commands);
+
+        var queued = await ProvisionAnotherAsync();
+        await Engine().EnqueueAsync(queued);
+        Assert.Equal(0, await Care(on).ReturnIdleRobotsAsync(default));
+        Assert.Empty(_fleet.Commands);
+
+        await Engine().CancelJobAsync(queued, "not needed");
+        Assert.Equal(1, await Care(on).ReturnIdleRobotsAsync(default));
+        Assert.Equal(6.0, _fleet.Commands[^1].X);
+
+        // Now busy with that Job: not sent again.
+        Assert.Equal(0, await Care(on).ReturnIdleRobotsAsync(default));
+    }
+
+    [Fact]
+    public async Task A_robot_already_parked_is_left_alone()
+    {
+        var robot = await ReadyForCareAsync(RobotCareService.ParkWorkflow);
+        _fleet.Idle.Add(robot);
+        AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.PARK, 0.0);
+
+        Assert.Equal(0, await Care(new FleetIdleOptions { AutoReturnToPark = true, IdleSeconds = 0 }).ReturnIdleRobotsAsync(default));
+    }
+
+    [Fact]
+    public async Task Maintenance_is_one_job_per_robot_one_at_a_time_and_a_failure_does_not_stop_the_rest()
+    {
+        var first = await ReadyForCareAsync(RobotCareService.MaintenanceWorkflow);
+        var second = _fleet.AddRobot(_mapVersionId);
+        var bay = AddEndpoint(WaroTrans.Navigation.Enums.EndpointType.WAYPOINT, 7.0);
+
+        var (_, jobs) = await Care().StartMaintenanceRunAsync([first, second], bay, default);
+
+        Assert.Equal(2, jobs.Count);
+        Assert.Equal(1, await Care().RunNextMaintenanceAsync(default));
+        Assert.Equal(0, await Care().RunNextMaintenanceAsync(default)); // the first is still going
+        Assert.Equal(first, _fleet.Commands[^1].RobotId);
+
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobs[0]), null, HumanConfirmationSource.StaffApp(_staff));
+        Assert.Equal(JobStatus.COMPLETED, (await _db.Jobs.SingleAsync(j => j.Id == jobs[0])).Status);
+
+        Assert.Equal(1, await Care().RunNextMaintenanceAsync(default));
+        Assert.Equal(second, _fleet.Commands[^1].RobotId);
     }
 
     private sealed class FakeWarehouse : IWarehouseModule
@@ -1764,6 +1995,11 @@ public sealed class JobExecutionEngineTests
         public Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Robots.TryGetValue(robotId, out var r) ? r with { BatteryPercent = Battery } : null);
 
+        public List<Guid> Idle { get; } = [];
+
+        public Task<IReadOnlyList<IdleRobot>> GetIdleRobotsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<IdleRobot>>(Idle.Select(id => new IdleRobot(Robots[id], null)).ToList());
+
         public Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Guid>>([]);
 
@@ -1857,6 +2093,11 @@ public sealed class JobExecutionEngineTests
 
         public Task<EndpointPoseSnapshot?> GetEndpointPoseByCodeAsync(Guid mapVersionId, string code, CancellationToken cancellationToken = default) =>
             Task.FromResult(Poses.Values.FirstOrDefault(p => p.MapVersionId == mapVersionId && p.Code == code));
+
+        public List<EndpointPoseWithType> OnMap { get; } = [];
+
+        public Task<IReadOnlyList<EndpointPoseWithType>> GetEndpointsOnMapAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<EndpointPoseWithType>>(OnMap);
     }
 
     private sealed class FakeRequestActivity : ITransportRequestActivityQuery

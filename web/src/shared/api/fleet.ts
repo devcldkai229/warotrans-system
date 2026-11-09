@@ -159,6 +159,16 @@ export function releaseTrafficAfterClearance(robotId: string, body: { robotCode:
   })
 }
 
+/** FL-08: an idle, empty robot goes to the nearest free parking place. Returns the Job. */
+export function returnRobotToPark(robotId: string) {
+  return apiFetch<{ id: string }>(`/api/workflow-execution/robots/${robotId}/return-to-park`, { method: 'POST', body: JSON.stringify({}) })
+}
+
+/** FL-08: goes to a charger; a person connects it, there is no auto-dock. Returns the Job. */
+export function sendRobotToCharger(robotId: string) {
+  return apiFetch<{ id: string }>(`/api/workflow-execution/robots/${robotId}/go-to-charger`, { method: 'POST', body: JSON.stringify({}) })
+}
+
 /** FLT-02: what this robot can be asked now. An unsupported item must not be offered. */
 export interface RobotCommandCatalogItem {
   code: 'STOP' | 'PAUSE' | 'RESUME' | 'MANUAL_DRIVE' | 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN' | 'LOCALIZE' | 'DOCK' | 'CHARGE'

@@ -16,8 +16,11 @@ public sealed class ProcessRobotTelemetryHandler(
     IRobotRealtimeNotifier realtimeNotifier,
     IIntegrationEventPublisher events,
     TrafficShadowObserver? trafficShadow,
-    ILogger<ProcessRobotTelemetryHandler> logger)
+    ILogger<ProcessRobotTelemetryHandler> logger,
+    Microsoft.Extensions.Options.IOptions<WaroTrans.Fleet.Features.Dispatch.BatteryOptions>? battery = null)
 {
+    private decimal LowBattery => battery?.Value.LowPercent is { } low ? (decimal)low : GetRobotStatisticsHandler.LowBatteryPercent;
+
     public async Task HandleAsync(RobotTelemetryMessage message, CancellationToken cancellationToken)
     {
         var robot = await db.Robots
@@ -117,9 +120,9 @@ public sealed class ProcessRobotTelemetryHandler(
         }
 
         // Admin notifications: only the moment something starts, not every reading while it lasts.
-        if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent
+        if (batteryBefore > LowBattery
             && message.BatteryPercent is not null
-            && robot.BatteryPercent <= GetRobotStatisticsHandler.LowBatteryPercent
+            && robot.BatteryPercent <= LowBattery
             && robot.Status != RobotStatus.CHARGING)
         {
             await events.PublishAsync(new RobotBatteryLow(robot.Id, robot.Code, robot.BatteryPercent), cancellationToken);

@@ -27,9 +27,11 @@ public static class JobRuntimeTestDb
         return new WorkflowExecutionDbContext(options);
     }
 
-    public static async Task<Workflow> SeedPublishedInternalRelocationAsync(WorkflowExecutionDbContext db)
+    public static Task<Workflow> SeedPublishedInternalRelocationAsync(WorkflowExecutionDbContext db) =>
+        SeedPublishedAsync(db, InternalRelocationWorkflowFactory.CreateValid());
+
+    public static async Task<Workflow> SeedPublishedAsync(WorkflowExecutionDbContext db, WaroTrans.WorkflowExecution.Validation.WorkflowDefinitionModel model)
     {
-        var model = InternalRelocationWorkflowFactory.CreateValid();
         var workflow = new Workflow
         {
             Id = Guid.NewGuid(),

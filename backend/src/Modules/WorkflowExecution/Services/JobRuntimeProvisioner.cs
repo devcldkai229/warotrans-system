@@ -79,6 +79,44 @@ public sealed class JobRuntimeProvisioner(
         return new ProvisionJobRuntimeResult(request.TransportRequestId, summaries);
     }
 
+    public async Task<Guid> ProvisionRobotJobAsync(RobotJobRequest request, CancellationToken cancellationToken = default)
+    {
+        var existing = await FindExistingJobAsync(request.ProvisioningKey, cancellationToken);
+        if (existing is not null)
+        {
+            return existing.Id;
+        }
+
+        var workflow = await db.Workflows
+            .Include(w => w.Tasks)
+            .ThenInclude(t => t.Steps)
+            .FirstOrDefaultAsync(w => w.Id == request.WorkflowId, cancellationToken)
+            ?? throw new NotFoundException($"Workflow '{request.WorkflowId}' was not found.", "workflow_not_found");
+        if (workflow.Status != WorkflowStatus.PUBLISHED)
+        {
+            throw new DomainValidationException($"Workflow must be PUBLISHED (current: {workflow.Status}).", "workflow_not_published");
+        }
+
+        if (workflow.Tasks.SelectMany(t => t.Steps).Any(s =>
+                OperationExecutionScopeCatalog.Get(s.StepType, s.Config.OperationCode).Scope != ExecutionScope.ONCE_PER_JOB))
+        {
+            throw new DomainValidationException($"Workflow {workflow.Code} moves containers; it needs a transport request.", "workflow_not_robot_level");
+        }
+
+        var snapshot = new TransportRequestExecutionSnapshot(
+            Guid.Empty, request.WarehouseId, request.MapVersionId, request.WorkflowId, 1, request.Inputs, []);
+        var job = await CreateJobGraphAsync(
+            snapshot,
+            new JobBatchPlan("ROBOT", 1, [], []),
+            request.ProvisioningKey,
+            workflow.Tasks.OrderBy(t => t.SequenceNo).ToList(),
+            new Dictionary<Guid, TransportRequestDetailSnapshot>(),
+            workflow.VariablesSchema,
+            cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return job.Id;
+    }
+
     public static string BuildProvisioningKey(Guid transportRequestId, string batchKey) =>
         $"{transportRequestId:N}:{batchKey.Trim()}";
 

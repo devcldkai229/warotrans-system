@@ -146,7 +146,10 @@ public sealed class JobExecutionEngine(
             {
                 EnsureRobotCanTakeJob(robot, job, busyRobots);
                 EnsureCapacityAllows(candidates.FirstOrDefault(c => c.RobotId == requested), robot);
-                EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
+                if (dispatchOverride?.RobotCare != true)
+                {
+                    EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
+                }
             }
             catch (AppException refused)
             {
@@ -2475,7 +2478,8 @@ public sealed class JobExecutionEngine(
     }
 
     /// <summary>An operator who dispatches a robot the policy would not pick automatically (FL-02).</summary>
-    public sealed record DispatchOverride(Guid? ActorId, string? Reason);
+    /// <param name="RobotCare">The Job looks after the robot itself (park, charger, maintenance): a low battery must not stop it going.</param>
+    public sealed record DispatchOverride(Guid? ActorId, string? Reason, bool RobotCare = false);
 
     /// <summary>FL-01 evaluation for this Job: pickup = the stop of its first task, busy = robots on other active Jobs.</summary>
     public async Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(Job job, IReadOnlySet<Guid> busyRobots, CancellationToken cancellationToken)

@@ -66,6 +66,23 @@ public sealed class FleetModuleApi(
             .Select(c => new RobotCommandSummary(c.Id, c.Type.ToString(), c.Status.ToString(), c.IssuedAt, c.AckedAt, c.CompletedAt))
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<IdleRobot>> GetIdleRobotsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var robots = (await db.Robots.AsNoTracking()
+                .Where(r => r.IsEnabled && r.IsOnline && r.Status == WaroTrans.Fleet.Enums.RobotStatus.AVAILABLE && !r.MotionHeld)
+                .ToListAsync(cancellationToken))
+            .Where(r => !r.HasActiveManualLease(now))
+            .ToList();
+        var ids = robots.Select(r => r.Id).ToList();
+        var last = await db.RobotCommands.AsNoTracking()
+            .Where(c => ids.Contains(c.RobotId))
+            .GroupBy(c => c.RobotId)
+            .Select(g => new { RobotId = g.Key, At = g.Max(c => c.IssuedAt) })
+            .ToDictionaryAsync(x => x.RobotId, x => x.At, cancellationToken);
+        return robots.Select(r => new IdleRobot(ToSnapshot(r), last.TryGetValue(r.Id, out var at) ? at : null)).ToList();
+    }
+
     public async Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,
         CancellationToken cancellationToken = default)

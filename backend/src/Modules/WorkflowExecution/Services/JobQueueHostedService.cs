@@ -20,6 +20,9 @@ public sealed class JobQueueHostedService(
                 {
                     await using var scope = scopeFactory.CreateAsyncScope();
                     await scope.ServiceProvider.GetRequiredService<JobQueueProcessor>().TickAsync(stoppingToken).ConfigureAwait(false);
+                    var care = scope.ServiceProvider.GetRequiredService<Features.RobotCare.RobotCareService>();
+                    await care.RunNextMaintenanceAsync(stoppingToken).ConfigureAwait(false);
+                    await care.ReturnIdleRobotsAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
