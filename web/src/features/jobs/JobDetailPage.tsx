@@ -355,6 +355,8 @@ function taskTitle(task: JobTaskDto, labels: Labels) {
       return `${action} stop · ${labels.endpoint(task.stopEndpointId)}`
     case 'PER_CONTAINER_AT_STOP':
       return `${action} ${labels.container(task.containerId)} · ${labels.endpoint(task.stopEndpointId)}`
+    case 'RECOVERY':
+      return `Recovery robot to ${labels.endpoint(task.stopEndpointId)}`
     default:
       return task.taskKey
   }

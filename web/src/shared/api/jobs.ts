@@ -53,7 +53,8 @@ export interface JobTaskDto {
   sequenceNo: number
   taskKey: string
   status: string
-  executionScope: 'ONCE_PER_JOB' | 'ONCE_PER_STOP' | 'PER_CONTAINER_AT_STOP' | null
+  /** RECOVERY: the second robot of a payload recovery driving to the safe endpoint (WFX-04). */
+  executionScope: 'ONCE_PER_JOB' | 'ONCE_PER_STOP' | 'PER_CONTAINER_AT_STOP' | 'RECOVERY' | null
   stopAction: 'PICKUP' | 'DROPOFF' | null
   stopEndpointId: string | null
   containerId: string | null

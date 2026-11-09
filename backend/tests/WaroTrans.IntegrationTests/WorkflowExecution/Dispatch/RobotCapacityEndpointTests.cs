@@ -117,6 +117,23 @@ public sealed class RobotCapacityEndpointTests(WaroTransWebApplicationFactory fa
     }
 
     [Fact]
+    public async Task What_was_saved_is_read_back_on_the_robot_and_the_container()
+    {
+        var (seed, _) = await RequestAsync();
+        var robot = await SeedRobotAsync(seed);
+
+        await SetCapacityAsync(robot, new { maxPayloadKg = 30m, maxContainers = 2, lengthM = 0.3, widthM = 0.25 });
+        await SetWeightAsync(seed.ContainerId, 12.5m);
+
+        var read = await Client.GetFromJsonAsync<JsonElement>($"/api/fleet/robots/{robot}");
+        Assert.Equal(30m, read.GetProperty("maxPayloadKg").GetDecimal());
+        Assert.Equal(2, read.GetProperty("maxContainers").GetInt32());
+        Assert.Equal(0.25, read.GetProperty("widthM").GetDouble());
+        var physical = await Client.GetFromJsonAsync<JsonElement>($"/api/warehouse/containers/{seed.ContainerId}/physical");
+        Assert.Equal(12.5m, physical.GetProperty("weightKg").GetDecimal());
+    }
+
+    [Fact]
     public async Task Values_below_zero_are_refused()
     {
         var (seed, _) = await RequestAsync();

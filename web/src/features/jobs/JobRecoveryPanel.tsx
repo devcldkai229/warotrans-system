@@ -58,7 +58,7 @@ export function JobRecoveryPanel({
       <h2 className="text-xl font-book">Payload recovery</h2>
       <p className="mt-1 text-sm text-ink-2">
         The robot failed ({current?.reason ?? job.failureCode}) with these containers on board:{' '}
-        <b className="font-medium">{(current?.containerIds ?? []).map(containerLabel).join(', ') || '…'}</b>. Its zones stay held until someone clears them.
+        <b className="font-medium">{(current?.containerIds ?? []).map(containerLabel).join(', ') || '…'}</b>. Its traffic zones stay held. If the second robot waits behind them, move the failed robot by hand and release its zones on the robot page.
       </p>
 
       {current?.status === 'OPEN' ? (

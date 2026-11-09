@@ -78,5 +78,9 @@ public sealed record RobotResponse(
         robot.BatteryMeasuredAt,
         robot.BatteryVoltage,
         robot.BatteryEstimationMode,
-        robot.BatteryConfidence);
+        robot.BatteryConfidence,
+        robot.MaxPayloadKg,
+        robot.MaxContainers,
+        robot.LengthM,
+        robot.WidthM);
 }

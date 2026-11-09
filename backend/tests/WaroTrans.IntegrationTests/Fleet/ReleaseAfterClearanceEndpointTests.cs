@@ -64,6 +64,33 @@ public sealed class ReleaseAfterClearanceEndpointTests(WaroTransWebApplicationFa
         Assert.Equal("nothing_to_release", await refused.ReadErrorCodeAsync());
     }
 
+    private async Task HoldJobAsync(Guid robotId, WaroTrans.WorkflowExecution.Enums.JobStatus status)
+    {
+        var seed = await TransportRequestScenario.SeedAsync(Factory.Services, Client, "CTN-" + Guid.NewGuid().ToString("N")[..8]);
+        var workflowId = await TransportRequestScenario.CreatePublishedWorkflowAsync(Client);
+        var requestId = await TransportRequestScenario.SubmitAsync(Client, seed, workflowId);
+        var queued = await (await Client.PostAsync($"/api/transportation/transport-requests/{requestId}/queue", null))
+            .Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var jobId = queued.GetProperty("jobs")[0].GetProperty("jobId").GetGuid();
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WaroTrans.WorkflowExecution.Persistence.WorkflowExecutionDbContext>();
+        (await db.Jobs.FindAsync(jobId))!.Status = status;
+        db.JobRobotAssignments.Add(new WaroTrans.WorkflowExecution.Entities.JobRobotAssignment { Id = Guid.NewGuid(), JobId = jobId, RobotId = robotId, StartedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task A_robot_on_a_running_job_is_refused_but_one_whose_job_waits_for_recovery_is_not()
+    {
+        var (running, runningCode) = await SeedRobotAsync(online: false, null);
+        await HoldJobAsync(running, WaroTrans.WorkflowExecution.Enums.JobStatus.RUNNING);
+        Assert.Equal("robot_has_active_job", await (await ReleaseAsync(running, new { robotCode = runningCode, clearanceConfirmed = true, reason = "checked" })).ReadErrorCodeAsync());
+
+        var (failed, failedCode) = await SeedRobotAsync(online: false, null);
+        await HoldJobAsync(failed, WaroTrans.WorkflowExecution.Enums.JobStatus.RECOVERY_REQUIRED);
+        Assert.Equal("nothing_to_release", await (await ReleaseAsync(failed, new { robotCode = failedCode, clearanceConfirmed = true, reason = "checked" })).ReadErrorCodeAsync());
+    }
+
     [Fact]
     public async Task A_robot_with_a_navigation_running_is_refused()
     {

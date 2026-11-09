@@ -160,7 +160,7 @@ A step failing for good with cargo ONBOARD, or a robot silent past `Recovery:Off
 
 Then either the same robot resumes, once it is online with a verified pose, or a second robot is sent to a safe endpoint as a MOVE of this Job, and a person confirms the transfer naming the Containers. Only then does the Job change robot, in one transaction. It waits PAUSED until an operator resumes it to the original destination. Same Job, no new request.
 
-Releasing a robot's zones (`release-after-clearance`) rests on a person's word, so it is refused when software can do better: robot online with a pose (reconcile instead), a Job still held, or a navigation running.
+Releasing a robot's zones (`release-after-clearance`) rests on a person's word, so it is refused when software can do better: robot online with a pose (reconcile instead), a Job still going on, or a navigation running. A Job in `RECOVERY_REQUIRED` does not block it: a failed robot standing on the only way must be movable by hand, or the second robot could never arrive.
 
 ## Job state machine
 ```text

@@ -130,7 +130,7 @@ public sealed record RobotSnapshot(
     DateTimeOffset? BatteryMeasuredAt = null);
 
 /// <summary>
-/// FL-06: whether a robot still holds a Job. Fleet owns this contract and WorkflowExecution implements it, because
+/// FL-06: whether a robot still holds a Job that is going on. Fleet owns this contract and WorkflowExecution implements it, because
 /// WorkflowExecution already depends on Fleet.
 /// </summary>
 public interface IRobotWorkQuery
