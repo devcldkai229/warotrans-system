@@ -39,6 +39,15 @@ describe('localizedNotificationText', () => {
     )
   })
 
+  it('words a known failure code in the reason, in English too, and leaves an unknown code alone', () => {
+    const content = (reason: string) => say('Job J-1 needs another robot', `The robot could not finish the job; assign it to a different robot. Reason: ${reason}.`).content
+
+    expect(content('check_failed_battery_min')).toBe('The robot could not finish the job; assign it to a different robot. Reason: The battery is too low.')
+    setLanguageForTests('vi')
+    expect(content('check_failed_battery_min')).toBe('Robot không hoàn thành được công việc; hãy giao cho robot khác. Lý do: Pin quá yếu.')
+    expect(content('MYSTERY_CODE')).toBe('Robot không hoàn thành được công việc; hãy giao cho robot khác. Lý do: MYSTERY_CODE.')
+  })
+
   it('translates how long something has waited, in all three of the backend forms', () => {
     setLanguageForTests('vi')
     const waiting = (waited: string) => say('Job J-9 has not been started', `It has been waiting ${waited} for a robot. Run it on a robot from its job page.`).content

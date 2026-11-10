@@ -6,7 +6,9 @@ import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { JOB_CONTAINER_STATUS_TONE, JOB_STATUS_TONE, STEP_STATUS_TONE } from '@/shared/ui/statusTones'
-import { Drawer, DrawerHeading, FailureNote, LineItem, MetaList, MetaRow } from './panelParts'
+import { FailureExplanation } from '@/features/jobs/FailureExplanation'
+import { explainJobProblem } from '@/features/jobs/failureCatalog'
+import { Drawer, DrawerHeading, LineItem, MetaList, MetaRow } from './panelParts'
 import { t } from '@/shared/i18n'
 const LIVE_JOB_STATUSES: JobStatus[] = ['CREATED', 'QUEUED', 'ASSIGNED', 'RUNNING', 'PAUSED', 'REASSIGNING', 'RECOVERY_REQUIRED']
 
@@ -59,7 +61,7 @@ export function JobSummaryPanel({ jobRef, jobId, containerBarcodes, onClose, onO
             <span>{t('{done} of {length} steps done', { done, length: steps.length })}</span>
           </div>
 
-          {job.failureMessage ? <FailureNote>{job.failureMessage}</FailureNote> : null}
+          {explainJobProblem(job) ? <FailureExplanation problem={explainJobProblem(job)!} message={job.failureMessage} className="mt-4" /> : null}
 
           {job.containers.length > 0 ? (
             <>

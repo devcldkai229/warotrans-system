@@ -19,6 +19,8 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE, ROBOT_STATUS_TONE, STEP_STATUS_TONE, type Tone } from '@/shared/ui/statusTones'
 
 import { t } from '@/shared/i18n'
+import { FailureExplanation } from './FailureExplanation'
+import { explainJobProblem, failureTitle } from './failureCatalog'
 const show = (value: unknown) => (typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value))
 
 const CARD = 'flex flex-col rounded-lg border border-outline-soft bg-surface p-6 shadow-float'
@@ -191,7 +193,7 @@ function StepRow({
 
           {step.errorMessage ? (
             <p className="mt-3 rounded-sm bg-surface px-3 py-2 text-xs text-red-ink">
-              {step.errorCode ? <b className="font-medium">{step.errorCode}: </b> : null}
+              {step.errorCode ? <b className="font-medium">{failureTitle(step.errorCode)}{': '}</b> : null}
               {step.errorMessage}
             </p>
           ) : null}
@@ -363,6 +365,7 @@ export function JobDetailPage() {
 
   if (!job) return <p className="px-10 py-8 text-sm text-muted">{t('Loading job…')}</p>
 
+  const problem = explainJobProblem(job)
   const steps = allSteps(job)
   const done = steps.filter((s) => s.status === 'COMPLETED').length
   const progress = {
@@ -420,6 +423,8 @@ export function JobDetailPage() {
             </p>
           </div>
         </header>
+
+        {problem ? <FailureExplanation problem={problem} message={job.failureMessage} className="mt-6" /> : null}
 
         <div className="mt-8 grid grid-cols-[1fr_1.2fr_1fr] gap-4">
           <section className={cx(CARD, 'border-l-4 border-l-blue bg-blue-soft/40')}>
@@ -503,12 +508,6 @@ export function JobDetailPage() {
               </TaskGroup>
             ))}
 
-            {job.failureMessage ? (
-              <p className="mt-4 text-sm text-red-ink">
-                {job.failureCode ? <b className="font-medium">{job.failureCode}: </b> : null}
-                {job.failureMessage}
-              </p>
-            ) : null}
           </section>
 
           {/* Stays in view while the (long) list of steps scrolls past it. */}

@@ -12,6 +12,7 @@ import { Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { JOB_STATUS_TONE, REQUEST_STATUS_TONE, ROBOT_STATUS_TONE, TONE_SOLID, type Tone } from '@/shared/ui/statusTones'
 
 import { getLocale, t } from '@/shared/i18n'
+import { explainFailureCode, failureTitle } from '@/features/jobs/failureCatalog'
 type RangeId = 'today' | '7d' | '30d'
 
 const RANGES: { id: RangeId; label: string; days: number }[] = [
@@ -309,7 +310,10 @@ function JobsSection({ stats }: { stats: JobStatistics }) {
               ) : (
                 stats.topFailureCodes.map((row) => (
                   <Tr key={row.code}>
-                    <Td tone="strong">{humanize(row.code)}</Td>
+                    <Td tone="strong">
+                      {failureTitle(row.code)}
+                      {explainFailureCode(row.code)?.known ? <span className="ml-2 font-mono text-xs font-normal text-muted">{row.code}</span> : null}
+                    </Td>
                     <Td align="right">{row.count}</Td>
                   </Tr>
                 ))

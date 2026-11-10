@@ -18,6 +18,7 @@ import { JOB_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 
 import { t } from '@/shared/i18n'
+import { explainJobProblem, type ProblemTone } from './failureCatalog'
 const PAGE_SIZE = 50
 /** The Jobs endpoint turns at most 100 request ids into codes at a time; smaller chunks also stay cached page by page. */
 const CODE_CHUNK = 50
@@ -200,6 +201,9 @@ export function JobsPage() {
   )
 }
 
+// A cancelled Job carries its reason too, but somebody decided that: it is not a problem to chase.
+const PROBLEM_TEXT: Record<ProblemTone, string> = { red: 'text-red-ink', amber: 'text-amber-ink', grey: 'text-ink-2' }
+
 interface JobRowProps {
   job: JobSummaryDto
   robotCode: string | undefined
@@ -208,6 +212,7 @@ interface JobRowProps {
 }
 
 function JobRow({ job, robotCode, requestCodes, onOpen }: JobRowProps) {
+  const problem = explainJobProblem(job)
   const progress = job.totalSteps > 0 ? Math.round((job.completedSteps / job.totalSteps) * 100) : 0
   const shownRequests = job.transportRequestIds.slice(0, 2)
   const hidden = job.transportRequestIds.length - shownRequests.length
@@ -261,9 +266,11 @@ function JobRow({ job, robotCode, requestCodes, onOpen }: JobRowProps) {
         </span>
       </Td>
       <Td className="max-w-[220px]">
-        {job.failureCode ? (
-          // A cancelled Job carries its reason too, but somebody decided that: it is not a problem to chase.
-          <span className={job.status === 'CANCELLED' ? 'text-ink-2' : 'text-red-ink'}>{humanize(job.failureCode)}</span>
+        {problem ? (
+          // The meaning and the next step are in the tooltip; the Job's page has the whole explanation.
+          <span title={`${problem.meaning} ${problem.next}`} className={PROBLEM_TEXT[problem.tone]}>
+            {problem.title}
+          </span>
         ) : (
           <span className="text-muted">—</span>
         )}

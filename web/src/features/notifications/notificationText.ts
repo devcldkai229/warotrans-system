@@ -1,5 +1,6 @@
 import type { AdminNotification } from '@/shared/api/contracts'
-import { getLanguage, msg, t, type TranslationValues } from '@/shared/i18n'
+import { failureTitle } from '@/features/jobs/failureCatalog'
+import { msg, t, type TranslationValues } from '@/shared/i18n'
 import { humanize } from '@/shared/lib/format'
 
 /**
@@ -92,6 +93,8 @@ function localize(text: string): string {
   const { template, values } = found
   if (typeof values.waited === 'string') values.waited = localizeDuration(values.waited)
   if (typeof values.severity === 'string') values.severity = humanize(values.severity)
+  // A Job's failure reason is a machine code; say what it means (an operator's typed reason is left alone).
+  if (template.endsWith(' Reason: {reason}.') && typeof values.reason === 'string') values.reason = failureTitle(values.reason)
   return t(template, values)
 }
 
@@ -100,8 +103,7 @@ function localizeDuration(text: string): string {
   return found ? t(found.template, found.values) : text
 }
 
-/** The title and content of a notification in the interface language (English is returned as stored). */
+/** The title and content of a notification in the interface language (what is not recognised is returned as stored). */
 export function localizedNotificationText(notification: Pick<AdminNotification, 'title' | 'content'>) {
-  if (getLanguage() === 'en') return { title: notification.title, content: notification.content }
   return { title: localize(notification.title), content: localize(notification.content) }
 }
