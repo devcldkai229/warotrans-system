@@ -12,6 +12,7 @@ import { RobotScopeDialog } from '@/features/accounts/RobotScopeDialog'
 import { AccountFormDialog, type AccountFormValues } from '@/features/accounts/AccountFormDialog'
 import { TemporaryPasswordDialog } from '@/features/accounts/TemporaryPasswordDialog'
 import { useAuth } from '@/features/auth/authContext'
+import { useRoles } from '@/features/accounts/useRoles'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AddButton, SectionHead } from './SectionHead'
 import { t } from '@/shared/i18n'
@@ -35,6 +36,8 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
   const [issued, setIssued] = useState<{ username: string; password: string; reason: 'created' | 'reset' } | null>(null)
   const [scopeFor, setScopeFor] = useState<Account | null>(null)
   const { account: me } = useAuth()
+  // The server says which roles are limited to assigned robots (not a role name written here).
+  const robotScopedRoles = new Set((useRoles().data?.roles ?? []).filter((role) => role.robotScoped).map((role) => role.role))
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -151,7 +154,7 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
               <Td>
                 <div className="flex justify-end gap-1.5">
                   <Button size="sm" onClick={() => setEditing(account)}>{t('Edit')}</Button>
-                  {account.role === 'TECHNICIAN' ? (
+                  {robotScopedRoles.has(account.role) ? (
                     <Button size="sm" variant="ghost" onClick={() => setScopeFor(account)}>{t('Robots')}</Button>
                   ) : null}
                   <Button

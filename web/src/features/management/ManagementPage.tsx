@@ -5,6 +5,8 @@ import type { Account, Product, ProductCategory } from '@/shared/api/contracts'
 import { listWarehouses } from '@/shared/api/warehouses'
 import { cx } from '@/shared/lib/cx'
 import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
+import { useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS, type Permission } from '@/shared/auth/permissions'
 import { listAccounts } from '@/features/accounts/api'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AccountsSection } from './AccountsSection'
@@ -40,9 +42,10 @@ type TabId =
   | 'vouchers'
   | 'locations'
 
-const MENU: { label: string; items: { id: TabId; label: string }[] }[] = [
+const MENU: { label: string; requires: Permission; items: { id: TabId; label: string }[] }[] = [
   {
     label: t('Access'),
+    requires: PERMISSIONS.userManage,
     items: [
       { id: 'accounts', label: t('Accounts') },
       { id: 'roles', label: t('Roles') },
@@ -50,6 +53,7 @@ const MENU: { label: string; items: { id: TabId; label: string }[] }[] = [
   },
   {
     label: t('Warehouse data'),
+    requires: PERMISSIONS.warehouseRead,
     items: [
       { id: 'warehouses', label: t('Warehouses') },
       { id: 'products', label: t('Products') },
@@ -79,9 +83,15 @@ const TAB_IDS: TabId[] = [
  * the page. Every list follows its database table (see mock.ts and each section).
  */
 export function ManagementPage() {
+  const { can } = useAuth()
+  const canUsers = can(PERMISSIONS.userManage)
+  const canWarehouse = can(PERMISSIONS.warehouseRead)
+  // Only the sections this session's permissions open (WEB-MGMT-01): the server refuses the rest anyway.
+  const menu = MENU.filter((group) => can(group.requires))
+  const allowedTabs = menu.flatMap((group) => group.items.map((item) => item.id))
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab') as TabId | null
-  const tab: TabId = requested && TAB_IDS.includes(requested) ? requested : 'accounts'
+  const tab: TabId = requested && TAB_IDS.includes(requested) && allowedTabs.includes(requested) ? requested : (allowedTabs[0] ?? 'accounts')
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -98,10 +108,12 @@ export function ManagementPage() {
   const warehousesQuery = useQuery({
     queryKey: ['warehouses', 'all'],
     queryFn: () => listWarehouses({ take: 100 }),
+    enabled: canWarehouse,
   })
   const vouchersQuery = useStockVouchers(locationListing.warehouse?.id ?? null)
 
   useEffect(() => {
+    if (!canUsers) return
     let cancelled = false
     listAccounts()
       .then((items) => {
@@ -115,9 +127,10 @@ export function ManagementPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [canUsers])
 
   useEffect(() => {
+    if (!canWarehouse) return
     let cancelled = false
     Promise.all([listCategories(), listProducts()])
       .then(([loadedCategories, loadedProducts]) => {
@@ -132,7 +145,7 @@ export function ManagementPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [canWarehouse])
 
   // Containers and stock change when a robot delivers, so both lists reload in place (no "Loading" flash): on mount, when
   // their tab is opened, and shortly after any Job update (the stock write lands just after the dropoff is confirmed).
@@ -145,6 +158,7 @@ export function ManagementPage() {
   }, [])
 
   const reloadContainers = useCallback(() => {
+    if (!canWarehouse) return
     listManagedContainers()
       .then((listing) => {
         if (!mounted.current) return
@@ -154,9 +168,10 @@ export function ManagementPage() {
       .catch(() => {
         if (mounted.current) setContainerState((current) => (current === 'ready' ? current : 'error'))
       })
-  }, [])
+  }, [canWarehouse])
 
   const reloadInventory = useCallback(() => {
+    if (!canWarehouse) return
     listManagedInventory()
       .then((listing) => {
         if (!mounted.current) return
@@ -166,7 +181,7 @@ export function ManagementPage() {
       .catch(() => {
         if (mounted.current) setInventoryState((current) => (current === 'ready' ? current : 'error'))
       })
-  }, [])
+  }, [canWarehouse])
 
   useEffect(() => {
     reloadContainers()
@@ -198,6 +213,7 @@ export function ManagementPage() {
   useNotificationsHub({ jobUpdated: onJobUpdated })
 
   useEffect(() => {
+    if (!canWarehouse) return
     let cancelled = false
     listManagedLocations()
       .then((listing) => {
@@ -211,7 +227,7 @@ export function ManagementPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [canWarehouse])
 
   // What the left menu shows next to each entry.
   const counts = useMemo<Record<TabId, number>>(
@@ -239,7 +255,7 @@ export function ManagementPage() {
 
         <div className="mt-10 grid grid-cols-[220px_minmax(0,1fr)] items-start gap-10">
           <nav className="sticky top-4 flex flex-col gap-6" aria-label={t('Management sections')}>
-            {MENU.map((group) => (
+            {menu.map((group) => (
               <div key={group.label}>
                 <p className="mb-1 px-3.5 text-xs text-muted">{group.label}</p>
                 {group.items.map((item) => (
@@ -262,8 +278,9 @@ export function ManagementPage() {
           </nav>
 
           <section className="min-w-0">
-            {tab === 'accounts' ? <AccountsSection accounts={accounts} setAccounts={setAccounts} loadState={loadState} /> : null}
-            {tab === 'roles' ? <RolesSection accounts={accounts} /> : null}
+            {allowedTabs.length === 0 ? <p className="text-sm text-muted">{t('Your role does not include any of these sections.')}</p> : null}
+            {tab === 'accounts' && canUsers ? <AccountsSection accounts={accounts} setAccounts={setAccounts} loadState={loadState} /> : null}
+            {tab === 'roles' && canUsers ? <RolesSection accounts={accounts} /> : null}
             {tab === 'warehouses' ? <WarehousesSection /> : null}
             {tab === 'products' ? (
               <ProductsSection products={products} setProducts={setProducts} categories={categories} loadState={catalogState} />

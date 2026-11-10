@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useAuth } from '@/features/auth/authContext'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import type { WorkflowListItem, WorkflowStatus } from '@/shared/api/types'
@@ -27,6 +30,7 @@ function WorkflowCard({
   onDelete: () => void
 }) {
   const navigate = useNavigate()
+  const canWrite = useAuth().can(PERMISSIONS.workflowWrite)
   const href = `/configure/workflows/${workflow.id}`
   const tone = WORKFLOW_STATUS_TONE[workflow.status]
   const tint =
@@ -96,11 +100,13 @@ function WorkflowCard({
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <Button variant="dangerGhost" size="sm" disabled={deleting} onClick={onDelete}>
-          <Icon name="trash" size={14} /> {deleting ? t('Deleting…') : t('Delete')}
-        </Button>
+        <Can permission={PERMISSIONS.workflowWrite}>
+          <Button variant="dangerGhost" size="sm" disabled={deleting} onClick={onDelete}>
+            <Icon name="trash" size={14} /> {deleting ? t('Deleting…') : t('Delete')}
+          </Button>
+        </Can>
         <Button variant="surface" size="sm" onClick={() => navigate(href)}>
-          {workflow.status === 'PUBLISHED' ? t('View') : t('Edit')}
+          {workflow.status === 'PUBLISHED' || !canWrite ? t('View') : t('Edit')}
         </Button>
         {workflow.status === 'DRAFT' ? (
           <Button variant="primary" size="sm" onClick={() => navigate(href)}>{t('Open to publish')}</Button>
@@ -151,8 +157,10 @@ export function WorkflowsListPage() {
           <div className="flex flex-wrap gap-2">
             <Button variant="surface" disabled={isFetching} onClick={() => refetch()}>
               <Icon name="refresh" size={15} />{' '}{t('Refresh')}</Button>
-            <Button variant="primary" onClick={() => navigate('/configure/workflows/new')}>
-              <Icon name="plus" size={15} />{' '}{t('New workflow')}</Button>
+            <Can permission={PERMISSIONS.workflowWrite}>
+              <Button variant="primary" onClick={() => navigate('/configure/workflows/new')}>
+                <Icon name="plus" size={15} />{' '}{t('New workflow')}</Button>
+            </Can>
           </div>
         </header>
 
@@ -196,12 +204,14 @@ export function WorkflowsListPage() {
             <Icon name="workflow" size={28} className="text-muted" />
             <h2 className="mt-4 text-xl font-book text-ink">{t('No workflows yet')}</h2>
             <p className="mt-2 max-w-md text-sm text-ink-2">{t('Create a draft template, bind step inputs from metadata, then publish when it is ready for TransportRequests.')}</p>
-            <Button
-              className="mt-6"
-              variant="primary"
-              onClick={() => navigate('/configure/workflows/new')}
-            >
-              <Icon name="plus" size={15} />{' '}{t('Create first workflow')}</Button>
+            <Can permission={PERMISSIONS.workflowWrite}>
+              <Button
+                className="mt-6"
+                variant="primary"
+                onClick={() => navigate('/configure/workflows/new')}
+              >
+                <Icon name="plus" size={15} />{' '}{t('Create first workflow')}</Button>
+            </Can>
           </div>
         )}
 
@@ -209,10 +219,12 @@ export function WorkflowsListPage() {
           <section className="mt-10">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-book">{t('All templates')}</h2>
-              <Link
-                to="/configure/workflows/new"
-                className="text-sm text-ink-2 transition-colors hover:text-ink"
-              >{t('+ Add another')}</Link>
+              <Can permission={PERMISSIONS.workflowWrite}>
+                <Link
+                  to="/configure/workflows/new"
+                  className="text-sm text-ink-2 transition-colors hover:text-ink"
+                >{t('+ Add another')}</Link>
+              </Can>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {items.map((workflow) => (

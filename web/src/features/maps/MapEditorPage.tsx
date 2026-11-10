@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type {
@@ -184,7 +186,9 @@ export function MapEditorPage() {
   })
 
   const version = detailQuery.data
-  const isDraft = version?.status === 'DRAFT'
+  // Only a DRAFT can be edited, and only by someone who may change maps (map.write); everyone else sees it read-only.
+  const canWrite = useAuth().can(PERMISSIONS.mapWrite)
+  const isDraft = version?.status === 'DRAFT' && canWrite
   const endpoints = useMemo(() => (version?.endpoints ?? []).map(toEndpoint), [version])
   const edges = useMemo(() => (version?.edges ?? []).map(toEdge), [version])
   const zones = useMemo(() => (version?.zones ?? []).map(toZone), [version])
@@ -969,8 +973,10 @@ export function MapEditorPage() {
             </>
           ) : isDraft ? (
             t('World meters · pan/zoom display-only · continuous image coords')
-          ) : (
+          ) : canWrite ? (
             t('Read-only: only DRAFT maps can be edited. Clone & edit makes an editable copy.')
+          ) : (
+            t('Read-only: your role may view maps but not change them.')
           )}
         </span>
         <div className="ml-auto flex gap-2">
@@ -999,6 +1005,7 @@ export function MapEditorPage() {
               window.open(`${base}/api/navigation/maps/${mapId}/traffic-graph/debug.svg`, '_blank', 'noopener,noreferrer')
             }}
           >{t('Debug SVG')}</Button>
+          {canWrite ? (
           <Button
             variant="ghost"
             disabled={!mapId || clearGraphCacheMutation.isPending}
@@ -1015,8 +1022,9 @@ export function MapEditorPage() {
           >
             {clearGraphCacheMutation.isPending ? t('Clearing…') : t('Clear graph cache')}
           </Button>
+          ) : null}
           <Button variant="ghost" onClick={() => navigate('/configure/facility')}>{t('Close')}</Button>
-          {isDraft ? (
+          {!canWrite ? null : isDraft ? (
             <Button variant="primary" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>{t('Publish')}</Button>
           ) : (
             <Button

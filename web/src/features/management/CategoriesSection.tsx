@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import type { Product, ProductCategory } from '@/shared/api/contracts'
 import { Dialog } from '@/shared/ui/Dialog'
 import { Field, FieldRow, FormError } from '@/shared/ui/Field'
@@ -66,7 +68,9 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
   return (
     <>
       <SectionHead title={t('Categories')} hint={t('Groups that products belong to.')}>
-        <AddButton onClick={open}>{t('Add category')}</AddButton>
+        <Can permission={PERMISSIONS.warehouseWrite}>
+          <AddButton onClick={open}>{t('Add category')}</AddButton>
+        </Can>
       </SectionHead>
 
       <Table>

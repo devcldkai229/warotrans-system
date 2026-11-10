@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PERMISSIONS } from '@/shared/auth/permissions'
+import { Can } from '@/features/auth/RequirePermission'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { Robot, RobotStatus, RobotView } from '@/shared/api/contracts'
@@ -152,14 +154,17 @@ export function FleetPage() {
             robot={selected}
             onBack={() => navigate('/monitor/fleet')}
             onManual={() => navigate(`/monitor/fleet/${selected.code}/manual`)}
+            onTechnical={() => navigate(`/monitor/fleet/${selected.code}/technical`)}
           />
         ) : (
           <>
             <header className="flex items-center gap-3 px-4 pt-5">
               <h1 className="text-xl font-book">{t('Fleet')}</h1>
               <span className="text-sm text-muted">{totalForHeader} {t('robots')}</span>
-              <Button variant="primary" size="sm" className="ml-auto" onClick={openRegister}>
-                <Icon name="plus" size={14} /> {t('Register Robot')}</Button>
+              <Can permission={PERMISSIONS.robotManage}>
+                <Button variant="primary" size="sm" className="ml-auto" onClick={openRegister}>
+                  <Icon name="plus" size={14} /> {t('Register Robot')}</Button>
+              </Can>
             </header>
 
             {robotNotFound ? (
@@ -253,8 +258,10 @@ export function FleetPage() {
                         : t('Add a robot to start monitoring the fleet.')}
                     </p>
                   </div>
-                  <Button type="button" variant="primary" size="sm" onClick={openRegister}>
-                    <Icon name="plus" size={14} /> {t('Register Robot')}</Button>
+                  <Can permission={PERMISSIONS.robotManage}>
+                    <Button type="button" variant="primary" size="sm" onClick={openRegister}>
+                      <Icon name="plus" size={14} /> {t('Register Robot')}</Button>
+                  </Can>
                 </li>
               ) : null}
             </ul>

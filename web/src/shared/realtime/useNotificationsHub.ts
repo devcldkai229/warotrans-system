@@ -18,6 +18,13 @@ export interface RobotTelemetryMessage {
   angularVelocity?: number | null
 }
 
+/** RB-10: a new diagnostics snapshot of a robot arrived (refetch GET /robots/{id}/health). */
+export interface RobotHealthUpdatedMessage {
+  robotId: string
+  robotCode: string
+  overall: string
+}
+
 export interface JobUpdatedMessage {
   jobId: string
   kind: 'job' | 'step'
@@ -62,6 +69,7 @@ export interface TrafficUpdatedMessage {
 
 export interface HubHandlers {
   robotTelemetryUpdated?: (message: RobotTelemetryMessage) => void
+  robotHealthUpdated?: (message: RobotHealthUpdatedMessage) => void
   jobUpdated?: (message: JobUpdatedMessage) => void
   transportRequestUpdated?: (message: TransportRequestUpdatedMessage) => void
   trafficUpdated?: (message: TrafficUpdatedMessage) => void
@@ -120,13 +128,14 @@ function ensureStarted(): Promise<void> {
  */
 export function useNotificationsHub(handlers: HubHandlers): boolean {
   const [connected, setConnected] = useState(false)
-  const { robotTelemetryUpdated, jobUpdated, notificationCreated, transportRequestUpdated, trafficUpdated } = handlers
+  const { robotTelemetryUpdated, robotHealthUpdated, jobUpdated, notificationCreated, transportRequestUpdated, trafficUpdated } = handlers
 
   useEffect(() => {
     const hub = getConnection()
     let cancelled = false
     subscribers += 1
     if (robotTelemetryUpdated) hub.on('robotTelemetryUpdated', robotTelemetryUpdated)
+    if (robotHealthUpdated) hub.on('robotHealthUpdated', robotHealthUpdated)
     if (jobUpdated) hub.on('jobUpdated', jobUpdated)
     if (notificationCreated) hub.on('notificationCreated', notificationCreated)
     if (transportRequestUpdated) hub.on('transportRequestUpdated', transportRequestUpdated)
@@ -142,12 +151,13 @@ export function useNotificationsHub(handlers: HubHandlers): boolean {
       cancelled = true
       subscribers -= 1
       if (robotTelemetryUpdated) hub.off('robotTelemetryUpdated', robotTelemetryUpdated)
+      if (robotHealthUpdated) hub.off('robotHealthUpdated', robotHealthUpdated)
       if (jobUpdated) hub.off('jobUpdated', jobUpdated)
       if (notificationCreated) hub.off('notificationCreated', notificationCreated)
       if (transportRequestUpdated) hub.off('transportRequestUpdated', transportRequestUpdated)
       if (trafficUpdated) hub.off('trafficUpdated', trafficUpdated)
     }
-  }, [robotTelemetryUpdated, jobUpdated, notificationCreated, transportRequestUpdated, trafficUpdated])
+  }, [robotTelemetryUpdated, robotHealthUpdated, jobUpdated, notificationCreated, transportRequestUpdated, trafficUpdated])
 
   return connected
 }

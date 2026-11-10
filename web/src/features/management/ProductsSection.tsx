@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import type { Product, ProductCategory } from '@/shared/api/contracts'
 import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
@@ -125,7 +127,9 @@ export function ProductsSection({ products, setProducts, categories, loadState }
             </option>
           ))}
         </select>
-        <AddButton onClick={open}>{t('Add product')}</AddButton>
+        <Can permission={PERMISSIONS.warehouseWrite}>
+          <AddButton onClick={open}>{t('Add product')}</AddButton>
+        </Can>
       </SectionHead>
 
       {notice ? (
@@ -163,9 +167,11 @@ export function ProductsSection({ products, setProducts, categories, loadState }
               </Td>
               <Td>
                 <div className="flex justify-end">
-                  <Button size="sm" variant={product.isActive ? 'ghost' : 'tonal'} disabled={busyId === product.id} onClick={() => toggle(product)}>
-                    {product.isActive ? t('Deactivate') : t('Activate')}
-                  </Button>
+                  <Can permission={PERMISSIONS.warehouseWrite}>
+                    <Button size="sm" variant={product.isActive ? 'ghost' : 'tonal'} disabled={busyId === product.id} onClick={() => toggle(product)}>
+                      {product.isActive ? t('Deactivate') : t('Activate')}
+                    </Button>
+                  </Can>
                 </div>
               </Td>
             </Tr>

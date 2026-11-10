@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
@@ -81,7 +83,9 @@ export function WarehousesSection() {
         title={t('Warehouses')}
         hint={t('Sites that own maps, robots, and transport requests. Create one before importing maps on Facility.')}
       >
-        <AddButton onClick={open}>{t('Add warehouse')}</AddButton>
+        <Can permission={PERMISSIONS.warehouseWrite}>
+          <AddButton onClick={open}>{t('Add warehouse')}</AddButton>
+        </Can>
       </SectionHead>
 
       {warehousesQuery.isLoading ? <p className="text-sm text-muted">{t('Loading warehouses…')}</p> : null}

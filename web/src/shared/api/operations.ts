@@ -48,6 +48,8 @@ export interface IssueQuery {
   status?: IssueStatus | ''
   severity?: IssueSeverity | ''
   mine?: boolean
+  /** Only the issues about this robot. */
+  robotId?: string
   skip?: number
   take?: number
 }
@@ -57,6 +59,7 @@ export function listIssues(params: IssueQuery = {}) {
   if (params.status) query.set('status', params.status)
   if (params.severity) query.set('severity', params.severity)
   if (params.mine) query.set('mine', 'true')
+  if (params.robotId) query.set('robotId', params.robotId)
   query.set('take', String(params.take ?? 50))
   if (params.skip) query.set('skip', String(params.skip))
   return apiRequest<IssueListResponse>(`/api/operations/issues?${query}`)

@@ -247,6 +247,10 @@ export interface Robot {
   maintenanceSince?: string | null
   /** RB-09: system actions the robot announced. */
   capabilities?: string[]
+  /** HW-04: what the robot said about its battery estimate; null when it did not say. */
+  batteryVoltage?: number | null
+  batteryEstimationMode?: string | null
+  batteryConfidence?: string | null
 }
 
 /** The Job a Robot is working on, joined from JobAssignment. TODO(backend): needs a fleet read endpoint. */

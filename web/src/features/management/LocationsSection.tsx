@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import type { StorageLocationView } from '@/shared/api/contracts'
 import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
@@ -104,7 +106,11 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
             : t('Places where Containers are stored. Each one points at one map Endpoint.')
         }
       >
-        {warehouse ? <AddButton onClick={open}>{t('Add location')}</AddButton> : null}
+        {warehouse ? (
+          <Can permission={PERMISSIONS.warehouseWrite}>
+            <AddButton onClick={open}>{t('Add location')}</AddButton>
+          </Can>
+        ) : null}
       </SectionHead>
 
       {notice ? (
@@ -140,14 +146,16 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
               </Td>
               <Td>
                 <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    variant={location.isActive ? 'ghost' : 'tonal'}
-                    disabled={busyId === location.id}
-                    onClick={() => toggle(location)}
-                  >
-                    {location.isActive ? t('Deactivate') : t('Activate')}
-                  </Button>
+                  <Can permission={PERMISSIONS.warehouseWrite}>
+                    <Button
+                      size="sm"
+                      variant={location.isActive ? 'ghost' : 'tonal'}
+                      disabled={busyId === location.id}
+                      onClick={() => toggle(location)}
+                    >
+                      {location.isActive ? t('Deactivate') : t('Activate')}
+                    </Button>
+                  </Can>
                 </div>
               </Td>
             </Tr>

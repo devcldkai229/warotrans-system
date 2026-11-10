@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
@@ -359,7 +361,9 @@ export function WorkflowEditor({
     setShowPublishWarnings(false)
   }
 
-  const readOnly = status === 'PUBLISHED'
+  // A published workflow is fixed, and only someone who may change workflows (workflow.write) edits a draft.
+  const canWrite = useAuth().can(PERMISSIONS.workflowWrite)
+  const readOnly = status === 'PUBLISHED' || !canWrite
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -577,19 +581,19 @@ export function WorkflowEditor({
           {saveMutation.isPending ? t('Saving…') : saveLabel}
         </Button>
       )}
-      {!isNew && status === 'DRAFT' && (
+      {!isNew && status === 'DRAFT' && canWrite && (
         <Button variant="surface" disabled={publishMutation.isPending} onClick={runPublish}>
           {publishMutation.isPending ? t('Publishing…') : t('Publish')}
         </Button>
       )}
-      {!isNew && status === 'PUBLISHED' && (
+      {!isNew && status === 'PUBLISHED' && canWrite && (
         <Button
           variant="primary"
           disabled={versionMutation.isPending}
           onClick={() => versionMutation.mutate()}
         >{t('New version')}</Button>
       )}
-      {!isNew && (
+      {!isNew && canWrite && (
         <Button variant="dangerGhost" disabled={deleteMutation.isPending} onClick={runDelete}>
           <Icon name="trash" size={15} />
           {deleteMutation.isPending ? t('Deleting…') : t('Delete')}

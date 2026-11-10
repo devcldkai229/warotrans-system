@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { RoleSummary } from './RoleSummary'
 import type { Account, AccountRole } from '@/shared/api/contracts'
 import { Dialog } from '@/shared/ui/Dialog'
 import { Field, FormError } from '@/shared/ui/Field'
@@ -111,6 +112,7 @@ export function AccountFormDialog({ account, existingUsernames, currentAccountId
             </option>
           ))}
         </select>
+        <RoleSummary role={role} />
       </Field>
       {error ? <FormError>{error}</FormError> : null}
     </Dialog>

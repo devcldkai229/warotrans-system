@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { MapStatus } from '@/shared/api/contracts'
@@ -148,6 +150,8 @@ function formFromVersion(version: MapVersionDto): MetadataFormState {
 
 export function FacilityPage() {
   const navigate = useNavigate()
+  // Reading maps is for everyone with map.read; changing them needs map.write (an Admin).
+  const canWrite = useAuth().can(PERMISSIONS.mapWrite)
   const queryClient = useQueryClient()
   const fileYamlRef = useRef<HTMLInputElement>(null)
   const filePgmRef = useRef<HTMLInputElement>(null)
@@ -451,30 +455,36 @@ export function FacilityPage() {
         <div className="mt-10 grid grid-cols-2 gap-4">
           {draft ? (
             <MapCard version={draft} warehouseName={warehouseName} when={t('Created {value}', { value: formatDateTime(draft.createdAt) })}>
-              <Button
-                variant="surface"
-                disabled={publishMutation.isPending}
-                onClick={() => publishMutation.mutate(draft.id)}
-              >{t('Publish map')}</Button>
-              <Button variant="outline" onClick={() => openEdit(draft)}>{t('Metadata')}</Button>
-              {hasMapImage(draft) ? (
-                <Button variant="primary" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>{t('Edit')}</Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setImportOpen(true)
-                    setActionError(t('Import yaml + pgm first. Create-only drafts have no image size for the editor.'))
-                  }}
-                >{t('Import assets')}</Button>
-              )}
-              <Button
-                variant="ghost"
-                disabled={archiveMutation.isPending}
-                onClick={() => {
-                  if (window.confirm(t('Archive draft {code}?', { code: draft.code }))) archiveMutation.mutate(draft.id)
-                }}
-              >{t('Archive')}</Button>
+              {canWrite ? (
+                <>
+                  <Button
+                    variant="surface"
+                    disabled={publishMutation.isPending}
+                    onClick={() => publishMutation.mutate(draft.id)}
+                  >{t('Publish map')}</Button>
+                  <Button variant="outline" onClick={() => openEdit(draft)}>{t('Metadata')}</Button>
+                  {hasMapImage(draft) ? (
+                    <Button variant="primary" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>{t('Edit')}</Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        setImportOpen(true)
+                        setActionError(t('Import yaml + pgm first. Create-only drafts have no image size for the editor.'))
+                      }}
+                    >{t('Import assets')}</Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    disabled={archiveMutation.isPending}
+                    onClick={() => {
+                      if (window.confirm(t('Archive draft {code}?', { code: draft.code }))) archiveMutation.mutate(draft.id)
+                    }}
+                  >{t('Archive')}</Button>
+                </>
+              ) : hasMapImage(draft) ? (
+                <Button variant="surface" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>{t('View')}</Button>
+              ) : null}
             </MapCard>
           ) : (
             <MissingMapCard title={t('No draft map')}>{t('Create a metadata-only draft or import a yaml + pgm pair.')}</MissingMapCard>
@@ -519,15 +529,17 @@ export function FacilityPage() {
                   }
                 }}
               >{t('Build map')}</Button>
-              <Button
-                variant="ghost"
-                disabled={archiveMutation.isPending}
-                onClick={() => {
-                  if (window.confirm(t('Archive published {code}? Robots will lose the active map.', { code: published.code }))) {
-                    archiveMutation.mutate(published.id)
-                  }
-                }}
-              >{t('Archive')}</Button>
+              {canWrite ? (
+                <Button
+                  variant="ghost"
+                  disabled={archiveMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm(t('Archive published {code}? Robots will lose the active map.', { code: published.code }))) {
+                      archiveMutation.mutate(published.id)
+                    }
+                  }}
+                >{t('Archive')}</Button>
+              ) : null}
             </MapCard>
           ) : (
             <MissingMapCard title={t('No published map')}>{t('Robots cannot navigate until a map version is published.')}</MissingMapCard>
@@ -540,7 +552,7 @@ export function FacilityPage() {
             <IconButton aria-label={t('Search maps')}>
               <Icon name="search" size={16} />
             </IconButton>
-            {import.meta.env.DEV ? (
+            {canWrite && import.meta.env.DEV ? (
               <Button
                 variant="outline"
                 disabled={sampleMutation.isPending}
@@ -549,19 +561,23 @@ export function FacilityPage() {
                 <Icon name="bolt" size={15} /> {sampleMutation.isPending ? t('Loading…') : t('Load Sample Map')}
               </Button>
             ) : null}
-            <Button
-              variant="outline"
-              disabled={Boolean(draft)}
-              title={draft ? t('Archive or publish the current draft first') : undefined}
-              onClick={() => {
-                setCreateOpen(true)
-                setCreateForm(emptyCreateForm())
-                setCreateError(null)
-              }}
-            >
-              <Icon name="plus" size={15} />{' '}{t('Create')}</Button>
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <Icon name="upload" size={15} />{' '}{t('Import')}</Button>
+            {canWrite ? (
+              <>
+                <Button
+                  variant="outline"
+                  disabled={Boolean(draft)}
+                  title={draft ? t('Archive or publish the current draft first') : undefined}
+                  onClick={() => {
+                    setCreateOpen(true)
+                    setCreateForm(emptyCreateForm())
+                    setCreateError(null)
+                  }}
+                >
+                  <Icon name="plus" size={15} />{' '}{t('Create')}</Button>
+                <Button variant="outline" onClick={() => setImportOpen(true)}>
+                  <Icon name="upload" size={15} />{' '}{t('Import')}</Button>
+              </>
+            ) : null}
           </div>
         </header>
 
@@ -747,7 +763,14 @@ export function FacilityPage() {
                   <Td className="max-w-80 truncate">{version.name}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-2">
-                      {version.status === 'DRAFT' ? (
+                      {!canWrite && hasMapImage(version) ? (
+                        <button
+                          type="button"
+                          className="text-sm text-ink hover:underline"
+                          onClick={() => navigate(`/configure/facility/maps/${version.id}/edit`)}
+                        >{t('View')}</button>
+                      ) : null}
+                      {canWrite && version.status === 'DRAFT' ? (
                         <>
                           <button
                             type="button"
@@ -779,7 +802,7 @@ export function FacilityPage() {
                           >{t('Publish')}</button>
                         </>
                       ) : null}
-                      {hasMapImage(version) ? (
+                      {canWrite && hasMapImage(version) ? (
                         <button
                           type="button"
                           className="text-sm text-ink hover:underline"
@@ -790,7 +813,7 @@ export function FacilityPage() {
                           {cloneMutation.isPending && cloneMutation.variables === version.id ? t('Cloning…') : t('Clone to draft')}
                         </button>
                       ) : null}
-                      {version.status !== 'ARCHIVED' ? (
+                      {canWrite && version.status !== 'ARCHIVED' ? (
                         <button
                           type="button"
                           className="text-sm text-ink-2 hover:underline"

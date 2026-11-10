@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS } from '@/shared/auth/permissions'
+import { Can } from '@/features/auth/RequirePermission'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
@@ -148,27 +151,29 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
   })
 
   const busy = run.isPending || start.isPending || again.isPending || resume.isPending
+  // Starting, resuming and replaying a Job is job.operate (Staff and Admin); a Technician only looks.
+  const mayOperate = useAuth().can(PERMISSIONS.jobOperate)
   // A Job stopped half-way (robot offline) keeps its containers: resume it, do not replay the request.
   const jobOpen = jobs.some((job) => !TERMINAL_JOB_STATUSES.includes(job.status))
   const finished = TERMINAL_REQUEST_STATUSES.includes(request.status) && request.status !== 'CANCELLED' && !jobOpen
   return (
     <>
-      {finished ? (
+      {finished && mayOperate ? (
         <Button variant="primary" size="sm" disabled={busy} onClick={() => again.mutate()}>
           <Icon name="refresh" size={14} /> {again.isPending ? t('Starting…') : t('Run again on robot')}
         </Button>
       ) : null}
-      {request.status === 'SUBMITTED' && jobs.length === 0 ? (
+      {request.status === 'SUBMITTED' && jobs.length === 0 && mayOperate ? (
         <Button variant="primary" size="sm" disabled={busy} onClick={() => run.mutate()}>
           <Icon name="bolt" size={14} /> {run.isPending ? t('Starting…') : t('Run on robot')}
         </Button>
       ) : null}
       {jobs.map((job) =>
-        job.status === 'CREATED' ? (
+        job.status === 'CREATED' && mayOperate ? (
           <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => start.mutate(job.id)}>
             <Icon name="bolt" size={14} /> {start.isPending ? t('Starting…') : t('Start {jobNo} on robot', { jobNo: job.jobNo })}
           </Button>
-        ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
+        ) : (job.status === 'PAUSED' || job.status === 'REASSIGNING') && mayOperate ? (
           <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => resume.mutate(job.id)}>
             <Icon name="play" size={14} /> {resume.isPending ? t('Resuming…') : t('Resume {jobNo} on robot', { jobNo: job.jobNo })}
           </Button>
@@ -177,7 +182,7 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
             <Icon name="target" size={14} /> {t('View {jobNo}', { jobNo: job.jobNo })}</Button>
         ),
       )}
-      {request.status === 'SUBMITTED' && jobs.length === 0 ? (
+      {request.status === 'SUBMITTED' && jobs.length === 0 && mayOperate ? (
         <p className="text-xs text-muted">{t('Plans the route, starts the best free robot on this map and opens the live view.')}</p>
       ) : null}
       {error ? <p className="text-xs text-red-ink">{error}</p> : null}
@@ -458,8 +463,10 @@ export function TransportRequestsPage() {
           <header className="flex items-center gap-3 px-5 pt-5">
             <h1 className="text-xl font-book whitespace-nowrap">{t('Transport requests')}</h1>
             <span className="text-sm text-muted">{listQuery.data?.total ?? requests.length}</span>
-            <Button variant="primary" size="sm" className="ml-auto" onClick={startCompose}>
-              <Icon name="plus" size={14} /> {t('New request')}</Button>
+            <Can permission={PERMISSIONS.transportCreate}>
+              <Button variant="primary" size="sm" className="ml-auto" onClick={startCompose}>
+                <Icon name="plus" size={14} /> {t('New request')}</Button>
+            </Can>
           </header>
 
           <div className="mt-3 mb-3 flex h-9 items-center gap-1.5 px-4">

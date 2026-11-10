@@ -63,6 +63,11 @@ export function canActOnRobot(
   return capabilities.robotScope.allRobots || capabilities.robotScope.robotIds.includes(robotId)
 }
 
+/** True when `can` grants the one permission, or any one of a list (a screen several roles reach by different rights). */
+export function holdsPermission(can: (permission: Permission) => boolean, needs: Permission | Permission[]): boolean {
+  return Array.isArray(needs) ? needs.some(can) : can(needs)
+}
+
 /** The web console is for Admins and Technicians; Staff work in the mobile app. */
 export function mayUseConsole(capabilities: Capabilities | null | undefined): boolean {
   return hasPermission(capabilities, PERMISSIONS.consoleAccess)

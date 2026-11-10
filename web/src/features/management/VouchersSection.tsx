@@ -1,4 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Product } from '@/shared/api/contracts'
@@ -119,7 +121,11 @@ export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
           <option value="CANCELLED">{t('Cancelled')}</option>
         </select>
         <SearchInput className="w-48" placeholder={t('Search code or reference')} value={query} onChange={setQuery} />
-        {warehouseId ? <AddButton onClick={() => setCreating(true)}>{t('New voucher')}</AddButton> : null}
+        {warehouseId ? (
+          <Can permission={PERMISSIONS.voucherWrite}>
+            <AddButton onClick={() => setCreating(true)}>{t('New voucher')}</AddButton>
+          </Can>
+        ) : null}
       </SectionHead>
 
       <Table>
@@ -405,12 +411,14 @@ function VoucherDetailModal({
                   </Td>
                   <Td align="right">
                     {draft ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => void run(() => removeStockVoucherLine(voucher.id, line.id), t('The Container could not be removed.'))}
-                      >{t('Remove')}</Button>
+                      <Can permission={PERMISSIONS.voucherWrite}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => void run(() => removeStockVoucherLine(voucher.id, line.id), t('The Container could not be removed.'))}
+                        >{t('Remove')}</Button>
+                      </Can>
                     ) : line.done ? (
                       <Icon name="check" size={16} className="ml-auto text-green-ink" />
                     ) : (
@@ -436,7 +444,7 @@ function VoucherDetailModal({
       <footer className="flex flex-wrap items-center justify-end gap-2 px-6 pb-6">
         <Button variant="ghost" onClick={() => printVoucher(voucher)}>{t('Print')}</Button>
         {draft ? (
-          <>
+          <Can permission={PERMISSIONS.voucherWrite}>
             <Button variant="ghost" disabled={busy} onClick={() => void run(() => cancelStockVoucher(voucher.id), t('The voucher could not be cancelled.'))}>{t('Cancel voucher')}</Button>
             <Button variant="tonal" disabled={busy} onClick={() => setAdding(true)}>
               <Icon name="plus" size={14} />{' '}{t('Add Containers')}</Button>
@@ -445,10 +453,12 @@ function VoucherDetailModal({
               disabled={busy || voucher.lines.length === 0}
               onClick={() => void run(() => confirmStockVoucher(voucher.id), t('The voucher could not be confirmed.'))}
             >{t('Confirm voucher')}</Button>
-          </>
+          </Can>
         ) : null}
         {voucher.status === 'CONFIRMED' && remaining > 0 ? (
+          <Can permission={PERMISSIONS.transportCreate}>
           <Button variant="primary" onClick={() => navigate(`/monitor/requests?voucher=${voucher.id}`)}>{t('Dispatch robots ({remaining})', { remaining })}</Button>
+          </Can>
         ) : null}
       </footer>
 

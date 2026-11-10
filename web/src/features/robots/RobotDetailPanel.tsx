@@ -3,33 +3,38 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import type { RobotView } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
-import { disableRobot, enableRobot } from '@/shared/api/fleet'
+import { disableRobot, enableRobot, getRobotHealth } from '@/shared/api/fleet'
 import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
-import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
+import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, humanize, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_CONTAINER_STATUS_TONE, JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
 import { t } from '@/shared/i18n'
+import type { RobotHealth } from '@/shared/api/fleet'
+import { buildHealthGroups, countHealth, formatAge } from './technical/healthModel'
 interface RobotDetailPanelProps {
 
   robot: RobotView
   onBack: () => void
   /** Opens manual control (go to a point on the map, or drive with buttons). */
   onManual?: () => void
+  /** Opens the Technical dashboard (diagnostics, battery, connection). */
+  onTechnical?: () => void
 }
 
 /**
  * Robot commands. Taking a robot out of dispatch is the Disable button above. An action the backend cannot run yet is
  * shown disabled with its reason instead of doing nothing.
  */
-const ACTIONS: { label: string; icon: IconName; unavailable?: string }[] = [
-  { label: t('Manual'), icon: 'gamepad' },
-  { label: t('Localize'), icon: 'crosshair', unavailable: t('The robot does not accept a re-localize command yet.') },
+const ACTIONS: { id: 'manual' | 'localize' | 'technical'; label: string; icon: IconName; unavailable?: string }[] = [
+  { id: 'manual', label: t('Manual'), icon: 'gamepad' },
+  { id: 'localize', label: t('Localize'), icon: 'crosshair', unavailable: t('The robot does not accept a re-localize command yet.') },
+  { id: 'technical', label: t('Technical'), icon: 'sliders' },
 ]
 
 const TIMELINE = 'divide-y divide-outline-soft'
@@ -55,10 +60,60 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/** The Health section: the counts from the robot's last snapshot, what needs attention, and the way to the full dashboard. */
+function HealthBody({ robot, diagnostics }: { robot: RobotView; diagnostics: Diagnostics }) {
+  const { allowed, health } = diagnostics
+  const groups = buildHealthGroups(health)
+  const rows = groups.flatMap((group) => group.rows)
+  const attention = rows.filter((row) => row.freshness === 'stale' || row.level === 'ERROR' || row.level === 'WARN')
+  const counts = countHealth(groups)
+
+  return (
+    <dl>
+      {allowed && health?.receivedAt ? (
+        <>
+          <Field label={t('Overall')}>
+            <StatusBadge tone={HEALTH_TONE[health.overall]}>{health.overall}</StatusBadge>
+          </Field>
+          <Field label={t('Diagnostics received {age}', { age: formatAge(health.receivedAt) })}>
+            <span className="text-xs text-muted tabular-nums">
+              {t('{live} live, {stale} stale, {unmeasured} not measured', { live: counts.live + counts.warn + counts.error, stale: counts.stale, unmeasured: counts.notMeasured + counts.notReported })}
+            </span>
+          </Field>
+          {attention.slice(0, 4).map((row) => (
+            <Field key={row.key} label={row.label}>
+              <span className="text-xs text-muted">{row.value ?? '—'}</span>
+              <StatusBadge tone={row.freshness === 'stale' ? 'amber' : HEALTH_TONE[row.level ?? 'OK']}>{row.freshness === 'stale' ? t('Stale') : (row.level ?? 'OK')}</StatusBadge>
+            </Field>
+          ))}
+        </>
+      ) : allowed ? (
+        <p className={EMPTY}>{t('No diagnostics received yet.')}</p>
+      ) : null}
+      <Field label={t('Error code')}>{dash(robot.errorCode)}</Field>
+      {allowed ? (
+        <div className="pt-2">
+          <Link to={`/monitor/fleet/${robot.code}/technical`} className="text-sm font-medium text-blue-ink hover:underline">
+            {t('Open the technical dashboard')}
+          </Link>
+        </div>
+      ) : null}
+    </dl>
+  )
+}
+
 type RecentJobs = { state: 'loading' | 'error' | 'ready'; items: JobSummaryDto[] }
 
+/** The robot's latest health snapshot, when this person may read it (robot.diagnostics). */
+interface Diagnostics {
+  allowed: boolean
+  health: RobotHealth | undefined
+}
+
+const HEALTH_TONE = { OK: 'green', WARN: 'amber', ERROR: 'red', STALE: 'amber', UNKNOWN: 'grey' } as const
+
 // Every section is backed by persisted data: fleet.robots, the active JobAssignment and the robot's Job assignments.
-function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
+function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagnostics): Section[] {
   const activity = robot.activity
   const recentJobs = recent.items
   const hasTelemetry = Boolean(robot.lastTelemetryAt)
@@ -160,12 +215,9 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
     {
       id: 'health',
       label: t('Health'),
-      summary: robot.errorCode ?? 'OK',
-      body: (
-        <dl>
-          <Field label={t('Error code')}>{dash(robot.errorCode)}</Field>
-        </dl>
-      ),
+      // What the robot reported, never a made-up "OK": no snapshot yet says so.
+      summary: robot.errorCode ?? (diagnostics.health?.receivedAt ? humanize(diagnostics.health.overall) : t('No diagnostics yet')),
+      body: <HealthBody robot={robot} diagnostics={diagnostics} />,
     },
     {
       id: 'system',
@@ -253,20 +305,32 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
   ]
 }
 
-export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelProps) {
+export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: RobotDetailPanelProps) {
   const queryClient = useQueryClient()
   const { capabilities } = useAuth()
   const mayConfigure = canActOnRobot(capabilities, PERMISSIONS.robotConfigure, robot.id)
   const mayDrive = canActOnRobot(capabilities, PERMISSIONS.robotManualDrive, robot.id)
+  const mayDiagnose = canActOnRobot(capabilities, PERMISSIONS.robotDiagnostics, robot.id)
   const recentQuery = useQuery({
     queryKey: ['jobs', 'by-robot', robot.id],
     queryFn: () => listJobs({ robotId: robot.id, take: 5 }),
     refetchInterval: 10_000,
   })
-  const sections = buildSections(robot, {
-    state: recentQuery.isError ? 'error' : recentQuery.data ? 'ready' : 'loading',
-    items: recentQuery.data?.items ?? [],
+  // Shares its query key with the Control card, so the snapshot is fetched once.
+  const healthQuery = useQuery({
+    queryKey: ['robot-health', robot.id],
+    queryFn: () => getRobotHealth(robot.id),
+    enabled: mayDiagnose,
+    refetchInterval: 10_000,
   })
+  const sections = buildSections(
+    robot,
+    {
+      state: recentQuery.isError ? 'error' : recentQuery.data ? 'ready' : 'loading',
+      items: recentQuery.data?.items ?? [],
+    },
+    { allowed: mayDiagnose, health: healthQuery.data },
+  )
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
   const [confirmed, setConfirmed] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -350,9 +414,20 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
               key={action.label}
               type="button"
               className="group flex flex-col items-center gap-2 text-xs text-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={Boolean(action.unavailable) || (action.label === 'Manual' && (!onManual || !mayDrive))}
-              title={action.unavailable ?? (action.label === 'Manual' && !mayDrive ? t('You may not drive this robot.') : undefined)}
-              onClick={action.label === 'Manual' ? onManual : undefined}
+              disabled={
+                Boolean(action.unavailable) ||
+                (action.id === 'manual' && (!onManual || !mayDrive)) ||
+                (action.id === 'technical' && (!onTechnical || !mayDiagnose))
+              }
+              title={
+                action.unavailable ??
+                (action.id === 'manual' && !mayDrive
+                  ? t('You may not drive this robot.')
+                  : action.id === 'technical' && !mayDiagnose
+                    ? t('You do not have access to the diagnostics of this robot.')
+                    : undefined)
+              }
+              onClick={action.id === 'manual' ? onManual : action.id === 'technical' ? onTechnical : undefined}
             >
               <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-enabled:group-hover:bg-container-higher">
                 <Icon name={action.icon} size={18} />
