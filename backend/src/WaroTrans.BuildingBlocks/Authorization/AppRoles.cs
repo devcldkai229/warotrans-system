@@ -10,4 +10,7 @@ public static class AppRoles
     public const string Technician = "TECHNICIAN";
 
     public static IReadOnlyList<string> All { get; } = [Admin, Staff, Technician];
+
+    /// <summary>Only a Technician is limited to the robots assigned to the account (IRobotAccessScope).</summary>
+    public static bool IsRobotScoped(string role) => role == Technician;
 }
