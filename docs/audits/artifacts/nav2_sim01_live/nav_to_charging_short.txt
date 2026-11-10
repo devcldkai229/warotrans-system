@@ -1,0 +1,27 @@
+Waiting for an action server to become available...
+Sending goal:
+     pose:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: map
+  pose:
+    position:
+      x: -1.02
+      y: -0.529
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: -0.7071
+      w: 0.7071
+behavior_tree: ''
+
+Goal accepted with ID: 07f90197b61d4442a424570f77d99603
+
+Result:
+    error_code: 208
+error_msg: ''
+
+Goal finished with status: ABORTED

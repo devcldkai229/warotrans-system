@@ -37,8 +37,8 @@ export type JsonValue =
 /* Identity                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** `Identity/Enums/AccountRole.cs` — ADMIN, STAFF. */
-export type AccountRole = 'ADMIN' | 'STAFF';
+/** `Identity/Enums/AccountRole.cs` — ADMIN, STAFF, TECHNICIAN. */
+export type AccountRole = 'ADMIN' | 'STAFF' | 'TECHNICIAN';
 
 /** `Identity/Enums/AccountStatus.cs`. */
 export type AccountStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED';
@@ -80,7 +80,15 @@ export type ContainerStatus =
   | 'STORED'
   | 'HOLD'
   | 'EMPTY'
-  | 'OUT_OF_SERVICE';
+  | 'OUT_OF_SERVICE'
+  /** Left the warehouse on a confirmed outbound stock voucher; it holds no storage location. */
+  | 'ISSUED';
+
+/** `Warehouse/Enums/StockVoucherType.cs`: INBOUND = phiếu nhập (PN-), OUTBOUND = phiếu xuất (PX-). */
+export type StockVoucherType = 'INBOUND' | 'OUTBOUND';
+
+/** `Warehouse/Enums/StockVoucherStatus.cs`. Set by people only; robot progress is `doneCount`. */
+export type StockVoucherStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
 
 /** `Warehouse/Features/ListWarehouses/Response.cs`. */
 export interface WarehouseListItemResponse {
@@ -201,7 +209,8 @@ export interface RobotResponse {
   name: string;
   status: RobotStatus;
   isOnline: boolean;
-  batteryPercent: number;
+  /** HW-04: null = never reported (Unknown), never 0 %. */
+  batteryPercent: number | null;
   poseX: number;
   poseY: number;
   poseYaw: number;
@@ -554,7 +563,9 @@ export type TransportRequestStatus =
   | 'COMPLETED'
   | 'FAILED'
   | 'CANCELLED'
-  | 'REJECTED';
+  | 'REJECTED'
+  /** Cancel accepted, cargo still on a robot (WH-04). */
+  | 'CANCELLING';
 
 /** `Transportation/Enums/TransportRequestDetailStatus.cs`. */
 export type TransportRequestDetailStatus =
@@ -563,7 +574,15 @@ export type TransportRequestDetailStatus =
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'FAILED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'CANCEL_PENDING_RECOVERY';
+
+/** BOTH-04: `BuildingBlocks/Abstractions/ActionAvailability.cs` — what the server lets this user do now, and why not. */
+export interface ActionAvailability {
+  action: string;
+  allowed: boolean;
+  reason: string | null;
+}
 
 /** `Transportation/Features/CreateTransportRequest/Request.cs` (per movement line). */
 export interface CreateTransportRequestDetailRequest {
@@ -672,6 +691,10 @@ export interface UserSession {
   role: AccountRole;
   zone: string;
   avatarInitials: string;
+  /** Server-enforced permissions (GET /api/identity/me/capabilities); screens render from these, not from `role`. */
+  permissions?: string[];
+  /** True while the account still holds a temporary password: only the change-password screen opens. */
+  mustChangePassword?: boolean;
 }
 
 export interface RobotSummary {

@@ -1,0 +1,6 @@
+[planner_server-16] [INFO] [1793506000.573034757] [planner_server]: Created global planner plugin GridBased of type warotrans_lane_planner::LaneAwareNavfn
+[planner_server-16] [INFO] [1793506000.580526084] [planner_server]: LaneAwareNavfn: loaded 7 lane segments from /mnt/e/programming/my_project/warotrans/ros2_ws/src/warotrans_simulation/maps/map_one_v001/lanes.json
+[planner_server-16] [WARN] [1793506095.593138117] [planner_server]: LaneAwareNavfn: no path (ONE_WAY / lethal)
+[planner_server-16] [WARN] [1793506095.692771888] [planner_server]: LaneAwareNavfn: no path (ONE_WAY / lethal)
+[planner_server-16] [WARN] [1793506097.846753788] [planner_server]: LaneAwareNavfn: no path (ONE_WAY / lethal)
+[planner_server-16] [WARN] [1793506098.699524042] [planner_server]: LaneAwareNavfn: no path (ONE_WAY / lethal)

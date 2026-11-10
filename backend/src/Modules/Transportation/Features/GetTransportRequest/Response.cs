@@ -1,4 +1,6 @@
 using System.Text.Json;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.WorkflowExecution.Contracts;
 
 namespace WaroTrans.Transportation.Features.GetTransportRequest;
 
@@ -18,7 +20,17 @@ public sealed record GetTransportRequestResponse(
     DateTimeOffset? CompletedAt,
     string? FailureCode,
     string? FailureMessage,
-    IReadOnlyList<TransportRequestDetailItemResponse> Details);
+    IReadOnlyList<TransportRequestDetailItemResponse> Details,
+    // TRN-01 / TRN-02: who closed the request and why.
+    Guid? CancelledBy,
+    string? CancelReason,
+    DateTimeOffset? CancelRequestedAt,
+    Guid? RejectedBy,
+    string? RejectReason,
+    DateTimeOffset? RejectedAt,
+    // The Jobs carrying it and what the caller may do now (BOTH-04).
+    IReadOnlyList<RequestJobState> Jobs,
+    IReadOnlyList<ActionAvailability> AvailableActions);
 
 public sealed record TransportRequestDetailItemResponse(
     Guid Id,

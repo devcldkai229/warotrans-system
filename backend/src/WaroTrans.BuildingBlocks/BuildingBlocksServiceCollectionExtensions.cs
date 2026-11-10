@@ -38,10 +38,12 @@ public static class BuildingBlocksServiceCollectionExtensions
 
         services.AddValidatorsFromAssembly(typeof(BuildingBlocksServiceCollectionExtensions).Assembly);
         // One MQTT client for commands (QoS1), teleop (QoS0), and HUMAN_INTERACTION (QoS1).
+        services.AddSingleton<RobotIngressGate>();
         services.AddSingleton<MqttRobotCommandPublisher>();
         services.AddSingleton<IMqttRobotCommandPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
         services.AddSingleton<IMqttRobotTeleopPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
         services.AddSingleton<IMqttRobotInteractionPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
+        services.AddSingleton<IMqttTrafficEpochPublisher>(sp => sp.GetRequiredService<MqttRobotCommandPublisher>());
         services.AddHostedService<MqttSubscriberHostedService>();
         services.AddHostedService<MqttCommandPublisherWarmupHostedService>();
 

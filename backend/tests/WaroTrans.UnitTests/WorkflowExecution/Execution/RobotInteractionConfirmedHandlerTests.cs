@@ -357,6 +357,9 @@ public sealed class RobotInteractionConfirmedHandlerTests
         public Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Robots.TryGetValue(robotId, out var r) ? r with { BatteryPercent = Battery } : null);
 
+        public Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>([]);
+
         public Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RobotSnapshot>>(Robots.Values.Where(r => r.CurrentMapVersionId == mapVersionId).ToList());
 
@@ -368,12 +371,22 @@ public sealed class RobotInteractionConfirmedHandlerTests
             Guid jobId,
             Guid jobStepId,
             CancellationToken cancellationToken = default,
-            RouteGrantSnapshot? route = null)
+            RouteGrantSnapshot? route = null,
+            double? timeoutSeconds = null)
         {
             var commandId = Guid.NewGuid();
             Commands.Add((robotId, x, y, jobStepId, commandId));
             return Task.FromResult(commandId);
         }
+
+        public Task<bool> CancelNavigationAsync(Guid robotId, Guid navigateCommandId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public Task<Guid?> StopRobotAsync(Guid robotId, string mode, string? reason, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
+
+        public Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
 
         public Task RequestHumanInteractionAsync(Guid robotId, Guid jobId, Guid jobStepId, string interactionType, Guid containerId, Guid endpointId, CancellationToken cancellationToken = default)
         {
@@ -395,6 +408,9 @@ public sealed class RobotInteractionConfirmedHandlerTests
             Task.FromResult(Poses.GetValueOrDefault(endpointId));
         public Task<MapVersionSnapshot?> GetMapVersionAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<MapVersionSnapshot?>(null);
+        public Task<EndpointPoseSnapshot?> GetEndpointPoseByCodeAsync(Guid mapVersionId, string code, CancellationToken cancellationToken = default) =>
+            Task.FromResult<EndpointPoseSnapshot?>(null);
+
         public Task<IReadOnlyList<EndpointSnapshot>> GetEndpointsAsync(IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EndpointSnapshot>>([]);
     }

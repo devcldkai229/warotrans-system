@@ -46,7 +46,7 @@ public sealed class TrafficAuthorityPublisher(
         {
             await foreach (var evt in outbox.ReadAllAsync(stoppingToken).ConfigureAwait(false))
             {
-                if (options.Value.Mode != TrafficCoordinatorMode.Active)
+                if (options.Value.Mode is not (TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic))
                 {
                     continue;
                 }
@@ -82,11 +82,16 @@ public sealed class TrafficAuthorityPublisher(
             return;
         }
 
-        if (evt.Kind == TrafficEventKind.AuthorityRevoked
-            && _activeCommandByRobot.Remove(evt.RobotId, out var revokeTarget))
+        if (evt.Kind == TrafficEventKind.AuthorityRevoked)
         {
-            await PublishRevokeAsync(db, robot.Code, evt, revokeTarget, ct).ConfigureAwait(false);
-            return;
+            // A semantic authority names its NAVIGATE; an Active one uses the command it was published with.
+            var tracked = _activeCommandByRobot.Remove(evt.RobotId, out var trackedTarget);
+            if (evt.Authority.CommandId is not null || tracked)
+            {
+                await PublishRevokeAsync(
+                    db, robot.Code, evt, evt.Authority.CommandId ?? trackedTarget, ct).ConfigureAwait(false);
+                return;
+            }
         }
 
         if (evt.Kind is TrafficEventKind.AuthorityRevoked or TrafficEventKind.Quarantined
@@ -96,7 +101,10 @@ public sealed class TrafficAuthorityPublisher(
             return;
         }
 
-        if (evt.Authority.EdgeIds.IsDefaultOrEmpty || evt.Authority.EdgeIds.Length == 0)
+        var hasEdges = !evt.Authority.EdgeIds.IsDefaultOrEmpty && evt.Authority.EdgeIds.Length > 0;
+        var hasSemantic = evt.Authority.PlanRevision > 0
+            || (!evt.Authority.ResourceIds.IsDefaultOrEmpty && evt.Authority.ResourceIds.Length > 0);
+        if (!hasEdges && !hasSemantic)
         {
             logger.LogWarning(
                 "Skip Active publish for empty segment robot={RobotCode} auth={AuthorityId} (already at safe-stop)",
@@ -105,7 +113,11 @@ public sealed class TrafficAuthorityPublisher(
         }
 
         var expiresAt = evt.ExpiresAt ?? DateTimeOffset.UtcNow.Add(AuthorityTtl);
-        var pathHash = AuthorityPathHash.Compute(evt.Authority.GraphHash, evt.Authority.EdgeIds);
+        var pathHash = hasEdges
+            ? AuthorityPathHash.Compute(evt.Authority.GraphHash, evt.Authority.EdgeIds)
+            : AuthorityPathHash.Compute(
+                evt.Authority.SemanticMapFingerprint ?? evt.Authority.GraphHash,
+                evt.Authority.ResourceIds);
         // Only the segment that reaches the destination carries finalGoal: the robot completes NAVIGATE there
         // and otherwise stops at the safe stop awaiting EXTEND.
         var finalGoal = evt.IsFinalSegment && evt.GoalX is double gx && evt.GoalY is double gy
@@ -119,38 +131,78 @@ public sealed class TrafficAuthorityPublisher(
             MapVersionId = robot.CurrentMapVersionId,
             MapVersionCode = robot.MapVersionCode,
             GraphHash = evt.Authority.GraphHash,
-            SegmentEdgeIds = evt.Authority.EdgeIds.ToList(),
+            SemanticMapFingerprint = evt.Authority.SemanticMapFingerprint ?? evt.Authority.GraphHash,
+            PlanRevision = evt.Authority.PlanRevision,
+            ResourceIds = evt.Authority.ResourceIds.IsDefaultOrEmpty
+                ? []
+                : evt.Authority.ResourceIds.ToList(),
+            SegmentEdgeIds = evt.Authority.EdgeIds.IsDefaultOrEmpty
+                ? []
+                : evt.Authority.EdgeIds.ToList(),
             PathHash = pathHash,
-            GoalSafeStopNodeId = evt.Authority.GoalSafeStopNodeId,
+            GoalSafeStopNodeId = evt.Authority.GoalSafeStopNodeId == 0
+                ? null
+                : evt.Authority.GoalSafeStopNodeId,
             ExpiresAt = expiresAt,
-            FinalGoal = finalGoal
+            FinalGoal = finalGoal,
+            Maneuvers = evt.Authority.Maneuvers.IsDefaultOrEmpty
+                ? null
+                : ManeuverStepBuilder.ToPayload(evt.Authority.Maneuvers)
         };
 
         if (evt.Kind == TrafficEventKind.AuthorityGranted && evt.IsFirstSegment)
         {
-            var navigate = scope.ServiceProvider.GetRequiredService<IssueNavigateCommandHandler>();
-            var response = await navigate.HandleAsync(
-                evt.RobotId,
-                new IssueNavigateCommandRequest(
-                    evt.GoalX ?? 0,
-                    evt.GoalY ?? 0,
-                    evt.GoalYaw ?? 0,
-                    "map",
-                    evt.JobId,
-                    null,
-                    evt.JobStepId,
-                    new RouteGrantPayload
-                    {
-                        GraphHash = evt.Authority.GraphHash,
-                        EdgeIds = evt.Authority.EdgeIds.ToList()
-                    },
-                    authorityPayload),
-                ct).ConfigureAwait(false);
-            _activeCommandByRobot[evt.RobotId] = response.CommandId;
-            logger.LogInformation(
-                "Active NAVIGATE+authority robot={RobotCode} command={CommandId} seq={Seq} edges={Count}",
-                robot.Code, response.CommandId, evt.Authority.Seq, evt.Authority.EdgeIds.Length);
-            return;
+            // Stage-3 Semantic: NAVIGATE already issued by JobExecutionEngine; the grant goes out as EXTEND targeting
+            // exactly the NAVIGATE the robot proposed the plan for (never a cached, earlier command).
+            if (evt.Authority.PlanRevision > 0)
+            {
+                if (evt.Authority.CommandId is Guid semanticTarget)
+                {
+                    _activeCommandByRobot[evt.RobotId] = semanticTarget;
+                }
+                else if (options.Value.AllowStandaloneSemanticPlans)
+                {
+                    // Sim only: robot proposed a plan without a Fleet NAVIGATE (standalone NavigateToPose).
+                    _activeCommandByRobot[evt.RobotId] = evt.Authority.AuthorityId;
+                    logger.LogInformation(
+                        "Semantic standalone EXTEND (no NAVIGATE command) robot={RobotCode} rev={Rev}",
+                        robot.Code, evt.Authority.PlanRevision);
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "Semantic grant without a command for robot {RobotCode} not published", robot.Code);
+                    return;
+                }
+
+                // Fall through to EXTEND_AUTHORITY below by treating as non-first publish.
+            }
+            else
+            {
+                var navigate = scope.ServiceProvider.GetRequiredService<IssueNavigateCommandHandler>();
+                var response = await navigate.HandleAsync(
+                    evt.RobotId,
+                    new IssueNavigateCommandRequest(
+                        evt.GoalX ?? 0,
+                        evt.GoalY ?? 0,
+                        evt.GoalYaw ?? 0,
+                        "map",
+                        evt.JobId,
+                        null,
+                        evt.JobStepId,
+                        new RouteGrantPayload
+                        {
+                            GraphHash = evt.Authority.GraphHash,
+                            EdgeIds = evt.Authority.EdgeIds.ToList()
+                        },
+                        authorityPayload),
+                    ct).ConfigureAwait(false);
+                _activeCommandByRobot[evt.RobotId] = response.CommandId;
+                logger.LogInformation(
+                    "Active NAVIGATE+authority robot={RobotCode} command={CommandId} seq={Seq} edges={Count}",
+                    robot.Code, response.CommandId, evt.Authority.Seq, evt.Authority.EdgeIds.Length);
+                return;
+            }
         }
 
         if (evt.Kind == TrafficEventKind.AuthorityRenewed)
@@ -217,11 +269,23 @@ public sealed class TrafficAuthorityPublisher(
                 AuthorityId = evt.Authority.AuthorityId,
                 Epoch = evt.Authority.Epoch,
                 Seq = evt.Authority.Seq,
-                SegmentEdgeIds = evt.Authority.EdgeIds.ToList(),
+                SegmentEdgeIds = evt.Authority.EdgeIds.IsDefaultOrEmpty
+                    ? []
+                    : evt.Authority.EdgeIds.ToList(),
                 PathHash = pathHash,
                 GraphHash = evt.Authority.GraphHash,
+                SemanticMapFingerprint = evt.Authority.SemanticMapFingerprint ?? evt.Authority.GraphHash,
+                PlanRevision = evt.Authority.PlanRevision,
+                ResourceIds = evt.Authority.ResourceIds.IsDefaultOrEmpty
+                    ? []
+                    : evt.Authority.ResourceIds.ToList(),
                 ExpiresAt = expiresAt,
-                FinalGoal = finalGoal
+                PlanHash = evt.Authority.PlanHash,
+                Geometry = evt.Authority.PlanRevision > 0 ? SemanticGeometry() : null,
+                FinalGoal = finalGoal,
+                Maneuvers = evt.Authority.Maneuvers.IsDefaultOrEmpty
+                    ? null
+                    : ManeuverStepBuilder.ToPayload(evt.Authority.Maneuvers)
             };
             var command = new RobotCommand
             {
@@ -254,7 +318,28 @@ public sealed class TrafficAuthorityPublisher(
         }
     }
 
-    /// <summary>Quarantine revoked the authority: stop the robot now through the traffic channel.</summary>
+    /// <summary>
+    /// Geometry of the bound semantic policy: built from the same options both binds apply
+    /// (<see cref="TrafficOptions.ApplySemanticOverrides"/>), so the robot computes the cells the backend reserved.
+    /// </summary>
+    private SemanticGeometryPayload SemanticGeometry()
+    {
+        var policy = options.Value.ApplySemanticOverrides(
+            new SemanticTrafficPolicy("", Guid.Empty, "", 0, 0, 0, 0, [], []));
+        return new SemanticGeometryPayload
+        {
+            CellSizeMeters = policy.EffectiveCellSize,
+            HorizonMeters = Math.Max(policy.EffectiveCellSize, policy.HorizonMeters),
+            SampleStepMeters = policy.SampleStepMeters,
+            ReserveRadiusMeters = policy.ReserveRadiusMeters,
+            FootprintRadiusMeters = policy.FootprintRadiusMeters,
+            LaneHalfWidthMeters = policy.LaneHalfWidthMeters,
+            FootprintHalfLengthMeters = policy.FootprintHalfLength,
+            FootprintHalfWidthMeters = policy.FootprintHalfWidth
+        };
+    }
+
+    /// <summary>Quarantine / refused replan revoked the authority: stop the robot now through the traffic channel.</summary>
     private async Task PublishRevokeAsync(
         FleetDbContext db, string robotCode, TrafficEvent evt, Guid targetCommandId, CancellationToken ct)
     {

@@ -1,0 +1,22 @@
+Waiting for an action server to become available...
+Sending goal:
+     pose:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: map
+  pose:
+    position:
+      x: -1.15
+      y: -0.525
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: -0.707107
+      w: 0.707107
+behavior_tree: ''
+
+Goal accepted with ID: 3a3047788a48496f98e706864fa09d71
+

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetActiveMapVersion;
 
@@ -16,6 +17,7 @@ public static class GetActiveMapVersionEndpoint
             var response = await handler.HandleAsync(warehouseId, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetActiveMapVersion")
         .WithSummary("Get active published map version for a warehouse")
         .WithDescription("Retrieves the currently PUBLISHED active map version for real-time visualization and navigation.");

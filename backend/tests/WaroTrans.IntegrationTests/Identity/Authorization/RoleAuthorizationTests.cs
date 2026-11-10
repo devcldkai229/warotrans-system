@@ -72,7 +72,8 @@ public sealed class RoleAuthorizationTests(WaroTransWebApplicationFactory factor
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.DoesNotContain("password", body, StringComparison.OrdinalIgnoreCase);
+        // "mustChangePassword" is a flag, not a secret; nothing else about the password may appear.
+        Assert.DoesNotContain("password", body.Replace("mustChangePassword", string.Empty), StringComparison.OrdinalIgnoreCase);
 
         var accounts = (await response.Content.ReadFromJsonAsync<ListAccountsDto>())!;
         Assert.Equal(["adam", "zoe"], accounts.Items.Select(a => a.Username));

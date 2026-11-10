@@ -6,6 +6,8 @@ import type {
   EdgeDirection,
   Endpoint,
   EndpointType,
+  GeoJsonLineString,
+  GeoJsonPolygon,
   MapStatus,
   Point,
   Zone,
@@ -13,7 +15,10 @@ import type {
 } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import {
+  checkRouteGraph,
+  clearRouteGraphCache,
   cloneMapVersion,
+  downloadRouteGraphGeoJson,
   createEdge,
   createEndpoint,
   createZone,
@@ -28,6 +33,7 @@ import {
   updateZone,
   type EdgeDto,
   type EndpointDto,
+  type RouteGraphValidationDto,
   type ZoneDto,
 } from '@/shared/api/navigation'
 import { listWorkflows } from '@/shared/api/workflows'
@@ -52,6 +58,9 @@ const PANEL_GAP = 12
 const DEFAULT_YAW_DEG = 0
 const DEFAULT_YAW_TOL_DEG = 5
 const DEFAULT_POS_TOL_M = 0.1
+/** Local-only id until the user clicks Save (no row in the database yet). */
+const NEW_ENTITY_ID = '__new__'
+const isUnsavedId = (id: string | undefined | null) => id === NEW_ENTITY_ID
 
 const clampPanelWidth = (width: number) =>
   Math.min(Math.max(width, WORKFLOW_PANEL.min), Math.max(WORKFLOW_PANEL.min, Math.round(window.innerWidth * 0.7)))
@@ -69,7 +78,7 @@ type Mode =
   | { kind: 'idle' }
   | { kind: 'picker'; tool: 'workflows' }
   | { kind: 'workflow'; workflowId: string }
-  | { kind: 'placing'; endpointType: EndpointType; at: Point; yawDeg: number }
+  | { kind: 'placing'; endpointType: EndpointType; name: string; at: Point; yawDeg: number }
   | { kind: 'endpoint'; endpointId: string }
   | { kind: 'zone'; zoneId: string }
   | { kind: 'drawingEdge'; direction: EdgeDirection; points: Point[] }
@@ -187,6 +196,7 @@ export function MapEditorPage() {
   const [panelWidth, setPanelWidth] = useState(readPanelWidth)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionOk, setActionOk] = useState<string | null>(null)
+  const [graphReport, setGraphReport] = useState<RouteGraphValidationDto | null>(null)
   const [epDraft, setEpDraft] = useState<Partial<Endpoint> | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<{
     name: string
@@ -194,12 +204,14 @@ export function MapEditorPage() {
     widthMeters: number
     maxSpeed: string
     isActive: boolean
+    geometry: GeoJsonLineString
   } | null>(null)
   const [zoneDraft, setZoneDraft] = useState<{
     name: string
     zoneType: ZoneType
     maxSpeed: string
     isActive: boolean
+    geometry: GeoJsonPolygon
   } | null>(null)
   const latestWidth = useRef(panelWidth)
 
@@ -220,6 +232,61 @@ export function MapEditorPage() {
       navigate('/configure/facility')
     },
     onError: (err) => setActionError(errMessage(err)),
+  })
+
+  const checkGraphMutation = useMutation({
+    mutationFn: () => checkRouteGraph(mapId!),
+    onSuccess: (report) => {
+      setGraphReport(report)
+      setActionError(null)
+      setActionOk(
+        report.isValid
+          ? `Route graph OK · ${report.nodeCount} nodes · ${report.edgeCount} edges · ${report.graphHash.slice(0, 8)}…`
+          : `Route graph has ${report.issues.filter((i) => i.severity === 'ERROR').length} error(s)`,
+      )
+    },
+    onError: (err) => {
+      setGraphReport(null)
+      setActionError(errMessage(err))
+    },
+  })
+
+  const clearGraphCacheMutation = useMutation({
+    mutationFn: () => clearRouteGraphCache(mapId!),
+    onSuccess: () => {
+      setGraphReport(null)
+      setActionError(null)
+      setActionOk('Compiled graph cache cleared — next check/sim rebuilds from Edges / Endpoints / Zones')
+    },
+    onError: (err) => setActionError(errMessage(err)),
+  })
+
+  const viewRouteGraphMutation = useMutation({
+    mutationFn: async () => {
+      const code = version?.code?.replace(/[^A-Za-z0-9_-]+/g, '_') || mapId!
+      await downloadRouteGraphGeoJson(mapId!, `route_graph_${code}.geojson`)
+      return code
+    },
+    onSuccess: (code) => {
+      setActionError(null)
+      setActionOk(`Downloaded route graph · ${code}.geojson`)
+    },
+    onError: async (err) => {
+      if (err instanceof ApiError && err.status === 422) {
+        try {
+          const report = await checkRouteGraph(mapId!)
+          setGraphReport(report)
+          setActionOk(null)
+          setActionError(
+            `Route graph invalid — ${report.issues.filter((i) => i.severity === 'ERROR').length} error(s); fix then View again`,
+          )
+          return
+        } catch {
+          /* fall through */
+        }
+      }
+      setActionError(errMessage(err))
+    },
   })
 
   // Read-only (published / archived) map → edit a DRAFT copy of it.
@@ -248,16 +315,90 @@ export function MapEditorPage() {
 
   const occupancyUrl = resolveMapAssetUrl(version?.previewImageUri)
 
-  const selectedEndpoint =
-    mode.kind === 'endpoint' ? endpoints.find((e) => e.id === mode.endpointId) : undefined
-  const selectedEdge = mode.kind === 'edge' ? edges.find((e) => e.id === mode.edgeId) : undefined
-  const selectedZone = mode.kind === 'zone' ? zones.find((z) => z.id === mode.zoneId) : undefined
-  // The selected endpoint is drawn from its unsaved panel values, so editing X, Y, Yaw or the name moves it on the map
-  // at once (and a drag on the map fills those fields back in); Save is what stores them.
+  const mapVersionId = version?.id ?? ''
+
+  const selectedEndpoint = useMemo((): Endpoint | undefined => {
+    if (mode.kind !== 'endpoint' || !epDraft) return undefined
+    if (isUnsavedId(mode.endpointId)) {
+      return {
+        id: NEW_ENTITY_ID,
+        mapVersionId,
+        code: '',
+        name: epDraft.name ?? '',
+        endpointType: (epDraft.endpointType as EndpointType) ?? 'WAYPOINT',
+        x: epDraft.x ?? 0,
+        y: epDraft.y ?? 0,
+        yaw: epDraft.yaw ?? 0,
+        positionTolerance: epDraft.positionTolerance ?? DEFAULT_POS_TOL_M,
+        yawTolerance: epDraft.yawTolerance ?? degToRad(DEFAULT_YAW_TOL_DEG),
+        isEnabled: epDraft.isEnabled ?? true,
+      }
+    }
+    return endpoints.find((e) => e.id === mode.endpointId)
+  }, [mode, epDraft, endpoints, mapVersionId])
+
+  const selectedEdge = useMemo((): Edge | undefined => {
+    if (mode.kind !== 'edge' || !edgeDraft) return undefined
+    if (isUnsavedId(mode.edgeId)) {
+      return {
+        id: NEW_ENTITY_ID,
+        mapVersionId,
+        code: '',
+        name: edgeDraft.name,
+        geometry: edgeDraft.geometry,
+        widthMeters: edgeDraft.widthMeters,
+        direction: edgeDraft.direction,
+        maxSpeed: edgeDraft.maxSpeed === '' ? null : Number(edgeDraft.maxSpeed),
+        isActive: edgeDraft.isActive,
+      }
+    }
+    const edge = edges.find((e) => e.id === mode.edgeId)
+    return edge
+      ? {
+          ...edge,
+          name: edgeDraft.name,
+          geometry: edgeDraft.geometry,
+          widthMeters: edgeDraft.widthMeters,
+          direction: edgeDraft.direction,
+          maxSpeed: edgeDraft.maxSpeed === '' ? null : Number(edgeDraft.maxSpeed),
+          isActive: edgeDraft.isActive,
+        }
+      : undefined
+  }, [mode, edgeDraft, edges, mapVersionId])
+
+  const selectedZone = useMemo((): Zone | undefined => {
+    if (mode.kind !== 'zone' || !zoneDraft) return undefined
+    if (isUnsavedId(mode.zoneId)) {
+      return {
+        id: NEW_ENTITY_ID,
+        mapVersionId,
+        code: '',
+        name: zoneDraft.name,
+        zoneType: zoneDraft.zoneType,
+        geometry: zoneDraft.geometry,
+        maxSpeed: zoneDraft.maxSpeed === '' ? null : Number(zoneDraft.maxSpeed),
+        isActive: zoneDraft.isActive,
+      }
+    }
+    const zone = zones.find((z) => z.id === mode.zoneId)
+    return zone
+      ? {
+          ...zone,
+          name: zoneDraft.name,
+          zoneType: zoneDraft.zoneType,
+          geometry: zoneDraft.geometry,
+          maxSpeed: zoneDraft.maxSpeed === '' ? null : Number(zoneDraft.maxSpeed),
+          isActive: zoneDraft.isActive,
+        }
+      : undefined
+  }, [mode, zoneDraft, zones, mapVersionId])
+
+  // Draft values paint on the map immediately; Save is the only write to the database.
   const canvasEndpoints = useMemo(() => {
-    if (!selectedEndpoint || epDraft?.id !== selectedEndpoint.id) return endpoints
+    if (!selectedEndpoint || !epDraft) return endpoints
     const finite = (value: number | undefined, fallback: number) =>
       typeof value === 'number' && Number.isFinite(value) ? value : fallback
+    if (isUnsavedId(selectedEndpoint.id)) return [...endpoints, selectedEndpoint]
     return endpoints.map((e) =>
       e.id === selectedEndpoint.id
         ? {
@@ -270,6 +411,19 @@ export function MapEditorPage() {
         : e,
     )
   }, [endpoints, selectedEndpoint, epDraft])
+
+  const canvasEdges = useMemo(() => {
+    if (!selectedEdge || !edgeDraft) return edges
+    if (isUnsavedId(selectedEdge.id)) return [...edges, selectedEdge]
+    return edges.map((e) => (e.id === selectedEdge.id ? selectedEdge : e))
+  }, [edges, selectedEdge, edgeDraft])
+
+  const canvasZones = useMemo(() => {
+    if (!selectedZone || !zoneDraft) return zones
+    if (isUnsavedId(selectedZone.id)) return [...zones, selectedZone]
+    return zones.map((z) => (z.id === selectedZone.id ? selectedZone : z))
+  }, [zones, selectedZone, zoneDraft])
+
   const workflowOpen = mode.kind === 'workflow'
   const panelOpen = Boolean(selectedZone ?? selectedEndpoint ?? selectedEdge ?? workflowOpen)
   const openPanelWidth = workflowOpen
@@ -277,6 +431,13 @@ export function MapEditorPage() {
     : selectedZone || selectedEndpoint || selectedEdge
       ? INSPECTOR_WIDTH
       : 0
+
+  function closeInspector() {
+    setMode({ kind: 'idle' })
+    setEpDraft(null)
+    setEdgeDraft(null)
+    setZoneDraft(null)
+  }
 
   const draftWorldPoints =
     mode.kind === 'drawingEdge' || mode.kind === 'drawingZone'
@@ -310,35 +471,46 @@ export function MapEditorPage() {
   }
 
   function selectEndpoint(id: string) {
+    if (isUnsavedId(id)) return
     const ep = endpoints.find((e) => e.id === id)
     if (!ep) return
+    setEdgeDraft(null)
+    setZoneDraft(null)
     setEpDraft({ ...ep })
     setMode({ kind: 'endpoint', endpointId: id })
     setTool('select')
   }
 
   function selectEdge(id: string) {
+    if (isUnsavedId(id)) return
     const edge = edges.find((e) => e.id === id)
     if (!edge) return
+    setEpDraft(null)
+    setZoneDraft(null)
     setEdgeDraft({
       name: edge.name,
       direction: edge.direction,
       widthMeters: edge.widthMeters ?? 1,
       maxSpeed: edge.maxSpeed?.toString() ?? '',
       isActive: edge.isActive,
+      geometry: edge.geometry,
     })
     setMode({ kind: 'edge', edgeId: id })
     setTool('select')
   }
 
   function selectZone(id: string) {
+    if (isUnsavedId(id)) return
     const zone = zones.find((z) => z.id === id)
     if (!zone) return
+    setEpDraft(null)
+    setEdgeDraft(null)
     setZoneDraft({
       name: zone.name,
       zoneType: zone.zoneType,
       maxSpeed: zone.maxSpeed?.toString() ?? '',
       isActive: zone.isActive,
+      geometry: zone.geometry,
     })
     setMode({ kind: 'zone', zoneId: id })
     setTool('select')
@@ -350,7 +522,7 @@ export function MapEditorPage() {
     const at = { x: snap(world.x), y: snap(world.y) }
 
     if (tool === 'endpoint' && mode.kind !== 'placing') {
-      setMode({ kind: 'placing', endpointType: 'WAYPOINT', at, yawDeg: DEFAULT_YAW_DEG })
+      setMode({ kind: 'placing', endpointType: 'WAYPOINT', name: '', at, yawDeg: DEFAULT_YAW_DEG })
       return
     }
     if (mode.kind === 'placing') {
@@ -380,45 +552,64 @@ export function MapEditorPage() {
     if (mode.kind === 'drawingZone' && mode.points.length >= 3) void finishZone(mode.points)
   }
 
-  async function placeEndpoint(endpointType: EndpointType, at: Point, yawDeg: number) {
+  function placeEndpoint(endpointType: EndpointType, name: string, at: Point, yawDeg: number) {
     if (!version || !isDraft) return
-    setActionError(null)
-    try {
-      const created = await createEndpoint(version.id, {
-        name: `${endpointType} ${endpoints.length + 1}`,
-        endpointType,
-        x: at.x,
-        y: at.y,
-        yaw: degToRad(yawDeg),
-        positionTolerance: DEFAULT_POS_TOL_M,
-        yawTolerance: degToRad(DEFAULT_YAW_TOL_DEG),
-      })
-      await invalidate()
-      setActionOk(`Created ${created.code}`)
-      setMode({ kind: 'endpoint', endpointId: created.id })
-      setEpDraft(toEndpoint(created))
-      setTool('select')
-    } catch (err) {
-      setActionError(errMessage(err))
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setActionError('Enter a name first — the endpoint code is generated from it (EP-{NAME}) on Save.')
+      return
     }
+    setActionError(null)
+    setEdgeDraft(null)
+    setZoneDraft(null)
+    setEpDraft({
+      id: NEW_ENTITY_ID,
+      mapVersionId: version.id,
+      code: '',
+      name: trimmed,
+      endpointType,
+      x: at.x,
+      y: at.y,
+      yaw: degToRad(yawDeg),
+      positionTolerance: DEFAULT_POS_TOL_M,
+      yawTolerance: degToRad(DEFAULT_YAW_TOL_DEG),
+      isEnabled: true,
+    })
+    setMode({ kind: 'endpoint', endpointId: NEW_ENTITY_ID })
+    setTool('select')
+    setActionOk('Endpoint placed — click Save to write it to the database')
   }
 
   async function saveEndpoint() {
-    if (!epDraft?.id || !isDraft) return
+    if (!epDraft || !isDraft || !version || mode.kind !== 'endpoint') return
+    const trimmed = (epDraft.name ?? '').trim()
+    if (!trimmed) {
+      setActionError('Name is required — code is generated as EP-{NAME}.')
+      return
+    }
     setActionError(null)
+    const body = {
+      name: trimmed,
+      endpointType: (epDraft.endpointType as EndpointType) ?? 'WAYPOINT',
+      x: Number(epDraft.x),
+      y: Number(epDraft.y),
+      yaw: Number(epDraft.yaw),
+      positionTolerance: Number(epDraft.positionTolerance),
+      yawTolerance: Number(epDraft.yawTolerance),
+      isEnabled: epDraft.isEnabled ?? true,
+    }
     try {
-      await updateEndpoint(epDraft.id, {
-        name: epDraft.name ?? '',
-        endpointType: epDraft.endpointType ?? 'WAYPOINT',
-        x: Number(epDraft.x),
-        y: Number(epDraft.y),
-        yaw: Number(epDraft.yaw),
-        positionTolerance: Number(epDraft.positionTolerance),
-        yawTolerance: Number(epDraft.yawTolerance),
-        isEnabled: epDraft.isEnabled ?? true,
-      })
-      await invalidate()
-      setActionOk('Endpoint saved')
+      if (isUnsavedId(mode.endpointId)) {
+        const created = await createEndpoint(version.id, body)
+        await invalidate()
+        setEpDraft(toEndpoint(created))
+        setMode({ kind: 'endpoint', endpointId: created.id })
+        setActionOk(`Created ${created.code}`)
+      } else {
+        await updateEndpoint(mode.endpointId, body)
+        await invalidate()
+        setActionOk('Endpoint saved')
+      }
     } catch (err) {
       setActionError(errMessage(err))
     }
@@ -426,62 +617,74 @@ export function MapEditorPage() {
 
   async function removeEndpoint(id: string) {
     if (!isDraft) return
+    if (isUnsavedId(id)) {
+      closeInspector()
+      setActionOk('Unsaved endpoint discarded')
+      return
+    }
     try {
       await deleteEndpoint(id)
       await invalidate()
-      setMode({ kind: 'idle' })
-      setEpDraft(null)
+      closeInspector()
       setActionOk('Endpoint deleted')
     } catch (err) {
       setActionError(errMessage(err))
     }
   }
 
-  async function finishEdge(points: Point[], direction: EdgeDirection) {
+  function finishEdge(points: Point[], direction: EdgeDirection) {
     if (!version || !isDraft || points.length < 2) return
     setActionError(null)
-    try {
-      const name = `Lane ${edges.length + 1}`
-      const created = await createEdge(version.id, {
-        name,
-        geometry: pointsToLineString(points),
-        widthMeters: 1,
-        direction,
-        maxSpeed: null,
-        isActive: true,
-      })
-      await invalidate()
-      setActionOk(`Created ${created.code}`)
-      setEdgeDraft({
-        name: created.name,
-        direction: created.direction as EdgeDirection,
-        widthMeters: created.widthMeters,
-        maxSpeed: created.maxSpeed?.toString() ?? '',
-        isActive: created.isActive,
-      })
-      setMode({ kind: 'edge', edgeId: created.id })
-      setTool('select')
-    } catch (err) {
-      setActionError(errMessage(err))
-    }
+    setEpDraft(null)
+    setZoneDraft(null)
+    setEdgeDraft({
+      name: '',
+      direction,
+      widthMeters: 1,
+      maxSpeed: '',
+      isActive: true,
+      geometry: pointsToLineString(points),
+    })
+    setMode({ kind: 'edge', edgeId: NEW_ENTITY_ID })
+    setTool('select')
+    setActionOk('Edge drawn — enter a name and click Save to persist')
   }
 
   async function saveEdge() {
-    if (mode.kind !== 'edge' || !edgeDraft || !isDraft) return
-    const edge = edges.find((e) => e.id === mode.edgeId)
-    if (!edge) return
+    if (mode.kind !== 'edge' || !edgeDraft || !isDraft || !version) return
+    const trimmed = edgeDraft.name.trim()
+    if (!trimmed) {
+      setActionError('Name is required — code is generated as EDGE-{NAME}.')
+      return
+    }
     setActionError(null)
+    const body = {
+      name: trimmed,
+      geometry: edgeDraft.geometry,
+      widthMeters: edgeDraft.widthMeters,
+      direction: edgeDraft.direction,
+      maxSpeed: edgeDraft.maxSpeed === '' ? null : Number(edgeDraft.maxSpeed),
+      isActive: edgeDraft.isActive,
+    }
     try {
-      await updateEdge(edge.id, {
-        name: edgeDraft.name,
-        geometry: edge.geometry,
-        widthMeters: edgeDraft.widthMeters,
-        direction: edgeDraft.direction,
-        maxSpeed: edgeDraft.maxSpeed === '' ? null : Number(edgeDraft.maxSpeed),
-        isActive: edgeDraft.isActive,
-      })
-      await invalidate()
-      setActionOk('Edge saved')
+      if (isUnsavedId(mode.edgeId)) {
+        const created = await createEdge(version.id, body)
+        await invalidate()
+        setEdgeDraft({
+          name: created.name,
+          direction: created.direction as EdgeDirection,
+          widthMeters: created.widthMeters,
+          maxSpeed: created.maxSpeed?.toString() ?? '',
+          isActive: created.isActive,
+          geometry: created.geometry,
+        })
+        setMode({ kind: 'edge', edgeId: created.id })
+        setActionOk(`Created ${created.code}`)
+      } else {
+        await updateEdge(mode.edgeId, body)
+        await invalidate()
+        setActionOk('Edge saved')
+      }
     } catch (err) {
       setActionError(errMessage(err))
     }
@@ -489,91 +692,38 @@ export function MapEditorPage() {
 
   async function removeEdge(id: string) {
     if (!isDraft) return
+    if (isUnsavedId(id)) {
+      closeInspector()
+      setActionOk('Unsaved edge discarded')
+      return
+    }
     try {
       await deleteEdge(id)
       await invalidate()
-      setMode({ kind: 'idle' })
-      setEdgeDraft(null)
+      closeInspector()
       setActionOk('Edge deleted')
     } catch (err) {
       setActionError(errMessage(err))
     }
   }
 
-  // A side of the selected edge's corridor was dragged: the width is saved on release with the edge's saved fields,
-  // and the panel shows it (other unsaved panel edits are kept).
-  async function resizeEdgeWidth(id: string, widthMeters: number) {
-    if (!version || !isDraft) return
-    const edge = edges.find((e) => e.id === id)
-    if (!edge) return
-    setActionError(null)
-    queryClient.setQueryData<typeof version>(['navigation', 'map-detail', mapId], (old) =>
-      old && { ...old, edges: old.edges.map((e) => (e.id === id ? { ...e, widthMeters } : e)) },
-    )
-    setEdgeDraft((draft) => (draft && mode.kind === 'edge' && mode.edgeId === id ? { ...draft, widthMeters } : draft))
-    try {
-      await updateEdge(id, {
-        name: edge.name,
-        geometry: edge.geometry,
-        widthMeters,
-        direction: edge.direction,
-        maxSpeed: edge.maxSpeed,
-        isActive: edge.isActive,
-      })
-      setActionOk(`Edge width ${widthMeters.toFixed(2)} m saved`)
-      await invalidate()
-    } catch (err) {
-      setActionError(errMessage(err))
-      await invalidate()
+  // Width / vertex edits stay in the draft until Save.
+  function resizeEdgeWidth(id: string, widthMeters: number) {
+    if (!isDraft) return
+    if (mode.kind === 'edge' && mode.edgeId === id) {
+      setEdgeDraft((draft) => (draft ? { ...draft, widthMeters } : draft))
     }
   }
 
-  // A vertex was dragged on the selected edge/zone. The outline is saved on release together with the shape's saved
-  // fields (not unsaved panel edits), and shown at once so it does not jump back while the request is in flight.
-  async function moveShapeVertices(shape: { kind: 'edge' | 'zone'; id: string }, points: Point[]) {
-    if (!version || !isDraft) return
-    setActionError(null)
+  function moveShapeVertices(shape: { kind: 'edge' | 'zone'; id: string }, points: Point[]) {
+    if (!isDraft) return
     const rounded = points.map((p) => ({ x: snap(p.x), y: snap(p.y) }))
-    const detailKey = ['navigation', 'map-detail', mapId]
-    try {
-      if (shape.kind === 'edge') {
-        const edge = edges.find((e) => e.id === shape.id)
-        if (!edge) return
-        const geometry = pointsToLineString(rounded)
-        queryClient.setQueryData<typeof version>(detailKey, (old) =>
-          old && { ...old, edges: old.edges.map((e) => (e.id === edge.id ? { ...e, geometry } : e)) },
-        )
-        await updateEdge(edge.id, {
-          name: edge.name,
-          geometry,
-          widthMeters: edge.widthMeters ?? 1,
-          direction: edge.direction,
-          maxSpeed: edge.maxSpeed,
-          isActive: edge.isActive,
-        })
-        setActionOk('Edge saved')
-      } else {
-        const zone = zones.find((z) => z.id === shape.id)
-        if (!zone) return
-        const geometry = pointsToPolygon(rounded)
-        queryClient.setQueryData<typeof version>(detailKey, (old) =>
-          old && { ...old, zones: old.zones.map((z) => (z.id === zone.id ? { ...z, geometry } : z)) },
-        )
-        await updateZone(zone.id, {
-          name: zone.name,
-          zoneType: zone.zoneType,
-          geometry,
-          maxSpeed: zone.maxSpeed,
-          isActive: zone.isActive,
-          policy: zone.policy ?? null,
-          policySchemaVersion: zone.policySchemaVersion ?? 1,
-        })
-        setActionOk('Zone saved')
-      }
-      await invalidate()
-    } catch (err) {
-      setActionError(errMessage(err))
-      await invalidate()
+    if (shape.kind === 'edge' && mode.kind === 'edge' && mode.edgeId === shape.id) {
+      setEdgeDraft((draft) => (draft ? { ...draft, geometry: pointsToLineString(rounded) } : draft))
+      return
+    }
+    if (shape.kind === 'zone' && mode.kind === 'zone' && mode.zoneId === shape.id) {
+      setZoneDraft((draft) => (draft ? { ...draft, geometry: pointsToPolygon(rounded) } : draft))
     }
   }
 
@@ -581,52 +731,61 @@ export function MapEditorPage() {
     return null
   }
 
-  async function finishZone(points: Point[], zoneType?: ZoneType, title?: string) {
+  function finishZone(points: Point[], zoneType?: ZoneType, title?: string) {
     if (!version || !isDraft || points.length < 3) return
     const type = zoneType ?? (mode.kind === 'drawingZone' ? mode.zoneType : 'KEEP_OUT')
     const name =
       title ?? (mode.kind === 'drawingZone' ? `${mode.title} - ${zones.length + 1}` : `Zone ${zones.length + 1}`)
     setActionError(null)
-    try {
-      const created = await createZone(version.id, {
-        name,
-        zoneType: type,
-        geometry: pointsToPolygon(points),
-        maxSpeed: type === 'SPEED' ? 0.5 : null,
-        isActive: true,
-      })
-      await invalidate()
-      setActionOk(`Created ${created.code}`)
-      setZoneDraft({
-        name: created.name,
-        zoneType: created.zoneType as ZoneType,
-        maxSpeed: created.maxSpeed?.toString() ?? '',
-        isActive: created.isActive,
-      })
-      setMode({ kind: 'zone', zoneId: created.id })
-      setTool('select')
-    } catch (err) {
-      setActionError(errMessage(err))
-    }
+    setEpDraft(null)
+    setEdgeDraft(null)
+    setZoneDraft({
+      name,
+      zoneType: type,
+      maxSpeed: type === 'SPEED' ? '0.5' : '',
+      isActive: true,
+      geometry: pointsToPolygon(points),
+    })
+    setMode({ kind: 'zone', zoneId: NEW_ENTITY_ID })
+    setTool('select')
+    setActionOk('Zone drawn — click Save to write it to the database')
   }
 
   async function saveZone() {
-    if (mode.kind !== 'zone' || !zoneDraft || !isDraft) return
-    const zone = zones.find((z) => z.id === mode.zoneId)
-    if (!zone) return
+    if (mode.kind !== 'zone' || !zoneDraft || !isDraft || !version) return
+    const trimmed = zoneDraft.name.trim()
+    if (!trimmed) {
+      setActionError('Name is required — code is generated as ZONE-{NAME}.')
+      return
+    }
     setActionError(null)
+    const body = {
+      name: trimmed,
+      zoneType: zoneDraft.zoneType,
+      geometry: zoneDraft.geometry,
+      maxSpeed: zoneDraft.maxSpeed === '' ? null : Number(zoneDraft.maxSpeed),
+      isActive: zoneDraft.isActive,
+      policy: buildZonePolicy(zoneDraft),
+      policySchemaVersion: 1,
+    }
     try {
-      await updateZone(zone.id, {
-        name: zoneDraft.name,
-        zoneType: zoneDraft.zoneType,
-        geometry: zone.geometry,
-        maxSpeed: zoneDraft.maxSpeed === '' ? null : Number(zoneDraft.maxSpeed),
-        isActive: zoneDraft.isActive,
-        policy: buildZonePolicy(zoneDraft),
-        policySchemaVersion: 1,
-      })
-      await invalidate()
-      setActionOk('Zone saved')
+      if (isUnsavedId(mode.zoneId)) {
+        const created = await createZone(version.id, body)
+        await invalidate()
+        setZoneDraft({
+          name: created.name,
+          zoneType: created.zoneType as ZoneType,
+          maxSpeed: created.maxSpeed?.toString() ?? '',
+          isActive: created.isActive,
+          geometry: created.geometry,
+        })
+        setMode({ kind: 'zone', zoneId: created.id })
+        setActionOk(`Created ${created.code}`)
+      } else {
+        await updateZone(mode.zoneId, body)
+        await invalidate()
+        setActionOk('Zone saved')
+      }
     } catch (err) {
       setActionError(errMessage(err))
     }
@@ -634,21 +793,32 @@ export function MapEditorPage() {
 
   async function removeZone(id: string) {
     if (!isDraft) return
+    if (isUnsavedId(id)) {
+      closeInspector()
+      setActionOk('Unsaved zone discarded')
+      return
+    }
     try {
       await deleteZone(id)
       await invalidate()
-      setMode({ kind: 'idle' })
-      setZoneDraft(null)
+      closeInspector()
       setActionOk('Zone deleted')
     } catch (err) {
       setActionError(errMessage(err))
     }
   }
 
-  // Duplicate the selected endpoint / edge / zone from its saved values (not unsaved panel edits), shifted by
-  // DUPLICATE_OFFSET; the backend gives it a new id and code, and the copy becomes the selection.
+  // Duplicate a persisted selection only (Save first if this is still a local draft).
   async function duplicateSelected() {
     if (!version || !isDraft) return
+    if (
+      (mode.kind === 'endpoint' && isUnsavedId(mode.endpointId)) ||
+      (mode.kind === 'edge' && isUnsavedId(mode.edgeId)) ||
+      (mode.kind === 'zone' && isUnsavedId(mode.zoneId))
+    ) {
+      setActionError('Save this item before duplicating.')
+      return
+    }
     setActionError(null)
     try {
       if (mode.kind === 'endpoint') {
@@ -687,6 +857,7 @@ export function MapEditorPage() {
           widthMeters: created.widthMeters,
           maxSpeed: created.maxSpeed?.toString() ?? '',
           isActive: created.isActive,
+          geometry: created.geometry,
         })
         setMode({ kind: 'edge', edgeId: created.id })
       } else if (mode.kind === 'zone') {
@@ -708,6 +879,7 @@ export function MapEditorPage() {
           zoneType: created.zoneType as ZoneType,
           maxSpeed: created.maxSpeed?.toString() ?? '',
           isActive: created.isActive,
+          geometry: created.geometry,
         })
         setMode({ kind: 'zone', zoneId: created.id })
       }
@@ -808,6 +980,49 @@ export function MapEditorPage() {
           )}
         </span>
         <div className="ml-auto flex gap-2">
+          <Button
+            variant="ghost"
+            disabled={!mapId || checkGraphMutation.isPending}
+            title="Offline QA: compile Edges/Endpoints/Zones (not required for Semantic Nav2 Active)"
+            onClick={() => checkGraphMutation.mutate()}
+          >
+            {checkGraphMutation.isPending ? 'Checking…' : 'Check topology (offline)'}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!mapId || viewRouteGraphMutation.isPending}
+            title="Offline: download legacy RouteGraph GeoJSON (Stage-3 Active uses Nav2 free-space)"
+            onClick={() => viewRouteGraphMutation.mutate()}
+          >
+            {viewRouteGraphMutation.isPending ? 'Loading…' : 'Export route graph (legacy)'}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!mapId}
+            title="Open traffic debug SVG (occupancy, connectors, rejected access, clearance)"
+            onClick={() => {
+              const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
+              window.open(`${base}/api/navigation/maps/${mapId}/traffic-graph/debug.svg`, '_blank', 'noopener,noreferrer')
+            }}
+          >
+            Debug SVG
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!mapId || clearGraphCacheMutation.isPending}
+            title="Drop in-memory compiled graph cache for this map (does not delete geometry)"
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Clear compiled route-graph cache for this map?\n\nEdges, endpoints and zones stay. The next check or sim rebuilds the graph.',
+                )
+              ) {
+                clearGraphCacheMutation.mutate()
+              }
+            }}
+          >
+            {clearGraphCacheMutation.isPending ? 'Clearing…' : 'Clear graph cache'}
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/configure/facility')}>
             Close
           </Button>
@@ -827,6 +1042,35 @@ export function MapEditorPage() {
           )}
         </div>
       </header>
+
+      {graphReport ? (
+        <div className="mx-3 mb-0 max-h-40 flex-none overflow-auto rounded-md border border-outline-soft bg-container px-3 py-2 text-xs">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <span className={graphReport.isValid ? 'font-medium text-green' : 'font-medium text-red'}>
+                {graphReport.isValid ? 'Valid' : 'Invalid'}
+              </span>
+              <span className="ml-2 text-muted">
+                {graphReport.nodeCount} nodes · {graphReport.edgeCount} edges · hash {graphReport.graphHash.slice(0, 12)}…
+              </span>
+            </div>
+            <button type="button" className="text-muted hover:text-ink" onClick={() => setGraphReport(null)}>
+              Dismiss
+            </button>
+          </div>
+          {graphReport.issues.length === 0 ? (
+            <p className="mt-1 text-muted">No issues.</p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {graphReport.issues.map((issue, index) => (
+                <li key={`${issue.code}-${index}`} className={issue.severity === 'ERROR' ? 'text-red' : 'text-ink-2'}>
+                  <span className="font-mono">{issue.severity}</span> · {issue.code}: {issue.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       <div className="relative flex h-12 flex-none items-center justify-between px-4">
         <div className="flex items-center gap-2">
@@ -924,8 +1168,8 @@ export function MapEditorPage() {
             transform={transform}
             previewUrl={occupancyUrl}
             endpoints={canvasEndpoints}
-            edges={edges}
-            zones={zones}
+            edges={canvasEdges}
+            zones={canvasZones}
             tool={tool}
             readOnly={!isDraft}
             selected={{
@@ -967,9 +1211,24 @@ export function MapEditorPage() {
               )}
             >
               <p className="text-ink-2">
-                Click the map or drag the marker to move it. Set heading ({mode.yawDeg}°). Yaw is sent as radians to
-                the API.
+                Click the map or drag the marker to move it. Name it here, then confirm — nothing is written to the
+                database until you click Save in the inspector.
               </p>
+              <label className="mt-2 block">
+                <span className="mb-1 block text-[11px] font-medium text-ink-2">Name *</span>
+                <input
+                  className={controlClass('sm')}
+                  value={mode.name}
+                  placeholder="e.g. Dock 1"
+                  autoFocus
+                  onChange={(event) => setMode({ ...mode, name: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && mode.name.trim()) {
+                      void placeEndpoint(mode.endpointType, mode.name, mode.at, mode.yawDeg)
+                    }
+                  }}
+                />
+              </label>
               <HeadingDial
                 variant="panel"
                 yaw={mode.yawDeg}
@@ -994,9 +1253,10 @@ export function MapEditorPage() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => void placeEndpoint(mode.endpointType, mode.at, mode.yawDeg)}
+                  disabled={!mode.name.trim()}
+                  onClick={() => void placeEndpoint(mode.endpointType, mode.name, mode.at, mode.yawDeg)}
                 >
-                  Create endpoint
+                  Confirm placement
                 </Button>
               </div>
             </div>
@@ -1062,10 +1322,7 @@ export function MapEditorPage() {
         ) : null}
 
         {selectedEndpoint && epDraft ? (
-          <Inspector title="Endpoint" onClose={() => setMode({ kind: 'idle' })}>
-            <Field label="Code">
-              <input className={controlClass()} value={selectedEndpoint.code} readOnly disabled />
-            </Field>
+          <Inspector title="Endpoint" onClose={closeInspector}>
             <Field label="Name">
               <input
                 className={controlClass()}
@@ -1073,6 +1330,18 @@ export function MapEditorPage() {
                 disabled={!isDraft}
                 onChange={(e) => setEpDraft({ ...epDraft, name: e.target.value })}
               />
+            </Field>
+            <Field label="Code">
+              <input
+                className={controlClass()}
+                value={isUnsavedId(selectedEndpoint.id) ? '' : selectedEndpoint.code}
+                placeholder={isUnsavedId(selectedEndpoint.id) ? 'Assigned on Save' : undefined}
+                readOnly
+                disabled
+              />
+              <p className="mt-1 text-[11px] text-muted">
+                Generated from the name on Save; renaming later does not change it.
+              </p>
             </Field>
             <Field label="Type">
               <select
@@ -1161,11 +1430,16 @@ export function MapEditorPage() {
                 <Button variant="primary" onClick={() => void saveEndpoint()}>
                   Save
                 </Button>
-                <Button variant="ghost" onClick={() => void duplicateSelected()} title="Duplicate (Ctrl+D)">
+                <Button
+                  variant="ghost"
+                  disabled={isUnsavedId(selectedEndpoint.id)}
+                  onClick={() => void duplicateSelected()}
+                  title="Duplicate (Ctrl+D)"
+                >
                   Duplicate
                 </Button>
                 <Button variant="ghost" onClick={() => void removeEndpoint(selectedEndpoint.id)}>
-                  Delete
+                  {isUnsavedId(selectedEndpoint.id) ? 'Discard' : 'Delete'}
                 </Button>
               </div>
             ) : null}
@@ -1173,17 +1447,25 @@ export function MapEditorPage() {
         ) : null}
 
         {selectedEdge && edgeDraft ? (
-          <Inspector title="Edge" onClose={() => setMode({ kind: 'idle' })}>
-            <Field label="Code">
-              <input className={controlClass()} value={selectedEdge.code} readOnly disabled />
-            </Field>
+          <Inspector title="Edge" onClose={closeInspector}>
             <Field label="Name">
               <input
                 className={controlClass()}
                 value={edgeDraft.name}
                 disabled={!isDraft}
+                placeholder="e.g. North aisle"
                 onChange={(e) => setEdgeDraft({ ...edgeDraft, name: e.target.value })}
               />
+            </Field>
+            <Field label="Code">
+              <input
+                className={controlClass()}
+                value={isUnsavedId(selectedEdge.id) ? '' : selectedEdge.code}
+                placeholder={isUnsavedId(selectedEdge.id) ? 'Assigned on Save' : undefined}
+                readOnly
+                disabled
+              />
+              <p className="mt-1 text-[11px] text-muted">Generated from the name on Save.</p>
             </Field>
             <Field label="Direction">
               <select
@@ -1234,11 +1516,16 @@ export function MapEditorPage() {
                 <Button variant="primary" onClick={() => void saveEdge()}>
                   Save
                 </Button>
-                <Button variant="ghost" onClick={() => void duplicateSelected()} title="Duplicate (Ctrl+D)">
+                <Button
+                  variant="ghost"
+                  disabled={isUnsavedId(selectedEdge.id)}
+                  onClick={() => void duplicateSelected()}
+                  title="Duplicate (Ctrl+D)"
+                >
                   Duplicate
                 </Button>
                 <Button variant="ghost" onClick={() => void removeEdge(selectedEdge.id)}>
-                  Delete
+                  {isUnsavedId(selectedEdge.id) ? 'Discard' : 'Delete'}
                 </Button>
               </div>
             ) : null}
@@ -1246,10 +1533,7 @@ export function MapEditorPage() {
         ) : null}
 
         {selectedZone && zoneDraft ? (
-          <Inspector title="Zone" onClose={() => setMode({ kind: 'idle' })}>
-            <Field label="Code">
-              <input className={controlClass()} value={selectedZone.code} readOnly disabled />
-            </Field>
+          <Inspector title="Zone" onClose={closeInspector}>
             <Field label="Name">
               <input
                 className={controlClass()}
@@ -1257,6 +1541,16 @@ export function MapEditorPage() {
                 disabled={!isDraft}
                 onChange={(e) => setZoneDraft({ ...zoneDraft, name: e.target.value })}
               />
+            </Field>
+            <Field label="Code">
+              <input
+                className={controlClass()}
+                value={isUnsavedId(selectedZone.id) ? '' : selectedZone.code}
+                placeholder={isUnsavedId(selectedZone.id) ? 'Assigned on Save' : undefined}
+                readOnly
+                disabled
+              />
+              <p className="mt-1 text-[11px] text-muted">Generated from the name on Save.</p>
             </Field>
             <Field label="Type">
               <select
@@ -1283,11 +1577,13 @@ export function MapEditorPage() {
               <p className="text-xs text-amber-ink">SPEED requires MaxSpeed (m/s).</p>
             ) : null}
             {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' ? (
-              <p className="text-xs text-muted">One robot at a time on lanes covered by this zone.</p>
+              <p className="text-xs text-muted">
+                Exclusive footprint occupancy (Stage-3 Fleet reservation). Not required for Nav2 free-space planning.
+              </p>
             ) : null}
             {zoneDraft.zoneType === 'JUNCTION' ? (
               <p className="text-xs text-muted">
-                Lanes that end at this zone are connected; an Endpoint inside it is reached through it.
+                Optional / legacy topology helper. Not required for Semantic Nav2 navigation.
               </p>
             ) : null}
             <Field label="Max speed (m/s)">
@@ -1312,11 +1608,16 @@ export function MapEditorPage() {
                 <Button variant="primary" onClick={() => void saveZone()}>
                   Save
                 </Button>
-                <Button variant="ghost" onClick={() => void duplicateSelected()} title="Duplicate (Ctrl+D)">
+                <Button
+                  variant="ghost"
+                  disabled={isUnsavedId(selectedZone.id)}
+                  onClick={() => void duplicateSelected()}
+                  title="Duplicate (Ctrl+D)"
+                >
                   Duplicate
                 </Button>
                 <Button variant="ghost" onClick={() => void removeZone(selectedZone.id)}>
-                  Delete
+                  {isUnsavedId(selectedZone.id) ? 'Discard' : 'Delete'}
                 </Button>
               </div>
             ) : null}

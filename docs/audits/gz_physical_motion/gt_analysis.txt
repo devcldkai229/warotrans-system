@@ -1,0 +1,9 @@
+rows=23
+odom_net_m=0.7100 odom_path_m=0.8189 n=23
+map_net_m=0.6280 map_path_m=0.6556 n=18
+gz_net_m=0.0000 gz_path_m=0.0000 n=0 (gz model -p samples)
+cmd_nz nav=7 safe=6 gated=5
+odom_start=(-1.848, -0.575) odom_end=(-1.1425, -0.6549)
+map_start=(-1.848, -0.575) map_end=(-1.2249, -0.6534)
+PHYSICAL_CLASS=MOVED
+PRIMARY_NET_M=0.7100

@@ -108,7 +108,18 @@ export interface TrafficRobotView {
   y?: number | null
   localizationOk: boolean
   occupiedResourceIds: string[]
-  authority?: { authorityId: string; edgeIds: number[]; graphHash: string; seq: number; epoch: number } | null
+  authority?: {
+    authorityId: string
+    edgeIds: number[]
+    graphHash: string
+    seq: number
+    epoch: number
+    planRevision?: number
+    semanticMapFingerprint?: string | null
+    resourceIds?: string[]
+  } | null
+  planRevision?: number
+  proposedPath?: { x: number; y: number; yaw: number }[]
   waitingReason: string
   quarantineReason?: string | null
   jobStepId?: string | null
@@ -142,5 +153,99 @@ export function releaseTrafficAfterClearance(robotId: string, operatorId: string
   return apiFetch(`/api/fleet/traffic/robots/${robotId}/release-after-clearance`, {
     method: 'POST',
     body: JSON.stringify({ operatorId, resourceIds: resourceIds ?? null }),
+  })
+}
+
+/** RB-03: REQUESTED → ACCEPTED → STOPPED_VERIFIED, or REJECTED / UNKNOWN. Never "stopped" without the robot saying so. */
+export type StopStateName = 'NONE' | 'REQUESTED' | 'ACCEPTED' | 'STOPPED_VERIFIED' | 'REJECTED' | 'UNKNOWN'
+
+export interface StopState {
+  robotId: string
+  state: StopStateName
+  motionHeld: boolean
+  commandId: string | null
+  mode: 'STOP' | 'PAUSE' | null
+  commandStatus: string | null
+  outcome: string | null
+  errorCode: string | null
+  issuedAt: string | null
+  completedAt: string | null
+}
+
+export function stopRobot(id: string, reason?: string, mode: 'STOP' | 'PAUSE' = 'STOP') {
+  return apiFetch<StopState>(`/api/fleet/robots/${id}/commands/stop`, { method: 'POST', body: JSON.stringify({ mode, reason }) })
+}
+
+export function resumeRobot(id: string) {
+  return apiFetch<StopState>(`/api/fleet/robots/${id}/commands/resume`, { method: 'POST' })
+}
+
+export function getStopState(id: string) {
+  return apiFetch<StopState>(`/api/fleet/robots/${id}/stop-state`)
+}
+
+/** RB-04: exclusive manual-drive lease, 30 s, renewed while driving. */
+export interface ManualLease {
+  robotId: string
+  active: boolean
+  holderId: string | null
+  holderName: string | null
+  until: string | null
+  heldByMe: boolean
+}
+
+export function acquireManualLease(id: string, takeover = false, reason?: string) {
+  return apiFetch<ManualLease>(`/api/fleet/robots/${id}/manual/lease`, { method: 'POST', body: JSON.stringify({ takeover, reason }) })
+}
+
+export function releaseManualLease(id: string) {
+  return apiFetch<void>(`/api/fleet/robots/${id}/manual/lease`, { method: 'DELETE' })
+}
+
+/** RB-08 maintenance session. */
+export interface MaintenanceChecklist {
+  sensorsOk: boolean
+  localizationOk: boolean
+  stopTestOk: boolean
+  trafficClear: boolean
+  notes?: string
+}
+
+export function startMaintenance(id: string, reason: string) {
+  return apiFetch<unknown>(`/api/fleet/robots/${id}/maintenance/start`, { method: 'POST', body: JSON.stringify({ reason }) })
+}
+
+export function completeMaintenance(id: string, checklist: MaintenanceChecklist) {
+  return apiFetch<unknown>(`/api/fleet/robots/${id}/maintenance/complete`, { method: 'POST', body: JSON.stringify(checklist) })
+}
+
+/** RB-10 diagnostics snapshot; STALE when the robot stopped reporting, UNKNOWN for what it cannot measure. */
+export interface RobotHealthItem {
+  name: string
+  level: 'OK' | 'WARN' | 'ERROR' | 'STALE' | 'UNKNOWN'
+  value: number | null
+  unit: string | null
+  message: string | null
+  measuredAt: string | null
+}
+
+export interface RobotHealth {
+  robotId: string
+  robotCode: string
+  overall: RobotHealthItem['level']
+  receivedAt: string | null
+  stale: boolean
+  items: RobotHealthItem[]
+}
+
+export function getRobotHealth(id: string) {
+  return apiFetch<RobotHealth>(`/api/fleet/robots/${id}/health`)
+}
+
+/** RB-09: only actions the robot announced; it must be stopped and idle; confirmRobotCode repeats the code. */
+export function robotSystemAction(id: string, action: 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN', confirmRobotCode: string) {
+  return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/system-actions`, {
+    method: 'POST',
+    body: JSON.stringify({ action, confirmRobotCode }),
   })
 }

@@ -11,6 +11,7 @@ import { RequestSetupPanel } from './RequestSetupPanel'
 import { buildComposerMapPreview } from './mapPreview'
 import { submitTransportRequest } from './submitTransportRequest'
 import { useTransportRequestComposerData } from './useTransportRequestComposerData'
+import type { ComposerPrefill } from './voucherPrefill'
 import {
   draftIsDirty,
   emptyDraft,
@@ -38,6 +39,8 @@ interface TransportRequestComposerProps {
   onSubmitted: (result: { id: string; requestCode: string }) => void
   onMapState: (state: ComposerMapState) => void
   onBanner?: (message: string | null) => void
+  /** Opens with this draft instead of an empty one, e.g. from a stock voucher. */
+  prefill?: ComposerPrefill | null
 }
 
 export function TransportRequestComposer({
@@ -45,13 +48,15 @@ export function TransportRequestComposer({
   onSubmitted,
   onMapState,
   onBanner,
+  prefill,
 }: TransportRequestComposerProps) {
   const queryClient = useQueryClient()
-  const [draft, setDraft] = useState<TransportRequestDraft>(() => emptyDraft())
+  const [draft, setDraft] = useState<TransportRequestDraft>(() => prefill?.draft ?? emptyDraft())
   const data = useTransportRequestComposerData({
     warehouseId: draft.warehouseId,
     mapVersionId: draft.mapVersionId,
     workflowId: draft.workflowId,
+    extraContainers: prefill?.containers,
   })
 
   const [activeMovementId, setActiveMovementId] = useState<string | null>(null)

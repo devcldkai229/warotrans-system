@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Navigation.Features.ArchiveMapVersion;
 
@@ -16,6 +18,8 @@ public static class ArchiveMapVersionEndpoint
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapWrite)
+        .Audited("map.archived", "MAP", "id")
         .WithName("ArchiveMapVersion")
         .WithSummary("Archive a map version")
         .WithDescription("Transitions any active or draft map version to ARCHIVED status.");

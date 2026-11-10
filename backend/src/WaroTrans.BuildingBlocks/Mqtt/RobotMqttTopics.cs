@@ -11,7 +11,13 @@ public static class RobotMqttTopics
     public const string InteractionConfirmSuffix = "interaction_confirm";
     public const string InteractionResultSuffix = "interaction_result";
     public const string TrafficProgressSuffix = "traffic_progress";
+    public const string TrafficPlanSuffix = "traffic_plan";
+    public const string TrafficPlanRejectSuffix = "traffic_plan_reject";
     public const string AuthorityStateSuffix = "authority_state";
+    public const string HealthSuffix = "health";
+
+    public static string HealthFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/health";
 
     public static string HeartbeatFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/heartbeat";
@@ -30,6 +36,9 @@ public static class RobotMqttTopics
 
     public static string TrafficProgressFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/traffic_progress";
+
+    public static string TrafficPlanFilter(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/+/traffic_plan";
 
     public static string AuthorityStateFilter(string topicPrefix) =>
         $"{NormalizePrefix(topicPrefix)}/robots/+/authority_state";
@@ -68,8 +77,19 @@ public static class RobotMqttTopics
     public static string TrafficProgress(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/traffic_progress";
 
+    public static string TrafficPlan(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/traffic_plan";
+
+    /// <summary>Backend → robot: why the latest traffic_plan was not granted.</summary>
+    public static string TrafficPlanReject(string topicPrefix, string robotCode) =>
+        $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/traffic_plan_reject";
+
     public static string AuthorityState(string topicPrefix, string robotCode) =>
         $"{NormalizePrefix(topicPrefix)}/robots/{robotCode}/authority_state";
+
+    /// <summary>Backend → all robots (retained): the traffic coordinator epoch now in charge.</summary>
+    public static string TrafficEpoch(string topicPrefix) =>
+        $"{NormalizePrefix(topicPrefix)}/traffic/epoch";
 
     public static bool TryParse(string topic, string topicPrefix, out string robotCode, out string kind)
     {
@@ -100,7 +120,9 @@ public static class RobotMqttTopics
             or InteractionConfirmSuffix
             or InteractionResultSuffix
             or TrafficProgressSuffix
-            or AuthorityStateSuffix;
+            or TrafficPlanSuffix
+            or AuthorityStateSuffix
+            or HealthSuffix;
     }
 
     public static string NormalizePrefix(string topicPrefix) =>

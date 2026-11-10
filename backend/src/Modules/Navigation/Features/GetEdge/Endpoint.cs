@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetEdge;
 
@@ -16,6 +17,7 @@ public static class GetEdgeEndpoint
             var response = await handler.GetByMapVersionIdAsync(mapVersionId, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetMapVersionEdges")
         .WithSummary("Get all Edges (Lanes) of a map version")
         .WithDescription("Retrieves every Edge drawn on the specified MapVersion, ordered by Code.");
@@ -28,6 +30,7 @@ public static class GetEdgeEndpoint
             var response = await handler.GetByIdAsync(id, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetEdgeById")
         .WithSummary("Get Edge (Lane) by ID")
         .WithDescription("Retrieves details of a specific navigation Edge by its ID.");

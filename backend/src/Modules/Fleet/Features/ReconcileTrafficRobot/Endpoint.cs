@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Fleet.Traffic;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Fleet.Features.ReconcileTrafficRobot;
 
@@ -34,9 +35,11 @@ public static class Endpoint
                     .ConfigureAwait(false);
                 return result.Ok ? Results.Ok(result) : Results.Conflict(result);
             })
+            .RequirePermission(Permissions.TrafficManage)
+            .RequireRobotScope("robotId")
+            .Audited("traffic.robot_reconciled", "ROBOT", "robotId")
             .WithName("ReconcileTrafficRobot")
-            .WithTags("Traffic")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Traffic");
 
         group.MapPost("/traffic/robots/{robotId:guid}/release-after-clearance", async (
                 Guid robotId,
@@ -49,9 +52,11 @@ public static class Endpoint
                     robotId, body.OperatorId, resources, ct).ConfigureAwait(false);
                 return result.Ok ? Results.Ok(result) : Results.Conflict(result);
             })
+            .RequirePermission(Permissions.TrafficManage)
+            .RequireRobotScope("robotId")
+            .Audited("traffic.released_after_clearance", "ROBOT", "robotId")
             .WithName("ReleaseTrafficAfterClearance")
-            .WithTags("Traffic")
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .WithTags("Traffic");
 
         return group;
     }

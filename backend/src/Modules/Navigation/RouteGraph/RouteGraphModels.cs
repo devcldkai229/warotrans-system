@@ -33,14 +33,19 @@ public sealed record RouteGraphInput(
     IReadOnlyList<RouteGraphZoneInput>? Zones = null);
 
 /// <param name="VertexSnapTolerance">Points closer than this (m) are one node; a node this close to a segment splits it.
-/// An Endpoint within this of a lane is treated as on-lane (station stays at stored x,y).</param>
-/// <param name="EndpointSnapDistance">Legacy option kept for traffic hash stability; attach no longer invents foot connectors.</param>
-/// <param name="JunctionCaptureDistance">A lane end this far (m) outside a junction zone (JUNCTION / SINGLE_OCCUPANCY / NO_STOP)
-/// still counts as reaching it (hand-drawn lanes stop a little short of the zone edge).</param>
+/// An Endpoint within this of a lane is treated as on-lane (station stays at stored x,y). Not a reachability cap for
+/// off-lane Endpoints.</param>
+/// <param name="EndpointSnapDistance">Legacy option kept for traffic hash stability only; off-lane attach does not
+/// use this as a gate.</param>
+/// <param name="JunctionCaptureDistance">A lane end this far (m) outside a JUNCTION polygon still counts as a portal
+/// (hand-drawn lanes often stop a little short of the zone edge).</param>
+/// <param name="MaxEndpointAccessDistance">Hard cap (m) for a straight lane-foot → Endpoint access spur. Beyond this
+/// the Endpoint is unreachable even if free of KEEP_OUT (guards against spanning the whole map).</param>
 public sealed record RouteGraphOptions(
     double VertexSnapTolerance = 0.05,
     double EndpointSnapDistance = 0.5,
-    double JunctionCaptureDistance = 0.15)
+    double JunctionCaptureDistance = 0.15,
+    double MaxEndpointAccessDistance = 3.0)
 {
     public static RouteGraphOptions Default { get; } = new();
 }
@@ -54,8 +59,9 @@ public sealed record RouteGraphNode(int Id, double X, double Y, IReadOnlyList<st
 /// <param name="ZoneCodes">SPEED / NO_STOP / SINGLE_OCCUPANCY / JUNCTION zones the segment lies in.</param>
 /// <param name="NoStop">Inside a NO_STOP zone (label only: multi-robot coordination is not implemented).</param>
 /// <param name="SingleOccupancy">Inside a SINGLE_OCCUPANCY zone (label only).</param>
-/// <param name="IsJunction">Link generated inside a JUNCTION / SINGLE_OCCUPANCY / NO_STOP zone between lanes that end at
-/// it, or to the exit point of an Endpoint reached through the zone.</param>
+/// <param name="IsJunction">Link generated inside a JUNCTION polygon between lane portals, or an in-JUNCTION access
+/// chord to an Endpoint (those access chords are also <see cref="IsConnector"/>). Lane-foot spurs outside JUNCTION
+/// are IsConnector only.</param>
 public sealed record RouteGraphEdge(
     int Id,
     int StartId,

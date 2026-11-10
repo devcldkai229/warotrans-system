@@ -111,6 +111,17 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
     public Task<TrafficOpResult> BindGraphAsync(Guid mapVersionId, CompiledTrafficGraph graph, CancellationToken ct = default) =>
         EnqueueAsync(s => s.BindGraph(mapVersionId, graph), ct);
 
+    public Task<TrafficOpResult> BindSemanticPolicyAsync(SemanticTrafficPolicy policy, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.BindSemanticPolicy(policy), ct);
+
+    public Task<AcquireResult> AcquireSemanticPlanAsync(SemanticPlanProposeRequest request, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            var result = s.AcquireSemanticPlan(request);
+            PublishGranted(s);
+            return result;
+        }, ct);
+
     public Task<TrafficOpResult> EnsureTrackedAsync(
         Guid robotId, double? poseX, double? poseY, bool localizationOk, CancellationToken ct = default) =>
         EnqueueAsync(s => s.EnsureTracked(robotId, poseX, poseY, localizationOk), ct);
@@ -176,10 +187,11 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
         }, ct);
 
     public Task<TrafficOpResult> CompleteRouteAsync(
-        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default) =>
+        Guid robotId, bool succeeded, string? reason, Guid? authorityId = null, CancellationToken ct = default,
+        Guid? commandId = null, double? poseX = null, double? poseY = null) =>
         EnqueueAsync(s =>
         {
-            var result = s.CompleteRoute(robotId, succeeded, reason, authorityId);
+            var result = s.CompleteRoute(robotId, succeeded, reason, authorityId, commandId, poseX, poseY);
             PublishGranted(s);
             return result;
         }, ct);
@@ -227,16 +239,20 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public async Task<int> RenewAllActiveAuthoritiesAsync(CancellationToken ct = default)
     {
-        if (_options.Mode != TrafficCoordinatorMode.Active)
+        if (_options.Mode is not (TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic))
         {
             return 0;
         }
 
-        // Retry EXTEND for robots parked at a safe stop whose next segment was busy.
-        var awaiting = await EnqueueAsync(s => s.RobotsAwaitingExtension(), ct).ConfigureAwait(false);
-        foreach (var robotId in awaiting)
+        if (_options.Mode == TrafficCoordinatorMode.Active)
         {
-            await AdvanceRouteAsync(robotId, ct).ConfigureAwait(false);
+            // Retry EXTEND for robots parked at a safe stop whose next segment was busy.
+            // Segmented routes only: a Semantic plan carries no pending segments.
+            var awaiting = await EnqueueAsync(s => s.RobotsAwaitingExtension(), ct).ConfigureAwait(false);
+            foreach (var robotId in awaiting)
+            {
+                await AdvanceRouteAsync(robotId, ct).ConfigureAwait(false);
+            }
         }
 
         var keys = await EnqueueAsync(s => s.ActiveAuthorityKeys(), ct).ConfigureAwait(false);
@@ -302,6 +318,25 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
 
     public Task<TrafficOpResult> MarkOfflineAsync(Guid robotId, CancellationToken ct = default) =>
         EnqueueAsync(s => s.MarkOffline(robotId), ct);
+
+    public Task<TrafficOpResult> MarkOnlineAsync(
+        Guid robotId, CancellationToken ct = default, double? poseX = null, double? poseY = null, bool localizationOk = false) =>
+        EnqueueAsync(s => s.MarkOnline(robotId, poseX, poseY, localizationOk), ct);
+
+    public Task<long> TakeOverAsync(IReadOnlyList<TrafficReconcileSeed> seeds, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            s.BeginEpoch(Math.Max(s.Epoch + 1, _clock.GetUtcNow().ToUnixTimeSeconds()));
+            s.CompleteReconciliation(seeds);
+            return s.Epoch;
+        }, ct);
+
+    public Task SetOpenForGrantsAsync(bool open, string reason, CancellationToken ct = default) =>
+        EnqueueAsync(s =>
+        {
+            s.SetOpenForGrants(open, reason);
+            return TrafficOpResult.Success();
+        }, ct);
 
     public Task<TrafficOpResult> ReconcileRobotAsync(
         Guid robotId, double poseX, double poseY, bool localizationOk, ImmutableArray<int> occupiedEdges,

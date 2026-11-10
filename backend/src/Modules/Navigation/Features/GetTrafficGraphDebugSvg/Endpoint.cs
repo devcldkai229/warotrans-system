@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.Navigation.Traffic;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetTrafficGraphDebugSvg;
 
@@ -17,6 +18,7 @@ public static class GetTrafficGraphDebugSvgEndpoint
             var svg = await handler.HandleAsync(id, cancellationToken);
             return Results.Text(svg, TrafficDebugSvgWriter.ContentType);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetTrafficGraphDebugSvg")
         .WithSummary("SVG overlay of compiled traffic graph for debugging")
         .WithDescription(

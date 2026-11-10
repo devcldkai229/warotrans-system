@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/mnt/e/programming/my_project/warotrans/ros2_ws/scripts/diag_get_costmap.py", line 176, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/mnt/e/programming/my_project/warotrans/ros2_ws/scripts/diag_get_costmap.py", line 118, in main
+    cost_occ = costmap_to_occ(resp.map)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/e/programming/my_project/warotrans/ros2_ws/scripts/diag_get_costmap.py", line 82, in costmap_to_occ
+    g.data = list(cmap.data)
+    ^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/nav_msgs/msg/_occupancy_grid.py", line 208, in data
+    self._data = array.array('b', value)
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+OverflowError: signed char is greater than maximum

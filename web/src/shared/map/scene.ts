@@ -1,64 +1,14 @@
-import type { Edge, Endpoint, EndpointType, Point, Zone, ZoneType } from '@/shared/api/contracts'
+import type { Endpoint, EndpointType, Point } from '@/shared/api/contracts'
 import type { MapBounds } from '@/shared/lib/mapView'
 
-// The one warehouse map every screen draws (Fleet, Transport Requests, Job Detail, Map Editor, Facility cards).
-// Everything is in metres on the MapVersion frame (origin bottom-left, y up) and follows rules/05:
-//   Endpoint = where a Robot arrives, Edge = where it may travel, Zone = an area with traffic rules.
-// TODO(backend): replaced by the published MapVersion's Zones, Edges and Endpoints.
+// Demo Endpoints for the mock sign-in mode only (VITE_MOCK_AUTO_LOGIN). Real screens draw the MapVersion's own
+// Zones, Edges and Endpoints; WarehouseMap never falls back to this data. Metres on the MapVersion frame
+// (origin bottom-left, y up), rules/05.
 
 export const MAP_BOUNDS: MapBounds = { minX: 0, minY: 0, maxX: 50, maxY: 50 }
 
 /** The editor stamps the real MapVersion id when it loads this scene. */
 const NO_VERSION = ''
-
-const rect = (x1: number, y1: number, x2: number, y2: number): Point[] => [
-  { x: x1, y: y1 },
-  { x: x2, y: y1 },
-  { x: x2, y: y2 },
-  { x: x1, y: y2 },
-]
-
-function zone(
-  n: number,
-  name: string,
-  zoneType: ZoneType,
-  area: [number, number, number, number],
-  maxSpeed: number | null = null,
-): Zone {
-  const ring = rect(...area).map((p) => [p.x, p.y] as [number, number])
-  const first = ring[0]
-  ring.push([first[0], first[1]])
-  return {
-    id: `zone-${n}`,
-    mapVersionId: NO_VERSION,
-    code: `ZN-${String(n).padStart(2, '0')}`,
-    name,
-    zoneType,
-    geometry: { type: 'Polygon', coordinates: [ring] },
-    maxSpeed,
-    isActive: true,
-  }
-}
-
-function edge(
-  n: number,
-  name: string,
-  direction: Edge['direction'],
-  points: [number, number][],
-  maxSpeed: number | null = null,
-): Edge {
-  return {
-    id: `edge-${n}`,
-    mapVersionId: NO_VERSION,
-    code: `EG-${String(n).padStart(2, '0')}`,
-    name,
-    geometry: { type: 'LineString', coordinates: points.map(([x, y]) => [x, y] as [number, number]) },
-    widthMeters: 1,
-    direction,
-    maxSpeed,
-    isActive: true,
-  }
-}
 
 const counters: Partial<Record<EndpointType, number>> = {}
 
@@ -78,25 +28,6 @@ function endpoint(name: string, endpointType: EndpointType, x: number, y: number
     isEnabled: true,
   }
 }
-
-export const SCENE_ZONES: Zone[] = [
-  zone(1, 'Receiving & packing', 'SPEED', [2, 30, 16, 48], 1.2),
-  zone(2, 'Storage aisles', 'SPEED', [18, 36, 34, 48], 0.8),
-  zone(3, 'Zone C — Junction', 'NO_STOP', [21, 21, 31, 31]),
-  zone(4, 'Zone F — Narrow aisle', 'SINGLE_OCCUPANCY', [21, 7, 31, 15], 0.5),
-  zone(5, 'Dispatch docks', 'SPEED', [40, 2, 48, 20], 1.0),
-  zone(6, 'Exclusion zone', 'KEEP_OUT', [2, 14, 8, 24]),
-]
-
-export const SCENE_EDGES: Edge[] = [
-  edge(1, 'North aisle', 'BIDIRECTIONAL', [[10, 42], [24, 42], [37, 42]]),
-  edge(2, 'East spine', 'BIDIRECTIONAL', [[37, 42], [37, 26], [37, 11.5]]),
-  edge(3, 'West spine', 'BIDIRECTIONAL', [[10, 42], [10, 26], [10, 12]]),
-  edge(4, 'Centre cross', 'BIDIRECTIONAL', [[10, 26], [26, 26], [37, 26]]),
-  edge(5, 'South one-way', 'ONE_WAY', [[37, 11.5], [26, 11], [10, 12]], 0.5),
-  edge(6, 'Dock spur', 'BIDIRECTIONAL', [[37, 16], [44, 16], [44, 4]]),
-  edge(7, 'Inbound link', 'BIDIRECTIONAL', [[5, 32], [5, 42], [10, 42]]),
-]
 
 export const SCENE_ENDPOINTS: Endpoint[] = [
   endpoint('Inbound 1', 'WAYPOINT', 5, 42, 0),
@@ -132,7 +63,7 @@ export const SCENE_ENDPOINTS: Endpoint[] = [
 ]
 
 /** Finds an Endpoint by the label requests and jobs show ("Rack A-12", "Dock 3"...). */
-export function findEndpointByName(name: string | undefined | null, endpoints: Endpoint[] = SCENE_ENDPOINTS) {
+export function findEndpointByName(name: string | undefined | null, endpoints: Endpoint[]) {
   if (!name) return undefined
   const wanted = name.trim().toLowerCase()
   return endpoints.find((item) => item.name.toLowerCase() === wanted)

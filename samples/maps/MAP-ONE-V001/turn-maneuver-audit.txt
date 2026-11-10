@@ -1,0 +1,84 @@
+compiler=10 hash=fbbf11bb070fabb14d9b84692c004f0dee9099136fd9fa1741dd8539306f40f2
+nodes=149 edges=230
+LEVEL followpath_exec=PARTIAL (Forward/Reverse/Spin on MotionAuthority; ContinuousArc not executable; enable_authority_gate required)
+LEVEL gazebo_e2e_MAP-ONE=NOT_RUN (no MAP-ONE Gazebo world; warehouse.sdf only)
+LEVEL cycle_authorized_route=PASS
+LEVEL cycle_traffic_resources=PASS
+TURN_ISSUES_AFTER_CLASSIFIER=6
+STATION EP-PARKING-A node=28 pose=(-1.825,-0.538) yaw=-1.5708 clr=0.2 needTurnR=0.226 onCycle=True needsPivot=True pivotOk=False failReason=disk clr=0.2 required=0.226 status=FAIL_pivot_map_data classes=[TruePivot=2]
+  PAIR in=187 out=199 Δdeg=50.3 class=TruePivot detail=arc_hit t=0 pose=(-1.825,-0.538,0.878) corner(-1.825,-0.304)
+  PAIR in=206 out=199 Δdeg=135.0 class=TruePivot detail=arc_hit t=0 pose=(-1.825,-0.538,-3.927) edge(-1.899,-0.358)
+  MAP_DATA keep TURN_CLEARANCE failReason=disk clr=0.2 required=0.226; editor: free space to ≥0.226 m AND pivot_rect clear at (-1.825,-0.538) or move pose (AI will not move Endpoint). pivotPairs=2
+  SVG=debug-turn-EP-PARKING-A.svg
+STATION EP-OUTBOUND node=149 pose=(1.953,-1.021) yaw=1.5708 clr=0.2 needTurnR=0.226 onCycle=True needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=1]
+  PAIR in=366 out=379 Δdeg=169.4 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-OUTBOUND.svg
+STATION EP-PARKING-B node=35 pose=(-1.445,-0.532) yaw=-1.5708 clr=0.2 needTurnR=0.226 onCycle=False needsPivot=True pivotOk=False failReason=disk clr=0.2 required=0.226 status=FAIL_pivot_map_data classes=[TruePivot=3]
+  PAIR in=200 out=211 Δdeg=45.3 class=TruePivot detail=arc_hit t=0 pose=(-1.445,-0.532,0.764) corner(-1.419,-0.299)
+  PAIR in=226 out=211 Δdeg=136.6 class=TruePivot detail=arc_hit t=0 pose=(-1.445,-0.532,-3.927) edge(-1.519,-0.352)
+  PAIR in=227 out=211 Δdeg=136.6 class=TruePivot detail=arc_hit t=0 pose=(-1.445,-0.532,-3.927) edge(-1.519,-0.352)
+  MAP_DATA keep TURN_CLEARANCE failReason=disk clr=0.2 required=0.226; editor: free space to ≥0.226 m AND pivot_rect clear at (-1.445,-0.532) or move pose (AI will not move Endpoint). pivotPairs=3
+  SVG=debug-turn-EP-PARKING-B.svg
+STATION EP-SHELFA04 node=44 pose=(-1.298,1.664) yaw=3.1416 clr=0.15 needTurnR=0.226 onCycle=False needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=3]
+  PAIR in=155 out=220 Δdeg=160.7 class=YawDriveInReverseOut detail=-
+  PAIR in=174 out=220 Δdeg=162.3 class=YawDriveInReverseOut detail=-
+  PAIR in=178 out=220 Δdeg=162.0 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-SHELFA04.svg
+STATION EP-CHARGING-A node=52 pose=(-1.051,-0.538) yaw=-1.5708 clr=0.2 needTurnR=0.226 onCycle=False needsPivot=True pivotOk=False failReason=disk clr=0.2 required=0.226 status=FAIL_pivot_map_data classes=[TruePivot=2]
+  PAIR in=214 out=231 Δdeg=134.3 class=TruePivot detail=arc_hit t=0 pose=(-1.051,-0.538,0.774) corner(-1.027,-0.305)
+  PAIR in=233 out=231 Δdeg=135.0 class=TruePivot detail=arc_hit t=0 pose=(-1.051,-0.538,2.356) edge(-1.125,-0.358)
+  MAP_DATA keep TURN_CLEARANCE failReason=disk clr=0.2 required=0.226; editor: free space to ≥0.226 m AND pivot_rect clear at (-1.051,-0.538) or move pose (AI will not move Endpoint). pivotPairs=2
+  SVG=debug-turn-EP-CHARGING-A.svg
+STATION EP-SHELFB04 node=110 pose=(0.562,0.973) yaw=1.5708 clr=0.15 needTurnR=0.226 onCycle=False needsPivot=True pivotOk=False failReason=disk clr=0.15 required=0.226 status=FAIL_pivot_map_data classes=[TruePivot=1]
+  PAIR in=318 out=321 Δdeg=146.2 class=TruePivot detail=arc_hit t=0 pose=(0.562,0.973,-1.208) edge(0.39,1.004)
+  MAP_DATA keep TURN_CLEARANCE failReason=disk clr=0.15 required=0.226; editor: free space to ≥0.226 m AND pivot_rect clear at (0.562,0.973) or move pose (AI will not move Endpoint). pivotPairs=1
+  SVG=debug-turn-EP-SHELFB04.svg
+STATION EP-SHELFB01 node=122 pose=(0.818,1.697) yaw=3.1416 clr=0.15 needTurnR=0.226 onCycle=False needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=1]
+  PAIR in=295 out=334 Δdeg=168.4 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-SHELFB01.svg
+STATION EP-SHELFB03 node=127 pose=(0.885,0.977) yaw=1.5708 clr=0.15 needTurnR=0.226 onCycle=False needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=1]
+  PAIR in=315 out=346 Δdeg=161.0 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-SHELFB03.svg
+STATION EP-SHELFC02 node=131 pose=(0.916,-1.09) yaw=3.1416 clr=0.2 needTurnR=0.226 onCycle=False needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=6]
+  PAIR in=342 out=350 Δdeg=155.5 class=YawDriveInReverseOut detail=-
+  PAIR in=342 out=351 Δdeg=177.4 class=YawDriveInReverseOut detail=-
+  PAIR in=342 out=352 Δdeg=174.5 class=YawDriveInReverseOut detail=-
+  PAIR in=347 out=350 Δdeg=179.8 class=YawDriveInReverseOut detail=-
+  PAIR in=347 out=351 Δdeg=158.3 class=YawDriveInReverseOut detail=-
+  PAIR in=347 out=352 Δdeg=161.3 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-SHELFC02.svg
+STATION EP-QUEUE-POINT node=133 pose=(1.306,0.809) yaw=0 clr=0.2 needTurnR=0.226 onCycle=False needsPivot=True pivotOk=False failReason=disk clr=0.2 required=0.226 status=FAIL_pivot_map_data classes=[TruePivot=1]
+  PAIR in=357 out=356 Δdeg=137.5 class=TruePivot detail=arc_hit t=0 pose=(1.306,0.809,-3.984) corner(1.074,0.843)
+  MAP_DATA keep TURN_CLEARANCE failReason=disk clr=0.2 required=0.226; editor: free space to ≥0.226 m AND pivot_rect clear at (1.306,0.809) or move pose (AI will not move Endpoint). pivotPairs=1
+  SVG=debug-turn-EP-QUEUE-POINT.svg
+STATION EP-INBOUND node=146 pose=(1.758,1.617) yaw=-1.5708 clr=0.25 needTurnR=0.226 onCycle=True needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=1]
+  PAIR in=365 out=376 Δdeg=163.5 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-INBOUND.svg
+STATION EP-SHELFA01 node=46 pose=(-1.292,0.657) yaw=3.1416 clr=0.25 needTurnR=0.226 onCycle=True needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=2]
+  PAIR in=209 out=223 Δdeg=164.5 class=YawDriveInReverseOut detail=-
+  PAIR in=218 out=223 Δdeg=175.4 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-SHELFA01.svg
+STATION EP-INSPECTION node=144 pose=(1.684,-1.026) yaw=1.5708 clr=0.25 needTurnR=0.226 onCycle=False needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=1]
+  PAIR in=364 out=374 Δdeg=176.1 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-INSPECTION.svg
+STATION EP-SHELFA02 node=45 pose=(-1.294,0.963) yaw=3.1416 clr=0.3 needTurnR=0.226 onCycle=False needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[ReverseSameEdge=1,YawDriveInReverseOut=3]
+  PAIR in=194 out=222 Δdeg=170.5 class=YawDriveInReverseOut detail=-
+  PAIR in=217 out=221 Δdeg=154.9 class=YawDriveInReverseOut detail=-
+  PAIR in=217 out=222 Δdeg=164.4 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-SHELFA02.svg
+STATION EP-SHELFA03 node=43 pose=(-1.301,1.307) yaw=3.1416 clr=0.3 needTurnR=0.226 onCycle=False needsPivot=True pivotOk=True failReason=- status=PASS_pivot_clear classes=[TruePivot=2]
+  PAIR in=204 out=219 Δdeg=135.4 class=TruePivot detail=arc_hit t=0.14 pose=(-1.256,1.368,1.099) corner(-1.04,1.46)
+  PAIR in=215 out=219 Δdeg=144.0 class=TruePivot detail=arc_hit t=0.27 pose=(-1.214,1.428,1.282) edge(-1.045,1.471)
+  SVG=debug-turn-EP-SHELFA03.svg
+STATION EP-SHELFB02 node=125 pose=(0.824,1.343) yaw=3.1416 clr=0.25 needTurnR=0.226 onCycle=False needsPivot=False pivotOk=True failReason=- status=PASS_no_pivot classes=[YawDriveInReverseOut=1]
+  PAIR in=302 out=344 Δdeg=175.3 class=YawDriveInReverseOut detail=-
+  SVG=debug-turn-EP-SHELFB02.svg
+STATION EP-SHELFC01 node=132 pose=(0.916,-0.761) yaw=3.1416 clr=0.233 needTurnR=0.226 onCycle=False needsPivot=True pivotOk=False failReason=pivot_rect pivot_hit yaw=0 corner(1.096,-0.611) status=FAIL_pivot_map_data classes=[YawDriveInReverseOut=3,TruePivot=3]
+  PAIR in=276 out=353 Δdeg=166.4 class=YawDriveInReverseOut detail=-
+  PAIR in=276 out=354 Δdeg=138.5 class=TruePivot detail=arc_hit t=0.21 pose=(0.98,-0.857,-1.242) corner(1.18,-0.979)
+  PAIR in=276 out=355 Δdeg=142.8 class=TruePivot detail=arc_hit t=0.13 pose=(0.979,-0.801,-0.391) corner(1.089,-1.008)
+  PAIR in=343 out=353 Δdeg=150.6 class=YawDriveInReverseOut detail=-
+  PAIR in=343 out=354 Δdeg=95.5 class=TruePivot detail=arc_hit t=0.1 pose=(0.916,-0.799,-1.641) corner(1.079,-0.63)
+  PAIR in=343 out=355 Δdeg=174.2 class=YawDriveInReverseOut detail=-
+  MAP_DATA keep TURN_CLEARANCE failReason=pivot_rect pivot_hit yaw=0 corner(1.096,-0.611); editor: free space to ≥0.226 m AND pivot_rect clear at (0.916,-0.761) or move pose (AI will not move Endpoint). pivotPairs=3
+  SVG=debug-turn-EP-SHELFC01.svg

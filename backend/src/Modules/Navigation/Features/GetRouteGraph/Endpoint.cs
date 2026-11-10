@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WaroTrans.Navigation.RouteGraph;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetRouteGraph;
 
@@ -55,14 +56,16 @@ public static class GetRouteGraphEndpoint
                 RouteGraphGeoJsonWriter.Write(result.Graph, export.GraphHash),
                 RouteGraphGeoJsonWriter.ContentType);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetRouteGraph")
         .WithSummary("Nav2 Route Server graph (GeoJSON) built from the map's Edges and Endpoints")
         .WithDescription(
             "Directed graph for nav2_route GeoJsonGraphFileLoader via CompiledTrafficGraph: lane polylines become " +
-            "straight directed segments (BIDIRECTIONAL → both ways), Endpoints become nodes (joined by connectors when ≤ 0.5 m from a lane). " +
+            "straight directed segments (BIDIRECTIONAL → both ways). Endpoints on a lane (VertexSnapTolerance) split that lane; " +
+            "inside JUNCTION use portal access; otherwise a straight IsConnector spur from the nearest lane foot when " +
+            "≤ MaxEndpointAccessDistance and clear of KEEP_OUT (occupancy checked at traffic compile). " +
             "Response includes properties.graphHash and header X-Route-Graph-Hash; X-Route-Graph-Warnings when there are warnings. " +
-            "200 application/geo+json; 422 route_graph_invalid with issues (ENDPOINT_TOO_FAR, ENDPOINT_UNREACHABLE, ENDPOINT_IN_KEEP_OUT, GRAPH_EMPTY); " +
-            "404 map_version_not_found. Zones: KEEP_OUT removes lane pieces, SPEED lowers abs_speed_limit; " +
-            "JUNCTION / SINGLE_OCCUPANCY / NO_STOP link lane ends (and Endpoints within 0.5 m) and label pieces inside.");
+            "200 application/geo+json; 422 route_graph_invalid with issues (ENDPOINT_TOO_FAR, SERVICE_ACCESS_BLOCKED, ENDPOINT_UNREACHABLE, …); " +
+            "404 map_version_not_found. JUNCTION links lane portals; SINGLE_OCCUPANCY / NO_STOP / SPEED are policy only.");
     }
 }

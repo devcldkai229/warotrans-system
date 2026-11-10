@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Transportation.Features.Shared;
@@ -11,7 +13,9 @@ namespace WaroTrans.Transportation.Features.GetTransportRequest;
 public sealed class GetTransportRequestHandler(
     TransportationDbContext dbContext,
     IWarehouseModule warehouseModule,
-    INavigationModule navigationModule)
+    INavigationModule navigationModule,
+    ITransportRequestJobControl jobControl,
+    ICurrentUser currentUser)
 {
     public async Task<GetTransportRequestResponse> HandleAsync(
         Guid id,
@@ -30,6 +34,8 @@ public sealed class GetTransportRequestHandler(
             warehouseModule,
             navigationModule,
             cancellationToken);
+
+        var jobs = (await jobControl.GetJobsAsync([request.Id], cancellationToken)).GetValueOrDefault(request.Id) ?? [];
 
         return new GetTransportRequestResponse(
             request.Id,
@@ -86,6 +92,14 @@ public sealed class GetTransportRequestHandler(
                         d.DestinationLevelNo,
                         d.Status.ToString());
                 })
-                .ToList());
+                .ToList(),
+            request.CancelledBy,
+            request.CancelReason,
+            request.CancelRequestedAt,
+            request.RejectedBy,
+            request.RejectReason,
+            request.RejectedAt,
+            jobs,
+            TransportRequestActionPolicy.Evaluate(request, jobs, currentUser.Can));
     }
 }

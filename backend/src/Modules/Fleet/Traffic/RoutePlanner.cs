@@ -143,6 +143,25 @@ public sealed class RoutePlanner
                 exitStops = exitStops.Add(nodes[toIdx]);
             }
 
+            var maneuvers = ManeuverStepBuilder.Build(graph, edgeSlice);
+            // Station Spin holds node: resources already cover edges; append node: for spin duration.
+            var resourceIds = resources;
+            foreach (var step in maneuvers)
+            {
+                if (step.Kind != TrafficManeuverKind.Spin || step.ResourceIds is null)
+                {
+                    continue;
+                }
+
+                foreach (var rid in step.ResourceIds)
+                {
+                    if (!resourceIds.Contains(rid))
+                    {
+                        resourceIds = resourceIds.Add(rid);
+                    }
+                }
+            }
+
             segments.Add(new RouteSegmentCandidate(
                 request.RequestId,
                 request.RobotId,
@@ -151,13 +170,14 @@ public sealed class RoutePlanner
                 nodes[fromIdx],
                 nodes[toIdx],
                 edgeSlice,
-                resources,
+                resourceIds,
                 exitStops,
                 totalCost / Math.Max(1, boundaryIndexes.Count - 1),
                 stateVersion,
                 request.Priority,
                 request.JobStepId,
-                request.JobId));
+                request.JobId,
+                maneuvers));
         }
 
         return segments.ToImmutableArray();

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { getApiBaseUrl } from '../api/client';
+import { getAccessToken, getApiBaseUrl } from '../api/client';
 import type { MapVersionDetailDto } from '../api/navigationApi';
 import type { RobotResponse } from '../types/contracts';
 import { mapRobotSnapshots } from '../maps/mapModel';
@@ -38,7 +38,7 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
   const valid = hasMapCalibration(geometry);
   const availableHeight = Math.max(0, bounds.height - contentInsets.top - contentInsets.bottom);
   const { width, height } = valid ? fitMapViewport(geometry, Math.max(0, bounds.width - 24), availableHeight) : { width: 0, height: 0 };
-  const uri = resolveMapPreviewUri(map?.previewImageUri, getApiBaseUrl());
+  const uri = resolveMapPreviewUri(map?.previewImageUri, getApiBaseUrl(), getAccessToken());
   const source = uri ? { uri } : null;
   const [imageAttempt, setImageAttempt] = useState(0);
   const imageKey = `${map?.id}:${uri}:${imageAttempt}`;

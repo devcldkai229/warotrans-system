@@ -63,8 +63,15 @@ public sealed class IssueNavigateCommandHandler(
             throw new DomainValidationException("Robot is offline.", "robot_offline");
         }
 
+        // Traffic-channel messages (EXTEND / RENEW / REVOKE_AUTHORITY) never make the robot busy: they are sent
+        // every second while it drives and are acknowledged on their own.
         var hasInFlight = await db.RobotCommands.AnyAsync(
             c => c.RobotId == robotId
+                 && c.Type != RobotCommandType.EXTEND_AUTHORITY
+                 && c.Type != RobotCommandType.RENEW_AUTHORITY
+                 && c.Type != RobotCommandType.REVOKE_AUTHORITY
+                 // A RESUME just sent (job resume) must not make the robot look busy for the MOVE that follows it.
+                 && c.Type != RobotCommandType.RESUME
                  && (c.Status == RobotCommandStatus.SENT
                      || c.Status == RobotCommandStatus.ACKED
                      || c.Status == RobotCommandStatus.RUNNING),
@@ -73,6 +80,22 @@ public sealed class IssueNavigateCommandHandler(
         if (hasInFlight || robot.CurrentCommandId is not null)
         {
             throw new DomainValidationException("Robot already has an in-flight command.", "robot_busy");
+        }
+
+        // RB-03 / RB-04 / RB-08: a held, hand-driven or maintained robot takes no navigation goal.
+        if (robot.MotionHeld)
+        {
+            throw new ConflictException($"Robot {robot.Code} holds motion after a STOP; resume it first.", "robot_motion_held");
+        }
+
+        if (robot.HasActiveManualLease(DateTimeOffset.UtcNow))
+        {
+            throw new ConflictException($"Robot {robot.Code} is being driven by hand ({robot.ManualLeaseHolderName}).", "robot_in_manual_mode");
+        }
+
+        if (robot.Status == RobotStatus.MAINTENANCE)
+        {
+            throw new ConflictException($"Robot {robot.Code} is in maintenance.", "robot_in_maintenance");
         }
 
         var utcNow = DateTimeOffset.UtcNow;
@@ -91,7 +114,8 @@ public sealed class IssueNavigateCommandHandler(
                     EdgeIds = route.EdgeIds?.ToList() ?? []
                 }
                 : null,
-            Authority = request.Authority
+            Authority = request.Authority,
+            TimeoutSeconds = request.TimeoutSeconds is > 0 ? request.TimeoutSeconds : null
         };
         var payloadJson = JsonSerializer.Serialize(posePayload, JsonOptions);
 

@@ -5,7 +5,7 @@ import {
   LogLevel,
   HttpTransportType,
 } from '@microsoft/signalr';
-import { getApiBaseUrl, getAccessToken, getBearerToken } from '../api/client';
+import { getApiBaseUrl, getAccessToken, getBearerToken, getFreshAccessToken } from '../api/client';
 
 export interface JobUpdatedRealtimeEvent {
   jobId: string;
@@ -34,7 +34,7 @@ export interface RobotTelemetryEvent {
   poseX: number;
   poseY: number;
   poseYaw: number;
-  batteryPercent: number;
+  batteryPercent: number | null;
   linearVelocity?: number | null;
   angularVelocity?: number | null;
   navigationStatus: string | null;
@@ -53,11 +53,47 @@ export interface LiveNotificationEvent {
   isRead: boolean;
 }
 
+/** Payload of the hub's "notificationCreated". */
+export interface ServerNotificationEvent {
+  id: string;
+  type: string;
+  kind: string;
+  title: string;
+  content: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  route?: string | null;
+  createdAt: string;
+}
+
+/** Maps a server notification onto the app's live-notification shape. */
+export function toLiveNotification(data: ServerNotificationEvent): LiveNotificationEvent {
+  const category: LiveNotificationEvent['category'] =
+    data.kind === 'ROBOT_BATTERY_LOW' ? 'BATTERY_LOW'
+      : data.kind === 'ISSUE_ASSIGNED' || data.kind === 'JOB_STEP_WAITING_FOR_PERSON' ? 'JOB_ASSIGNED'
+        : data.kind.startsWith('ISSUE') ? 'HAZARD'
+          : 'SYSTEM';
+  return {
+    id: data.id,
+    category,
+    title: data.title,
+    message: data.content,
+    timeLabel: 'now',
+    robotId: data.entityType === 'ROBOT' ? data.entityId ?? undefined : undefined,
+    jobId: data.entityType === 'JOB' ? data.entityId ?? undefined : undefined,
+    isRead: false,
+  };
+}
+
+/** RTM-02 "transportRequestUpdated": the request moved; refetch it from the API (the event carries no full state). */
 export interface TransportStatusEvent {
   transportRequestId: string;
+  kind: 'request' | 'detail' | 'cancelled' | 'rejected';
   requestCode: string;
   status: string;
-  timestamp: string;
+  containerId?: string | null;
+  detailStatus?: string | null;
+  occurredAt: string;
 }
 
 export type RealtimeEventHandler<T> = (data: T) => void;
@@ -96,7 +132,8 @@ class RealtimeClient {
     try {
       conn = new HubConnectionBuilder()
         .withUrl(hubUrl, {
-          accessTokenFactory: () => getAccessToken() ?? '',
+          // Refreshed first when about to expire: the server closes the connection when its token expires (RTM-01).
+          accessTokenFactory: async () => (await getFreshAccessToken()) ?? '',
           transport: HttpTransportType.WebSockets | HttpTransportType.LongPolling,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -112,8 +149,18 @@ class RealtimeClient {
         this.telemetryListeners.forEach((fn) => fn(data));
       });
 
+      // Backend NotificationsHub sends "notificationCreated" to the person / role it is for (OPS-03).
+      conn.on('notificationCreated', (data: ServerNotificationEvent) => {
+        const event = toLiveNotification(data);
+        this.notificationListeners.forEach((fn) => fn(event));
+      });
+
       conn.on('notificationReceived', (data: LiveNotificationEvent) => {
         this.notificationListeners.forEach((fn) => fn(data));
+      });
+
+      conn.on('transportRequestUpdated', (data: TransportStatusEvent) => {
+        this.transportStatusListeners.forEach((fn) => fn(data));
       });
 
       conn.on('transportRequestStatusChanged', (data: TransportStatusEvent) => {

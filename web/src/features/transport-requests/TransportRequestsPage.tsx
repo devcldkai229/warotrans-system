@@ -1,14 +1,17 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { JobStatus, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { listJobs, resumeJob, startJob, type JobSummaryDto } from '@/shared/api/jobs'
 import { getTransportRequest, listTransportRequests } from '@/shared/api/transportRequests'
+import { getActiveMapVersion } from '@/shared/api/navigation'
+import { getStockVoucher } from '@/shared/api/warehouses'
 import { listWorkflows } from '@/shared/api/workflows'
 import { cx } from '@/shared/lib/cx'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
+import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
 import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
@@ -21,10 +24,12 @@ import {
   TransportRequestComposer,
   type ComposerMapState,
 } from './composer/TransportRequestComposer'
+import { voucherPrefill, type ComposerPrefill } from './composer/voucherPrefill'
 import { REQUEST_STATUS_GROUPS } from './constants'
 import { detailProgress, routeSummary } from './derive'
 import { JobSummaryPanel } from './JobSummaryPanel'
 import { detailToView, listItemToView } from './mapTransportRequest'
+import { RequestCloseActions } from './RequestCloseActions'
 import { RequestDetailPanel } from './RequestDetailPanel'
 import { queueAndStart, runAgain } from './runOnRobot'
 
@@ -39,7 +44,6 @@ function RequestCard({
 }) {
   const progress = detailProgress(request)
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
-  const canCancel = request.availableActions.includes('CANCEL')
   const facts = [
     { label: 'Route', value: routeSummary(request) },
     { label: 'Containers', value: request.details.length },
@@ -71,19 +75,13 @@ function RequestCard({
         <span className="text-xs text-muted">
           {progress.done} of {progress.total} delivered{elapsed === null ? '' : `, ${formatDuration(elapsed)}`}
         </span>
-        {canCancel ? (
-          <span onClick={(event) => event.stopPropagation()}>
-            <Button variant="danger" size="sm">
-              Cancel
-            </Button>
-          </span>
-        ) : null}
+        <RequestCloseActions request={request} />
       </footer>
     </article>
   )
 }
 
-const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED']
+const TERMINAL_REQUEST_STATUSES: TransportRequestStatus[] = ['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED']
 const TERMINAL_JOB_STATUSES: JobStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED']
 
 /**
@@ -197,11 +195,49 @@ export function TransportRequestsPage() {
   const [composing, setComposing] = useState(false)
   const [composerMap, setComposerMap] = useState<ComposerMapState | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
+  const [prefill, setPrefill] = useState<ComposerPrefill | null>(null)
+
+  // "Dispatch robots" on a stock voucher lands here with ?voucher=<id>: open the composer filled with its Containers,
+  // on the warehouse's published map. The parameter is dropped when the composer closes.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const voucherId = searchParams.get('voucher')
+  const [openedVoucherId, setOpenedVoucherId] = useState<string | null>(null)
+  const voucherPrefillQuery = useQuery({
+    queryKey: ['transport-requests', 'voucher-prefill', voucherId],
+    queryFn: async () => {
+      const voucher = await getStockVoucher(voucherId!)
+      const map = await getActiveMapVersion(voucher.warehouseId)
+      return voucherPrefill(voucher, map?.id ?? '')
+    },
+    enabled: Boolean(voucherId),
+    staleTime: 0,
+    gcTime: 0,
+  })
+  if (voucherId && voucherPrefillQuery.data && openedVoucherId !== voucherId) {
+    setOpenedVoucherId(voucherId)
+    setPrefill(voucherPrefillQuery.data)
+    setSelectedId(null)
+    setSelectedJobNo(null)
+    setComposing(true)
+    setBanner(null)
+  }
 
   const listQuery = useQuery({
     queryKey: ['transport-requests', 'list', query],
     queryFn: () => listTransportRequests({ search: query.trim() || undefined, take: 100 }),
   })
+
+  // RTM-02: a pushed change only says "this request moved"; the data always comes from the API. After a reconnect
+  // everything is refetched, so events missed while offline cannot leave the page stale.
+  const queryClient = useQueryClient()
+  const onRequestUpdated = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: ['transport-requests'] }),
+    [queryClient],
+  )
+  const hubConnected = useNotificationsHub({ transportRequestUpdated: onRequestUpdated })
+  useEffect(() => {
+    if (hubConnected) onRequestUpdated()
+  }, [hubConnected, onRequestUpdated])
 
   const workflowsQuery = useQuery({
     queryKey: ['workflows', 'published'],
@@ -355,6 +391,7 @@ export function TransportRequestsPage() {
   function startCompose() {
     setSelectedId(null)
     setSelectedJobNo(null)
+    setPrefill(null)
     setComposing(true)
     setBanner(null)
   }
@@ -362,6 +399,8 @@ export function TransportRequestsPage() {
   function endCompose() {
     setComposing(false)
     setComposerMap(null)
+    setPrefill(null)
+    if (voucherId) setSearchParams({}, { replace: true })
   }
 
   function toggle(status: TransportRequestStatus) {
@@ -396,6 +435,7 @@ export function TransportRequestsPage() {
           }}
           onMapState={handleComposerMapState}
           onBanner={setBanner}
+          prefill={prefill}
         />
       ) : (
         <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">
@@ -527,6 +567,8 @@ export function TransportRequestsPage() {
                 {selectedJob ? (
                   <JobSummaryPanel
                     jobRef={selectedJob}
+                    jobId={selectedJobId}
+                    containerBarcodes={new Map(selected.details.map((detail) => [detail.containerId, detail.containerBarcode]))}
                     onClose={() => setSelectedJobNo(null)}
                     onOpenFull={selectedJobId ? () => navigate(`/monitor/jobs/${selectedJobId}`) : undefined}
                   />

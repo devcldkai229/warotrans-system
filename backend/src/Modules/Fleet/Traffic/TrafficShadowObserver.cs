@@ -95,9 +95,10 @@ public sealed class TrafficShadowObserver(
         bool localizationOk,
         CancellationToken ct = default)
     {
-        // Active Mode: traffic_progress is the sole progress/authority channel. Feeding every
-        // telemetry LOST sample into ReportProgress sticky-quarantines and starves RENEW.
-        if (trafficOptions.Value.Mode == TrafficCoordinatorMode.Active)
+        // Active/Semantic: traffic_progress / traffic_plan are the sole progress/authority channels.
+        // Feeding every telemetry UNKNOWN/LOST sample into ReportProgress sticky-quarantines
+        // (LOCALIZATION_LOSS) and blocks subsequent semantic grants.
+        if (trafficOptions.Value.Mode is TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic)
         {
             return;
         }
@@ -124,6 +125,23 @@ public sealed class TrafficShadowObserver(
         segmented.MarkOfflineAsync(robotId, ct);
 
     /// <summary>
+    /// Verified heartbeat. The robot's last telemetry pose goes along only while it is fresh and localized: a semantic
+    /// OFFLINE quarantine is lifted only when that pose shows the robot still inside what it holds.
+    /// </summary>
+    public Task OnOnlineAsync(
+        Guid robotId,
+        CancellationToken ct = default,
+        double? poseX = null,
+        double? poseY = null,
+        bool localized = false,
+        DateTimeOffset? lastTelemetryAt = null)
+    {
+        var maxAge = TimeSpan.FromSeconds(Math.Max(0.5, trafficOptions.Value.PoseMaxAgeSec));
+        var fresh = localized && lastTelemetryAt is { } at && DateTimeOffset.UtcNow - at <= maxAge;
+        return segmented.MarkOnlineAsync(robotId, ct, fresh ? poseX : null, fresh ? poseY : null, fresh);
+    }
+
+    /// <summary>
     /// Cumulative authority edges: <c>authority.segmentEdgeIds</c> of an Active NAVIGATE, or the top-level
     /// <c>segmentEdgeIds</c> of an EXTEND_AUTHORITY payload.
     /// </summary>
@@ -138,6 +156,11 @@ public sealed class TrafficShadowObserver(
         {
             using var doc = JsonDocument.Parse(payloadJson);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return [];
+            }
+
             if (root.TryGetProperty("authority", out var authority) && authority.ValueKind == JsonValueKind.Object)
             {
                 root = authority;
@@ -163,14 +186,17 @@ public sealed class TrafficShadowObserver(
         try
         {
             using var doc = JsonDocument.Parse(payloadJson);
-            if (!doc.RootElement.TryGetProperty("route", out var route) &&
-                !doc.RootElement.TryGetProperty("Route", out route))
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || (!doc.RootElement.TryGetProperty("route", out var route)
+                    && !doc.RootElement.TryGetProperty("Route", out route))
+                || route.ValueKind != JsonValueKind.Object)
             {
+                // A Semantic NAVIGATE carries "route": null — at start-up this threw and the Host did not start.
                 return [];
             }
 
-            if (!route.TryGetProperty("edgeIds", out var edges) &&
-                !route.TryGetProperty("EdgeIds", out edges))
+            if ((!route.TryGetProperty("edgeIds", out var edges) && !route.TryGetProperty("EdgeIds", out edges))
+                || edges.ValueKind != JsonValueKind.Array)
             {
                 return [];
             }

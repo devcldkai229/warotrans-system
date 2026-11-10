@@ -17,10 +17,10 @@ public static class CreateWarehouseEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Created($"/api/warehouse/warehouses/{response.Id}", response);
         })
+        .RequirePermission(Permissions.WarehouseWrite)
         .WithName("CreateWarehouse")
         .WithSummary("Create a warehouse")
-        .WithDescription("Creates a warehouse master record used by Facility maps, Fleet, and Transport Requests.")
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        .WithDescription("Creates a warehouse master record used by Facility maps, Fleet, and Transport Requests.");
 
         return group;
     }

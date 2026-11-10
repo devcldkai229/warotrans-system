@@ -1,0 +1,42 @@
+[
+  {
+    "case": "valid_goal",
+    "ok": true,
+    "reason": "goal_ok",
+    "expect_ok": true,
+    "expect_reason_substr": "goal_ok",
+    "matched": true
+  },
+  {
+    "case": "no_stop_goal",
+    "ok": false,
+    "reason": "NO_STOP_GOAL",
+    "expect_ok": false,
+    "expect_reason_substr": "NO_STOP_GOAL",
+    "matched": true
+  },
+  {
+    "case": "keepout_goal",
+    "ok": false,
+    "reason": "KEEP_OUT_GOAL",
+    "expect_ok": false,
+    "expect_reason_substr": "KEEP_OUT_GOAL",
+    "matched": true
+  },
+  {
+    "case": "oneway_reverse_plan",
+    "ok": false,
+    "reason": "ONE_WAY_VIOLATION at segment 0",
+    "expect_ok": false,
+    "expect_reason_substr": "ONE_WAY_VIOLATION",
+    "matched": true
+  },
+  {
+    "case": "oneway_forward_plan",
+    "ok": true,
+    "reason": "path_ok",
+    "expect_ok": true,
+    "expect_reason_substr": "path_ok",
+    "matched": true
+  }
+]

@@ -180,8 +180,13 @@ per PUBLISHED MapVersion) with resource kinds including NarrowBidirectional,
 PhysicalOverlap, ServiceCorridor, StationBay, HoldingBay, and precomputed
 safe-stop / exit indexes.
 
-`JUNCTION` is the primary single-robot free-motion junction zone.
-`SINGLE_OCCUPANCY` / `NO_STOP` may still form junction links (legacy warning).
+`JUNCTION` creates lane↔lane portals/transitions and in-zone Endpoint access.
+Off-lane Endpoints outside a JUNCTION attach from the nearest lane foot (pose kept;
+not gated by `VertexSnapTolerance` / `EndpointSnapDistance`): straight
+occupancy-validated `IsConnector` first, else a compile-time local footprint BFS
+polyline within `MaxEndpointAccessDistance`. `SINGLE_OCCUPANCY` / `NO_STOP` /
+`SPEED` are policy labels only — they never invent links. Unsafe approaches are
+rejected (`SERVICE_ACCESS_BLOCKED` / `ENDPOINT_TOO_FAR`); no Nav2 free-nav fallback.
 
 Nav2 owns local tracking/`FollowPath` inside the granted corridor.
 Backend Traffic Coordinator is the only authority that grants Edge/Zone use.

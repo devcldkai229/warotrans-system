@@ -17,14 +17,17 @@ public sealed class TrafficGraphCompileService(
     NavigationDbContext dbContext,
     CompiledTrafficGraphCache cache,
     IMapAssetStore mapAssetStore,
-    IOptions<TrafficFootprintOptions> footprintOptions)
+    IOptions<TrafficFootprintOptions> footprintOptions,
+    IOptions<TrafficManeuverOptions>? maneuverOptions = null)
 {
     /// <summary>
     /// Compile settings shared by every runtime consumer of the graph — the exported route graph the robot loads,
     /// host-start reconciliation and Active MOVE planning. They must match: the occupancy grid is part of the graph
     /// hash, so a mismatch makes the robot reject every grant (ROUTE_GRAPH_MISMATCH).
+    /// When occupancy assets exist, runtime compile uses includeOccupancy=true (fail-closed strip of unsafe connectors)
+    /// so Check / Debug SVG / GetRouteGraph share one graphHash.
     /// </summary>
-    public const bool RuntimeIncludesOccupancy = false;
+    public const bool RuntimeIncludesOccupancy = true;
 
     public async Task<TrafficCompileBundle> CompileAsync(
         Guid mapVersionId,
@@ -98,6 +101,10 @@ public sealed class TrafficGraphCompileService(
             .Select(e => e.Code)
             .ToHashSet(StringComparer.Ordinal);
 
+        var endpointYaw = endpoints
+            .Where(e => e.IsEnabled)
+            .ToDictionary(e => e.Code, e => e.Yaw, StringComparer.Ordinal);
+
         var input = new TrafficCompileInput(
             map.Code,
             frame,
@@ -109,7 +116,8 @@ public sealed class TrafficGraphCompileService(
             footprint,
             occupancy,
             ServiceStopEndpointCodes: null,
-            RecoveryEndpointCodes: recoveryStops);
+            RecoveryEndpointCodes: recoveryStops,
+            EndpointYaw: endpointYaw);
 
         var hash = TrafficGraphCompiler.ComputeGraphHash(input);
         if (map.Status == MapStatus.PUBLISHED &&
@@ -124,7 +132,9 @@ public sealed class TrafficGraphCompileService(
                 map.Status);
         }
 
-        var compiled = TrafficGraphCompiler.Compile(input);
+        var compiled = TrafficGraphCompiler.Compile(
+            input,
+            maneuverOptions: maneuverOptions?.Value ?? TrafficManeuverOptions.Default);
         cache.SetPublished(mapVersionId, map.Status, compiled.Graph);
         return new TrafficCompileBundle(compiled, occupancy, zoneInputs, zoneMeta, map.Status);
     }

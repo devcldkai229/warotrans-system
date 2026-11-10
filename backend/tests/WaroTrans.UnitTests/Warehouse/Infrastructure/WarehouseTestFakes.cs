@@ -1,5 +1,6 @@
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
+using WaroTrans.Warehouse.Contracts;
 
 namespace WaroTrans.UnitTests.Warehouse.Infrastructure;
 
@@ -12,6 +13,17 @@ public sealed class FakeCurrentUser(
     public string? Username { get; set; } = username;
     public string? Role { get; set; } = role;
     public bool IsAuthenticated => true;
+}
+
+/// <summary>Containers listed in <see cref="Moving"/> count as being on an open Transport Request.</summary>
+public sealed class FakeContainerTransportLookup : IContainerTransportLookup
+{
+    public HashSet<Guid> Moving { get; } = [];
+
+    public Task<IReadOnlySet<Guid>> GetContainersInActiveTransportAsync(
+        IReadOnlyCollection<Guid> containerIds,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlySet<Guid>>(containerIds.Where(Moving.Contains).ToHashSet());
 }
 
 public sealed class FakeBusinessCodeGenerator(string containerCode = "CTN-20261006-000001") : IBusinessCodeGenerator
@@ -50,4 +62,10 @@ public sealed class FakeBusinessCodeGenerator(string containerCode = "CTN-202610
 
     public Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         Task.FromResult("JOB-20261006-000001");
+
+    public Task<string> NextInboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult("PN-20261006-000001");
+
+    public Task<string> NextOutboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult("PX-20261006-000001");
 }

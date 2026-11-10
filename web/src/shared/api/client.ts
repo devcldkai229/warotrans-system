@@ -48,6 +48,29 @@ export function getAccessToken(): string | null {
   return accessToken
 }
 
+/** Seconds until the in-memory access token expires (from its `exp` claim), or null when there is none. */
+export function accessTokenSecondsLeft(token: string | null = accessToken): number | null {
+  if (!token) return null
+  try {
+    const payload = token.split('.')[1]
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number }
+    return typeof json.exp === 'number' ? json.exp - Date.now() / 1000 : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A token that is still valid for at least `minSeconds`, refreshing the session first when needed.
+ * For callers that cannot retry on 401 themselves, e.g. the SignalR connection.
+ */
+export async function getFreshAccessToken(minSeconds = 30): Promise<string | null> {
+  const left = accessTokenSecondsLeft()
+  if (left !== null && left > minSeconds) return accessToken
+  const session = await refreshSession()
+  return session?.accessToken ?? null
+}
+
 /** Backend base URL, e.g. for the SignalR hub. */
 export function getApiUrl(): string {
   return API_URL

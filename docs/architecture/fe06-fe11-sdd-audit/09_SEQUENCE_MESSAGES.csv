@@ -1,0 +1,31 @@
+feature,scenario,step,from_participant,to_participant,message_or_method,input_type,result_type,condition,async_or_sync,evidence_path,implementation_status
+FE-06,SQ01,1,MqttRobotCommandPublisher,MQTT Broker,PublishAsync NAVIGATE_TO_POSE,RobotCommandMessage/NavigateToPosePayload,void,job or grant issued,async,backend/src/WaroTrans.BuildingBlocks/Mqtt/MqttRobotCommandPublisher.cs,IMPLEMENTED
+FE-06,SQ01,2,MQTT Broker,RobotGatewayNode,command topic message,JSON envelope,parsed CommandEnvelope,subscribed,async,ros2_ws/src/warotrans_fleet/warotrans_fleet/robot_gateway_node.py,IMPLEMENTED
+FE-06,SQ01,3,RobotGatewayNode,MoveCommandHandler,handle,CommandEnvelope+CommandSession,AckDecision,localized+nav ready+not busy,sync,ros2_ws/src/warotrans_fleet/warotrans_fleet/move_command_handler.py,IMPLEMENTED
+FE-06,SQ01,4,MoveCommandHandler,MQTT Broker,command_ack,RobotCommandAckMessage,void,accepted,async,command_contract builders,IMPLEMENTED
+FE-06,SQ01,5,MoveCommandHandler,Nav2ActionNavigator,send_goal,NavGoal+GoalCallbacks,void,legacy mode,async,nav2_navigator.py,IMPLEMENTED
+FE-06,SQ01,6,Nav2ActionNavigator,bt_navigator,NavigateToPose.Goal,PoseStamped,accepted/rejected,action server ready,async,nav2_msgs NavigateToPose,IMPLEMENTED
+FE-06,SQ01,7,bt_navigator,planner_server,ComputePathToPose,start+goal,Path,BT RateController,sync-in-BT,nav2_params + BT XML,EXTERNAL_FRAMEWORK
+FE-06,SQ01,8,bt_navigator,controller_server,FollowPath,Path,Twist stream,path valid,loop async,RPP FollowPath,EXTERNAL_FRAMEWORK
+FE-06,SQ01,9,collision_monitor,Esp32BridgeNode,/cmd_vel Twist,Twist,serial cmd,pipeline on,async,esp32_bridge_node.py,IMPLEMENTED
+FE-06,SQ01,10,Nav2ActionNavigator,MoveCommandHandler,on_result SUCCEEDED,NavResult,command_result SUCCEEDED,status succeeded,async,nav2_navigator.py,IMPLEMENTED
+FE-06,SQ02,1,LiDAR,/scan ObstacleLayer,LaserScan,costmap update,,sensor data,async,nav2 costmap params,EXTERNAL_FRAMEWORK
+FE-06,SQ02,2,controller_server,BT Recovery,FollowPath failure,abort,replan/clear,collision or stuck,async,BT resilient XML,CONFIGURATION-DEPENDENT
+FE-06,SQ02,3,BT,planner_server,ComputePathToPose retry,start+goal,Path,recovery,sync-in-BT,BT XML,IMPLEMENTED_CONFIG
+FE-06,SQ02,4,bt_navigator,MoveCommandHandler,on_result ABORT,NavResult,FAILED ERROR_NAVIGATION_FAILED,retries exhausted,async,move_command_handler,IMPLEMENTED
+FE-06,SQ03,1,Backend,RobotGatewayNode,CANCEL,CancelCommandPayload,ack,cancel issued,async,RobotCommandTypes.Cancel,IMPLEMENTED
+FE-06,SQ03,2,MoveCommandHandler,Nav2ActionNavigator,cancel_goal,GoalTicket,canceled,active goal,async,nav2_navigator.py,IMPLEMENTED
+FE-06,SQ03,3,LocalizationHysteresis,telemetry,LOST status,TF stale,telemetry only,legacy mid-run,async,localization_hysteresis.py,PARTIAL
+FE-11,SQ01,1,SemanticTrafficClient,MQTT Broker,traffic_plan,TrafficPlanProposeMessage,void,on /plan,async,semantic_traffic_client.py,IMPLEMENTED
+FE-11,SQ01,2,RobotMqttIngress,TrafficProgressIngress,HandlePlanProposeAsync,TrafficPlanProposeMessage,AcquireResult,Mode=Semantic,async/sync,TrafficProgressIngress.cs,IMPLEMENTED
+FE-11,SQ01,3,SegmentedTrafficCoordinator,TrafficState,AcquireSemanticPlan,SemanticPlanProposeRequest,AcquireResult Grant|Queue,actor mailbox,sync,TrafficState.cs,IMPLEMENTED
+FE-11,SQ01,4,TrafficAuthorityPublisher,MQTT Broker,EXTEND_AUTHORITY or NAVIGATE+Authority,AuthorityPayload,void,grant event,async,TrafficAuthorityPublisher.cs,IMPLEMENTED
+FE-11,SQ01,5,SemanticTrafficClient,CmdVelAuthorityGate,/traffic/authority_ok Bool,bool,GateDecision,grant valid+fresh,async,cmd_vel_authority_gate.py,IMPLEMENTED
+FE-11,SQ02,1,TrafficState,TrafficState,CanAcquire fail,resourceIds,Queue Capacity,overlap holders,sync,TrafficState.cs,IMPLEMENTED
+FE-11,SQ02,2,TrafficState,TrafficState,PromoteWaiters,freedResources,Grant next,after release,sync,TrafficState.cs,IMPLEMENTED
+FE-11,SQ02,3,SIM-01/SIM-02 Gazebo,—,dual goal complete,—,—,acceptance,runtime,docs/audits/.../DUAL_ROBOT_RESULTS.md,NOT_VERIFIED_PASS
+FE-11,SQ03,1,SemanticTrafficClient,TrafficState,AcquireSemanticPlan replan,new PlanRevision,Grant/reconcile,path changed,async,semantic_traffic_client + TrafficState,IMPLEMENTED
+FE-11,SQ04,1,ConnectivityMonitor,SegmentedTrafficCoordinator,MarkOfflineAsync,robotId,Quarantine OFFLINE,HB timeout,async,Fleet hosted services,IMPLEMENTED
+FE-11,SQ04,2,ProcessRobotHeartbeat,SegmentedTrafficCoordinator,MarkOnlineAsync,robotId,clear OFFLINE,fresh HB,async,ProcessRobotHeartbeatHandler,IMPLEMENTED
+FE-11,SQ05,1,Backend/Robot,SegmentedTrafficCoordinator,CancelRequestAsync/CompleteRouteAsync,robotId+reason,quarantine/clear auth,cancel or fail,async,ISegmentedTrafficCoordinator,IMPLEMENTED
+FE-11,SQ05,2,Robot,TrafficProgressIngress,ReportVerifiedExit via clearedResourceIds,TrafficProgressMessage,release if clear,Semantic,async,TrafficProgressIngress.cs,IMPLEMENTED

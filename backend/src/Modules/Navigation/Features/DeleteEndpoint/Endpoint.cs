@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
+using WaroTrans.BuildingBlocks.Abstractions;
 
 namespace WaroTrans.Navigation.Features.DeleteEndpoint;
 
@@ -16,6 +18,8 @@ public static class DeleteEndpointEndpoint
             await handler.HandleAsync(id, cancellationToken);
             return Results.NoContent();
         })
+        .RequirePermission(Permissions.MapWrite)
+        .Audited("map.endpoint_deleted", "ENDPOINT", "id")
         .WithName("DeleteEndpoint")
         .WithSummary("Delete an Endpoint from a draft map version")
         .WithDescription(

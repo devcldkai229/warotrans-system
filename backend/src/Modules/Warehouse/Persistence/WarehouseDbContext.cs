@@ -12,6 +12,8 @@ public sealed class WarehouseDbContext(DbContextOptions<WarehouseDbContext> opti
     public DbSet<StorageLocation> StorageLocations => Set<StorageLocation>();
     public DbSet<Container> Containers => Set<Container>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
+    public DbSet<StockVoucher> StockVouchers => Set<StockVoucher>();
+    public DbSet<StockVoucherLine> StockVoucherLines => Set<StockVoucherLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

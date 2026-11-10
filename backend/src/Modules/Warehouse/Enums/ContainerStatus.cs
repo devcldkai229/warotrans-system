@@ -9,5 +9,8 @@ public enum ContainerStatus
     STORED,
     HOLD,
     EMPTY,
-    OUT_OF_SERVICE
+    OUT_OF_SERVICE,
+
+    /// <summary>Left the warehouse on a CONFIRMED outbound StockVoucher; it holds no StorageLocation.</summary>
+    ISSUED
 }

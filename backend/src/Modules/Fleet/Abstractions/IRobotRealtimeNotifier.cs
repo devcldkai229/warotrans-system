@@ -18,11 +18,15 @@ public interface IRobotRealtimeNotifier
         double poseX,
         double poseY,
         double poseYaw,
-        decimal batteryPercent,
+        decimal? batteryPercent,
         NavigationStatus? navigationStatus,
         LocalizationStatus? localizationStatus,
         DateTimeOffset? lastTelemetryAt,
         CancellationToken cancellationToken = default,
         double? linearVelocity = null,
         double? angularVelocity = null);
+
+    /// <summary>RB-10: a new health snapshot of the robot. Default no-op.</summary>
+    Task NotifyHealthUpdatedAsync(Guid robotId, string robotCode, string overall, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

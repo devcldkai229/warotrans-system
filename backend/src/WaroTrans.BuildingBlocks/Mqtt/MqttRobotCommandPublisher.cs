@@ -15,7 +15,8 @@ namespace WaroTrans.BuildingBlocks.Mqtt;
 /// on one reconnecting client.
 /// </summary>
 public sealed class MqttRobotCommandPublisher
-    : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IMqttRobotInteractionPublisher, IAsyncDisposable
+    : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IMqttRobotInteractionPublisher, IMqttTrafficEpochPublisher,
+        IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -150,6 +151,72 @@ public sealed class MqttRobotCommandPublisher
                 message.ReasonCode,
                 message.JobStepId,
                 message.RobotCode);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task PublishEpochAsync(TrafficEpochMessage message, CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.TrafficEpoch(_options.Value.TopicPrefix);
+        var json = JsonSerializer.Serialize(message, JsonOptions);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            // Retained: a robot that (re)connects later still learns which epoch is in charge.
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .WithRetainFlag()
+                .Build();
+
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("Published MQTT traffic epoch {Epoch} coordinator={CoordinatorId}", message.Epoch, message.CoordinatorId);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task PublishPlanRejectAsync(
+        string robotCode,
+        long planRevision,
+        string? reason,
+        string? waitingReason,
+        string? blocker,
+        CancellationToken cancellationToken = default)
+    {
+        var topic = RobotMqttTopics.TrafficPlanReject(_options.Value.TopicPrefix, robotCode);
+        var json = JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            robotCode,
+            planRevision,
+            reason,
+            waitingReason,
+            blocker,
+            sentAt = DateTimeOffset.UtcNow
+        }, JsonOptions);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            var appMessage = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(json)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .Build();
+            await client.PublishAsync(appMessage, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Published traffic_plan_reject robot={RobotCode} rev={Rev} reason={Reason}",
+                robotCode, planRevision, reason);
         }
         finally
         {

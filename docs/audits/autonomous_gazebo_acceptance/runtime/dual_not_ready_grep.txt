@@ -1,0 +1,10 @@
+[lifecycle_manager-8] [INFO] [1793518567.232373815] [sim01.lifecycle_manager_localization]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-15] [INFO] [1793518569.306949850] [sim02.lifecycle_manager_localization]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-26] [INFO] [1793518595.181149190] [sim02.lifecycle_manager_costmap_filters]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-21] [INFO] [1793518596.025899234] [sim01.lifecycle_manager_costmap_filters]: [34m[1mManaged nodes are active[0m[0m
+[planner_server-36] [INFO] [1793518609.218025891] [sim02.planner_server]: Created global planner plugin GridBased of type warotrans_lane_planner::LaneAwareNavfn
+[planner_server-36] [INFO] [1793518609.229355766] [sim02.planner_server]: LaneAwareNavfn: loaded 7 lane segments from /mnt/e/programming/my_project/warotrans/ros2_ws/src/warotrans_simulation/maps/map_one_v001/lanes.json
+[lifecycle_manager-42] [INFO] [1793518612.572631012] [sim02.lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[planner_server-28] [INFO] [1793518619.035845937] [sim01.planner_server]: Created global planner plugin GridBased of type warotrans_lane_planner::LaneAwareNavfn
+[planner_server-28] [INFO] [1793518619.046384233] [sim01.planner_server]: LaneAwareNavfn: loaded 7 lane segments from /mnt/e/programming/my_project/warotrans/ros2_ws/src/warotrans_simulation/maps/map_one_v001/lanes.json
+[lifecycle_manager-34] [INFO] [1793518622.473606025] [sim01.lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m

@@ -30,7 +30,7 @@ import {
 } from './mapStyle'
 import { lineStringToPoints, polygonToPoints } from './geoJson'
 import { CHEVRON_PATH, laneGlyphs } from './laneGlyphs'
-import { SCENE_EDGES, SCENE_ENDPOINTS, SCENE_ZONES, pointInPolygon } from './scene'
+import { pointInPolygon } from './scene'
 
 /** A Robot as the map draws it: pose from fleet.robots, status for the colour. */
 export interface MapRobot {
@@ -149,9 +149,9 @@ const ZOOM_BUTTON =
 
 /** One map for every screen: an SVG square in metres plus an HTML overlay in the same square. */
 export function WarehouseMap({
-  zones = SCENE_ZONES,
-  edges = SCENE_EDGES,
-  endpoints = SCENE_ENDPOINTS,
+  zones = [],
+  edges = [],
+  endpoints = [],
   bounds = DEFAULT_MAP_BOUNDS,
   robots = [],
   layers = {},
@@ -319,7 +319,7 @@ export function WarehouseMap({
         >
           <defs>
             <pattern id="wmap-hatch" width="1" height="1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="1" stroke={MAP_RED} strokeOpacity={0.22} strokeWidth="0.3" />
+              <line x1="0" y1="0" x2="0" y2="1" stroke={ZONE_COLOR.KEEP_OUT} strokeOpacity={0.55} strokeWidth="0.35" />
             </pattern>
             <pattern id="wmap-dots" width="5" height="5" patternUnits="userSpaceOnUse">
               <circle cx="0" cy="0" r="0.09" fill={MAP_LINE} />
@@ -894,7 +894,7 @@ export function WarehouseMap({
         <div data-map-ui className={cx(CHROME, 'pointer-events-none bottom-3 left-3 rounded-full px-3 py-1 font-mono text-xs text-ink-2')}>
           {cursor && cursor.x >= bounds.minX && cursor.x <= bounds.maxX && cursor.y >= bounds.minY && cursor.y <= bounds.maxY
             ? `x ${cursor.x.toFixed(1)} m, y ${cursor.y.toFixed(1)} m`
-            : `${width} × ${height} m`}
+            : `${Number(width.toFixed(1))} × ${Number(height.toFixed(1))} m`}
         </div>
       ) : null}
     </div>

@@ -90,15 +90,13 @@ public class TrafficGraphCompilerTests
             Lane("E-E", EdgeDirection.BIDIRECTIONAL, (1.1, 0), (2, 0)),
             Lane("E-N", EdgeDirection.BIDIRECTIONAL, (1, 0.1), (1, 1))
         ];
-        // Occupancy mutex is SINGLE_OCCUPANCY; JUNCTION alone is connectivity only.
-        var zones = new[] { Zone("Z-J", ZoneType.SINGLE_OCCUPANCY, 0.85, -0.2, 1.15, 0.25) };
+        var zones = new[] { Zone("Z-J", ZoneType.JUNCTION, 0.85, -0.2, 1.15, 0.25) };
 
         var result = TrafficGraphCompiler.Compile(Input(edges, [Stop("EP-A", 0, 0), Stop("EP-B", 2, 0), Stop("EP-C", 1, 1)], zones));
 
         Assert.Contains(result.Graph.Resources, r => r.Kind == TrafficResourceKind.JunctionConflict && r.RelatedCodes.Contains("Z-J"));
         Assert.NotEmpty(result.Graph.Corridors);
         Assert.Contains(result.Graph.Edges, e => e.IsJunction || e.InCriticalCorridor);
-        // Occupancy capacity is owned by JunctionConflict — no duplicate CriticalCorridor for those edges.
         var junction = Assert.Single(result.Graph.Resources, r => r.Kind == TrafficResourceKind.JunctionConflict);
         Assert.DoesNotContain(result.Graph.Resources, r =>
             r.Kind == TrafficResourceKind.CriticalCorridor &&
@@ -106,7 +104,7 @@ public class TrafficGraphCompilerTests
     }
 
     [Fact]
-    public void Two_single_occupancy_zones_do_not_cross_include_edges()
+    public void Two_junction_zones_do_not_cross_include_edges()
     {
         RouteGraphEdgeInput[] edges =
         [
@@ -116,8 +114,8 @@ public class TrafficGraphCompilerTests
         ];
         var zones = new[]
         {
-            Zone("Z-J1", ZoneType.SINGLE_OCCUPANCY, -0.1, -0.2, 1.1, 0.2),
-            Zone("Z-J2", ZoneType.SINGLE_OCCUPANCY, 2.9, -0.2, 4.1, 0.2)
+            Zone("Z-J1", ZoneType.JUNCTION, -0.1, -0.2, 1.1, 0.2),
+            Zone("Z-J2", ZoneType.JUNCTION, 2.9, -0.2, 4.1, 0.2)
         };
 
         var result = TrafficGraphCompiler.Compile(Input(
@@ -161,7 +159,7 @@ public class TrafficGraphCompilerTests
     }
 
     [Fact]
-    public void Legacy_single_occupancy_junction_emits_warning()
+    public void Single_occupancy_alone_does_not_connect_or_emit_legacy_junction_warning()
     {
         RouteGraphEdgeInput[] edges =
         [
@@ -172,7 +170,40 @@ public class TrafficGraphCompilerTests
 
         var result = TrafficGraphCompiler.Compile(Input(edges, [Stop("EP-A", 0, 0), Stop("EP-B", 2, 0)], zones));
 
-        Assert.Contains(result.Issues, i => i.Code == TrafficGraphCompiler.LegacyJunctionZone && i.RelatedCodes.Contains("Z-LEG"));
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsJunction);
+        Assert.DoesNotContain(result.Issues, i => i.Code == TrafficGraphCompiler.LegacyJunctionZone);
+        Assert.DoesNotContain(result.Graph.Resources, r => r.Id == "junction:Z-LEG");
+    }
+
+    [Fact]
+    public void Off_lane_endpoint_spur_creates_bay_resource()
+    {
+        var result = TrafficGraphCompiler.Compile(Input(
+            [Lane("E-1", EdgeDirection.BIDIRECTIONAL, (0, 0), (4, 0))],
+            [Stop("EP-A", 0, 0), Stop("EP-B", 4, 0), Stop("EP-DOCK", 2, 1.0)]));
+
+        Assert.Contains(result.Graph.Edges, e => e.IsConnector);
+        Assert.Contains(result.Graph.Resources, r => r.Id == "bay:EP-DOCK" && r.Kind == TrafficResourceKind.StationBay);
+        Assert.DoesNotContain(result.Issues, i => i.Code is RouteGraphBuilder.EndpointTooFar or TrafficGraphCompiler.ServiceAccessBlocked);
+    }
+
+    [Fact]
+    public void Off_lane_spur_through_occupied_cells_is_stripped_as_service_access_blocked()
+    {
+        // Free grid; vertical wall on the spur centreline x≈1.5 (col 15).
+        var pgm = BuildPgm(30, 30, fill: 254);
+        PaintColumn(pgm, width: 30, height: 30, col: 15, value: 0);
+        var grid = OccupancyGrid.Load(pgm, 0.1, 0, 0, negate: false, 0.65, 0.25);
+
+        var result = TrafficGraphCompiler.Compile(Input(
+            [Lane("E-1", EdgeDirection.BIDIRECTIONAL, (0.5, 0.5), (2.5, 0.5))],
+            [Stop("EP-A", 0.5, 0.5), Stop("EP-B", 2.5, 0.5), Stop("EP-DOCK", 1.5, 1.5)],
+            occupancy: grid));
+
+        Assert.Contains(result.Issues, i =>
+            i.Code == TrafficGraphCompiler.ServiceAccessBlocked && i.RelatedCodes.Contains("EP-DOCK"));
+        Assert.DoesNotContain(result.Graph.Edges, e => e.IsConnector);
+        Assert.DoesNotContain(result.Graph.Resources, r => r.Id == "bay:EP-DOCK");
     }
 
     [Fact]
@@ -261,6 +292,15 @@ public class TrafficGraphCompilerTests
         // Skip header to pixel payload.
         var offset = IndexOfPayload(pgm);
         for (var row = 0; row < height; row++)
+        {
+            pgm[offset + row * width + col] = value;
+        }
+    }
+
+    private static void PaintRow(byte[] pgm, int width, int height, int row, byte value)
+    {
+        var offset = IndexOfPayload(pgm);
+        for (var col = 0; col < width; col++)
         {
             pgm[offset + row * width + col] = value;
         }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.BuildingBlocks.Options;
 using WaroTrans.Fleet.Abstractions;
 using WaroTrans.Fleet.Enums;
@@ -17,8 +18,12 @@ namespace WaroTrans.Fleet.Services;
 public sealed class RobotConnectivityMonitorHostedService(
     IServiceScopeFactory scopeFactory,
     IOptions<MqttOptions> mqttOptions,
+    RobotIngressGate ingressGate,
     ILogger<RobotConnectivityMonitorHostedService> logger) : BackgroundService
 {
+    private DateTimeOffset _activeSince = DateTimeOffset.UtcNow;
+    private bool _wasActive = true;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -51,6 +56,25 @@ public sealed class RobotConnectivityMonitorHostedService(
     {
         var timeout = TimeSpan.FromSeconds(Math.Max(1, mqttOptions.Value.HeartbeatTimeoutSeconds));
         var cutoff = DateTimeOffset.UtcNow - timeout;
+        if (!ingressGate.IsActive)
+        {
+            _wasActive = false;
+            return; // standby: this host sees no heartbeats, so it must not judge them
+        }
+
+        if (!_wasActive)
+        {
+            _wasActive = true;
+            _activeSince = DateTimeOffset.UtcNow;
+        }
+
+        if (DateTimeOffset.UtcNow - _activeSince < 3 * timeout)
+        {
+            // Right after start-up / taking over every stored heartbeat looks old only because no host was listening,
+            // and the first uplink burst is still being worked off. Judging them now marked live robots OFFLINE and
+            // aborted their NAVIGATE on every backend restart.
+            return;
+        }
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
@@ -91,6 +115,7 @@ public sealed class RobotConnectivityMonitorHostedService(
                 .ToListAsync(cancellationToken);
 
             var abortedNavigate = false;
+            var segmented = scope.ServiceProvider.GetService<ISegmentedTrafficCoordinator>();
             foreach (var command in inFlight)
             {
                 if (!command.TryAbortOffline(utcNow))
@@ -101,6 +126,13 @@ public sealed class RobotConnectivityMonitorHostedService(
                 if (command.Type == RobotCommandType.NAVIGATE_TO_POSE)
                 {
                     abortedNavigate = true;
+                    // The NAVIGATE no longer exists for the backend: its traffic authority must not outlive it (the
+                    // robot would resume and keep renewing it after reconnecting). Revoked here, occupancy kept.
+                    if (segmented is not null)
+                    {
+                        await segmented.CompleteRouteAsync(
+                            robot.Id, false, "ROBOT_OFFLINE", null, cancellationToken, command.Id);
+                    }
                 }
 
                 if (command.JobAssignmentId is { } assignmentId)
@@ -139,7 +171,6 @@ public sealed class RobotConnectivityMonitorHostedService(
             // Segmented coordinator quarantines (no auto-release on heartbeat loss).
             var traffic = scope.ServiceProvider.GetRequiredService<ITrafficCoordinator>();
             traffic.ReleaseAllForOfflineRobot(robot.Id);
-            var segmented = scope.ServiceProvider.GetService<ISegmentedTrafficCoordinator>();
             if (segmented is not null)
             {
                 await segmented.MarkOfflineAsync(robot.Id, cancellationToken);

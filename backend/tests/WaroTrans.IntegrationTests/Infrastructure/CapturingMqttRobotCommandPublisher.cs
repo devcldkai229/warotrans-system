@@ -5,8 +5,25 @@ using WaroTrans.BuildingBlocks.Mqtt.Messages;
 namespace WaroTrans.IntegrationTests.Infrastructure;
 
 public sealed class CapturingMqttRobotCommandPublisher
-    : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IMqttRobotInteractionPublisher
+    : IMqttRobotCommandPublisher, IMqttRobotTeleopPublisher, IMqttRobotInteractionPublisher, IMqttTrafficEpochPublisher
 {
+    public ConcurrentQueue<TrafficEpochMessage> PublishedEpochs { get; } = new();
+
+    public Task PublishPlanRejectAsync(
+        string robotCode,
+        long planRevision,
+        string? reason,
+        string? waitingReason,
+        string? blocker,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task PublishEpochAsync(TrafficEpochMessage message, CancellationToken cancellationToken = default)
+    {
+        PublishedEpochs.Enqueue(message);
+        return Task.CompletedTask;
+    }
+
     public ConcurrentQueue<RobotCommandMessage> Published { get; } = new();
     public ConcurrentQueue<RobotTeleopMessage> PublishedTeleop { get; } = new();
     public ConcurrentQueue<RobotInteractionRequestMessage> PublishedInteractionRequests { get; } = new();

@@ -13,10 +13,10 @@ concurrency:
 
 env:
   ASPNETCORE_ENVIRONMENT: Development
-  ConnectionStrings__PostgreSQL: Host=localhost;Port=5432;Database=warotrans;Username=warotrans;Password=warotrans
+  ConnectionStrings__PostgreSQL: Host=localhost;Port=5432;Database=warotrans_test;Username=warotrans;Password=warotrans
   ConnectionStrings__MongoDB: mongodb://warotrans:warotrans@localhost:27017/?authSource=admin
   Mongo__ConnectionString: mongodb://warotrans:warotrans@localhost:27017/?authSource=admin
-  Mongo__DatabaseName: warotrans_operations
+  Mongo__DatabaseName: warotrans_operations_test
 
 jobs:
   release-gate:
@@ -26,22 +26,23 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_DB: warotrans
+          POSTGRES_DB: warotrans_test
           POSTGRES_USER: warotrans
           POSTGRES_PASSWORD: warotrans
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U warotrans -d warotrans"
+          --health-cmd "pg_isready -U warotrans -d warotrans_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
       mongodb:
-        image: mongo:8
+        # MongoDB 8.x refuses to start on the runner's Linux kernel (6.19+): SERVER-121912.
+        image: mongo:7
         env:
           MONGO_INITDB_ROOT_USERNAME: warotrans
           MONGO_INITDB_ROOT_PASSWORD: warotrans
-          MONGO_INITDB_DATABASE: warotrans_operations
+          MONGO_INITDB_DATABASE: warotrans_operations_test
         ports:
           - 27017:27017
         options: >-

@@ -10,25 +10,31 @@ using WaroTrans.WorkflowExecution.Persistence;
 namespace WaroTrans.WorkflowExecution.IntegrationEventHandlers;
 
 /// <summary>
-/// When a robot comes back online, re-arm a WAITING PICKUP/DROPOFF step on its active Job
-/// so a Pi restart does not leave the button permanently disarmed.
+/// When a robot comes back online or its gateway restarted, re-arm a WAITING PICKUP/DROPOFF step on its active Job
+/// so a Pi or gateway restart does not leave the button permanently disarmed.
 /// </summary>
 public sealed class RobotConnectivityRearmHandler(
     WorkflowExecutionDbContext db,
     JobExecutionEngine engine,
     ILogger<RobotConnectivityRearmHandler> logger)
-    : IIntegrationEventHandler<RobotConnectivityChanged>
+    : IIntegrationEventHandler<RobotConnectivityChanged>, IIntegrationEventHandler<RobotGatewayRestarted>
 {
     private static readonly JobStatus[] Active =
         [JobStatus.ASSIGNED, JobStatus.RUNNING, JobStatus.PAUSED, JobStatus.REASSIGNING, JobStatus.RECOVERY_REQUIRED];
 
     public async Task HandleAsync(RobotConnectivityChanged e, CancellationToken cancellationToken = default)
     {
-        if (!e.IsOnline)
+        if (e.IsOnline)
         {
-            return;
+            await RearmAsync(e.RobotId, e.RobotCode, cancellationToken);
         }
+    }
 
+    public Task HandleAsync(RobotGatewayRestarted e, CancellationToken cancellationToken = default) =>
+        RearmAsync(e.RobotId, e.RobotCode, cancellationToken);
+
+    private async Task RearmAsync(Guid robotId, string robotCode, CancellationToken cancellationToken)
+    {
         var activeJobs = await db.Jobs
             .AsNoTracking()
             .Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)
@@ -39,7 +45,7 @@ public sealed class RobotConnectivityRearmHandler(
         var job = activeJobs.FirstOrDefault(j =>
             j.ContextValues.TryGetValue(JobExecutionEngine.AssignedRobotKey, out var rid)
             && rid.ValueKind == System.Text.Json.JsonValueKind.String
-            && rid.GetGuid() == e.RobotId);
+            && rid.GetGuid() == robotId);
 
         if (job is null || job.Status != JobStatus.RUNNING)
         {
@@ -88,7 +94,7 @@ public sealed class RobotConnectivityRearmHandler(
 
         logger.LogInformation(
             "Re-arming HUMAN_INTERACTION on robot reconnect robot={RobotCode} job={JobNo} step={StepId}",
-            e.RobotCode,
+            robotCode,
             tracked.JobNo,
             waiting.Id);
 

@@ -1,0 +1,1 @@
+[stage1_open_grant_node.py-9] [WARN] [1793505309.133637354] [stage1_open_grant]: STAGE1_OPEN_GRANT active: publishing authority_ok=True on /traffic/authority_ok at 20.0 Hz (wall-clock; gate max_age is monotonic — not production traffic)

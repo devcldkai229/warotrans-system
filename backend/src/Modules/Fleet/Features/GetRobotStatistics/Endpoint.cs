@@ -21,7 +21,7 @@ public static class GetRobotStatisticsEndpoint
             var range = StatisticsRange.Resolve(from, to, utcOffsetMinutes, clock.GetUtcNow());
             return Results.Ok(await handler.HandleAsync(range, cancellationToken));
         })
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+        .RequirePermission(Permissions.StatisticsRead)
         .WithName("GetRobotStatistics")
         .WithSummary("Fleet statistics for the admin dashboard")
         .WithDescription(

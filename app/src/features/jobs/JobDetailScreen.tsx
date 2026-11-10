@@ -216,13 +216,12 @@ export function JobDetailScreen() {
 
   const handleIssueSubmit = async (cat: IncidentCategory, notes: string) => {
     try {
-      if (!job.activeTaskId) throw new Error('This job has no active human task.');
-      await reportTaskProblem(job.activeTaskId, {
+      const issue = await reportTaskProblem(job.activeTaskId, {
         reason: cat,
         note: notes.trim() || `Staff reported ${cat} on job ${job.jobNo}`,
-      }, job.activeStepId);
+      }, job.activeStepId, { jobId: job.id });
       setIsIssueOpen(false);
-      toast.success('Incident recorded. Robot state has not been changed.');
+      toast.success(`Issue ${issue.code} recorded. Robot state has not been changed.`);
     } catch (error: any) { toast.error(error.message || 'Incident could not be recorded.'); throw error; }
   };
 

@@ -17,9 +17,9 @@ public static class MarkNotificationReadEndpoint
                 await handler.HandleAsync(id, cancellationToken);
                 return Results.NoContent();
             })
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequirePermission(Permissions.NotificationRead)
             .WithName("MarkNotificationRead")
-            .WithSummary("Mark one notification as read (for every admin)");
+            .WithSummary("Mark one notification as read for the signed-in person only");
 
         return group;
     }

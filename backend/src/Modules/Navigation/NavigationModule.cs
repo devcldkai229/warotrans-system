@@ -14,6 +14,7 @@ using WaroTrans.Navigation.Features.CreateMapVersion;
 using WaroTrans.Navigation.Features.CreateZone;
 using WaroTrans.Navigation.Features.DeleteEdge;
 using WaroTrans.Navigation.Features.DeleteEndpoint;
+using WaroTrans.Navigation.Features.DeleteRouteGraphCache;
 using WaroTrans.Navigation.Features.DeleteZone;
 using WaroTrans.Navigation.Features.GetActiveMapVersion;
 using WaroTrans.Navigation.Features.GetEdge;
@@ -48,6 +49,8 @@ public static class NavigationModule
         // Footprint defaults match Nav2 0.32×0.26 + 0.02 padding (see calibration / geometry.yaml).
         services.Configure<TrafficFootprintOptions>(
             configuration.GetSection(TrafficFootprintOptions.SectionName));
+        services.Configure<TrafficManeuverOptions>(
+            configuration.GetSection(TrafficManeuverOptions.SectionName));
 
         services.AddValidatorsFromAssembly(typeof(NavigationModule).Assembly);
 
@@ -60,6 +63,7 @@ public static class NavigationModule
         services.AddScoped<GetRouteGraphHandler>();
         services.AddScoped<GetTrafficGraphValidationHandler>();
         services.AddScoped<GetTrafficGraphDebugSvgHandler>();
+        services.AddScoped<DeleteRouteGraphCacheHandler>();
         services.AddScoped<GetActiveMapVersionHandler>();
         services.AddScoped<PublishMapVersionHandler>();
         services.AddScoped<ArchiveMapVersionHandler>();
@@ -77,6 +81,7 @@ public static class NavigationModule
         services.AddScoped<DeleteZoneHandler>();
         services.AddScoped<ImportMapVersionHandler>();
         services.AddScoped<CloneMapVersionHandler>();
+        services.AddScoped<Features.EndpointGroups.EndpointGroupService>();
         RegisterMapAssetStore(services, configuration);
 
         services.AddScoped<INavigationModule, NavigationModuleApi>();
@@ -111,6 +116,7 @@ public static class NavigationModule
         GetRouteGraphEndpoint.Map(group);
         GetTrafficGraphValidationEndpoint.Map(group);
         GetTrafficGraphDebugSvgEndpoint.Map(group);
+        DeleteRouteGraphCacheEndpoint.Map(group);
         GetActiveMapVersionEndpoint.Map(group);
         PublishMapVersionEndpoint.Map(group);
         ArchiveMapVersionEndpoint.Map(group);
@@ -124,6 +130,7 @@ public static class NavigationModule
         GetEdgeEndpoint.Map(group);
         UpdateEdgeEndpoint.Map(group);
         DeleteEdgeEndpoint.Map(group);
+        Features.EndpointGroups.EndpointGroupEndpoints.Map(group);
         CreateZoneEndpoint.Map(group);
         GetZoneEndpoint.Map(group);
         UpdateZoneEndpoint.Map(group);

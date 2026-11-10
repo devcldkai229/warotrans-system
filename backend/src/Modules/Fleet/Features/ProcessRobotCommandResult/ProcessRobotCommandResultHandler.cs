@@ -36,6 +36,18 @@ public sealed class ProcessRobotCommandResultHandler(
             return;
         }
 
+        // The command is found by id alone: only the robot it was sent to may finish it.
+        var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == command.RobotId, cancellationToken);
+        if (robot is not null && !string.Equals(robot.Code, message.RobotCode, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "Dropped command_result {CommandId} from robot {Sender}: the command belongs to {Owner}",
+                message.CommandId,
+                message.RobotCode,
+                robot.Code);
+            return;
+        }
+
         // CANCEL command result is optional; primary correlation is on the navigate commandId.
         var utcNow = DateTimeOffset.UtcNow;
         if (!command.TryApplyResult(message.Outcome, message.ErrorCode, utcNow))
@@ -46,8 +58,6 @@ public sealed class ProcessRobotCommandResultHandler(
                 command.Status);
             return;
         }
-
-        var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == command.RobotId, cancellationToken);
         JobAssignment? assignment = null;
         if (command.JobAssignmentId is { } assignmentId)
         {
@@ -56,6 +66,9 @@ public sealed class ProcessRobotCommandResultHandler(
 
         if (command.Type == RobotCommandType.NAVIGATE_TO_POSE)
         {
+            logger.LogInformation(
+                "NAVIGATE {CommandId} robot {RobotCode} outcome {Outcome} error {ErrorCode} detail {Detail}",
+                command.Id, message.RobotCode, message.Outcome, message.ErrorCode, message.Result?.GetRawText());
             robot?.MarkAvailable(utcNow);
 
             var endReason = message.Outcome switch
@@ -107,15 +120,23 @@ public sealed class ProcessRobotCommandResultHandler(
                 shadowMoverGuard?.Exit(robot.CurrentMapVersionId, robot.Id);
             }
 
-            if (trafficOptions?.Value.Mode == TrafficCoordinatorMode.Active && segmentedTraffic is not null)
+            if (trafficOptions?.Value.Mode is TrafficCoordinatorMode.Active or TrafficCoordinatorMode.Semantic
+                && segmentedTraffic is not null)
             {
-                // Active route finished: clear authority (stops RENEW) or quarantine on failure (fail-closed).
+                // Route finished: clear authority (stops RENEW) or quarantine on failure (fail-closed). Semantic grants
+                // are tied to this NAVIGATE; the pose is passed only when fresh and localized (else nothing is released).
+                var maxAge = TimeSpan.FromSeconds(Math.Max(0.5, trafficOptions.Value.PoseMaxAgeSec));
+                var poseFresh = robot is { LocalizationStatus: LocalizationStatus.LOCALIZED, LastTelemetryAt: { } at }
+                                && utcNow - at <= maxAge;
                 await segmentedTraffic.CompleteRouteAsync(
                     command.RobotId,
                     message.Outcome == RobotCommandOutcomes.Succeeded,
                     message.ErrorCode ?? message.Outcome,
                     NavigateAuthorityId(command.PayloadJson),
-                    cancellationToken);
+                    cancellationToken,
+                    command.Id,
+                    poseFresh ? robot!.PoseX : null,
+                    poseFresh ? robot!.PoseY : null);
             }
         }
         else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } targetCommandId)

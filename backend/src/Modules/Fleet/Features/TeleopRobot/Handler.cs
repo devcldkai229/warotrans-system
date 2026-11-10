@@ -15,6 +15,7 @@ namespace WaroTrans.Fleet.Features.TeleopRobot;
 public sealed class TeleopRobotHandler(
     FleetDbContext db,
     IMqttRobotTeleopPublisher publisher,
+    WaroTrans.BuildingBlocks.Abstractions.ICurrentUser currentUser,
     TimeProvider timeProvider)
 {
     /// <summary>Backend cap, above any robot's own limit; the gateway clamps to the robot's real limits.</summary>
@@ -30,6 +31,17 @@ public sealed class TeleopRobotHandler(
             ?? throw new NotFoundException($"Robot '{robotId}' was not found.", "robot_not_found");
 
         var (linear, angular) = Evaluate(robot, request);
+
+        // RB-04: only the holder of the manual-drive lease moves the robot. A stop always goes through.
+        if ((linear != 0 || angular != 0)
+            && (!robot.HasActiveManualLease(timeProvider.GetUtcNow()) || robot.ManualLeaseHolderId != currentUser.AccountId))
+        {
+            throw new ConflictException(
+                robot.HasActiveManualLease(timeProvider.GetUtcNow())
+                    ? $"{robot.ManualLeaseHolderName} holds the manual-drive lease of {robot.Code}."
+                    : $"Take the manual-drive lease of {robot.Code} first.",
+                "manual_lease_required");
+        }
 
         await publisher.PublishAsync(
             new RobotTeleopMessage
@@ -70,6 +82,11 @@ public sealed class TeleopRobotHandler(
             throw new DomainValidationException(
                 "Robot is executing a navigate command. Cancel it before driving manually.",
                 "robot_busy");
+        }
+
+        if (robot.MotionHeld)
+        {
+            throw new DomainValidationException("Robot holds motion after a STOP. Resume it first.", "robot_motion_held");
         }
 
         return (linear, angular);

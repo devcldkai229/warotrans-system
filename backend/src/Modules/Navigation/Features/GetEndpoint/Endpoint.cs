@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Navigation.Features.GetEndpoint;
 
@@ -16,6 +17,7 @@ public static class GetEndpointEndpoint
             var response = await handler.GetByMapVersionIdAsync(mapVersionId, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetMapVersionEndpoints")
         .WithSummary("Get all Endpoints of a map version")
         .WithDescription("Retrieves every Endpoint placed on the specified MapVersion, ordered by Code.");
@@ -28,6 +30,7 @@ public static class GetEndpointEndpoint
             var response = await handler.GetByIdAsync(id, cancellationToken);
             return Results.Ok(response);
         })
+        .RequirePermission(Permissions.MapRead)
         .WithName("GetEndpointById")
         .WithSummary("Get Endpoint by ID")
         .WithDescription("Retrieves details of a specific navigation Endpoint by its ID.");

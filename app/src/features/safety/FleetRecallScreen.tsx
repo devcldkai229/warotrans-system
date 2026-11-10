@@ -38,6 +38,7 @@ import { Text } from '../../shared/ui/Text';
 import { StatusPill } from '../../shared/ui/StatusPill';
 import { useRealtime } from '../../shared/realtime';
 import { cancelRobotCommand, listRobots, RobotDto } from '../../shared/api';
+import { formatBattery } from '../../shared/formatBattery';
 
 interface RobotUiItem extends Omit<RobotDto, 'status'> {
   status: string;
@@ -353,8 +354,8 @@ export function FleetRecallScreen() {
                         <Battery size={13} color={colors.textSecondary} />
                         <Text variant="caption" color={colors.textSecondary}>Battery</Text>
                       </View>
-                      <Text style={[styles.metricValue, robot.batteryPercent < 20 && styles.batteryLow]}>
-                        {Math.round(robot.batteryPercent)}%
+                      <Text style={[styles.metricValue, robot.batteryPercent !== null && robot.batteryPercent < 20 && styles.batteryLow]}>
+                        {formatBattery(robot.batteryPercent)}
                       </Text>
                     </View>
 

@@ -1,22 +1,32 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { refreshSession, setAccessToken, setSessionExpiredHandler } from '@/shared/api/client'
-import type { Account } from '@/shared/api/contracts'
-import { login, logout } from './api'
+import type { Account, Capabilities, Session } from '@/shared/api/contracts'
+import { hasPermission, mayUseConsole, PERMISSIONS, type Permission } from '@/shared/auth/permissions'
+import { changeOwnPassword, getCapabilities, login, logout } from './api'
 import { AuthContext, ConsoleAccessError, type AuthStatus, type AuthValue } from './authContext'
 import { MOCK_ACCOUNT } from './mock'
 
 // VITE_MOCK_AUTO_LOGIN=true skips the login screen so the mock-data screens can be built without a running backend.
 const MOCK_AUTO_LOGIN = import.meta.env.VITE_MOCK_AUTO_LOGIN === 'true'
 
+const MOCK_CAPABILITIES: Capabilities = {
+  accountId: MOCK_ACCOUNT.id,
+  role: 'ADMIN',
+  mustChangePassword: false,
+  permissions: Object.values(PERMISSIONS),
+  robotScope: { allRobots: true, robotIds: [] },
+}
+
 interface AuthState {
   status: AuthStatus
   account: Account | null
+  capabilities: Capabilities | null
 }
 
-const ANONYMOUS: AuthState = { status: 'anonymous', account: null }
+const ANONYMOUS: AuthState = { status: 'anonymous', account: null, capabilities: null }
 
-/** Ends a session that belongs to a non-Admin account. UX only: the API enforces roles on every request. */
-async function rejectNonAdmin(): Promise<void> {
+/** Ends a session that may not use the console. UX only: the API enforces permissions on every request. */
+async function rejectSession(): Promise<void> {
   try {
     await logout()
   } finally {
@@ -24,9 +34,25 @@ async function rejectNonAdmin(): Promise<void> {
   }
 }
 
+/**
+ * Loads the capabilities of a fresh session. A temporary password is always let through (to the change-password
+ * screen); otherwise the account needs console.access.
+ */
+async function admit(session: Session): Promise<AuthState> {
+  setAccessToken(session.accessToken)
+  const capabilities = await getCapabilities()
+  if (!capabilities.mustChangePassword && !mayUseConsole(capabilities)) {
+    await rejectSession()
+    throw new ConsoleAccessError()
+  }
+  return { status: 'authenticated', account: session.account, capabilities }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(
-    MOCK_AUTO_LOGIN ? { status: 'authenticated', account: MOCK_ACCOUNT } : { status: 'loading', account: null },
+    MOCK_AUTO_LOGIN
+      ? { status: 'authenticated', account: MOCK_ACCOUNT, capabilities: MOCK_CAPABILITIES }
+      : { status: 'loading', account: null, capabilities: null },
   )
 
   // Restore the session after a page load: the access token is memory-only, the refresh cookie survives.
@@ -35,17 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     refreshSession()
-      .then(async (session) => {
-        if (session && session.account.role !== 'ADMIN') {
-          await rejectNonAdmin()
-          return null
-        }
-        return session
-      })
-      .catch(() => null)
-      .then((session) => {
-        if (cancelled) return
-        setState(session ? { status: 'authenticated', account: session.account } : ANONYMOUS)
+      .then((session) => (session ? admit(session) : ANONYMOUS))
+      .catch(() => ANONYMOUS)
+      .then((next) => {
+        if (!cancelled) setState(next)
       })
 
     return () => {
@@ -60,12 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (username: string, password: string) => {
     const session = await login(username, password)
-    if (session.account.role !== 'ADMIN') {
-      await rejectNonAdmin()
-      throw new ConsoleAccessError()
-    }
-    setAccessToken(session.accessToken)
-    setState({ status: 'authenticated', account: session.account })
+    setState(await admit(session))
   }, [])
 
   const signOut = useCallback(async () => {
@@ -79,7 +93,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const value = useMemo<AuthValue>(() => ({ ...state, signIn, signOut }), [state, signIn, signOut])
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const session = await changeOwnPassword(currentPassword, newPassword)
+    // The new token no longer carries the "must change password" mark; capabilities now list real permissions.
+    setState(await admit(session))
+  }, [])
+
+  const can = useCallback((permission: Permission) => hasPermission(state.capabilities, permission), [state.capabilities])
+
+  const value = useMemo<AuthValue>(
+    () => ({ ...state, can, signIn, signOut, changePassword }),
+    [state, can, signIn, signOut, changePassword],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

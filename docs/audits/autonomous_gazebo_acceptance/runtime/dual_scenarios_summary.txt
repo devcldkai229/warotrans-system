@@ -1,0 +1,6 @@
+TF_WARM sim01=(-1.7979999999999927, -0.6750000000000222) sim02=(-1.4339999999998851, -0.6790000000000556)
+{'scenario': 'independent_paths', 'robot': 'SIM-01', 'goal': 'EP-WAIT-POINT', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '-1.798,-0.675', 'end_xy': '-1.168,-0.966', 'goal_error_m': '3.046'}
+{'scenario': 'independent_paths', 'robot': 'SIM-02', 'goal': 'EP-INBOUND', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '-1.434,-0.679', 'end_xy': '-1.011,-0.661', 'goal_error_m': '3.531'}
+{'scenario': 'sim01_to_outbound', 'robot': 'SIM-01', 'goal': 'EP-OUTBOUND', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '-1.168,-0.966', 'end_xy': '-1.196,-0.984', 'goal_error_m': '2.989'}
+{'scenario': 'sim02_to_outbound_area', 'robot': 'SIM-02', 'goal': 'EP-WAIT-POINT', 'status': 'TIMEOUT', 'error_code': -1, 'start_xy': '-1.011,-0.661', 'end_xy': '-1.011,-0.661', 'goal_error_m': '2.744'}
+{"legs": 4, "pass": 0, "csv": "/mnt/e/programming/my_project/warotrans-system/docs/audits/autonomous_gazebo_acceptance/DUAL_MOTION_RESULTS.csv"}

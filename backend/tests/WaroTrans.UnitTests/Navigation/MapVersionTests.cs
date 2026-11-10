@@ -42,6 +42,17 @@ public class MapVersionTests
             IReadOnlyCollection<Guid> storageLocationIds,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<StorageLocationSnapshot>>([]);
+
+        public Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsByEndpointsAsync(
+            Guid warehouseId,
+            IReadOnlyCollection<Guid> endpointIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<StorageLocationSnapshot>>([]);
+
+        public Task<IReadOnlyList<ContainerVoucherSnapshot>> GetConfirmedVoucherLinesAsync(
+            IReadOnlyCollection<Guid> containerIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ContainerVoucherSnapshot>>([]);
     }
 
     private sealed class FakeCodeGenerator : IBusinessCodeGenerator
@@ -59,6 +70,8 @@ public class MapVersionTests
         public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> NextInboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> NextOutboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private static NavigationDbContext CreateDbContext()

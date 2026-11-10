@@ -45,6 +45,27 @@ public sealed class RobotCommand
         };
     }
 
+    /// <summary>STOP / RESUME / SYSTEM_ACTION: robot-level commands, not tied to a job step.</summary>
+    public static RobotCommand CreateControl(
+        Guid robotId,
+        Guid commandId,
+        RobotCommandType type,
+        string payloadJson,
+        DateTimeOffset utcNow,
+        Guid? jobAssignmentId = null)
+    {
+        return new RobotCommand
+        {
+            Id = commandId,
+            RobotId = robotId,
+            JobAssignmentId = jobAssignmentId,
+            Type = type,
+            Status = RobotCommandStatus.SENT,
+            PayloadJson = payloadJson,
+            IssuedAt = utcNow
+        };
+    }
+
     public static RobotCommand CreateCancel(
         Guid robotId,
         Guid commandId,
@@ -162,6 +183,25 @@ public sealed class RobotCommand
         Status = RobotCommandStatus.TIMEOUT;
         CompletedAt = utcNow;
         ErrorCode = "ACK_TIMEOUT";
+        return true;
+    }
+
+    /// <summary>ACKED/RUNNING NAVIGATE with no RESULT within the watchdog window.</summary>
+    public bool TryMarkResultTimeout(DateTimeOffset utcNow)
+    {
+        if (IsAuthorityControl || Type == RobotCommandType.CANCEL)
+        {
+            return false;
+        }
+
+        if (Status is not (RobotCommandStatus.ACKED or RobotCommandStatus.RUNNING))
+        {
+            return false;
+        }
+
+        Status = RobotCommandStatus.TIMEOUT;
+        CompletedAt = utcNow;
+        ErrorCode = "RESULT_TIMEOUT";
         return true;
     }
 

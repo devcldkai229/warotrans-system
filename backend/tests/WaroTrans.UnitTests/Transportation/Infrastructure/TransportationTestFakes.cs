@@ -23,6 +23,7 @@ public sealed class FakeWarehouseModule : IWarehouseModule
     public Dictionary<Guid, WarehouseSnapshot> Warehouses { get; } = [];
     public Dictionary<Guid, ContainerSnapshot> Containers { get; } = [];
     public Dictionary<Guid, StorageLocationSnapshot> StorageLocations { get; } = [];
+    public List<ContainerVoucherSnapshot> ConfirmedVoucherLines { get; } = [];
 
     public Task<WarehouseSnapshot?> GetWarehouseAsync(Guid warehouseId, CancellationToken cancellationToken = default) =>
         Task.FromResult(Warehouses.GetValueOrDefault(warehouseId));
@@ -38,6 +39,19 @@ public sealed class FakeWarehouseModule : IWarehouseModule
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<StorageLocationSnapshot>>(
             storageLocationIds.Where(StorageLocations.ContainsKey).Select(id => StorageLocations[id]).ToList());
+
+    public Task<IReadOnlyList<StorageLocationSnapshot>> GetStorageLocationsByEndpointsAsync(
+        Guid warehouseId,
+        IReadOnlyCollection<Guid> endpointIds,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<StorageLocationSnapshot>>(
+            StorageLocations.Values.Where(l => l.WarehouseId == warehouseId && l.IsActive && endpointIds.Contains(l.EndpointId)).ToList());
+
+    public Task<IReadOnlyList<ContainerVoucherSnapshot>> GetConfirmedVoucherLinesAsync(
+        IReadOnlyCollection<Guid> containerIds,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ContainerVoucherSnapshot>>(
+            ConfirmedVoucherLines.Where(l => containerIds.Contains(l.ContainerId)).ToList());
 }
 
 public sealed class FakeNavigationModule : INavigationModule
@@ -51,6 +65,9 @@ public sealed class FakeNavigationModule : INavigationModule
 
     public Task<MapVersionSnapshot?> GetMapVersionAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
         Task.FromResult(MapVersions.GetValueOrDefault(mapVersionId));
+
+    public Task<EndpointPoseSnapshot?> GetEndpointPoseByCodeAsync(Guid mapVersionId, string code, CancellationToken cancellationToken = default) =>
+        Task.FromResult<EndpointPoseSnapshot?>(null);
 
     public Task<IReadOnlyList<EndpointSnapshot>> GetEndpointsAsync(
         IReadOnlyCollection<Guid> endpointIds,

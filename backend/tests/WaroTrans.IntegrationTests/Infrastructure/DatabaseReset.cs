@@ -18,6 +18,7 @@ public static class DatabaseReset
         string connectionString,
         CancellationToken cancellationToken = default)
     {
+        EnsureTestDatabase(connectionString);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
 
@@ -79,10 +80,25 @@ public static class DatabaseReset
         }
     }
 
+    /// <summary>
+    /// The reset empties every module schema. Refuse anything that is not plainly a test database, so a missing or
+    /// wrong ConnectionStrings__PostgreSQL can never wipe the dev or a real database.
+    /// </summary>
+    private static void EnsureTestDatabase(string connectionString)
+    {
+        var database = new NpgsqlConnectionStringBuilder(connectionString).Database ?? "";
+        if (!database.Contains("test", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Refusing to TRUNCATE database '{database}': integration tests only reset a database whose name contains 'test'.");
+        }
+    }
+
     private static async Task TruncatePostgreSqlOnceAsync(
         string connectionString,
         CancellationToken cancellationToken)
     {
+        EnsureTestDatabase(connectionString);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
 

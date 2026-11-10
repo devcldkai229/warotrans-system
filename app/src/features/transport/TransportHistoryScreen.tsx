@@ -131,7 +131,7 @@ export type TabFilter = 'TOTAL' | 'ACTIVE' | 'DONE' | 'VOID';
 export function TransportHistoryScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, goBack } = useNavigation();
-  const { lastJobUpdate } = useRealtime();
+  const { lastJobUpdate, lastTransportStatus } = useRealtime();
   const [filter, setFilter] = useState<TabFilter>('TOTAL');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
   const [showCategoryChips, setShowCategoryChips] = useState(false);
@@ -175,7 +175,7 @@ export function TransportHistoryScreen() {
     fetchHistory();
     const poll = setInterval(fetchHistory, 15000);
     return () => clearInterval(poll);
-  }, [fetchHistory, lastJobUpdate]);
+  }, [fetchHistory, lastJobUpdate, lastTransportStatus]);
 
   const totalCount = orders.length;
   const activeCount = orders.filter(

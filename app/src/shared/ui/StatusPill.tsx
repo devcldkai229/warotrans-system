@@ -83,6 +83,8 @@ const TONE_BY_STATUS: Record<string, SemanticTone> = {
   DELIVERED: 'success',
   STORED: 'success',
   PACKED: 'success',
+  ISSUED: 'success',
+  CONFIRMED: 'success',
   LOCALIZED: 'success',
   PUBLISHED: 'success',
 

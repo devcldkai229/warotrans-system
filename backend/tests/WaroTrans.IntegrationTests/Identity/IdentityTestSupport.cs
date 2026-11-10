@@ -111,9 +111,12 @@ public static class IdentityTestSupport
         bool useCookie = false) =>
         client.PostAsJsonAsync("/api/identity/login", new { username, password, useCookie });
 
-    public static async Task<SessionDto> LoginAsync(this HttpClient client, string username)
+    public static Task<SessionDto> LoginAsync(this HttpClient client, string username) =>
+        client.LoginAsync(username, Password);
+
+    public static async Task<SessionDto> LoginAsync(this HttpClient client, string username, string password)
     {
-        var response = await client.PostLoginAsync(username);
+        var response = await client.PostLoginAsync(username, password);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<SessionDto>())!;
     }

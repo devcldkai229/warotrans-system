@@ -9,6 +9,8 @@ using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Features.DisableRobot;
 using WaroTrans.Fleet.Features.EnableRobot;
+using WaroTrans.Fleet.Features.ChangeRobotMap;
+using WaroTrans.Fleet.Features.PutRobotInService;
 using WaroTrans.Fleet.Features.GetRobot;
 using WaroTrans.Fleet.Features.GetRobotStatistics;
 using WaroTrans.Fleet.Features.IssueCancelCommand;
@@ -50,6 +52,8 @@ public static class FleetModule
         services.AddScoped<GetRobotStatisticsHandler>();
         services.AddScoped<EnableRobotHandler>();
         services.AddScoped<DisableRobotHandler>();
+        services.AddScoped<PutRobotInServiceHandler>();
+        services.AddScoped<ChangeRobotMapHandler>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
         services.AddScoped<ProcessRobotTelemetryHandler>();
         services.AddScoped<ProcessRobotCommandAckHandler>();
@@ -59,7 +63,13 @@ public static class FleetModule
         services.AddScoped<IFleetModule, WaroTrans.Fleet.Services.FleetModuleApi>();
         services.AddScoped<IssueCancelCommandHandler>();
         services.AddScoped<TeleopRobotHandler>();
+        services.AddScoped<WaroTrans.Fleet.Features.RobotControl.RobotControlService>();
+        services.AddSingleton<WaroTrans.Fleet.Features.RobotHealth.RobotHealthStore>();
+        services.AddScoped<WaroTrans.Fleet.Features.RobotHealth.ProcessRobotHealthHandler>();
         services.Configure<RobotCameraOptions>(configuration.GetSection(RobotCameraOptions.SectionName));
+        services.Configure<Features.Dispatch.BatteryOptions>(configuration.GetSection(Features.Dispatch.BatteryOptions.SectionName));
+        services.Configure<Features.Dispatch.DispatchOptions>(configuration.GetSection(Features.Dispatch.DispatchOptions.SectionName));
+        services.AddScoped<Features.Dispatch.DispatchService>();
         services.AddHttpClient(StreamRobotCameraHandler.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddScoped<StreamRobotCameraHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();
@@ -82,6 +92,8 @@ public static class FleetModule
         services.AddHostedService<RobotConnectivityMonitorHostedService>();
         services.AddHostedService<RobotCommandTimeoutMonitorHostedService>();
         services.AddHostedService<TrafficGrantHostedService>();
+        services.AddHostedService<SemanticPolicyBootstrapHostedService>();
+        services.AddHostedService<TrafficCoordinatorLeaseHostedService>();
 
         return services;
     }
@@ -96,9 +108,13 @@ public static class FleetModule
         group.MapGetRobotStatistics();
         group.MapEnableRobot();
         group.MapDisableRobot();
+        group.MapPutRobotInService();
+        group.MapChangeRobotMap();
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();
         group.MapTeleopRobot();
+        WaroTrans.Fleet.Features.RobotControl.RobotControlEndpoints.MapRobotControl(group);
+        WaroTrans.Fleet.Features.RobotHealth.RobotHealthEndpoint.MapRobotHealth(group);
         group.MapStreamRobotCamera();
         group.MapGetTrafficSnapshot();
         group.MapTrafficOperatorEndpoints();

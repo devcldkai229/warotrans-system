@@ -11,6 +11,9 @@ public sealed class InventoryStockConfiguration : IEntityTypeConfiguration<Inven
         builder.ToTable("inventory_stocks");
         builder.HasKey(x => x.Id);
 
+        // Two robots can drop the same product on the same shelf level at once; the loser retries the count.
+        builder.Property(x => x.UpdatedAt).IsConcurrencyToken();
+
         builder.HasIndex(x => new { x.ProductId, x.StorageLocationId, x.LevelNo }).IsUnique();
 
         builder.HasOne(x => x.Product)

@@ -839,7 +839,7 @@ export function MapEditorCanvas({
 
           <defs>
             <pattern id="editor-hatch" width={px(8)} height={px(8)} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2={px(8)} stroke={ZONE_COLOR.KEEP_OUT} strokeOpacity={0.45} strokeWidth={px(2)} />
+              <line x1="0" y1="0" x2="0" y2={px(8)} stroke={ZONE_COLOR.KEEP_OUT} strokeOpacity={0.75} strokeWidth={px(2.5)} />
             </pattern>
           </defs>
         </svg>

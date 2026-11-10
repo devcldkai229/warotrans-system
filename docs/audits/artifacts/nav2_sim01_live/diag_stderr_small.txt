@@ -1,0 +1,3 @@
+got map=102x67 cost=102x67 keepout=True
+keepout_mask_received=True base={'x': -1.8480000000000472, 'y': -0.5250000000000318, 'z': 4.1359030627651384e-25}
+WROTE /tmp/nav2_live_artifacts/diag_costmap_lethal.json

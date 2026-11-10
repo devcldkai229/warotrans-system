@@ -12,6 +12,28 @@ public sealed class Robot
     public string Name { get; set; } = string.Empty;
     public RobotStatus Status { get; set; }
     public decimal BatteryPercent { get; set; }
+
+    /// <summary>
+    /// HW-04: when the robot last reported a battery value. Null = never measured (a robot without a battery sensor
+    /// reports null), so <see cref="BatteryPercent"/> is meaningless and must be shown as Unknown, never as 0 %.
+    /// </summary>
+    public DateTimeOffset? BatteryMeasuredAt { get; set; }
+
+    /// <summary>HW-04: how the last value was obtained, as the robot reported it (shown next to the percentage).</summary>
+    public double? BatteryVoltage { get; set; }
+    public string? BatteryEstimationMode { get; set; }
+    public string? BatteryConfidence { get; set; }
+
+    /// <summary>Keeps the robot's own description of its battery estimate; unknown fields stay null.</summary>
+    public void ApplyBatteryMetadata(double? voltage, string? mode, string? confidence)
+    {
+        BatteryVoltage = voltage;
+        BatteryEstimationMode = Clip(mode);
+        BatteryConfidence = Clip(confidence);
+
+        static string? Clip(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Length > 30 ? value[..30] : value;
+    }
     public double PoseX { get; set; }
     public double PoseY { get; set; }
     public double PoseYaw { get; set; }
@@ -28,6 +50,31 @@ public sealed class Robot
     public Guid? CurrentCommandId { get; set; }
     public Guid? LastHeartbeatBootId { get; set; }
     public long? LastHeartbeatSequence { get; set; }
+    /// <summary>
+    /// The robot holds every motion (STOP/PAUSE accepted, not resumed yet). Reported by the robot in telemetry
+    /// (<c>motionHold</c>); a held robot is never dispatched, navigated or driven (RB-03).
+    /// </summary>
+    public bool MotionHeld { get; set; }
+    public DateTimeOffset? MotionHoldChangedAt { get; set; }
+
+    /// <summary>Exclusive manual-drive lease (RB-04): one holder at a time, renewed while the joystick is used.</summary>
+    public Guid? ManualLeaseHolderId { get; set; }
+    public string? ManualLeaseHolderName { get; set; }
+    public DateTimeOffset? ManualLeaseUntil { get; set; }
+
+    /// <summary>Why the robot is in MAINTENANCE, and since when (RB-08).</summary>
+    public string? MaintenanceReason { get; set; }
+    public DateTimeOffset? MaintenanceSince { get; set; }
+
+    /// <summary>System actions the robot announced in its heartbeat (RESTART_STACK, REBOOT, SHUTDOWN), comma separated.</summary>
+    public string? Capabilities { get; set; }
+
+    public bool HasActiveManualLease(DateTimeOffset now) => ManualLeaseHolderId is not null && ManualLeaseUntil > now;
+
+    public bool Supports(string capability) =>
+        Capabilities is { } list && list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Contains(capability, StringComparer.Ordinal);
+
     public Guid? LastTelemetryBootId { get; set; }
     public long? LastTelemetrySequence { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -165,6 +212,7 @@ public sealed class Robot
         if (batteryPercent is not null)
         {
             BatteryPercent = batteryPercent.Value;
+            BatteryMeasuredAt = utcNow;
         }
 
         NavigationStatus = navigationStatus;
@@ -209,10 +257,62 @@ public sealed class Robot
         UpdatedAt = utcNow;
     }
 
+    /// <summary>
+    /// Operator puts a registered robot into service: OFFLINE (never commissioned) → AVAILABLE.
+    /// Heartbeats deliberately never change <see cref="Status"/>, so without this a newly registered robot could not
+    /// be dispatched at all. Only a connected, enabled robot that is not running a command may be put in service.
+    /// </summary>
+    public void PutInService(DateTimeOffset utcNow)
+    {
+        if (Status != RobotStatus.OFFLINE)
+        {
+            throw new ConflictException($"Robot {Code} is already {Status}.", "robot_not_offline");
+        }
+
+        if (!IsEnabled)
+        {
+            throw new DomainValidationException($"Robot {Code} is disabled.", "robot_disabled");
+        }
+
+        if (!IsOnline)
+        {
+            throw new DomainValidationException($"Robot {Code} is not connected (no heartbeat).", "robot_offline");
+        }
+
+        if (CurrentCommandId is not null)
+        {
+            throw new ConflictException($"Robot {Code} still has command {CurrentCommandId}.", "robot_busy");
+        }
+
+        Status = RobotStatus.AVAILABLE;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>
+    /// Admin: the robot now runs on another published map version. Only while it has no command; its pose and
+    /// localization belong to the old map, so it must localize again (reported by its next telemetry).
+    /// </summary>
+    public void ChangeMap(Guid mapVersionId, DateTimeOffset utcNow)
+    {
+        if (CurrentCommandId is not null)
+        {
+            throw new ConflictException($"Robot {Code} still has command {CurrentCommandId}.", "robot_busy");
+        }
+
+        CurrentMapVersionId = mapVersionId;
+        LocalizationStatus = Enums.LocalizationStatus.UNKNOWN;
+        UpdatedAt = utcNow;
+    }
+
     /// <summary>Backend-owned: clear command and return to AVAILABLE.</summary>
     public void MarkAvailable(DateTimeOffset utcNow)
     {
-        Status = RobotStatus.AVAILABLE;
+        // A command finishing does not end a maintenance session: only an authorized Technician does (RB-08).
+        if (Status != RobotStatus.MAINTENANCE)
+        {
+            Status = RobotStatus.AVAILABLE;
+        }
+
         CurrentCommandId = null;
         UpdatedAt = utcNow;
     }

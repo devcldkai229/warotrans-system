@@ -97,7 +97,12 @@ public sealed record TrafficNode(
     /// True when the robot may wait here (holding / stopline / station) and the node is outside
     /// every critical / NO_STOP / junction resource.
     /// </summary>
-    bool IsSafeStop = false);
+    bool IsSafeStop = false,
+    /// <summary>
+    /// Station has at least one TruePivot in→out pair (needs Spin under MotionAuthority).
+    /// Set at compile time from StationManeuverClassifier — used by ManeuverStepBuilder without occupancy.
+    /// </summary>
+    bool RequiresSpin = false);
 
 public sealed record TrafficEdge(
     int Id,
@@ -377,11 +382,17 @@ public sealed record TrafficCompileInput(
     IReadOnlySet<string>? ServiceStopEndpointCodes = null,
     IReadOnlySet<string>? RecoveryEndpointCodes = null,
     IReadOnlyList<TrafficStationMeta>? StationMeta = null,
-    string ExpectedFrameId = "map");
+    string ExpectedFrameId = "map",
+    /// <summary>
+    /// Optional endpoint yaw (rad) for station maneuver classification. Omitted from graphHash —
+    /// yaw changes do not renumber edges; Host and harness should still supply yaw when available.
+    /// </summary>
+    IReadOnlyDictionary<string, double>? EndpointYaw = null);
 
 public sealed record TrafficCompileResult(
     CompiledTrafficGraph Graph,
-    IReadOnlyList<TrafficIssue> Issues)
+    IReadOnlyList<TrafficIssue> Issues,
+    IReadOnlyList<RejectedAccessPath>? RejectedAccessPaths = null)
 {
     public bool HasErrors => Issues.Any(i => i.Severity == TrafficIssueSeverity.Error);
 }

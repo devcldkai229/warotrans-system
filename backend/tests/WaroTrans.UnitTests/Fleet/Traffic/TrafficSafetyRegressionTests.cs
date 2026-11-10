@@ -296,7 +296,7 @@ public class TrafficSafetyRegressionTests
         Assert.True(sim.State.EnsureTracked(robot, 0, 0, true).Ok);
 
         var other = FakeRobotSim.BuildNarrowBidirectional();
-        Assert.Equal("GRAPH_IN_USE", sim.State.BindGraph(Guid.NewGuid(), other).Reason);
+        Assert.StartsWith("GRAPH_IN_USE", sim.State.BindGraph(Guid.NewGuid(), other).Reason);
         Assert.Same(sim.Graph, sim.State.Graph);
     }
 

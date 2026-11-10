@@ -1,5 +1,6 @@
 import { ApiError, getUserErrorMessage, setAccessToken } from '../../shared/api/client';
-import { getCurrentAccount } from '../../shared/api/identityApi';
+import { getCapabilities, getCurrentAccount } from '../../shared/api/identityApi';
+import { initialsFor } from '../../shared/auth/permissions';
 import { clearAllStoredAuth, getStoredAccessToken, getStoredUserSession } from '../../shared/api/secureStore';
 import type { UserSession } from '../../shared/types/contracts';
 
@@ -23,7 +24,7 @@ export async function restoreSession(isCurrent: () => boolean = () => true): Pro
     const account = await getCurrentAccount();
     if (!isCurrent()) return { kind: 'cancelled' };
     if (typeof account?.id !== 'string' || !account.id || typeof account.username !== 'string' || !account.username
-      || !['ADMIN', 'STAFF'].includes(account.role) || typeof account.status !== 'string') {
+      || !['ADMIN', 'STAFF', 'TECHNICIAN'].includes(account.role) || typeof account.status !== 'string') {
       throw new ApiError(502, 'INVALID_RESPONSE', 'Your account could not be verified. Please try again.');
     }
     if (account.status !== 'ACTIVE') {
@@ -31,11 +32,15 @@ export async function restoreSession(isCurrent: () => boolean = () => true): Pro
       await clearAllStoredAuth();
       return { kind: 'signed-out' };
     }
+    const capabilities = await getCapabilities();
+    if (!isCurrent()) return { kind: 'cancelled' };
     const fullName = account.fullName || account.username;
     return { kind: 'ready', session: {
       ...stored, id: account.id, username: account.username, fullName,
-      role: account.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
-      avatarInitials: fullName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase(),
+      role: account.role as UserSession['role'],
+      avatarInitials: initialsFor(fullName),
+      permissions: capabilities.permissions,
+      mustChangePassword: capabilities.mustChangePassword,
     } };
   } catch (error) {
     if (!isCurrent()) return { kind: 'cancelled' };

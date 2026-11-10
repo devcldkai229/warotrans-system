@@ -22,7 +22,7 @@ public static class ListStorageLocationsEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
         })
-        .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin)
+        .RequirePermission(Permissions.WarehouseRead)
         .WithName("ListStorageLocations")
         .WithSummary("List storage locations for a warehouse")
         .WithDescription("Returns storage locations for Admin Transport Request composer selectors.");

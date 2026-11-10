@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { TransportRequestStatus } from './contracts'
+import type { ActionAvailability, TransportRequestAction, TransportRequestStatus } from './contracts'
 
 export interface CreateTransportRequestDetailBody {
   sequenceNo: number
@@ -73,6 +73,7 @@ export interface TransportRequestListItem {
   submittedAt: string
   detailCount: number
   details: TransportRequestListDetail[]
+  availableActions: ActionAvailability<TransportRequestAction>[]
 }
 
 export interface ListTransportRequestsResponse {
@@ -117,6 +118,14 @@ export interface TransportRequestDetailDto {
   failureCode: string | null
   failureMessage: string | null
   details: TransportRequestDetailItem[]
+  cancelledBy: string | null
+  cancelReason: string | null
+  cancelRequestedAt: string | null
+  rejectedBy: string | null
+  rejectReason: string | null
+  rejectedAt: string | null
+  jobs: { jobId: string; jobNo: string; status: string; transportRequestId: string }[]
+  availableActions: ActionAvailability<TransportRequestAction>[]
 }
 
 export function createTransportRequest(body: CreateTransportRequestBody) {
@@ -160,5 +169,24 @@ export interface QueueTransportRequestResponse {
 export function queueTransportRequest(id: string) {
   return apiRequest<QueueTransportRequestResponse>(`/api/transportation/transport-requests/${id}/queue`, {
     method: 'POST',
+  })
+}
+
+/**
+ * TRN-01: cancels the request and its Jobs. Containers not picked up are cancelled; a Job with cargo on the robot is
+ * paused for recovery and the request stays CANCELLING. Idempotent.
+ */
+export function cancelTransportRequest(id: string, reason: string) {
+  return apiRequest<TransportRequestDetailDto>(`/api/transportation/transport-requests/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+/** TRN-02: refuses a request before any of its Jobs ran. The requester is notified. */
+export function rejectTransportRequest(id: string, reason: string) {
+  return apiRequest<TransportRequestDetailDto>(`/api/transportation/transport-requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   })
 }

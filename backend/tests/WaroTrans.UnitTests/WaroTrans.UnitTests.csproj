@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\Modules\WorkflowExecution\WaroTrans.WorkflowExecution.csproj" />
     <ProjectReference Include="..\..\src\Modules\Navigation\WaroTrans.Navigation.csproj" />
     <ProjectReference Include="..\..\src\Modules\Transportation\WaroTrans.Transportation.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Operations\WaroTrans.Operations.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-import { ApiError, apiFetch, apiRequest } from './client'
+import { ApiError, apiFetch, apiRequest, getAccessToken } from './client'
 import type {
   EdgeDirection,
   EndpointType,
@@ -166,6 +166,37 @@ export async function downloadRouteGraphGeoJson(mapVersionId: string, fileName?:
   a.download = fileName ?? `route-graph-${mapVersionId}.geojson`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+export interface RouteGraphIssueDto {
+  code: string
+  severity: string
+  message: string
+  relatedCodes: string[]
+}
+
+/** Compile + validate CompiledTrafficGraph (occupancy when available). Does not persist. */
+export interface RouteGraphValidationDto {
+  mapVersionId: string
+  graphHash: string
+  isValid: boolean
+  nodeCount: number
+  edgeCount: number
+  resourceCount: number
+  corridorCount: number
+  holdingPointCount: number
+  stoplineCount: number
+  stationCount: number
+  issues: RouteGraphIssueDto[]
+}
+
+export function checkRouteGraph(mapVersionId: string) {
+  return apiFetch<RouteGraphValidationDto>(`/api/navigation/maps/${mapVersionId}/traffic-graph/validation`)
+}
+
+/** Drop in-memory compiled graph cache for this map (geometry unchanged). */
+export function clearRouteGraphCache(mapVersionId: string) {
+  return apiRequest<void>(`/api/navigation/maps/${mapVersionId}/route-graph-cache`, { method: 'DELETE' })
 }
 
 /**
@@ -343,7 +374,10 @@ export function deleteZone(id: string) {
   return apiRequest<void>(`/api/navigation/zones/${id}`, { method: 'DELETE' })
 }
 
-/** Resolve a public map-asset path against the API origin when needed. */
+/**
+ * Resolve a map-asset path against the API origin. Map files need a signed-in user (POL-04) and an `<img>` cannot
+ * send the Authorization header, so the current access token goes in the query, as for the camera stream.
+ */
 export function resolveMapAssetUrl(uri: string | null | undefined): string | null {
   if (!uri) return null
   if (uri.startsWith('pending://')) return null
@@ -351,5 +385,44 @@ export function resolveMapAssetUrl(uri: string | null | undefined): string | nul
   const path = uri.startsWith('/') ? uri : `/${uri}`
   // Empty VITE_API_URL → same-origin (Vite proxies /map-assets in dev).
   const apiUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
-  return apiUrl ? `${apiUrl}${path}` : path
+  const token = getAccessToken()
+  const withToken = token ? `${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : path
+  return apiUrl ? `${apiUrl}${withToken}` : withToken
+}
+
+/** NV-01: a named set of endpoints of one map version (e.g. parking spots). */
+export interface EndpointGroup {
+  id: string
+  mapVersionId: string
+  code: string
+  name: string
+  selectionPolicy: 'FIRST_AVAILABLE' | 'NEAREST'
+  isActive: boolean
+  members: { endpointId: string; code: string; name: string }[]
+}
+
+export function listEndpointGroups(mapVersionId: string) {
+  return apiRequest<EndpointGroup[]>(`/api/navigation/maps/${mapVersionId}/endpoint-groups`)
+}
+
+/** DRAFT map only; members must be endpoints of the same map version. */
+export function createEndpointGroup(
+  mapVersionId: string,
+  body: { code: string; name: string; selectionPolicy?: EndpointGroup['selectionPolicy']; endpointIds: string[] },
+) {
+  return apiRequest<EndpointGroup>(`/api/navigation/maps/${mapVersionId}/endpoint-groups`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateEndpointGroup(
+  id: string,
+  body: { name?: string; selectionPolicy?: EndpointGroup['selectionPolicy']; isActive?: boolean; endpointIds?: string[] },
+) {
+  return apiRequest<EndpointGroup>(`/api/navigation/endpoint-groups/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export function deleteEndpointGroup(id: string) {
+  return apiRequest<void>(`/api/navigation/endpoint-groups/${id}`, { method: 'DELETE' })
 }

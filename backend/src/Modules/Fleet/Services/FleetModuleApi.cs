@@ -6,6 +6,7 @@ using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Features.DispatchRobot;
+using WaroTrans.Fleet.Features.IssueCancelCommand;
 using WaroTrans.Fleet.Features.IssueNavigateCommand;
 using WaroTrans.Fleet.Persistence;
 
@@ -14,34 +15,47 @@ namespace WaroTrans.Fleet.Services;
 public sealed class FleetModuleApi(
     FleetDbContext db,
     IssueNavigateCommandHandler issueNavigateCommandHandler,
+    IssueCancelCommandHandler issueCancelCommandHandler,
+    WaroTrans.Fleet.Features.RobotControl.RobotControlService robotControl,
     IMqttRobotInteractionPublisher interactionPublisher,
+    WaroTrans.Fleet.Features.Dispatch.DispatchService dispatch,
     ILogger<FleetModuleApi> logger) : IFleetModule
 {
+    public Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(DispatchQuery query, CancellationToken cancellationToken = default) =>
+        dispatch.EvaluateAsync(query, cancellationToken);
+
+    public Task RecordDispatchDecisionAsync(DispatchDecisionRecord record, CancellationToken cancellationToken = default) =>
+        dispatch.RecordAsync(record, cancellationToken);
+
+    public Task<IReadOnlyList<DispatchDecisionView>> GetDispatchDecisionsAsync(Guid jobId, CancellationToken cancellationToken = default) =>
+        dispatch.ListAsync(jobId, cancellationToken);
+
     public async Task<RobotSnapshot?> GetRobotAsync(Guid robotId, CancellationToken cancellationToken = default)
     {
         var robot = await db.Robots.AsNoTracking().FirstOrDefaultAsync(r => r.Id == robotId, cancellationToken);
         return robot is null ? null : ToSnapshot(robot);
     }
 
+    public async Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default) =>
+        await db.JobAssignments
+            .AsNoTracking()
+            .Where(a => a.RobotId == robotId)
+            .GroupBy(a => a.JobId)
+            .Select(g => new { JobId = g.Key, LastAssignedAt = g.Max(a => a.AssignedAt) })
+            .OrderByDescending(x => x.LastAssignedAt)
+            .Take(take)
+            .Select(x => x.JobId)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,
         CancellationToken cancellationToken = default)
     {
-        var robots = await db.Robots
-            .AsNoTracking()
-            .Where(r => r.CurrentMapVersionId == mapVersionId)
-            .ToListAsync(cancellationToken);
-
-        // Same ordering rule as DispatchRobotSelector (highest battery, then code).
-        var candidates = new List<RobotSnapshot>();
-        var remaining = robots.ToList();
-        while (DispatchRobotSelector.Select(remaining) is { } best)
-        {
-            candidates.Add(ToSnapshot(best));
-            remaining.Remove(best);
-        }
-
-        return candidates;
+        // FL-01: the same eligibility and score as EvaluateDispatchAsync, eligible robots only.
+        var evaluated = await dispatch.EvaluateAsync(new DispatchQuery(mapVersionId, null, null, new HashSet<Guid>()), cancellationToken);
+        var eligible = evaluated.Where(c => c.Eligible).Select(c => c.RobotId).ToList();
+        var robots = await db.Robots.AsNoTracking().Where(r => eligible.Contains(r.Id)).ToDictionaryAsync(r => r.Id, cancellationToken);
+        return eligible.Select(id => ToSnapshot(robots[id])).ToList();
     }
 
     public async Task<Guid> NavigateAsync(
@@ -52,7 +66,8 @@ public sealed class FleetModuleApi(
         Guid jobId,
         Guid jobStepId,
         CancellationToken cancellationToken = default,
-        RouteGrantSnapshot? route = null)
+        RouteGrantSnapshot? route = null,
+        double? timeoutSeconds = null)
     {
         // JobId without JobAssignmentId: Fleet records one assignment per navigate command
         // (ended by its RESULT). The Job keeps its robot in WorkflowExecution (assignedRobotId).
@@ -66,9 +81,29 @@ public sealed class FleetModuleApi(
             };
         var response = await issueNavigateCommandHandler.HandleAsync(
             robotId,
-            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload),
+            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload, TimeoutSeconds: timeoutSeconds),
             cancellationToken);
         return response.CommandId;
+    }
+
+    public async Task<bool> CancelNavigationAsync(
+        Guid robotId,
+        Guid navigateCommandId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await issueCancelCommandHandler.HandleAsync(
+                robotId, new IssueCancelCommandRequest(navigateCommandId), cancellationToken);
+            return true;
+        }
+        catch (AppException ex)
+        {
+            logger.LogWarning(
+                "CANCEL of navigate {CommandId} on robot {RobotId} not sent: {Code} {Message}",
+                navigateCommandId, robotId, ex.Code, ex.Message);
+            return false;
+        }
     }
 
     public async Task RequestHumanInteractionAsync(
@@ -131,6 +166,32 @@ public sealed class FleetModuleApi(
             cancellationToken);
     }
 
+    public async Task<Guid?> StopRobotAsync(Guid robotId, string mode, string? reason, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return (await robotControl.StopAsync(robotId, mode, reason, cancellationToken)).CommandId;
+        }
+        catch (AppException ex)
+        {
+            logger.LogWarning("STOP for robot {RobotId} not sent: {Code} {Message}", robotId, ex.Code, ex.Message);
+            return null;
+        }
+    }
+
+    public async Task<Guid?> ResumeRobotAsync(Guid robotId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return (await robotControl.ResumeAsync(robotId, cancellationToken)).CommandId;
+        }
+        catch (AppException ex)
+        {
+            logger.LogWarning("RESUME for robot {RobotId} not sent: {Code} {Message}", robotId, ex.Code, ex.Message);
+            return null;
+        }
+    }
+
     private static RobotSnapshot ToSnapshot(Robot r) => new(
         r.Id,
         r.Code,
@@ -141,9 +202,13 @@ public sealed class FleetModuleApi(
         r.IsOnline,
         r.LocalizationStatus,
         r.NavigationStatus,
-        r.BatteryPercent,
+        // HW-04: never measured = unknown, not 0 %.
+        r.BatteryMeasuredAt is null ? null : r.BatteryPercent,
         r.LastTelemetryAt,
         r.PoseX,
         r.PoseY,
-        r.PoseYaw);
+        r.PoseYaw,
+        r.MotionHeld,
+        r.HasActiveManualLease(DateTimeOffset.UtcNow),
+        r.BatteryMeasuredAt);
 }

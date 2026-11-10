@@ -15,6 +15,7 @@ warotrans/v1/robots/{robotCode}/teleop                 # backend → robot (QoS0
 warotrans/v1/robots/{robotCode}/interaction_request    # backend → robot (QoS1), arm HUMAN_CONFIRM button
 warotrans/v1/robots/{robotCode}/interaction_confirm    # robot → backend (QoS1), button confirmation
 warotrans/v1/robots/{robotCode}/interaction_result     # backend → robot (QoS1), business accept/reject
+warotrans/v1/robots/{robotCode}/health                 # robot → backend (QoS0), diagnostics snapshot — see "Health"
 ```
 
 `robotCode` example: `RBT-001`.
@@ -22,6 +23,8 @@ warotrans/v1/robots/{robotCode}/interaction_result     # backend → robot (QoS1
 HUMAN_INTERACTION is **not** a RobotCommand. The physical button is a confirmation input for a waiting JobStep.
 
 ## Heartbeat (~1 Hz)
+
+Optional `capabilities` (array of strings, RB-09): the system actions this robot performs.
 
 ```json
 {
@@ -57,7 +60,8 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
   "linearVelocity": 0.0,
   "angularVelocity": 0.0,
   "currentCommandId": null,
-  "errorCode": null
+  "errorCode": null,
+  "motionHold": false
 }
 ```
 
@@ -124,13 +128,41 @@ Protocol decision: [adr/0007-traffic-route-ownership.md](adr/0007-traffic-route-
   "goalSafeStopNodeId": 42,
   "finalGoal": { "x": 1.0, "y": 2.0, "yaw": 0.0 },
   "expiresAt": "2026-10-25T05:00:30.000Z",
-  "speedLimits": { "12": 0.4 }
+  "speedLimits": { "12": 0.4 },
+  "maneuvers": [
+    { "kind": "Forward", "edgeIds": [12] },
+    { "kind": "Spin", "edgeIds": [], "yawTarget": 1.57, "resourceIds": ["node:42"] },
+    { "kind": "Reverse", "edgeIds": [15] }
+  ]
 }
 ```
+
+`maneuvers` is optional (CompilerVersion 10+). Missing / empty → legacy Forward-only over `segmentEdgeIds`
+(older robots). Kinds: `Forward` | `Reverse` | `Spin`. ContinuousArc is **not** an MQTT kind —
+classified ContinuousArc stations execute as Forward kink. Active Mode requires
+`enable_authority_gate:=true`; Reverse/Spin must not run without an active grant.
 
 Schema version stays **1**. Shadow Mode may omit `authority` and keep using `route`.
 See ADR 0010. New commands: `EXTEND_AUTHORITY`, `RENEW_AUTHORITY`, `REVOKE_AUTHORITY`.
 Uplink topics: `…/traffic_progress`, `…/authority_state` (QoS1).
+
+#### Semantic Mode (`Traffic:Mode=Semantic`, robot `traffic_mode=semantic_active`)
+
+All additive, schema version stays 1.
+
+- **`…/robots/{code}/traffic_plan`** (robot → backend, QoS1): `planRevision` (> 0), `planHash` (robot hash of
+  `poses`), `commandId` (the open backend NAVIGATE; a plan without one is never granted), `poses`, `goal`.
+- **`EXTEND_AUTHORITY`** payload adds `planHash` (echo) and `geometry`
+  (`cellSizeMeters`, `horizonMeters`, `sampleStepMeters`, `reserveRadiusMeters`, `footprintRadiusMeters`);
+  `targetCommandId` is the NAVIGATE the plan belongs to. The robot moves only while its footprint stays inside the
+  granted `resourceIds` (cells/zones computed with that geometry, same algorithm as the backend).
+- The robot **ACKs** EXTEND / RENEW / REVOKE on `command_ack` (terminal; a refused grant carries `reasonCode`, e.g.
+  `STALE_PLAN_REVISION`, `PLAN_HASH_MISMATCH`, `STALE_EPOCH`, `EXPIRED_ON_ARRIVAL`, `DUPLICATE_OR_OLDER`).
+- **`{prefix}/traffic/epoch`** (backend → all, QoS1, **retained**): `{epoch, coordinatorId, startedAt}`. Published
+  once the host holds the coordinator lease, before any grant of that epoch. A robot drops every grant of an older
+  epoch when it sees a newer one.
+- **`authority_state`** adds `poseX`, `poseY`, `localizationOk` (the robot's own pose; sent on boot, reconnect and
+  epoch change).
 
 ### CANCEL
 
@@ -155,6 +187,53 @@ Robot accept/reject rules:
 - `NAVIGATE_TO_POSE`: reject if not `LOCALIZED`, or another command is already active (`BUSY`)
 - `CANCEL`: reject if `targetCommandId` is not the active command (`UNKNOWN_TARGET`)
 - Duplicate delivery of the same `commandId`: ACK `accepted=true` with `reasonCode=ALREADY_ACCEPTED` if already accepted/running/completed for that id
+
+### STOP / RESUME (RB-03)
+
+```json
+{ "type": "STOP", "payload": { "mode": "STOP", "reason": "person in aisle" } }
+{ "type": "RESUME", "payload": {} }
+```
+
+- `mode`: `STOP` or `PAUSE` (same hold; PAUSE is what an operator Job pause sends). Anything else → `INVALID_PAYLOAD`.
+- STOP is never refused for being busy. After the ACK the robot cancels its running goal (that goal reports its own
+  RESULT `CANCELED`) and **holds every motion**: zero velocity on the hold topic, `authority_ok=false` for the
+  authority gate, NAVIGATE refused with `MOTION_HELD`, teleop setpoints dropped.
+- RESULT `SUCCEEDED` (`result.stoppedVerified=true`) only once odometry showed |v| ≤ 0.02 m/s and |ω| ≤ 0.05 rad/s for
+  0.5 s. Otherwise after 5 s: `FAILED` / `STOP_UNVERIFIED` — the hold stays, the robot never claims a stop it did not see.
+- RESUME releases the hold, RESULT `SUCCEEDED`.
+- Telemetry field `motionHold` (bool) is the truth the backend shows; a held robot is never dispatched.
+- Backend view (`GET /api/fleet/robots/{id}/stop-state`): `REQUESTED` (sent) → `ACCEPTED` (ACK) → `STOPPED_VERIFIED`
+  (RESULT SUCCEEDED), or `REJECTED`, or `UNKNOWN` (no ACK/RESULT, robot offline, unverified).
+- A software stop is not an E-stop.
+
+### SYSTEM_ACTION (RB-09)
+
+```json
+{ "type": "SYSTEM_ACTION", "payload": { "action": "RESTART_STACK" } }
+```
+
+- `action`: `RESTART_STACK`, `REBOOT`, `SHUTDOWN`. Only those enabled on the robot (`system_actions_enabled` + a
+  configured command) and announced in the heartbeat `capabilities`; else `SYSTEM_ACTION_DISABLED`.
+- Accepted only while motion is held and no goal runs (`NOT_STOPPED`). RESULT `SUCCEEDED` is sent before the action
+  runs (after a reboot nobody could report it). There is no remote power-on.
+
+## Health (robot → backend, RB-10)
+
+```json
+{
+  "schemaVersion": 1, "robotCode": "RBT-001", "sentAt": "2026-11-08T08:00:00.000Z",
+  "items": [
+    { "name": "lidar", "level": "OK", "value": 6.8, "unit": "Hz", "message": null, "measuredAt": "…" },
+    { "name": "cpu_temperature", "level": "UNKNOWN", "value": null, "unit": "C", "message": "no thermal sensor" }
+  ]
+}
+```
+
+- Every 5 s. `level`: `OK`, `WARN`, `ERROR`, `STALE` (source stopped), `UNKNOWN` (not measured; value null — never
+  invented). Items: configured sensor topics (lidar, odometry, imu, ultrasonic …), `tf_localization`, `nav2`,
+  `cpu_load`, `cpu_temperature`, `memory_available`.
+- The backend keeps the latest snapshot; older than 15 s it is shown `STALE`.
 
 ## CommandAck (robot → backend)
 
@@ -255,6 +334,9 @@ or terminal `reasonCode` (`interaction_not_current`, `interaction_wrong_robot`, 
 ```
 
 ## Teleop (backend → robot, manual drive)
+
+Off in Semantic Mode (`teleop_enabled: false`, `robot_gateway_semantic.yaml`): with the authority gate on, the ESP32
+bridge drives only from `/cmd_vel_motor` and only while the gate is its sole publisher, so no teleop reaches the motors.
 
 Not a command: no `commandId`, no ACK / RESULT, nothing persisted. The web console sends a setpoint every
 ~200 ms while a direction is held and `{0, 0}` on release (`POST /api/fleet/robots/{id}/teleop`).

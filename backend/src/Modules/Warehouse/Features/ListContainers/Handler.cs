@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.Warehouse.Features.ListContainers;
 
-public sealed class ListContainersHandler(WarehouseDbContext db)
+public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTransportLookup transports)
 {
     private static readonly ContainerStatus[] EligibleStatuses =
     [
@@ -58,8 +59,16 @@ public sealed class ListContainersHandler(WarehouseDbContext db)
                 c.CurrentStorageLocation != null ? c.CurrentStorageLocation.EndpointId : (Guid?)null,
                 c.CurrentLevelNo,
                 c.SupplierPackageBarcode,
-                c.UpdatedAt))
+                c.UpdatedAt,
+                false))
             .ToListAsync(cancellationToken);
+
+        // Transport Requests live in another module, so the flag is filled in after the query.
+        var moving = await transports.GetContainersInActiveTransportAsync(items.Select(i => i.Id).ToList(), cancellationToken);
+        if (moving.Count > 0)
+        {
+            items = items.Select(i => moving.Contains(i.Id) ? i with { InActiveTransport = true } : i).ToList();
+        }
 
         return new ListContainersResponse(items, total);
     }

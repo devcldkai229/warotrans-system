@@ -17,10 +17,10 @@ public static class CreateStorageLocationEndpoint
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Created($"/api/warehouse/storage-locations/{response.Id}", response);
         })
+        .RequirePermission(Permissions.WarehouseWrite)
         .WithName("CreateStorageLocation")
         .WithSummary("Create a storage location")
-        .WithDescription("A named place that points at one enabled Endpoint of the warehouse's published map. The code is unique per warehouse.")
-        .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        .WithDescription("A named place that points at one enabled Endpoint of the warehouse's published map. The code is unique per warehouse.");
 
         return group;
     }
