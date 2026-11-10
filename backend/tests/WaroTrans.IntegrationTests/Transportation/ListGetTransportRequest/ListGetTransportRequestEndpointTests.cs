@@ -187,6 +187,34 @@ public sealed class ListGetTransportRequestEndpointTests(WaroTransWebApplication
         Assert.True(locations.GetProperty("total").GetInt32() >= 2);
     }
 
+    [Fact]
+    public async Task Ids_narrow_the_list_to_those_requests_and_unknown_ids_match_nothing()
+    {
+        var seed = await SeedAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var requestId = await TransportRequestScenario.SubmitAsync(Client, seed, workflowId);
+
+        var found = await Client.GetFromJsonAsync<ListResponseDto>($"{Route}?ids={requestId}&ids={Guid.NewGuid()}&take=200", JsonOptions);
+        var none = await Client.GetFromJsonAsync<ListResponseDto>($"{Route}?ids={Guid.NewGuid()}", JsonOptions);
+        var everything = await Client.GetFromJsonAsync<ListResponseDto>($"{Route}?take=200", JsonOptions);
+
+        Assert.Equal(requestId, Assert.Single(found!.Items).Id);
+        Assert.Equal(1, found.Total);
+        Assert.Empty(none!.Items);
+        Assert.Equal(0, none.Total);
+        Assert.Contains(everything!.Items, item => item.Id == requestId);
+    }
+
+    [Fact]
+    public async Task Looking_up_more_than_a_hundred_ids_at_once_is_rejected()
+    {
+        var ids = string.Join("&", Enumerable.Range(0, 101).Select(_ => $"ids={Guid.NewGuid()}"));
+
+        var response = await Client.GetAsync($"{Route}?{ids}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private Task<TransportRequestScenario.Seed> SeedAsync() => TransportRequestScenario.SeedAsync(Factory.Services, Client, "CTN-LIST-1");
 
     private Task<Guid> CreatePublishedWorkflowAsync() => TransportRequestScenario.CreatePublishedWorkflowAsync(Client);

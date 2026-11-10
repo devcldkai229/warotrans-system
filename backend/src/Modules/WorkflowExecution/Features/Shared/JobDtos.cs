@@ -158,7 +158,9 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
         Guid? transportRequestId,
         int take,
         CancellationToken cancellationToken,
-        IReadOnlyCollection<Guid>? jobIds = null)
+        IReadOnlyCollection<Guid>? jobIds = null,
+        string? search = null,
+        int skip = 0)
     {
         var query = db.Jobs.AsNoTracking().AsQueryable();
         if (jobIds is not null)
@@ -176,9 +178,25 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
             query = query.Where(j => j.JobContainers.Any(c => c.TransportRequestId == requestId));
         }
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            // Pasting a Job's id finds it as well as typing part of its number.
+            if (Guid.TryParse(term, out var jobId))
+            {
+                query = query.Where(j => j.Id == jobId || EF.Functions.ILike(j.JobNo, $"%{term}%"));
+            }
+            else
+            {
+                query = query.Where(j => EF.Functions.ILike(j.JobNo, $"%{term}%"));
+            }
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var jobs = await query
             .OrderByDescending(j => j.CreatedAt)
+            .ThenByDescending(j => j.Id)
+            .Skip(skip)
             .Take(take)
             .Include(j => j.JobContainers)
             .Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)
