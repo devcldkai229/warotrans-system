@@ -8,8 +8,9 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { createLocation, listFreeEndpoints, setLocationStatus, type FreeEndpoint, type LocationListing } from './api'
 import { AddButton, SectionHead } from './SectionHead'
-
+import { t } from '@/shared/i18n'
 interface LocationDraft {
+
   code: string
   name: string
   endpointId: string
@@ -48,7 +49,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
         setDraft((current) => (current ? { ...current, endpointId: items[0]?.id ?? '' } : current))
       })
       .catch((failure: unknown) =>
-        setOptions({ state: 'error', message: failure instanceof Error ? failure.message : 'The endpoints could not be loaded.' }),
+        setOptions({ state: 'error', message: failure instanceof Error ? failure.message : t('The endpoints could not be loaded.') }),
       )
   }
 
@@ -57,11 +58,11 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
     const code = draft.code.trim().toUpperCase()
     const endpoint = options.state === 'ready' ? options.items.find((item) => item.id === draft.endpointId) : undefined
     if (!code || !draft.name.trim() || !endpoint) {
-      setError('Code, name and endpoint are required.')
+      setError(t('Code, name and endpoint are required.'))
       return
     }
     if (locations.some((location) => location.code === code)) {
-      setError('This code already exists in this warehouse.')
+      setError(t('This code already exists in this warehouse.'))
       return
     }
 
@@ -73,7 +74,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
       setNotice(null)
       setDraft(null)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'The location could not be saved.')
+      setError(failure instanceof Error ? failure.message : t('The location could not be saved.'))
     } finally {
       setBusy(false)
     }
@@ -87,7 +88,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
       setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)))
     } catch (failure) {
       // e.g. "still holds 3 container(s)": the server says why the location cannot be switched off.
-      setNotice(failure instanceof Error ? failure.message : 'The status could not be changed.')
+      setNotice(failure instanceof Error ? failure.message : t('The status could not be changed.'))
     } finally {
       setBusyId(null)
     }
@@ -96,14 +97,14 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
   return (
     <>
       <SectionHead
-        title="Storage locations"
+        title={t('Storage locations')}
         hint={
           warehouse
-            ? `Places where Containers are stored in ${warehouse.name}. Each one points at one map Endpoint.`
-            : 'Places where Containers are stored. Each one points at one map Endpoint.'
+            ? t('Places where Containers are stored in {name}. Each one points at one map Endpoint.', { name: warehouse.name })
+            : t('Places where Containers are stored. Each one points at one map Endpoint.')
         }
       >
-        {warehouse ? <AddButton onClick={open}>Add location</AddButton> : null}
+        {warehouse ? <AddButton onClick={open}>{t('Add location')}</AddButton> : null}
       </SectionHead>
 
       {notice ? (
@@ -115,12 +116,12 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
       <Table>
         <thead>
           <tr>
-            <Th>Code</Th>
-            <Th>Name</Th>
-            <Th>Warehouse</Th>
-            <Th>Endpoint</Th>
-            <Th>Status</Th>
-            <Th align="right">Actions</Th>
+            <Th>{t('Code')}</Th>
+            <Th>{t('Name')}</Th>
+            <Th>{t('Warehouse')}</Th>
+            <Th>{t('Endpoint')}</Th>
+            <Th>{t('Status')}</Th>
+            <Th align="right">{t('Actions')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -134,7 +135,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
               </Td>
               <Td>
                 <StatusBadge tone={location.isActive ? 'green' : 'grey'} withDot>
-                  {location.isActive ? 'Active' : 'Inactive'}
+                  {location.isActive ? t('Active') : t('Inactive')}
                 </StatusBadge>
               </Td>
               <Td>
@@ -145,7 +146,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
                     disabled={busyId === location.id}
                     onClick={() => toggle(location)}
                   >
-                    {location.isActive ? 'Deactivate' : 'Activate'}
+                    {location.isActive ? t('Deactivate') : t('Activate')}
                   </Button>
                 </div>
               </Td>
@@ -154,21 +155,21 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
           {locations.length === 0 ? (
             <EmptyRow colSpan={6}>
               {loadState === 'loading'
-                ? 'Loading storage locations…'
+                ? t('Loading storage locations…')
                 : loadState === 'error'
-                  ? 'Could not load storage locations. Check that the API is running, then reload.'
+                  ? t('Could not load storage locations. Check that the API is running, then reload.')
                   : warehouse === null
-                    ? 'No active warehouse yet, so there are no storage locations.'
-                    : 'No storage locations yet. Add the first one.'}
+                    ? t('No active warehouse yet, so there are no storage locations.')
+                    : t('No storage locations yet. Add the first one.')}
             </EmptyRow>
           ) : null}
         </tbody>
       </Table>
 
       {draft && warehouse ? (
-        <Dialog title="Add storage location" submitLabel="Create location" busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
+        <Dialog title={t('Add storage location')} submitLabel={t('Create location')} busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
           <FieldRow>
-            <Field label="Code">
+            <Field label={t('Code')}>
               <input
                 className={controlClass()}
                 value={draft.code}
@@ -177,7 +178,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
                 autoFocus
               />
             </Field>
-            <Field label="Name">
+            <Field label={t('Name')}>
               <input
                 className={controlClass()}
                 value={draft.name}
@@ -186,15 +187,15 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
               />
             </Field>
           </FieldRow>
-          <Field label="Warehouse">
+          <Field label={t('Warehouse')}>
             <input className={controlClass()} value={warehouse.name} disabled readOnly />
           </Field>
           <Field
-            label="Map endpoint"
+            label={t('Map endpoint')}
             hint={
               options.state === 'ready' && options.items.length === 0
-                ? 'No free endpoint: every storage endpoint of the published map is used, or no map is published yet.'
-                : 'Each location uses one Endpoint of the published map, and an Endpoint can serve only one location.'
+                ? t('No free endpoint: every storage endpoint of the published map is used, or no map is published yet.')
+                : t('Each location uses one Endpoint of the published map, and an Endpoint can serve only one location.')
             }
           >
             <select
@@ -203,9 +204,9 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
               disabled={options.state !== 'ready'}
               onChange={(event) => setDraft({ ...draft, endpointId: event.target.value })}
             >
-              {options.state === 'loading' ? <option value="">Loading endpoints…</option> : null}
-              {options.state === 'error' ? <option value="">Could not load endpoints</option> : null}
-              {options.state === 'ready' && options.items.length === 0 ? <option value="">No free endpoint</option> : null}
+              {options.state === 'loading' ? <option value="">{t('Loading endpoints…')}</option> : null}
+              {options.state === 'error' ? <option value="">{t('Could not load endpoints')}</option> : null}
+              {options.state === 'ready' && options.items.length === 0 ? <option value="">{t('No free endpoint')}</option> : null}
               {options.state === 'ready'
                 ? options.items.map((endpoint) => (
                     <option key={endpoint.id} value={endpoint.id}>

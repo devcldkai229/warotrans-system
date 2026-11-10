@@ -602,7 +602,7 @@ export interface RequestStatistics {
 
 /* ------------------------------------------------------------ Notifications */
 
-/** One item of the admin notification bell (GET /api/operations/notifications). */
+/** One item of the notification inbox: the bell and the Notifications page (GET /api/operations/notifications). */
 export interface AdminNotification {
   id: string
   type: 'INFO' | 'WARNING' | 'ALERT' | 'ASSIGNMENT' | 'SYSTEM'
@@ -623,8 +623,11 @@ export interface AdminNotification {
 }
 
 export interface NotificationInbox {
+  /** Every unread notification of the caller, whatever the filters. */
   unreadCount: number
   items: AdminNotification[]
+  /** How many notifications match the filters, for paging (the page's "Load more"). */
+  total: number
 }
 
 /* ---------------------------------------------------------------- Warehouse */

@@ -4,8 +4,9 @@ import { ApiError } from '@/shared/api/client'
 import type { TransportRequestView } from '@/shared/api/contracts'
 import { cancelTransportRequest, rejectTransportRequest } from '@/shared/api/transportRequests'
 import { Button } from '@/shared/ui/Button'
-
+import { t } from '@/shared/i18n'
 /**
+
  * TRN-01 / TRN-02 buttons. Whether each one shows comes from the server's availableActions (BOTH-04), and the
  * server checks again on click, so this component never decides on the request state itself.
  */
@@ -19,7 +20,7 @@ export function RequestCloseActions({ request }: { request: TransportRequestView
       void queryClient.invalidateQueries({ queryKey: ['transport-requests'] })
       void queryClient.invalidateQueries({ queryKey: ['jobs'] })
     },
-    onError: (failure) => setError(failure instanceof ApiError ? failure.message : 'The request could not be changed.'),
+    onError: (failure) => setError(failure instanceof ApiError ? failure.message : t('The request could not be changed.')),
   })
 
   const cancel = request.availableActions.find((a) => a.action === 'CANCEL')
@@ -40,10 +41,8 @@ export function RequestCloseActions({ request }: { request: TransportRequestView
             variant="ghost"
             size="sm"
             disabled={act.isPending}
-            onClick={() => ask(`Reject ${request.requestCode}? Give the reason the requester will see.`, (r) => rejectTransportRequest(request.id, r))}
-          >
-            Reject
-          </Button>
+            onClick={() => ask(t('Reject {requestCode}? Give the reason the requester will see.', { requestCode: request.requestCode }), (r) => rejectTransportRequest(request.id, r))}
+          >{t('Reject')}</Button>
         ) : null}
         {cancel?.allowed ? (
           <Button
@@ -52,18 +51,16 @@ export function RequestCloseActions({ request }: { request: TransportRequestView
             disabled={act.isPending}
             onClick={() =>
               ask(
-                `Cancel ${request.requestCode}? Containers not picked up are cancelled; cargo already on a robot is held for recovery. Reason:`,
+                t('Cancel {requestCode}? Containers not picked up are cancelled; cargo already on a robot is held for recovery. Reason:', { requestCode: request.requestCode }),
                 (r) => cancelTransportRequest(request.id, r),
               )
             }
-          >
-            Cancel
-          </Button>
+          >{t('Cancel')}</Button>
         ) : null}
       </span>
       {error ? <span className="text-xs text-red-ink">{error}</span> : null}
       {!error && cancelling ? (
-        <span className="text-xs text-muted">Cancelled; cargo on a robot is waiting to be unloaded or delivered.</span>
+        <span className="text-xs text-muted">{t('Cancelled; cargo on a robot is waiting to be unloaded or delivered.')}</span>
       ) : null}
     </span>
   )

@@ -1,46 +1,47 @@
 import type { ComposerData, DraftValidation, TransportRequestDraft } from './types'
-
+import { t } from '@/shared/i18n'
 export function validateDraft(draft: TransportRequestDraft, data: ComposerData): DraftValidation {
+
   const errors: string[] = []
   const movementErrors: Record<string, string[]> = {}
 
-  if (!draft.warehouseId) errors.push('Warehouse is required.')
-  if (!draft.mapVersionId) errors.push('Map is required.')
-  if (!draft.workflowId) errors.push('Workflow is required.')
+  if (!draft.warehouseId) errors.push(t('Warehouse is required.'))
+  if (!draft.mapVersionId) errors.push(t('Map is required.'))
+  if (!draft.workflowId) errors.push(t('Workflow is required.'))
 
   const map = data.maps.find((item) => item.id === draft.mapVersionId)
   if (draft.mapVersionId && map && map.warehouseId !== draft.warehouseId) {
-    errors.push('Selected map does not belong to the warehouse.')
+    errors.push(t('Selected map does not belong to the warehouse.'))
   }
   if (map && map.status !== 'PUBLISHED') {
-    errors.push('Only published maps can be used.')
+    errors.push(t('Only published maps can be used.'))
   }
 
   for (const field of data.staffInputFields) {
     if (field.required && !(draft.workflowInputs[field.key] ?? '').trim()) {
-      errors.push(`${field.label} is required.`)
+      errors.push(t('{field} is required.', { field: field.label }))
     }
   }
 
   if (draft.movements.length === 0) {
-    errors.push('Add at least one container movement.')
+    errors.push(t('Add at least one container movement.'))
   }
 
   const seenContainers = new Set<string>()
   for (const movement of draft.movements) {
     const local: string[] = []
-    if (!movement.containerId) local.push('Container is required.')
-    else if (seenContainers.has(movement.containerId)) local.push('Duplicate container in this request.')
+    if (!movement.containerId) local.push(t('Container is required.'))
+    else if (seenContainers.has(movement.containerId)) local.push(t('Duplicate container in this request.'))
     else seenContainers.add(movement.containerId)
 
-    if (!movement.sourceEndpointId) local.push('Source is required.')
-    if (!movement.destinationEndpointId) local.push('Destination is required.')
+    if (!movement.sourceEndpointId) local.push(t('Source is required.'))
+    if (!movement.destinationEndpointId) local.push(t('Destination is required.'))
     if (
       movement.sourceEndpointId &&
       movement.destinationEndpointId &&
       movement.sourceEndpointId === movement.destinationEndpointId
     ) {
-      local.push('Source and destination must differ.')
+      local.push(t('Source and destination must differ.'))
     }
 
     if (local.length) movementErrors[movement.localId] = local

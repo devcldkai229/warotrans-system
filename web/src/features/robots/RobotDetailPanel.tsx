@@ -14,8 +14,9 @@ import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_CONTAINER_STATUS_TONE, JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
-
+import { t } from '@/shared/i18n'
 interface RobotDetailPanelProps {
+
   robot: RobotView
   onBack: () => void
   /** Opens manual control (go to a point on the map, or drive with buttons). */
@@ -27,8 +28,8 @@ interface RobotDetailPanelProps {
  * shown disabled with its reason instead of doing nothing.
  */
 const ACTIONS: { label: string; icon: IconName; unavailable?: string }[] = [
-  { label: 'Manual', icon: 'gamepad' },
-  { label: 'Localize', icon: 'crosshair', unavailable: 'The robot does not accept a re-localize command yet.' },
+  { label: t('Manual'), icon: 'gamepad' },
+  { label: t('Localize'), icon: 'crosshair', unavailable: t('The robot does not accept a re-localize command yet.') },
 ]
 
 const TIMELINE = 'divide-y divide-outline-soft'
@@ -65,59 +66,59 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
   return [
     {
       id: 'identity',
-      label: 'Identity',
+      label: t('Identity'),
       summary: robot.name,
       body: (
         <dl>
-          <Field label="Code">{robot.code}</Field>
-          <Field label="Name">{robot.name}</Field>
-          <Field label="Warehouse">{dash(robot.warehouseId)}</Field>
-          <Field label="Current map version">{dash(robot.currentMapVersionId)}</Field>
+          <Field label={t('Code')}>{robot.code}</Field>
+          <Field label={t('Name')}>{robot.name}</Field>
+          <Field label={t('Warehouse')}>{dash(robot.warehouseId)}</Field>
+          <Field label={t('Current map version')}>{dash(robot.currentMapVersionId)}</Field>
         </dl>
       ),
     },
     {
       id: 'operational',
-      label: 'Operational',
+      label: t('Operational'),
       summary: (
         <>
           <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
             {robot.status}
           </StatusBadge>
-          <span className="text-muted">{robot.isEnabled ? 'Enabled' : 'Disabled'}</span>
+          <span className="text-muted">{robot.isEnabled ? t('Enabled') : t('Disabled')}</span>
         </>
       ),
       body: (
         <dl>
-          <Field label="Operational status">
+          <Field label={t('Operational status')}>
             <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
               {robot.status}
             </StatusBadge>
           </Field>
-          <Field label="Enabled">{robot.isEnabled ? 'Yes' : 'No'}</Field>
-          <Field label="Connectivity">{robot.isOnline ? 'Online' : 'Offline'}</Field>
+          <Field label={t('Enabled')}>{robot.isEnabled ? t('Yes') : t('No')}</Field>
+          <Field label={t('Connectivity')}>{robot.isOnline ? t('Online') : t('Offline')}</Field>
         </dl>
       ),
     },
     {
       id: 'navigation',
-      label: 'Navigation',
-      summary: robot.navigationStatus ?? 'No telemetry yet',
+      label: t('Navigation'),
+      summary: robot.navigationStatus ?? t('No telemetry yet'),
       body: (
         <dl>
-          <Field label="Navigation status">{dash(robot.navigationStatus)}</Field>
-          <Field label="Localization status">{dash(robot.localizationStatus)}</Field>
-          <Field label="Current command">{dash(robot.currentCommandId)}</Field>
+          <Field label={t('Navigation status')}>{dash(robot.navigationStatus)}</Field>
+          <Field label={t('Localization status')}>{dash(robot.localizationStatus)}</Field>
+          <Field label={t('Current command')}>{dash(robot.currentCommandId)}</Field>
         </dl>
       ),
     },
     {
       id: 'telemetry',
-      label: 'Telemetry',
-      summary: hasTelemetry ? formatBattery(robot.batteryPercent) : 'No telemetry yet',
+      label: t('Telemetry'),
+      summary: hasTelemetry ? formatBattery(robot.batteryPercent) : t('No telemetry yet'),
       body: (
         <dl>
-          <Field label="Battery">
+          <Field label={t('Battery')}>
             {hasTelemetry ? (
               <>
                 {formatBattery(robot.batteryPercent)}{' '}
@@ -127,77 +128,74 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
               '—'
             )}
           </Field>
-          <Field label="Pose X">{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
-          <Field label="Pose Y">{hasTelemetry ? `${robot.poseY.toFixed(2)} m` : '—'}</Field>
-          <Field label="Pose yaw">{hasTelemetry ? `${Math.round((robot.poseYaw * 180) / Math.PI)}°` : '—'}</Field>
-          <Field label="Linear velocity">{dash(robot.linearVelocity)}</Field>
-          <Field label="Angular velocity">{dash(robot.angularVelocity)}</Field>
-          <Field label="Last telemetry">{formatDateTimeWithYear(robot.lastTelemetryAt)}</Field>
+          <Field label={t('Pose X')}>{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
+          <Field label={t('Pose Y')}>{hasTelemetry ? `${robot.poseY.toFixed(2)} m` : '—'}</Field>
+          <Field label={t('Pose yaw')}>{hasTelemetry ? `${Math.round((robot.poseYaw * 180) / Math.PI)}°` : '—'}</Field>
+          <Field label={t('Linear velocity')}>{dash(robot.linearVelocity)}</Field>
+          <Field label={t('Angular velocity')}>{dash(robot.angularVelocity)}</Field>
+          <Field label={t('Last telemetry')}>{formatDateTimeWithYear(robot.lastTelemetryAt)}</Field>
           {!hasTelemetry ? (
-            <p className="py-2 text-xs text-muted">
-              Pose and battery default to 0 until the first telemetry message. Values shown as "—" until
-              telemetry is received.
-            </p>
+            <p className="py-2 text-xs text-muted">{t('Pose and battery default to 0 until the first telemetry message. Values shown as "—" until telemetry is received.')}</p>
           ) : null}
         </dl>
       ),
     },
     {
       id: 'connectivity',
-      label: 'Connectivity',
-      summary: robot.isOnline ? 'Online' : 'Offline',
+      label: t('Connectivity'),
+      summary: robot.isOnline ? t('Online') : t('Offline'),
       body: (
         <dl>
-          <Field label="Online">{robot.isOnline ? 'Yes' : 'No'}</Field>
-          <Field label="Last heartbeat">
+          <Field label={t('Online')}>{robot.isOnline ? t('Yes') : t('No')}</Field>
+          <Field label={t('Last heartbeat')}>
             {formatRelativeTime(robot.lastHeartbeatAt)}
             <span className="basis-full text-xs font-normal text-muted">
               {formatDateTimeWithYear(robot.lastHeartbeatAt)}
             </span>
           </Field>
-          <Field label="Map version code">{dash(robot.mapVersionCode)}</Field>
+          <Field label={t('Map version code')}>{dash(robot.mapVersionCode)}</Field>
         </dl>
       ),
     },
     {
       id: 'health',
-      label: 'Health',
+      label: t('Health'),
       summary: robot.errorCode ?? 'OK',
       body: (
         <dl>
-          <Field label="Error code">{dash(robot.errorCode)}</Field>
+          <Field label={t('Error code')}>{dash(robot.errorCode)}</Field>
         </dl>
       ),
     },
     {
       id: 'system',
-      label: 'System',
+      label: t('System'),
       summary: formatDateTimeWithYear(robot.createdAt),
       body: (
         <dl>
-          <Field label="Created">{formatDateTimeWithYear(robot.createdAt)}</Field>
-          <Field label="Updated">{formatDateTimeWithYear(robot.updatedAt)}</Field>
+          <Field label={t('Created')}>{formatDateTimeWithYear(robot.createdAt)}</Field>
+          <Field label={t('Updated')}>{formatDateTimeWithYear(robot.updatedAt)}</Field>
         </dl>
       ),
     },
     {
       id: 'job',
-      label: 'Current job',
-      summary: activity ? activity.requestCode : 'No active job',
+      label: t('Current job'),
+      summary: activity ? activity.requestCode : t('No active job'),
       body: activity ? (
         <dl>
-          <Field label="Job">{activity.jobNo}</Field>
-          <Field label="Request">{activity.requestCode}</Field>
-          <Field label="Status">
+          <Field label={t('Job')}>{activity.jobNo}</Field>
+          <Field label={t('Request')}>{activity.requestCode}</Field>
+          <Field label={t('Status')}>
             <StatusBadge tone={JOB_STATUS_TONE[activity.jobStatus]}>{activity.jobStatus}</StatusBadge>
           </Field>
-          <Field label="Progress">
+          <Field label={t('Progress')}>
             {activity.progressPercent}%{' '}
             <Meter percent={activity.progressPercent} tone={activity.jobStatus === 'FAILED' ? 'red' : 'blue'} className="w-12" />
           </Field>
-          {activity.routeLabel ? <Field label="Route">{activity.routeLabel}</Field> : null}
+          {activity.routeLabel ? <Field label={t('Route')}>{activity.routeLabel}</Field> : null}
           {activity.containers?.length ? (
-            <Field label={activity.containers.length > 1 ? 'Containers' : 'Container'}>
+            <Field label={activity.containers.length > 1 ? t('Containers') : t('Container')}>
               <ul className="flex flex-col items-end gap-1.5">
                 {activity.containers.map((container) => (
                   <li key={container.barcode} className="flex items-center gap-2">
@@ -210,13 +208,13 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
           ) : null}
         </dl>
       ) : (
-        <p className={EMPTY}>This robot has no job assigned.</p>
+        <p className={EMPTY}>{t('This robot has no job assigned.')}</p>
       ),
     },
     {
       id: 'recent',
-      label: 'Recent jobs',
-      summary: recent.state === 'loading' ? 'Loading…' : recent.state === 'error' ? 'Unavailable' : recentJobs.length ? `Last ${recentJobs.length}` : 'No jobs yet',
+      label: t('Recent jobs'),
+      summary: recent.state === 'loading' ? t('Loading…') : recent.state === 'error' ? t('Unavailable') : recentJobs.length ? t('Last {length}', { length: recentJobs.length }) : t('No jobs yet'),
       body: recentJobs.length ? (
         <ol className={TIMELINE}>
           {recentJobs.map((item) => {
@@ -229,9 +227,7 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
                   </Link>
                   <StatusBadge tone={JOB_STATUS_TONE[item.status]}>{item.status}</StatusBadge>
                 </div>
-                <span className={TIMELINE_NOTE}>
-                  {formatRelativeTime(item.createdAt)}, {item.containerCount} container{item.containerCount === 1 ? '' : 's'}
-                  {item.completedAt && seconds !== null ? `, ${formatDuration(seconds)}` : item.completedAt ? '' : ', in progress'}
+                <span className={TIMELINE_NOTE}>{t('{value}, {containerCount} container{value2}', { value: formatRelativeTime(item.createdAt), containerCount: item.containerCount, value2: item.containerCount === 1 ? '' : 's' })}{item.completedAt && seconds !== null ? `, ${formatDuration(seconds)}` : item.completedAt ? '' : t(', in progress')}
                 </span>
               </li>
             )
@@ -240,19 +236,19 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
       ) : (
         <p className={EMPTY}>
           {recent.state === 'loading'
-            ? 'Loading jobs…'
+            ? t('Loading jobs…')
             : recent.state === 'error'
-              ? 'The jobs of this robot could not be loaded.'
-              : 'This robot has not been assigned any job yet.'}
+              ? t('The jobs of this robot could not be loaded.')
+              : t('This robot has not been assigned any job yet.')}
         </p>
       ),
     },
     {
       id: 'history',
-      label: 'State history',
+      label: t('State history'),
       // TODO(backend): nothing writes fleet.robot_state_events yet, so there is no history to show.
-      summary: 'Not recorded',
-      body: <p className={EMPTY}>State changes of this robot are not recorded yet.</p>,
+      summary: t('Not recorded'),
+      body: <p className={EMPTY}>{t('State changes of this robot are not recorded yet.')}</p>,
     },
   ]
 }
@@ -305,18 +301,16 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-auto px-6 pt-4 pb-2">
         <Button variant="surface" size="sm" className="self-start" onClick={onBack}>
-          <Icon name="arrowLeft" size={14} /> Fleet
-        </Button>
+          <Icon name="arrowLeft" size={14} />{' '}{t('Fleet')}</Button>
         <div className="mt-3 mb-2 flex items-center justify-between gap-3">
           <h1 className="text-3xl font-book">{robot.code}</h1>
           <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
             {robot.status}
           </StatusBadge>
         </div>
-        <p className="mb-4 text-sm text-muted">
-          Connectivity: {robot.isOnline ? 'Online' : 'Offline'}
+        <p className="mb-4 text-sm text-muted">{t('Connectivity:')}{' '}{robot.isOnline ? t('Online') : t('Offline')}
           {' · '}
-          {robot.isEnabled ? 'Enabled' : 'Disabled'}
+          {robot.isEnabled ? t('Enabled') : t('Disabled')}
         </p>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -326,18 +320,14 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
               size="sm"
               disabled={toggling}
               onClick={() => disableMutation.mutate()}
-            >
-              Disable
-            </Button>
+            >{t('Disable')}</Button>
           ) : (
             <Button
               variant="primary"
               size="sm"
               disabled={toggling}
               onClick={() => enableMutation.mutate()}
-            >
-              Enable
-            </Button>
+            >{t('Enable')}</Button>
           )}
         </div>
         {actionError ? <p className="mb-4 text-xs text-red-ink">{actionError}</p> : null}
@@ -361,7 +351,7 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
               type="button"
               className="group flex flex-col items-center gap-2 text-xs text-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
               disabled={Boolean(action.unavailable) || (action.label === 'Manual' && (!onManual || !mayDrive))}
-              title={action.unavailable ?? (action.label === 'Manual' && !mayDrive ? 'You may not drive this robot.' : undefined)}
+              title={action.unavailable ?? (action.label === 'Manual' && !mayDrive ? t('You may not drive this robot.') : undefined)}
               onClick={action.label === 'Manual' ? onManual : undefined}
             >
               <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-enabled:group-hover:bg-container-higher">
@@ -381,7 +371,7 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
 
         {navigationState ? (
           <p className="mb-4 flex items-baseline justify-between gap-4 text-sm">
-            <span className="text-muted">Navigation</span>
+            <span className="text-muted">{t('Navigation')}</span>
             <span className="font-medium">{navigationState}</span>
           </p>
         ) : null}
@@ -416,7 +406,7 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
         <footer className="px-6 pt-3 pb-6">
           {/* TODO(backend): no endpoint to acknowledge a Robot error yet; the confirmation is local to this panel. */}
           <Button variant="primary" size="lg" block disabled={confirmed} onClick={() => setConfirmed(true)}>
-            <Icon name="check" size={16} /> {confirmed ? 'Error confirmed' : 'Confirm error'}
+            <Icon name="check" size={16} /> {confirmed ? t('Error confirmed') : t('Confirm error')}
           </Button>
         </footer>
       ) : null}

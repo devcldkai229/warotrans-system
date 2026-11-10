@@ -51,8 +51,9 @@ import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
 import { MapEditorCanvas, type EditorTool } from './editor/MapEditorCanvas'
 import { degToRad, normalizeYaw, radToDeg } from './yaw'
-
+import { t } from '@/shared/i18n'
 const WORKFLOW_PANEL = { min: 320, default: 460, key: 'warotrans.workflowPanelWidth' }
+
 const INSPECTOR_WIDTH = 340
 const PANEL_GAP = 12
 const DEFAULT_YAW_DEG = 0
@@ -86,11 +87,11 @@ type Mode =
   | { kind: 'drawingZone'; zoneType: ZoneType; title: string; points: Point[] }
 
 const MAP_TOOLS: { tool: EditorTool; label: string; icon: IconName }[] = [
-  { tool: 'select', label: 'Select', icon: 'target' },
-  { tool: 'pan', label: 'Pan', icon: 'navigate' },
-  { tool: 'endpoint', label: 'Endpoint', icon: 'crosshair' },
-  { tool: 'edge', label: 'Edge', icon: 'route' },
-  { tool: 'zone', label: 'Zone', icon: 'layers' },
+  { tool: 'select', label: t('Select'), icon: 'target' },
+  { tool: 'pan', label: t('Pan'), icon: 'navigate' },
+  { tool: 'endpoint', label: t('Endpoint'), icon: 'crosshair' },
+  { tool: 'edge', label: t('Edge'), icon: 'route' },
+  { tool: 'zone', label: t('Zone'), icon: 'layers' },
 ]
 
 function snap(value: number) {
@@ -167,7 +168,7 @@ function Backdrop({ onClick }: { onClick: () => void }) {
 function errMessage(err: unknown) {
   if (err instanceof ApiError) return err.message
   if (err instanceof Error) return err.message
-  return 'Request failed'
+  return t('Request failed')
 }
 
 export function MapEditorPage() {
@@ -241,8 +242,8 @@ export function MapEditorPage() {
       setActionError(null)
       setActionOk(
         report.isValid
-          ? `Route graph OK · ${report.nodeCount} nodes · ${report.edgeCount} edges · ${report.graphHash.slice(0, 8)}…`
-          : `Route graph has ${report.issues.filter((i) => i.severity === 'ERROR').length} error(s)`,
+          ? t('Route graph OK · {nodeCount} nodes · {edgeCount} edges · {value}…', { nodeCount: report.nodeCount, edgeCount: report.edgeCount, value: report.graphHash.slice(0, 8) })
+          : t('Route graph has {length} error(s)', { length: report.issues.filter((i) => i.severity === 'ERROR').length }),
       )
     },
     onError: (err) => {
@@ -256,7 +257,7 @@ export function MapEditorPage() {
     onSuccess: () => {
       setGraphReport(null)
       setActionError(null)
-      setActionOk('Compiled graph cache cleared — next check/sim rebuilds from Edges / Endpoints / Zones')
+      setActionOk(t('Compiled graph cache cleared — next check/sim rebuilds from Edges / Endpoints / Zones'))
     },
     onError: (err) => setActionError(errMessage(err)),
   })
@@ -269,7 +270,7 @@ export function MapEditorPage() {
     },
     onSuccess: (code) => {
       setActionError(null)
-      setActionOk(`Downloaded route graph · ${code}.geojson`)
+      setActionOk(t('Downloaded route graph · {code}.geojson', { code }))
     },
     onError: async (err) => {
       if (err instanceof ApiError && err.status === 422) {
@@ -278,7 +279,7 @@ export function MapEditorPage() {
           setGraphReport(report)
           setActionOk(null)
           setActionError(
-            `Route graph invalid — ${report.issues.filter((i) => i.severity === 'ERROR').length} error(s); fix then View again`,
+            t('Route graph invalid — {length} error(s); fix then View again', { length: report.issues.filter((i) => i.severity === 'ERROR').length }),
           )
           return
         } catch {
@@ -556,7 +557,7 @@ export function MapEditorPage() {
     if (!version || !isDraft) return
     const trimmed = name.trim()
     if (!trimmed) {
-      setActionError('Enter a name first — the endpoint code is generated from it (EP-{NAME}) on Save.')
+      setActionError(t('Enter a name first — the endpoint code is generated from it (EP-{NAME}) on Save.'))
       return
     }
     setActionError(null)
@@ -577,14 +578,14 @@ export function MapEditorPage() {
     })
     setMode({ kind: 'endpoint', endpointId: NEW_ENTITY_ID })
     setTool('select')
-    setActionOk('Endpoint placed — click Save to write it to the database')
+    setActionOk(t('Endpoint placed — click Save to write it to the database'))
   }
 
   async function saveEndpoint() {
     if (!epDraft || !isDraft || !version || mode.kind !== 'endpoint') return
     const trimmed = (epDraft.name ?? '').trim()
     if (!trimmed) {
-      setActionError('Name is required — code is generated as EP-{NAME}.')
+      setActionError(t('Name is required — code is generated as EP-{NAME}.'))
       return
     }
     setActionError(null)
@@ -604,11 +605,11 @@ export function MapEditorPage() {
         await invalidate()
         setEpDraft(toEndpoint(created))
         setMode({ kind: 'endpoint', endpointId: created.id })
-        setActionOk(`Created ${created.code}`)
+        setActionOk(t('Created {code}', { code: created.code }))
       } else {
         await updateEndpoint(mode.endpointId, body)
         await invalidate()
-        setActionOk('Endpoint saved')
+        setActionOk(t('Endpoint saved'))
       }
     } catch (err) {
       setActionError(errMessage(err))
@@ -619,14 +620,14 @@ export function MapEditorPage() {
     if (!isDraft) return
     if (isUnsavedId(id)) {
       closeInspector()
-      setActionOk('Unsaved endpoint discarded')
+      setActionOk(t('Unsaved endpoint discarded'))
       return
     }
     try {
       await deleteEndpoint(id)
       await invalidate()
       closeInspector()
-      setActionOk('Endpoint deleted')
+      setActionOk(t('Endpoint deleted'))
     } catch (err) {
       setActionError(errMessage(err))
     }
@@ -647,14 +648,14 @@ export function MapEditorPage() {
     })
     setMode({ kind: 'edge', edgeId: NEW_ENTITY_ID })
     setTool('select')
-    setActionOk('Edge drawn — enter a name and click Save to persist')
+    setActionOk(t('Edge drawn — enter a name and click Save to persist'))
   }
 
   async function saveEdge() {
     if (mode.kind !== 'edge' || !edgeDraft || !isDraft || !version) return
     const trimmed = edgeDraft.name.trim()
     if (!trimmed) {
-      setActionError('Name is required — code is generated as EDGE-{NAME}.')
+      setActionError(t('Name is required — code is generated as EDGE-{NAME}.'))
       return
     }
     setActionError(null)
@@ -679,11 +680,11 @@ export function MapEditorPage() {
           geometry: created.geometry,
         })
         setMode({ kind: 'edge', edgeId: created.id })
-        setActionOk(`Created ${created.code}`)
+        setActionOk(t('Created {code}', { code: created.code }))
       } else {
         await updateEdge(mode.edgeId, body)
         await invalidate()
-        setActionOk('Edge saved')
+        setActionOk(t('Edge saved'))
       }
     } catch (err) {
       setActionError(errMessage(err))
@@ -694,14 +695,14 @@ export function MapEditorPage() {
     if (!isDraft) return
     if (isUnsavedId(id)) {
       closeInspector()
-      setActionOk('Unsaved edge discarded')
+      setActionOk(t('Unsaved edge discarded'))
       return
     }
     try {
       await deleteEdge(id)
       await invalidate()
       closeInspector()
-      setActionOk('Edge deleted')
+      setActionOk(t('Edge deleted'))
     } catch (err) {
       setActionError(errMessage(err))
     }
@@ -735,7 +736,7 @@ export function MapEditorPage() {
     if (!version || !isDraft || points.length < 3) return
     const type = zoneType ?? (mode.kind === 'drawingZone' ? mode.zoneType : 'KEEP_OUT')
     const name =
-      title ?? (mode.kind === 'drawingZone' ? `${mode.title} - ${zones.length + 1}` : `Zone ${zones.length + 1}`)
+      title ?? (mode.kind === 'drawingZone' ? `${mode.title} - ${zones.length + 1}` : t('Zone {value}', { value: zones.length + 1 }))
     setActionError(null)
     setEpDraft(null)
     setEdgeDraft(null)
@@ -748,14 +749,14 @@ export function MapEditorPage() {
     })
     setMode({ kind: 'zone', zoneId: NEW_ENTITY_ID })
     setTool('select')
-    setActionOk('Zone drawn — click Save to write it to the database')
+    setActionOk(t('Zone drawn — click Save to write it to the database'))
   }
 
   async function saveZone() {
     if (mode.kind !== 'zone' || !zoneDraft || !isDraft || !version) return
     const trimmed = zoneDraft.name.trim()
     if (!trimmed) {
-      setActionError('Name is required — code is generated as ZONE-{NAME}.')
+      setActionError(t('Name is required — code is generated as ZONE-{NAME}.'))
       return
     }
     setActionError(null)
@@ -780,11 +781,11 @@ export function MapEditorPage() {
           geometry: created.geometry,
         })
         setMode({ kind: 'zone', zoneId: created.id })
-        setActionOk(`Created ${created.code}`)
+        setActionOk(t('Created {code}', { code: created.code }))
       } else {
         await updateZone(mode.zoneId, body)
         await invalidate()
-        setActionOk('Zone saved')
+        setActionOk(t('Zone saved'))
       }
     } catch (err) {
       setActionError(errMessage(err))
@@ -795,14 +796,14 @@ export function MapEditorPage() {
     if (!isDraft) return
     if (isUnsavedId(id)) {
       closeInspector()
-      setActionOk('Unsaved zone discarded')
+      setActionOk(t('Unsaved zone discarded'))
       return
     }
     try {
       await deleteZone(id)
       await invalidate()
       closeInspector()
-      setActionOk('Zone deleted')
+      setActionOk(t('Zone deleted'))
     } catch (err) {
       setActionError(errMessage(err))
     }
@@ -816,7 +817,7 @@ export function MapEditorPage() {
       (mode.kind === 'edge' && isUnsavedId(mode.edgeId)) ||
       (mode.kind === 'zone' && isUnsavedId(mode.zoneId))
     ) {
-      setActionError('Save this item before duplicating.')
+      setActionError(t('Save this item before duplicating.'))
       return
     }
     setActionError(null)
@@ -835,7 +836,7 @@ export function MapEditorPage() {
           yawTolerance: ep.yawTolerance,
         })
         await invalidate()
-        setActionOk(`Duplicated ${ep.code} as ${created.code}`)
+        setActionOk(t('Duplicated {code} as {code2}', { code: ep.code, code2: created.code }))
         setMode({ kind: 'endpoint', endpointId: created.id })
         setEpDraft(toEndpoint(created))
       } else if (mode.kind === 'edge') {
@@ -850,7 +851,7 @@ export function MapEditorPage() {
           isActive: edge.isActive,
         })
         await invalidate()
-        setActionOk(`Duplicated ${edge.code} as ${created.code}`)
+        setActionOk(t('Duplicated {code} as {code2}', { code: edge.code, code2: created.code }))
         setEdgeDraft({
           name: created.name,
           direction: created.direction as EdgeDirection,
@@ -873,7 +874,7 @@ export function MapEditorPage() {
           policySchemaVersion: zone.policySchemaVersion ?? 1,
         })
         await invalidate()
-        setActionOk(`Duplicated ${zone.code} as ${created.code}`)
+        setActionOk(t('Duplicated {code} as {code2}', { code: zone.code, code2: created.code }))
         setZoneDraft({
           name: created.name,
           zoneType: created.zoneType as ZoneType,
@@ -919,7 +920,7 @@ export function MapEditorPage() {
 
   if (detailQuery.isLoading) {
     return (
-      <div className="fixed inset-0 z-40 grid place-items-center bg-surface text-sm text-muted">Loading map…</div>
+      <div className="fixed inset-0 z-40 grid place-items-center bg-surface text-sm text-muted">{t('Loading map…')}</div>
     )
   }
 
@@ -927,10 +928,8 @@ export function MapEditorPage() {
     return (
       <div className="fixed inset-0 z-40 grid place-items-center bg-surface">
         <div className="text-center">
-          <p className="text-sm text-ink-2">Map version not found.</p>
-          <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>
-            Back to Facility
-          </Button>
+          <p className="text-sm text-ink-2">{t('Map version not found.')}</p>
+          <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>{t('Back to Facility')}</Button>
         </div>
       </div>
     )
@@ -940,14 +939,9 @@ export function MapEditorPage() {
     return (
       <div className="fixed inset-0 z-40 grid place-items-center bg-surface">
         <div className="mx-auto max-w-md px-6 text-center">
-          <p className="text-sm text-ink-2">
-            This draft has no occupancy image yet (image width/height is 0). Create-metadata-only maps cannot be
-            edited until you Import <span className="font-mono">map.yaml</span> +{' '}
-            <span className="font-mono">map.pgm</span> on Facility.
-          </p>
-          <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>
-            Back to Facility · Import assets
-          </Button>
+          <p className="text-sm text-ink-2">{t('This draft has no occupancy image yet (image width/height is 0). Create-metadata-only maps cannot be edited until you Import')}{' '}<span className="font-mono">{t('map.yaml')}</span> +{' '}
+            <span className="font-mono">{t('map.pgm')}</span>{' '}{t('on Facility.')}</p>
+          <Button className="mt-4" variant="primary" onClick={() => navigate('/configure/facility')}>{t('Back to Facility · Import assets')}</Button>
         </div>
       </div>
     )
@@ -956,7 +950,7 @@ export function MapEditorPage() {
   return (
     <div className="fixed inset-0 z-40 flex min-w-[1100px] flex-col bg-surface">
       <header className="flex h-14 flex-none items-center gap-3 pr-6 pl-3">
-        <IconButton aria-label="Back to Facility" onClick={() => navigate('/configure/facility')}>
+        <IconButton aria-label={t('Back to Facility')} onClick={() => navigate('/configure/facility')}>
           <Icon name="arrowLeft" size={18} />
         </IconButton>
         <h1 className="text-base font-medium">
@@ -964,7 +958,7 @@ export function MapEditorPage() {
         </h1>
         <StatusBadge tone={MAP_STATUS_TONE[version.status as MapStatus] ?? 'grey'}>{version.status}</StatusBadge>
         {version.sourceMapVersionCode ? (
-          <span className="text-xs text-muted">Cloned from {version.sourceMapVersionCode}</span>
+          <span className="text-xs text-muted">{t('Cloned from')}{' '}{version.sourceMapVersionCode}</span>
         ) : null}
         <span className="ml-2 flex items-center gap-2 text-xs text-muted">
           {actionError ? (
@@ -974,70 +968,64 @@ export function MapEditorPage() {
               <span className="size-1.5 rounded-full bg-green" /> {actionOk}
             </>
           ) : isDraft ? (
-            'World meters · pan/zoom display-only · continuous image coords'
+            t('World meters · pan/zoom display-only · continuous image coords')
           ) : (
-            'Read-only: only DRAFT maps can be edited. Clone & edit makes an editable copy.'
+            t('Read-only: only DRAFT maps can be edited. Clone & edit makes an editable copy.')
           )}
         </span>
         <div className="ml-auto flex gap-2">
           <Button
             variant="ghost"
             disabled={!mapId || checkGraphMutation.isPending}
-            title="Offline QA: compile Edges/Endpoints/Zones (not required for Semantic Nav2 Active)"
+            title={t('Offline QA: compile Edges/Endpoints/Zones (not required for Semantic Nav2 Active)')}
             onClick={() => checkGraphMutation.mutate()}
           >
-            {checkGraphMutation.isPending ? 'Checking…' : 'Check topology (offline)'}
+            {checkGraphMutation.isPending ? t('Checking…') : t('Check topology (offline)')}
           </Button>
           <Button
             variant="ghost"
             disabled={!mapId || viewRouteGraphMutation.isPending}
-            title="Offline: download legacy RouteGraph GeoJSON (Stage-3 Active uses Nav2 free-space)"
+            title={t('Offline: download legacy RouteGraph GeoJSON (Stage-3 Active uses Nav2 free-space)')}
             onClick={() => viewRouteGraphMutation.mutate()}
           >
-            {viewRouteGraphMutation.isPending ? 'Loading…' : 'Export route graph (legacy)'}
+            {viewRouteGraphMutation.isPending ? t('Loading…') : t('Export route graph (legacy)')}
           </Button>
           <Button
             variant="ghost"
             disabled={!mapId}
-            title="Open traffic debug SVG (occupancy, connectors, rejected access, clearance)"
+            title={t('Open traffic debug SVG (occupancy, connectors, rejected access, clearance)')}
             onClick={() => {
               const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
               window.open(`${base}/api/navigation/maps/${mapId}/traffic-graph/debug.svg`, '_blank', 'noopener,noreferrer')
             }}
-          >
-            Debug SVG
-          </Button>
+          >{t('Debug SVG')}</Button>
           <Button
             variant="ghost"
             disabled={!mapId || clearGraphCacheMutation.isPending}
-            title="Drop in-memory compiled graph cache for this map (does not delete geometry)"
+            title={t('Drop in-memory compiled graph cache for this map (does not delete geometry)')}
             onClick={() => {
               if (
                 window.confirm(
-                  'Clear compiled route-graph cache for this map?\n\nEdges, endpoints and zones stay. The next check or sim rebuilds the graph.',
+                  t('Clear compiled route-graph cache for this map?\n\nEdges, endpoints and zones stay. The next check or sim rebuilds the graph.'),
                 )
               ) {
                 clearGraphCacheMutation.mutate()
               }
             }}
           >
-            {clearGraphCacheMutation.isPending ? 'Clearing…' : 'Clear graph cache'}
+            {clearGraphCacheMutation.isPending ? t('Clearing…') : t('Clear graph cache')}
           </Button>
-          <Button variant="ghost" onClick={() => navigate('/configure/facility')}>
-            Close
-          </Button>
+          <Button variant="ghost" onClick={() => navigate('/configure/facility')}>{t('Close')}</Button>
           {isDraft ? (
-            <Button variant="primary" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>
-              Publish
-            </Button>
+            <Button variant="primary" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>{t('Publish')}</Button>
           ) : (
             <Button
               variant="primary"
               disabled={cloneMutation.isPending}
-              title="Copy this map (image, endpoints, zones, edges) into a new DRAFT and edit the copy"
+              title={t('Copy this map (image, endpoints, zones, edges) into a new DRAFT and edit the copy')}
               onClick={() => cloneMutation.mutate()}
             >
-              {cloneMutation.isPending ? 'Cloning…' : 'Clone & edit'}
+              {cloneMutation.isPending ? t('Cloning…') : t('Clone & edit')}
             </Button>
           )}
         </div>
@@ -1048,18 +1036,14 @@ export function MapEditorPage() {
           <div className="flex items-start justify-between gap-2">
             <div>
               <span className={graphReport.isValid ? 'font-medium text-green' : 'font-medium text-red'}>
-                {graphReport.isValid ? 'Valid' : 'Invalid'}
+                {graphReport.isValid ? t('Valid') : t('Invalid')}
               </span>
-              <span className="ml-2 text-muted">
-                {graphReport.nodeCount} nodes · {graphReport.edgeCount} edges · hash {graphReport.graphHash.slice(0, 12)}…
-              </span>
+              <span className="ml-2 text-muted">{t('{nodeCount} nodes · {edgeCount} edges · hash {value}…', { nodeCount: graphReport.nodeCount, edgeCount: graphReport.edgeCount, value: graphReport.graphHash.slice(0, 12) })}</span>
             </div>
-            <button type="button" className="text-muted hover:text-ink" onClick={() => setGraphReport(null)}>
-              Dismiss
-            </button>
+            <button type="button" className="text-muted hover:text-ink" onClick={() => setGraphReport(null)}>{t('Dismiss')}</button>
           </div>
           {graphReport.issues.length === 0 ? (
-            <p className="mt-1 text-muted">No issues.</p>
+            <p className="mt-1 text-muted">{t('No issues.')}</p>
           ) : (
             <ul className="mt-1 space-y-1">
               {graphReport.issues.map((issue, index) => (
@@ -1085,15 +1069,12 @@ export function MapEditorPage() {
                   setEdgeDraft(null)
                   setZoneDraft(null)
                 }}
-              >
-                Done
-              </Button>
+              >{t('Done')}</Button>
               {workflowOpen ? (
                 <span className="ml-2 inline-flex items-center gap-2 text-sm text-muted">
-                  <Icon name="workflow" size={15} /> Workflows
-                  <Icon name="chevronRight" size={12} />
+                  <Icon name="workflow" size={15} />{' '}{t('Workflows')}<Icon name="chevronRight" size={12} />
                   <strong className="font-medium text-ink">
-                    {mode.kind === 'workflow' && mode.workflowId === 'new' ? 'New workflow' : 'Edit workflow'}
+                    {mode.kind === 'workflow' && mode.workflowId === 'new' ? t('New workflow') : t('Edit workflow')}
                   </strong>
                 </span>
               ) : null}
@@ -1104,8 +1085,7 @@ export function MapEditorPage() {
               size="sm"
               onClick={() => setMode({ kind: 'picker', tool: 'workflows' })}
             >
-              <Icon name="workflow" size={14} /> Workflows
-            </Button>
+              <Icon name="workflow" size={14} />{' '}{t('Workflows')}</Button>
           )}
           {(mode.kind === 'drawingEdge' || mode.kind === 'drawingZone') && (
             <>
@@ -1114,12 +1094,8 @@ export function MapEditorPage() {
                 size="sm"
                 disabled={mode.points.length === 0}
                 onClick={() => setMode({ ...mode, points: mode.points.slice(0, -1) })}
-              >
-                Undo point
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
-                Cancel
-              </Button>
+              >{t('Undo point')}</Button>
+              <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>{t('Cancel')}</Button>
               <Button
                 variant="primary"
                 size="sm"
@@ -1130,9 +1106,7 @@ export function MapEditorPage() {
                   if (mode.kind === 'drawingEdge') void finishEdge(mode.points, mode.direction)
                   if (mode.kind === 'drawingZone') void finishZone(mode.points)
                 }}
-              >
-                Finish
-              </Button>
+              >{t('Finish')}</Button>
             </>
           )}
         </div>
@@ -1210,16 +1184,13 @@ export function MapEditorPage() {
                 worldToPixel(transform, mode.at).u < transform.imageWidthPixels / 2 ? 'right-3' : 'left-3',
               )}
             >
-              <p className="text-ink-2">
-                Click the map or drag the marker to move it. Name it here, then confirm — nothing is written to the
-                database until you click Save in the inspector.
-              </p>
+              <p className="text-ink-2">{t('Click the map or drag the marker to move it. Name it here, then confirm — nothing is written to the database until you click Save in the inspector.')}</p>
               <label className="mt-2 block">
-                <span className="mb-1 block text-[11px] font-medium text-ink-2">Name *</span>
+                <span className="mb-1 block text-[11px] font-medium text-ink-2">{t('Name *')}</span>
                 <input
                   className={controlClass('sm')}
                   value={mode.name}
-                  placeholder="e.g. Dock 1"
+                  placeholder={t('e.g. Dock 1')}
                   autoFocus
                   onChange={(event) => setMode({ ...mode, name: event.target.value })}
                   onKeyDown={(event) => {
@@ -1237,7 +1208,7 @@ export function MapEditorPage() {
               <select
                 className={controlClass('sm')}
                 value={mode.endpointType}
-                aria-label="Endpoint type"
+                aria-label={t('Endpoint type')}
                 onChange={(event) => setMode({ ...mode, endpointType: event.target.value as EndpointType })}
               >
                 {ENDPOINT_TEMPLATES.map((item) => (
@@ -1247,25 +1218,19 @@ export function MapEditorPage() {
                 ))}
               </select>
               <div className="mt-2 flex justify-end gap-1.5">
-                <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>
-                  Cancel
-                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'idle' })}>{t('Cancel')}</Button>
                 <Button
                   variant="primary"
                   size="sm"
                   disabled={!mode.name.trim()}
                   onClick={() => void placeEndpoint(mode.endpointType, mode.name, mode.at, mode.yawDeg)}
-                >
-                  Confirm placement
-                </Button>
+                >{t('Confirm placement')}</Button>
               </div>
             </div>
           ) : null}
 
           {tool === 'endpoint' && mode.kind === 'idle' && isDraft ? (
-            <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-xs text-ink-2 shadow-float">
-              Click the map to place an Endpoint
-            </div>
+            <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-xs text-ink-2 shadow-float">{t('Click the map to place an Endpoint')}</div>
           ) : null}
 
           {tool === 'edge' && mode.kind === 'idle' && isDraft ? (
@@ -1294,14 +1259,12 @@ export function MapEditorPage() {
             <Backdrop onClick={() => setMode({ kind: 'idle' })} />
             <div className="absolute top-3 left-1/2 z-20 max-h-[calc(100%-24px)] w-[380px] -translate-x-1/2 overflow-auto rounded-lg bg-surface p-2 shadow-float">
               <div className="flex items-center justify-between px-2 py-2">
-                <h3 className="text-sm font-medium">Workflows</h3>
-                <Button variant="primary" size="sm" onClick={() => setMode({ kind: 'workflow', workflowId: 'new' })}>
-                  New
-                </Button>
+                <h3 className="text-sm font-medium">{t('Workflows')}</h3>
+                <Button variant="primary" size="sm" onClick={() => setMode({ kind: 'workflow', workflowId: 'new' })}>{t('New')}</Button>
               </div>
-              <SearchInput value={query} onChange={setQuery} placeholder="Search workflows" className="mb-2" />
+              <SearchInput value={query} onChange={setQuery} placeholder={t('Search workflows')} className="mb-2" />
               {workflowsQuery.isLoading ? (
-                <p className="px-2 py-4 text-sm text-muted">Loading…</p>
+                <p className="px-2 py-4 text-sm text-muted">{t('Loading…')}</p>
               ) : (
                 (workflowsQuery.data?.items ?? [])
                   .filter((w) => w.name.toLowerCase().includes(lowered))
@@ -1322,8 +1285,8 @@ export function MapEditorPage() {
         ) : null}
 
         {selectedEndpoint && epDraft ? (
-          <Inspector title="Endpoint" onClose={closeInspector}>
-            <Field label="Name">
+          <Inspector title={t('Endpoint')} onClose={closeInspector}>
+            <Field label={t('Name')}>
               <input
                 className={controlClass()}
                 value={epDraft.name ?? ''}
@@ -1331,19 +1294,17 @@ export function MapEditorPage() {
                 onChange={(e) => setEpDraft({ ...epDraft, name: e.target.value })}
               />
             </Field>
-            <Field label="Code">
+            <Field label={t('Code')}>
               <input
                 className={controlClass()}
                 value={isUnsavedId(selectedEndpoint.id) ? '' : selectedEndpoint.code}
-                placeholder={isUnsavedId(selectedEndpoint.id) ? 'Assigned on Save' : undefined}
+                placeholder={isUnsavedId(selectedEndpoint.id) ? t('Assigned on Save') : undefined}
                 readOnly
                 disabled
               />
-              <p className="mt-1 text-[11px] text-muted">
-                Generated from the name on Save; renaming later does not change it.
-              </p>
+              <p className="mt-1 text-[11px] text-muted">{t('Generated from the name on Save; renaming later does not change it.')}</p>
             </Field>
-            <Field label="Type">
+            <Field label={t('Type')}>
               <select
                 className={controlClass()}
                 value={epDraft.endpointType}
@@ -1379,7 +1340,7 @@ export function MapEditorPage() {
                 />
               </Field>
             </FieldRow>
-            <Field label={`Yaw (${radToDeg(epDraft.yaw ?? 0).toFixed(1)}° → rad)`}>
+            <Field label={t('Yaw ({value}° → rad)', { value: radToDeg(epDraft.yaw ?? 0).toFixed(1) })}>
               <input
                 className={controlClass()}
                 type="number"
@@ -1395,7 +1356,7 @@ export function MapEditorPage() {
               onChange={(deg) => isDraft && setEpDraft({ ...epDraft, yaw: degToRad(normalizeYaw(deg)) })}
             />
             <FieldRow>
-              <Field label="Pos. tol (m)">
+              <Field label={t('Pos. tol (m)')}>
                 <input
                   className={controlClass()}
                   type="number"
@@ -1405,7 +1366,7 @@ export function MapEditorPage() {
                   onChange={(e) => setEpDraft({ ...epDraft, positionTolerance: Number(e.target.value) })}
                 />
               </Field>
-              <Field label="Yaw tol (°)">
+              <Field label={t('Yaw tol (°)')}>
                 <input
                   className={controlClass()}
                   type="number"
@@ -1422,24 +1383,18 @@ export function MapEditorPage() {
                 checked={epDraft.isEnabled ?? true}
                 disabled={!isDraft}
                 onChange={(e) => setEpDraft({ ...epDraft, isEnabled: e.target.checked })}
-              />
-              Enabled
-            </label>
+              />{t('Enabled')}</label>
             {isDraft ? (
               <div className="mt-4 flex gap-2">
-                <Button variant="primary" onClick={() => void saveEndpoint()}>
-                  Save
-                </Button>
+                <Button variant="primary" onClick={() => void saveEndpoint()}>{t('Save')}</Button>
                 <Button
                   variant="ghost"
                   disabled={isUnsavedId(selectedEndpoint.id)}
                   onClick={() => void duplicateSelected()}
-                  title="Duplicate (Ctrl+D)"
-                >
-                  Duplicate
-                </Button>
+                  title={t('Duplicate (Ctrl+D)')}
+                >{t('Duplicate')}</Button>
                 <Button variant="ghost" onClick={() => void removeEndpoint(selectedEndpoint.id)}>
-                  {isUnsavedId(selectedEndpoint.id) ? 'Discard' : 'Delete'}
+                  {isUnsavedId(selectedEndpoint.id) ? t('Discard') : t('Delete')}
                 </Button>
               </div>
             ) : null}
@@ -1447,27 +1402,27 @@ export function MapEditorPage() {
         ) : null}
 
         {selectedEdge && edgeDraft ? (
-          <Inspector title="Edge" onClose={closeInspector}>
-            <Field label="Name">
+          <Inspector title={t('Edge')} onClose={closeInspector}>
+            <Field label={t('Name')}>
               <input
                 className={controlClass()}
                 value={edgeDraft.name}
                 disabled={!isDraft}
-                placeholder="e.g. North aisle"
+                placeholder={t('e.g. North aisle')}
                 onChange={(e) => setEdgeDraft({ ...edgeDraft, name: e.target.value })}
               />
             </Field>
-            <Field label="Code">
+            <Field label={t('Code')}>
               <input
                 className={controlClass()}
                 value={isUnsavedId(selectedEdge.id) ? '' : selectedEdge.code}
-                placeholder={isUnsavedId(selectedEdge.id) ? 'Assigned on Save' : undefined}
+                placeholder={isUnsavedId(selectedEdge.id) ? t('Assigned on Save') : undefined}
                 readOnly
                 disabled
               />
-              <p className="mt-1 text-[11px] text-muted">Generated from the name on Save.</p>
+              <p className="mt-1 text-[11px] text-muted">{t('Generated from the name on Save.')}</p>
             </Field>
-            <Field label="Direction">
+            <Field label={t('Direction')}>
               <select
                 className={controlClass()}
                 value={edgeDraft.direction}
@@ -1481,7 +1436,7 @@ export function MapEditorPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Width (m)">
+            <Field label={t('Width (m)')}>
               <input
                 className={controlClass()}
                 type="number"
@@ -1492,12 +1447,12 @@ export function MapEditorPage() {
                 onChange={(e) => setEdgeDraft({ ...edgeDraft, widthMeters: Number(e.target.value) })}
               />
             </Field>
-            <Field label="Max speed (m/s)">
+            <Field label={t('Max speed (m/s)')}>
               <input
                 className={controlClass()}
                 value={edgeDraft.maxSpeed}
                 disabled={!isDraft}
-                placeholder="optional"
+                placeholder={t('optional')}
                 onChange={(e) => setEdgeDraft({ ...edgeDraft, maxSpeed: e.target.value })}
               />
             </Field>
@@ -1507,25 +1462,19 @@ export function MapEditorPage() {
                 checked={edgeDraft.isActive}
                 disabled={!isDraft}
                 onChange={(e) => setEdgeDraft({ ...edgeDraft, isActive: e.target.checked })}
-              />
-              Active
-            </label>
-            <p className="text-xs text-muted">{selectedEdge.geometry.coordinates.length} LineString vertices (world m)</p>
+              />{t('Active')}</label>
+            <p className="text-xs text-muted">{selectedEdge.geometry.coordinates.length}{' '}{t('LineString vertices (world m)')}</p>
             {isDraft ? (
               <div className="mt-4 flex gap-2">
-                <Button variant="primary" onClick={() => void saveEdge()}>
-                  Save
-                </Button>
+                <Button variant="primary" onClick={() => void saveEdge()}>{t('Save')}</Button>
                 <Button
                   variant="ghost"
                   disabled={isUnsavedId(selectedEdge.id)}
                   onClick={() => void duplicateSelected()}
-                  title="Duplicate (Ctrl+D)"
-                >
-                  Duplicate
-                </Button>
+                  title={t('Duplicate (Ctrl+D)')}
+                >{t('Duplicate')}</Button>
                 <Button variant="ghost" onClick={() => void removeEdge(selectedEdge.id)}>
-                  {isUnsavedId(selectedEdge.id) ? 'Discard' : 'Delete'}
+                  {isUnsavedId(selectedEdge.id) ? t('Discard') : t('Delete')}
                 </Button>
               </div>
             ) : null}
@@ -1533,8 +1482,8 @@ export function MapEditorPage() {
         ) : null}
 
         {selectedZone && zoneDraft ? (
-          <Inspector title="Zone" onClose={closeInspector}>
-            <Field label="Name">
+          <Inspector title={t('Zone')} onClose={closeInspector}>
+            <Field label={t('Name')}>
               <input
                 className={controlClass()}
                 value={zoneDraft.name}
@@ -1542,17 +1491,17 @@ export function MapEditorPage() {
                 onChange={(e) => setZoneDraft({ ...zoneDraft, name: e.target.value })}
               />
             </Field>
-            <Field label="Code">
+            <Field label={t('Code')}>
               <input
                 className={controlClass()}
                 value={isUnsavedId(selectedZone.id) ? '' : selectedZone.code}
-                placeholder={isUnsavedId(selectedZone.id) ? 'Assigned on Save' : undefined}
+                placeholder={isUnsavedId(selectedZone.id) ? t('Assigned on Save') : undefined}
                 readOnly
                 disabled
               />
-              <p className="mt-1 text-[11px] text-muted">Generated from the name on Save.</p>
+              <p className="mt-1 text-[11px] text-muted">{t('Generated from the name on Save.')}</p>
             </Field>
-            <Field label="Type">
+            <Field label={t('Type')}>
               <select
                 className={controlClass()}
                 value={zoneDraft.zoneType}
@@ -1574,19 +1523,15 @@ export function MapEditorPage() {
               </select>
             </Field>
             {zoneDraft.zoneType === 'SPEED' ? (
-              <p className="text-xs text-amber-ink">SPEED requires MaxSpeed (m/s).</p>
+              <p className="text-xs text-amber-ink">{t('SPEED requires MaxSpeed (m/s).')}</p>
             ) : null}
             {zoneDraft.zoneType === 'SINGLE_OCCUPANCY' ? (
-              <p className="text-xs text-muted">
-                Exclusive footprint occupancy (Stage-3 Fleet reservation). Not required for Nav2 free-space planning.
-              </p>
+              <p className="text-xs text-muted">{t('Exclusive footprint occupancy (Stage-3 Fleet reservation). Not required for Nav2 free-space planning.')}</p>
             ) : null}
             {zoneDraft.zoneType === 'JUNCTION' ? (
-              <p className="text-xs text-muted">
-                Optional / legacy topology helper. Not required for Semantic Nav2 navigation.
-              </p>
+              <p className="text-xs text-muted">{t('Optional / legacy topology helper. Not required for Semantic Nav2 navigation.')}</p>
             ) : null}
-            <Field label="Max speed (m/s)">
+            <Field label={t('Max speed (m/s)')}>
               <input
                 className={controlClass()}
                 value={zoneDraft.maxSpeed}
@@ -1600,24 +1545,18 @@ export function MapEditorPage() {
                 checked={zoneDraft.isActive}
                 disabled={!isDraft}
                 onChange={(e) => setZoneDraft({ ...zoneDraft, isActive: e.target.checked })}
-              />
-              Active
-            </label>
+              />{t('Active')}</label>
             {isDraft ? (
               <div className="mt-4 flex gap-2">
-                <Button variant="primary" onClick={() => void saveZone()}>
-                  Save
-                </Button>
+                <Button variant="primary" onClick={() => void saveZone()}>{t('Save')}</Button>
                 <Button
                   variant="ghost"
                   disabled={isUnsavedId(selectedZone.id)}
                   onClick={() => void duplicateSelected()}
-                  title="Duplicate (Ctrl+D)"
-                >
-                  Duplicate
-                </Button>
+                  title={t('Duplicate (Ctrl+D)')}
+                >{t('Duplicate')}</Button>
                 <Button variant="ghost" onClick={() => void removeZone(selectedZone.id)}>
-                  {isUnsavedId(selectedZone.id) ? 'Discard' : 'Delete'}
+                  {isUnsavedId(selectedZone.id) ? t('Discard') : t('Delete')}
                 </Button>
               </div>
             ) : null}
@@ -1662,7 +1601,7 @@ function Inspector({
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">{title}</h3>
-        <IconButton aria-label="Close" onClick={onClose}>
+        <IconButton aria-label={t('Close')} onClick={onClose}>
           <Icon name="close" size={16} />
         </IconButton>
       </div>

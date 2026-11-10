@@ -6,8 +6,9 @@ import { controlClass } from '@/shared/ui/controlClass'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { createCategory } from './api'
 import { AddButton, SectionHead } from './SectionHead'
-
+import { t } from '@/shared/i18n'
 interface CategoryDraft {
+
   code: string
   name: string
   description: string
@@ -37,11 +38,11 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
     if (!draft) return
     const code = draft.code.trim().toUpperCase()
     if (!code || !draft.name.trim()) {
-      setError('Code and name are required.')
+      setError(t('Code and name are required.'))
       return
     }
     if (categories.some((category) => category.code === code)) {
-      setError('This category code already exists.')
+      setError(t('This category code already exists.'))
       return
     }
 
@@ -56,7 +57,7 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
       setCategories((current) => [...current, created].sort((a, b) => a.code.localeCompare(b.code)))
       setDraft(null)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'The category could not be saved.')
+      setError(failure instanceof Error ? failure.message : t('The category could not be saved.'))
     } finally {
       setBusy(false)
     }
@@ -64,17 +65,17 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
 
   return (
     <>
-      <SectionHead title="Categories" hint="Groups that products belong to.">
-        <AddButton onClick={open}>Add category</AddButton>
+      <SectionHead title={t('Categories')} hint={t('Groups that products belong to.')}>
+        <AddButton onClick={open}>{t('Add category')}</AddButton>
       </SectionHead>
 
       <Table>
         <thead>
           <tr>
-            <Th>Code</Th>
-            <Th>Name</Th>
-            <Th>Description</Th>
-            <Th align="right">Products</Th>
+            <Th>{t('Code')}</Th>
+            <Th>{t('Name')}</Th>
+            <Th>{t('Description')}</Th>
+            <Th align="right">{t('Products')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -89,19 +90,19 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
           {categories.length === 0 ? (
             <EmptyRow colSpan={4}>
               {loadState === 'loading'
-                ? 'Loading categories…'
+                ? t('Loading categories…')
                 : loadState === 'error'
-                  ? 'Could not load categories. Check that the API is running, then reload.'
-                  : 'No categories yet. Add the first one.'}
+                  ? t('Could not load categories. Check that the API is running, then reload.')
+                  : t('No categories yet. Add the first one.')}
             </EmptyRow>
           ) : null}
         </tbody>
       </Table>
 
       {draft ? (
-        <Dialog title="Add category" submitLabel="Create category" busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
+        <Dialog title={t('Add category')} submitLabel={t('Create category')} busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
           <FieldRow>
-            <Field label="Code">
+            <Field label={t('Code')}>
               <input
                 className={controlClass()}
                 value={draft.code}
@@ -110,7 +111,7 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
                 autoFocus
               />
             </Field>
-            <Field label="Name">
+            <Field label={t('Name')}>
               <input
                 className={controlClass()}
                 value={draft.name}
@@ -119,7 +120,7 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
               />
             </Field>
           </FieldRow>
-          <Field label="Description">
+          <Field label={t('Description')}>
             <textarea
               className={controlClass('area')}
               value={draft.description}

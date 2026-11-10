@@ -8,8 +8,9 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { createProduct, setProductStatus } from './api'
 import { AddButton, SectionHead } from './SectionHead'
-
+import { t } from '@/shared/i18n'
 /** Web-only limit: the API accepts up to 128 characters, the console keeps barcodes to 13 digits (EAN-13 length). */
+
 const BARCODE_MAX_DIGITS = 13
 
 interface ProductDraft {
@@ -61,15 +62,15 @@ export function ProductsSection({ products, setProducts, categories, loadState }
     const sku = draft.sku.trim().toUpperCase()
     const barcode = draft.supplierBarcode.trim()
     if (!sku || !draft.name.trim() || !draft.categoryId) {
-      setError('SKU, name and category are required.')
+      setError(t('SKU, name and category are required.'))
       return
     }
     if (products.some((product) => product.sku === sku)) {
-      setError('This SKU already exists.')
+      setError(t('This SKU already exists.'))
       return
     }
     if (barcode && products.some((product) => product.supplierBarcode === barcode)) {
-      setError('This supplier barcode already belongs to another product.')
+      setError(t('This supplier barcode already belongs to another product.'))
       return
     }
 
@@ -88,7 +89,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
       setDraft(null)
     } catch (failure) {
       // e.g. the same SKU was just added by someone else: the server's message says which value clashes.
-      setError(failure instanceof Error ? failure.message : 'The product could not be saved.')
+      setError(failure instanceof Error ? failure.message : t('The product could not be saved.'))
     } finally {
       setBusy(false)
     }
@@ -101,7 +102,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
       const updated = await setProductStatus(product, !product.isActive)
       setProducts((current) => current.map((item) => (item.id === updated.id ? updated : item)))
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : 'The status could not be changed.')
+      setNotice(failure instanceof Error ? failure.message : t('The status could not be changed.'))
     } finally {
       setBusyId(null)
     }
@@ -109,22 +110,22 @@ export function ProductsSection({ products, setProducts, categories, loadState }
 
   return (
     <>
-      <SectionHead title="Products" hint="The product master catalog. A Container always holds one product type.">
-        <SearchInput className="w-72" placeholder="Search SKU, name or barcode" value={query} onChange={setQuery} />
+      <SectionHead title={t('Products')} hint={t('The product master catalog. A Container always holds one product type.')}>
+        <SearchInput className="w-72" placeholder={t('Search SKU, name or barcode')} value={query} onChange={setQuery} />
         <select
           className={controlClass('pill')}
-          aria-label="Filter by category"
+          aria-label={t('Filter by category')}
           value={categoryFilter}
           onChange={(event) => setCategoryFilter(event.target.value)}
         >
-          <option value="">All categories</option>
+          <option value="">{t('All categories')}</option>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}
             </option>
           ))}
         </select>
-        <AddButton onClick={open}>Add product</AddButton>
+        <AddButton onClick={open}>{t('Add product')}</AddButton>
       </SectionHead>
 
       {notice ? (
@@ -136,13 +137,13 @@ export function ProductsSection({ products, setProducts, categories, loadState }
       <Table>
         <thead>
           <tr>
-            <Th>SKU</Th>
-            <Th>Name</Th>
-            <Th>Description</Th>
-            <Th>Category</Th>
-            <Th>Supplier barcode</Th>
-            <Th>Status</Th>
-            <Th align="right">Actions</Th>
+            <Th>{t('SKU')}</Th>
+            <Th>{t('Name')}</Th>
+            <Th>{t('Description')}</Th>
+            <Th>{t('Category')}</Th>
+            <Th>{t('Supplier barcode')}</Th>
+            <Th>{t('Status')}</Th>
+            <Th align="right">{t('Actions')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -157,13 +158,13 @@ export function ProductsSection({ products, setProducts, categories, loadState }
               </Td>
               <Td>
                 <StatusBadge tone={product.isActive ? 'green' : 'grey'} withDot>
-                  {product.isActive ? 'Active' : 'Inactive'}
+                  {product.isActive ? t('Active') : t('Inactive')}
                 </StatusBadge>
               </Td>
               <Td>
                 <div className="flex justify-end">
                   <Button size="sm" variant={product.isActive ? 'ghost' : 'tonal'} disabled={busyId === product.id} onClick={() => toggle(product)}>
-                    {product.isActive ? 'Deactivate' : 'Activate'}
+                    {product.isActive ? t('Deactivate') : t('Activate')}
                   </Button>
                 </div>
               </Td>
@@ -172,21 +173,21 @@ export function ProductsSection({ products, setProducts, categories, loadState }
           {visible.length === 0 ? (
             <EmptyRow colSpan={7}>
               {loadState === 'loading'
-                ? 'Loading products…'
+                ? t('Loading products…')
                 : loadState === 'error'
-                  ? 'Could not load products. Check that the API is running, then reload.'
+                  ? t('Could not load products. Check that the API is running, then reload.')
                   : products.length === 0
-                    ? 'No products yet. Add the first one.'
-                    : 'No products match this filter.'}
+                    ? t('No products yet. Add the first one.')
+                    : t('No products match this filter.')}
             </EmptyRow>
           ) : null}
         </tbody>
       </Table>
 
       {draft ? (
-        <Dialog title="Add product" submitLabel="Create product" busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
+        <Dialog title={t('Add product')} submitLabel={t('Create product')} busy={busy} onClose={() => setDraft(null)} onSubmit={save}>
           <FieldRow>
-            <Field label="SKU">
+            <Field label={t('SKU')}>
               <input
                 className={controlClass()}
                 value={draft.sku}
@@ -195,7 +196,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
                 autoFocus
               />
             </Field>
-            <Field label="Category">
+            <Field label={t('Category')}>
               <select
                 className={controlClass()}
                 value={draft.categoryId}
@@ -209,7 +210,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
               </select>
             </Field>
           </FieldRow>
-          <Field label="Name">
+          <Field label={t('Name')}>
             <input
               className={controlClass()}
               value={draft.name}
@@ -218,8 +219,8 @@ export function ProductsSection({ products, setProducts, categories, loadState }
             />
           </Field>
           <Field
-            label="Supplier barcode"
-            hint="Up to 13 digits, scanned on the supplier package to identify the product when receiving. Must be unique."
+            label={t('Supplier barcode')}
+            hint={t('Up to 13 digits, scanned on the supplier package to identify the product when receiving. Must be unique.')}
           >
             <input
               className={controlClass()}
@@ -231,7 +232,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
               }
             />
           </Field>
-          <Field label="Description">
+          <Field label={t('Description')}>
             <textarea
               className={controlClass('area')}
               value={draft.description}

@@ -19,8 +19,9 @@ import {
   type StorageLocationListItem,
 } from '@/shared/api/warehouses'
 import { CATEGORIES, CONTAINERS, ENDPOINT_OPTIONS, INVENTORY, PRODUCTS, STORAGE_LOCATIONS, WAREHOUSES } from './mock'
-
+import { t } from '@/shared/i18n'
 // Mock auto-login has no real session, so the API would answer 401; this mode keeps working on local rows.
+
 const MOCK_MODE = import.meta.env.VITE_MOCK_AUTO_LOGIN === 'true'
 
 /** The API sends null for a missing barcode or description; the screens use undefined. */
@@ -208,7 +209,7 @@ function toLocationView(item: StorageLocationListItem): StorageLocationView {
     warehouseName: item.warehouseName,
     endpointId: item.endpointId,
     endpointCode: item.endpointCode ?? '—',
-    endpointName: item.endpointName ?? 'Unknown endpoint',
+    endpointName: item.endpointName ?? t('Unknown endpoint'),
     code: item.code,
     name: item.name,
     isActive: item.isActive,

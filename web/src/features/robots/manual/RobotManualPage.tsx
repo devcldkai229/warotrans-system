@@ -18,8 +18,9 @@ import { Joystick } from './Joystick'
 import { Speedometer } from './Speedometer'
 import { useManualLease } from './useManualLease'
 import { useTeleopLoop } from './useTeleopLoop'
-
+import { t } from '@/shared/i18n'
 interface Target {
+
   x: number
   y: number
   /** Heading on arrival in degrees (0 = +X, counter-clockwise). */
@@ -168,7 +169,7 @@ export function RobotManualPage() {
     [restRobot, pose],
   )
   const callouts: MapCallout[] = target
-    ? [{ x: target.x, y: target.y, lines: [target.label ?? 'Target', `(${target.x.toFixed(2)}, ${target.y.toFixed(2)})`] }]
+    ? [{ x: target.x, y: target.y, lines: [target.label ?? t('Target'), `(${target.x.toFixed(2)}, ${target.y.toFixed(2)})`] }]
     : []
   const movements: MapMovement[] =
     target && pose ? [{ from: { x: pose.poseX, y: pose.poseY }, to: { x: target.x, y: target.y } }] : []
@@ -214,7 +215,7 @@ export function RobotManualPage() {
       <header className="absolute top-4 left-4 flex items-center gap-3 rounded-full bg-surface py-1.5 pr-4 pl-1.5 shadow-float">
         <button
           type="button"
-          aria-label="Back to robot"
+          aria-label={t('Back to robot')}
           className="grid size-9 place-items-center rounded-full bg-container hover:bg-container-high"
           onClick={() => {
             driveStop()
@@ -230,25 +231,25 @@ export function RobotManualPage() {
           </StatusBadge>
         ) : null}
         <span className="text-xs text-muted">
-          {restRobot?.isOnline ? 'Online' : 'Offline'} · {live?.navigationStatus ?? restRobot?.navigationStatus ?? '—'}
+          {restRobot?.isOnline ? t('Online') : t('Offline')} · {live?.navigationStatus ?? restRobot?.navigationStatus ?? '—'}
         </span>
         {pose ? (
           <span className="font-mono text-xs text-muted">
             ({pose.poseX.toFixed(2)}, {pose.poseY.toFixed(2)}) {Math.round((pose.poseYaw * 180) / Math.PI)}°
           </span>
         ) : null}
-        {!hubConnected ? <span className="text-xs text-amber-ink">polling</span> : null}
+        {!hubConnected ? <span className="text-xs text-amber-ink">{t('polling')}</span> : null}
       </header>
 
       {/* Top-right: map tools */}
       <div className="absolute top-4 right-4 flex flex-col gap-2">
-        <ToolButton icon="layers" label="Zones" active={showZones} onClick={() => setShowZones(!showZones)} />
-        <ToolButton icon="navigate" label="Follow robot" active={follow} onClick={() => setFollow(!follow)} />
-        <ToolButton icon="plus" label="Zoom in" onClick={() => setZoom(Math.min(4, zoom + 0.5))} />
-        <ToolButton icon="minus" label="Zoom out" onClick={() => setZoom(Math.max(1, zoom - 0.5))} />
+        <ToolButton icon="layers" label={t('Zones')} active={showZones} onClick={() => setShowZones(!showZones)} />
+        <ToolButton icon="navigate" label={t('Follow robot')} active={follow} onClick={() => setFollow(!follow)} />
+        <ToolButton icon="plus" label={t('Zoom in')} onClick={() => setZoom(Math.min(4, zoom + 0.5))} />
+        <ToolButton icon="minus" label={t('Zoom out')} onClick={() => setZoom(Math.max(1, zoom - 0.5))} />
         <ToolButton
           icon="fit"
-          label="Whole map"
+          label={t('Whole map')}
           onClick={() => {
             setFollow(false)
             setZoom(1)
@@ -261,11 +262,9 @@ export function RobotManualPage() {
         <section className="absolute top-20 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-lg bg-surface px-4 py-3 shadow-float">
           <div className="text-sm">
             <div className="flex items-center gap-2 font-medium">
-              <Icon name="target" size={15} className="text-blue" /> {target.label ?? 'Floor point'}
+              <Icon name="target" size={15} className="text-blue" /> {target.label ?? t('Floor point')}
             </div>
-            <div className="mt-0.5 font-mono text-xs text-muted">
-              ({target.x.toFixed(2)}, {target.y.toFixed(2)}) · heading {target.yawDeg}°
-            </div>
+            <div className="mt-0.5 font-mono text-xs text-muted">{t('({value}, {value2}) · heading {yawDeg}°', { value: target.x.toFixed(2), value2: target.y.toFixed(2), yawDeg: target.yawDeg })}</div>
           </div>
           <div className="w-28">
             <HeadingDial variant="panel" yaw={target.yawDeg} onChange={(yaw) => setTarget({ ...target, yawDeg: yaw })} />
@@ -277,21 +276,19 @@ export function RobotManualPage() {
               disabled={!restRobot?.isOnline || navigating || go.isPending}
               onClick={() => go.mutate()}
             >
-              <Icon name="play" size={14} /> Go
-            </Button>
+              <Icon name="play" size={14} />{' '}{t('Go')}</Button>
             <Button variant="danger" size="sm" disabled={!navigating || cancel.isPending} onClick={() => cancel.mutate()}>
-              <Icon name="stop" size={14} /> Cancel
-            </Button>
+              <Icon name="stop" size={14} />{' '}{t('Cancel')}</Button>
           </div>
-          <button type="button" aria-label="Clear target" className="text-muted hover:text-ink" onClick={() => setTarget(null)}>
+          <button type="button" aria-label={t('Clear target')} className="text-muted hover:text-ink" onClick={() => setTarget(null)}>
             <Icon name="close" size={16} />
           </button>
         </section>
       ) : (
         <p className="pointer-events-none absolute top-20 left-1/2 -translate-x-1/2 rounded-full bg-surface/95 px-4 py-2 text-xs text-ink-2 shadow-float">
           {manualOn
-            ? 'Manual: drive with the joystick, ▲ ▼ or arrow keys / WASD. Space stops.'
-            : 'Click the floor or an endpoint to send the robot there (Nav2 plans the path).'}
+            ? t('Manual: drive with the joystick, ▲ ▼ or arrow keys / WASD. Space stops.')
+            : t('Click the floor or an endpoint to send the robot there (Nav2 plans the path).')}
         </p>
       )}
 
@@ -304,12 +301,9 @@ export function RobotManualPage() {
           {manualLease.error}
         </p>
       ) : manualOn && restRobot?.motionHeld ? (
-        <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-red-soft px-4 py-2 text-sm text-red-ink shadow-float">
-          The robot holds motion after a STOP. Resume it from the Fleet page before driving.
-        </p>
+        <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-red-soft px-4 py-2 text-sm text-red-ink shadow-float">{t('The robot holds motion after a STOP. Resume it from the Fleet page before driving.')}</p>
       ) : navigating ? (
-        <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-blue-soft px-4 py-2 text-sm text-blue-ink shadow-float">
-          Navigating with Nav2{manualOn ? ' — cancel the goal (Manual off → Cancel) to drive by hand' : ''}.
+        <p className="absolute top-36 left-1/2 -translate-x-1/2 rounded-full bg-blue-soft px-4 py-2 text-sm text-blue-ink shadow-float">{t('Navigating with Nav2')}{manualOn ? t(' — cancel the goal (Manual off → Cancel) to drive by hand') : ''}.
         </p>
       ) : null}
 
@@ -331,7 +325,7 @@ export function RobotManualPage() {
           <div className="pb-2">
             <RoundButton
               icon="sliders"
-              label={barOpen ? 'Hide control panel' : 'Show control panel'}
+              label={barOpen ? t('Hide control panel') : t('Show control panel')}
               active={barOpen}
               onClick={() => setBarOpen(!barOpen)}
             />
@@ -342,8 +336,8 @@ export function RobotManualPage() {
       {/* Bottom bar: shown from the control-panel button */}
       {barOpen ? (
         <footer className="absolute inset-x-0 bottom-0 flex h-16 items-center justify-center gap-10 border-t border-outline-soft bg-surface">
-          <Toggle label="Manual" on={manualOn} onChange={setMode} />
-          <Toggle label="Drive Assist" on={assist} onChange={setAssist} />
+          <Toggle label={t('Manual')} on={manualOn} onChange={setMode} />
+          <Toggle label={t('Drive Assist')} on={assist} onChange={setAssist} />
           <label className="flex items-center gap-3 text-sm text-ink-2">
             <span aria-hidden>🐢</span>
             <input
@@ -353,15 +347,14 @@ export function RobotManualPage() {
               step={0.05}
               value={maxLinear}
               onChange={(e) => setMaxLinear(Number(e.target.value))}
-              aria-label="Max speed"
+              aria-label={t('Max speed')}
               className="w-48 accent-blue"
             />
             <span aria-hidden>🐇</span>
             <span className="w-16 text-xs text-muted tabular-nums">{maxLinear.toFixed(2)} m/s</span>
           </label>
           <Button variant="danger" size="sm" onClick={() => driveStop()}>
-            <Icon name="stop" size={14} /> Stop
-          </Button>
+            <Icon name="stop" size={14} />{' '}{t('Stop')}</Button>
         </footer>
       ) : null}
     </div>

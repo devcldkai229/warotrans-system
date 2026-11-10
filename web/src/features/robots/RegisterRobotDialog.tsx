@@ -9,8 +9,9 @@ import { Modal } from '@/shared/ui/Dialog'
 import { Field, FormError } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
-
+import { t } from '@/shared/i18n'
 interface RegisterRobotDialogProps {
+
   onClose: () => void
   onRegistered: (code: string) => void
 }
@@ -57,26 +58,26 @@ export function RegisterRobotDialog({ onClose, onRegistered }: RegisterRobotDial
         setFormError(field || error.message)
         return
       }
-      setFormError((error as Error).message || 'Failed to register robot.')
+      setFormError((error as Error).message || t('Failed to register robot.'))
     },
   })
 
   function submit() {
     setFormError(null)
     if (!code.trim()) {
-      setFormError('Robot code is required.')
+      setFormError(t('Robot code is required.'))
       return
     }
     if (!name.trim()) {
-      setFormError('Robot name is required.')
+      setFormError(t('Robot name is required.'))
       return
     }
     if (!warehouseId) {
-      setFormError('Warehouse is required.')
+      setFormError(t('Warehouse is required.'))
       return
     }
     if (!mapVersionId) {
-      setFormError('Current map version is required.')
+      setFormError(t('Current map version is required.'))
       return
     }
     mutation.mutate()
@@ -84,34 +85,34 @@ export function RegisterRobotDialog({ onClose, onRegistered }: RegisterRobotDial
 
   return (
     <Modal
-      title="Register Robot"
-      subtitle="Create a robot record. Operational and connectivity states are managed by the system."
+      title={t('Register Robot')}
+      subtitle={t('Create a robot record. Operational and connectivity states are managed by the system.')}
       onClose={onClose}
       width="w-[560px]"
     >
       <div className="flex flex-col gap-4 px-6 py-5">
-        <p className="text-xs font-medium tracking-wide text-muted uppercase">General information</p>
+        <p className="text-xs font-medium tracking-wide text-muted uppercase">{t('General information')}</p>
 
-        <Field label="Robot code *">
+        <Field label={t('Robot code *')}>
           <input
             className={controlClass()}
             value={code}
-            placeholder="RBT-001"
+            placeholder={t('RBT-001')}
             autoFocus
             onChange={(event) => setCode(event.target.value)}
           />
         </Field>
 
-        <Field label="Robot name *">
+        <Field label={t('Robot name *')}>
           <input
             className={controlClass()}
             value={name}
-            placeholder="Warehouse Robot 01"
+            placeholder={t('Warehouse Robot 01')}
             onChange={(event) => setName(event.target.value)}
           />
         </Field>
 
-        <Field label="Warehouse *">
+        <Field label={t('Warehouse *')}>
           <select
             className={controlClass()}
             value={warehouseId}
@@ -121,7 +122,7 @@ export function RegisterRobotDialog({ onClose, onRegistered }: RegisterRobotDial
             }}
             disabled={warehousesQuery.isLoading}
           >
-            <option value="">Select warehouse…</option>
+            <option value="">{t('Select warehouse…')}</option>
             {(warehousesQuery.data?.items ?? []).map((warehouse) => (
               <option key={warehouse.id} value={warehouse.id}>
                 {warehouse.code} — {warehouse.name}
@@ -130,7 +131,7 @@ export function RegisterRobotDialog({ onClose, onRegistered }: RegisterRobotDial
           </select>
         </Field>
 
-        <Field label="Current map version *">
+        <Field label={t('Current map version *')}>
           <select
             className={controlClass()}
             value={mapVersionId}
@@ -139,12 +140,12 @@ export function RegisterRobotDialog({ onClose, onRegistered }: RegisterRobotDial
           >
             <option value="">
               {!warehouseId
-                ? 'Select a warehouse first…'
+                ? t('Select a warehouse first…')
                 : mapsQuery.isLoading
-                  ? 'Loading maps…'
+                  ? t('Loading maps…')
                   : publishedMaps.length === 0
-                    ? 'No published map for this warehouse'
-                    : 'Select map version…'}
+                    ? t('No published map for this warehouse')
+                    : t('Select map version…')}
             </option>
             {publishedMaps.map((map) => (
               <option key={map.id} value={map.id}>
@@ -155,29 +156,24 @@ export function RegisterRobotDialog({ onClose, onRegistered }: RegisterRobotDial
         </Field>
 
         <div className="rounded-md border border-outline-soft bg-container px-4 py-3">
-          <p className="text-xs font-medium tracking-wide text-muted uppercase">Initial state</p>
+          <p className="text-xs font-medium tracking-wide text-muted uppercase">{t('Initial state')}</p>
           <dl className="mt-3 flex flex-col gap-2 text-sm">
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Operational status</dt>
+              <dt className="text-muted">{t('Operational status')}</dt>
               <dd>
-                <StatusBadge tone="grey" withDot>
-                  OFFLINE
-                </StatusBadge>
+                <StatusBadge tone="grey" withDot>{t('OFFLINE')}</StatusBadge>
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Connectivity</dt>
-              <dd className="font-medium">Offline</dd>
+              <dt className="text-muted">{t('Connectivity')}</dt>
+              <dd className="font-medium">{t('Offline')}</dd>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted">Enabled</dt>
-              <dd className="font-medium">Yes</dd>
+              <dt className="text-muted">{t('Enabled')}</dt>
+              <dd className="font-medium">{t('Yes')}</dd>
             </div>
           </dl>
-          <p className="mt-3 text-xs text-muted">
-            Operational and connectivity states are managed automatically by the system and updated from robot
-            heartbeat/telemetry.
-          </p>
+          <p className="mt-3 text-xs text-muted">{t('Operational and connectivity states are managed automatically by the system and updated from robot heartbeat/telemetry.')}</p>
         </div>
 
         {warehousesQuery.error ? (
@@ -188,11 +184,9 @@ export function RegisterRobotDialog({ onClose, onRegistered }: RegisterRobotDial
       </div>
 
       <footer className="flex justify-end gap-2 px-6 pb-6">
-        <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
-          Cancel
-        </Button>
+        <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>{t('Cancel')}</Button>
         <Button variant="primary" onClick={submit} disabled={mutation.isPending}>
-          {mutation.isPending ? 'Registering…' : 'Register Robot'}
+          {mutation.isPending ? t('Registering…') : t('Register Robot')}
         </Button>
       </footer>
     </Modal>

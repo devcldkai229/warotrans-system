@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ApiError } from '@/shared/api/client'
 import type { JobStatus, TransportRequestStatus, TransportRequestView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { listJobs, resumeJob, startJob, type JobSummaryDto } from '@/shared/api/jobs'
@@ -32,8 +33,9 @@ import { detailToView, listItemToView } from './mapTransportRequest'
 import { RequestCloseActions } from './RequestCloseActions'
 import { RequestDetailPanel } from './RequestDetailPanel'
 import { queueAndStart, runAgain } from './runOnRobot'
-
+import { t } from '@/shared/i18n'
 function RequestCard({
+
   request,
   selected,
   onSelect,
@@ -45,9 +47,9 @@ function RequestCard({
   const progress = detailProgress(request)
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
   const facts = [
-    { label: 'Route', value: routeSummary(request) },
-    { label: 'Containers', value: request.details.length },
-    { label: 'Jobs', value: request.jobs.length === 0 ? '—' : request.jobs.length },
+    { label: t('Route'), value: routeSummary(request) },
+    { label: t('Containers'), value: request.details.length },
+    { label: t('Jobs'), value: request.jobs.length === 0 ? '—' : request.jobs.length },
   ]
 
   return (
@@ -72,8 +74,7 @@ function RequestCard({
       </dl>
       <Meter percent={progress.percent} tone="blue" className="mt-3" />
       <footer className="mt-3 flex min-h-8 items-center justify-between gap-2">
-        <span className="text-xs text-muted">
-          {progress.done} of {progress.total} delivered{elapsed === null ? '' : `, ${formatDuration(elapsed)}`}
+        <span className="text-xs text-muted">{t('{done} of {total} delivered', { done: progress.done, total: progress.total })}{elapsed === null ? '' : `, ${formatDuration(elapsed)}`}
         </span>
         <RequestCloseActions request={request} />
       </footer>
@@ -154,31 +155,30 @@ function RunControls({ request, jobs }: { request: TransportRequestView; jobs: J
     <>
       {finished ? (
         <Button variant="primary" size="sm" disabled={busy} onClick={() => again.mutate()}>
-          <Icon name="refresh" size={14} /> {again.isPending ? 'Starting…' : 'Run again on robot'}
+          <Icon name="refresh" size={14} /> {again.isPending ? t('Starting…') : t('Run again on robot')}
         </Button>
       ) : null}
       {request.status === 'SUBMITTED' && jobs.length === 0 ? (
         <Button variant="primary" size="sm" disabled={busy} onClick={() => run.mutate()}>
-          <Icon name="bolt" size={14} /> {run.isPending ? 'Starting…' : 'Run on robot'}
+          <Icon name="bolt" size={14} /> {run.isPending ? t('Starting…') : t('Run on robot')}
         </Button>
       ) : null}
       {jobs.map((job) =>
         job.status === 'CREATED' ? (
           <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => start.mutate(job.id)}>
-            <Icon name="bolt" size={14} /> {start.isPending ? 'Starting…' : `Start ${job.jobNo} on robot`}
+            <Icon name="bolt" size={14} /> {start.isPending ? t('Starting…') : t('Start {jobNo} on robot', { jobNo: job.jobNo })}
           </Button>
         ) : job.status === 'PAUSED' || job.status === 'REASSIGNING' ? (
           <Button key={job.id} variant="primary" size="sm" disabled={busy} onClick={() => resume.mutate(job.id)}>
-            <Icon name="play" size={14} /> {resume.isPending ? 'Resuming…' : `Resume ${job.jobNo} on robot`}
+            <Icon name="play" size={14} /> {resume.isPending ? t('Resuming…') : t('Resume {jobNo} on robot', { jobNo: job.jobNo })}
           </Button>
         ) : (
           <Button key={job.id} variant="outline" size="sm" onClick={() => navigate(`/monitor/jobs/${job.id}`)}>
-            <Icon name="target" size={14} /> View {job.jobNo}
-          </Button>
+            <Icon name="target" size={14} /> {t('View {jobNo}', { jobNo: job.jobNo })}</Button>
         ),
       )}
       {request.status === 'SUBMITTED' && jobs.length === 0 ? (
-        <p className="text-xs text-muted">Plans the route, starts the best free robot on this map and opens the live view.</p>
+        <p className="text-xs text-muted">{t('Plans the route, starts the best free robot on this map and opens the live view.')}</p>
       ) : null}
       {error ? <p className="text-xs text-red-ink">{error}</p> : null}
     </>
@@ -201,6 +201,16 @@ export function TransportRequestsPage() {
   // on the warehouse's published map. The parameter is dropped when the composer closes.
   const [searchParams, setSearchParams] = useSearchParams()
   const voucherId = searchParams.get('voucher')
+  // A notification about a request lands here with ?requestId=<id>: open that request. The parameter stays in the
+  // address, so the link can be shared and a reload reopens the same request; picking another request still works.
+  const linkedRequestId = searchParams.get('requestId')
+  const [openedRequestId, setOpenedRequestId] = useState<string | null>(null)
+  if (linkedRequestId && openedRequestId !== linkedRequestId) {
+    setOpenedRequestId(linkedRequestId)
+    setSelectedId(linkedRequestId)
+    setSelectedJobNo(null)
+    setCollapsed(false)
+  }
   const [openedVoucherId, setOpenedVoucherId] = useState<string | null>(null)
   const voucherPrefillQuery = useQuery({
     queryKey: ['transport-requests', 'voucher-prefill', voucherId],
@@ -262,9 +272,15 @@ export function TransportRequestsPage() {
     queryFn: () => getTransportRequest(selectedId!),
     enabled: Boolean(selectedId) && !composing,
     // Keep progress moving while the robot runs; stop polling once the request is finished.
-    refetchInterval: (q) =>
-      q.state.data && TERMINAL_REQUEST_STATUSES.includes(q.state.data.status as TransportRequestStatus) ? false : 3000,
+    refetchInterval: (q) => {
+      // A request that does not exist (a stale link) will not appear by asking again every 3 seconds.
+      if (q.state.error instanceof ApiError && q.state.error.status === 404) return false
+      return q.state.data && TERMINAL_REQUEST_STATUSES.includes(q.state.data.status as TransportRequestStatus) ? false : 3000
+    },
   })
+  // A link (a notification) to a request that is gone or not visible to this person: say so instead of showing nothing.
+  const linkedRequestMissing =
+    Boolean(linkedRequestId) && selectedId === linkedRequestId && detailQuery.error instanceof ApiError && detailQuery.error.status === 404
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', 'by-request', selectedId],
@@ -428,7 +444,7 @@ export function TransportRequestsPage() {
         <TransportRequestComposer
           onClose={endCompose}
           onSubmitted={({ id, requestCode }) => {
-            setBanner(`Created ${requestCode}`)
+            setBanner(t('Created {requestCode}', { requestCode }))
             endCompose()
             setSelectedId(id)
             setOpen((current) => new Set(current).add('SUBMITTED'))
@@ -440,40 +456,39 @@ export function TransportRequestsPage() {
       ) : (
         <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container">
           <header className="flex items-center gap-3 px-5 pt-5">
-            <h1 className="text-xl font-book whitespace-nowrap">Transport requests</h1>
+            <h1 className="text-xl font-book whitespace-nowrap">{t('Transport requests')}</h1>
             <span className="text-sm text-muted">{listQuery.data?.total ?? requests.length}</span>
             <Button variant="primary" size="sm" className="ml-auto" onClick={startCompose}>
-              <Icon name="plus" size={14} /> New request
-            </Button>
+              <Icon name="plus" size={14} /> {t('New request')}</Button>
           </header>
 
           <div className="mt-3 mb-3 flex h-9 items-center gap-1.5 px-4">
             <SearchInput
               tone="surface"
               className="h-9 min-w-0 flex-1"
-              placeholder="Search request code or container"
+              placeholder={t('Search request code or container')}
               value={query}
               onChange={setQuery}
             />
-            <IconButton tone="surface" className="size-9 shrink-0" aria-label="Filter">
+            <IconButton tone="surface" className="size-9 shrink-0" aria-label={t('Filter')}>
               <Icon name="filter" size={15} />
             </IconButton>
-            <IconButton tone="surface" className="size-9 shrink-0" aria-label="Sort">
+            <IconButton tone="surface" className="size-9 shrink-0" aria-label={t('Sort')}>
               <Icon name="sort" size={15} />
             </IconButton>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
             {listQuery.isLoading ? (
-              <p className="px-3 py-4 text-xs text-muted">Loading transport requests…</p>
+              <p className="px-3 py-4 text-xs text-muted">{t('Loading transport requests…')}</p>
             ) : null}
             {listQuery.error ? (
               <p className="px-3 py-4 text-xs text-red-ink">
-                {(listQuery.error as Error).message || 'Failed to load transport requests.'}
+                {(listQuery.error as Error).message || t('Failed to load transport requests.')}
               </p>
             ) : null}
             {!listQuery.isLoading && !listQuery.error && requests.length === 0 ? (
-              <p className="px-3 py-4 text-xs text-muted">No transport requests yet. Create one to get started.</p>
+              <p className="px-3 py-4 text-xs text-muted">{t('No transport requests yet. Create one to get started.')}</p>
             ) : null}
             {REQUEST_STATUS_GROUPS.map((status) => {
               const group = grouped.get(status) ?? []
@@ -493,7 +508,7 @@ export function TransportRequestsPage() {
                   </button>
                   {expanded ? (
                     <div className="flex flex-col gap-2 px-2 pt-1 pb-3">
-                      {group.length === 0 ? <p className="px-2 py-2 text-xs text-muted">No requests</p> : null}
+                      {group.length === 0 ? <p className="px-2 py-2 text-xs text-muted">{t('No requests')}</p> : null}
                       {group.map((request) => (
                         <RequestCard
                           key={request.id}
@@ -545,9 +560,7 @@ export function TransportRequestsPage() {
         ) : null}
 
         {composing ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-float">
-            Preview only — final robot route is planned after submission.
-            {composerMap?.pickHint ? (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-float">{t('Preview only — final robot route is planned after submission.')}{composerMap?.pickHint ? (
               <p className="mt-1 font-medium text-ink">{composerMap.pickHint}</p>
             ) : null}
           </div>
@@ -578,8 +591,8 @@ export function TransportRequestsPage() {
             <button
               type="button"
               className="pointer-events-auto grid h-14 w-7 place-items-center self-center rounded-full bg-surface text-ink-2 shadow-float transition-colors duration-200 hover:text-ink"
-              aria-label={collapsed ? 'Show panels' : 'Hide panels'}
-              title={collapsed ? 'Show panels' : 'Hide panels'}
+              aria-label={collapsed ? t('Show panels') : t('Hide panels')}
+              title={collapsed ? t('Show panels') : t('Hide panels')}
               onClick={() => setCollapsed(!collapsed)}
             >
               <Icon name={collapsed ? 'chevronRight' : 'chevronRight'} size={14} className={collapsed ? undefined : 'rotate-180'} />
@@ -591,14 +604,21 @@ export function TransportRequestsPage() {
           type="button"
           className="absolute top-3 right-3 z-5 inline-flex h-9 items-center gap-2 rounded-full bg-red px-4 text-sm font-medium text-white shadow-float transition-colors duration-200 hover:bg-red-ink"
         >
-          <Icon name="bolt" size={15} /> Facility E-stop
-        </button>
+          <Icon name="bolt" size={15} /> {t('Facility E-stop')}</button>
       </section>
 
       {banner ? (
         <div className="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-full bg-container-high px-4 py-2 text-xs text-ink shadow-float">
           {banner}
         </div>
+      ) : null}
+
+      {linkedRequestMissing ? (
+        // Bottom centre: the top centre is the map toolbar.
+        <div
+          role="status"
+          className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full bg-container-high px-4 py-2 text-xs text-ink shadow-float"
+        >{t('That transport request was not found. It may have been removed, or you may not have access to it.')}</div>
       ) : null}
     </div>
   )

@@ -1,6 +1,7 @@
 import type { EdgeDirection, EndpointType, ZoneType } from '@/shared/api/contracts'
-
+import { t } from '@/shared/i18n'
 export interface EndpointTemplate {
+
   type: EndpointType
   title: string
   description: string
@@ -8,9 +9,9 @@ export interface EndpointTemplate {
 
 /** One entry per backend EndpointType; the labels/descriptions are UI copy. */
 export const ENDPOINT_TEMPLATES: EndpointTemplate[] = [
-  { type: 'WAYPOINT', title: 'Waypoint', description: 'Điểm đường / điểm trung gian' },
-  { type: 'CHARGER', title: 'Charger', description: 'Điểm sạc' },
-  { type: 'PARK', title: 'Park', description: 'Điểm đỗ / chờ' },
+  { type: 'WAYPOINT', title: t('Waypoint'), description: t('Waypoint / intermediate point') },
+  { type: 'CHARGER', title: t('Charger'), description: t('Charging point') },
+  { type: 'PARK', title: t('Park'), description: t('Parking / waiting point') },
 ]
 
 export interface ZoneTemplate {
@@ -21,14 +22,14 @@ export interface ZoneTemplate {
 
 /** One entry per backend ZoneType (rules/05). */
 export const ZONE_TEMPLATES: ZoneTemplate[] = [
-  { type: 'KEEP_OUT', title: 'Keep-out', description: 'Khu vực cấm vào (đỏ sọc chéo)' },
-  { type: 'SPEED', title: 'Speed zone', description: 'Khu vực giới hạn tốc độ (vàng)' },
-  { type: 'NO_STOP', title: 'No-stop', description: 'Khu vực cấm dừng (xanh da trời)' },
-  { type: 'SINGLE_OCCUPANCY', title: 'Single-occupancy', description: 'Khu vực giới hạn 1 xe (tím)' },
+  { type: 'KEEP_OUT', title: t('Keep-out'), description: t('No-entry area (red diagonal stripes)') },
+  { type: 'SPEED', title: t('Speed zone'), description: t('Speed-limited area (yellow)') },
+  { type: 'NO_STOP', title: t('No-stop'), description: t('No-stopping area (sky blue)') },
+  { type: 'SINGLE_OCCUPANCY', title: t('Single-occupancy'), description: t('Single-vehicle area (purple)') },
   {
     type: 'JUNCTION',
-    title: 'Junction',
-    description: 'Legacy — không dùng cho map mới (màu xanh indigo nhạt)',
+    title: t('Junction'),
+    description: t('Legacy: not used for new maps (light indigo)'),
   },
 ]
 
@@ -40,6 +41,6 @@ export interface EdgeTemplate {
 
 /** One entry per backend EdgeDirection (rules/05). */
 export const EDGE_TEMPLATES: EdgeTemplate[] = [
-  { direction: 'ONE_WAY', title: 'One-way edge', description: 'Path Robots may travel in one direction only' },
-  { direction: 'BIDIRECTIONAL', title: 'Two-way edge', description: 'Path Robots may travel in both directions' },
+  { direction: 'ONE_WAY', title: t('One-way edge'), description: t('Path Robots may travel in one direction only') },
+  { direction: 'BIDIRECTIONAL', title: t('Two-way edge'), description: t('Path Robots may travel in both directions') },
 ]

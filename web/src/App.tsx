@@ -6,9 +6,11 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { JobDetailPage } from '@/features/jobs/JobDetailPage'
+import { JobsPage } from '@/features/jobs/JobsPage'
 import { ManagementPage } from '@/features/management/ManagementPage'
 import { AuditLogPage } from '@/features/operations/AuditLogPage'
 import { IssuesPage } from '@/features/operations/IssuesPage'
+import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { FacilityPage } from '@/features/maps/FacilityPage'
 import { MapEditorPage } from '@/features/maps/MapEditorPage'
 import { FleetPage } from '@/features/robots/FleetPage'
@@ -38,7 +40,7 @@ function App() {
             <Route path="/monitor/fleet" element={<FleetPage />} />
             <Route path="/monitor/fleet/:robotCode" element={<FleetPage />} />
             <Route path="/monitor/requests" element={<TransportRequestsPage />} />
-            <Route path="/monitor/jobs" element={<Navigate to="/monitor/requests" replace />} />
+            <Route path="/monitor/jobs" element={<JobsPage />} />
             <Route path="/monitor/jobs/:jobId" element={<JobDetailPage />} />
             <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
@@ -50,6 +52,7 @@ function App() {
             <Route path="/operations/issues" element={<IssuesPage />} />
             <Route path="/operations/issues/:issueId" element={<IssuesPage />} />
             <Route path="/operations/audit" element={<AuditLogPage />} />
+            <Route path="/operations/notifications" element={<NotificationsPage />} />
           </Route>
 
           {/* Full-screen editor: has its own header instead of the app shell. */}
@@ -58,6 +61,7 @@ function App() {
           <Route path="/monitor/fleet/:robotCode/manual" element={<RobotManualPage />} />
         </Route>
 
+        <Route path="/notifications" element={<Navigate to="/operations/notifications" replace />} />
         <Route path="/admin" element={<Navigate to="/management?tab=accounts" replace />} />
         <Route path="/admin/accounts" element={<Navigate to="/management?tab=accounts" replace />} />
         <Route path="/admin/roles" element={<Navigate to="/management?tab=roles" replace />} />

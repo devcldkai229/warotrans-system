@@ -7,23 +7,24 @@ import { Field, FormError } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { ConsoleAccessError, useAuth } from './authContext'
 import { MIN_PASSWORD_LENGTH as MIN_LENGTH, passwordProblem } from './passwordPolicy'
-
+import { t } from '@/shared/i18n'
 const DEFAULT_ROUTE = '/monitor/fleet'
+
 function describeError(error: unknown): string {
   if (error instanceof ConsoleAccessError) return error.message
   if (error instanceof ApiError) {
     switch (error.code) {
       case 'current_password_incorrect':
-        return 'The current password is incorrect.'
+        return t('The current password is incorrect.')
       case 'password_contains_username':
-        return 'The password must not contain your username.'
+        return t('The password must not contain your username.')
       case 'validation_failed':
         return error.message
       default:
-        return 'The password could not be changed. Try again.'
+        return t('The password could not be changed. Try again.')
     }
   }
-  return 'Cannot reach the server. Check your connection and try again.'
+  return t('Cannot reach the server. Check your connection and try again.')
 }
 
 /**
@@ -42,9 +43,7 @@ export function ChangePasswordPage() {
 
   if (status === 'loading') {
     return (
-      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">
-        Restoring session…
-      </div>
+      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">{t('Restoring session…')}</div>
     )
   }
   if (!account) return <Navigate to="/login" replace />
@@ -75,15 +74,15 @@ export function ChangePasswordPage() {
     <div className="grid min-h-svh place-items-center bg-surface px-6 py-16">
       <main className="flex w-full max-w-sm flex-col items-center text-center">
         <Wordmark size="lg" />
-        <h1 className="mt-10 text-3xl font-normal">{forced ? 'Choose your own password' : 'Change password'}</h1>
+        <h1 className="mt-10 text-3xl font-normal">{forced ? t('Choose your own password') : t('Change password')}</h1>
         <p className="mt-3 text-sm text-ink-2">
           {forced
-            ? 'You signed in with a temporary password. Replace it before using the console.'
-            : 'Other devices signed in to this account will be signed out.'}
+            ? t('You signed in with a temporary password. Replace it before using the console.')
+            : t('Other devices signed in to this account will be signed out.')}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 flex w-full flex-col gap-4 text-left">
-          <Field label={forced ? 'Temporary password' : 'Current password'}>
+          <Field label={forced ? t('Temporary password') : t('Current password')}>
             <input
               type="password"
               className={controlClass('lg')}
@@ -94,7 +93,7 @@ export function ChangePasswordPage() {
               required
             />
           </Field>
-          <Field label="New password" hint={`At least ${MIN_LENGTH} characters, with a letter and a digit.`}>
+          <Field label={t('New password')} hint={t('At least {MIN_LENGTH} characters, with a letter and a digit.', { MIN_LENGTH })}>
             <input
               type="password"
               className={controlClass('lg')}
@@ -104,7 +103,7 @@ export function ChangePasswordPage() {
               required
             />
           </Field>
-          <Field label="Repeat new password">
+          <Field label={t('Repeat new password')}>
             <input
               type="password"
               className={controlClass('lg')}
@@ -118,16 +117,12 @@ export function ChangePasswordPage() {
           {error ? <FormError>{error}</FormError> : null}
 
           <Button type="submit" variant="primary" size="lg" block className="mt-2" disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save password'}
+            {submitting ? t('Saving…') : t('Save password')}
           </Button>
           {forced ? (
-            <Button variant="ghost" block onClick={signOut}>
-              Sign out
-            </Button>
+            <Button variant="ghost" block onClick={signOut}>{t('Sign out')}</Button>
           ) : (
-            <Button variant="ghost" block onClick={() => navigate(-1)}>
-              Cancel
-            </Button>
+            <Button variant="ghost" block onClick={() => navigate(-1)}>{t('Cancel')}</Button>
           )}
         </form>
       </main>

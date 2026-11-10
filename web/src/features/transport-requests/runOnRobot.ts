@@ -1,14 +1,15 @@
 import { startJob } from '@/shared/api/jobs'
 import { createTransportRequest, getTransportRequest, queueTransportRequest } from '@/shared/api/transportRequests'
-
+import { t } from '@/shared/i18n'
 /**
+
  * SUBMITTED request → queue (plan its Job) → start the Job. Without a robot id the backend picks the best
  * free robot on the request's map. Returns the started Job id (for the live view).
  */
 export async function queueAndStart(transportRequestId: string): Promise<string> {
   const queued = await queueTransportRequest(transportRequestId)
   const first = queued.jobs[0]
-  if (!first) throw new Error('The request was queued but no job was planned.')
+  if (!first) throw new Error(t('The request was queued but no job was planned.'))
   await startJob(first.jobId)
   return first.jobId
 }
@@ -24,7 +25,7 @@ export async function runAgain(transportRequestId: string): Promise<{ jobId: str
     mapVersionId: source.mapVersionId,
     workflowId: source.workflowId,
     workflowInputs: source.workflowInputs ?? {},
-    note: `Replay of ${source.requestCode}`,
+    note: t('Replay of {requestCode}', { requestCode: source.requestCode }),
     details: source.details.map((d) => ({
       sequenceNo: d.sequenceNo,
       containerId: d.containerId,

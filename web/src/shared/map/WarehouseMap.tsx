@@ -31,8 +31,9 @@ import {
 import { lineStringToPoints, polygonToPoints } from './geoJson'
 import { CHEVRON_PATH, laneGlyphs } from './laneGlyphs'
 import { pointInPolygon } from './scene'
-
+import { t } from '@/shared/i18n'
 /** A Robot as the map draws it: pose from fleet.robots, status for the colour. */
+
 export interface MapRobot {
   code: string
   status: RobotStatus
@@ -721,13 +722,13 @@ export function WarehouseMap({
                   const load = zoneLoad.get(zone.id) ?? 0
                   const occupancyLine =
                     zone.zoneType === 'KEEP_OUT'
-                      ? 'No entry'
+                      ? t('No entry')
                       : zone.zoneType === 'SINGLE_OCCUPANCY'
                         ? show.occupancy
-                          ? `${load}/1 robots`
-                          : '1 robot'
+                          ? t('{load}/1 robots', { load })
+                          : t('1 robot')
                         : show.occupancy
-                          ? `${load} robots`
+                          ? t('{load} robots', { load })
                           : '—'
                   return (
                     <MapNameCallout
@@ -737,10 +738,10 @@ export function WarehouseMap({
                       anchor={anchor}
                       bounds={bounds}
                       details={[
-                        { label: 'Type', value: ZONE_LABEL[zone.zoneType] },
-                        { label: 'Occupancy', value: occupancyLine },
+                        { label: t('Type'), value: ZONE_LABEL[zone.zoneType] },
+                        { label: t('Occupancy'), value: occupancyLine },
                         ...(show.occupancy && zone.maxSpeed != null
-                          ? [{ label: 'Max', value: `${zone.maxSpeed} m/s` }]
+                          ? [{ label: t('Max'), value: `${zone.maxSpeed} m/s` }]
                           : []),
                       ]}
                     />
@@ -758,8 +759,8 @@ export function WarehouseMap({
                     anchor={{ x: endpoint.x, y: endpoint.y }}
                     bounds={bounds}
                     details={[
-                      { label: 'Type', value: ENDPOINT_NAME[endpoint.endpointType] },
-                      { label: 'Code', value: endpoint.code },
+                      { label: t('Type'), value: ENDPOINT_NAME[endpoint.endpointType] },
+                      { label: t('Code'), value: endpoint.code },
                     ]}
                   />
                 ))
@@ -779,11 +780,11 @@ export function WarehouseMap({
                       bounds={bounds}
                       details={[
                         {
-                          label: 'Type',
-                          value: edge.direction === 'ONE_WAY' ? 'One-way edge' : 'Two-way edge',
+                          label: t('Type'),
+                          value: edge.direction === 'ONE_WAY' ? t('One-way edge') : t('Two-way edge'),
                         },
-                        { label: 'Code', value: edge.code },
-                        ...(edge.maxSpeed != null ? [{ label: 'Max', value: `${edge.maxSpeed} m/s` }] : []),
+                        { label: t('Code'), value: edge.code },
+                        ...(edge.maxSpeed != null ? [{ label: t('Max'), value: `${edge.maxSpeed} m/s` }] : []),
                       ]}
                     />
                   )
@@ -817,9 +818,9 @@ export function WarehouseMap({
           className={cx(CHROME, 'top-3 left-3 min-w-40 rounded-md px-3.5 py-2.5 text-xs text-ink-2')}
           open={show.legendOpen ? true : undefined}
         >
-          <summary className="font-medium text-ink">Guide</summary>
+          <summary className="font-medium text-ink">{t('Guide')}</summary>
           {present.robots.length > 0 ? (
-            <GuideSection title="Robots">
+            <GuideSection title={t('Robots')}>
               {present.robots.map((status) => (
                 <GuideItem key={status} label={humanize(status)}>
                   <svg className="shrink-0" width="18" height="18" viewBox="-1.2 -1.2 2.4 2.4" color={ROBOT_COLOR[status]}>
@@ -833,7 +834,7 @@ export function WarehouseMap({
             </GuideSection>
           ) : null}
           {show.zones && present.zones.length > 0 ? (
-            <GuideSection title="Zones">
+            <GuideSection title={t('Zones')}>
               {present.zones.map((type) => (
                 <GuideItem key={type} label={ZONE_LABEL[type]}>
                   <i className="size-2.5 shrink-0 rounded-xs border-[1.5px]" style={zoneSwatchStyle(type)} />
@@ -842,9 +843,9 @@ export function WarehouseMap({
             </GuideSection>
           ) : null}
           {show.edges && present.edges.length > 0 ? (
-            <GuideSection title="Paths">
+            <GuideSection title={t('Paths')}>
               {present.edges.map((direction) => (
-                <GuideItem key={direction} label={direction === 'ONE_WAY' ? 'One-way edge' : 'Two-way edge'}>
+                <GuideItem key={direction} label={direction === 'ONE_WAY' ? t('One-way edge') : t('Two-way edge')}>
                   <svg className="shrink-0" width="22" height="12" viewBox="0 0 22 12" color={EDGE_COLOR[direction]}>
                     <rect x={0} y={0} width={22} height={12} fill="currentColor" fillOpacity={LANE_BAND_OPACITY * 1.5} />
                     {direction === 'ONE_WAY' ? (
@@ -862,7 +863,7 @@ export function WarehouseMap({
             </GuideSection>
           ) : null}
           {show.endpoints && present.endpointTypes.length > 0 ? (
-            <GuideSection title="Endpoints" note="The wedge shows the arrival heading." columns>
+            <GuideSection title={t('Endpoints')} note={t('The wedge shows the arrival heading.')} columns>
               {present.endpointTypes.map((type) => (
                 <GuideItem key={type} label={ENDPOINT_NAME[type]}>
                   <svg className="shrink-0" width="18" height="18" viewBox="-1 -1 2 2" color={ENDPOINT_COLOR[type]}>
@@ -878,13 +879,13 @@ export function WarehouseMap({
 
       {show.controls ? (
         <div data-map-ui className={cx(CHROME, 'bottom-3 flex flex-col rounded-full p-1')} style={{ right: 12 + uiInset }}>
-          <button type="button" className={ZOOM_BUTTON} aria-label="Zoom in" disabled={zoom >= 4} onClick={() => changeZoom(zoom + 0.5)}>
+          <button type="button" className={ZOOM_BUTTON} aria-label={t('Zoom in')} disabled={zoom >= 4} onClick={() => changeZoom(zoom + 0.5)}>
             <Icon name="plus" size={15} />
           </button>
-          <button type="button" className={ZOOM_BUTTON} aria-label="Zoom out" disabled={zoom <= 1} onClick={() => changeZoom(zoom - 0.5)}>
+          <button type="button" className={ZOOM_BUTTON} aria-label={t('Zoom out')} disabled={zoom <= 1} onClick={() => changeZoom(zoom - 0.5)}>
             <Icon name="minus" size={15} />
           </button>
-          <button type="button" className={ZOOM_BUTTON} aria-label="Reset view" disabled={zoom === 1} onClick={() => changeZoom(1)}>
+          <button type="button" className={ZOOM_BUTTON} aria-label={t('Reset view')} disabled={zoom === 1} onClick={() => changeZoom(1)}>
             <Icon name="crosshair" size={15} />
           </button>
         </div>

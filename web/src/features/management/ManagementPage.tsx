@@ -27,8 +27,9 @@ import {
   type InventoryListing,
   type LocationListing,
 } from './api'
-
+import { t } from '@/shared/i18n'
 type TabId =
+
   | 'accounts'
   | 'roles'
   | 'warehouses'
@@ -41,22 +42,22 @@ type TabId =
 
 const MENU: { label: string; items: { id: TabId; label: string }[] }[] = [
   {
-    label: 'Access',
+    label: t('Access'),
     items: [
-      { id: 'accounts', label: 'Accounts' },
-      { id: 'roles', label: 'Roles' },
+      { id: 'accounts', label: t('Accounts') },
+      { id: 'roles', label: t('Roles') },
     ],
   },
   {
-    label: 'Warehouse data',
+    label: t('Warehouse data'),
     items: [
-      { id: 'warehouses', label: 'Warehouses' },
-      { id: 'products', label: 'Products' },
-      { id: 'categories', label: 'Categories' },
-      { id: 'containers', label: 'Containers' },
-      { id: 'inventory', label: 'Inventory' },
-      { id: 'vouchers', label: 'Stock vouchers' },
-      { id: 'locations', label: 'Storage locations' },
+      { id: 'warehouses', label: t('Warehouses') },
+      { id: 'products', label: t('Products') },
+      { id: 'categories', label: t('Categories') },
+      { id: 'containers', label: t('Containers') },
+      { id: 'inventory', label: t('Inventory') },
+      { id: 'vouchers', label: t('Stock vouchers') },
+      { id: 'locations', label: t('Storage locations') },
     ],
   },
 ]
@@ -232,12 +233,12 @@ export function ManagementPage() {
     <div className="h-full overflow-auto">
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
         <header>
-          <h1 className="text-4xl font-book">Management</h1>
-          <p className="mt-3 text-base text-ink-2">Accounts, roles and warehouse master data in one place.</p>
+          <h1 className="text-4xl font-book">{t('Management')}</h1>
+          <p className="mt-3 text-base text-ink-2">{t('Accounts, roles and warehouse master data in one place.')}</p>
         </header>
 
         <div className="mt-10 grid grid-cols-[220px_minmax(0,1fr)] items-start gap-10">
-          <nav className="sticky top-4 flex flex-col gap-6" aria-label="Management sections">
+          <nav className="sticky top-4 flex flex-col gap-6" aria-label={t('Management sections')}>
             {MENU.map((group) => (
               <div key={group.label}>
                 <p className="mb-1 px-3.5 text-xs text-muted">{group.label}</p>

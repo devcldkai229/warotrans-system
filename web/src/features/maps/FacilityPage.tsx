@@ -29,7 +29,7 @@ import { WarehouseMap } from '@/shared/map/WarehouseMap'
 import { boundsFromMapMeta } from '@/shared/map/mapBounds'
 import { DEFAULT_MAP_BOUNDS } from '@/shared/lib/mapView'
 import { controlClass } from '@/shared/ui/controlClass'
-
+import { t } from '@/shared/i18n'
 const WAREHOUSE_KEY = 'warotrans.facilityWarehouseId'
 
 /** Map Editor needs pixel size from PGM import; Create-metadata-only leaves width/height = 0. */
@@ -91,9 +91,7 @@ function MapCard({ version, warehouseName, when, active, children }: MapCardProp
             {version.status}
           </StatusBadge>
           {active ? (
-            <StatusBadge tone="green" withDot surface className="shadow-float">
-              Active
-            </StatusBadge>
+            <StatusBadge tone="green" withDot surface className="shadow-float">{t('Active')}</StatusBadge>
           ) : null}
         </div>
       </div>
@@ -206,7 +204,7 @@ export function FacilityPage() {
   const draft = maps.find((m) => m.status === 'DRAFT')
   const published = maps.find((m) => m.status === 'PUBLISHED')
   const activeMap = activeMapQuery.data
-  const warehouseName = warehouse?.name ?? warehouse?.code ?? 'Warehouse'
+  const warehouseName = warehouse?.name ?? warehouse?.code ?? t('Warehouse')
 
   async function invalidateMaps() {
     await Promise.all([
@@ -222,7 +220,7 @@ export function FacilityPage() {
       await invalidateMaps()
     },
     onError: (err) => {
-      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Publish failed')
+      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Publish failed'))
     },
   })
 
@@ -235,7 +233,7 @@ export function FacilityPage() {
       navigate(`/configure/facility/maps/${copy.id}/edit`)
     },
     onError: (err) => {
-      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Clone failed')
+      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Clone failed'))
     },
   })
 
@@ -246,21 +244,21 @@ export function FacilityPage() {
       await invalidateMaps()
     },
     onError: (err) => {
-      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Archive failed')
+      setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Archive failed'))
     },
   })
 
   const createMutation = useMutation({
     mutationFn: async (form: MetadataFormState) => {
-      if (!warehouseId) throw new Error('Select a warehouse.')
+      if (!warehouseId) throw new Error(t('Select a warehouse.'))
       const name = form.name.trim()
-      if (!name) throw new Error('Name is required.')
+      if (!name) throw new Error(t('Name is required.'))
       const resolution = Number(form.resolution)
       const originX = Number(form.originX)
       const originY = Number(form.originY)
       const originYaw = Number(form.originYaw)
       if (!(resolution > 0) || Number.isNaN(originX) || Number.isNaN(originY) || Number.isNaN(originYaw)) {
-        throw new Error('Resolution must be > 0; origin values must be numbers.')
+        throw new Error(t('Resolution must be > 0; origin values must be numbers.'))
       }
       return createMapVersion(warehouseId, {
         name,
@@ -275,24 +273,24 @@ export function FacilityPage() {
       setCreateForm(emptyCreateForm())
       setCreateError(null)
       setImportOpen(true)
-      setActionError('Draft created. Import map.yaml + map.pgm next — Edit needs image size from the PGM.')
+      setActionError(t('Draft created. Import map.yaml + map.pgm next — Edit needs image size from the PGM.'))
       await invalidateMaps()
     },
     onError: (err) => {
-      setCreateError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Create failed')
+      setCreateError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Create failed'))
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: async ({ version, form }: { version: MapVersionDto; form: MetadataFormState }) => {
       const name = form.name.trim()
-      if (!name) throw new Error('Name is required.')
+      if (!name) throw new Error(t('Name is required.'))
       const resolution = Number(form.resolution)
       const originX = Number(form.originX)
       const originY = Number(form.originY)
       const originYaw = Number(form.originYaw)
       if (!(resolution > 0) || Number.isNaN(originX) || Number.isNaN(originY) || Number.isNaN(originYaw)) {
-        throw new Error('Resolution must be > 0; origin values must be numbers.')
+        throw new Error(t('Resolution must be > 0; origin values must be numbers.'))
       }
       return updateMapVersion(version.id, {
         name,
@@ -318,13 +316,13 @@ export function FacilityPage() {
       await invalidateMaps()
     },
     onError: (err) => {
-      setEditError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Update failed')
+      setEditError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Update failed'))
     },
   })
 
   const importMutation = useMutation({
     mutationFn: async (files: { yaml: File; pgm: File; name?: string }) => {
-      if (!warehouseId) throw new Error('Select a warehouse.')
+      if (!warehouseId) throw new Error(t('Select a warehouse.'))
       return importMapVersion(warehouseId, files.yaml, files.pgm, files.name)
     },
     onSuccess: async (created) => {
@@ -337,14 +335,14 @@ export function FacilityPage() {
       navigate(`/configure/facility/maps/${created.id}/edit`)
     },
     onError: (err) => {
-      setImportError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Import failed')
+      setImportError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Import failed'))
     },
   })
 
   const sampleMutation = useMutation({
     mutationFn: async () => {
       const files = await fetchSampleMapFiles()
-      if (!warehouseId) throw new Error('Select a warehouse.')
+      if (!warehouseId) throw new Error(t('Select a warehouse.'))
       return importMapVersion(warehouseId, files.yaml, files.pgm, 'Sample ROS map')
     },
     onSuccess: async (created) => {
@@ -352,7 +350,7 @@ export function FacilityPage() {
       navigate(`/configure/facility/maps/${created.id}/edit`)
     },
     onError: (err) => {
-      setImportError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Sample import failed')
+      setImportError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Sample import failed'))
     },
   })
 
@@ -372,7 +370,7 @@ export function FacilityPage() {
 
   if (warehousesQuery.isLoading || (warehouseId && mapsQuery.isLoading)) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted">Loading facility maps…</div>
+      <div className="flex h-full items-center justify-center text-sm text-muted">{t('Loading facility maps…')}</div>
     )
   }
 
@@ -380,18 +378,14 @@ export function FacilityPage() {
   if (warehousesQuery.isError || (warehouseId && mapsQuery.isError)) {
     return (
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
-        <h1 className="text-4xl font-book">Facility</h1>
+        <h1 className="text-4xl font-book">{t('Facility')}</h1>
         <p role="alert" className="mt-3 max-w-xl text-base text-red-ink">
-          {warehousesQuery.isError ? 'The warehouses could not be loaded.' : 'The map versions of this warehouse could not be loaded.'}{' '}
-          Check that the API is running, then try again.
-        </p>
+          {warehousesQuery.isError ? t('The warehouses could not be loaded.') : t('The map versions of this warehouse could not be loaded.')}{' '}{t('Check that the API is running, then try again.')}</p>
         <Button
           variant="outline"
           className="mt-6"
           onClick={() => void (warehousesQuery.isError ? warehousesQuery.refetch() : mapsQuery.refetch())}
-        >
-          Try again
-        </Button>
+        >{t('Try again')}</Button>
       </div>
     )
   }
@@ -399,18 +393,12 @@ export function FacilityPage() {
   if (!warehouseId) {
     return (
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
-        <h1 className="text-4xl font-book">Facility</h1>
-        <p className="mt-3 max-w-xl text-base text-ink-2">
-          Facility maps belong to a warehouse. Create an active warehouse in Management, then return here to
-          import or create a map version.
-        </p>
+        <h1 className="text-4xl font-book">{t('Facility')}</h1>
+        <p className="mt-3 max-w-xl text-base text-ink-2">{t('Facility maps belong to a warehouse. Create an active warehouse in Management, then return here to import or create a map version.')}</p>
         <div className="mt-6 flex flex-wrap gap-2">
           <Button variant="primary" onClick={() => navigate('/management?tab=warehouses')}>
-            <Icon name="plus" size={15} /> Create warehouse
-          </Button>
-          <Button variant="outline" onClick={() => warehousesQuery.refetch()}>
-            Refresh
-          </Button>
+            <Icon name="plus" size={15} />{' '}{t('Create warehouse')}</Button>
+          <Button variant="outline" onClick={() => warehousesQuery.refetch()}>{t('Refresh')}</Button>
         </div>
       </div>
     )
@@ -421,14 +409,10 @@ export function FacilityPage() {
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-book">Facility</h1>
-            <p className="mt-3 text-base text-ink-2">
-              Create a draft map, import ROS assets, edit metadata, publish to activate, or archive old versions.
-            </p>
+            <h1 className="text-4xl font-book">{t('Facility')}</h1>
+            <p className="mt-3 text-base text-ink-2">{t('Create a draft map, import ROS assets, edit metadata, publish to activate, or archive old versions.')}</p>
             {activeMap ? (
-              <p className="mt-2 text-sm text-ink-2">
-                Active map:{' '}
-                <button
+              <p className="mt-2 text-sm text-ink-2">{t('Active map:{value}', { value: ' ' })}<button
                   type="button"
                   className="font-medium text-ink hover:underline"
                   onClick={() => navigate(`/configure/facility/maps/${activeMap.id}/edit`)}
@@ -438,12 +422,10 @@ export function FacilityPage() {
                 · {activeMap.name}
               </p>
             ) : (
-              <p className="mt-2 text-sm text-muted">No active (published) map for this warehouse.</p>
+              <p className="mt-2 text-sm text-muted">{t('No active (published) map for this warehouse.')}</p>
             )}
           </div>
-          <label className="text-sm text-ink-2">
-            Warehouse
-            <select
+          <label className="text-sm text-ink-2">{t('Warehouse')}<select
               className={cx(controlClass(), 'mt-1 block min-w-56')}
               value={warehouseId}
               onChange={(e) => {
@@ -468,59 +450,45 @@ export function FacilityPage() {
 
         <div className="mt-10 grid grid-cols-2 gap-4">
           {draft ? (
-            <MapCard version={draft} warehouseName={warehouseName} when={`Created ${formatDateTime(draft.createdAt)}`}>
+            <MapCard version={draft} warehouseName={warehouseName} when={t('Created {value}', { value: formatDateTime(draft.createdAt) })}>
               <Button
                 variant="surface"
                 disabled={publishMutation.isPending}
                 onClick={() => publishMutation.mutate(draft.id)}
-              >
-                Publish map
-              </Button>
-              <Button variant="outline" onClick={() => openEdit(draft)}>
-                Metadata
-              </Button>
+              >{t('Publish map')}</Button>
+              <Button variant="outline" onClick={() => openEdit(draft)}>{t('Metadata')}</Button>
               {hasMapImage(draft) ? (
-                <Button variant="primary" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>
-                  Edit
-                </Button>
+                <Button variant="primary" onClick={() => navigate(`/configure/facility/maps/${draft.id}/edit`)}>{t('Edit')}</Button>
               ) : (
                 <Button
                   variant="primary"
                   onClick={() => {
                     setImportOpen(true)
-                    setActionError('Import yaml + pgm first. Create-only drafts have no image size for the editor.')
+                    setActionError(t('Import yaml + pgm first. Create-only drafts have no image size for the editor.'))
                   }}
-                >
-                  Import assets
-                </Button>
+                >{t('Import assets')}</Button>
               )}
               <Button
                 variant="ghost"
                 disabled={archiveMutation.isPending}
                 onClick={() => {
-                  if (window.confirm(`Archive draft ${draft.code}?`)) archiveMutation.mutate(draft.id)
+                  if (window.confirm(t('Archive draft {code}?', { code: draft.code }))) archiveMutation.mutate(draft.id)
                 }}
-              >
-                Archive
-              </Button>
+              >{t('Archive')}</Button>
             </MapCard>
           ) : (
-            <MissingMapCard title="No draft map">
-              Create a metadata-only draft or import a yaml + pgm pair.
-            </MissingMapCard>
+            <MissingMapCard title={t('No draft map')}>{t('Create a metadata-only draft or import a yaml + pgm pair.')}</MissingMapCard>
           )}
 
           {published ? (
             <MapCard
               version={published}
               warehouseName={warehouseName}
-              when={`Published ${formatDateTime(published.publishedAt)}`}
+              when={t('Published {value}', { value: formatDateTime(published.publishedAt) })}
               active={activeMap?.id === published.id}
             >
               {hasMapImage(published) ? (
-                <Button variant="surface" onClick={() => navigate(`/configure/facility/maps/${published.id}/edit`)}>
-                  View
-                </Button>
+                <Button variant="surface" onClick={() => navigate(`/configure/facility/maps/${published.id}/edit`)}>{t('View')}</Button>
               ) : null}
               <Button
                 variant="primary"
@@ -534,7 +502,7 @@ export function FacilityPage() {
                         '',
                         'Tiếp theo (WSL / sim), cập nhật warehouse_layout.yaml web.map_version_id nếu cần, rồi:',
                         '  cd ros2_ws/src/warotrans_simulation',
-                        "  python3 scripts/sync_web_map.py --user admin --password 'Admin@123'",
+                        '  python3 scripts/sync_web_map.py --user admin --password \'Admin@123\'',
                         '  python3 scripts/generate_warehouse.py',
                         '  # copy GeoJSON vừa tải vào GRAPH_PATH (vd. /home/ser/maps/...)',
                         '  bash ../../../scripts/_restart_sim_clean.sh',
@@ -550,30 +518,26 @@ export function FacilityPage() {
                     )
                   }
                 }}
-              >
-                Dựng map
-              </Button>
+              >{t('Build map')}</Button>
               <Button
                 variant="ghost"
                 disabled={archiveMutation.isPending}
                 onClick={() => {
-                  if (window.confirm(`Archive published ${published.code}? Robots will lose the active map.`)) {
+                  if (window.confirm(t('Archive published {code}? Robots will lose the active map.', { code: published.code }))) {
                     archiveMutation.mutate(published.id)
                   }
                 }}
-              >
-                Archive
-              </Button>
+              >{t('Archive')}</Button>
             </MapCard>
           ) : (
-            <MissingMapCard title="No published map">Robots cannot navigate until a map version is published.</MissingMapCard>
+            <MissingMapCard title={t('No published map')}>{t('Robots cannot navigate until a map version is published.')}</MissingMapCard>
           )}
         </div>
 
         <header className="mt-14 mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-book">Map versions</h2>
+          <h2 className="text-xl font-book">{t('Map versions')}</h2>
           <div className="flex items-center gap-2">
-            <IconButton aria-label="Search maps">
+            <IconButton aria-label={t('Search maps')}>
               <Icon name="search" size={16} />
             </IconButton>
             {import.meta.env.DEV ? (
@@ -582,71 +546,56 @@ export function FacilityPage() {
                 disabled={sampleMutation.isPending}
                 onClick={() => sampleMutation.mutate()}
               >
-                <Icon name="bolt" size={15} /> {sampleMutation.isPending ? 'Loading…' : 'Load Sample Map'}
+                <Icon name="bolt" size={15} /> {sampleMutation.isPending ? t('Loading…') : t('Load Sample Map')}
               </Button>
             ) : null}
             <Button
               variant="outline"
               disabled={Boolean(draft)}
-              title={draft ? 'Archive or publish the current draft first' : undefined}
+              title={draft ? t('Archive or publish the current draft first') : undefined}
               onClick={() => {
                 setCreateOpen(true)
                 setCreateForm(emptyCreateForm())
                 setCreateError(null)
               }}
             >
-              <Icon name="plus" size={15} /> Create
-            </Button>
+              <Icon name="plus" size={15} />{' '}{t('Create')}</Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <Icon name="upload" size={15} /> Import
-            </Button>
+              <Icon name="upload" size={15} />{' '}{t('Import')}</Button>
           </div>
         </header>
 
         {createOpen ? (
           <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
-            <h3 className="text-md font-book">Create map (metadata only)</h3>
-            <p className="mt-1 text-sm text-ink-2">
-              Creates a DRAFT with name/resolution/origin only (not from a file). You must Import yaml + pgm
-              next before Edit — the editor needs image width/height from the PGM.
-            </p>
+            <h3 className="text-md font-book">{t('Create map (metadata only)')}</h3>
+            <p className="mt-1 text-sm text-ink-2">{t('Creates a DRAFT with name/resolution/origin only (not from a file). You must Import yaml + pgm next before Edit — the editor needs image width/height from the PGM.')}</p>
             <div className="mt-4 flex flex-wrap items-end gap-4">
-              <label className="text-sm">
-                Name
-                <input
+              <label className="text-sm">{t('Name')}<input
                   className="mt-1 block w-64 rounded border border-outline-soft bg-container px-3 py-2"
                   value={createForm.name}
                   onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Floor 1 draft"
+                  placeholder={t('Floor 1 draft')}
                 />
               </label>
-              <label className="text-sm">
-                Resolution (m/px)
-                <input
+              <label className="text-sm">{t('Resolution (m/px)')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={createForm.resolution}
                   onChange={(e) => setCreateForm((f) => ({ ...f, resolution: e.target.value }))}
                 />
               </label>
-              <label className="text-sm">
-                Origin X
-                <input
+              <label className="text-sm">{t('Origin X')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={createForm.originX}
                   onChange={(e) => setCreateForm((f) => ({ ...f, originX: e.target.value }))}
                 />
               </label>
-              <label className="text-sm">
-                Origin Y
-                <input
+              <label className="text-sm">{t('Origin Y')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={createForm.originY}
                   onChange={(e) => setCreateForm((f) => ({ ...f, originY: e.target.value }))}
                 />
               </label>
-              <label className="text-sm">
-                Origin Yaw
-                <input
+              <label className="text-sm">{t('Origin Yaw')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={createForm.originYaw}
                   onChange={(e) => setCreateForm((f) => ({ ...f, originYaw: e.target.value }))}
@@ -657,11 +606,9 @@ export function FacilityPage() {
                 disabled={createMutation.isPending}
                 onClick={() => createMutation.mutate(createForm)}
               >
-                {createMutation.isPending ? 'Creating…' : 'Create draft'}
+                {createMutation.isPending ? t('Creating…') : t('Create draft')}
               </Button>
-              <Button variant="ghost" onClick={() => { setCreateOpen(false); setCreateError(null) }}>
-                Cancel
-              </Button>
+              <Button variant="ghost" onClick={() => { setCreateOpen(false); setCreateError(null) }}>{t('Cancel')}</Button>
             </div>
             {createError ? <p className="mt-3 text-sm text-red">{createError}</p> : null}
           </div>
@@ -669,46 +616,34 @@ export function FacilityPage() {
 
         {editTarget ? (
           <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
-            <h3 className="text-md font-book">Update map metadata · {editTarget.code}</h3>
-            <p className="mt-1 text-sm text-ink-2">
-              DRAFT only. Asset URIs are kept as-is (local /map-assets or S3 HTTPS after import).
-            </p>
+            <h3 className="text-md font-book">{t('Update map metadata ·')}{' '}{editTarget.code}</h3>
+            <p className="mt-1 text-sm text-ink-2">{t('DRAFT only. Asset URIs are kept as-is (local /map-assets or S3 HTTPS after import).')}</p>
             <div className="mt-4 flex flex-wrap items-end gap-4">
-              <label className="text-sm">
-                Name
-                <input
+              <label className="text-sm">{t('Name')}<input
                   className="mt-1 block w-64 rounded border border-outline-soft bg-container px-3 py-2"
                   value={editForm.name}
                   onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                 />
               </label>
-              <label className="text-sm">
-                Resolution (m/px)
-                <input
+              <label className="text-sm">{t('Resolution (m/px)')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={editForm.resolution}
                   onChange={(e) => setEditForm((f) => ({ ...f, resolution: e.target.value }))}
                 />
               </label>
-              <label className="text-sm">
-                Origin X
-                <input
+              <label className="text-sm">{t('Origin X')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={editForm.originX}
                   onChange={(e) => setEditForm((f) => ({ ...f, originX: e.target.value }))}
                 />
               </label>
-              <label className="text-sm">
-                Origin Y
-                <input
+              <label className="text-sm">{t('Origin Y')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={editForm.originY}
                   onChange={(e) => setEditForm((f) => ({ ...f, originY: e.target.value }))}
                 />
               </label>
-              <label className="text-sm">
-                Origin Yaw
-                <input
+              <label className="text-sm">{t('Origin Yaw')}<input
                   className="mt-1 block w-28 rounded border border-outline-soft bg-container px-3 py-2 tabular-nums"
                   value={editForm.originYaw}
                   onChange={(e) => setEditForm((f) => ({ ...f, originYaw: e.target.value }))}
@@ -719,11 +654,9 @@ export function FacilityPage() {
                 disabled={updateMutation.isPending}
                 onClick={() => updateMutation.mutate({ version: editTarget, form: editForm })}
               >
-                {updateMutation.isPending ? 'Saving…' : 'Save metadata'}
+                {updateMutation.isPending ? t('Saving…') : t('Save metadata')}
               </Button>
-              <Button variant="ghost" onClick={() => { setEditTarget(null); setEditError(null) }}>
-                Cancel
-              </Button>
+              <Button variant="ghost" onClick={() => { setEditTarget(null); setEditError(null) }}>{t('Cancel')}</Button>
             </div>
             {editError ? <p className="mt-3 text-sm text-red">{editError}</p> : null}
           </div>
@@ -731,28 +664,19 @@ export function FacilityPage() {
 
         {importOpen || importError ? (
           <div className="mb-6 rounded-lg border border-outline-soft bg-surface p-5 shadow-float">
-            <h3 className="text-md font-book">Import ROS map (yaml + pgm)</h3>
-            <p className="mt-1 text-sm text-ink-2">
-              Creates a DRAFT MapVersion. Files are stored by MapAssetStorage (Local or S3); URIs are saved on the
-              map row.
-            </p>
+            <h3 className="text-md font-book">{t('Import ROS map (yaml + pgm)')}</h3>
+            <p className="mt-1 text-sm text-ink-2">{t('Creates a DRAFT MapVersion. Files are stored by MapAssetStorage (Local or S3); URIs are saved on the map row.')}</p>
             <div className="mt-4 flex flex-wrap items-end gap-4">
-              <label className="text-sm">
-                Name
-                <input
+              <label className="text-sm">{t('Name')}<input
                   className="mt-1 block w-64 rounded border border-outline-soft bg-container px-3 py-2"
                   value={importName}
                   onChange={(e) => setImportName(e.target.value)}
-                  placeholder="Optional display name"
+                  placeholder={t('Optional display name')}
                 />
               </label>
-              <label className="text-sm">
-                map.yaml
-                <input ref={fileYamlRef} type="file" accept=".yaml,.yml" className="mt-1 block" onChange={onPickYaml} />
+              <label className="text-sm">{t('map.yaml')}<input ref={fileYamlRef} type="file" accept=".yaml,.yml" className="mt-1 block" onChange={onPickYaml} />
               </label>
-              <label className="text-sm">
-                map.pgm
-                <input ref={filePgmRef} type="file" accept=".pgm" className="mt-1 block" onChange={onPickPgm} />
+              <label className="text-sm">{t('map.pgm')}<input ref={filePgmRef} type="file" accept=".pgm" className="mt-1 block" onChange={onPickPgm} />
               </label>
               <Button
                 variant="primary"
@@ -765,11 +689,9 @@ export function FacilityPage() {
                   })
                 }
               >
-                {importMutation.isPending ? 'Importing…' : 'Import'}
+                {importMutation.isPending ? t('Importing…') : t('Import')}
               </Button>
-              <Button variant="ghost" onClick={() => { setImportOpen(false); setImportError(null) }}>
-                Cancel
-              </Button>
+              <Button variant="ghost" onClick={() => { setImportOpen(false); setImportError(null) }}>{t('Cancel')}</Button>
             </div>
             {importError ? <p className="mt-3 text-sm text-red">{importError}</p> : null}
           </div>
@@ -778,18 +700,18 @@ export function FacilityPage() {
         <Table>
           <thead>
             <tr>
-              <Th>Code</Th>
-              <Th>Version</Th>
-              <Th>Status</Th>
-              <Th>Created</Th>
-              <Th>Published</Th>
-              <Th>Name</Th>
-              <Th>Actions</Th>
+              <Th>{t('Code')}</Th>
+              <Th>{t('Version')}</Th>
+              <Th>{t('Status')}</Th>
+              <Th>{t('Created')}</Th>
+              <Th>{t('Published')}</Th>
+              <Th>{t('Name')}</Th>
+              <Th>{t('Actions')}</Th>
             </tr>
           </thead>
           <tbody>
             {maps.length === 0 ? (
-              <EmptyRow colSpan={7}>No map versions yet. Create a draft or import yaml + pgm.</EmptyRow>
+              <EmptyRow colSpan={7}>{t('No map versions yet. Create a draft or import yaml + pgm.')}</EmptyRow>
             ) : (
               maps.map((version) => (
                 <Tr key={version.id}>
@@ -803,15 +725,15 @@ export function FacilityPage() {
                         {version.code}
                       </button>
                     ) : (
-                      <span className="font-medium text-ink" title="Import yaml + pgm before editing">
+                      <span className="font-medium text-ink" title={t('Import yaml + pgm before editing')}>
                         {version.code}
                       </span>
                     )}
                     {activeMap?.id === version.id ? (
-                      <span className="ml-2 text-xs font-medium text-green">Active</span>
+                      <span className="ml-2 text-xs font-medium text-green">{t('Active')}</span>
                     ) : null}
                     {!hasMapImage(version) ? (
-                      <span className="ml-2 text-xs text-muted">no image</span>
+                      <span className="ml-2 text-xs text-muted">{t('no image')}</span>
                     ) : null}
                   </Td>
                   <Td className="tabular-nums">v{version.versionNo}</Td>
@@ -831,38 +753,30 @@ export function FacilityPage() {
                             type="button"
                             className="text-sm text-ink hover:underline"
                             onClick={() => openEdit(version)}
-                          >
-                            Metadata
-                          </button>
+                          >{t('Metadata')}</button>
                           {hasMapImage(version) ? (
                             <button
                               type="button"
                               className="text-sm text-ink hover:underline"
                               onClick={() => navigate(`/configure/facility/maps/${version.id}/edit`)}
-                            >
-                              Edit
-                            </button>
+                            >{t('Edit')}</button>
                           ) : (
                             <button
                               type="button"
                               className="text-sm text-ink hover:underline"
                               onClick={() => {
                                 setImportOpen(true)
-                                setActionError('Import yaml + pgm to unlock the map editor for this draft.')
+                                setActionError(t('Import yaml + pgm to unlock the map editor for this draft.'))
                               }}
-                            >
-                              Import assets
-                            </button>
+                            >{t('Import assets')}</button>
                           )}
                           <button
                             type="button"
                             className="text-sm text-ink hover:underline"
                             disabled={publishMutation.isPending || !hasMapImage(version)}
-                            title={!hasMapImage(version) ? 'Import yaml + pgm first' : undefined}
+                            title={!hasMapImage(version) ? t('Import yaml + pgm first') : undefined}
                             onClick={() => publishMutation.mutate(version.id)}
-                          >
-                            Publish
-                          </button>
+                          >{t('Publish')}</button>
                         </>
                       ) : null}
                       {hasMapImage(version) ? (
@@ -870,10 +784,10 @@ export function FacilityPage() {
                           type="button"
                           className="text-sm text-ink hover:underline"
                           disabled={cloneMutation.isPending}
-                          title="Copy this map (image, endpoints, zones, edges) into a new DRAFT to edit"
+                          title={t('Copy this map (image, endpoints, zones, edges) into a new DRAFT to edit')}
                           onClick={() => cloneMutation.mutate(version.id)}
                         >
-                          {cloneMutation.isPending && cloneMutation.variables === version.id ? 'Cloning…' : 'Clone to draft'}
+                          {cloneMutation.isPending && cloneMutation.variables === version.id ? t('Cloning…') : t('Clone to draft')}
                         </button>
                       ) : null}
                       {version.status !== 'ARCHIVED' ? (
@@ -882,11 +796,9 @@ export function FacilityPage() {
                           className="text-sm text-ink-2 hover:underline"
                           disabled={archiveMutation.isPending}
                           onClick={() => {
-                            if (window.confirm(`Archive ${version.code}?`)) archiveMutation.mutate(version.id)
+                            if (window.confirm(t('Archive {code}?', { code: version.code }))) archiveMutation.mutate(version.id)
                           }}
-                        >
-                          Archive
-                        </button>
+                        >{t('Archive')}</button>
                       ) : null}
                     </div>
                   </Td>

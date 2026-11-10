@@ -8,8 +8,9 @@ import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import type { ContainerListing } from './api'
 import { SectionHead } from './SectionHead'
-
+import { t } from '@/shared/i18n'
 const STATUSES: ContainerStatus[] = [
+
   'CREATED',
   'PACKED',
   'RESERVED',
@@ -44,19 +45,19 @@ export function ContainersSection({ listing, loadState }: { listing: ContainerLi
 
   return (
     <>
-      <SectionHead title="Containers" hint={
+      <SectionHead title={t('Containers')} hint={
           listing.warehouseName
-            ? `The physical units the robots carry in ${listing.warehouseName}. One Container holds one product type.`
-            : 'The physical units the robots carry. One Container holds one product type.'
+            ? t('The physical units the robots carry in {warehouseName}. One Container holds one product type.', { warehouseName: listing.warehouseName })
+            : t('The physical units the robots carry. One Container holds one product type.')
         }>
-        <SearchInput className="w-72" placeholder="Search barcode, SKU or product" value={query} onChange={setQuery} />
+        <SearchInput className="w-72" placeholder={t('Search barcode, SKU or product')} value={query} onChange={setQuery} />
         <select
           className={controlClass('pill')}
-          aria-label="Filter by status"
+          aria-label={t('Filter by status')}
           value={status}
           onChange={(event) => setStatus(event.target.value as ContainerStatus | '')}
         >
-          <option value="">All statuses</option>
+          <option value="">{t('All statuses')}</option>
           {STATUSES.map((value) => (
             <option key={value} value={value}>
               {humanize(value)}
@@ -68,13 +69,13 @@ export function ContainersSection({ listing, loadState }: { listing: ContainerLi
       <Table>
         <thead>
           <tr>
-            <Th>Barcode</Th>
-            <Th>Product</Th>
-            <Th>Status</Th>
-            <Th>Location</Th>
-            <Th>Level</Th>
-            <Th>Supplier package</Th>
-            <Th align="right">Updated</Th>
+            <Th>{t('Barcode')}</Th>
+            <Th>{t('Product')}</Th>
+            <Th>{t('Status')}</Th>
+            <Th>{t('Location')}</Th>
+            <Th>{t('Level')}</Th>
+            <Th>{t('Supplier package')}</Th>
+            <Th align="right">{t('Updated')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -101,22 +102,20 @@ export function ContainersSection({ listing, loadState }: { listing: ContainerLi
           {visible.length === 0 ? (
             <EmptyRow colSpan={7}>
               {loadState === 'loading'
-                ? 'Loading containers…'
+                ? t('Loading containers…')
                 : loadState === 'error'
-                  ? 'Could not load containers. Check that the API is running, then reload.'
+                  ? t('Could not load containers. Check that the API is running, then reload.')
                   : listing.warehouseName === null
-                    ? 'No active warehouse yet, so there are no containers to show.'
+                    ? t('No active warehouse yet, so there are no containers to show.')
                     : containers.length === 0
-                      ? 'No containers in this warehouse yet.'
-                      : 'No containers match this filter.'}
+                      ? t('No containers in this warehouse yet.')
+                      : t('No containers match this filter.')}
             </EmptyRow>
           ) : null}
         </tbody>
       </Table>
       {listing.total > containers.length ? (
-        <p className="mt-3 text-xs text-muted">
-          Showing the first {containers.length} of {listing.total} containers. Search to find the others.
-        </p>
+        <p className="mt-3 text-xs text-muted">{t('Showing the first {length} of {total} containers. Search to find the others.', { length: containers.length, total: listing.total })}</p>
       ) : null}
     </>
   )

@@ -7,8 +7,9 @@ import type {
   WorkflowVariable,
 } from '@/shared/api/types'
 import { isMovementFieldAvailable } from './movement-scope'
-
+import { t } from '@/shared/i18n'
 interface BindingEditorProps {
+
   input: FieldMetadata
   binding: StepInputBinding | undefined
   variables: WorkflowVariable[]
@@ -121,13 +122,11 @@ export function BindingEditor({
           <strong>{input.key}</strong>
           <span>
             {input.dataType}
-            {input.required ? ' · required' : ' · optional'}
+            {input.required ? t(' · required') : t(' · optional')}
           </span>
           <small>{input.description}</small>
         </div>
-        <span className="auto-constant-value">
-          CONSTANT: {String(binding.constantValue ?? '')}
-          <em> (synced with operation)</em>
+        <span className="auto-constant-value">{t('CONSTANT: {value}', { value: String(binding.constantValue ?? '') })}<em>{' '}{t('(synced with operation)')}</em>
         </span>
       </div>
     )
@@ -144,7 +143,7 @@ export function BindingEditor({
         <strong>{input.key}</strong>
         <span>
           {input.dataType}
-          {input.required ? ' · required' : ' · optional'}
+          {input.required ? t(' · required') : t(' · optional')}
         </span>
         <small>{input.description}</small>
       </div>
@@ -179,7 +178,7 @@ export function BindingEditor({
             })
           }
         >
-          <option value="">Select variable…</option>
+          <option value="">{t('Select variable…')}</option>
           {compatibleVars.map((v) => (
             <option key={v.key} value={v.key}>
               {v.key} ({v.dataType} / {v.source})
@@ -201,7 +200,7 @@ export function BindingEditor({
               })
             }
           >
-            <option value="">Select path…</option>
+            <option value="">{t('Select path…')}</option>
             {compatibleMovement.map((f) => (
               <option key={f.key} value={f.key}>
                 {f.key} ({f.dataType})
@@ -209,22 +208,16 @@ export function BindingEditor({
             ))}
           </select>
           {compatibleMovement.length === 0 && (
-            <p className="binding-warning">
-              No CURRENT_MOVEMENT paths are available for this step&apos;s execution scope
-              {executionScope ? ` (${executionScope}` : ''}
+            <p className="binding-warning">{t('No CURRENT_MOVEMENT paths are available for this step\'s execution scope')}{executionScope ? ` (${executionScope}` : ''}
               {stopActionFilter ? ` · ${stopActionFilter}` : ''}
               {executionScope ? ')' : ''}.
             </p>
           )}
-          <p className="binding-help">
-            Runtime context from TransportRequestDetail / Job planning
-            {stopActionFilter === 'PICKUP'
-              ? ' · PICKUP stop → source.* only'
+          <p className="binding-help">{t('Runtime context from TransportRequestDetail / Job planning')}{stopActionFilter === 'PICKUP'
+              ? t(' · PICKUP stop → source.* only')
               : stopActionFilter === 'DROPOFF'
-                ? ' · DROPOFF stop → destination.* only'
-                : ''}
-            . Not entered by Admin/Staff.
-          </p>
+                ? t(' · DROPOFF stop → destination.* only')
+                : ''}{t('. Not entered by Admin/Staff.')}</p>
         </div>
       )}
 
@@ -245,7 +238,7 @@ export function BindingEditor({
             })
           }}
         >
-          <option value="">Select earlier output…</option>
+          <option value="">{t('Select earlier output…')}</option>
           {stepOptions.map((o) => (
             <option key={`${o.stepKey}::${o.outputKey}`} value={`${o.stepKey}::${o.outputKey}`}>
               {o.label}
@@ -254,7 +247,7 @@ export function BindingEditor({
         </select>
       )}
       {sourceType === 'STEP_OUTPUT' && unsavedWithOutputs && (
-        <span className="muted">Save the workflow to use outputs of steps you just added.</span>
+        <span className="muted">{t('Save the workflow to use outputs of steps you just added.')}</span>
       )}
 
       {sourceType === 'CONSTANT' &&
@@ -270,7 +263,7 @@ export function BindingEditor({
               })
             }
           >
-            <option value="">Select value…</option>
+            <option value="">{t('Select value…')}</option>
             {input.allowedValues.map((v) => (
               <option key={v} value={v}>
                 {v}
@@ -286,8 +279,8 @@ export function BindingEditor({
             value={displayConstantValue(binding?.constantValue)}
             placeholder={
               input.required
-                ? `Constant ${input.dataType}`
-                : `Optional ${input.dataType} (leave empty to omit)`
+                ? t('Constant {dataType}', { dataType: input.dataType })
+                : t('Optional {dataType} (leave empty to omit)', { dataType: input.dataType })
             }
             onChange={(e) => {
               onChange({

@@ -28,7 +28,7 @@ import {
   type PixelCoord,
   type WorldCoord,
 } from '@/shared/map/mapCoordinateTransform'
-
+import { t } from '@/shared/i18n'
 export type EditorTool = 'select' | 'pan' | 'endpoint' | 'edge' | 'zone'
 
 export interface MapEditorCanvasProps {
@@ -780,7 +780,7 @@ export function MapEditorCanvas({
                     onPointerDown={(e) => startShapeDrag(e, vertexShape.kind, vertexShape.id, vertexShape.world)}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <title>Drag to move the whole {vertexShape.kind}</title>
+                    <title>{t('Drag to move the whole')}{' '}{vertexShape.kind}</title>
                     <circle r={px(14)} fill="transparent" />
                     <circle r={px(10)} fill="#2d88ff" stroke={MAP_HALO} strokeWidth={px(2)} />
                     {/* four-way arrow, sized in screen px around the grip centre */}
@@ -846,40 +846,32 @@ export function MapEditorCanvas({
       </div>
 
       <div className="absolute right-3 bottom-3 z-10 flex flex-col gap-1 rounded-full bg-surface p-1 shadow-float">
-        <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-container-high" onClick={() => changeZoom(zoom * 1.25)} aria-label="Zoom in">
+        <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-container-high" onClick={() => changeZoom(zoom * 1.25)} aria-label={t('Zoom in')}>
           <Icon name="plus" size={14} />
         </button>
-        <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-container-high" onClick={() => changeZoom(zoom / 1.25)} aria-label="Zoom out">
+        <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-container-high" onClick={() => changeZoom(zoom / 1.25)} aria-label={t('Zoom out')}>
           <Icon name="minus" size={14} />
         </button>
-        <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-container-high" onClick={resetView} aria-label="Reset view">
+        <button type="button" className="grid size-8 place-items-center rounded-full hover:bg-container-high" onClick={resetView} aria-label={t('Reset view')}>
           <Icon name="refresh" size={14} />
         </button>
       </div>
 
       {zoneStack && selected.zoneId === zoneStack.zoneId && tool === 'select' ? (
-        <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-ink-2 shadow-float">
-          Zone {zoneStack.position} of {zoneStack.count} here. Click again for the next one
-        </div>
+        <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-ink-2 shadow-float">{t('Zone {position} of {count} here. Click again for the next one', { position: zoneStack.position, count: zoneStack.count })}</div>
       ) : null}
 
       {(draftKind && !readOnly) || vertexShape ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-ink-2 shadow-float">
-          {vertexShape ? 'Drag a point to move it, the blue grip to move the whole shape. ' : null}
-          {editedEdge ? 'Drag a side of the lane to change its width. ' : null}Hold{' '}
-          <kbd className="rounded bg-container-high px-1 font-mono">Shift</kbd> to keep the line straight (45° steps)
-        </div>
+          {vertexShape ? t('Drag a point to move it, the blue grip to move the whole shape. ') : null}
+          {editedEdge ? t('Drag a side of the lane to change its width. ') : null}{t('Hold{value}', { value: ' ' })}<kbd className="rounded bg-container-high px-1 font-mono">Shift</kbd>{' '}{t('to keep the line straight (45° steps)')}</div>
       ) : null}
 
       {import.meta.env.DEV && aimedImage && aimedWorld ? (
         <div className="absolute bottom-3 left-3 z-10 rounded-md bg-surface/95 px-3 py-2 font-mono text-[11px] text-ink-2 shadow-float">
-          <div>
-            Image u={aimedImage.u.toFixed(2)} v={aimedImage.v.toFixed(2)}
-          </div>
-          <div>
-            World x={aimedWorld.x.toFixed(3)} m · y={aimedWorld.y.toFixed(3)} m
-          </div>
-          <div>Frame = {frameId}</div>
+          <div>{t('Image u={value} v={value2}', { value: aimedImage.u.toFixed(2), value2: aimedImage.v.toFixed(2) })}</div>
+          <div>{t('World x={value} m · y={value2} m', { value: aimedWorld.x.toFixed(3), value2: aimedWorld.y.toFixed(3) })}</div>
+          <div>{t('Frame =')}{' '}{frameId}</div>
         </div>
       ) : null}
 

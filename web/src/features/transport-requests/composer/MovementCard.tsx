@@ -5,8 +5,9 @@ import { controlClass } from '@/shared/ui/controlClass'
 import { LocationEndpointPicker } from './LocationEndpointPicker'
 import { containerById, movementCollapseLine } from './labels'
 import type { ComposerData, MapPickTarget, MovementDraft } from './types'
-
+import { t } from '@/shared/i18n'
 interface MovementCardProps {
+
   data: ComposerData
   movement: MovementDraft
   selected: boolean
@@ -46,7 +47,7 @@ export function MovementCard({
           selected && 'ring-2 ring-blue/40',
         )}
       >
-        <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={`Select movement ${movement.sequenceNo}`} />
+        <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={t('Select movement {sequenceNo}', { sequenceNo: movement.sequenceNo })} />
         <button type="button" className="min-w-0 flex-1 text-left" onClick={onToggleCollapse}>
           <span className="font-medium">#{movement.sequenceNo}</span>{' '}
           <span className="font-mono">{line.code}</span>
@@ -54,7 +55,7 @@ export function MovementCard({
             {line.from} → {line.to}
           </span>
         </button>
-        <IconButton className="size-7" aria-label="Expand" onClick={onToggleCollapse}>
+        <IconButton className="size-7" aria-label={t('Expand')} onClick={onToggleCollapse}>
           <Icon name="chevronDown" size={14} />
         </IconButton>
       </article>
@@ -70,22 +71,18 @@ export function MovementCard({
       )}
     >
       <header className="mb-3 flex items-center gap-2">
-        <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={`Select movement ${movement.sequenceNo}`} />
+        <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={t('Select movement {sequenceNo}', { sequenceNo: movement.sequenceNo })} />
         <span className="text-xs font-medium">#{movement.sequenceNo}</span>
         <span className="font-mono text-xs">{container?.barcode ?? '—'}</span>
         <div className="ml-auto flex items-center gap-1">
-          <IconButton className="size-7" aria-label="Collapse" onClick={onToggleCollapse}>
+          <IconButton className="size-7" aria-label={t('Collapse')} onClick={onToggleCollapse}>
             <Icon name="chevronRight" size={14} className="rotate-90" />
           </IconButton>
-          <Button variant="dangerGhost" size="sm" onClick={onRemove}>
-            Remove
-          </Button>
+          <Button variant="dangerGhost" size="sm" onClick={onRemove}>{t('Remove')}</Button>
         </div>
       </header>
 
-      <label className="mb-3 flex flex-col gap-1 text-[10px] font-medium tracking-wide text-muted uppercase">
-        Container
-        <select
+      <label className="mb-3 flex flex-col gap-1 text-[10px] font-medium tracking-wide text-muted uppercase">{t('Container')}<select
           className={controlClass('sm')}
           value={movement.containerId}
           onChange={(event) => {
@@ -104,7 +101,7 @@ export function MovementCard({
             })
           }}
         >
-          <option value="">Select container…</option>
+          <option value="">{t('Select container…')}</option>
           {data.containers.map((item) => (
             <option key={item.id} value={item.id}>
               {item.barcode} · {item.productName}
@@ -114,12 +111,12 @@ export function MovementCard({
       </label>
 
       {movement.sourceAutoFilled ? (
-        <p className="mb-2 text-[11px] text-blue">Auto-filled from current container location.</p>
+        <p className="mb-2 text-[11px] text-blue">{t('Auto-filled from current container location.')}</p>
       ) : null}
 
       <div className="flex flex-col gap-3">
         <LocationEndpointPicker
-          label="From"
+          label={t('From')}
           data={data}
           value={{
             storageLocationId: movement.sourceStorageLocationId,
@@ -139,7 +136,7 @@ export function MovementCard({
           }
         />
         <LocationEndpointPicker
-          label="To"
+          label={t('To')}
           data={data}
           value={{
             storageLocationId: movement.destinationStorageLocationId,

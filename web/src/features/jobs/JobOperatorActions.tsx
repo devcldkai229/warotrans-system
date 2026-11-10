@@ -3,8 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/shared/api/client'
 import { cancelJob, pauseJob, resumeJob, type JobDetailDto } from '@/shared/api/jobs'
 import { Button } from '@/shared/ui/Button'
-
+import { t } from '@/shared/i18n'
 /**
+
  * WFX-03: operator pause / resume / cancel. A pause stops the robot (STOP mode PAUSE); whether it really stopped is
  * shown in the robot's Control card (requested → accepted → verified, or unknown). Which buttons show is the
  * server's availableActions (BOTH-04): state and permission are decided there, and checked again on click.
@@ -27,7 +28,7 @@ export function JobOperatorActions({
       setError(null)
       void queryClient.invalidateQueries({ queryKey: ['job', jobId] })
     },
-    onError: (failure) => setError(failure instanceof ApiError ? failure.message : 'The job could not be changed.'),
+    onError: (failure) => setError(failure instanceof ApiError ? failure.message : t('The job could not be changed.')),
   })
 
   const mayPause = allowed('PAUSE')
@@ -44,20 +45,18 @@ export function JobOperatorActions({
             variant="primary"
             disabled={act.isPending}
             onClick={() => {
-              const reason = window.prompt('Why pause this job? (optional)') ?? undefined
+              const reason = window.prompt(t('Why pause this job? (optional)')) ?? undefined
               act.mutate(() => pauseJob(jobId, reason || undefined))
             }}
-          >
-            Pause
-          </Button>
+          >{t('Pause')}</Button>
         ) : null}
         {mayResume ? (
           <Button size="sm" variant="surface" disabled={act.isPending} onClick={() => act.mutate(() => resumeJob(jobId))}>
             {failureCode === 'operator_paused'
-              ? 'Resume (release the robot)'
+              ? t('Resume (release the robot)')
               : failureCode === 'request_cancelled_cargo_onboard'
-                ? 'Resume (deliver the cargo)'
-                : 'Resume'}
+                ? t('Resume (deliver the cargo)')
+                : t('Resume')}
           </Button>
         ) : null}
         {mayCancel ? (
@@ -68,14 +67,12 @@ export function JobOperatorActions({
             onClick={() => {
               const reason = window.prompt(
                 failureCode === 'request_cancelled_cargo_onboard'
-                  ? 'Cancel this job? Containers are still on the robot: say where they are now.'
-                  : 'Cancel this job? Give a reason.',
+                  ? t('Cancel this job? Containers are still on the robot: say where they are now.')
+                  : t('Cancel this job? Give a reason.'),
               )
               if (reason) act.mutate(() => cancelJob(jobId, reason))
             }}
-          >
-            Cancel job
-          </Button>
+          >{t('Cancel job')}</Button>
         ) : null}
       </div>
       {error ? <p className="text-xs text-red-ink">{error}</p> : null}

@@ -18,8 +18,9 @@ import {
   type MapPickTarget,
   type TransportRequestDraft,
 } from './types'
-
+import { t } from '@/shared/i18n'
 export interface ComposerMapState {
+
   panel2Open: boolean
   focusEndpointIds: string[]
   movements: MapMovement[]
@@ -119,7 +120,7 @@ export function TransportRequestComposer({
       uiInset: showPanel2 ? 500 : 0,
       onEndpointClick: mapPickTarget ? handleEndpointClick : undefined,
       pickHint: mapPickTarget
-        ? `Click an endpoint on the map to set ${mapPickTarget}`
+        ? t('Click an endpoint on the map to set {mapPickTarget}', { mapPickTarget })
         : null,
       endpoints: data.endpoints.length ? data.endpoints : composerGeometry.endpoints,
       edges: composerGeometry.edges,
@@ -150,7 +151,7 @@ export function TransportRequestComposer({
   }, [mapPickTarget])
 
   function requestClose() {
-    if (draftIsDirty(draft) && !window.confirm('Discard this transport request draft?')) return
+    if (draftIsDirty(draft) && !window.confirm(t('Discard this transport request draft?'))) return
     onClose()
   }
 
@@ -162,15 +163,15 @@ export function TransportRequestComposer({
       )
       const result = await submitTransportRequest(draft, staffInputTypes)
       await queryClient.invalidateQueries({ queryKey: ['transport-requests'] })
-      onBanner?.(`Created ${result.requestCode}`)
+      onBanner?.(t('Created {requestCode}', { requestCode: result.requestCode }))
       onSubmitted({ id: result.id, requestCode: result.requestCode })
     } catch (error) {
       const message =
         error instanceof ApiError
-          ? error.errors[0]?.message || error.message || error.code || 'Create failed'
+          ? error.errors[0]?.message || error.message || error.code || t('Create failed')
           : error instanceof Error
             ? error.message
-            : 'Create failed'
+            : t('Create failed')
       onBanner?.(message)
     } finally {
       setSubmitting(false)

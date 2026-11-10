@@ -18,6 +18,7 @@ import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE, ROBOT_STATUS_TONE, STEP_STATUS_TONE, type Tone } from '@/shared/ui/statusTones'
 
+import { t } from '@/shared/i18n'
 const show = (value: unknown) => (typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value))
 
 const CARD = 'flex flex-col rounded-lg border border-outline-soft bg-surface p-6 shadow-float'
@@ -110,14 +111,12 @@ function StepRow({
         <span className={cx('grid size-5 shrink-0 place-items-center rounded-full', STEP_MARK[tone])}>
           {step.status === 'COMPLETED' ? <Icon name="check" size={12} strokeWidth={2.5} /> : null}
         </span>
-        <span className="w-12 shrink-0 text-xs text-muted">Step {number}</span>
+        <span className="w-12 shrink-0 text-xs text-muted">{t('Step')}{' '}{number}</span>
         <strong className="min-w-0 truncate font-medium">{step.name || step.stepKey}</strong>
         <span className="shrink-0 text-xs whitespace-nowrap text-muted">{humanize(step.stepType)}</span>
         <span className="ml-auto flex shrink-0 items-center gap-3">
           {waiting && waited !== null ? (
-            <span className="text-xs font-medium whitespace-nowrap text-amber-ink tabular-nums">
-              waiting {formatDuration(waited)}
-            </span>
+            <span className="text-xs font-medium whitespace-nowrap text-amber-ink tabular-nums">{t('waiting {value}', { value: formatDuration(waited) })}</span>
           ) : null}
           <StatusBadge tone={tone} surface={Boolean(STEP_SURFACE[tone])}>
             {step.status}
@@ -129,32 +128,31 @@ function StepRow({
       {open ? (
         <div className="border-t border-outline-soft pr-4 pb-4 pl-12">
           <Facts>
-            <Fact label="Operation">{step.operationCode}</Fact>
-            <Fact label="Started">{formatClock(step.startedAt)}</Fact>
-            <Fact label="Completed">{formatClock(step.completedAt)}</Fact>
-            {step.targetEndpointId ? <Fact label="Target endpoint">{labels.endpoint(step.targetEndpointId)}</Fact> : null}
+            <Fact label={t('Operation')}>{step.operationCode}</Fact>
+            <Fact label={t('Started')}>{formatClock(step.startedAt)}</Fact>
+            <Fact label={t('Completed')}>{formatClock(step.completedAt)}</Fact>
+            {step.targetEndpointId ? <Fact label={t('Target endpoint')}>{labels.endpoint(step.targetEndpointId)}</Fact> : null}
           </Facts>
 
           {step.stepType === 'HUMAN_INTERACTION' ? (
             <>
-              <h4 className={STEP_HEADING}>Confirmation</h4>
+              <h4 className={STEP_HEADING}>{t('Confirmation')}</h4>
               <div className="flex flex-col gap-1.5">
                 <p className="text-sm">
                   {step.status === 'COMPLETED'
-                    ? `Confirmed at ${formatClock(step.completedAt)}.`
+                    ? t('Confirmed at {value}.', { value: formatClock(step.completedAt) })
                     : waiting
-                      ? 'The robot is waiting for an operator to confirm the container identity.'
-                      : 'Not confirmed yet.'}
+                      ? t('The robot is waiting for an operator to confirm the container identity.')
+                      : t('Not confirmed yet.')}
                 </p>
                 {expectedContainer ? (
-                  <p className="text-xs text-ink-2">
-                    Expected container: <b className="font-medium text-ink">{labels.container(expectedContainer)}</b>
+                  <p className="text-xs text-ink-2">{t('Expected container:')}{' '}<b className="font-medium text-ink">{labels.container(expectedContainer)}</b>
                   </p>
                 ) : null}
                 {waiting && canConfirm ? (
                   <div className="mt-2 flex gap-2">
                     <Button variant="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending}>
-                      <Icon name="check" size={15} /> {confirm.isPending ? 'Confirming…' : 'Confirm'}
+                      <Icon name="check" size={15} /> {confirm.isPending ? t('Confirming…') : t('Confirm')}
                     </Button>
                   </div>
                 ) : null}
@@ -165,7 +163,7 @@ function StepRow({
 
           {inputs.length > 0 ? (
             <>
-              <h4 className={STEP_HEADING}>Inputs</h4>
+              <h4 className={STEP_HEADING}>{t('Inputs')}</h4>
               <ul>
                 {inputs.map(([name, value]) => (
                   <li key={name} className={VALUE_ROW}>
@@ -179,7 +177,7 @@ function StepRow({
 
           {outputs.length > 0 ? (
             <>
-              <h4 className={STEP_HEADING}>Outputs</h4>
+              <h4 className={STEP_HEADING}>{t('Outputs')}</h4>
               <ul>
                 {outputs.map(([name, value]) => (
                   <li key={name} className={VALUE_ROW}>
@@ -205,12 +203,12 @@ function StepRow({
 
 /** "Job checks", "Pickup stop · Rack A-02", "Drop-off CTN-… · Dock 1": what a task is, from its scope and stop. */
 function taskTitle(task: JobTaskDto, labels: Labels) {
-  const action = task.stopAction === 'PICKUP' ? 'Pickup' : task.stopAction === 'DROPOFF' ? 'Drop-off' : ''
+  const action = task.stopAction === 'PICKUP' ? t('Pickup') : task.stopAction === 'DROPOFF' ? t('Drop-off') : ''
   switch (task.executionScope) {
     case 'ONCE_PER_JOB':
-      return 'Job checks'
+      return t('Job checks')
     case 'ONCE_PER_STOP':
-      return `${action} stop · ${labels.endpoint(task.stopEndpointId)}`
+      return t('{action} stop · {value}', { action, value: labels.endpoint(task.stopEndpointId) })
     case 'PER_CONTAINER_AT_STOP':
       return `${action} ${labels.container(task.containerId)} · ${labels.endpoint(task.stopEndpointId)}`
     default:
@@ -264,9 +262,7 @@ function TaskGroup({
         <Icon name={open ? 'chevronDown' : 'chevronRight'} size={16} className="text-muted" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-base font-medium">{title}</span>
-          <span className="mt-0.5 block text-xs text-muted">
-            Task {task.sequenceNo} · {done} of {task.steps.length} {task.steps.length === 1 ? 'step' : 'steps'} done
-          </span>
+          <span className="mt-0.5 block text-xs text-muted">{t('Task {sequenceNo} · {done} of {length}', { sequenceNo: task.sequenceNo, done, length: task.steps.length })}{' '}{task.steps.length === 1 ? t('step') : t('steps')}{' '}{t('done')}</span>
         </span>
         <StatusBadge tone={failed ? 'red' : waiting ? 'amber' : done === task.steps.length ? 'green' : 'blue'} surface>
           {task.status}
@@ -359,15 +355,13 @@ export function JobDetailPage() {
   if (jobId === null || jobQuery.error || (!job && !jobQuery.isLoading)) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-5">
-        <h1 className="text-xl font-book">{jobQuery.error ? errorText(jobQuery.error) : 'No job selected'}</h1>
-        <Link to="/monitor/requests" className={buttonClass({ variant: 'primary' })}>
-          Back to transport requests
-        </Link>
+        <h1 className="text-xl font-book">{jobQuery.error ? errorText(jobQuery.error) : t('No job selected')}</h1>
+        <Link to="/monitor/requests" className={buttonClass({ variant: 'primary' })}>{t('Back to transport requests')}</Link>
       </div>
     )
   }
 
-  if (!job) return <p className="px-10 py-8 text-sm text-muted">Loading job…</p>
+  if (!job) return <p className="px-10 py-8 text-sm text-muted">{t('Loading job…')}</p>
 
   const steps = allSteps(job)
   const done = steps.filter((s) => s.status === 'COMPLETED').length
@@ -406,26 +400,23 @@ export function JobDetailPage() {
     <div className="h-full overflow-auto">
       <div className="mx-auto flex min-h-full max-w-[1700px] flex-col px-10 pt-2 pb-10">
         <Button variant="ghost" size="sm" className="-ml-3 self-start" onClick={() => navigate('/monitor/requests')}>
-          <Icon name="arrowLeft" size={14} /> Transport requests
-        </Button>
+          <Icon name="arrowLeft" size={14} />{' '}{t('Transport requests')}</Button>
 
         <header className="mt-5 flex items-end justify-between gap-6">
           <div>
-            <p className="text-sm text-muted">
-              Job of request <span className="font-mono text-ink-2">{request?.requestCode ?? '—'}</span>
+            <p className="text-sm text-muted">{t('Job of request')}{' '}<span className="font-mono text-ink-2">{request?.requestCode ?? '—'}</span>
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-4xl font-book">{job.jobNo}</h1>
               <StatusBadge tone={JOB_STATUS_TONE[job.status]} withDot>
                 {job.status}
               </StatusBadge>
-              {waiting ? <StatusBadge tone="amber">Step waiting</StatusBadge> : null}
+              {waiting ? <StatusBadge tone="amber">{t('Step waiting')}</StatusBadge> : null}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
             <JobOperatorActions jobId={job.id} actions={job.availableActions ?? []} failureCode={job.failureCode} />
-            <p className="text-sm text-muted">
-              Created at <span className="text-ink tabular-nums">{formatClock(job.createdAt)}</span>
+            <p className="text-sm text-muted">{t('Created at')}{' '}<span className="text-ink tabular-nums">{formatClock(job.createdAt)}</span>
             </p>
           </div>
         </header>
@@ -433,21 +424,21 @@ export function JobDetailPage() {
         <div className="mt-8 grid grid-cols-[1fr_1.2fr_1fr] gap-4">
           <section className={cx(CARD, 'border-l-4 border-l-blue bg-blue-soft/40')}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className={CARD_LABEL}>Assigned robot</h2>
+              <h2 className={CARD_LABEL}>{t('Assigned robot')}</h2>
               {robot ? (
                 <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot surface>
                   {robot.status}
                 </StatusBadge>
               ) : null}
             </div>
-            <p className="mt-3 text-2xl font-book">{robot?.code ?? 'Unassigned'}</p>
+            <p className="mt-3 text-2xl font-book">{robot?.code ?? t('Unassigned')}</p>
             <dl className="mt-4 flex gap-8 text-xs">
               <div>
-                <dt className="text-muted">Battery</dt>
+                <dt className="text-muted">{t('Battery')}</dt>
                 <dd className="mt-0.5 font-medium">{robot ? formatBattery(robot.batteryPercent) : '—'}</dd>
               </div>
               <div>
-                <dt className="text-muted">{containerLabels.length > 1 ? 'Containers' : 'Container'}</dt>
+                <dt className="text-muted">{containerLabels.length > 1 ? t('Containers') : t('Container')}</dt>
                 <dd className="mt-0.5 font-mono font-medium">{containerLabels.length > 0 ? containerLabels.join(', ') : '—'}</dd>
               </div>
             </dl>
@@ -455,32 +446,28 @@ export function JobDetailPage() {
 
           <section className={cx(CARD, 'border-l-4 border-l-teal bg-teal-soft/40')}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className={CARD_LABEL}>Progress</h2>
-              <span className="text-xs text-muted tabular-nums">
-                Step {progress.current} of {progress.total}, {progress.percent}%
-              </span>
+              <h2 className={CARD_LABEL}>{t('Progress')}</h2>
+              <span className="text-xs text-muted tabular-nums">{t('Step {current} of {total}, {percent}%', { current: progress.current, total: progress.total, percent: progress.percent })}</span>
             </div>
             <p className="mt-3 text-2xl font-book">
-              {waiting ? `Waiting for ${waiting.name || waiting.stepKey}` : (routeLabel ?? humanize(job.status))}
+              {waiting ? t('Waiting for {value}', { value: waiting.name || waiting.stepKey }) : (routeLabel ?? humanize(job.status))}
             </p>
             <div className="mt-6 flex h-1.5 overflow-hidden rounded-full bg-container-higher">
               <span className="bg-blue" style={{ width: `${progress.percent}%` }} />
               {waiting ? <span className="bg-amber" style={{ width: `${100 / Math.max(progress.total, 1)}%` }} /> : null}
             </div>
             <div className="mt-3 flex justify-between gap-4 text-xs text-muted">
-              <span>From {origin ? origin.name || origin.code : '—'}</span>
-              <span>To {destination ? destination.name || destination.code : '—'}</span>
+              <span>{t('From')}{' '}{origin ? origin.name || origin.code : '—'}</span>
+              <span>{t('To')}{' '}{destination ? destination.name || destination.code : '—'}</span>
             </div>
           </section>
 
           <section className={cx(CARD, 'border-l-4 border-l-amber bg-amber-soft/40')}>
-            <h2 className={CARD_LABEL}>Execution time</h2>
+            <h2 className={CARD_LABEL}>{t('Execution time')}</h2>
             <p className="mt-3 text-4xl font-book">{elapsed === null ? '—' : formatDuration(elapsed)}</p>
-            <p className="mt-1 text-xs text-muted">{job.completedAt ? 'total' : job.startedAt ? 'elapsed' : 'not started yet'}</p>
+            <p className="mt-1 text-xs text-muted">{job.completedAt ? t('total') : job.startedAt ? t('elapsed') : t('not started yet')}</p>
             {waiting && waited !== null ? (
-              <p className="mt-5 self-start rounded-full bg-amber-soft px-3 py-1 text-xs font-medium text-amber-ink">
-                Waiting for confirmation: {formatDuration(waited)}
-              </p>
+              <p className="mt-5 self-start rounded-full bg-amber-soft px-3 py-1 text-xs font-medium text-amber-ink">{t('Waiting for confirmation: {value}', { value: formatDuration(waited) })}</p>
             ) : null}
           </section>
         </div>
@@ -490,10 +477,9 @@ export function JobDetailPage() {
         <div className="mt-4 grid flex-1 grid-cols-[1fr_1.05fr] items-start gap-4">
           <section className="rounded-lg border border-outline-soft border-l-4 border-l-purple bg-surface p-6 shadow-float">
             <header className="flex items-baseline justify-between gap-3">
-              <h2 className="text-xl font-book">Execution steps</h2>
+              <h2 className="text-xl font-book">{t('Execution steps')}</h2>
               <span className="text-xs text-muted">
-                {job.tasks.length} {job.tasks.length === 1 ? 'task' : 'tasks'}, {progress.total} steps
-              </span>
+                {job.tasks.length} {job.tasks.length === 1 ? t('task') : t('tasks')}{t(', {total} steps', { total: progress.total })}</span>
             </header>
 
             {job.tasks.map((task) => (
@@ -547,7 +533,7 @@ export function JobDetailPage() {
                           x: pose.x,
                           y: pose.y,
                           tone: 'warn',
-                          lines: ['Awaiting confirmation', `${waiting.name || waiting.stepKey}, waited ${waited === null ? '—' : formatDuration(waited)}`],
+                          lines: [t('Awaiting confirmation'), t('{value}, waited {value2}', { value: waiting.name || waiting.stepKey, value2: waited === null ? '—' : formatDuration(waited) })],
                         },
                       ]
                     : []

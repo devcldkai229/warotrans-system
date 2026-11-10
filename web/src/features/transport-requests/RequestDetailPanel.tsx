@@ -8,8 +8,9 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE, REQUEST_DETAIL_STATUS_TONE, REQUEST_STATUS_TONE } from '@/shared/ui/statusTones'
 import { detailProgress } from './derive'
 import { Drawer, DrawerHeading, FailureNote, LineItem, MetaList, MetaRow } from './panelParts'
-
+import { t } from '@/shared/i18n'
 interface RequestDetailPanelProps {
+
   request: TransportRequestView
   selectedJobNo: string | null
   onSelectJob: (jobNo: string) => void
@@ -25,7 +26,7 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
 
   return (
     <Drawer
-      label={`${request.requestCode} detail`}
+      label={t('{requestCode} detail', { requestCode: request.requestCode })}
       kind="Transport request"
       code={request.requestCode}
       status={request.status}
@@ -34,27 +35,25 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
     >
       <div className="mb-5 flex flex-col gap-2 text-xs text-muted">
         <Meter percent={progress.percent} tone="blue" />
-        <span>
-          {progress.done} of {progress.total} containers delivered
-        </span>
+        <span>{t('{done} of {total} containers delivered', { done: progress.done, total: progress.total })}</span>
       </div>
 
       <MetaList>
-        <MetaRow label="Workflow">{request.workflowName}</MetaRow>
-        <MetaRow label="Requested by">{request.requestedByName}</MetaRow>
-        <MetaRow label="Submitted">{formatDateTimeWithYear(request.submittedAt)}</MetaRow>
-        <MetaRow label="Queued">{formatDateTimeWithYear(request.queuedAt)}</MetaRow>
-        <MetaRow label={request.completedAt ? 'Finished' : 'Elapsed'}>
+        <MetaRow label={t('Workflow')}>{request.workflowName}</MetaRow>
+        <MetaRow label={t('Requested by')}>{request.requestedByName}</MetaRow>
+        <MetaRow label={t('Submitted')}>{formatDateTimeWithYear(request.submittedAt)}</MetaRow>
+        <MetaRow label={t('Queued')}>{formatDateTimeWithYear(request.queuedAt)}</MetaRow>
+        <MetaRow label={request.completedAt ? t('Finished') : t('Elapsed')}>
           {request.completedAt ? formatDateTimeWithYear(request.completedAt) : elapsed === null ? '—' : formatDuration(elapsed)}
         </MetaRow>
-        {request.note ? <MetaRow label="Note">{request.note}</MetaRow> : null}
+        {request.note ? <MetaRow label={t('Note')}>{request.note}</MetaRow> : null}
       </MetaList>
 
       {request.failureMessage ? <FailureNote>{request.failureMessage}</FailureNote> : null}
 
       {actions ? <div className="mt-4 flex flex-col gap-2">{actions}</div> : null}
 
-      <DrawerHeading>Movement plan</DrawerHeading>
+      <DrawerHeading>{t('Movement plan')}</DrawerHeading>
       <ol>
         {request.details.map((detail) => (
           <LineItem
@@ -69,9 +68,9 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
         ))}
       </ol>
 
-      <DrawerHeading>Jobs ({request.jobs.length})</DrawerHeading>
+      <DrawerHeading>{t('Jobs ({length})', { length: request.jobs.length })}</DrawerHeading>
       {request.jobs.length === 0 ? (
-        <p className="text-xs text-muted">No job has been planned for this request yet.</p>
+        <p className="text-xs text-muted">{t('No job has been planned for this request yet.')}</p>
       ) : (
         <ul className="mt-2 flex flex-col gap-1.5">
           {request.jobs.map((job) => (
@@ -87,7 +86,7 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
               >
                 <span className="flex min-w-0 flex-1 flex-col text-xs">
                   <strong className="font-mono font-medium">{job.jobNo}</strong>
-                  <span className="text-muted">{job.robotCode ?? 'Unassigned'}</span>
+                  <span className="text-muted">{job.robotCode ?? t('Unassigned')}</span>
                 </span>
                 <StatusBadge tone={JOB_STATUS_TONE[job.status]}>{job.status}</StatusBadge>
                 <Icon name="chevronRight" size={14} className="text-muted" />

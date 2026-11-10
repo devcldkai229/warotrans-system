@@ -5,8 +5,9 @@ import { SearchInput } from '@/shared/ui/Field'
 import { DIRECT_ENDPOINT_TYPES } from './constants'
 import { endpointById, locationById } from './labels'
 import type { ComposerData } from './types'
-
+import { t } from '@/shared/i18n'
 export interface PlaceSelection {
+
   storageLocationId: string | null
   endpointId: string
   levelNo: number | null
@@ -91,9 +92,7 @@ export function LocationEndpointPicker({
               mode === 'location' ? 'bg-blue/15 text-blue' : 'text-muted hover:bg-container-high',
             )}
             onClick={() => setMode('location')}
-          >
-            Location
-          </button>
+          >{t('Location')}</button>
           <button
             type="button"
             className={cx(
@@ -101,9 +100,7 @@ export function LocationEndpointPicker({
               mode === 'endpoint' ? 'bg-blue/15 text-blue' : 'text-muted hover:bg-container-high',
             )}
             onClick={() => setMode('endpoint')}
-          >
-            Endpoint
-          </button>
+          >{t('Endpoint')}</button>
           {onMapPick ? (
             <button
               type="button"
@@ -112,10 +109,8 @@ export function LocationEndpointPicker({
                 picking ? 'bg-primary text-white' : 'text-muted hover:bg-container-high',
               )}
               onClick={onMapPick}
-              title="Pick from map"
-            >
-              Map
-            </button>
+              title={t('Pick from map')}
+            >{t('Map')}</button>
           ) : null}
         </div>
       </div>
@@ -126,7 +121,7 @@ export function LocationEndpointPicker({
             variant="field"
             value={query}
             onChange={setQuery}
-            placeholder="Search location"
+            placeholder={t('Search location')}
           />
           <select
             className={controlClass('sm')}
@@ -144,7 +139,7 @@ export function LocationEndpointPicker({
               })
             }}
           >
-            <option value="">Select storage location…</option>
+            <option value="">{t('Select storage location…')}</option>
             {locations.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.code} · {item.name}
@@ -162,16 +157,13 @@ export function LocationEndpointPicker({
                     levelNo: event.target.value ? Number(event.target.value) : null,
                   })
                 }
-                aria-label="Level"
+                aria-label={t('Level')}
               >
                 {location.levelOptions.map((level) => (
-                  <option key={level} value={level}>
-                    Level {level}
-                  </option>
+                  <option key={level} value={level}>{t('Level {level}', { level })}</option>
                 ))}
               </select>
-              <p className="truncate text-[11px] text-muted">
-                Endpoint: <span className="font-mono text-ink-2">{location.endpointCode}</span>
+              <p className="truncate text-[11px] text-muted">{t('Endpoint:')}{' '}<span className="font-mono text-ink-2">{location.endpointCode}</span>
               </p>
             </div>
           ) : null}
@@ -182,7 +174,7 @@ export function LocationEndpointPicker({
             variant="field"
             value={query}
             onChange={setQuery}
-            placeholder="Search endpoint"
+            placeholder={t('Search endpoint')}
           />
           <select
             className={controlClass('sm')}
@@ -195,7 +187,7 @@ export function LocationEndpointPicker({
               })
             }}
           >
-            <option value="">Select endpoint…</option>
+            <option value="">{t('Select endpoint…')}</option>
             {directEndpoints.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.endpointType}
@@ -203,8 +195,7 @@ export function LocationEndpointPicker({
             ))}
           </select>
           {endpoint && !location ? (
-            <p className="text-[11px] text-muted">
-              Direct endpoint <span className="font-mono text-ink-2">{endpoint.code}</span>
+            <p className="text-[11px] text-muted">{t('Direct endpoint')}{' '}<span className="font-mono text-ink-2">{endpoint.code}</span>
             </p>
           ) : null}
         </>

@@ -9,8 +9,9 @@ import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot, type Ma
 import { findEndpointByName } from '@/shared/map/scene'
 import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
 import { RobotPreviewCard } from './RobotPreviewCard'
-
+import { t } from '@/shared/i18n'
 interface FleetMapProps {
+
   robots: RobotView[]
   selectedCode: string | null
   onSelect: (code: string) => void
@@ -64,7 +65,7 @@ export function FleetMap({
   // The map version the Fleet page is showing; a draft or archived one is said so, since robots run on the published map.
   const mapLabel = mapVersion
     ? `${mapVersion.code} · v${mapVersion.versionNo}${mapVersion.status === 'PUBLISHED' ? '' : ` · ${humanize(String(mapVersion.status))}`}`
-    : 'No map selected'
+    : t('No map selected')
 
   const trafficOverlay = useMemo<MapTrafficOverlay | null>(() => {
     if (!snap) return null
@@ -125,7 +126,7 @@ export function FleetMap({
           x: robot.poseX,
           y: robot.poseY,
           tone: 'danger' as const,
-          lines: [`${robot.code} waiting at ${zone.name}`, `held by ${zone.heldByRobotCode}, queue +${zone.queueAfter ?? 0}`],
+          lines: [t('{code} waiting at {zone}', { code: robot.code, zone: zone.name }), t('held by {heldByRobotCode}, queue +{value}', { heldByRobotCode: zone.heldByRobotCode, value: zone.queueAfter ?? 0 })],
         },
       ]
     }),
@@ -137,7 +138,7 @@ export function FleetMap({
           x: robot.poseX,
           y: robot.poseY,
           tone: 'warn' as const,
-          lines: [`${robot.code} traffic wait`, `${wait.reason} @ ${wait.resourceId}`],
+          lines: [t('{code} traffic wait', { code: robot.code }), `${wait.reason} @ ${wait.resourceId}`],
         },
       ]
     }),
@@ -151,7 +152,7 @@ export function FleetMap({
             x: r.x,
             y: r.y,
             tone: 'danger' as const,
-            lines: [`${robot.code} quarantined`, r.quarantineReason!],
+            lines: [t('{code} quarantined', { code: robot.code }), r.quarantineReason!],
           },
         ]
       }),
@@ -186,7 +187,7 @@ export function FleetMap({
       </WarehouseMap>
       <div className="absolute top-3 right-3 z-5 flex h-8 items-center gap-2 rounded-full bg-surface/95 px-3.5 text-xs text-ink-2 shadow-float">
         <span className={`size-1.5 rounded-full ${snap ? 'bg-green' : 'bg-amber'}`} />
-        {snap ? `${mapLabel} · traffic e${snap.epoch}` : mapLabel}
+        {snap ? t('{mapLabel} · traffic e{epoch}', { mapLabel, epoch: snap.epoch }) : mapLabel}
       </div>
       {alignDebug ? (
         <MapAlignDebugOverlay

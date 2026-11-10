@@ -3,7 +3,7 @@ import { IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
-
+import { t } from '@/shared/i18n'
 // Building blocks shared by the Request and Job drawers that float over the map.
 
 interface DrawerProps {
@@ -28,7 +28,7 @@ export function Drawer({ label, kind, code, status, tone, onClose, children }: D
           <strong className="block truncate font-mono text-sm font-medium">{code}</strong>
         </div>
         <StatusBadge tone={tone}>{status}</StatusBadge>
-        <IconButton size="sm" aria-label="Close" className="-mr-1" onClick={onClose}>
+        <IconButton size="sm" aria-label={t('Close')} className="-mr-1" onClick={onClose}>
           <Icon name="close" size={15} />
         </IconButton>
       </header>

@@ -1,8 +1,9 @@
 import { createContext, useContext } from 'react'
 import type { Account, Capabilities } from '@/shared/api/contracts'
 import type { Permission } from '@/shared/auth/permissions'
-
+import { t } from '@/shared/i18n'
 /** `loading` while the stored session is being restored after a page load. */
+
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous'
 
 export interface AuthValue {
@@ -22,7 +23,7 @@ export interface AuthValue {
 /** The credentials were valid, but the web console is for Admin and Technician accounts only. */
 export class ConsoleAccessError extends Error {
   constructor() {
-    super('This console is for administrators and technicians. Staff accounts sign in on the mobile app.')
+    super(t('This console is for administrators and technicians. Staff accounts sign in on the mobile app.'))
     this.name = 'ConsoleAccessError'
   }
 }
