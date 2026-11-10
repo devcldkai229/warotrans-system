@@ -8,6 +8,7 @@ import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
+import { RobotFaultCard } from './fault/RobotFaultCard'
 import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, humanize, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
@@ -332,9 +333,7 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
     { allowed: mayDiagnose, health: healthQuery.data },
   )
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
-  const [confirmed, setConfirmed] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const error = robot.telemetry?.error
   const navigationState = robot.telemetry?.navigationState
 
   const enableMutation = useMutation({
@@ -398,15 +397,7 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
 
         <RobotControlCard robotId={robot.id} robotCode={robot.code} />
 
-        {error ? (
-          <div className="flex gap-3 rounded-md bg-red-soft p-4 text-red-ink">
-            <Icon name="alert" size={18} className="mt-0.5" />
-            <div>
-              <strong className="font-medium">{error.title}</strong>
-              <p className="mt-1 text-xs text-ink-2">{error.message}</p>
-            </div>
-          </div>
-        ) : null}
+        <RobotFaultCard robot={robot} />
 
         <div className="mt-6 grid grid-cols-3 gap-2">
           {ACTIONS.map((action) => (
@@ -477,14 +468,6 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
         </div>
       </div>
 
-      {error ? (
-        <footer className="px-6 pt-3 pb-6">
-          {/* TODO(backend): no endpoint to acknowledge a Robot error yet; the confirmation is local to this panel. */}
-          <Button variant="primary" size="lg" block disabled={confirmed} onClick={() => setConfirmed(true)}>
-            <Icon name="check" size={16} /> {confirmed ? t('Error confirmed') : t('Confirm error')}
-          </Button>
-        </footer>
-      ) : null}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { explainJobProblem } from '@/features/jobs/failureCatalog'
+import { RobotFaultCard } from '../fault/RobotFaultCard'
 import { useAuth } from '@/features/auth/authContext'
 import { getRobot, getRobotHealth, listRobots, type RobotHealth } from '@/shared/api/fleet'
 import { listJobs } from '@/shared/api/jobs'
@@ -187,6 +188,12 @@ export function RobotTechnicalPage() {
           {!robot.isEnabled ? <StatusBadge tone="grey">{t('Disabled')}</StatusBadge> : null}
           <span className="ml-auto text-sm text-muted">{robot.name}</span>
         </header>
+
+        {robot.errorCode?.trim() ? (
+          <div className="mt-6">
+            <RobotFaultCard robot={robot} />
+          </div>
+        ) : null}
 
         {/* The state of the diagnostics as a whole: live, stale, or never reported. */}
         {mayDiagnose ? (

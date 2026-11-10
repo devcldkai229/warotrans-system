@@ -272,7 +272,6 @@ export interface RobotTelemetry {
   eStopReleased?: boolean
   zone?: { name: string; heldSeconds: number; heldByRobotCode?: string; queueAfter?: number }
   navigationState?: string
-  error?: { title: string; message: string }
 }
 
 export interface RobotView extends Robot {

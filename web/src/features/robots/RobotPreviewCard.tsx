@@ -56,8 +56,8 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
         </IconButton>
       </header>
 
-      {robot.telemetry?.error ? (
-        <p className="mt-3 rounded-sm bg-red-soft px-3 py-2 text-xs font-medium text-red-ink">{robot.telemetry.error.title}</p>
+      {robot.errorCode?.trim() ? (
+        <p className="mt-3 rounded-sm bg-red-soft px-3 py-2 font-mono text-xs font-medium text-red-ink break-words">{robot.errorCode}</p>
       ) : null}
 
       <dl className="mt-3">

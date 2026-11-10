@@ -77,6 +77,18 @@ export function transitionIssue(issue: Issue, status: IssueStatus, resolution?: 
   })
 }
 
+export interface CreateIssueBody {
+  issueType: IssueType
+  severity: IssueSeverity
+  description: string
+  robotId?: string
+  evidence?: { kind: string; note?: string }[]
+}
+
+export function createIssue(body: CreateIssueBody) {
+  return apiRequest<Issue>('/api/operations/issues', { method: 'POST', body: JSON.stringify(body) })
+}
+
 export function assignIssue(issue: Issue, assigneeId: string | null) {
   return apiRequest<Issue>(`/api/operations/issues/${issue.id}/assign`, {
     method: 'POST',
