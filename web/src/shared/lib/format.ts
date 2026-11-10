@@ -1,3 +1,4 @@
+import { t } from '@/shared/i18n'
 // Display formatting for API values. The API sends ISO-8601 timestamps and plain numbers; the UI formats them here.
 
 const pad = (value: number) => String(value).padStart(2, '0')
@@ -50,20 +51,20 @@ export function formatIsoDateTime(iso: string | null | undefined): string {
 export function formatRelativeTime(iso: string | null | undefined): string {
   const seconds = secondsBetween(iso)
   if (seconds === null) return '—'
-  if (seconds < 45) return 'just now'
-  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`
-  if (seconds < 86_400) return `${Math.round(seconds / 3600)} h ago`
+  if (seconds < 45) return t('just now')
+  if (seconds < 3600) return t('{minutes} min ago', { minutes: Math.round(seconds / 60) })
+  if (seconds < 86_400) return t('{hours} h ago', { hours: Math.round(seconds / 3600) })
   return formatDateTime(iso)
 }
 
 /** `IN_PROGRESS` → `In progress`. Backend enum values keep their meaning, only the casing changes. */
 export function humanize(value: string): string {
-  if (value !== value.toUpperCase()) return value
+  if (value !== value.toUpperCase()) return t(value)
   const text = value.replaceAll('_', ' ').toLowerCase()
-  return text.charAt(0).toUpperCase() + text.slice(1)
+  return t(text.charAt(0).toUpperCase() + text.slice(1))
 }
 
 /** HW-04: a battery the robot never reported is "Unknown", never 0 %. */
 export function formatBattery(percent: number | null | undefined): string {
-  return percent === null || percent === undefined ? 'Unknown' : `${Math.round(percent)}%`
+  return percent === null || percent === undefined ? t('Unknown') : `${Math.round(percent)}%`
 }
