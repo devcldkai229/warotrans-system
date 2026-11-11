@@ -50,7 +50,7 @@ public sealed class CreateTransportRequestHandler(
         return CreateForAsync(request, requestedBy, cancellationToken);
     }
 
-    /// <summary>For work with no signed-in user behind it (a schedule's wave): every check still applies.</summary>
+    /// <summary>Creates the request on behalf of the given account; every check still applies.</summary>
     public async Task<CreateTransportRequestResponse> CreateForAsync(
         CreateTransportRequestRequest request,
         Guid requestedBy,
