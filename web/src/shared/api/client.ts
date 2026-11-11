@@ -1,5 +1,7 @@
 import type { Session } from './contracts'
 import type { ProblemError } from './types'
+import { t } from '@/shared/i18n'
+import { localizeServerMessage } from '@/shared/i18n/serverErrors'
 
 /**
  * Empty → same-origin (Vite proxies /api in dev). Absolute URL → direct Host.
@@ -26,7 +28,7 @@ export class ApiError extends Error {
     message: string,
     errors: ProblemError[] = [],
   ) {
-    super(message)
+    super(localizeServerMessage(code, message))
     this.name = 'ApiError'
     this.status = status
     this.code = code
@@ -83,7 +85,7 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
 
 async function toApiError(response: Response): Promise<ApiError> {
   let code: string | null = null
-  let message = `Request failed (${response.status})`
+  let message = t('Request failed ({status})', { status: response.status })
   let errors: ProblemError[] = []
   try {
     const problem = (await response.json()) as {
@@ -119,7 +121,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+        timer = setTimeout(() => reject(new Error(t('{label} timed out after {ms}ms', { label, ms }))), ms)
       }),
     ])
   } finally {

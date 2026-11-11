@@ -35,6 +35,11 @@ public sealed class ListTransportRequestsHandler(
             query = query.Where(r => r.Status == status);
         }
 
+        if (request.Ids is { Count: > 0 } ids)
+        {
+            query = query.Where(r => ids.Contains(r.Id));
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();

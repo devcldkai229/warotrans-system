@@ -12,10 +12,12 @@ import { RobotScopeDialog } from '@/features/accounts/RobotScopeDialog'
 import { AccountFormDialog, type AccountFormValues } from '@/features/accounts/AccountFormDialog'
 import { TemporaryPasswordDialog } from '@/features/accounts/TemporaryPasswordDialog'
 import { useAuth } from '@/features/auth/authContext'
+import { useRoles } from '@/features/accounts/useRoles'
 import { ACCOUNT_ROLES } from '@/features/accounts/constants'
 import { AddButton, SectionHead } from './SectionHead'
-
+import { t } from '@/shared/i18n'
 const STATUS_TONE: Record<AccountStatus, Tone> = { ACTIVE: 'green', INACTIVE: 'grey', LOCKED: 'red' }
+
 const ROLE_TONE: Record<AccountRole, Tone> = { ADMIN: 'blue', STAFF: 'grey', TECHNICIAN: 'amber' }
 
 interface AccountsSectionProps {
@@ -34,6 +36,8 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
   const [issued, setIssued] = useState<{ username: string; password: string; reason: 'created' | 'reset' } | null>(null)
   const [scopeFor, setScopeFor] = useState<Account | null>(null)
   const { account: me } = useAuth()
+  // The server says which roles are limited to assigned robots (not a role name written here).
+  const robotScopedRoles = new Set((useRoles().data?.roles ?? []).filter((role) => role.robotScoped).map((role) => role.role))
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -57,14 +61,14 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
     try {
       replace(await setAccountStatus(account, status))
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : 'The status could not be changed.')
+      setNotice(failure instanceof Error ? failure.message : t('The status could not be changed.'))
     } finally {
       setBusyId(null)
     }
   }
 
   async function resetPassword(account: Account) {
-    if (!window.confirm(`Reset the password of ${account.username}? They will be signed out on every device.`)) return
+    if (!window.confirm(t('Reset the password of {username}? They will be signed out on every device.', { username: account.username }))) return
     setBusyId(account.id)
     setNotice(null)
     try {
@@ -72,7 +76,7 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
       replace(reset.account)
       setIssued({ username: reset.account.username, password: reset.temporaryPassword, reason: 'reset' })
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : 'The password could not be reset.')
+      setNotice(failure instanceof Error ? failure.message : t('The password could not be reset.'))
     } finally {
       setBusyId(null)
     }
@@ -93,22 +97,22 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
 
   return (
     <>
-      <SectionHead title="Accounts" hint="People who can sign in. The role decides what each person may do.">
-        <SearchInput className="w-72" placeholder="Search name, username or email" value={query} onChange={setQuery} />
+      <SectionHead title={t('Accounts')} hint={t('People who can sign in. The role decides what each person may do.')}>
+        <SearchInput className="w-72" placeholder={t('Search name, username or email')} value={query} onChange={setQuery} />
         <select
           className={controlClass('pill')}
-          aria-label="Filter by role"
+          aria-label={t('Filter by role')}
           value={roleFilter}
           onChange={(event) => setRoleFilter(event.target.value as AccountRole | '')}
         >
-          <option value="">All roles</option>
+          <option value="">{t('All roles')}</option>
           {ACCOUNT_ROLES.map((role) => (
             <option key={role} value={role}>
               {role}
             </option>
           ))}
         </select>
-        <AddButton onClick={() => setEditing('new')}>Add account</AddButton>
+        <AddButton onClick={() => setEditing('new')}>{t('Add account')}</AddButton>
       </SectionHead>
 
       {notice ? (
@@ -120,13 +124,13 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
       <Table>
         <thead>
           <tr>
-            <Th>Username</Th>
-            <Th>Full name</Th>
-            <Th>Email</Th>
-            <Th>Role</Th>
-            <Th>Last login</Th>
-            <Th>Status</Th>
-            <Th align="right">Actions</Th>
+            <Th>{t('Username')}</Th>
+            <Th>{t('Full name')}</Th>
+            <Th>{t('Email')}</Th>
+            <Th>{t('Role')}</Th>
+            <Th>{t('Last login')}</Th>
+            <Th>{t('Status')}</Th>
+            <Th align="right">{t('Actions')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -137,7 +141,7 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
               <Td>{account.email}</Td>
               <Td>
                 <StatusBadge tone={ROLE_TONE[account.role]}>{account.role}</StatusBadge>
-                {account.mustChangePassword ? <span className="ml-2 text-xs text-muted">temporary password</span> : null}
+                {account.mustChangePassword ? <span className="ml-2 text-xs text-muted">{t('temporary password')}</span> : null}
               </Td>
               <Td tone="faint" className="tabular-nums">
                 {formatIsoDateTime(account.lastLoginAt)}
@@ -149,37 +153,27 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
               </Td>
               <Td>
                 <div className="flex justify-end gap-1.5">
-                  <Button size="sm" onClick={() => setEditing(account)}>
-                    Edit
-                  </Button>
-                  {account.role === 'TECHNICIAN' ? (
-                    <Button size="sm" variant="ghost" onClick={() => setScopeFor(account)}>
-                      Robots
-                    </Button>
+                  <Button size="sm" onClick={() => setEditing(account)}>{t('Edit')}</Button>
+                  {robotScopedRoles.has(account.role) ? (
+                    <Button size="sm" variant="ghost" onClick={() => setScopeFor(account)}>{t('Robots')}</Button>
                   ) : null}
                   <Button
                     size="sm"
                     variant="ghost"
                     disabled={busyId === account.id || account.id === me?.id}
-                    title={account.id === me?.id ? 'Use Change password for your own account.' : undefined}
+                    title={account.id === me?.id ? t('Use Change password for your own account.') : undefined}
                     onClick={() => resetPassword(account)}
-                  >
-                    Reset password
-                  </Button>
+                  >{t('Reset password')}</Button>
                   {account.status === 'ACTIVE' ? (
                     <Button
                       size="sm"
                       variant="ghost"
                       disabled={busyId === account.id || account.id === me?.id}
-                      title={account.id === me?.id ? 'You cannot deactivate your own account.' : undefined}
+                      title={account.id === me?.id ? t('You cannot deactivate your own account.') : undefined}
                       onClick={() => changeStatus(account, 'INACTIVE')}
-                    >
-                      Deactivate
-                    </Button>
+                    >{t('Deactivate')}</Button>
                   ) : (
-                    <Button size="sm" variant="tonal" disabled={busyId === account.id} onClick={() => changeStatus(account, 'ACTIVE')}>
-                      Activate
-                    </Button>
+                    <Button size="sm" variant="tonal" disabled={busyId === account.id} onClick={() => changeStatus(account, 'ACTIVE')}>{t('Activate')}</Button>
                   )}
                 </div>
               </Td>
@@ -188,10 +182,10 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
           {visible.length === 0 ? (
             <EmptyRow colSpan={7}>
               {loadState === 'loading'
-                ? 'Loading accounts…'
+                ? t('Loading accounts…')
                 : loadState === 'error'
-                  ? 'Could not load accounts. Check that the API is running, then reload.'
-                  : 'No accounts match this filter.'}
+                  ? t('Could not load accounts. Check that the API is running, then reload.')
+                  : t('No accounts match this filter.')}
             </EmptyRow>
           ) : null}
         </tbody>

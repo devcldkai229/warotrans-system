@@ -15,6 +15,7 @@ public static class ListTransportRequestsEndpoint
             Guid? warehouseId,
             string? status,
             string? search,
+            Guid[]? ids,
             int? take,
             int? skip,
             IValidator<ListTransportRequestsRequest> validator,
@@ -40,7 +41,8 @@ public static class ListTransportRequestsEndpoint
                 parsedStatus,
                 search,
                 take ?? 50,
-                skip ?? 0);
+                skip ?? 0,
+                ids);
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
@@ -48,6 +50,6 @@ public static class ListTransportRequestsEndpoint
         .RequirePermission(Permissions.TransportRead)
         .WithName("ListTransportRequests")
         .WithSummary("List TransportRequests")
-        .WithDescription("Returns TransportRequests with enriched container and endpoint labels. Does not create Jobs.");
+        .WithDescription("Returns TransportRequests with enriched container and endpoint labels. Does not create Jobs. `ids` (repeat the parameter, at most 100) narrows the list to those requests, e.g. to turn the ids on a Job list into request codes.");
     }
 }

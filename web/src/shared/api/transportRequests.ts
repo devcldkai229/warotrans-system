@@ -145,6 +145,8 @@ export function listTransportRequests(params?: {
   warehouseId?: string
   status?: string
   search?: string
+  /** Only these requests (at most 100): turns the request ids on a Job list into codes. */
+  ids?: string[]
   skip?: number
   take?: number
 }) {
@@ -152,6 +154,7 @@ export function listTransportRequests(params?: {
   if (params?.warehouseId) query.set('warehouseId', params.warehouseId)
   if (params?.status) query.set('status', params.status)
   if (params?.search) query.set('search', params.search)
+  for (const id of params?.ids ?? []) query.append('ids', id)
   if (params?.skip !== undefined) query.set('skip', String(params.skip))
   if (params?.take !== undefined) query.set('take', String(params.take))
   const qs = query.toString()

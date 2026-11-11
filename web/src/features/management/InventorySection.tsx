@@ -4,8 +4,9 @@ import { SearchInput } from '@/shared/ui/Field'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import type { InventoryListing } from './api'
 import { SectionHead } from './SectionHead'
-
+import { t } from '@/shared/i18n'
 /**
+
  * warehouse.inventory_stocks, read-only: stock changes only through the Container lifecycle (putaway, retrieval,
  * relocation), so there is no manual adjustment. Counts are Containers, not product units (rules/00).
  */
@@ -26,19 +27,19 @@ export function InventorySection({ listing, loadState }: { listing: InventoryLis
 
   return (
     <>
-      <SectionHead title="Inventory" hint="Containers stored per product, location and shelf level. Counts are Containers, not units.">
-        <SearchInput className="w-72" placeholder="Search SKU, product or location" value={query} onChange={setQuery} />
+      <SectionHead title={t('Inventory')} hint={t('Containers stored per product, location and shelf level. Counts are Containers, not units.')}>
+        <SearchInput className="w-72" placeholder={t('Search SKU, product or location')} value={query} onChange={setQuery} />
       </SectionHead>
 
       <Table>
         <thead>
           <tr>
-            <Th>SKU</Th>
-            <Th>Product</Th>
-            <Th>Location</Th>
-            <Th>Level</Th>
-            <Th align="right">Containers</Th>
-            <Th align="right">Updated</Th>
+            <Th>{t('SKU')}</Th>
+            <Th>{t('Product')}</Th>
+            <Th>{t('Location')}</Th>
+            <Th>{t('Level')}</Th>
+            <Th align="right">{t('Containers')}</Th>
+            <Th align="right">{t('Updated')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -59,22 +60,20 @@ export function InventorySection({ listing, loadState }: { listing: InventoryLis
           {visible.length === 0 ? (
             <EmptyRow colSpan={6}>
               {loadState === 'loading'
-                ? 'Loading inventory…'
+                ? t('Loading inventory…')
                 : loadState === 'error'
-                  ? 'Could not load inventory. Check that the API is running, then reload.'
+                  ? t('Could not load inventory. Check that the API is running, then reload.')
                   : listing.warehouseName === null
-                    ? 'No active warehouse yet, so there is no stock to show.'
+                    ? t('No active warehouse yet, so there is no stock to show.')
                     : inventory.length === 0
-                      ? 'No stock yet. Stock appears here once containers are put away on shelves.'
-                      : 'No stock records match this filter.'}
+                      ? t('No stock yet. Stock appears here once containers are put away on shelves.')
+                      : t('No stock records match this filter.')}
             </EmptyRow>
           ) : null}
         </tbody>
       </Table>
       {listing.total > inventory.length ? (
-        <p className="mt-3 text-xs text-muted">
-          Showing the first {inventory.length} of {listing.total} stock rows. Search to find the others.
-        </p>
+        <p className="mt-3 text-xs text-muted">{t('Showing the first {length} of {total} stock rows. Search to find the others.', { length: inventory.length, total: listing.total })}</p>
       ) : null}
     </>
   )

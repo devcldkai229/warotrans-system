@@ -9,8 +9,9 @@ import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE, ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
-
+import { t } from '@/shared/i18n'
 interface RobotPreviewCardProps {
+
   robot: RobotView
   onClose: () => void
   onOpenDetails: () => void
@@ -42,7 +43,7 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
       className={cx('absolute z-6 w-72 cursor-default rounded-md bg-surface p-4 shadow-float', SIDE[side], VERTICAL[vertical])}
       style={{ left: anchor.left, top: anchor.top }}
       role="dialog"
-      aria-label={`${robot.code} summary`}
+      aria-label={t('{code} summary', { code: robot.code })}
       onClick={(event) => event.stopPropagation()}
     >
       <header className="flex items-center gap-2">
@@ -51,21 +52,21 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
           <span className="block truncate text-xs text-muted">{robot.name}</span>
         </div>
         <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]}>{robot.status}</StatusBadge>
-        <IconButton size="sm" aria-label="Close" className="-mr-1" onClick={onClose}>
+        <IconButton size="sm" aria-label={t('Close')} className="-mr-1" onClick={onClose}>
           <Icon name="close" size={15} />
         </IconButton>
       </header>
 
-      {robot.telemetry?.error ? (
-        <p className="mt-3 rounded-sm bg-red-soft px-3 py-2 text-xs font-medium text-red-ink">{robot.telemetry.error.title}</p>
+      {robot.errorCode?.trim() ? (
+        <p className="mt-3 rounded-sm bg-red-soft px-3 py-2 font-mono text-xs font-medium text-red-ink break-words">{robot.errorCode}</p>
       ) : null}
 
       <dl className="mt-3">
-        <Row label="Battery">
+        <Row label={t('Battery')}>
           <BatteryLevel percent={robot.batteryPercent} />
         </Row>
-        <Row label="Heartbeat">{formatRelativeTime(robot.lastHeartbeatAt)}</Row>
-        <Row label="Position">
+        <Row label={t('Heartbeat')}>{formatRelativeTime(robot.lastHeartbeatAt)}</Row>
+        <Row label={t('Position')}>
           {robot.poseX.toFixed(1)}, {robot.poseY.toFixed(1)} m
         </Row>
       </dl>
@@ -84,12 +85,11 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
             </div>
           </>
         ) : (
-          <span className="text-muted">No active job</span>
+          <span className="text-muted">{t('No active job')}</span>
         )}
       </section>
 
-      <Button block className="mt-3" onClick={onOpenDetails}>
-        View details <Icon name="arrowRight" size={14} />
+      <Button block className="mt-3" onClick={onOpenDetails}>{t('View details')}{' '}<Icon name="arrowRight" size={14} />
       </Button>
     </div>
   )

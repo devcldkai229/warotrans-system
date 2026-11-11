@@ -7,6 +7,7 @@ import {
 } from '@/shared/api/warehouses'
 import type { Tone } from '@/shared/ui/statusTones'
 
+import { t } from '@/shared/i18n'
 export const VOUCHERS_KEY = ['warehouse', 'stock-vouchers'] as const
 
 /** The working Warehouse's vouchers, newest first. Shared by the menu count and the section. */
@@ -19,8 +20,8 @@ export function useStockVouchers(warehouseId: string | null) {
 }
 
 export const VOUCHER_TYPE_LABEL: Record<StockVoucherType, string> = {
-  INBOUND: 'Inbound',
-  OUTBOUND: 'Outbound',
+  INBOUND: t('Inbound'),
+  OUTBOUND: t('Outbound'),
 }
 
 export const VOUCHER_TYPE_TONE: Record<StockVoucherType, Tone> = {
@@ -36,7 +37,7 @@ export const VOUCHER_STATUS_TONE: Record<StockVoucherStatus, Tone> = {
 
 /** What "done" means for a line: on a shelf for inbound, issued for outbound. */
 export function doneLabel(type: StockVoucherType): string {
-  return type === 'INBOUND' ? 'on shelf' : 'issued'
+  return type === 'INBOUND' ? t('on shelf') : t('issued')
 }
 
 function escapeHtml(value: string): string {

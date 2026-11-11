@@ -5,8 +5,9 @@ import { Button } from '@/shared/ui/Button'
 import { Modal } from '@/shared/ui/Dialog'
 import { FormError } from '@/shared/ui/Field'
 import { getRobotScope, setRobotScope } from './api'
-
+import { t } from '@/shared/i18n'
 interface RobotScopeDialogProps {
+
   account: Account
   onClose: () => void
 }
@@ -36,7 +37,7 @@ export function RobotScopeDialog({ account, onClose }: RobotScopeDialogProps) {
         setSelected(new Set(scope.robotIds))
       })
       .catch((failure: unknown) => {
-        if (!cancelled) setError(failure instanceof Error ? failure.message : 'Could not load the robots.')
+        if (!cancelled) setError(failure instanceof Error ? failure.message : t('Could not load the robots.'))
       })
     return () => {
       cancelled = true
@@ -59,16 +60,16 @@ export function RobotScopeDialog({ account, onClose }: RobotScopeDialogProps) {
       await setRobotScope(account, [...selected])
       onClose()
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'The robot scope could not be saved.')
+      setError(failure instanceof Error ? failure.message : t('The robot scope could not be saved.'))
       setSaving(false)
     }
   }
 
   return (
-    <Modal title="Assigned robots" subtitle={`Robots ${account.fullName} may act on.`} onClose={onClose}>
+    <Modal title={t('Assigned robots')} subtitle={t('Robots {fullName} may act on.', { fullName: account.fullName })} onClose={onClose}>
       <div className="max-h-80 overflow-auto px-6 py-4">
-        {robots === null && !error ? <p className="text-sm text-muted">Loading robots…</p> : null}
-        {robots?.length === 0 ? <p className="text-sm text-muted">No robot is registered yet.</p> : null}
+        {robots === null && !error ? <p className="text-sm text-muted">{t('Loading robots…')}</p> : null}
+        {robots?.length === 0 ? <p className="text-sm text-muted">{t('No robot is registered yet.')}</p> : null}
         <ul className="flex flex-col gap-1">
           {robots?.map((robot) => (
             <li key={robot.id}>
@@ -87,11 +88,9 @@ export function RobotScopeDialog({ account, onClose }: RobotScopeDialogProps) {
         ) : null}
       </div>
       <footer className="flex justify-end gap-2 px-6 pb-6">
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
+        <Button variant="ghost" onClick={onClose}>{t('Cancel')}</Button>
         <Button variant="primary" disabled={saving || robots === null} onClick={save}>
-          {saving ? 'Saving…' : `Save (${selected.size})`}
+          {saving ? t('Saving…') : t('Save ({size})', { size: selected.size })}
         </Button>
       </footer>
     </Modal>

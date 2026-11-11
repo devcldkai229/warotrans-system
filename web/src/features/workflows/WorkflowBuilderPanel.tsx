@@ -34,8 +34,9 @@ import {
   type InputSpec,
   type ValueType,
 } from './constants'
-
+import { t } from '@/shared/i18n'
 interface WorkflowBuilderPanelProps {
+
   workflow: Workflow
   onChange: (workflow: Workflow) => void
 }
@@ -136,7 +137,7 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
         <span className="min-w-0 truncate text-xs font-medium" title={input}>
           {input}
           {spec.required ? (
-            <b className="text-red" title="Required">
+            <b className="text-red" title={t('Required')}>
               {' '}
               *
             </b>
@@ -144,7 +145,7 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
         </span>
         <span className="mr-auto text-xs text-muted">{spec.type}</span>
         {spec.required ? null : (
-          <IconButton size="sm" onClick={onRemove} aria-label={`Remove ${input}`}>
+          <IconButton size="sm" onClick={onRemove} aria-label={t('Remove {input}', { input })}>
             <Icon name="close" size={13} />
           </IconButton>
         )}
@@ -154,7 +155,7 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
         <select
           className={controlClass('sm')}
           value={binding.sourceType}
-          aria-label={`${input} source`}
+          aria-label={t('{input} source', { input })}
           onChange={(event) => {
             const sourceType = event.target.value as BindingSourceType
             onChange({ sourceType, path: initialPath(spec, sourceType, ctx) })
@@ -175,10 +176,10 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
           <select
             className={controlClass('sm')}
             value={listed ? binding.path : ''}
-            aria-label={`${input} value`}
+            aria-label={t('{input} value', { input })}
             onChange={(event) => onChange({ ...binding, path: event.target.value })}
           >
-            {!listed ? <option value="">Select…</option> : null}
+            {!listed ? <option value="">{t('Select…')}</option> : null}
             {list.map((candidate) => (
               <option key={candidate.value} value={candidate.value}>
                 {candidate.label}
@@ -189,10 +190,10 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
           <select
             className={controlClass('sm')}
             value={binding.path}
-            aria-label={`${input} value`}
+            aria-label={t('{input} value', { input })}
             onChange={(event) => onChange({ ...binding, path: event.target.value })}
           >
-            {!(spec.options ?? ['true', 'false']).includes(binding.path) ? <option value="">Select…</option> : null}
+            {!(spec.options ?? ['true', 'false']).includes(binding.path) ? <option value="">{t('Select…')}</option> : null}
             {(spec.options ?? ['true', 'false']).map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -205,7 +206,7 @@ function BindingRow({ input, spec, binding, ctx, onChange, onRemove }: BindingRo
             type={spec.type === 'INT' || spec.type === 'DECIMAL' ? 'number' : 'text'}
             step={spec.type === 'DECIMAL' ? 'any' : undefined}
             value={binding.path}
-            aria-label={`${input} value`}
+            aria-label={t('{input} value', { input })}
             onChange={(event) => onChange({ ...binding, path: event.target.value })}
           />
         )}
@@ -317,25 +318,24 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
 
   return (
     <div className="flex flex-col gap-8 px-5 pt-5 pb-10">
-      <Field label="Workflow name" hint={`Version ${workflow.versionNo}, ${workflow.status.toLowerCase()}`}>
+      <Field label={t('Workflow name')} hint={t('Version {versionNo}, {value}', { versionNo: workflow.versionNo, value: workflow.status.toLowerCase() })}>
         <input className={controlClass()} value={workflow.name} onChange={(event) => patch({ name: event.target.value })} />
       </Field>
 
       <section>
-        <SectionHead title="Variables" count={workflow.variablesSchema.length}>
+        <SectionHead title={t('Variables')} count={workflow.variablesSchema.length}>
           <Button size="sm" onClick={addVariable}>
-            <Icon name="plus" size={14} /> Variable
-          </Button>
+            <Icon name="plus" size={14} />{' '}{t('Variable')}</Button>
         </SectionHead>
         {workflow.variablesSchema.length === 0 ? (
-          <p className="text-xs text-muted">No variables yet. Add one to pass values into the steps.</p>
+          <p className="text-xs text-muted">{t('No variables yet. Add one to pass values into the steps.')}</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             <div className={cx(VARIABLE_GRID, 'text-xs text-muted')}>
-              <span>Name</span>
-              <span>Type</span>
-              <span>Source</span>
-              <span>Value</span>
+              <span>{t('Name')}</span>
+              <span>{t('Type')}</span>
+              <span>{t('Source')}</span>
+              <span>{t('Value')}</span>
               <span />
             </div>
             {workflow.variablesSchema.map((variable, index) => (
@@ -343,7 +343,7 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                 <input
                   className={controlClass('sm')}
                   value={variable.key}
-                  aria-label="Variable key"
+                  aria-label={t('Variable key')}
                   onChange={(event) =>
                     updateVariable(index, {
                       key: event.target.value,
@@ -354,7 +354,7 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                 <select
                   className={controlClass('sm')}
                   value={variable.dataType}
-                  aria-label="Data type"
+                  aria-label={t('Data type')}
                   onChange={(event) => updateVariable(index, { dataType: event.target.value })}
                 >
                   {(VARIABLE_DATA_TYPES.includes(variable.dataType)
@@ -369,7 +369,7 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                 <select
                   className={controlClass('sm')}
                   value={variable.source}
-                  aria-label="Variable source"
+                  aria-label={t('Variable source')}
                   onChange={(event) => updateVariable(index, { source: event.target.value as WorkflowVariableSource })}
                 >
                   {VARIABLE_SOURCES.map((source) => (
@@ -383,12 +383,12 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                   value={variable.source === 'ADMIN_INPUT' ? (variable.value ?? '') : ''}
                   disabled={variable.source !== 'ADMIN_INPUT'}
                   placeholder="—"
-                  aria-label="Value"
+                  aria-label={t('Value')}
                   onChange={(event) => updateVariable(index, { value: event.target.value })}
                 />
                 <IconButton
                   size="sm"
-                  aria-label="Remove variable"
+                  aria-label={t('Remove variable')}
                   onClick={() => patch({ variablesSchema: workflow.variablesSchema.filter((_, i) => i !== index) })}
                 >
                   <Icon name="close" size={13} />
@@ -400,12 +400,11 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
       </section>
 
       <section>
-        <SectionHead title="Tasks" count={workflow.tasks.length}>
+        <SectionHead title={t('Tasks')} count={workflow.tasks.length}>
           <Button size="sm" onClick={addTask}>
-            <Icon name="plus" size={14} /> Task
-          </Button>
+            <Icon name="plus" size={14} />{' '}{t('Task')}</Button>
         </SectionHead>
-        {workflow.tasks.length === 0 ? <p className="text-xs text-muted">No tasks yet. A task groups the steps a robot runs in order.</p> : null}
+        {workflow.tasks.length === 0 ? <p className="text-xs text-muted">{t('No tasks yet. A task groups the steps a robot runs in order.')}</p> : null}
 
         {workflow.tasks.map((task, taskIndex) => {
           const taskOpen = expandedTask === task.id
@@ -420,13 +419,13 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                 <Icon name={taskOpen ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
                 <strong className="min-w-0 flex-1 truncate text-base font-medium">{task.name || task.taskKey}</strong>
                 <span className="text-xs text-muted">
-                  {task.steps.length} {task.steps.length === 1 ? 'step' : 'steps'}
+                  {task.steps.length} {task.steps.length === 1 ? t('step') : t('steps')}
                 </span>
               </button>
 
               {taskOpen ? (
                 <div className="px-3 pb-3">
-                  <Field label="Task name" hint={`Key ${task.taskKey}`} className="mb-3 px-1">
+                  <Field label={t('Task name')} hint={t('Key {taskKey}', { taskKey: task.taskKey })} className="mb-3 px-1">
                     <input
                       className={controlClass('sm')}
                       value={task.name}
@@ -465,9 +464,7 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                             <Icon name={step.stepType === 'MOVE' ? 'navigate' : 'user'} size={14} />
                           </span>
                           <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="text-xs text-muted">
-                              Step {step.sequenceNo}, {step.stepType}
-                            </span>
+                            <span className="text-xs text-muted">{t('Step {sequenceNo}, {stepType}', { sequenceNo: step.sequenceNo, stepType: step.stepType })}</span>
                             <strong className="truncate font-medium">{step.name || step.stepKey}</strong>
                           </span>
                           <Icon name={stepOpen ? 'chevronDown' : 'chevronRight'} size={14} className="text-muted" />
@@ -475,7 +472,7 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
 
                         {stepOpen ? (
                           <div className="min-w-0 px-3 pb-3">
-                            <Field label="Step name" hint={`Key ${step.stepKey}`}>
+                            <Field label={t('Step name')} hint={t('Key {stepKey}', { stepKey: step.stepKey })}>
                               <input
                                 className={controlClass('sm')}
                                 value={step.name}
@@ -484,8 +481,8 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                               />
                             </Field>
 
-                            <h4 className={SUBHEADING}>Inputs</h4>
-                            {usedInputs.length === 0 ? <p className="mb-2 text-xs text-muted">None</p> : null}
+                            <h4 className={SUBHEADING}>{t('Inputs')}</h4>
+                            {usedInputs.length === 0 ? <p className="mb-2 text-xs text-muted">{t('None')}</p> : null}
                             {Object.entries(step.inputBindings).map(([input, binding]) => (
                               <BindingRow
                                 key={input}
@@ -501,10 +498,10 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                               <select
                                 className={controlClass('sm', 'border-dashed')}
                                 value=""
-                                aria-label="Add input"
+                                aria-label={t('Add input')}
                                 onChange={(event) => addInput(task.id, step, event.target.value, ctx)}
                               >
-                                <option value="">Add an input…</option>
+                                <option value="">{t('Add an input…')}</option>
                                 {addable.map((spec) => (
                                   <option key={spec.name} value={spec.name}>
                                     {spec.name} ({spec.type})
@@ -513,9 +510,9 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                               </select>
                             ) : null}
 
-                            <h4 className={SUBHEADING}>Outputs</h4>
+                            <h4 className={SUBHEADING}>{t('Outputs')}</h4>
                             {OUTPUT_SPECS[step.stepType].length === 0 ? (
-                              <p className="text-xs text-muted">None</p>
+                              <p className="text-xs text-muted">{t('None')}</p>
                             ) : (
                               <ul className="flex flex-wrap gap-1.5">
                                 {OUTPUT_SPECS[step.stepType].map((output) => (
@@ -538,8 +535,7 @@ export function WorkflowBuilderPanel({ workflow, onChange }: WorkflowBuilderPane
                       aria-expanded={stepMenuFor === task.id}
                       onClick={() => setStepMenuFor(stepMenuFor === task.id ? null : task.id)}
                     >
-                      <Icon name="plus" size={14} /> Step
-                    </Button>
+                      <Icon name="plus" size={14} />{' '}{t('Step')}</Button>
                     {stepMenuFor === task.id ? (
                       <ul className="absolute top-10 left-0 z-5 min-w-48 rounded-md bg-surface p-1.5 shadow-float">
                         {SUPPORTED_STEP_TYPES.map((type) => (

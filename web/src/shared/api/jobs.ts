@@ -87,12 +87,23 @@ export interface JobDetailDto extends Omit<JobSummaryDto, 'containerCount'> {
   availableActions: ActionAvailability<'START' | 'PAUSE' | 'RESUME' | 'CANCEL'>[]
 }
 
-/** `robotId` lists the Jobs that robot was assigned to, most recent first. */
-export function listJobs(params: { status?: JobStatus; transportRequestId?: string; robotId?: string; skip?: number; take?: number } = {}) {
+export interface ListJobsParams {
+  status?: JobStatus
+  transportRequestId?: string
+  /** The Jobs that robot was assigned to, most recent first. */
+  robotId?: string
+  /** Part of a Job number, or a whole Job id. */
+  search?: string
+  skip?: number
+  take?: number
+}
+
+export function listJobs(params: ListJobsParams = {}) {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
   if (params.transportRequestId) query.set('transportRequestId', params.transportRequestId)
   if (params.robotId) query.set('robotId', params.robotId)
+  if (params.search) query.set('search', params.search)
   if (params.skip) query.set('skip', String(params.skip))
   if (params.take) query.set('take', String(params.take))
   const qs = query.toString()

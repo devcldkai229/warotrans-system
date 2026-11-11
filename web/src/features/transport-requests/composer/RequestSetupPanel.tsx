@@ -5,8 +5,9 @@ import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { controlClass } from '@/shared/ui/controlClass'
 import { mapsForWarehouse } from './useTransportRequestComposerData'
 import type { ComposerData, TransportRequestDraft } from './types'
-
+import { t } from '@/shared/i18n'
 interface RequestSetupPanelProps {
+
   data: ComposerData
   draft: TransportRequestDraft
   onChange: (next: TransportRequestDraft) => void
@@ -23,9 +24,9 @@ function staffInputControl(
   if (upper === 'BOOLEAN') {
     return (
       <select className={controlClass('sm')} value={value} onChange={(event) => onValue(event.target.value)}>
-        <option value="">Select…</option>
-        <option value="true">Yes</option>
-        <option value="false">No</option>
+        <option value="">{t('Select…')}</option>
+        <option value="true">{t('Yes')}</option>
+        <option value="false">{t('No')}</option>
       </select>
     )
   }
@@ -62,14 +63,14 @@ export function RequestSetupPanel({
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-container animate-panel-in">
       <header className="flex shrink-0 items-center gap-2 px-4 pt-4 pb-2">
-        <IconButton className="size-8" aria-label="Back to transport requests" onClick={onBackToList}>
+        <IconButton className="size-8" aria-label={t('Back to transport requests')} onClick={onBackToList}>
           <Icon name="arrowLeft" size={15} />
         </IconButton>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">New transport request</p>
-          <p className="truncate text-[11px] text-muted">Request setup</p>
+          <p className="truncate text-sm font-medium">{t('New transport request')}</p>
+          <p className="truncate text-[11px] text-muted">{t('Request setup')}</p>
         </div>
-        <IconButton className="size-8" aria-label="Close" onClick={onClose}>
+        <IconButton className="size-8" aria-label={t('Close')} onClick={onClose}>
           <Icon name="close" size={15} />
         </IconButton>
       </header>
@@ -78,9 +79,9 @@ export function RequestSetupPanel({
         {data.error ? (
           <p className="rounded-md bg-red-soft/50 px-3 py-2 text-[11px] text-red-ink">{data.error}</p>
         ) : null}
-        {data.isLoading ? <p className="text-[11px] text-muted">Loading reference data…</p> : null}
+        {data.isLoading ? <p className="text-[11px] text-muted">{t('Loading reference data…')}</p> : null}
 
-        <Field label="Warehouse *">
+        <Field label={t('Warehouse *')}>
           <select
             className={controlClass('sm')}
             value={draft.warehouseId}
@@ -94,7 +95,7 @@ export function RequestSetupPanel({
               })
             }}
           >
-            <option value="">Select warehouse…</option>
+            <option value="">{t('Select warehouse…')}</option>
             {data.warehouses.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.code} · {item.name}
@@ -103,31 +104,27 @@ export function RequestSetupPanel({
           </select>
         </Field>
 
-        <Field label="Map *" hint="Published maps for the selected warehouse">
+        <Field label={t('Map *')} hint={t('Published maps for the selected warehouse')}>
           <select
             className={controlClass('sm')}
             value={draft.mapVersionId}
             disabled={!draft.warehouseId}
             onChange={(event) => onChange({ ...draft, mapVersionId: event.target.value })}
           >
-            <option value="">Select map…</option>
+            <option value="">{t('Select map…')}</option>
             {maps.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} · Published
-              </option>
+              <option key={item.id} value={item.id}>{t('{name} · Published', { name: item.name })}</option>
             ))}
           </select>
         </Field>
 
         <section>
-          <p className="mb-2 text-xs font-medium text-ink-2">Workflow *</p>
+          <p className="mb-2 text-xs font-medium text-ink-2">{t('Workflow *')}</p>
           {!workflow ? (
             <>
-              <p className="mb-2 text-[11px] text-muted">Choose what you want to move</p>
+              <p className="mb-2 text-[11px] text-muted">{t('Choose what you want to move')}</p>
               {data.workflows.length === 0 && !data.isLoading ? (
-                <p className="rounded-md bg-surface px-3 py-2 text-[11px] text-muted">
-                  No published workflows available.
-                </p>
+                <p className="rounded-md bg-surface px-3 py-2 text-[11px] text-muted">{t('No published workflows available.')}</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {data.workflows.map((item) => (
@@ -153,27 +150,23 @@ export function RequestSetupPanel({
                     {workflow.code} · v{workflow.versionNo}
                   </p>
                 </div>
-                <StatusBadge tone="green">PUBLISHED</StatusBadge>
+                <StatusBadge tone="green">{t('PUBLISHED')}</StatusBadge>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 className="mt-2"
                 onClick={() => onChange({ ...draft, workflowId: '', workflowInputs: {} })}
-              >
-                Change workflow
-              </Button>
+              >{t('Change workflow')}</Button>
             </div>
           )}
         </section>
 
         {workflow ? (
           <section>
-            <p className="mb-2 text-xs font-medium text-ink-2">Workflow parameters</p>
+            <p className="mb-2 text-xs font-medium text-ink-2">{t('Workflow parameters')}</p>
             {params.length === 0 ? (
-              <p className="rounded-md bg-surface px-3 py-2 text-[11px] text-muted">
-                No additional request parameters.
-              </p>
+              <p className="rounded-md bg-surface px-3 py-2 text-[11px] text-muted">{t('No additional request parameters.')}</p>
             ) : (
               <div className="space-y-3">
                 {params.map((field) => (
@@ -196,31 +189,29 @@ export function RequestSetupPanel({
         ) : null}
 
         <section className="space-y-3 border-t border-outline/50 pt-3">
-          <Field label="Requested by">
+          <Field label={t('Requested by')}>
             <input className={controlClass('sm')} value={data.requestedByName} disabled readOnly />
           </Field>
-          <Field label="Priority">
+          <Field label={t('Priority')}>
             <select
               className={controlClass('sm')}
               value={draft.priority ?? 0}
               onChange={(event) => onChange({ ...draft, priority: Number(event.target.value) })}
             >
-              <option value={1}>High</option>
-              <option value={0}>Normal</option>
-              <option value={-1}>Low</option>
+              <option value={1}>{t('High')}</option>
+              <option value={0}>{t('Normal')}</option>
+              <option value={-1}>{t('Low')}</option>
             </select>
           </Field>
-          <Field label="Note" hint="Optional">
+          <Field label={t('Note')} hint={t('Optional')}>
             <textarea
               className={controlClass('area')}
               value={draft.note ?? ''}
               onChange={(event) => onChange({ ...draft, note: event.target.value || null })}
-              placeholder="Optional note"
+              placeholder={t('Optional note')}
             />
           </Field>
-          <p className="text-[11px] text-muted">
-            Initial state: <span className="font-medium text-ink-2">SUBMITTED</span> (set after create)
-          </p>
+          <p className="text-[11px] text-muted">{t('Initial state:')}{' '}<span className="font-medium text-ink-2">{t('SUBMITTED')}</span>{' '}{t('(set after create)')}</p>
         </section>
       </div>
     </aside>

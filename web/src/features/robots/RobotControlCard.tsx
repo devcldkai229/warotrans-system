@@ -20,20 +20,21 @@ import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
-
+import { t } from '@/shared/i18n'
 const STOP_COPY: Record<StopStateName, { label: string; tone: Tone }> = {
-  NONE: { label: 'No stop requested', tone: 'grey' },
-  REQUESTED: { label: 'Stop requested, waiting for the robot', tone: 'amber' },
-  ACCEPTED: { label: 'Robot accepted, checking it is still', tone: 'amber' },
-  STOPPED_VERIFIED: { label: 'Stopped (verified by odometry)', tone: 'green' },
-  REJECTED: { label: 'Robot refused the stop', tone: 'red' },
-  UNKNOWN: { label: 'Unknown: no confirmation from the robot', tone: 'red' },
+
+  NONE: { label: t('No stop requested'), tone: 'grey' },
+  REQUESTED: { label: t('Stop requested, waiting for the robot'), tone: 'amber' },
+  ACCEPTED: { label: t('Robot accepted, checking it is still'), tone: 'amber' },
+  STOPPED_VERIFIED: { label: t('Stopped (verified by odometry)'), tone: 'green' },
+  REJECTED: { label: t('Robot refused the stop'), tone: 'red' },
+  UNKNOWN: { label: t('Unknown: no confirmation from the robot'), tone: 'red' },
 }
 
 const LEVEL_TONE: Record<string, Tone> = { OK: 'green', WARN: 'amber', ERROR: 'red', STALE: 'red', UNKNOWN: 'grey' }
 
 function message(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'The robot could not be reached.'
+  return error instanceof ApiError ? error.message : t('The robot could not be reached.')
 }
 
 /**
@@ -97,8 +98,8 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
   return (
     <section className="mb-6 rounded-md bg-surface p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">Control</h2>
-        {held ? <StatusBadge tone="red">Motion held</StatusBadge> : null}
+        <h2 className="text-sm font-medium">{t('Control')}</h2>
+        {held ? <StatusBadge tone="red">{t('Motion held')}</StatusBadge> : null}
       </div>
 
       <p className="mt-2 flex items-center gap-2 text-xs">
@@ -106,18 +107,14 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
           {stopCopy.label}
         </StatusBadge>
       </p>
-      <p className="mt-1 text-xs text-muted">A software stop is not an emergency stop: use the robot's physical E-stop when people are at risk.</p>
+      <p className="mt-1 text-xs text-muted">{t('A software stop is not an emergency stop: use the robot\'s physical E-stop when people are at risk.')}</p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         {mayStop && offered('STOP') ? (
-          <Button size="sm" variant="primary" disabled={act.isPending} onClick={() => act.mutate(() => stopRobot(robotId, 'Stopped from the console'))}>
-            Stop
-          </Button>
+          <Button size="sm" variant="primary" disabled={act.isPending} onClick={() => act.mutate(() => stopRobot(robotId, t('Stopped from the console')))}>{t('Stop')}</Button>
         ) : null}
         {mayResume && held && offered('RESUME') ? (
-          <Button size="sm" variant="surface" disabled={act.isPending} onClick={() => act.mutate(() => resumeRobot(robotId))}>
-            Resume
-          </Button>
+          <Button size="sm" variant="surface" disabled={act.isPending} onClick={() => act.mutate(() => resumeRobot(robotId))}>{t('Resume')}</Button>
         ) : null}
         {canActOnRobot(capabilities, PERMISSIONS.robotCommand, robotId) && !held && !inMaintenance ? (
           <>
@@ -135,28 +132,26 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
             variant="ghost"
             disabled={act.isPending}
             onClick={() => {
-              const reason = window.prompt(`Why does ${robotCode} go into maintenance?`)
+              const reason = window.prompt(t('Why does {robotCode} go into maintenance?', { robotCode }))
               if (reason) act.mutate(() => startMaintenance(robotId, reason))
             }}
-          >
-            Start maintenance
-          </Button>
+          >{t('Start maintenance')}</Button>
         ) : null}
       </div>
 
       {inMaintenance ? (
         <div className="mt-4 rounded-sm bg-container p-3 text-sm">
-          <p className="font-medium">In maintenance</p>
+          <p className="font-medium">{t('In maintenance')}</p>
           <p className="text-xs text-muted">{robot.data?.maintenanceReason}</p>
           {mayMaintain ? (
             <>
               <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
                 {(
                   [
-                    ['sensorsOk', 'Sensors checked'],
-                    ['localizationOk', 'Localization checked'],
-                    ['stopTestOk', 'Stop test passed'],
-                    ['trafficClear', 'Traffic area clear'],
+                    ['sensorsOk', t('Sensors checked')],
+                    ['localizationOk', t('Localization checked')],
+                    ['stopTestOk', t('Stop test passed')],
+                    ['trafficClear', t('Traffic area clear')],
                   ] as const
                 ).map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2">
@@ -175,9 +170,7 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
                 className="mt-2"
                 disabled={!allChecked || act.isPending}
                 onClick={() => act.mutate(() => completeMaintenance(robotId, checklist))}
-              >
-                Return to service
-              </Button>
+              >{t('Return to service')}</Button>
             </>
           ) : null}
         </div>
@@ -185,16 +178,16 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
 
       {mayPower && announced.length > 0 ? (
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-muted">Power:</span>
+          <span className="text-muted">{t('Power:')}</span>
           {announced.map((action) => (
             <Button
               key={action}
               size="sm"
               variant="ghost"
               disabled={!held || act.isPending}
-              title={held ? undefined : 'Stop the robot first'}
+              title={held ? undefined : t('Stop the robot first')}
               onClick={() => {
-                const typed = window.prompt(`Type ${robotCode} to confirm ${action}.`)
+                const typed = window.prompt(t('Type {robotCode} to confirm {action}.', { robotCode, action }))
                 if (typed) act.mutate(() => robotSystemAction(robotId, action as 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN', typed))
               }}
             >
@@ -209,7 +202,7 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
       {mayDiagnose ? (
         <div className="mt-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-medium text-muted">Diagnostics</h3>
+            <h3 className="text-xs font-medium text-muted">{t('Diagnostics')}</h3>
             {health.data ? (
               <StatusBadge tone={LEVEL_TONE[health.data.overall] ?? 'grey'}>{health.data.overall}</StatusBadge>
             ) : null}
@@ -226,7 +219,7 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
                 </span>
               </li>
             ))}
-            {health.data && health.data.items.length === 0 ? <li className="text-muted">No diagnostics received yet.</li> : null}
+            {health.data && health.data.items.length === 0 ? <li className="text-muted">{t('No diagnostics received yet.')}</li> : null}
           </ul>
         </div>
       ) : null}

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { AdminNotification } from '@/shared/api/contracts'
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '@/shared/api/notifications'
 import { cx } from '@/shared/lib/cx'
@@ -9,27 +9,11 @@ import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
 import { IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { ToneDot } from '@/shared/ui/StatusBadge'
-import type { Tone } from '@/shared/ui/statusTones'
-
-const TYPE_TONE: Record<AdminNotification['type'], Tone> = {
-  ALERT: 'red',
-  WARNING: 'amber',
-  INFO: 'blue',
-  ASSIGNMENT: 'blue',
-  SYSTEM: 'grey',
-}
-
-/** Where a notification leads: the route the server gave it (SY-04), else derived from what it is about. */
-function targetOf(notification: AdminNotification): string | null {
-  if (notification.route) return notification.route
-  if (notification.entityType === 'JOB' && notification.entityId) return `/monitor/jobs/${notification.entityId}`
-  if (notification.entityType === 'ISSUE' && notification.entityId) return `/operations/issues/${notification.entityId}`
-  if (notification.entityType === 'ROBOT') return '/monitor/fleet'
-  if (notification.entityType === 'REQUEST') return '/monitor/requests'
-  return null
-}
-
+import { notificationTarget, TYPE_TONE } from './notificationTarget'
+import { localizedNotificationText } from './notificationText'
+import { t } from '@/shared/i18n'
 /** The bell in the top bar: the signed-in person's unread count and inbox (failed jobs, offline robots, issues …). */
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
@@ -55,7 +39,7 @@ export function NotificationBell() {
 
   function openNotification(notification: AdminNotification) {
     if (!notification.isRead) markRead.mutate(notification.id)
-    const target = targetOf(notification)
+    const target = notificationTarget(notification)
     if (target) {
       setOpen(false)
       navigate(target)
@@ -65,7 +49,7 @@ export function NotificationBell() {
   return (
     <div className="relative">
       <IconButton
-        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        aria-label={unread > 0 ? t('Notifications, {unread} unread', { unread }) : t('Notifications')}
         aria-expanded={open}
         aria-haspopup="dialog"
         className="relative"
@@ -84,19 +68,17 @@ export function NotificationBell() {
           <div className="fixed inset-0 z-60" onClick={() => setOpen(false)} />
           <div
             role="dialog"
-            aria-label="Notifications"
+            aria-label={t('Notifications')}
             className="absolute top-[calc(100%+8px)] right-0 z-61 w-[420px] overflow-hidden rounded-md bg-surface shadow-float"
           >
             <header className="flex items-center justify-between gap-3 border-b border-outline-soft px-4 py-3">
-              <h2 className="text-base font-medium">Notifications</h2>
+              <h2 className="text-base font-medium">{t('Notifications')}</h2>
               <button
                 type="button"
                 className="text-xs text-ink-2 transition-colors hover:text-ink disabled:text-muted disabled:hover:text-muted"
                 disabled={unread === 0 || markAllRead.isPending}
                 onClick={() => markAllRead.mutate()}
-              >
-                Mark all as read
-              </button>
+              >{t('Mark all as read')}</button>
             </header>
 
             <div className="max-h-[28rem] overflow-y-auto">
@@ -105,9 +87,9 @@ export function NotificationBell() {
                   {(inbox.error as Error).message}
                 </p>
               ) : inbox.isLoading ? (
-                <p className="px-4 py-6 text-sm text-muted">Loading…</p>
+                <p className="px-4 py-6 text-sm text-muted">{t('Loading…')}</p>
               ) : items.length === 0 ? (
-                <p className="px-4 py-10 text-center text-sm text-muted">Nothing needs your attention.</p>
+                <p className="px-4 py-10 text-center text-sm text-muted">{t('Nothing needs your attention.')}</p>
               ) : (
                 <ul>
                   {items.map((notification) => (
@@ -130,18 +112,18 @@ export function NotificationBell() {
                               notification.isRead ? 'text-ink-2' : 'font-medium text-ink',
                             )}
                           >
-                            {notification.title}
+                            {localizedNotificationText(notification).title}
                           </span>
-                          <span className="mt-0.5 line-clamp-2 block text-xs text-ink-2">{notification.content}</span>
+                          <span className="mt-0.5 line-clamp-2 block text-xs text-ink-2">{localizedNotificationText(notification).content}</span>
                           <span className="mt-1 flex items-center gap-2 text-[11px] text-muted">
                             {formatRelativeTime(notification.createdAt)}
                             {notification.resolvedAt ? (
-                              <span className="rounded-full bg-container-high px-2 py-0.5 text-ink-2">Resolved</span>
+                              <span className="rounded-full bg-container-high px-2 py-0.5 text-ink-2">{t('Resolved')}</span>
                             ) : null}
                           </span>
                         </span>
                         {!notification.isRead ? (
-                          <span aria-label="Unread" className="mt-2 size-2 flex-none rounded-full bg-blue" />
+                          <span aria-label={t('Unread')} className="mt-2 size-2 flex-none rounded-full bg-blue" />
                         ) : null}
                       </button>
                     </li>
@@ -149,6 +131,14 @@ export function NotificationBell() {
                 </ul>
               )}
             </div>
+
+            <footer className="border-t border-outline-soft px-4 py-2.5 text-center">
+              <Link
+                to="/operations/notifications"
+                className="text-xs text-ink-2 transition-colors hover:text-ink"
+                onClick={() => setOpen(false)}
+              >{t('See all notifications')}</Link>
+            </footer>
           </div>
         </>
       ) : null}

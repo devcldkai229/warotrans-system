@@ -1,7 +1,8 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { cx } from '@/shared/lib/cx'
-
+import { t } from '@/shared/i18n'
 const RADIUS = 64 // px, knob travel
+
 const DEADZONE = 0.12
 
 interface JoystickProps {
@@ -71,7 +72,7 @@ export function Joystick({ disabled, onChange }: JoystickProps) {
 
   return (
     <div className={cx('flex flex-col items-center gap-1', disabled && 'opacity-45')}>
-      <button type="button" aria-label="Drive forward" disabled={disabled} className={ARROW} {...arrow('up')}>
+      <button type="button" aria-label={t('Drive forward')} disabled={disabled} className={ARROW} {...arrow('up')}>
         <svg width="34" height="20" viewBox="0 0 34 20" className={held === 'up' ? 'fill-green' : 'fill-current'}>
           <path d="M17 1 33 19H1Z" />
         </svg>
@@ -79,8 +80,8 @@ export function Joystick({ disabled, onChange }: JoystickProps) {
       <div
         ref={pad}
         role="slider"
-        aria-label="Joystick"
-        aria-valuetext={`forward ${(-knob.y / RADIUS).toFixed(2)}, turn ${(-knob.x / RADIUS).toFixed(2)}`}
+        aria-label={t('Joystick')}
+        aria-valuetext={t('forward {value}, turn {value2}', { value: (-knob.y / RADIUS).toFixed(2), value2: (-knob.x / RADIUS).toFixed(2) })}
         className={cx(
           'relative grid size-[164px] touch-none place-items-center rounded-full border border-outline-soft bg-surface text-ink-2 shadow-float select-none',
           disabled ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing',
@@ -102,7 +103,7 @@ export function Joystick({ disabled, onChange }: JoystickProps) {
           style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }}
         />
       </div>
-      <button type="button" aria-label="Drive backward" disabled={disabled} className={ARROW} {...arrow('down')}>
+      <button type="button" aria-label={t('Drive backward')} disabled={disabled} className={ARROW} {...arrow('down')}>
         <svg width="34" height="20" viewBox="0 0 34 20" className={held === 'down' ? 'fill-green' : 'fill-current'}>
           <path d="M17 19 33 1H1Z" />
         </svg>

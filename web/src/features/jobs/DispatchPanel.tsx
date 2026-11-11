@@ -9,20 +9,21 @@ import { cx } from '@/shared/lib/cx'
 import { formatBattery, formatClock, humanize } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
-
+import { t } from '@/shared/i18n'
 const REASON_TEXT: Record<string, string> = {
-  robot_disabled: 'Disabled',
-  robot_offline: 'Offline',
-  robot_in_maintenance: 'In maintenance',
-  robot_not_available: 'Not available',
-  robot_motion_held: 'Stopped (holding motion)',
-  robot_in_manual_mode: 'Driven by hand',
-  robot_map_mismatch: 'On another map',
-  robot_not_localized: 'Not localized',
-  robot_busy: 'Running another job',
-  battery_low: 'Battery below dispatch minimum',
-  battery_unknown: 'Battery unknown',
-  battery_stale: 'Battery reading is old',
+
+  robot_disabled: t('Disabled'),
+  robot_offline: t('Offline'),
+  robot_in_maintenance: t('In maintenance'),
+  robot_not_available: t('Not available'),
+  robot_motion_held: t('Stopped (holding motion)'),
+  robot_in_manual_mode: t('Driven by hand'),
+  robot_map_mismatch: t('On another map'),
+  robot_not_localized: t('Not localized'),
+  robot_busy: t('Running another job'),
+  battery_low: t('Battery below dispatch minimum'),
+  battery_unknown: t('Battery unknown'),
+  battery_stale: t('Battery reading is old'),
 }
 
 /**
@@ -57,7 +58,7 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
       setError(null)
       void queryClient.invalidateQueries({ queryKey: ['job', job.id] })
     },
-    onError: (failure) => setError(failure instanceof ApiError ? failure.message : 'Dispatch failed.'),
+    onError: (failure) => setError(failure instanceof ApiError ? failure.message : t('Dispatch failed.')),
   })
 
   const last = decisions.data?.[0]
@@ -67,7 +68,7 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
       return
     }
     const reason = window.prompt(
-      `${candidate.robotCode}: ${candidate.reasons.map((r) => REASON_TEXT[r] ?? r).join(', ')}. Why is it safe to use it anyway?`,
+      t('{robotCode}: {value}. Why is it safe to use it anyway?', { robotCode: candidate.robotCode, value: candidate.reasons.map((r) => REASON_TEXT[r] ?? r).join(', ') }),
     )?.trim()
     if (reason) dispatch.mutate({ robotId: candidate.robotId, overrideReason: reason })
   }
@@ -75,22 +76,20 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
   return (
     <section className="mt-4 rounded-lg border border-outline-soft bg-surface p-6 shadow-float">
       <header className="flex items-baseline justify-between gap-3">
-        <h2 className="text-xl font-book">Dispatch</h2>
+        <h2 className="text-xl font-book">{t('Dispatch')}</h2>
         <span className="text-xs text-muted">
           {last
-            ? `Last decision ${formatClock(last.createdAt)} (${humanize(last.trigger)})${last.overrideReason ? `, override: ${last.overrideReason}` : ''}`
-            : 'No decision yet'}
+            ? t('Last decision {value} ({value2}){value3}', { value: formatClock(last.createdAt), value2: humanize(last.trigger), value3: last.overrideReason ? `, override: ${last.overrideReason}` : '' })
+            : t('No decision yet')}
         </span>
       </header>
 
       {canStart ? (
         <div className="mt-3 flex items-center gap-3">
-          <Button size="sm" variant="primary" disabled={dispatch.isPending} onClick={() => dispatch.mutate({})}>
-            Dispatch to best robot
-          </Button>
+          <Button size="sm" variant="primary" disabled={dispatch.isPending} onClick={() => dispatch.mutate({})}>{t('Dispatch to best robot')}</Button>
           {job.status === 'CREATED' ? (
             <Button size="sm" variant="ghost" disabled={enqueue.isPending} onClick={() => enqueue.mutate()}>
-              Go when a robot is free
+              {t('Go when a robot is free')}
             </Button>
           ) : null}
           {error ? <span className="text-xs text-red-ink">{error}</span> : null}
@@ -106,11 +105,11 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
       <table className="mt-4 w-full text-left text-sm">
         <thead className="text-xs text-muted">
           <tr>
-            <th className="py-1 font-normal">Robot</th>
-            <th className="py-1 font-normal">Battery</th>
-            <th className="py-1 font-normal">Distance</th>
-            <th className="py-1 font-normal">Score</th>
-            <th className="py-1 font-normal">Eligibility</th>
+            <th className="py-1 font-normal">{t('Robot')}</th>
+            <th className="py-1 font-normal">{t('Battery')}</th>
+            <th className="py-1 font-normal">{t('Distance')}</th>
+            <th className="py-1 font-normal">{t('Score')}</th>
+            <th className="py-1 font-normal">{t('Eligibility')}</th>
             <th />
           </tr>
         </thead>
@@ -121,17 +120,17 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
               <tr key={c.robotId} className={cx('border-t border-outline-soft', chosen && 'bg-blue-soft/40')}>
                 <td className="py-2 font-mono">
                   {c.robotCode}
-                  {chosen ? <span className="ml-2 text-xs text-blue-ink">selected</span> : null}
+                  {chosen ? <span className="ml-2 text-xs text-blue-ink">{t('selected')}</span> : null}
                 </td>
                 <td className="py-2 tabular-nums">
                   {formatBattery(c.batteryPercent)}
-                  {c.batteryState === 'STALE' ? <span className="ml-1 text-xs text-muted">(old)</span> : null}
+                  {c.batteryState === 'STALE' ? <span className="ml-1 text-xs text-muted">{t('(old)')}</span> : null}
                 </td>
                 <td className="py-2 tabular-nums">{c.distanceMeters === null ? '—' : `${c.distanceMeters.toFixed(1)} m`}</td>
                 <td className="py-2 tabular-nums">{c.eligible && c.score !== null ? c.score.toFixed(2) : '—'}</td>
                 <td className="py-2">
                   {c.eligible ? (
-                    <StatusBadge tone="green">Eligible</StatusBadge>
+                    <StatusBadge tone="green">{t('Eligible')}</StatusBadge>
                   ) : (
                     <span className="text-xs text-red-ink">{c.reasons.map((r) => REASON_TEXT[r] ?? r).join(', ')}</span>
                   )}
@@ -139,7 +138,7 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
                 <td className="py-2 text-right">
                   {canStart && (c.eligible || (c.overridable && mayOverride)) ? (
                     <Button size="sm" variant={c.eligible ? 'surface' : 'ghost'} disabled={dispatch.isPending} onClick={() => use(c)}>
-                      {c.eligible ? 'Use' : 'Override'}
+                      {c.eligible ? t('Use') : t('Override')}
                     </Button>
                   ) : null}
                 </td>
@@ -148,7 +147,7 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
           })}
         </tbody>
       </table>
-      {candidates.data?.length === 0 ? <p className="mt-2 text-sm text-muted">No robot on this map.</p> : null}
+      {candidates.data?.length === 0 ? <p className="mt-2 text-sm text-muted">{t('No robot on this map.')}</p> : null}
     </section>
   )
 }

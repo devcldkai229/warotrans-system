@@ -17,8 +17,9 @@ import type {
   Panel2Mode,
   TransportRequestDraft,
 } from './types'
-
+import { t } from '@/shared/i18n'
 interface MovementBuilderPanelProps {
+
   data: ComposerData
   draft: TransportRequestDraft
   activeMovementId: string | null
@@ -169,18 +170,15 @@ export function MovementBuilderPanel({
       <header className="shrink-0 space-y-3 border-b border-outline/60 px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-medium">Transport movements</h2>
-            <p className="text-[11px] text-muted">Define what each container should move from and to.</p>
+            <h2 className="text-sm font-medium">{t('Transport movements')}</h2>
+            <p className="text-[11px] text-muted">{t('Define what each container should move from and to.')}</p>
           </div>
           <span className="text-xs tabular-nums text-muted">{draft.movements.length}</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Button variant="primary" size="sm" onClick={() => setMode('selectContainers')}>
-            <Icon name="plus" size={14} /> Add container
-          </Button>
-          <Button variant="outline" size="sm" title="Barcode scanner not connected" disabled>
-            Scan barcode
-          </Button>
+            <Icon name="plus" size={14} />{' '}{t('Add container')}</Button>
+          <Button variant="outline" size="sm" title={t('Barcode scanner not connected')} disabled>{t('Scan barcode')}</Button>
         </div>
         <div className="flex gap-1 rounded-full bg-surface p-0.5">
           {(['list', 'grouped'] as const).map((item) => (
@@ -193,32 +191,22 @@ export function MovementBuilderPanel({
               )}
               onClick={() => setViewMode(item)}
             >
-              {item === 'list' ? 'Movement list' : 'Grouped view'}
+              {item === 'list' ? t('Movement list') : t('Grouped view')}
             </button>
           ))}
         </div>
         {selectedIds.size > 0 ? (
           <div className="flex flex-wrap gap-1.5">
-            <Button variant="tonal" size="sm" onClick={() => applyBulk('source')}>
-              Set same source
-            </Button>
-            <Button variant="tonal" size="sm" onClick={() => applyBulk('destination')}>
-              Set same destination
-            </Button>
-            <Button variant="dangerGhost" size="sm" onClick={() => applyBulk('remove')}>
-              Remove selected
-            </Button>
+            <Button variant="tonal" size="sm" onClick={() => applyBulk('source')}>{t('Set same source')}</Button>
+            <Button variant="tonal" size="sm" onClick={() => applyBulk('destination')}>{t('Set same destination')}</Button>
+            <Button variant="dangerGhost" size="sm" onClick={() => applyBulk('remove')}>{t('Remove selected')}</Button>
           </div>
         ) : null}
         {shared.sharedSource ? (
-          <p className="rounded-md bg-blue-soft/50 px-2.5 py-1.5 text-[11px] text-blue-ink">
-            Shared source detected · {shared.sharedSource[1]} containers
-          </p>
+          <p className="rounded-md bg-blue-soft/50 px-2.5 py-1.5 text-[11px] text-blue-ink">{t('Shared source detected · {value} containers', { value: shared.sharedSource[1] })}</p>
         ) : null}
         {shared.sharedDest ? (
-          <p className="rounded-md bg-blue-soft/50 px-2.5 py-1.5 text-[11px] text-blue-ink">
-            Shared destination · {shared.sharedDest[1]} containers
-          </p>
+          <p className="rounded-md bg-blue-soft/50 px-2.5 py-1.5 text-[11px] text-blue-ink">{t('Shared destination · {value} containers', { value: shared.sharedDest[1] })}</p>
         ) : null}
       </header>
 
@@ -226,7 +214,7 @@ export function MovementBuilderPanel({
         {viewMode === 'grouped' ? (
           <GroupedMovementsView data={data} movements={draft.movements} />
         ) : draft.movements.length === 0 ? (
-          <p className="px-1 text-xs text-muted">Add containers to start building movements.</p>
+          <p className="px-1 text-xs text-muted">{t('Add containers to start building movements.')}</p>
         ) : (
           draft.movements.map((movement) => (
             <div key={movement.localId} onFocus={() => onActiveMovementId(movement.localId)}>
@@ -263,12 +251,8 @@ export function MovementBuilderPanel({
       </div>
 
       <footer className="flex shrink-0 items-center gap-2 border-t border-outline/60 px-4 py-3">
-        <div className="min-w-0 flex-1 text-xs text-muted">
-          {draft.movements.length} container{draft.movements.length === 1 ? '' : 's'}
-          <span className="mx-1">·</span>
-          {draft.movements.length} movement{draft.movements.length === 1 ? '' : 's'}
-          {!validation.ok && draft.movements.length > 0 ? (
-            <span className="ml-2 text-red-ink">Fix validation</span>
+        <div className="min-w-0 flex-1 text-xs text-muted">{t('{length} container{value}', { length: draft.movements.length, value: draft.movements.length === 1 ? '' : 's' })}<span className="mx-1">·</span>{t('{length} movement{value}', { length: draft.movements.length, value: draft.movements.length === 1 ? '' : 's' })}{!validation.ok && draft.movements.length > 0 ? (
+            <span className="ml-2 text-red-ink">{t('Fix validation')}</span>
           ) : null}
         </div>
         <Button
@@ -276,9 +260,7 @@ export function MovementBuilderPanel({
           size="sm"
           disabled={!validation.ok}
           onClick={() => setMode('review')}
-        >
-          Review request
-        </Button>
+        >{t('Review request')}</Button>
       </footer>
     </aside>
   )

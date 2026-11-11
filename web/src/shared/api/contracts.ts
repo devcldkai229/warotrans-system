@@ -248,6 +248,10 @@ export interface Robot {
   maintenanceSince?: string | null
   /** RB-09: system actions the robot announced. */
   capabilities?: string[]
+  /** HW-04: what the robot said about its battery estimate; null when it did not say. */
+  batteryVoltage?: number | null
+  batteryEstimationMode?: string | null
+  batteryConfidence?: string | null
   /** FL-03: null = not declared. */
   maxPayloadKg?: number | null
   maxContainers?: number | null
@@ -274,7 +278,6 @@ export interface RobotTelemetry {
   eStopReleased?: boolean
   zone?: { name: string; heldSeconds: number; heldByRobotCode?: string; queueAfter?: number }
   navigationState?: string
-  error?: { title: string; message: string }
 }
 
 export interface RobotView extends Robot {
@@ -610,7 +613,7 @@ export interface RequestStatistics {
 
 /* ------------------------------------------------------------ Notifications */
 
-/** One item of the admin notification bell (GET /api/operations/notifications). */
+/** One item of the notification inbox: the bell and the Notifications page (GET /api/operations/notifications). */
 export interface AdminNotification {
   id: string
   type: 'INFO' | 'WARNING' | 'ALERT' | 'ASSIGNMENT' | 'SYSTEM'
@@ -631,8 +634,11 @@ export interface AdminNotification {
 }
 
 export interface NotificationInbox {
+  /** Every unread notification of the caller, whatever the filters. */
   unreadCount: number
   items: AdminNotification[]
+  /** How many notifications match the filters, for paging (the page's "Load more"). */
+  total: number
 }
 
 /* ---------------------------------------------------------------- Warehouse */
