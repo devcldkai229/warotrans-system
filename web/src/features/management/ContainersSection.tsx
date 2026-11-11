@@ -1,12 +1,17 @@
 import { useMemo, useState } from 'react'
-import type { ContainerStatus } from '@/shared/api/contracts'
+import { useAuth } from '@/features/auth/authContext'
+import type { ContainerStatus, StorageLocationView } from '@/shared/api/contracts'
+import { hasPermission, PERMISSIONS } from '@/shared/auth/permissions'
 import { formatIsoDateTime, humanize } from '@/shared/lib/format'
+import { Button } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
-import type { ContainerListing } from './api'
+import type { ContainerListing, ManagedContainer } from './api'
+import { ContainerPhysicalDialog } from './ContainerPhysicalDialog'
+import { RecoverContainerDialog } from './RecoverContainerDialog'
 import { SectionHead } from './SectionHead'
 
 const STATUSES: ContainerStatus[] = [
@@ -22,10 +27,25 @@ const STATUSES: ContainerStatus[] = [
 ]
 
 /**
- * warehouse.containers, read-only: Containers are created by the receiving flow and their status changes only through
- * the Container lifecycle (CREATED -> PACKED -> RESERVED -> IN_TRANSIT -> STORED, rules/02).
+ * warehouse.containers: Containers are created by the receiving flow and their status changes only through the
+ * Container lifecycle (CREATED -> PACKED -> RESERVED -> IN_TRANSIT -> STORED, rules/02). The one action here is naming the
+ * shelf of a Container that lost its place after a failed or cancelled Job (WH-01).
  */
-export function ContainersSection({ listing, loadState }: { listing: ContainerListing; loadState: 'loading' | 'ready' | 'error' }) {
+export function ContainersSection({
+  listing,
+  loadState,
+  locations,
+  onChanged,
+}: {
+  listing: ContainerListing
+  loadState: 'loading' | 'ready' | 'error'
+  locations: StorageLocationView[]
+  onChanged: () => void
+}) {
+  const { capabilities } = useAuth()
+  const mayRecover = hasPermission(capabilities, PERMISSIONS.containerRecover)
+  const [recovering, setRecovering] = useState<ManagedContainer | null>(null)
+  const [measuring, setMeasuring] = useState<ManagedContainer | null>(null)
   const containers = listing.items
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<ContainerStatus | ''>('')
@@ -75,6 +95,7 @@ export function ContainersSection({ listing, loadState }: { listing: ContainerLi
             <Th>Level</Th>
             <Th>Supplier package</Th>
             <Th align="right">Updated</Th>
+            <Th align="right">{mayRecover ? 'Action' : ''}</Th>
           </tr>
         </thead>
         <tbody>
@@ -96,10 +117,20 @@ export function ContainersSection({ listing, loadState }: { listing: ContainerLi
               <Td align="right" tone="faint">
                 {formatIsoDateTime(item.updatedAt)}
               </Td>
+              <Td align="right">
+                {mayRecover && !item.inActiveTransport && (item.status === 'IN_TRANSIT' || item.status === 'HOLD') ? (
+                  <Button size="sm" variant="ghost" onClick={() => setRecovering(item)}>
+                    Recover
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="ghost" onClick={() => setMeasuring(item)}>
+                  Size
+                </Button>
+              </Td>
             </Tr>
           ))}
           {visible.length === 0 ? (
-            <EmptyRow colSpan={7}>
+            <EmptyRow colSpan={8}>
               {loadState === 'loading'
                 ? 'Loading containers…'
                 : loadState === 'error'
@@ -113,6 +144,15 @@ export function ContainersSection({ listing, loadState }: { listing: ContainerLi
           ) : null}
         </tbody>
       </Table>
+      {measuring ? <ContainerPhysicalDialog container={measuring} onClose={() => setMeasuring(null)} /> : null}
+      {recovering ? (
+        <RecoverContainerDialog
+          container={recovering}
+          locations={locations}
+          onClose={() => setRecovering(null)}
+          onRecovered={onChanged}
+        />
+      ) : null}
       {listing.total > containers.length ? (
         <p className="mt-3 text-xs text-muted">
           Showing the first {containers.length} of {listing.total} containers. Search to find the others.

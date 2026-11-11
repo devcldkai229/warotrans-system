@@ -97,6 +97,11 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("BlockingReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("blocking_reason");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -109,6 +114,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline_at");
 
                     b.Property<string>("FailureCode")
                         .HasMaxLength(50)
@@ -129,6 +138,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<Guid>("MapVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("map_version_id");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority");
 
                     b.Property<string>("ProvisioningKey")
                         .IsRequired()
@@ -193,6 +206,20 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("delivered_at");
 
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failed_at");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("failure_message");
+
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
@@ -239,7 +266,146 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_job_containers_job_id_sequence_no");
 
+                    b.HasIndex("TransportRequestId", "ContainerId")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_job_containers_transport_request_id_container_id");
+
                     b.ToTable("job_containers", "execution");
+                });
+
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRecoveryCase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<string>("ContainerIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("container_ids");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("FromRobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_robot_id");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<Guid?>("MoveStepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("move_step_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("RecoveryEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recovery_endpoint_id");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("ToRobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_robot_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_job_recovery_cases");
+
+                    b.HasIndex("JobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_job_recovery_cases_open_job")
+                        .HasFilter("resolved_at IS NULL");
+
+                    b.HasIndex("ToRobotId")
+                        .HasDatabaseName("i_x_job_recovery_cases_to_robot_id");
+
+                    b.ToTable("job_recovery_cases", "execution");
+                });
+
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRobotAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("end_reason");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<string>("StartReason")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("start_reason");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_job_robot_assignments");
+
+                    b.HasIndex("JobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_job_robot_assignments_active_job")
+                        .HasFilter("ended_at IS NULL");
+
+                    b.HasIndex("RobotId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_job_robot_assignments_active_robot")
+                        .HasFilter("ended_at IS NULL");
+
+                    b.HasIndex("JobId", "StartedAt")
+                        .HasDatabaseName("i_x_job_robot_assignments_job_id_started_at");
+
+                    b.HasIndex("RobotId", "StartedAt")
+                        .HasDatabaseName("i_x_job_robot_assignments_robot_id_started_at");
+
+                    b.ToTable("job_robot_assignments", "execution");
                 });
 
             modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobStep", b =>
@@ -249,9 +415,30 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("ClaimExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claim_expires_at");
+
+                    b.Property<int>("ClaimVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("claim_version");
+
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<Guid?>("ClaimedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("claimed_by");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset?>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline_at");
 
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(50)
@@ -262,6 +449,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("error_message");
+
+                    b.Property<DateTimeOffset?>("EscalatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_at");
 
                     b.Property<Guid>("JobTaskId")
                         .HasColumnType("uuid")
@@ -310,6 +501,9 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
 
                     b.HasIndex("JobTaskId")
                         .HasDatabaseName("i_x_job_steps_job_task_id");
+
+                    b.HasIndex("Status", "StepType")
+                        .HasDatabaseName("i_x_job_steps_status_step_type");
 
                     b.ToTable("job_steps", "execution");
                 });
@@ -401,6 +595,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                     b.Property<DateTimeOffset?>("PublishedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("published_at");
+
+                    b.Property<Guid?>("PublishedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("published_by");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -553,6 +751,30 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("f_k_job_containers_jobs_job_id");
+
+                    b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRecoveryCase", b =>
+                {
+                    b.HasOne("WaroTrans.WorkflowExecution.Entities.Job", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_job_recovery_cases_jobs_job_id");
+
+                    b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("WaroTrans.WorkflowExecution.Entities.JobRobotAssignment", b =>
+                {
+                    b.HasOne("WaroTrans.WorkflowExecution.Entities.Job", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_job_robot_assignments_jobs_job_id");
 
                     b.Navigation("Job");
                 });

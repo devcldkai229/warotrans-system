@@ -44,6 +44,9 @@
         "Traffic__SemanticPathToleranceMeters": "0.15",
         "Traffic__RequireCoordinatorLease": "true",
         "Traffic__RobotHomeEndpoints__RBT-001": "EP-PARKING-A",
+        "FleetIdle__AutoReturnToPark": "true",
+        "FleetIdle__IdleSeconds": "3",
+        "FleetIdle__FallbackEndpointCodes": "EP-QUEUE-POINT",
         "Logging__LogLevel__Default": "Information",
         "Logging__LogLevel__Microsoft.EntityFrameworkCore": "Warning"
       }

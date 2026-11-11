@@ -13,7 +13,8 @@ public sealed class DispatchService(
     FleetDbContext db,
     IOptions<BatteryOptions> battery,
     IOptions<DispatchOptions> weights,
-    TimeProvider clock)
+    TimeProvider clock,
+    IOptions<WaroTrans.Fleet.Traffic.TrafficOptions>? traffic = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -35,19 +36,51 @@ public sealed class DispatchService(
             .Select(g => new { RobotId = g.Key, Last = g.Max(c => c.IssuedAt) })
             .ToDictionaryAsync(x => x.RobotId, x => x.Last, cancellationToken);
 
+        // FL-08: a robot only returning to park gives way to work, so it is a candidate like an idle one.
+        var positioning = (await db.RobotPositioningIntents.AsNoTracking()
+                .Where(i => ids.Contains(i.RobotId)
+                            && (i.Status == PositioningIntentStatus.NAVIGATING || i.Status == PositioningIntentStatus.YIELDING))
+                .Select(i => i.RobotId)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+
         var now = clock.GetUtcNow();
         return DispatchEligibility.Rank(robots.Select(r =>
-            DispatchEligibility.Evaluate(r, query, now, lastCommands.TryGetValue(r.Id, out var last) ? last : null, battery.Value, weights.Value)));
+            DispatchEligibility.Evaluate(r, query, now, lastCommands.TryGetValue(r.Id, out var last) ? last : null, battery.Value, weights.Value,
+                traffic?.Value.Footprint, positioning.Contains(r.Id))));
     }
 
     public async Task RecordAsync(DispatchDecisionRecord record, CancellationToken cancellationToken)
     {
+        var type = record.RefusalCode is not null ? DispatchDecisionType.REFUSED
+            : record.SelectedRobotId is null ? DispatchDecisionType.NONE
+            : DispatchDecisionType.SELECTED;
+
+        // BOTH-03: something waiting for a robot retries every few seconds. Only a change of outcome is a new decision,
+        // otherwise the retries fill the table and push the real history out of the list.
+        if (type != DispatchDecisionType.SELECTED)
+        {
+            var last = await db.DispatchDecisions.AsNoTracking()
+                .Where(d => d.JobId == record.JobId)
+                .OrderByDescending(d => d.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (last is not null
+                && last.Type == type
+                && last.RobotId == record.SelectedRobotId
+                && last.RefusalCode == record.RefusalCode
+                && ReasonsOf(last.CandidateEvaluations.Deserialize<List<DispatchCandidate>>(Json) ?? []) == ReasonsOf(record.Candidates))
+            {
+                return;
+            }
+        }
+
         db.DispatchDecisions.Add(new DispatchDecision
         {
             Id = Guid.NewGuid(),
             JobId = record.JobId,
             RobotId = record.SelectedRobotId,
-            Type = record.SelectedRobotId is null ? DispatchDecisionType.NONE : DispatchDecisionType.SELECTED,
+            Type = type,
+            RefusalCode = record.RefusalCode,
             Trigger = record.Trigger,
             ActorId = record.ActorId,
             OverrideReason = record.OverrideReason,
@@ -66,7 +99,14 @@ public sealed class DispatchService(
             .ToListAsync(cancellationToken);
         return rows.Select(d => new DispatchDecisionView(
                 d.Id, d.JobId, d.RobotId, d.Type.ToString(), d.Trigger ?? DispatchTriggers.Start, d.ActorId, d.OverrideReason, d.CreatedAt,
-                d.CandidateEvaluations.Deserialize<List<DispatchCandidate>>(Json) ?? []))
+                d.CandidateEvaluations.Deserialize<List<DispatchCandidate>>(Json) ?? [],
+                d.RefusalCode))
             .ToList();
     }
+
+    /// <summary>Which robot was rejected for what. Scores and battery figures move all the time and are left out.</summary>
+    private static string ReasonsOf(IEnumerable<DispatchCandidate> candidates) =>
+        string.Join(';', candidates
+            .OrderBy(c => c.RobotId)
+            .Select(c => c.RobotId + ":" + string.Join(',', c.Reasons.Order(StringComparer.Ordinal))));
 }

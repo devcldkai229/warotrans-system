@@ -30,9 +30,20 @@ public static class TransportationModule
         services.AddScoped<GetRequestStatisticsHandler>();
         services.AddScoped<Features.CloseTransportRequest.CloseTransportRequestHandler>();
 
+        // WH-01: handovers Warehouse still has to post, retried until they land.
+        services.AddScoped<Services.StockPostingProcessor>();
+
+        // WH-09: recurring waves.
+        services.AddScoped<Features.TransportSchedules.TransportScheduleService>();
+        services.AddScoped<Services.TransportScheduleProcessor>();
+        services.AddHostedService<Services.TransportScheduleHostedService>();
+
+        services.AddHostedService<Services.StockPostingHostedService>();
+
         // Job execution feedback (WorkflowExecution → Transportation)
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.ITransportRequestActivityQuery, Services.TransportRequestActivityQuery>();
         services.AddScoped<WaroTrans.WorkflowExecution.Contracts.IWorkflowUsageQuery, Services.WorkflowUsageQuery>();
+        services.AddScoped<WaroTrans.WorkflowExecution.Contracts.ITransportRequestCodeLookup, Services.TransportRequestCodeLookup>();
         services.AddScoped<WaroTrans.Warehouse.Contracts.IContainerTransportLookup, Services.ContainerTransportLookup>();
         services.AddScoped<
             WaroTrans.BuildingBlocks.Abstractions.IIntegrationEventHandler<WaroTrans.WorkflowExecution.Contracts.JobContainerStatusChanged>,
@@ -51,6 +62,7 @@ public static class TransportationModule
         GetTransportRequestEndpoint.Map(group);
         QueueTransportRequestEndpoint.Map(group);
         Features.CloseTransportRequest.CloseTransportRequestEndpoints.Map(group);
+        Features.TransportSchedules.TransportScheduleEndpoints.Map(group);
         group.MapGetRequestStatistics();
 
         return endpoints;

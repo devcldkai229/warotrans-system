@@ -19,8 +19,24 @@ public sealed class FleetModuleApi(
     WaroTrans.Fleet.Features.RobotControl.RobotControlService robotControl,
     IMqttRobotInteractionPublisher interactionPublisher,
     WaroTrans.Fleet.Features.Dispatch.DispatchService dispatch,
-    ILogger<FleetModuleApi> logger) : IFleetModule
+    ILogger<FleetModuleApi> logger,
+    WaroTrans.Fleet.Features.Positioning.RobotPositioningService positioning) : IFleetModule
 {
+    public Task<IReadOnlySet<Guid>> GetPositioningRobotIdsAsync(CancellationToken cancellationToken = default) =>
+        positioning.LiveRobotIdsAsync(cancellationToken);
+
+    public Task<IReadOnlySet<Guid>> GetPositioningTargetsAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        positioning.LiveTargetsAsync(mapVersionId, cancellationToken);
+
+    public Task<Guid> StartReturnToParkAsync(Guid robotId, Guid endpointId, double x, double y, double yaw, CancellationToken cancellationToken = default) =>
+        positioning.StartReturnToParkAsync(robotId, endpointId, x, y, yaw, cancellationToken);
+
+    public Task<PositioningYield> YieldPositioningAsync(Guid robotId, Guid jobId, CancellationToken cancellationToken = default) =>
+        positioning.YieldAsync(robotId, jobId, cancellationToken);
+
+    public Task<int> SettlePositioningAsync(CancellationToken cancellationToken = default) =>
+        positioning.SettleAsync(cancellationToken);
+
     public Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(DispatchQuery query, CancellationToken cancellationToken = default) =>
         dispatch.EvaluateAsync(query, cancellationToken);
 
@@ -46,6 +62,42 @@ public sealed class FleetModuleApi(
             .Take(take)
             .Select(x => x.JobId)
             .ToListAsync(cancellationToken);
+
+    public async Task<FleetCapacity> GetCapacityAsync(Guid mapVersionId, CancellationToken cancellationToken = default)
+    {
+        var robots = await db.Robots.AsNoTracking()
+            .Where(r => r.CurrentMapVersionId == mapVersionId && r.IsEnabled)
+            .Select(r => new { r.MaxContainers, r.MaxPayloadKg })
+            .ToListAsync(cancellationToken);
+        return new FleetCapacity(
+            robots.Count > 0 && robots.All(r => r.MaxContainers is not null) ? robots.Max(r => r.MaxContainers) : null,
+            robots.Count > 0 && robots.All(r => r.MaxPayloadKg is not null) ? robots.Max(r => r.MaxPayloadKg) : null);
+    }
+
+    public async Task<RobotCommandSummary?> GetLatestCommandAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+        await db.RobotCommands
+            .AsNoTracking()
+            .Where(c => c.RobotId == robotId)
+            .OrderByDescending(c => c.IssuedAt)
+            .Select(c => new RobotCommandSummary(c.Id, c.Type.ToString(), c.Status.ToString(), c.IssuedAt, c.AckedAt, c.CompletedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<IdleRobot>> GetIdleRobotsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var robots = (await db.Robots.AsNoTracking()
+                .Where(r => r.IsEnabled && r.IsOnline && r.Status == WaroTrans.Fleet.Enums.RobotStatus.AVAILABLE && !r.MotionHeld)
+                .ToListAsync(cancellationToken))
+            .Where(r => !r.HasActiveManualLease(now))
+            .ToList();
+        var ids = robots.Select(r => r.Id).ToList();
+        var last = await db.RobotCommands.AsNoTracking()
+            .Where(c => ids.Contains(c.RobotId))
+            .GroupBy(c => c.RobotId)
+            .Select(g => new { RobotId = g.Key, At = g.Max(c => c.IssuedAt) })
+            .ToDictionaryAsync(x => x.RobotId, x => x.At, cancellationToken);
+        return robots.Select(r => new IdleRobot(ToSnapshot(r), last.TryGetValue(r.Id, out var at) ? at : null)).ToList();
+    }
 
     public async Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,

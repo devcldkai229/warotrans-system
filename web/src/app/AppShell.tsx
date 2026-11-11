@@ -30,6 +30,7 @@ const NAV: NavGroup[] = [
     items: [
       { label: 'Fleet', to: '/monitor/fleet', requires: PERMISSIONS.robotRead },
       { label: 'Transport requests', to: '/monitor/requests', requires: PERMISSIONS.transportRead },
+      { label: 'Schedules', to: '/monitor/schedules', requires: PERMISSIONS.transportRead },
     ],
   },
   {

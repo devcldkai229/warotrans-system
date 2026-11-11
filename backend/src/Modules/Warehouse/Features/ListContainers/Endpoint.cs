@@ -15,6 +15,7 @@ public static class ListContainersEndpoint
             string? search,
             bool? eligibleOnly,
             int? take,
+            int? skip,
             IValidator<ListContainersRequest> validator,
             ListContainersHandler handler,
             CancellationToken cancellationToken) =>
@@ -23,7 +24,8 @@ public static class ListContainersEndpoint
                 warehouseId,
                 search,
                 eligibleOnly ?? true,
-                take ?? 50);
+                take ?? 50,
+                skip ?? 0);
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);

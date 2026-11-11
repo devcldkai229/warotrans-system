@@ -12,7 +12,8 @@ public sealed record TransportRequestListItemResponse(
     DateTimeOffset SubmittedAt,
     int DetailCount,
     IReadOnlyList<TransportRequestListDetailSummary> Details,
-    IReadOnlyList<WaroTrans.BuildingBlocks.Abstractions.ActionAvailability> AvailableActions);
+    IReadOnlyList<WaroTrans.BuildingBlocks.Abstractions.ActionAvailability> AvailableActions,
+    string? RequestedByName = null);
 
 public sealed record TransportRequestListDetailSummary(
     Guid Id,

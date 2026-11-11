@@ -61,6 +61,10 @@ public sealed class ProcessRobotHeartbeatHandler(
                     .SetProperty(r => r.UpdatedAt, utcNow),
                 cancellationToken);
         db.ChangeTracker.Clear();
+        if (becameOnline)
+        {
+            await RobotStateJournal.WriteAsync(db, robot.Id, robot.Status, "online", Enums.RobotStateEventSource.HEARTBEAT, cancellationToken);
+        }
 
         // TrafficState is in-memory: Host restart re-quarantines OFFLINE while DB may still
         // IsOnline=true, so becameOnline stays false. Every verified HB must sync MarkOnline.

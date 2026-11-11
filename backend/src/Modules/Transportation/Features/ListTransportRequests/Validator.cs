@@ -7,6 +7,7 @@ public sealed class ListTransportRequestsRequestValidator : AbstractValidator<Li
     public ListTransportRequestsRequestValidator()
     {
         RuleFor(x => x.Take).InclusiveBetween(1, 200);
+        RuleFor(x => x.Skip).GreaterThanOrEqualTo(0);
         RuleFor(x => x.Search)
             .MaximumLength(100)
             .When(x => x.Search is not null);

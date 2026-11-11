@@ -19,7 +19,7 @@ public static class RolePermissionMatrix
             [AppRoles.Staff] = new[]
             {
                 Permissions.MapRead,
-                Permissions.WarehouseRead, Permissions.ContainerCreate, Permissions.VoucherWrite,
+                Permissions.WarehouseRead, Permissions.ContainerCreate, Permissions.ContainerRecover, Permissions.VoucherWrite,
                 Permissions.TransportRead, Permissions.TransportCreate,
                 Permissions.WorkflowRead, Permissions.JobRead, Permissions.JobOperate, Permissions.JobPause,
                 Permissions.RobotRead, Permissions.RobotStop,

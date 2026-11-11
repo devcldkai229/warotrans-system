@@ -49,6 +49,7 @@ export type JobStepStatus =
   | 'COMPLETED'
   | 'FAILED'
   | 'CANCELLED'
+  | 'SKIPPED'
 
 export type JobContainerStatus = 'PENDING' | 'ASSIGNED' | 'ONBOARD' | 'DELIVERED' | 'FAILED' | 'CANCELLED'
 
@@ -102,7 +103,7 @@ export type AssignmentEndReason =
 
 export type RobotStateEventSource = 'SYSTEM' | 'HEARTBEAT' | 'DISPATCHER' | 'OPERATOR' | 'ROBOT'
 
-export type DispatchDecisionType = 'SELECTED' | 'NONE'
+export type DispatchDecisionType = 'SELECTED' | 'NONE' | 'REFUSED'
 
 export type StepType = 'CHECK' | 'MOVE' | 'HUMAN_INTERACTION' | 'WAIT'
 
@@ -247,6 +248,11 @@ export interface Robot {
   maintenanceSince?: string | null
   /** RB-09: system actions the robot announced. */
   capabilities?: string[]
+  /** FL-03: null = not declared. */
+  maxPayloadKg?: number | null
+  maxContainers?: number | null
+  lengthM?: number | null
+  widthM?: number | null
 }
 
 /** The Job a Robot is working on, joined from JobAssignment. TODO(backend): needs a fleet read endpoint. */
@@ -328,6 +334,8 @@ export interface DispatchDecision {
   trigger: 'START' | 'RESUME'
   actorId: string | null
   overrideReason: string | null
+  /** Set when the named robot was refused (type REFUSED). */
+  refusalCode?: string | null
   createdAt: string
   candidates: DispatchCandidate[]
 }

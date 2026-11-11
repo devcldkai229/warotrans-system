@@ -30,7 +30,8 @@ public sealed record GetTransportRequestResponse(
     DateTimeOffset? RejectedAt,
     // The Jobs carrying it and what the caller may do now (BOTH-04).
     IReadOnlyList<RequestJobState> Jobs,
-    IReadOnlyList<ActionAvailability> AvailableActions);
+    IReadOnlyList<ActionAvailability> AvailableActions,
+    string? RequestedByName = null);
 
 public sealed record TransportRequestDetailItemResponse(
     Guid Id,

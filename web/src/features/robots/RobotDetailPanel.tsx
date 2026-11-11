@@ -8,6 +8,8 @@ import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
+import { RobotCapacityCard } from './RobotCapacityCard'
+import { TrafficClearanceCard } from './TrafficClearanceCard'
 import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
@@ -343,6 +345,8 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
         {actionError ? <p className="mb-4 text-xs text-red-ink">{actionError}</p> : null}
 
         <RobotControlCard robotId={robot.id} robotCode={robot.code} />
+        <TrafficClearanceCard robotId={robot.id} robotCode={robot.code} />
+        <RobotCapacityCard key={robot.id} robot={robot} />
 
         {error ? (
           <div className="flex gap-3 rounded-md bg-red-soft p-4 text-red-ink">

@@ -16,6 +16,7 @@ export const JOB_STATUS_TONE: Record<JobStatus, Tone> = {
 }
 
 export const STEP_STATUS_TONE: Record<JobStepStatus, Tone> = {
+  SKIPPED: 'grey',
   PENDING: 'grey',
   READY: 'teal',
   EXECUTING: 'blue',

@@ -29,6 +29,42 @@ public sealed class DispatchEligibilityTests
     private static DispatchCandidate Evaluate(Robot robot, double? px = null, double? py = null, ISet<Guid>? busy = null, BatteryOptions? battery = null) =>
         DispatchEligibility.Evaluate(robot, new DispatchQuery(Map, px, py, new HashSet<Guid>(busy ?? new HashSet<Guid>())), Now, null, battery ?? Battery, Weights);
 
+    [Theory]
+    [InlineData(RobotStatus.RESERVED)]
+    [InlineData(RobotStatus.EXECUTING)]
+    public void FL08_a_robot_only_driving_to_parking_is_offered_and_another_busy_robot_is_not(RobotStatus status)
+    {
+        var parking = Ready();
+        parking.Status = status;
+        var busy = Ready("RBT-2");
+        busy.Status = status;
+        var query = new DispatchQuery(Map, null, null, new HashSet<Guid>());
+
+        var offered = DispatchEligibility.Evaluate(parking, query, Now, null, Battery, Weights, returningToPark: true);
+        var refused = DispatchEligibility.Evaluate(busy, query, Now, null, Battery, Weights);
+
+        Assert.True(offered.Eligible, string.Join(",", offered.Reasons));
+        Assert.Contains(offered.Notes, n => n.StartsWith("returning_to_park", StringComparison.Ordinal));
+        Assert.Contains(DispatchReasons.NotAvailable, refused.Reasons);
+    }
+
+    [Fact]
+    public void FL08_returning_to_park_does_not_excuse_anything_else()
+    {
+        var robot = Ready();
+        robot.Status = RobotStatus.EXECUTING;
+        robot.MotionHeld = true;
+        robot.LocalizationStatus = LocalizationStatus.LOST;
+
+        var candidate = DispatchEligibility.Evaluate(robot, new DispatchQuery(Map, null, null, new HashSet<Guid>()), Now, null, Battery, Weights,
+            returningToPark: true);
+
+        Assert.False(candidate.Eligible);
+        Assert.Contains(DispatchReasons.MotionHeld, candidate.Reasons);
+        Assert.Contains(DispatchReasons.NotLocalized, candidate.Reasons);
+        Assert.DoesNotContain(DispatchReasons.NotAvailable, candidate.Reasons);
+    }
+
     [Fact]
     public void A_ready_robot_is_eligible()
     {

@@ -25,6 +25,7 @@ public sealed record WorkflowDetailDto(
     Guid CreatedBy,
     DateTimeOffset CreatedAt,
     DateTimeOffset? PublishedAt,
+    Guid? PublishedBy,
     IReadOnlyList<WorkflowVariableDefinition> Variables,
     IReadOnlyList<WorkflowTaskDto> Tasks);
 
@@ -202,6 +203,7 @@ public static class WorkflowMapping
             workflow.CreatedBy,
             workflow.CreatedAt,
             workflow.PublishedAt,
+            workflow.PublishedBy,
             workflow.VariablesSchema,
             workflow.Tasks
                 .OrderBy(t => t.SequenceNo)

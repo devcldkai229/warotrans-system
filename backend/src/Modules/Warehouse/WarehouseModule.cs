@@ -26,6 +26,7 @@ using WaroTrans.Warehouse.Features.ListProducts;
 using WaroTrans.Warehouse.Features.ListStockVouchers;
 using WaroTrans.Warehouse.Features.ListStorageLocations;
 using WaroTrans.Warehouse.Features.ListWarehouses;
+using WaroTrans.Warehouse.Features.RecoverContainer;
 using WaroTrans.Warehouse.Features.RemoveStockVoucherLine;
 using WaroTrans.Warehouse.Features.ResolveProduct;
 using WaroTrans.Warehouse.Features.SetProductStatus;
@@ -69,7 +70,10 @@ public static class WarehouseModule
 
         services.AddScoped<IWarehouseModule, WarehouseModuleApi>();
         services.AddScoped<IStorageLocationEndpointRebinder, StorageLocationEndpointRebinder>();
-        services.AddScoped<IContainerMovementRecorder, ContainerMovementRecorder>();
+        services.AddScoped<IStoredContainerQuery, StoredContainerQuery>();
+        services.AddScoped<ContainerMovementRecorder>();
+        services.AddScoped<IContainerMovementRecorder>(sp => sp.GetRequiredService<ContainerMovementRecorder>());
+        services.AddScoped<RecoverContainerHandler>();
 
         return services;
     }
@@ -81,6 +85,8 @@ public static class WarehouseModule
         group.MapListWarehouses();
         group.MapCreateWarehouse();
         group.MapListContainers();
+        group.MapRecoverContainer();
+        Features.ContainerPhysical.ContainerPhysicalEndpoint.MapContainerPhysical(group);
         group.MapListStorageLocations();
         group.MapCreateStorageLocation();
         group.MapSetStorageLocationStatus();

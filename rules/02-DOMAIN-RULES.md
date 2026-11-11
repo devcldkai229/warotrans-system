@@ -18,6 +18,13 @@ Other valid states:
 
 State changes must go through domain/use-case logic.
 
+### Stock follows custody (WH-01)
+
+- Pickup confirmed: 1 off the source shelf level, Container `IN_TRANSIT` with no location.
+- Delivery confirmed: 1 on the shelf level and `STORED`; off-shelf on a CONFIRMED outbound voucher: `ISSUED`; any other off-shelf drop: its status before the pickup if never shelved, otherwise `HOLD`.
+- A Job that fails or is cancelled with cargo on board leaves it `IN_TRANSIT`. Nothing is assumed returned: a person names the shelf (`POST /api/warehouse/containers/{id}/recover`).
+- Every move writes one `warehouse.container_movements` line with a unique key per Job + Container + move. Transportation queues handovers in `transportation.stock_postings` with the Detail and retries until posted.
+
 ### Inventory
 `InventoryStock` business key:
 ```text
@@ -72,6 +79,10 @@ FAILED
 CANCELLED
 ```
 
+### Recurring waves (WH-09)
+
+A `TransportSchedule` stores a rule (product on a shelf, destination, at most N Containers), not Containers: those are physical. Each occurrence is one `TransportWave` (unique on schedule + time). When due it picks the STORED Containers that match and are on no open request, oldest first, creates and queues one request through the normal path. Nothing matched: `SKIPPED`. Down or paused when due: `MISSED`, never run late. Could not create: `FAILED`, never retried. A queued request waits for a person to start it: a schedule does not move a robot by itself.
+
 ### Request status aggregation (via Details)
 Aggregate Request status from Detail lines (not from Job status alone):
 - all PENDING → SUBMITTED / QUEUED
@@ -96,7 +107,9 @@ TransportRequest (+ Details)
   → Job → JobTask → JobStep
 ```
 
-One `TransportRequest` may create **N** `Job`s (batching by robot capacity / zone / priority — planning policy).
+A Job a person enqueued (`POST /jobs/{id}/enqueue`) goes as soon as a robot is free: `JobQueue*` options, best score first, where one minute of waiting is one point and priority and deadline add a fixed amount, so nothing waits for ever. `BlockingReason` says why it has not gone. Nothing enters the queue by itself, except the next Job of a request someone started. A schedule's wave does not.
+
+One `TransportRequest` may create **N** `Job`s (batching by robot capacity / zone / priority — planning policy). `JobPlanning:MaxContainersPerJob` limits a Job until each robot has its own capacity (FL-03). A batch has no table of its own: `Job.ProvisioningKey` (`request:BATCH-00n`) and `JobContainer` hold it, and a request + Container is in one Job only. The Jobs of a request run one after the other: after someone starts it, the next starts when the running one ends.
 
 Request↔Job cardinality is expressed only through `JobContainer` (owned by WorkflowExecution / `execution` schema).  
 `Job` must **not** store `TransportRequestId`.  
@@ -123,6 +136,32 @@ CANCELLED
 | DELIVERED | COMPLETED |
 | FAILED | FAILED |
 | CANCELLED | CANCELLED (replan back to QUEUED — decide later) |
+## Robot history and commands (BOTH-02, FLT-02)
+
+`robot_state_events` gets a row only when a robot's status, connectivity or motion hold changes, never for a heartbeat. `GET /robots/{id}/state-history` merges these with its commands. `GET /robots/{id}/commands/catalog` says what can be asked of this robot now; LOCALIZE, DOCK and CHARGE are listed as unsupported and clients must not offer them. A stop accepted with no result for 30 s reads UNKNOWN rather than ACCEPTED. RESUME still clears the hold in the backend at once: Job resume reads it immediately, and the robot's telemetry corrects it.
+
+## Capacity (FL-03)
+
+A robot declares `MaxPayloadKg`, `MaxContainers`, `LengthM`, `WidthM`; a Container has `WeightKg`, `LengthM`, `WidthM`. All are entered by a person and may be empty. Planning happens before a robot is chosen, so it splits on the smaller of `JobPlanning:MaxContainersPerJob` and the largest robot in service on the map, and refuses a Container no robot can carry. Dispatch, resume and recovery then refuse a robot the load is too much for, and no override exists. A missing figure does not refuse: the decision records `capacity_unknown`. Traffic reserves one footprint for all robots, so a robot larger than it is refused and a smaller one reserves more than it needs. Container size is stored but not yet compared with anything.
+
+## Job and robot (FL-04)
+
+A Job holds one robot at a time and a robot one Job at a time: `execution.job_robot_assignments` has a unique index on each, over rows with no `EndedAt`. Every engine save keeps those rows in line with the Job. Handing a Job to another robot closes one row and opens another, so the history stays. Several robots on one request means several Jobs, and the request ends when they all have.
+
+## Who handles a human step (WH-03, SY-02)
+
+A waiting HUMAN step can be claimed for a limited time (`HumanTasks:ClaimLeaseSeconds`). While a claim is live, only its holder may confirm; everyone else, and the robot button, gets `409 human_task_claimed`. Confirming a free step claims it in the same write. A claim that runs out is offered to everyone again. An Admin can take a step over, with a reason. `JobStep.DeadlineAt` is stored: past it, an issue is opened and the floor is told once. A deadline never confirms a step and never releases the robot or its reservations.
+
+Confirm All (`/jobs/{id}/handover/confirm-batch`) is partial: each Container gets its own result, and a Container whose turn did not come is `not_reached`.
+
+## Payload recovery (WFX-04, FL-06)
+
+A step failing for good with cargo ONBOARD, or a robot silent past `Recovery:OfflineGraceSeconds` with cargo, sends the Job to `RECOVERY_REQUIRED`, opens a `JobRecoveryCase` and an issue. Cargo stays ONBOARD; it is never marked FAILED for this. The robot keeps what it occupies in traffic.
+
+Then either the same robot resumes, once it is online with a verified pose, or a second robot is sent to a safe endpoint as a MOVE of this Job, and a person confirms the transfer naming the Containers. Only then does the Job change robot, in one transaction. It waits PAUSED until an operator resumes it to the original destination. Same Job, no new request.
+
+Releasing a robot's zones (`release-after-clearance`) rests on a person's word, so it is refused when software can do better: robot online with a pose (reconcile instead), a Job still going on, or a navigation running. A Job in `RECOVERY_REQUIRED` does not block it: a failed robot standing on the only way must be movable by hand, or the second robot could never arrive.
+
 ## Job state machine
 ```text
 CREATED

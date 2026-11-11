@@ -46,7 +46,9 @@ public static class FleetModule
 
         services.AddValidatorsFromAssembly(typeof(FleetModule).Assembly);
 
+        services.AddHostedService<Services.RobotHistoryRetentionHostedService>();
         services.AddScoped<RegisterRobotHandler>();
+        services.AddScoped<Features.ReconcileTrafficRobot.ReleaseAfterClearanceHandler>();
         services.AddScoped<GetRobotHandler>();
         services.AddScoped<ListRobotsHandler>();
         services.AddScoped<GetRobotStatisticsHandler>();
@@ -70,6 +72,7 @@ public static class FleetModule
         services.Configure<Features.Dispatch.BatteryOptions>(configuration.GetSection(Features.Dispatch.BatteryOptions.SectionName));
         services.Configure<Features.Dispatch.DispatchOptions>(configuration.GetSection(Features.Dispatch.DispatchOptions.SectionName));
         services.AddScoped<Features.Dispatch.DispatchService>();
+        services.AddScoped<Features.Positioning.RobotPositioningService>();
         services.AddHttpClient(StreamRobotCameraHandler.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddScoped<StreamRobotCameraHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();
@@ -109,6 +112,8 @@ public static class FleetModule
         group.MapEnableRobot();
         group.MapDisableRobot();
         group.MapPutRobotInService();
+        Features.RobotCapacity.RobotCapacityEndpoint.MapSetRobotCapacity(group);
+        Features.RobotHistory.RobotHistoryEndpoints.MapRobotHistory(group);
         group.MapChangeRobotMap();
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();

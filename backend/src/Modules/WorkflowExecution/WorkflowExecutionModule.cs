@@ -65,7 +65,20 @@ public static class WorkflowExecutionModule
         services.AddScoped<WorkflowVariableContextBuilder>();
         services.AddScoped<IWorkflowRequestValidator, WorkflowRequestValidator>();
         services.AddScoped<IJobRuntimeProvisioner, JobRuntimeProvisioner>();
-        services.AddSingleton<IJobBatchPlanner, CollectThenDeliverJobBatchPlanner>();
+        services.AddScoped<IJobPlanLimitsQuery, JobPlanLimitsQuery>();
+        services.Configure<JobPlanningOptions>(configuration.GetSection(JobPlanningOptions.SectionName));
+        services.Configure<Execution.HumanTaskOptions>(configuration.GetSection(Execution.HumanTaskOptions.SectionName));
+        services.AddScoped<Features.HumanTasks.HumanTaskQueries>();
+        services.Configure<Execution.RecoveryOptions>(configuration.GetSection(Execution.RecoveryOptions.SectionName));
+        services.AddHostedService<Services.RobotOfflineJobHostedService>();
+        services.AddScoped<WaroTrans.Fleet.Contracts.IRobotWorkQuery, Services.RobotWorkQuery>();
+        services.AddSingleton<IJobBatchPlanner>(sp => new CollectThenDeliverJobBatchPlanner(
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JobPlanningOptions>>().Value.MaxContainersPerJob));
+        services.Configure<Execution.JobQueueOptions>(configuration.GetSection(Execution.JobQueueOptions.SectionName));
+        services.AddScoped<Services.JobQueueProcessor>();
+        services.Configure<Features.RobotCare.FleetIdleOptions>(configuration.GetSection(Features.RobotCare.FleetIdleOptions.SectionName));
+        services.AddScoped<Features.RobotCare.RobotCareService>();
+        services.AddHostedService<Services.JobQueueHostedService>();
 
         // Job execution (GĐ 3)
         services.AddScoped<JobExecutionEngine>();
@@ -76,6 +89,9 @@ public static class WorkflowExecutionModule
         services.AddScoped<CancelJobHandler>();
         services.AddScoped<WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobHandler>();
         services.AddScoped<ConfirmJobStepHandler>();
+        services.AddScoped<JobSummaryEnricher>();
+        services.AddScoped<Features.FailJobContainer.FailJobContainerHandler>();
+        services.AddScoped<Features.RobotActivity.RobotActivityQueries>();
         services.AddHostedService<HumanConfirmTimeoutHostedService>();
         services.AddHostedService<Services.WaitStepWakeupHostedService>();
 
@@ -113,6 +129,12 @@ public static class WorkflowExecutionModule
         group.MapCancelJob();
         WaroTrans.WorkflowExecution.Features.PauseJob.PauseJobEndpoint.MapPauseJob(group);
         group.MapConfirmJobStep();
+        Features.FailJobContainer.FailJobContainerEndpoint.MapFailJobContainer(group);
+        Features.RobotActivity.RobotActivityEndpoints.Map(group);
+        Features.HumanTasks.HumanTaskEndpoints.Map(group);
+        Features.JobRecovery.JobRecoveryEndpoints.Map(group);
+        Features.JobQueue.JobQueueEndpoints.Map(group);
+        Features.RobotCare.RobotCareEndpoints.Map(group);
         
         return endpoints;
     }

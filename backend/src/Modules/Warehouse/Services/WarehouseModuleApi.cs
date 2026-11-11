@@ -31,7 +31,8 @@ public sealed class WarehouseModuleApi(WarehouseDbContext dbContext) : IWarehous
                 c.Barcode,
                 c.Status,
                 c.CurrentStorageLocationId,
-                c.CurrentLevelNo))
+                c.CurrentLevelNo,
+                c.WeightKg))
             .ToListAsync(cancellationToken);
     }
 
