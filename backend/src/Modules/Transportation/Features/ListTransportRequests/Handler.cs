@@ -13,7 +13,8 @@ public sealed class ListTransportRequestsHandler(
     IWarehouseModule warehouseModule,
     INavigationModule navigationModule,
     ITransportRequestJobControl jobControl,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IAccountNameLookup accounts)
 {
     public async Task<ListTransportRequestsResponse> HandleAsync(
         ListTransportRequestsRequest request,
@@ -34,6 +35,11 @@ public sealed class ListTransportRequestsHandler(
             query = query.Where(r => r.Status == status);
         }
 
+        if (request.Ids is { Count: > 0 } ids)
+        {
+            query = query.Where(r => ids.Contains(r.Id));
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();
@@ -43,6 +49,8 @@ public sealed class ListTransportRequestsHandler(
         var total = await query.CountAsync(cancellationToken);
         var requests = await query
             .OrderByDescending(r => r.SubmittedAt)
+            .ThenBy(r => r.Id)
+            .Skip(request.Skip)
             .Take(request.Take)
             .ToListAsync(cancellationToken);
 
@@ -53,6 +61,7 @@ public sealed class ListTransportRequestsHandler(
             cancellationToken);
 
         var jobs = await jobControl.GetJobsAsync(requests.Select(r => r.Id).ToList(), cancellationToken);
+        var names = await accounts.GetNamesAsync(requests.Select(r => r.RequestedBy).Distinct().ToList(), cancellationToken);
 
         var items = requests.Select(r => new TransportRequestListItemResponse(
             r.Id,
@@ -84,7 +93,8 @@ public sealed class ListTransportRequestsHandler(
                         d.Status.ToString());
                 })
                 .ToList(),
-            TransportRequestActionPolicy.Evaluate(r, jobs.GetValueOrDefault(r.Id) ?? [], currentUser.Can)))
+            TransportRequestActionPolicy.Evaluate(r, jobs.GetValueOrDefault(r.Id) ?? [], currentUser.Can),
+            names.GetValueOrDefault(r.RequestedBy)))
             .ToList();
 
         return new ListTransportRequestsResponse(items, total);

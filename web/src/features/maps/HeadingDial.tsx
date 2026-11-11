@@ -1,8 +1,9 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { cx } from '@/shared/lib/cx'
 import { normalizeYaw } from './yaw'
-
+import { t } from '@/shared/i18n'
 /** Quick targets around the dial: tap one to face that way. */
+
 const CARDINALS = [
   { label: 'E', degrees: 0 },
   { label: 'N', degrees: 90 },
@@ -70,7 +71,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
           'cursor-pointer rounded-full bg-surface/90 shadow-float',
           isPanel ? 'relative mx-auto size-28' : 'absolute -top-16 -left-16 size-32',
         )}
-        title="Drag to rotate. Hold Shift for 15° steps."
+        title={t('Drag to rotate. Hold Shift for 15° steps.')}
         onPointerDown={startDrag}
       >
         <svg className="pointer-events-none size-full" viewBox="-64 -64 128 128" aria-hidden="true">
@@ -103,7 +104,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
           <span
             className="pointer-events-auto absolute -top-3 -right-3.5 grid size-7 cursor-grab place-items-center rounded-full bg-blue text-white ring-2 ring-surface transition-transform duration-100 select-none hover:scale-110 active:scale-115 active:cursor-grabbing"
             onPointerDown={startDrag}
-            aria-label="Drag to set heading"
+            aria-label={t('Drag to set heading')}
             role="slider"
             aria-valuenow={yaw}
             aria-valuemin={-180}
@@ -135,7 +136,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
               ? `translate(-50%, -50%) rotate(${-cardinal.degrees}deg) translateX(72px) rotate(${cardinal.degrees}deg)`
               : `translate(-50%, -50%) rotate(${-cardinal.degrees}deg) translateX(94px) rotate(${cardinal.degrees}deg)`,
           }}
-          aria-label={`Face ${cardinal.label} (${cardinal.degrees}°)`}
+          aria-label={t('Face {label} ({degrees}°)', { label: cardinal.label, degrees: cardinal.degrees })}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onChange(cardinal.degrees)}
         >
@@ -152,7 +153,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
             <span
               className="pointer-events-auto absolute -top-3 -right-3.5 grid size-7 cursor-grab place-items-center rounded-full bg-blue text-white ring-2 ring-surface transition-transform duration-100 select-none hover:scale-110 active:scale-115 active:cursor-grabbing"
               onPointerDown={startDrag}
-              aria-label="Drag to set heading"
+              aria-label={t('Drag to set heading')}
               role="slider"
               aria-valuenow={yaw}
               aria-valuemin={-180}
@@ -166,9 +167,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
           <span className="pointer-events-none absolute -top-1.5 -left-1.5 size-3 rounded-full bg-surface ring-[3px] ring-blue" />
           <div className="pointer-events-none absolute top-28 -left-32 flex w-64 flex-col items-center">
             <strong className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-white tabular-nums">{yaw}°</strong>
-            <span className="mt-1 rounded-full bg-surface/90 px-2 text-xs whitespace-nowrap text-ink-2">
-              Drag the knob. Shift snaps to 15°.
-            </span>
+            <span className="mt-1 rounded-full bg-surface/90 px-2 text-xs whitespace-nowrap text-ink-2">{t('Drag the knob. Shift snaps to 15°.')}</span>
           </div>
         </>
       ) : null}
@@ -180,7 +179,7 @@ export function HeadingDial({ x = 0, y = 0, yaw, onChange, variant = 'overlay' }
       <div className="flex flex-col items-center gap-2 py-2" onClick={(event) => event.stopPropagation()}>
         <div className="relative grid size-44 place-items-center">{dial}</div>
         <strong className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-white tabular-nums">{yaw}°</strong>
-        <span className="text-center text-xs text-ink-2">Drag the knob. Shift snaps to 15°.</span>
+        <span className="text-center text-xs text-ink-2">{t('Drag the knob. Shift snaps to 15°.')}</span>
       </div>
     )
   }

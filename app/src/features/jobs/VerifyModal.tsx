@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import {
@@ -24,7 +25,7 @@ import { typography } from '../../shared/theme/typography';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { ApiError, confirmHandover, getContainerByBarcode } from '../../shared/api';
+import { ApiError, confirmHandover, failJobContainer, getContainerByBarcode } from '../../shared/api';
 import type { JobDetailResponse, JobStatus, JobStepResponse } from '../../shared/types/contracts';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import { handoverStatus } from './handoverData';
@@ -83,6 +84,7 @@ export function VerifyModal({
   const [mismatch, setMismatch] = useState(initialMismatch);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [failReason, setFailReason] = useState<string | null>(null);
   const submissionVersion = useRef(0);
   const submissionPending = useRef(false);
   const status = handoverStatus(step, jobStatus);
@@ -309,6 +311,39 @@ export function VerifyModal({
                   style={styles.confirmButton}
                 />
               </View> : <Button title="Close" onPress={onClose} size="lg" fullWidth />}
+
+              {status.canConfirm && jobStepId && targetContainerId ? (
+                failReason === null ? (
+                  <Button title="Container cannot go on" variant="outline" onPress={() => setFailReason('')} size="lg" fullWidth />
+                ) : (
+                  <View>
+                    <TextInput
+                      placeholder="Why can this container not go on?"
+                      value={failReason}
+                      onChangeText={setFailReason}
+                      style={styles.failReasonInput}
+                    />
+                    <Button
+                      title={isSubmitting ? 'Reporting...' : 'Report container failed'}
+                      variant="danger"
+                      disabled={!failReason.trim() || isSubmitting}
+                      onPress={() => {
+                        setIsSubmitting(true);
+                        failJobContainer(jobStepId, targetContainerId, failReason.trim())
+                          .then(res => {
+                            toast.success('Container reported failed. The job goes on without it.');
+                            setFailReason(null);
+                            onSuccess(targetContainer ?? '', res && 'status' in res && res.id ? res as unknown as JobDetailResponse : null);
+                          })
+                          .catch((err: Error) => setVerificationError(err?.message || 'The report failed'))
+                          .finally(() => setIsSubmitting(false));
+                      }}
+                      size="lg"
+                      fullWidth
+                    />
+                  </View>
+                )
+              ) : null}
             </ScrollView>
           ) : (
             /* Barcode Mismatch Alert Screen */
@@ -393,6 +428,14 @@ export function VerifyModal({
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  failReasonInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    color: colors.text,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.65)',

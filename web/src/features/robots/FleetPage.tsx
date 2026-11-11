@@ -1,6 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PERMISSIONS } from '@/shared/auth/permissions'
+import { Can } from '@/features/auth/RequirePermission'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { Robot, RobotStatus, RobotView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { cx } from '@/shared/lib/cx'
@@ -9,6 +11,7 @@ import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { useNotificationsHub, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
+import { BatteryLevel } from '@/shared/ui/BatteryLevel'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
@@ -19,8 +22,9 @@ import { FleetMap } from './FleetMap'
 import { RegisterRobotDialog } from './RegisterRobotDialog'
 import { RobotDetailPanel } from './RobotDetailPanel'
 import { ROBOT_STATUS_ORDER } from './constants'
-
+import { t } from '@/shared/i18n'
 const chipClass = (active: boolean) =>
+
   cx(
     'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors duration-200',
     active ? 'bg-primary text-white' : 'bg-surface text-ink-2 hover:text-ink',
@@ -33,6 +37,9 @@ function toRobotView(robot: Robot): RobotView {
 export function FleetPage() {
   const { robotCode } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  // Set when a link to a robot that no longer exists sent us here (see the redirect below).
+  const robotNotFound = (useLocation().state as { robotNotFound?: boolean } | null)?.robotNotFound === true
   const [query, setQuery] = useState('')
   const [previewCode, setPreviewCode] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<RobotStatus | null>(null)
@@ -77,7 +84,11 @@ export function FleetPage() {
                 poseX: live.poseX,
                 poseY: live.poseY,
                 poseYaw: live.poseYaw,
+                batteryPercent: live.batteryPercent ?? robot.batteryPercent,
                 navigationStatus: (live.navigationStatus as Robot['navigationStatus']) ?? robot.navigationStatus,
+                localizationStatus:
+                  (live.localizationStatus as Robot['localizationStatus']) ?? robot.localizationStatus,
+                lastTelemetryAt: live.lastTelemetryAt ?? robot.lastTelemetryAt,
               }
             : robot,
         )
@@ -85,9 +96,39 @@ export function FleetPage() {
     [countsQuery.data, livePoses],
   )
   const robots = useMemo(
-    () => (listQuery.data?.items ?? []).map(toRobotView),
-    [listQuery.data],
+    () =>
+      (listQuery.data?.items ?? []).map((robot) => {
+        const live = livePoses[robot.id]
+        const fresher = live && (!robot.lastTelemetryAt || (live.lastTelemetryAt ?? '') >= robot.lastTelemetryAt)
+        return toRobotView(
+          fresher
+            ? {
+                ...robot,
+                poseX: live.poseX,
+                poseY: live.poseY,
+                poseYaw: live.poseYaw,
+                batteryPercent: live.batteryPercent ?? robot.batteryPercent,
+                navigationStatus: (live.navigationStatus as Robot['navigationStatus']) ?? robot.navigationStatus,
+                localizationStatus:
+                  (live.localizationStatus as Robot['localizationStatus']) ?? robot.localizationStatus,
+                lastTelemetryAt: live.lastTelemetryAt ?? robot.lastTelemetryAt,
+              }
+            : robot,
+        )
+      }),
+    [listQuery.data, livePoses],
   )
+  // A notification about a robot lands here with ?robotId=<id>: the screen is addressed by robot code, so go there.
+  const linkedRobotId = searchParams.get('robotId')
+  const knownRobots = countsQuery.data?.items
+  useEffect(() => {
+    if (!linkedRobotId || !knownRobots) return
+    const linked = knownRobots.find((robot) => robot.id === linkedRobotId)
+    navigate(linked ? `/monitor/fleet/${linked.code}` : '/monitor/fleet', {
+      replace: true,
+      state: linked ? undefined : { robotNotFound: true },
+    })
+  }, [linkedRobotId, knownRobots, navigate])
   const totalForHeader = countsQuery.data?.total ?? robotsForCounts.length
 
   const counts = useMemo(() => {
@@ -137,28 +178,33 @@ export function FleetPage() {
             robot={selected}
             onBack={() => navigate('/monitor/fleet')}
             onManual={() => navigate(`/monitor/fleet/${selected.code}/manual`)}
+            onTechnical={() => navigate(`/monitor/fleet/${selected.code}/technical`)}
           />
         ) : (
           <>
             <header className="flex items-center gap-3 px-4 pt-5">
-              <h1 className="text-xl font-book">Fleet</h1>
-              <span className="text-sm text-muted">{totalForHeader} robots</span>
-              <Button variant="primary" size="sm" className="ml-auto" onClick={openRegister}>
-                <Icon name="plus" size={14} /> Register Robot
-              </Button>
+              <h1 className="text-xl font-book">{t('Fleet')}</h1>
+              <span className="text-sm text-muted">{totalForHeader} {t('robots')}</span>
+              <Can permission={PERMISSIONS.robotManage}>
+                <Button variant="primary" size="sm" className="ml-auto" onClick={openRegister}>
+                  <Icon name="plus" size={14} /> {t('Register Robot')}</Button>
+              </Can>
             </header>
 
+            {robotNotFound ? (
+              <p role="status" className="mx-4 mt-3 rounded-md bg-amber-soft px-3 py-2 text-xs text-amber-ink">{t('That robot was not found. It may have been removed, or you may not have access to it.')}</p>
+            ) : null}
+
             <div className="px-4 pt-3">
-              <SearchInput tone="surface" placeholder="Filter robots" value={query} onChange={setQuery} className="w-full" />
+              <SearchInput tone="surface" placeholder={t('Filter robots')} value={query} onChange={setQuery} className="w-full" />
             </div>
 
-            <div className="flex items-center gap-1 px-4 py-3" role="group" aria-label="Filter by status">
+            <div className="flex items-center gap-1 px-4 py-3" role="group" aria-label={t('Filter by status')}>
               <div
                 ref={statusRailRef}
                 className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
-                <button type="button" className={chipClass(statusFilter === null)} onClick={() => setStatusFilter(null)}>
-                  All <span className="opacity-60">{countsQuery.data?.total ?? 0}</span>
+                <button type="button" className={chipClass(statusFilter === null)} onClick={() => setStatusFilter(null)}>{t('All')}{' '}<span className="opacity-60">{countsQuery.data?.total ?? 0}</span>
                 </button>
                 {ROBOT_STATUS_ORDER.map((status) => (
                   <button
@@ -172,21 +218,21 @@ export function FleetPage() {
                   </button>
                 ))}
               </div>
-              <IconButton tone="surface" size="sm" aria-label="Scroll statuses left" onClick={() => scrollStatuses(-1)}>
+              <IconButton tone="surface" size="sm" aria-label={t('Scroll statuses left')} onClick={() => scrollStatuses(-1)}>
                 <Icon name="chevronRight" size={14} className="rotate-180" />
               </IconButton>
-              <IconButton tone="surface" size="sm" aria-label="Scroll statuses right" onClick={() => scrollStatuses(1)}>
+              <IconButton tone="surface" size="sm" aria-label={t('Scroll statuses right')} onClick={() => scrollStatuses(1)}>
                 <Icon name="chevronRight" size={14} />
               </IconButton>
             </div>
 
             <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-4 pt-1 pb-2">
               {isLoading ? (
-                <li className="px-3 py-10 text-center text-sm text-muted">Loading robots…</li>
+                <li className="px-3 py-10 text-center text-sm text-muted">{t('Loading robots…')}</li>
               ) : null}
               {error ? (
                 <li className="px-3 py-10 text-center text-sm text-red-ink">
-                  {(error as Error).message || 'Failed to load robots.'}
+                  {(error as Error).message || t('Failed to load robots.')}
                 </li>
               ) : null}
               {!isLoading && !error
@@ -206,13 +252,16 @@ export function FleetPage() {
                           <span className="block truncate text-xs text-muted">
                             {robot.name}
                             {' · '}
-                            {robot.isOnline ? 'Online' : 'Offline'}
-                            {!robot.isEnabled ? ' · Disabled' : ''}
+                            {robot.isOnline ? t('Online') : t('Offline')}
+                            {!robot.isEnabled ? t(' · Disabled') : ''}
                           </span>
                         </span>
-                        <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
-                          {robot.status}
-                        </StatusBadge>
+                        <span className="flex flex-col items-end gap-1">
+                          <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
+                            {robot.status}
+                          </StatusBadge>
+                          <BatteryLevel percent={robot.batteryPercent} size="sm" />
+                        </span>
                         {robot.activity ? (
                           <>
                             <Meter percent={robot.activity.progressPercent} tone={ROBOT_STATUS_TONE[robot.status]} />
@@ -229,22 +278,23 @@ export function FleetPage() {
                 <li className="flex flex-col items-center justify-center gap-4 px-4 py-12 text-center">
                   <Icon name="radio" size={28} className="text-muted" />
                   <div>
-                    <p className="text-sm font-medium text-ink">There are currently no robots.</p>
+                    <p className="text-sm font-medium text-ink">{t('There are currently no robots.')}</p>
                     <p className="mt-1 text-xs text-muted">
                       {query || statusFilter
-                        ? 'Try a different code or status filter.'
-                        : 'Add a robot to start monitoring the fleet.'}
+                        ? t('Try a different code or status filter.')
+                        : t('Add a robot to start monitoring the fleet.')}
                     </p>
                   </div>
-                  <Button type="button" variant="primary" size="sm" onClick={openRegister}>
-                    <Icon name="plus" size={14} /> Register Robot
-                  </Button>
+                  <Can permission={PERMISSIONS.robotManage}>
+                    <Button type="button" variant="primary" size="sm" onClick={openRegister}>
+                      <Icon name="plus" size={14} /> {t('Register Robot')}</Button>
+                  </Can>
                 </li>
               ) : null}
             </ul>
 
             <footer className="flex items-center justify-between px-4 py-3 text-xs text-muted">
-              <span>{robots.length} shown</span>
+              <span>{robots.length} {t('shown')}</span>
             </footer>
           </>
         )}
@@ -275,13 +325,11 @@ export function FleetPage() {
           activeMapId={monitorMap.activeMapId}
         />
         {monitorMap.isLoading ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-5 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-float">
-            Loading map…
-          </div>
+          <div className="pointer-events-none absolute bottom-3 left-3 z-5 rounded-full bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-float">{t('Loading map…')}</div>
         ) : null}
         {monitorMap.error ? (
           <div className="pointer-events-none absolute bottom-3 left-3 z-5 max-w-sm rounded-md bg-surface/95 px-3 py-2 text-xs text-red-ink shadow-float">
-            {monitorMap.error.message || 'Failed to load map version.'}
+            {monitorMap.error.message || t('Failed to load map version.')}
           </div>
         ) : null}
       </div>

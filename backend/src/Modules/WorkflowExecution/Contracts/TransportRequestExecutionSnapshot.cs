@@ -12,4 +12,6 @@ public sealed record TransportRequestExecutionSnapshot(
     Guid WorkflowId,
     int PlanSchemaVersion,
     IReadOnlyDictionary<string, JsonElement> WorkflowInputs,
-    IReadOnlyList<TransportRequestDetailSnapshot> Details);
+    IReadOnlyList<TransportRequestDetailSnapshot> Details,
+    int Priority = 0,
+    DateTimeOffset? DeadlineAt = null);

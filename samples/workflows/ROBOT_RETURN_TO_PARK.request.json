@@ -1,0 +1,97 @@
+{
+  "code": "ROBOT_RETURN_TO_PARK",
+  "name": "Robot return to parking",
+  "description": "An idle, empty robot drives to a parking place. Carries nothing, so it has no transport request.",
+  "variables": [
+    {
+      "key": "parkEndpointId",
+      "name": "Parking place",
+      "dataType": "UUID",
+      "source": "STAFF_INPUT",
+      "isRequired": true,
+      "description": "Chosen when the Job is made.",
+      "sequenceNo": 0
+    },
+    {
+      "key": "assignedRobotId",
+      "name": "Assigned robot",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "description": "Resolved at runtime from the job assignment.",
+      "sequenceNo": 1
+    }
+  ],
+  "tasks": [
+    {
+      "taskKey": "PARK",
+      "name": "Go to parking",
+      "sequenceNo": 1,
+      "steps": [
+        {
+          "stepKey": "CHECK_READY",
+          "name": "Check robot is ready",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "ROBOT_READY",
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            }
+          }
+        },
+        {
+          "stepKey": "CHECK_EMPTY",
+          "name": "Check nothing is on board",
+          "stepType": "CHECK",
+          "sequenceNo": 2,
+          "operationCode": "LOAD_STATE",
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "expectedLoadState": {
+              "sourceType": "CONSTANT",
+              "constantValue": "EMPTY"
+            }
+          }
+        },
+        {
+          "stepKey": "MOVE_PARK",
+          "name": "Drive to parking",
+          "stepType": "MOVE",
+          "sequenceNo": 3,
+          "operationCode": "PARK",
+          "timeoutSeconds": 600,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "parkEndpointId"
+            },
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "PARK"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

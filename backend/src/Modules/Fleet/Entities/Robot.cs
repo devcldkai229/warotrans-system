@@ -75,6 +75,12 @@ public sealed class Robot
         Capabilities is { } list && list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Contains(capability, StringComparer.Ordinal);
 
+    /// <summary>FL-03: what this robot may carry and its size. Null means nobody declared it, not "no limit".</summary>
+    public decimal? MaxPayloadKg { get; set; }
+    public int? MaxContainers { get; set; }
+    public double? LengthM { get; set; }
+    public double? WidthM { get; set; }
+
     public Guid? LastTelemetryBootId { get; set; }
     public long? LastTelemetrySequence { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

@@ -14,10 +14,6 @@ public sealed record ReconcileTrafficRobotRequest(
     bool LocalizationOk,
     IReadOnlyList<int>? OccupiedEdgeIds = null);
 
-public sealed record ReleaseAfterClearanceRequest(
-    string OperatorId,
-    IReadOnlyList<string>? ResourceIds = null);
-
 public static class Endpoint
 {
     public static RouteGroupBuilder MapTrafficOperatorEndpoints(this RouteGroupBuilder group)
@@ -44,17 +40,11 @@ public static class Endpoint
         group.MapPost("/traffic/robots/{robotId:guid}/release-after-clearance", async (
                 Guid robotId,
                 ReleaseAfterClearanceRequest body,
-                ISegmentedTrafficCoordinator coordinator,
+                ReleaseAfterClearanceHandler handler,
                 CancellationToken ct) =>
-            {
-                var resources = body.ResourceIds?.ToImmutableArray();
-                var result = await coordinator.ReleaseAfterPhysicalClearanceAsync(
-                    robotId, body.OperatorId, resources, ct).ConfigureAwait(false);
-                return result.Ok ? Results.Ok(result) : Results.Conflict(result);
-            })
+                Results.Ok(await handler.HandleAsync(robotId, body, ct).ConfigureAwait(false)))
             .RequirePermission(Permissions.TrafficManage)
             .RequireRobotScope("robotId")
-            .Audited("traffic.released_after_clearance", "ROBOT", "robotId")
             .WithName("ReleaseTrafficAfterClearance")
             .WithTags("Traffic");
 

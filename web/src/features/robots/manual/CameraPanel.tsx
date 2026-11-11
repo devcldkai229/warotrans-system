@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { robotCameraStreamUrl } from '@/shared/api/fleet'
 import { cx } from '@/shared/lib/cx'
 import { Icon, type IconName } from '@/shared/ui/Icon'
-
+import { t } from '@/shared/i18n'
 const WIDTH_KEY = 'warotrans.manual.camera-width'
+
 const MIN_WIDTH = 240
 const DEFAULT_WIDTH = 320
 
@@ -82,8 +83,7 @@ export function CameraPanel({ robotId }: { robotId: string }) {
           retry()
         }}
       >
-        <Icon name="play" size={13} /> Camera
-      </button>
+        <Icon name="play" size={13} />{' '}{t('Camera')}</button>
     )
   }
 
@@ -97,17 +97,15 @@ export function CameraPanel({ robotId }: { robotId: string }) {
       {failed ? (
         <div className="absolute inset-0 grid place-items-center text-center text-xs text-surface/80">
           <div>
-            <p>Camera not available.</p>
-            <button type="button" className="mt-2 rounded-full bg-surface/15 px-3 py-1 hover:bg-surface/25" onClick={retry}>
-              Try again
-            </button>
+            <p>{t('Camera not available.')}</p>
+            <button type="button" className="mt-2 rounded-full bg-surface/15 px-3 py-1 hover:bg-surface/25" onClick={retry}>{t('Try again')}</button>
           </div>
         </div>
       ) : (
         <img
           key={nonce}
           src={robotCameraStreamUrl(robotId, nonce)}
-          alt="Robot camera"
+          alt={t('Robot camera')}
           draggable={false}
           className="absolute inset-0 size-full object-contain select-none"
           onLoad={() => setLoaded(true)}
@@ -118,17 +116,15 @@ export function CameraPanel({ robotId }: { robotId: string }) {
       {/* Overlay bar: status and controls, readable over any picture */}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-ink/70 to-transparent px-2 py-1.5 text-xs text-surface">
         <span className={cx('flex items-center gap-1.5', !fullscreen && 'pl-4')}>
-          <span className={cx('size-2 rounded-full', failed ? 'bg-red' : loaded ? 'bg-green' : 'bg-amber')} />
-          Camera · {status}
-        </span>
+          <span className={cx('size-2 rounded-full', failed ? 'bg-red' : loaded ? 'bg-green' : 'bg-amber')} />{t('Camera · {status}', { status })}</span>
         <span className="flex items-center gap-0.5">
-          <OverlayButton icon="refresh" label="Reconnect camera" onClick={retry} />
+          <OverlayButton icon="refresh" label={t('Reconnect camera')} onClick={retry} />
           <OverlayButton
             icon={fullscreen ? 'close' : 'fit'}
-            label={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'}
+            label={fullscreen ? t('Exit full screen (Esc)') : t('Full screen')}
             onClick={() => setFullscreen(!fullscreen)}
           />
-          {!fullscreen ? <OverlayButton icon="minus" label="Hide camera" onClick={() => setHidden(true)} /> : null}
+          {!fullscreen ? <OverlayButton icon="minus" label={t('Hide camera')} onClick={() => setHidden(true)} /> : null}
         </span>
       </div>
 
@@ -136,8 +132,8 @@ export function CameraPanel({ robotId }: { robotId: string }) {
       {!fullscreen ? (
         <div
           role="separator"
-          aria-label="Resize camera"
-          title="Drag to resize"
+          aria-label={t('Resize camera')}
+          title={t('Drag to resize')}
           className="absolute top-0 left-0 size-5 cursor-nwse-resize touch-none"
           onPointerDown={startResize}
           onPointerMove={resize}

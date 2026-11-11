@@ -1,8 +1,9 @@
 import type { CSSProperties } from 'react'
 import type { EdgeDirection, EndpointType, Point, RobotStatus, ZoneType } from '@/shared/api/contracts'
 import { DEFAULT_MAP_BOUNDS, type MapBounds } from '@/shared/lib/mapView'
-
+import { t } from '@/shared/i18n'
 // Map paint. The map is drawn in metres inside an SVG, so its colours are SVG attributes rather than utility classes;
+
 // the values follow the tokens in index.css.
 // The neutrals follow the theme (they are CSS variables, which SVG attributes accept), so the map is light or dark
 // with the rest of the console. Only the saturated status colours below are fixed.
@@ -22,11 +23,11 @@ export const MAP_HALO = 'var(--color-container)'
 export const MAP_IMAGE_FILTER = 'var(--map-image-filter)'
 
 export const ZONE_LABEL: Record<ZoneType, string> = {
-  KEEP_OUT: 'Keep-out',
-  SPEED: 'Speed zone',
-  NO_STOP: 'No-stop',
-  SINGLE_OCCUPANCY: 'Single-occupancy',
-  JUNCTION: 'Junction',
+  KEEP_OUT: t('Keep-out'),
+  SPEED: t('Speed zone'),
+  NO_STOP: t('No-stop'),
+  SINGLE_OCCUPANCY: t('Single-occupancy'),
+  JUNCTION: t('Junction'),
 }
 
 // Lane network blue (edges / legacy JUNCTION). Zone palette is independent.
@@ -69,9 +70,9 @@ export const ENDPOINT_COLOR: Record<EndpointType, string> = {
 }
 
 export const ENDPOINT_NAME: Record<EndpointType, string> = {
-  WAYPOINT: 'Waypoint',
-  CHARGER: 'Charger',
-  PARK: 'Park',
+  WAYPOINT: t('Waypoint'),
+  CHARGER: t('Charger'),
+  PARK: t('Park'),
 }
 
 export const ROBOT_COLOR: Record<RobotStatus, string> = {

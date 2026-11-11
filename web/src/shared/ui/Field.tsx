@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { cx } from '@/shared/lib/cx'
 import { Icon } from './Icon'
-
+import { t } from '@/shared/i18n'
 interface FieldProps {
+
   label: string
   hint?: string
   className?: string
@@ -83,7 +84,7 @@ export function SearchInput({
         )}
         style={{ border: 'none', padding: 0, margin: 0, minWidth: 0, height: 'auto' }}
         placeholder={placeholder}
-        aria-label={placeholder ?? 'Search'}
+        aria-label={placeholder ?? t('Search')}
         value={value}
         autoFocus={autoFocus}
         onChange={(event) => onChange(event.target.value)}

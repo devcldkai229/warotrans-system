@@ -1,8 +1,9 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { mayUseConsole } from '@/shared/auth/permissions'
 import { useAuth } from './authContext'
-
+import { t } from '@/shared/i18n'
 /**
+
  * Route guard. UX only: the backend enforces permissions on every request.
  * The web console is for Admins and Technicians (console.access); Staff accounts use the mobile app.
  * A temporary password must be changed before anything else opens.
@@ -14,9 +15,7 @@ export function RequireAuth() {
   // Wait for the session restore before deciding, otherwise a reload would always bounce through /login.
   if (status === 'loading') {
     return (
-      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">
-        Restoring session…
-      </div>
+      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">{t('Restoring session…')}</div>
     )
   }
 

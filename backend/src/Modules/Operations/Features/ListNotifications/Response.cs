@@ -1,6 +1,8 @@
 namespace WaroTrans.Operations.Features.ListNotifications;
 
-public sealed record ListNotificationsResponse(int UnreadCount, IReadOnlyList<NotificationDto> Items);
+/// <param name="UnreadCount">Every unread notification of the caller, whatever the filters.</param>
+/// <param name="Total">How many notifications match the filters (`unreadOnly`, `type`, `kind`), for paging.</param>
+public sealed record ListNotificationsResponse(int UnreadCount, IReadOnlyList<NotificationDto> Items, int Total = 0);
 
 public sealed record NotificationDto(
     Guid Id,

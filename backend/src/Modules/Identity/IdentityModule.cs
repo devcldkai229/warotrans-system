@@ -15,6 +15,7 @@ using WaroTrans.Identity.Features.GetAccount;
 using WaroTrans.Identity.Features.GetCurrentAccount;
 using WaroTrans.Identity.Features.GetMyCapabilities;
 using WaroTrans.Identity.Features.ListAccounts;
+using WaroTrans.Identity.Features.ListRoles;
 using WaroTrans.Identity.Features.Login;
 using WaroTrans.Identity.Features.Logout;
 using WaroTrans.Identity.Features.RefreshSession;
@@ -56,6 +57,7 @@ public static class IdentityModule
         services.AddScoped<IValidator<SetAccountRobotScopeRequest>, SetAccountRobotScopeValidator>();
         services.AddScoped<AccountRobotScopeHandler>();
         services.AddScoped<IRobotAccessScope, RobotAccessScope>();
+        services.AddScoped<WaroTrans.BuildingBlocks.Abstractions.IAccountNameLookup, AccountNameLookup>();
 
         return services;
     }
@@ -72,6 +74,7 @@ public static class IdentityModule
         group.MapGetMyCapabilities();
         group.MapChangeOwnPassword();
         group.MapListAccounts();
+        group.MapListRoles();
         group.MapGetAccount();
         group.MapCreateAccount();
         group.MapUpdateAccount();

@@ -29,6 +29,13 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<EndpointPoseWithType>> GetEndpointsOnMapAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        await dbContext.Endpoints
+            .AsNoTracking()
+            .Where(e => e.MapVersionId == mapVersionId)
+            .Select(e => new EndpointPoseWithType(e.Id, e.Code, e.Name, e.EndpointType, e.IsEnabled, e.X, e.Y, e.PositionTolerance))
+            .ToListAsync(cancellationToken);
+
     public Task<EndpointPoseSnapshot?> GetEndpointPoseByCodeAsync(
         Guid mapVersionId, string code, CancellationToken cancellationToken = default) =>
         dbContext.Endpoints

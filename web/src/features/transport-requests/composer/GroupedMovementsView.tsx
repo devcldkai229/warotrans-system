@@ -1,7 +1,8 @@
 import { containerById, shortPlace } from './labels'
 import type { ComposerData, MovementDraft } from './types'
-
+import { t } from '@/shared/i18n'
 interface GroupedMovementsViewProps {
+
   data: ComposerData
   movements: MovementDraft[]
 }
@@ -17,7 +18,7 @@ export function GroupedMovementsView({ data, movements }: GroupedMovementsViewPr
   }
 
   if (movements.length === 0) {
-    return <p className="px-1 text-xs text-muted">No movements yet.</p>
+    return <p className="px-1 text-xs text-muted">{t('No movements yet.')}</p>
   }
 
   return (
@@ -33,12 +34,9 @@ export function GroupedMovementsView({ data, movements }: GroupedMovementsViewPr
         return (
           <section key={sourceKey} className="rounded-md bg-surface p-3">
             <header className="mb-2 flex items-baseline justify-between gap-2">
-              <h3 className="text-xs font-medium">
-                SOURCE <span className="font-mono">{sourceLabel}</span>
+              <h3 className="text-xs font-medium">{t('SOURCE')}{' '}<span className="font-mono">{sourceLabel}</span>
               </h3>
-              <span className="text-[11px] text-muted">
-                {items.length} container{items.length === 1 ? '' : 's'}
-              </span>
+              <span className="text-[11px] text-muted">{t('{length} container{value}', { length: items.length, value: items.length === 1 ? '' : 's' })}</span>
             </header>
             <ul className="space-y-1.5">
               {items.map((movement) => {

@@ -50,8 +50,13 @@ export function Td({ children, align = 'left', tone = 'default', colSpan, classN
   )
 }
 
-export function Tr({ children, className }: { children: ReactNode; className?: string }) {
-  return <tr className={cx('group/row transition-colors duration-200 hover:bg-container', className)}>{children}</tr>
+/** `onClick` makes the whole row a target (the cells keep their own links for keyboard and middle-click use). */
+export function Tr({ children, className, onClick }: { children: ReactNode; className?: string; onClick?: () => void }) {
+  return (
+    <tr className={cx('group/row transition-colors duration-200 hover:bg-container', onClick && 'cursor-pointer', className)} onClick={onClick}>
+      {children}
+    </tr>
+  )
 }
 
 export function EmptyRow({ colSpan, children }: { colSpan: number; children: ReactNode }) {

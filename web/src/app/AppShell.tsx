@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { cx } from '@/shared/lib/cx'
+import { IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { initialsOf, roleLabel, useAuth } from '@/features/auth/authContext'
 import { PERMISSIONS, type Permission } from '@/shared/auth/permissions'
 import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { useTheme } from '@/shared/theme/theme'
 import { Wordmark } from './Wordmark'
+import { t } from '@/shared/i18n'
+import { LanguageSwitcher } from '@/shared/i18n/LanguageSwitcher'
 
 interface NavItem {
   label: string
@@ -25,30 +28,33 @@ interface NavGroup {
 
 const NAV: NavGroup[] = [
   {
-    label: 'Monitor',
+    label: t('Monitor'),
     to: '/monitor',
     items: [
-      { label: 'Fleet', to: '/monitor/fleet', requires: PERMISSIONS.robotRead },
-      { label: 'Transport requests', to: '/monitor/requests', requires: PERMISSIONS.transportRead },
+      { label: t('Fleet'), to: '/monitor/fleet', requires: PERMISSIONS.robotRead },
+      { label: t('Transport requests'), to: '/monitor/requests', requires: PERMISSIONS.transportRead },
+      { label: t('Schedules'), to: '/monitor/schedules', requires: PERMISSIONS.transportRead },
+      { label: t('Jobs'), to: '/monitor/jobs', requires: PERMISSIONS.jobRead },
     ],
   },
   {
-    label: 'Configure',
+    label: t('Configure'),
     to: '/configure',
     items: [
-      { label: 'Facility', to: '/configure/facility', requires: PERMISSIONS.mapRead },
-      { label: 'Workflows', to: '/configure/workflows', requires: PERMISSIONS.workflowRead },
+      { label: t('Facility'), to: '/configure/facility', requires: PERMISSIONS.mapRead },
+      { label: t('Workflows'), to: '/configure/workflows', requires: PERMISSIONS.workflowRead },
     ],
   },
   {
-    label: 'Operations',
+    label: t('Operations'),
     to: '/operations',
     items: [
-      { label: 'Issues', to: '/operations/issues', requires: PERMISSIONS.issueRead },
-      { label: 'Audit log', to: '/operations/audit', requires: PERMISSIONS.auditRead },
+      { label: t('Issues'), to: '/operations/issues', requires: PERMISSIONS.issueRead },
+      { label: t('Notifications'), to: '/operations/notifications', requires: PERMISSIONS.notificationRead },
+      { label: t('Audit log'), to: '/operations/audit', requires: PERMISSIONS.auditRead },
     ],
   },
-  { label: 'Statistics', to: '/dashboard', requires: PERMISSIONS.statisticsRead },
+  { label: t('Statistics'), to: '/dashboard', requires: PERMISSIONS.statisticsRead },
 ]
 
 const MENU_ITEM = 'flex h-9 w-full items-center rounded-sm px-3 text-left text-sm transition-colors duration-200 hover:bg-container-high'
@@ -71,11 +77,11 @@ export function AppShell() {
   return (
     <div className="flex h-svh min-w-[1100px] flex-col bg-surface">
       <header className="relative z-50 flex h-14 flex-none items-center gap-8 border-b border-outline-soft px-6">
-        <Link to="/monitor/fleet" aria-label="WaroTrans home">
+        <Link to="/monitor/fleet" aria-label={t('WaroTrans home')}>
           <Wordmark />
         </Link>
 
-        <nav className="flex items-center gap-1" aria-label="Main">
+        <nav className="flex items-center gap-1" aria-label={t('Main')}>
           {nav.map((group) => {
             const active = pathname.startsWith(group.to)
             return (
@@ -112,6 +118,14 @@ export function AppShell() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          <LanguageSwitcher compact />
+          <IconButton
+            aria-label={theme === 'dark' ? t('Switch to light mode') : t('Switch to dark mode')}
+            title={theme === 'dark' ? t('Switch to light mode') : t('Switch to dark mode')}
+            onClick={toggleTheme}
+          >
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
+          </IconButton>
           {can(PERMISSIONS.notificationRead) ? <NotificationBell /> : null}
 
           <div className="relative">
@@ -139,20 +153,10 @@ export function AppShell() {
                     </p>
                   </div>
                   {mayManage ? (
-                    <Link to="/management" role="menuitem" className={MENU_ITEM} onClick={() => setUserMenuOpen(false)}>
-                      Management
-                    </Link>
+                    <Link to="/management" role="menuitem" className={MENU_ITEM} onClick={() => setUserMenuOpen(false)}>{t('Management')}</Link>
                   ) : null}
-                  <Link to="/change-password" role="menuitem" className={MENU_ITEM} onClick={() => setUserMenuOpen(false)}>
-                    Change password
-                  </Link>
-                  <button type="button" role="menuitem" className={cx(MENU_ITEM, 'gap-2.5')} onClick={toggleTheme}>
-                    <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} className="text-ink-2" />
-                    {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-                  </button>
-                  <button type="button" role="menuitem" className={cx(MENU_ITEM, 'text-red-ink')} onClick={signOut}>
-                    Sign out
-                  </button>
+                  <Link to="/change-password" role="menuitem" className={MENU_ITEM} onClick={() => setUserMenuOpen(false)}>{t('Change password')}</Link>
+                  <button type="button" role="menuitem" className={cx(MENU_ITEM, 'text-red-ink')} onClick={signOut}>{t('Sign out')}</button>
                 </div>
               </>
             ) : null}

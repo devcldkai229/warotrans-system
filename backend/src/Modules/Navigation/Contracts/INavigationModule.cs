@@ -13,6 +13,10 @@ public interface INavigationModule
         IReadOnlyCollection<Guid> endpointIds,
         CancellationToken cancellationToken = default);
 
+    /// <summary>FL-08: every endpoint of a map version. Default: none (test doubles).</summary>
+    Task<IReadOnlyList<EndpointPoseWithType>> GetEndpointsOnMapAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<EndpointPoseWithType>>([]);
+
     /// <summary>Map-frame pose of the endpoint with this code on a map version, or null when there is none.</summary>
     Task<EndpointPoseSnapshot?> GetEndpointPoseByCodeAsync(
         Guid mapVersionId,
@@ -32,6 +36,8 @@ public sealed record EndpointPoseSnapshot(
     double Yaw,
     bool IsEnabled,
     double PositionTolerance = 0.25);
+
+public sealed record EndpointPoseWithType(Guid Id, string Code, string Name, EndpointType EndpointType, bool IsEnabled, double X, double Y, double PositionTolerance);
 
 public sealed record MapVersionSnapshot(Guid Id, Guid WarehouseId, int VersionNo, MapStatus Status);
 

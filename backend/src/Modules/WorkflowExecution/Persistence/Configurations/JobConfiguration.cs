@@ -17,6 +17,7 @@ public sealed class JobConfiguration : IEntityTypeConfiguration<Job>
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.FailureCode).HasMaxLength(50);
         builder.Property(x => x.FailureMessage).HasMaxLength(500);
+        builder.Property(x => x.BlockingReason).HasMaxLength(500);
 
         builder.Property(x => x.ContextValues)
             .HasColumnType("jsonb")

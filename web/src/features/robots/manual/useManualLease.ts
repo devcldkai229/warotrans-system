@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError } from '@/shared/api/client'
 import { acquireManualLease, releaseManualLease, type ManualLease } from '@/shared/api/fleet'
-
+import { t } from '@/shared/i18n'
 const RENEW_MS = 10_000
 
 export interface ManualLeaseState {
@@ -33,7 +33,7 @@ export function useManualLease(robotId: string | null, active: boolean): ManualL
         .catch((failure: unknown) => {
           if (cancelled) return
           setLease(null)
-          setError(failure instanceof ApiError ? failure.message : 'The manual-drive lease could not be obtained.')
+          setError(failure instanceof ApiError ? failure.message : t('The manual-drive lease could not be obtained.'))
         })
 
     void acquire()

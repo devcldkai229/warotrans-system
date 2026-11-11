@@ -28,5 +28,7 @@ public static class TransportRequestSnapshotMapper
                     d.DestinationStorageLocationId,
                     d.DestinationEndpointId,
                     d.DestinationLevelNo))
-                .ToList());
+                .ToList(),
+            request.Priority,
+            request.DeadlineAt);
 }

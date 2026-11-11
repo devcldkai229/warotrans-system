@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
@@ -10,8 +12,9 @@ import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 import { AddButton, SectionHead, SectionNote } from './SectionHead'
-
+import { t } from '@/shared/i18n'
 interface WarehouseDraft {
+
   code: string
   name: string
   timezone: string
@@ -48,7 +51,7 @@ export function WarehousesSection() {
       await queryClient.invalidateQueries({ queryKey: ['warehouses'] })
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Create failed')
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('Create failed'))
     },
   })
 
@@ -62,7 +65,7 @@ export function WarehousesSection() {
     const code = draft.code.trim().toUpperCase()
     const name = draft.name.trim()
     if (!code || !name) {
-      setError('Code and name are required.')
+      setError(t('Code and name are required.'))
       return
     }
     createMutation.mutate({
@@ -77,32 +80,34 @@ export function WarehousesSection() {
   return (
     <>
       <SectionHead
-        title="Warehouses"
-        hint="Sites that own maps, robots, and transport requests. Create one before importing maps on Facility."
+        title={t('Warehouses')}
+        hint={t('Sites that own maps, robots, and transport requests. Create one before importing maps on Facility.')}
       >
-        <AddButton onClick={open}>Add warehouse</AddButton>
+        <Can permission={PERMISSIONS.warehouseWrite}>
+          <AddButton onClick={open}>{t('Add warehouse')}</AddButton>
+        </Can>
       </SectionHead>
 
-      {warehousesQuery.isLoading ? <p className="text-sm text-muted">Loading warehouses…</p> : null}
+      {warehousesQuery.isLoading ? <p className="text-sm text-muted">{t('Loading warehouses…')}</p> : null}
       {warehousesQuery.error ? (
         <p className="text-sm text-red-ink">
-          {(warehousesQuery.error as Error).message || 'Failed to load warehouses.'}
+          {(warehousesQuery.error as Error).message || t('Failed to load warehouses.')}
         </p>
       ) : null}
 
       <Table>
         <thead>
           <tr>
-            <Th>Code</Th>
-            <Th>Name</Th>
-            <Th>Timezone</Th>
-            <Th>Status</Th>
-            <Th>Created</Th>
+            <Th>{t('Code')}</Th>
+            <Th>{t('Name')}</Th>
+            <Th>{t('Timezone')}</Th>
+            <Th>{t('Status')}</Th>
+            <Th>{t('Created')}</Th>
           </tr>
         </thead>
         <tbody>
           {!warehousesQuery.isLoading && items.length === 0 ? (
-            <EmptyRow colSpan={5}>No warehouses yet. Create one to unlock Facility maps.</EmptyRow>
+            <EmptyRow colSpan={5}>{t('No warehouses yet. Create one to unlock Facility maps.')}</EmptyRow>
           ) : null}
           {items.map((warehouse) => (
             <Tr key={warehouse.id}>
@@ -113,7 +118,7 @@ export function WarehousesSection() {
               <Td tone="faint">{warehouse.timezone ?? '—'}</Td>
               <Td>
                 <StatusBadge tone={warehouse.isActive ? 'green' : 'grey'} withDot>
-                  {warehouse.isActive ? 'Active' : 'Inactive'}
+                  {warehouse.isActive ? t('Active') : t('Inactive')}
                 </StatusBadge>
               </Td>
               <Td className="tabular-nums">{formatDateTime(warehouse.createdAt)}</Td>
@@ -122,65 +127,59 @@ export function WarehousesSection() {
         </tbody>
       </Table>
 
-      <SectionNote>
-        After creating an active warehouse, open{' '}
-        <Link className="underline hover:text-ink" to="/configure/facility">
-          Facility
-        </Link>{' '}
-        to import or create a map version.
-      </SectionNote>
+      <SectionNote>{t('After creating an active warehouse, open{value}', { value: ' ' })}<Link className="underline hover:text-ink" to="/configure/facility">{t('Facility')}</Link>{' '}{t('to import or create a map version.')}</SectionNote>
 
       {draft ? (
         <Dialog
-          title="Add warehouse"
-          submitLabel={createMutation.isPending ? 'Creating…' : 'Create warehouse'}
+          title={t('Add warehouse')}
+          submitLabel={createMutation.isPending ? t('Creating…') : t('Create warehouse')}
           onClose={() => {
             if (!createMutation.isPending) setDraft(null)
           }}
           onSubmit={save}
         >
           <FieldRow>
-            <Field label="Code">
+            <Field label={t('Code')}>
               <input
                 className={controlClass()}
                 value={draft.code}
-                placeholder="WH01"
+                placeholder={t('WH01')}
                 onChange={(e) => setDraft({ ...draft, code: e.target.value })}
               />
             </Field>
-            <Field label="Name">
+            <Field label={t('Name')}>
               <input
                 className={controlClass()}
                 value={draft.name}
-                placeholder="Main warehouse"
+                placeholder={t('Main warehouse')}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
             </Field>
           </FieldRow>
           <FieldRow>
-            <Field label="Timezone">
+            <Field label={t('Timezone')}>
               <input
                 className={controlClass()}
                 value={draft.timezone}
                 onChange={(e) => setDraft({ ...draft, timezone: e.target.value })}
               />
             </Field>
-            <Field label="Status">
+            <Field label={t('Status')}>
               <select
                 className={controlClass()}
                 value={draft.isActive ? 'active' : 'inactive'}
                 onChange={(e) => setDraft({ ...draft, isActive: e.target.value === 'active' })}
               >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">{t('Active')}</option>
+                <option value="inactive">{t('Inactive')}</option>
               </select>
             </Field>
           </FieldRow>
-          <Field label="Address (optional)">
+          <Field label={t('Address (optional)')}>
             <input
               className={controlClass()}
               value={draft.address}
-              placeholder="Optional street address"
+              placeholder={t('Optional street address')}
               onChange={(e) => setDraft({ ...draft, address: e.target.value })}
             />
           </Field>

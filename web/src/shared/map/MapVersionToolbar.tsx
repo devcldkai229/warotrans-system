@@ -1,8 +1,9 @@
 import { cx } from '@/shared/lib/cx'
 import type { MapVersionDto } from '@/shared/api/navigation'
 import { controlClass } from '@/shared/ui/controlClass'
-
+import { t } from '@/shared/i18n'
 interface MapVersionToolbarProps {
+
   warehouses: { id: string; code: string; name: string }[]
   warehouseId: string
   onWarehouseChange: (id: string) => void
@@ -36,14 +37,14 @@ export function MapVersionToolbar({
     >
       {showWarehouse ? (
         <label className="flex items-center gap-1.5">
-          <span className="text-muted">WH</span>
+          <span className="text-muted">{t('WH')}</span>
           <select
             className={cx(controlClass(), 'h-7 min-w-28 border-0 bg-transparent py-0 text-xs shadow-none')}
             value={warehouseId}
             onChange={(e) => onWarehouseChange(e.target.value)}
-            aria-label="Warehouse"
+            aria-label={t('Warehouse')}
           >
-            {warehouses.length === 0 ? <option value="">No warehouse</option> : null}
+            {warehouses.length === 0 ? <option value="">{t('No warehouse')}</option> : null}
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.code}
@@ -53,19 +54,19 @@ export function MapVersionToolbar({
         </label>
       ) : null}
       <label className="flex items-center gap-1.5">
-        <span className="text-muted">Map</span>
+        <span className="text-muted">{t('Map')}</span>
         <select
           className={cx(controlClass(), 'h-7 min-w-40 border-0 bg-transparent py-0 text-xs shadow-none')}
           value={mapVersionId}
           onChange={(e) => onMapVersionChange(e.target.value)}
-          aria-label="Map version"
+          aria-label={t('Map version')}
           disabled={maps.length === 0}
         >
-          {maps.length === 0 ? <option value="">No map versions</option> : null}
+          {maps.length === 0 ? <option value="">{t('No map versions')}</option> : null}
           {maps.map((m) => (
             <option key={m.id} value={m.id}>
               {m.code} · {m.status}
-              {activeMapId === m.id ? ' · Active' : ''}
+              {activeMapId === m.id ? t(' · Active') : ''}
               {` · v${m.versionNo}`}
             </option>
           ))}

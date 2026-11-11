@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   warehouseRead: 'warehouse.read',
   warehouseWrite: 'warehouse.write',
   containerCreate: 'container.create',
+  containerRecover: 'container.recover',
   voucherWrite: 'voucher.write',
   transportRead: 'tr.read',
   transportCreate: 'tr.create',
@@ -21,6 +22,7 @@ export const PERMISSIONS = {
   workflowWrite: 'workflow.write',
   jobRead: 'job.read',
   jobOperate: 'job.operate',
+  jobTakeover: 'job.takeover',
   jobPause: 'job.pause',
   jobCancel: 'job.cancel',
   robotRead: 'robot.read',
@@ -61,6 +63,11 @@ export function canActOnRobot(
 ): boolean {
   if (!capabilities || !hasPermission(capabilities, permission)) return false
   return capabilities.robotScope.allRobots || capabilities.robotScope.robotIds.includes(robotId)
+}
+
+/** True when `can` grants the one permission, or any one of a list (a screen several roles reach by different rights). */
+export function holdsPermission(can: (permission: Permission) => boolean, needs: Permission | Permission[]): boolean {
+  return Array.isArray(needs) ? needs.some(can) : can(needs)
 }
 
 /** The web console is for Admins and Technicians; Staff work in the mobile app. */

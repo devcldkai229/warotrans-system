@@ -148,12 +148,48 @@ export function getTrafficSnapshot() {
   return apiFetch<TrafficSnapshot>('/api/fleet/traffic/snapshot')
 }
 
-/** Operator clearance after physical verification — audited on backend. */
-export function releaseTrafficAfterClearance(robotId: string, operatorId: string, resourceIds?: string[]) {
+/**
+ * WEB-FLEET-06: frees every zone a robot holds, on the operator's word that they checked. The server refuses when the
+ * robot can report its pose, still holds a Job or is navigating. Audited with the reason.
+ */
+export function releaseTrafficAfterClearance(robotId: string, body: { robotCode: string; clearanceConfirmed: boolean; reason: string }) {
   return apiFetch(`/api/fleet/traffic/robots/${robotId}/release-after-clearance`, {
     method: 'POST',
-    body: JSON.stringify({ operatorId, resourceIds: resourceIds ?? null }),
+    body: JSON.stringify(body),
   })
+}
+
+/** FL-08: an idle, empty robot goes to the nearest free parking place. Returns the Job. */
+export function returnRobotToPark(robotId: string) {
+  return apiFetch<{ id: string }>(`/api/workflow-execution/robots/${robotId}/return-to-park`, { method: 'POST', body: JSON.stringify({}) })
+}
+
+/** FL-08: goes to a charger; a person connects it, there is no auto-dock. Returns the Job. */
+export function sendRobotToCharger(robotId: string) {
+  return apiFetch<{ id: string }>(`/api/workflow-execution/robots/${robotId}/go-to-charger`, { method: 'POST', body: JSON.stringify({}) })
+}
+
+/** FLT-02: what this robot can be asked now. An unsupported item must not be offered. */
+export interface RobotCommandCatalogItem {
+  code: 'STOP' | 'PAUSE' | 'RESUME' | 'MANUAL_DRIVE' | 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN' | 'LOCALIZE' | 'DOCK' | 'CHARGE'
+  supported: boolean
+  reason: string | null
+  permission: string
+  ackTimeoutSeconds: number | null
+  resultTimeoutSeconds: number | null
+  acknowledgement: 'ACK_AND_RESULT' | 'STATE_FROM_TELEMETRY' | 'LEASE' | 'NONE'
+}
+
+export function getRobotCommandCatalog(robotId: string) {
+  return apiFetch<{ items: RobotCommandCatalogItem[] }>(`/api/fleet/robots/${robotId}/commands/catalog`)
+}
+
+/** FL-03: what a robot may carry and its size. A field left null means not known. */
+export function setRobotCapacity(
+  robotId: string,
+  body: { maxPayloadKg: number | null; maxContainers: number | null; lengthM: number | null; widthM: number | null },
+) {
+  return apiFetch(`/api/fleet/robots/${robotId}/capacity`, { method: 'PUT', body: JSON.stringify(body) })
 }
 
 /** RB-03: REQUESTED → ACCEPTED → STOPPED_VERIFIED, or REJECTED / UNKNOWN. Never "stopped" without the robot saying so. */
@@ -174,6 +210,14 @@ export interface StopState {
 
 export function stopRobot(id: string, reason?: string, mode: 'STOP' | 'PAUSE' = 'STOP') {
   return apiFetch<StopState>(`/api/fleet/robots/${id}/commands/stop`, { method: 'POST', body: JSON.stringify({ mode, reason }) })
+}
+
+/** The robot sets its pose estimate to this endpoint of its map (where it was placed). Watch localizationStatus. */
+export function localizeRobot(id: string, endpointId: string) {
+  return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/commands/localize`, {
+    method: 'POST',
+    body: JSON.stringify({ endpointId }),
+  })
 }
 
 export function resumeRobot(id: string) {

@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.WorkflowExecution.Features.UpdateWorkflow;
@@ -21,7 +22,8 @@ public static class UpdateWorkflowEndpoint
             var response = await handler.HandleAsync(id, request, cancellationToken);
             return Results.Ok(response);
         })
-            .RequirePermission(Permissions.WorkflowWrite);
+            .RequirePermission(Permissions.WorkflowWrite)
+            .Audited("workflow.updated", "WORKFLOW", "id");
 
         return group;
     }

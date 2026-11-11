@@ -49,6 +49,7 @@ export type JobStepStatus =
   | 'COMPLETED'
   | 'FAILED'
   | 'CANCELLED'
+  | 'SKIPPED'
 
 export type JobContainerStatus = 'PENDING' | 'ASSIGNED' | 'ONBOARD' | 'DELIVERED' | 'FAILED' | 'CANCELLED'
 
@@ -102,7 +103,7 @@ export type AssignmentEndReason =
 
 export type RobotStateEventSource = 'SYSTEM' | 'HEARTBEAT' | 'DISPATCHER' | 'OPERATOR' | 'ROBOT'
 
-export type DispatchDecisionType = 'SELECTED' | 'NONE'
+export type DispatchDecisionType = 'SELECTED' | 'NONE' | 'REFUSED'
 
 export type StepType = 'CHECK' | 'MOVE' | 'HUMAN_INTERACTION' | 'WAIT'
 
@@ -247,6 +248,15 @@ export interface Robot {
   maintenanceSince?: string | null
   /** RB-09: system actions the robot announced. */
   capabilities?: string[]
+  /** HW-04: what the robot said about its battery estimate; null when it did not say. */
+  batteryVoltage?: number | null
+  batteryEstimationMode?: string | null
+  batteryConfidence?: string | null
+  /** FL-03: null = not declared. */
+  maxPayloadKg?: number | null
+  maxContainers?: number | null
+  lengthM?: number | null
+  widthM?: number | null
 }
 
 /** The Job a Robot is working on, joined from JobAssignment. TODO(backend): needs a fleet read endpoint. */
@@ -268,7 +278,6 @@ export interface RobotTelemetry {
   eStopReleased?: boolean
   zone?: { name: string; heldSeconds: number; heldByRobotCode?: string; queueAfter?: number }
   navigationState?: string
-  error?: { title: string; message: string }
 }
 
 export interface RobotView extends Robot {
@@ -328,6 +337,8 @@ export interface DispatchDecision {
   trigger: 'START' | 'RESUME'
   actorId: string | null
   overrideReason: string | null
+  /** Set when the named robot was refused (type REFUSED). */
+  refusalCode?: string | null
   createdAt: string
   candidates: DispatchCandidate[]
 }
@@ -602,7 +613,7 @@ export interface RequestStatistics {
 
 /* ------------------------------------------------------------ Notifications */
 
-/** One item of the admin notification bell (GET /api/operations/notifications). */
+/** One item of the notification inbox: the bell and the Notifications page (GET /api/operations/notifications). */
 export interface AdminNotification {
   id: string
   type: 'INFO' | 'WARNING' | 'ALERT' | 'ASSIGNMENT' | 'SYSTEM'
@@ -623,8 +634,11 @@ export interface AdminNotification {
 }
 
 export interface NotificationInbox {
+  /** Every unread notification of the caller, whatever the filters. */
   unreadCount: number
   items: AdminNotification[]
+  /** How many notifications match the filters, for paging (the page's "Load more"). */
+  total: number
 }
 
 /* ---------------------------------------------------------------- Warehouse */

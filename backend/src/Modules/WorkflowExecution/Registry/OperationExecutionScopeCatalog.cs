@@ -36,7 +36,8 @@ public static class OperationExecutionScopeCatalog
             (StepType.CHECK, nameof(CheckConditionCode.BATTERY_MIN)) => OncePerJob(),
             (StepType.CHECK, nameof(CheckConditionCode.REQUEST_ACTIVE)) => OncePerJob(),
             (StepType.CHECK, nameof(CheckConditionCode.LOAD_STATE)) => OncePerJob(),
-            (StepType.CHECK, nameof(CheckConditionCode.INVENTORY_AVAILABLE)) => OncePerJob(),
+            // Asks about one Container, so it runs once per Container at the pickup: its containerId binds to the movement.
+            (StepType.CHECK, nameof(CheckConditionCode.INVENTORY_AVAILABLE)) => PerContainer(JobStopAction.PICKUP),
             (StepType.CHECK, nameof(CheckConditionCode.ENDPOINT_AVAILABLE)) =>
                 new(ExecutionScope.ONCE_PER_STOP, StopActionFilter: null),
 

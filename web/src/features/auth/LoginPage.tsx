@@ -9,6 +9,8 @@ import { Icon } from '@/shared/ui/Icon'
 import { controlClass } from '@/shared/ui/controlClass'
 import { ConsoleAccessError, useAuth } from './authContext'
 import { DotField } from './DotField'
+import { t } from '@/shared/i18n'
+import { LanguageSwitcher } from '@/shared/i18n/LanguageSwitcher'
 
 const DEFAULT_ROUTE = '/monitor/fleet'
 
@@ -18,18 +20,18 @@ function describeSignInError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.code) {
       case 'invalid_credentials':
-        return 'Incorrect username or password.'
+        return t('Incorrect username or password.')
       case 'account_locked':
-        return 'This account is locked. Contact an administrator.'
+        return t('This account is locked. Contact an administrator.')
       case 'account_inactive':
-        return 'This account is not active. Contact an administrator.'
+        return t('This account is not active. Contact an administrator.')
       case 'validation_failed':
-        return 'Enter both username and password.'
+        return t('Enter both username and password.')
       default:
-        return 'Sign-in failed. Try again.'
+        return t('Sign-in failed. Try again.')
     }
   }
-  return 'Cannot reach the server. Check your connection and try again.'
+  return t('Cannot reach the server. Check your connection and try again.')
 }
 
 export function LoginPage() {
@@ -51,9 +53,7 @@ export function LoginPage() {
   // and surface a misleading "Incorrect username or password".
   if (status === 'loading') {
     return (
-      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">
-        Restoring session…
-      </div>
+      <div className="grid min-h-svh place-items-center text-sm text-muted" role="status">{t('Restoring session…')}</div>
     )
   }
 
@@ -75,14 +75,16 @@ export function LoginPage() {
     <div className="relative grid min-h-svh place-items-center overflow-hidden bg-surface px-6 py-16">
       <DotField />
 
-      <IconButton
-        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        tone="surface"
-        className="absolute top-5 right-5 z-10"
-        onClick={toggleTheme}
-      >
-        <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
-      </IconButton>
+      <div className="absolute top-5 right-5 z-10 flex items-center gap-2">
+        <LanguageSwitcher />
+        <IconButton
+          aria-label={theme === 'dark' ? t('Switch to light mode') : t('Switch to dark mode')}
+          tone="surface"
+          onClick={toggleTheme}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
+        </IconButton>
+      </div>
 
       <main className="relative w-full max-w-xl">
         {/* A soft pool of the card colour behind the form keeps the text readable over the dots. */}
@@ -90,11 +92,11 @@ export function LoginPage() {
 
         <div className="relative flex flex-col items-center text-center">
           <Wordmark size="lg" />
-          <h1 className="mt-10 text-4xl font-normal sm:text-5xl">Sign in to the console</h1>
-          <p className="mt-4 text-base text-ink-2">For administrators and robot technicians. Staff accounts use the mobile app.</p>
+          <h1 className="mt-10 text-4xl font-normal sm:text-5xl">{t('Sign in to the console')}</h1>
+          <p className="mt-4 text-base text-ink-2">{t('For administrators and robot technicians. Staff accounts use the mobile app.')}</p>
 
           <form onSubmit={handleSubmit} className="mt-10 flex w-full max-w-sm flex-col gap-4 text-left">
-            <Field label="Username">
+            <Field label={t('Username')}>
               <input
                 className={controlClass('lg')}
                 value={username}
@@ -104,7 +106,7 @@ export function LoginPage() {
                 required
               />
             </Field>
-            <Field label="Password">
+            <Field label={t('Password')}>
               <input
                 type="password"
                 className={controlClass('lg')}
@@ -118,7 +120,7 @@ export function LoginPage() {
             {error ? <FormError>{error}</FormError> : null}
 
             <Button type="submit" variant="primary" size="lg" block className="mt-2" disabled={submitting}>
-              {submitting ? 'Signing in…' : 'Sign in'}
+              {submitting ? t('Signing in…') : t('Sign in')}
             </Button>
           </form>
         </div>

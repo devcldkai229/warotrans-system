@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Enums;
+using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
 using WaroTrans.Transportation.Persistence;
 using WaroTrans.Warehouse.Entities;
@@ -192,7 +193,7 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
     private sealed record QueueDto(Guid TransportRequestId, string Status, DateTimeOffset? QueuedAt, List<QueuedJobDto> Jobs);
 
     [Fact]
-    public async Task Post_queue_plans_one_batch_and_persists_job_runtime_graph()
+    public async Task Post_queue_splits_by_the_limit_and_persists_one_job_per_container()
     {
         var scenario = await SeedScenarioAsync();
         var workflowId = await CreatePublishedWorkflowAsync();
@@ -207,27 +208,28 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var queued = (await response.Content.ReadFromJsonAsync<QueueDto>(JsonOptions))!;
         Assert.Equal("QUEUED", queued.Status);
-        var job = Assert.Single(queued.Jobs);
-        Assert.Equal("BATCH-001", job.BatchKey);
-        Assert.Equal(3, job.JobContainerCount);
+        Assert.Equal(["BATCH-001", "BATCH-002", "BATCH-003"], queued.Jobs.Select(j => j.BatchKey));
+        Assert.All(queued.Jobs, j => Assert.Equal(1, j.JobContainerCount));
 
         await using var scope = Factory.Services.CreateAsyncScope();
         var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
-        var jobContainers = await execution.JobContainers.Where(c => c.JobId == job.JobId).ToListAsync();
+        var jobContainers = await execution.JobContainers.ToListAsync();
         Assert.Equal(3, jobContainers.Count);
+        Assert.Equal(3, jobContainers.Select(c => c.JobId).Distinct().Count());
         Assert.All(jobContainers, c => Assert.Equal(created.Id, c.TransportRequestId));
         Assert.Equal(scenario.Containers.ToHashSet(), jobContainers.Select(c => c.ContainerId).ToHashSet());
 
-        // Shared pickup A: one MOVE_PICKUP, three PICKUP_CONFIRM; three dropoff stops.
+        // Each Job goes to its pickup and its one dropoff.
+        var first = queued.Jobs[0];
         var stepKeys = await execution.JobSteps
-            .Where(s => s.JobTask.JobId == job.JobId)
+            .Where(s => s.JobTask.JobId == first.JobId)
             .Join(execution.WorkflowSteps, s => s.WorkflowStepId, w => w.Id, (_, w) => w.StepKey)
             .ToListAsync();
         Assert.Equal(1, stepKeys.Count(k => k == "MOVE_PICKUP"));
-        Assert.Equal(3, stepKeys.Count(k => k == "PICKUP_CONFIRM"));
-        Assert.Equal(3, stepKeys.Count(k => k == "MOVE_DROPOFF"));
-        Assert.Equal(3, stepKeys.Count(k => k == "DROPOFF_CONFIRM"));
-        Assert.Equal(job.JobStepCount, stepKeys.Count);
+        Assert.Equal(1, stepKeys.Count(k => k == "PICKUP_CONFIRM"));
+        Assert.Equal(1, stepKeys.Count(k => k == "MOVE_DROPOFF"));
+        Assert.Equal(1, stepKeys.Count(k => k == "DROPOFF_CONFIRM"));
+        Assert.Equal(first.JobStepCount, stepKeys.Count);
 
         var db = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
         var persisted = await db.TransportRequests.Include(r => r.Details).SingleAsync(r => r.Id == created.Id);
@@ -236,7 +238,7 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
     }
 
     [Fact]
-    public async Task Post_queue_twice_returns_same_job_without_duplicating_runtime_rows()
+    public async Task Post_queue_twice_returns_the_same_jobs_without_duplicating_runtime_rows()
     {
         var scenario = await SeedScenarioAsync();
         var workflowId = await CreatePublishedWorkflowAsync();
@@ -250,12 +252,284 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
 
         Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
         var second = (await secondResponse.Content.ReadFromJsonAsync<QueueDto>(JsonOptions))!;
-        Assert.Equal(first.Jobs.Single().JobId, second.Jobs.Single().JobId);
+        Assert.Equal(first.Jobs.Select(j => j.JobId), second.Jobs.Select(j => j.JobId));
 
         await using var scope = Factory.Services.CreateAsyncScope();
         var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
-        Assert.Equal(1, await execution.Jobs.CountAsync());
+        Assert.Equal(2, await execution.Jobs.CountAsync());
         Assert.Equal(2, await execution.JobContainers.CountAsync());
+    }
+
+    [Fact]
+    public async Task Post_queue_at_the_same_time_makes_one_set_of_jobs()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var create = await Client.PostAsJsonAsync(Route, Body(scenario, workflowId,
+            Detail(1, scenario.Containers[0], scenario.A, scenario.D),
+            Detail(2, scenario.Containers[1], scenario.E, scenario.F)), JsonOptions);
+        var created = (await create.Content.ReadFromJsonAsync<RequestDto>(JsonOptions))!;
+
+        await Task.WhenAll(
+            Client.PostAsync($"{Route}/{created.Id}/queue", null),
+            Client.PostAsync($"{Route}/{created.Id}/queue", null),
+            Client.PostAsync($"{Route}/{created.Id}/queue", null));
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        Assert.Equal(2, await execution.Jobs.CountAsync());
+        Assert.Equal(2, await execution.JobContainers.CountAsync());
+    }
+
+    [Fact]
+    public async Task The_next_job_of_a_request_comes_after_the_running_one_ended_and_never_on_its_own()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var create = await Client.PostAsJsonAsync(Route, Body(scenario, workflowId,
+            Detail(1, scenario.Containers[0], scenario.A, scenario.D),
+            Detail(2, scenario.Containers[1], scenario.A, scenario.E),
+            Detail(3, scenario.Containers[2], scenario.A, scenario.F)), JsonOptions);
+        var created = (await create.Content.ReadFromJsonAsync<RequestDto>(JsonOptions))!;
+        var jobs = (await (await Client.PostAsync($"{Route}/{created.Id}/queue", null)).Content.ReadFromJsonAsync<QueueDto>(JsonOptions))!.Jobs;
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+
+        async Task SetAsync(Guid jobId, WaroTrans.WorkflowExecution.Enums.JobStatus status)
+        {
+            var job = await execution.Jobs.FirstAsync(j => j.Id == jobId);
+            job.Status = status;
+            job.StartedAt ??= DateTimeOffset.UtcNow;
+            await execution.SaveChangesAsync();
+        }
+
+        Task<IReadOnlyList<Guid>> NextAsync() =>
+            WaroTrans.WorkflowExecution.Services.JobQueueProcessor.FindNextOfStartedRequestsAsync(execution, default);
+
+        Assert.Empty(await NextAsync());
+
+        await SetAsync(jobs[0].JobId, WaroTrans.WorkflowExecution.Enums.JobStatus.RUNNING);
+        Assert.Empty(await NextAsync());
+
+        await SetAsync(jobs[0].JobId, WaroTrans.WorkflowExecution.Enums.JobStatus.COMPLETED);
+        Assert.Equal(jobs[1].JobId, Assert.Single(await NextAsync()));
+
+        // A failed Job does not hold the others back.
+        await SetAsync(jobs[1].JobId, WaroTrans.WorkflowExecution.Enums.JobStatus.FAILED);
+        Assert.Equal(jobs[2].JobId, Assert.Single(await NextAsync()));
+
+        await SetAsync(jobs[2].JobId, WaroTrans.WorkflowExecution.Enums.JobStatus.PAUSED);
+        Assert.Empty(await NextAsync());
+    }
+
+    [Fact]
+    public async Task Lists_show_real_names_page_correctly_and_hide_a_robot_outside_the_scope()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        await Factory.CreateAccountAsync("namer", WaroTrans.Identity.Enums.AccountRole.ADMIN);
+        await Factory.CreateAccountAsync("no_robots", WaroTrans.Identity.Enums.AccountRole.TECHNICIAN);
+        var client = CreateAnonymousClient();
+        var admin = (await client.LoginAsync("namer")).AccessToken;
+        var tech = (await client.LoginAsync("no_robots")).AccessToken;
+
+        var create = await client.SendWithTokenAsync(HttpMethod.Post, Route, admin, JsonSerializer.SerializeToElement(Body(scenario, workflowId,
+            Detail(1, scenario.Containers[0], scenario.A, scenario.D),
+            Detail(2, scenario.Containers[1], scenario.A, scenario.E)), JsonOptions));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var queued = await client.SendWithTokenAsync(HttpMethod.Post, $"{Route}/{created}/queue", admin);
+        Assert.Equal(HttpStatusCode.OK, queued.StatusCode);
+
+        Guid robot;
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var fleet = scope.ServiceProvider.GetRequiredService<WaroTrans.Fleet.Persistence.FleetDbContext>();
+            var seeded = WaroTrans.Fleet.Entities.Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-NAMED", "Named", DateTimeOffset.UtcNow);
+            fleet.Robots.Add(seeded);
+            await fleet.SaveChangesAsync();
+            robot = seeded.Id;
+            var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+            foreach (var job in await execution.Jobs.ToListAsync())
+            {
+                job.ContextValues[WaroTrans.WorkflowExecution.Execution.JobExecutionEngine.AssignedRobotKey] = JsonSerializer.SerializeToElement(robot);
+                execution.Entry(job).Property(j => j.ContextValues).IsModified = true;
+            }
+
+            await execution.SaveChangesAsync();
+        }
+
+        var request = await (await client.GetWithTokenAsync($"{Route}/{created}", admin)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(string.IsNullOrWhiteSpace(request.GetProperty("requestedByName").GetString()));
+        var requests = await (await client.GetWithTokenAsync($"{Route}?take=1", admin)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(request.GetProperty("requestedByName").GetString(), requests.GetProperty("items")[0].GetProperty("requestedByName").GetString());
+
+        var jobsUrl = $"/api/workflow-execution/jobs?transportRequestId={created}&take=1";
+        var page1 = await (await client.GetWithTokenAsync(jobsUrl, admin)).Content.ReadFromJsonAsync<JsonElement>();
+        var page2 = await (await client.GetWithTokenAsync(jobsUrl + "&skip=1", admin)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, page1.GetProperty("total").GetInt32());
+        var one = page1.GetProperty("items")[0];
+        Assert.NotEqual(one.GetProperty("id").GetGuid(), page2.GetProperty("items")[0].GetProperty("id").GetGuid());
+        Assert.Equal("RBT-NAMED", one.GetProperty("robotCode").GetString());
+        Assert.Equal(robot, one.GetProperty("assignedRobotId").GetGuid());
+        Assert.False(string.IsNullOrWhiteSpace(one.GetProperty("workflowName").GetString()));
+        Assert.StartsWith("REQ-", one.GetProperty("requestCodes")[0].GetString());
+        Assert.Single(one.GetProperty("containerBarcodes").EnumerateArray());
+
+        var foreign = (await (await client.GetWithTokenAsync(jobsUrl, tech)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items")[0];
+        Assert.Equal(JsonValueKind.Null, foreign.GetProperty("robotCode").ValueKind);
+        Assert.Equal(JsonValueKind.Null, foreign.GetProperty("assignedRobotId").ValueKind);
+    }
+
+    private async Task<(Guid Schedule, Guid Shelf)> SeedScheduleAsync(Scenario scenario, Guid workflowId, int maxContainers)
+    {
+        var shelf = Guid.NewGuid();
+        var target = Guid.NewGuid();
+        Guid product;
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WarehouseDbContext>();
+            db.StorageLocations.AddRange(
+                new StorageLocation { Id = shelf, WarehouseId = scenario.WarehouseId, EndpointId = scenario.A, Code = "SRC", Name = "Source", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+                new StorageLocation { Id = target, WarehouseId = scenario.WarehouseId, EndpointId = scenario.D, Code = "DST", Name = "Target", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+            var containers = await db.Containers.ToListAsync();
+            product = containers[0].ProductId;
+            foreach (var container in containers)
+            {
+                container.CurrentStorageLocationId = shelf;
+                container.CurrentLevelNo = 1;
+            }
+
+            db.InventoryStocks.Add(new InventoryStock { Id = Guid.NewGuid(), ProductId = product, StorageLocationId = shelf, LevelNo = 1, ContainerCount = containers.Count, UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.PostAsJsonAsync("/api/transportation/schedules", new
+        {
+            name = "Night move",
+            warehouseId = scenario.WarehouseId,
+            mapVersionId = scenario.MapVersionId,
+            workflowId,
+            productId = product,
+            sourceStorageLocationId = shelf,
+            destinationEndpointId = scenario.D,
+            destinationStorageLocationId = target,
+            maxContainersPerWave = maxContainers,
+            recurrence = "DAILY",
+            localTime = "08:30:00",
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)).ToString("yyyy-MM-dd"),
+            timezone = "Asia/Ho_Chi_Minh"
+        }, JsonOptions);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return ((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(), shelf);
+    }
+
+    private async Task TickAsync(DateTimeOffset now)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<WaroTrans.Transportation.Services.TransportScheduleProcessor>().TickAsync(now);
+    }
+
+    private async Task<List<WaroTrans.Transportation.Entities.TransportWave>> WavesAsync(Guid schedule)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<TransportationDbContext>().TransportWaves.AsNoTracking()
+            .Where(w => w.TransportScheduleId == schedule).OrderBy(w => w.PlannedAt).ToListAsync();
+    }
+
+    [Fact]
+    public async Task A_schedule_makes_one_request_per_wave_from_what_matches_then_skips_and_misses()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var (schedule, _) = await SeedScheduleAsync(scenario, workflowId, 2);
+
+        await TickAsync(DateTimeOffset.UtcNow);
+        var first = Assert.Single(await WavesAsync(schedule));
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED, first.Status);
+
+        // Three workers at the same moment: one request, two of the three Containers.
+        var at = first.PlannedAt.AddMinutes(1);
+        await Task.WhenAll(TickAsync(at), TickAsync(at), TickAsync(at));
+        var waves = await WavesAsync(schedule);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.STARTED, waves[0].Status);
+        Assert.Equal(2, waves[0].ContainerCount);
+        Assert.NotNull(waves[0].TransportRequestId);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED, Assert.Single(waves, w => w.Id != waves[0].Id).Status);
+
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var requests = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
+            var request = await requests.TransportRequests.Include(r => r.Details).SingleAsync();
+            Assert.Equal(WaroTrans.Transportation.Enums.TransportRequestStatus.QUEUED, request.Status);
+            Assert.Equal(2, request.Details.Count);
+            var execution = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+            Assert.Equal(2, await execution.Jobs.CountAsync());
+            // Queued, not started: nothing moves until a person says so.
+            Assert.True(await execution.Jobs.AllAsync(j => j.StartedAt == null));
+        }
+
+        // Next day: only the one Container not on an open request.
+        var nextDay = waves[1].PlannedAt.AddMinutes(1);
+        await TickAsync(nextDay);
+        waves = await WavesAsync(schedule);
+        Assert.Equal(1, waves[1].ContainerCount);
+
+        // Day after: everything matching is on an open request.
+        await TickAsync(waves[2].PlannedAt.AddMinutes(1));
+        waves = await WavesAsync(schedule);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.SKIPPED, waves[2].Status);
+
+        // The Host was down for a month: one MISSED and one new wave, no burst and no late run.
+        var count = waves.Count;
+        await TickAsync(waves[^1].PlannedAt.AddDays(30));
+        waves = await WavesAsync(schedule);
+        Assert.Equal(count + 1, waves.Count);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.MISSED, waves[^2].Status);
+        Assert.Null(waves[^2].TransportRequestId);
+    }
+
+    [Fact]
+    public async Task One_wave_can_be_cancelled_and_a_paused_schedule_does_not_run()
+    {
+        var scenario = await SeedScenarioAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var (schedule, _) = await SeedScheduleAsync(scenario, workflowId, 1);
+        await TickAsync(DateTimeOffset.UtcNow);
+        var wave = Assert.Single(await WavesAsync(schedule));
+
+        var cancel = await Client.PostAsync($"/api/transportation/schedules/waves/{wave.Id}/cancel", null);
+        Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Client.PostAsync($"/api/transportation/schedules/waves/{wave.Id}/cancel", null)).StatusCode);
+
+        await TickAsync(wave.PlannedAt.AddMinutes(1));
+        var waves = await WavesAsync(schedule);
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.CANCELLED, waves[0].Status);
+        Assert.Null(waves[0].TransportRequestId);
+        var next = Assert.Single(waves, w => w.Status == WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED);
+
+        Assert.Equal(HttpStatusCode.OK, (await Client.PostAsync($"/api/transportation/schedules/{schedule}/pause", null)).StatusCode);
+        await TickAsync(next.PlannedAt.AddMinutes(1));
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED, (await WavesAsync(schedule)).Single(w => w.Id == next.Id).Status);
+
+        Assert.Equal(HttpStatusCode.OK, (await Client.PostAsync($"/api/transportation/schedules/{schedule}/resume", null)).StatusCode);
+        await TickAsync(next.PlannedAt.AddHours(2));
+        Assert.Equal(WaroTrans.Transportation.Entities.TransportWaveStatus.MISSED, (await WavesAsync(schedule)).Single(w => w.Id == next.Id).Status);
+
+        Assert.Equal(HttpStatusCode.OK, (await Client.PostAsync($"/api/transportation/schedules/{schedule}/cancel", null)).StatusCode);
+        Assert.DoesNotContain(await WavesAsync(schedule), w => w.Status == WaroTrans.Transportation.Entities.TransportWaveStatus.PLANNED);
+    }
+
+    [Fact]
+    public async Task A_technician_may_read_schedules_but_not_write_them()
+    {
+        await Factory.CreateAccountAsync("sched_tech", WaroTrans.Identity.Enums.AccountRole.TECHNICIAN);
+        var client = CreateAnonymousClient();
+        var token = (await client.LoginAsync("sched_tech")).AccessToken;
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetWithTokenAsync("/api/transportation/schedules", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendWithTokenAsync(HttpMethod.Post, "/api/transportation/schedules", token, new { })).StatusCode);
     }
 
     [Fact]

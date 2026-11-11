@@ -5,7 +5,8 @@ namespace WaroTrans.WorkflowExecution.Registry;
 /// <summary>
 /// Hard-coded source of truth for StepType metadata. Admin cannot invent types/codes/inputs/outputs.
 /// Job Runtime Provisioner expands steps via OperationExecutionScopeCatalog (not TaskKey/StepKey):
-/// ROBOT_READY / BATTERY_MIN / REQUEST_ACTIVE → ONCE_PER_JOB;
+/// ROBOT_READY / BATTERY_MIN / REQUEST_ACTIVE / LOAD_STATE → ONCE_PER_JOB;
+/// INVENTORY_AVAILABLE → PER_CONTAINER_AT_STOP at the pickup;
 /// ENDPOINT_AVAILABLE / MOVE PICKUP|DROPOFF → ONCE_PER_STOP;
 /// PICKUP_CONFIRM / DROPOFF_CONFIRM → PER_CONTAINER_AT_STOP.
 /// Execution scope is not persisted on WorkflowStep in V1.

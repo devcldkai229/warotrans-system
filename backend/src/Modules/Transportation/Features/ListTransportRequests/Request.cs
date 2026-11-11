@@ -6,4 +6,6 @@ public sealed record ListTransportRequestsRequest(
     Guid? WarehouseId,
     TransportRequestStatus? Status,
     string? Search,
-    int Take);
+    int Take,
+    int Skip = 0,
+    IReadOnlyList<Guid>? Ids = null);

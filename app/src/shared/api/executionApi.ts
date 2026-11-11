@@ -159,6 +159,13 @@ export async function confirmHandover(requestOrId: HandoverConfirmRequest | stri
   });
   return (await hydrateJobs([response]))[0];
 }
+/** WH-10: the container of this waiting handover cannot go on; the Job continues with the others. */
+export async function failJobContainer(stepId: string, containerId: string, reason: string) {
+  const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${stepId}/fail-container`, {
+    method: 'POST', body: JSON.stringify({ containerId, reason }),
+  });
+  return (await hydrateJobs([response]))[0];
+}
 export function confirmJobStep(stepId: string, containerId: string | null, note?: string | null) {
   return confirmHandover({ jobStepId: stepId, containerId, note });
 }

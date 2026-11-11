@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { RoleSummary } from './RoleSummary'
 import type { Account, AccountRole } from '@/shared/api/contracts'
 import { Dialog } from '@/shared/ui/Dialog'
 import { Field, FormError } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { ACCOUNT_ROLES } from './constants'
-
+import { t } from '@/shared/i18n'
 export type AccountFormValues = Pick<Account, 'username' | 'email' | 'fullName' | 'role'>
 
 interface AccountFormDialogProps {
@@ -34,19 +35,19 @@ export function AccountFormDialog({ account, existingUsernames, currentAccountId
   async function submit() {
     const values = { username: username.trim(), email: email.trim(), fullName: fullName.trim(), role }
     if (!values.username || !values.email || !values.fullName) {
-      setError('Username, email and full name are required.')
+      setError(t('Username, email and full name are required.'))
       return
     }
     if (!account && !USERNAME_PATTERN.test(values.username)) {
-      setError('The username needs 3 to 50 characters: lower case letters, digits, "." "_" or "-".')
+      setError(t('The username needs 3 to 50 characters: lower case letters, digits, "." "_" or "-".'))
       return
     }
     if (!/^[^\s@]+@[^\s@]+$/.test(values.email)) {
-      setError('Enter a valid email address.')
+      setError(t('Enter a valid email address.'))
       return
     }
     if (!account && existingUsernames.includes(values.username)) {
-      setError('This username is already in use.')
+      setError(t('This username is already in use.'))
       return
     }
 
@@ -55,22 +56,22 @@ export function AccountFormDialog({ account, existingUsernames, currentAccountId
     try {
       await onSave(values)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'The account could not be saved.')
+      setError(failure instanceof Error ? failure.message : t('The account could not be saved.'))
       setBusy(false)
     }
   }
 
   return (
     <Dialog
-      title={account ? 'Edit account' : 'Add account'}
-      submitLabel={account ? 'Save changes' : 'Create account'}
+      title={account ? t('Edit account') : t('Add account')}
+      submitLabel={account ? t('Save changes') : t('Create account')}
       busy={busy}
       onClose={onClose}
       onSubmit={submit}
     >
       <Field
-        label="Username"
-        hint={account ? 'The username is the sign-in name and cannot be changed.' : 'Lower case letters, digits, "." "_" or "-".'}
+        label={t('Username')}
+        hint={account ? t('The username is the sign-in name and cannot be changed.') : t('Lower case letters, digits, "." "_" or "-".')}
       >
         <input
           className={controlClass()}
@@ -81,22 +82,22 @@ export function AccountFormDialog({ account, existingUsernames, currentAccountId
           onChange={(event) => setUsername(event.target.value.toLowerCase())}
         />
       </Field>
-      <Field label="Email">
+      <Field label={t('Email')}>
         <input className={controlClass()} type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
       </Field>
-      <Field label="Full name">
+      <Field label={t('Full name')}>
         <input className={controlClass()} value={fullName} autoFocus={account !== null} onChange={(event) => setFullName(event.target.value)} />
       </Field>
       <Field
-        label="Role"
+        label={t('Role')}
         hint={
           isSelf
-            ? 'You cannot change your own role.'
+            ? t('You cannot change your own role.')
             : roleChanges
-              ? 'Changing the role signs this person out of every device.'
+              ? t('Changing the role signs this person out of every device.')
               : account
                 ? undefined
-                : 'A temporary password is generated and shown once after the account is created.'
+                : t('A temporary password is generated and shown once after the account is created.')
         }
       >
         <select
@@ -111,6 +112,7 @@ export function AccountFormDialog({ account, existingUsernames, currentAccountId
             </option>
           ))}
         </select>
+        <RoleSummary role={role} />
       </Field>
       {error ? <FormError>{error}</FormError> : null}
     </Dialog>

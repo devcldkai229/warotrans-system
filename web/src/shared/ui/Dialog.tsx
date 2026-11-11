@@ -2,8 +2,9 @@ import type { FormEvent, ReactNode } from 'react'
 import { cx } from '@/shared/lib/cx'
 import { Button, IconButton } from './Button'
 import { Icon } from './Icon'
-
+import { t } from '@/shared/i18n'
 interface ModalProps {
+
   title: string
   subtitle?: string
   onClose: () => void
@@ -30,7 +31,7 @@ export function Modal({ title, subtitle, onClose, closeOnBackdrop = true, width 
             <h2 className="text-xl font-book">{title}</h2>
             {subtitle ? <p className="mt-1 text-sm text-ink-2">{subtitle}</p> : null}
           </div>
-          <IconButton aria-label="Close" className="-mt-1 -mr-2" onClick={onClose}>
+          <IconButton aria-label={t('Close')} className="-mt-1 -mr-2" onClick={onClose}>
             <Icon name="close" size={18} />
           </IconButton>
         </header>
@@ -64,11 +65,9 @@ export function Dialog({ title, submitLabel, onClose, onSubmit, busy = false, wi
       <form onSubmit={handleSubmit}>
         <div className="flex flex-col gap-4 px-6 py-5">{children}</div>
         <footer className="flex justify-end gap-2 px-6 pb-6">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
+          <Button variant="ghost" onClick={onClose}>{t('Cancel')}</Button>
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? 'Saving…' : submitLabel}
+            {busy ? t('Saving…') : submitLabel}
           </Button>
         </footer>
       </form>

@@ -119,6 +119,15 @@
   }
 }
 
+/*
+ * Segoe UI Historic has no glyphs for the stacked Vietnamese diacritics (ấ, ề, ỗ …), so the browser drew those letters
+ * from another font one by one: uneven weight within a word and marks out of place. Vietnamese therefore starts from
+ * Segoe UI, which has every Vietnamese letter. English keeps the stack above.
+ */
+:root:lang(vi) {
+  --font-sans: 'Segoe UI', system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+}
+
 @layer base {
   :root {
     /* Occupancy images are black walls on a white floor: in the dark theme they are flipped to light walls on dark. */

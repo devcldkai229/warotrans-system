@@ -1,8 +1,9 @@
 import type { MapCallout, MapMovement } from '@/shared/map/WarehouseMap'
 import type { Endpoint } from '@/shared/api/contracts'
 import type { TransportRequestDraft } from './types'
-
+import { t } from '@/shared/i18n'
 export interface ComposerMapPreview {
+
   focusEndpointIds: string[]
   movements: MapMovement[]
   callouts: MapCallout[]
@@ -64,7 +65,7 @@ export function buildComposerMapPreview(
       x: ep.x,
       y: ep.y,
       tone: 'dark',
-      lines: [`SOURCE · ${sourceCounts.get(endpointId)}`],
+      lines: [t('SOURCE · {value}', { value: sourceCounts.get(endpointId) })],
     })
   }
 

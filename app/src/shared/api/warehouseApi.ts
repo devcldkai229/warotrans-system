@@ -129,6 +129,10 @@ export interface StockVoucherListItem {
 export function listStockVouchers(params: { warehouseId: string; type?: StockVoucherType; status?: StockVoucherStatus; take?: number }) {
   return apiFetch<{ items: StockVoucherListItem[]; total: number }>(`/api/warehouse/stock-vouchers${queryString(params)}`);
 }
+/** WH-01: names the shelf of an IN_TRANSIT or HOLD Container. 409 `container_in_active_transport` while a request moves it. */
+export function recoverContainer(id: string, body: { storageLocationId: string; levelNo: number; note?: string }) {
+  return apiFetch<unknown>(`/api/warehouse/containers/${id}/recover`, { method: 'POST', body: JSON.stringify(body) });
+}
 /** Putaway needs the phiếu nhập CONFIRMED; confirming does not wait for robots. */
 export function confirmStockVoucher(id: string) {
   return apiFetch<StockVoucherListItem>(`/api/warehouse/stock-vouchers/${id}/confirm`, { method: 'POST' });

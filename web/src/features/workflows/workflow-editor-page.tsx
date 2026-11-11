@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
@@ -39,6 +41,7 @@ import {
   emptyWorkflow,
   reorderItem,
 } from './workflow-defaults'
+import { t } from '@/shared/i18n'
 import './workflows.css'
 
 function toUpsert(detail: {
@@ -80,16 +83,16 @@ function toUpsert(detail: {
 }
 
 const SCOPE_LABELS: Record<string, string> = {
-  ONCE_PER_JOB: 'Once per job',
-  ONCE_PER_STOP: 'Once per stop',
-  PER_CONTAINER_AT_STOP: 'Per container at stop',
+  ONCE_PER_JOB: t('Once per job'),
+  ONCE_PER_STOP: t('Once per stop'),
+  PER_CONTAINER_AT_STOP: t('Per container at stop'),
 }
 
 const SCOPE_TOOLTIPS: Record<string, string> = {
-  ONCE_PER_JOB: 'Step runs once for the entire Job, regardless of containers or stops.',
+  ONCE_PER_JOB: t('Step runs once for the entire Job, regardless of containers or stops.'),
   ONCE_PER_STOP:
-    'Step runs once for each endpoint stop, even if that stop contains multiple containers.',
-  PER_CONTAINER_AT_STOP: 'Step runs separately for each container at each stop.',
+    t('Step runs once for each endpoint stop, even if that stop contains multiple containers.'),
+  PER_CONTAINER_AT_STOP: t('Step runs separately for each container at each stop.'),
 }
 
 function ScopeBadge({
@@ -102,7 +105,7 @@ function ScopeBadge({
   if (!scope) return null
   const label = SCOPE_LABELS[scope] ?? scope
   const action =
-    stopAction === 'PICKUP' ? ' · Pickup' : stopAction === 'DROPOFF' ? ' · Dropoff' : ''
+    stopAction === 'PICKUP' ? t(' · Pickup') : stopAction === 'DROPOFF' ? t(' · Dropoff') : ''
   return (
     <span className="scope-badge" title={SCOPE_TOOLTIPS[scope] ?? scope}>
       {label}
@@ -182,22 +185,22 @@ function collectClientWarnings(
 ): string[] {
   const warnings: string[] = []
 
-  if (!draft.name.trim()) warnings.push('Workflow name is required.')
-  if (draft.tasks.length === 0) warnings.push('Add at least one task before publish.')
+  if (!draft.name.trim()) warnings.push(t('Workflow name is required.'))
+  if (draft.tasks.length === 0) warnings.push(t('Add at least one task before publish.'))
 
   for (const variable of draft.variables) {
     if (variable.source === 'ADMIN_INPUT' && variable.isRequired) {
       if (variable.configuredValue === undefined || variable.configuredValue === '') {
-        warnings.push(`ADMIN_INPUT '${variable.key}' needs a configured value.`)
+        warnings.push(t('ADMIN_INPUT \'{key}\' needs a configured value.', { key: variable.key }))
       }
     }
     if (variable.source === 'SYSTEM_VALUE') {
       const sys = metadata.systemVariables.find((s) => s.key === variable.key)
       if (!sys) {
-        warnings.push(`SYSTEM_VALUE '${variable.key}' is not in the system variable catalog.`)
+        warnings.push(t('SYSTEM_VALUE \'{key}\' is not in the system variable catalog.', { key: variable.key }))
       } else if (sys.dataType !== variable.dataType) {
         warnings.push(
-          `SYSTEM_VALUE '${variable.key}' dataType should be ${sys.dataType}, got ${variable.dataType}.`,
+          t('SYSTEM_VALUE \'{key}\' dataType should be {dataType}, got {dataType2}.', { key: variable.key, dataType: sys.dataType, dataType2: variable.dataType }),
         )
       }
     }
@@ -206,13 +209,13 @@ function collectClientWarnings(
   for (const task of draft.tasks) {
     for (const step of task.steps) {
       if (!step.operationCode) {
-        warnings.push(`Step '${stepLabel(step)}' has no operation selected.`)
+        warnings.push(t('Step \'{value}\' has no operation selected.', { value: stepLabel(step) }))
         continue
       }
       const op = findOperation(metadata, step.stepType, step.operationCode)
       if (!op) {
         warnings.push(
-          `Step '${stepLabel(step)}' operation ${step.stepType}.${step.operationCode} is unknown.`,
+          t('Step \'{value}\' operation {stepType}.{operationCode} is unknown.', { value: stepLabel(step), stepType: step.stepType, operationCode: step.operationCode }),
         )
         continue
       }
@@ -220,7 +223,7 @@ function collectClientWarnings(
       for (const input of op.inputs) {
         const binding = step.inputBindings[input.key]
         if (input.required && !binding) {
-          warnings.push(`Step '${stepLabel(step)}' missing required binding for '${input.key}'.`)
+          warnings.push(t('Step \'{value}\' missing required binding for \'{key}\'.', { value: stepLabel(step), key: input.key }))
           continue
         }
         if (!binding) continue
@@ -229,18 +232,18 @@ function collectClientWarnings(
           const field = metadata.currentMovementFields.find((f) => f.key === binding.sourceReference)
           if (!field) {
             warnings.push(
-              `Step '${stepLabel(step)}' CURRENT_MOVEMENT path '${binding.sourceReference}' is unknown.`,
+              t('Step \'{value}\' CURRENT_MOVEMENT path \'{sourceReference}\' is unknown.', { value: stepLabel(step), sourceReference: binding.sourceReference }),
             )
           } else if (
             !isMovementFieldAvailable(field, op.executionScope, op.stopActionFilter)
           ) {
             warnings.push(
-              `Step '${stepLabel(step)}' CURRENT_MOVEMENT '${binding.sourceReference}' is not available at ${op.executionScope}${op.stopActionFilter ? `/${op.stopActionFilter}` : ''}.`,
+              t('Step \'{value}\' CURRENT_MOVEMENT \'{sourceReference}\' is not available at {executionScope}{value2}.', { value: stepLabel(step), sourceReference: binding.sourceReference, executionScope: op.executionScope, value2: op.stopActionFilter ? `/${op.stopActionFilter}` : '' }),
             )
           }
           if (op.executionScope === 'ONCE_PER_JOB') {
             warnings.push(
-              `Step '${stepLabel(step)}' is ONCE_PER_JOB and cannot use CURRENT_MOVEMENT.`,
+              t('Step \'{value}\' is ONCE_PER_JOB and cannot use CURRENT_MOVEMENT.', { value: stepLabel(step) }),
             )
           }
         }
@@ -249,14 +252,14 @@ function collectClientWarnings(
           const variable = draft.variables.find((v) => v.key === binding.sourceReference)
           if (!variable) {
             warnings.push(
-              `Step '${stepLabel(step)}' WORKFLOW_VAR '${binding.sourceReference}' does not exist.`,
+              t('Step \'{value}\' WORKFLOW_VAR \'{sourceReference}\' does not exist.', { value: stepLabel(step), sourceReference: binding.sourceReference }),
             )
           } else if (
             variable.dataType !== input.dataType &&
             !(variable.dataType === 'INTEGER' && input.dataType === 'DECIMAL')
           ) {
             warnings.push(
-              `Step '${stepLabel(step)}' '${input.key}' type mismatch: variable ${variable.dataType} vs input ${input.dataType}.`,
+              t('Step \'{value}\' \'{key}\' type mismatch: variable {dataType} vs input {dataType2}.', { value: stepLabel(step), key: input.key, dataType: variable.dataType, dataType2: input.dataType }),
             )
           }
         }
@@ -265,7 +268,7 @@ function collectClientWarnings(
           const value = String(binding.constantValue ?? '')
           if (value && !input.allowedValues.includes(value)) {
             warnings.push(
-              `Step '${stepLabel(step)}' CONSTANT '${input.key}'="${value}" is not an allowed value.`,
+              t('Step \'{value}\' CONSTANT \'{key}\'="{value2}" is not an allowed value.', { value: stepLabel(step), key: input.key, value2: value }),
             )
           }
         }
@@ -274,19 +277,19 @@ function collectClientWarnings(
           const typeMeta = metadata.stepTypes.find((s) => s.stepType === step.stepType)
           // Existence of earlier output is checked loosely; backend validates order.
           if (!binding.sourceReference || !binding.outputKey) {
-            warnings.push(`Step '${stepLabel(step)}' STEP_OUTPUT for '${input.key}' is incomplete.`)
+            warnings.push(t('Step \'{value}\' STEP_OUTPUT for \'{key}\' is incomplete.', { value: stepLabel(step), key: input.key }))
           } else {
             void typeMeta
           }
         }
       }
 
-      // INVENTORY_AVAILABLE: ONCE_PER_JOB + required containerId — no CURRENT_MOVEMENT.
+      // INVENTORY_AVAILABLE runs once per Container at the pickup: containerId comes from the movement.
       if (step.operationCode === 'INVENTORY_AVAILABLE') {
         const containerBinding = step.inputBindings.containerId
         if (!containerBinding) {
           warnings.push(
-            `CHECK INVENTORY_AVAILABLE ('${stepLabel(step)}') requires containerId. CURRENT_MOVEMENT is not allowed at ONCE_PER_JOB scope — use WORKFLOW_VAR/CONSTANT/STEP_OUTPUT, or omit this step until backend scope is redesigned.`,
+            t('CHECK INVENTORY_AVAILABLE (\'{value}\') requires containerId. Bind it to CURRENT_MOVEMENT containerId.', { value: stepLabel(step) }),
           )
         }
       }
@@ -358,7 +361,9 @@ export function WorkflowEditor({
     setShowPublishWarnings(false)
   }
 
-  const readOnly = status === 'PUBLISHED'
+  // A published workflow is fixed, and only someone who may change workflows (workflow.write) edits a draft.
+  const canWrite = useAuth().can(PERMISSIONS.workflowWrite)
+  const readOnly = status === 'PUBLISHED' || !canWrite
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -367,7 +372,7 @@ export function WorkflowEditor({
     },
     onSuccess: (saved) => {
       setServerErrors([])
-      setMessage('Saved.')
+      setMessage(t('Saved.'))
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
       queryClient.invalidateQueries({ queryKey: ['workflow', saved.id] })
       if (isNew) {
@@ -399,7 +404,7 @@ export function WorkflowEditor({
     mutationFn: () => publishWorkflow(id!),
     onSuccess: (saved) => {
       setServerErrors([])
-      setMessage('Published.')
+      setMessage(t('Published.'))
       setDraft(toUpsert(saved))
       setStatus(saved.status)
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
@@ -442,8 +447,8 @@ export function WorkflowEditor({
 
   function runDelete() {
     const label = `${draft.code} v${detailQuery.data?.versionNo ?? ''}`.trim()
-    const note = status === 'PUBLISHED' ? ' It is published: transport requests can no longer pick it.' : ''
-    if (window.confirm(`Delete workflow ${label}?${note} This cannot be undone.`)) deleteMutation.mutate()
+    const note = status === 'PUBLISHED' ? t(' It is published: transport requests can no longer pick it.') : ''
+    if (window.confirm(t('Delete workflow {label}?{note} This cannot be undone.', { label, note }))) deleteMutation.mutate()
   }
 
   const metadata = metadataQuery.data
@@ -538,7 +543,7 @@ export function WorkflowEditor({
 
   // After panel create we already have draft + draftKey=id; skip loading flash while detail refetches.
   if (metadataQuery.isLoading || (!isNew && detailQuery.isLoading && draftKey !== id)) {
-    return <p>Loading…</p>
+    return <p>{t('Loading…')}</p>
   }
 
   if (metadataQuery.error) {
@@ -564,7 +569,7 @@ export function WorkflowEditor({
     publishMutation.mutate()
   }
 
-  const saveLabel = isNew ? 'Create workflow' : 'Save draft'
+  const saveLabel = isNew ? t('Create workflow') : t('Save draft')
   const statusTone: Tone = status === 'PUBLISHED' ? 'green' : 'amber'
   const stepCount = draft.tasks.reduce((n, t) => n + t.steps.length, 0)
 
@@ -573,33 +578,29 @@ export function WorkflowEditor({
       {!readOnly && (
         <Button variant="primary" disabled={saveMutation.isPending} onClick={runSave}>
           <Icon name="save" size={15} />
-          {saveMutation.isPending ? 'Saving…' : saveLabel}
+          {saveMutation.isPending ? t('Saving…') : saveLabel}
         </Button>
       )}
-      {!isNew && status === 'DRAFT' && (
+      {!isNew && status === 'DRAFT' && canWrite && (
         <Button variant="surface" disabled={publishMutation.isPending} onClick={runPublish}>
-          {publishMutation.isPending ? 'Publishing…' : 'Publish'}
+          {publishMutation.isPending ? t('Publishing…') : t('Publish')}
         </Button>
       )}
-      {!isNew && status === 'PUBLISHED' && (
+      {!isNew && status === 'PUBLISHED' && canWrite && (
         <Button
           variant="primary"
           disabled={versionMutation.isPending}
           onClick={() => versionMutation.mutate()}
-        >
-          New version
-        </Button>
+        >{t('New version')}</Button>
       )}
-      {!isNew && (
+      {!isNew && canWrite && (
         <Button variant="dangerGhost" disabled={deleteMutation.isPending} onClick={runDelete}>
           <Icon name="trash" size={15} />
-          {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+          {deleteMutation.isPending ? t('Deleting…') : t('Delete')}
         </Button>
       )}
       {isPanel && onClose && (
-        <Button variant="surface" onClick={onClose}>
-          Done
-        </Button>
+        <Button variant="surface" onClick={onClose}>{t('Done')}</Button>
       )}
     </>
   )
@@ -608,28 +609,27 @@ export function WorkflowEditor({
     <header className="wf-page-hero">
       <div className="wf-page-hero__top">
         <Link className="wf-page-hero__back" to="/configure/workflows">
-          <Icon name="arrowLeft" size={16} /> Workflows
-        </Link>
+          <Icon name="arrowLeft" size={16} />{' '}{t('Workflows')}</Link>
         <div className="wf-actions">{actionButtons}</div>
       </div>
       <div className="wf-page-hero__title-row">
         <div className="min-w-0">
           <p className="wf-page-hero__code">
-            {draft.code || (isNew ? 'NEW DRAFT' : 'Workflow')}
+            {draft.code || (isNew ? t('NEW DRAFT') : t('Workflow'))}
             {!isNew && detailQuery.data ? ` · v${detailQuery.data.versionNo}` : ''}
           </p>
           <h1 className="wf-page-hero__title">
-            {isNew ? 'New workflow template' : draft.name || draft.code || 'Workflow editor'}
+            {isNew ? t('New workflow template') : draft.name || draft.code || t('Workflow editor')}
           </h1>
           <div className="wf-page-hero__meta">
             <StatusBadge tone={statusTone} withDot>
               {status}
             </StatusBadge>
             {!isNew && detailQuery.data?.createdAt ? (
-              <span>Created {formatDateTimeWithYear(detailQuery.data.createdAt)}</span>
+              <span>{t('Created')}{' '}{formatDateTimeWithYear(detailQuery.data.createdAt)}</span>
             ) : null}
             {!isNew && detailQuery.data?.publishedAt ? (
-              <span>Published {formatDateTimeWithYear(detailQuery.data.publishedAt)}</span>
+              <span>{t('Published')}{' '}{formatDateTimeWithYear(detailQuery.data.publishedAt)}</span>
             ) : null}
           </div>
         </div>
@@ -639,15 +639,15 @@ export function WorkflowEditor({
       ) : null}
       <div className="wf-page-hero__stats">
         <div className="wf-page-hero__stat">
-          <span className="wf-page-hero__stat-label">Variables</span>
+          <span className="wf-page-hero__stat-label">{t('Variables')}</span>
           <span className="wf-page-hero__stat-value">{draft.variables.length}</span>
         </div>
         <div className="wf-page-hero__stat">
-          <span className="wf-page-hero__stat-label">Tasks</span>
+          <span className="wf-page-hero__stat-label">{t('Tasks')}</span>
           <span className="wf-page-hero__stat-value">{draft.tasks.length}</span>
         </div>
         <div className="wf-page-hero__stat">
-          <span className="wf-page-hero__stat-label">Steps</span>
+          <span className="wf-page-hero__stat-label">{t('Steps')}</span>
           <span className="wf-page-hero__stat-value">{stepCount}</span>
         </div>
       </div>
@@ -657,7 +657,7 @@ export function WorkflowEditor({
   const panelHeader = isPanel && (
     <header className="wf-header">
       <div>
-        <h1>{isNew ? 'New workflow template' : draft.name || draft.code || 'Workflow editor'}</h1>
+        <h1>{isNew ? t('New workflow template') : draft.name || draft.code || t('Workflow editor')}</h1>
         <p className="wf-panel-status">
           <StatusBadge tone={statusTone} withDot>
             {status}
@@ -685,10 +685,7 @@ export function WorkflowEditor({
       )}
       {showPublishWarnings && clientWarnings.length > 0 && (
         <div className="client-warnings">
-          <p>
-            Fix these issues before publish (client checks; backend ValidateForPublish is still the
-            authority):
-          </p>
+          <p>{t('Fix these issues before publish (client checks; backend ValidateForPublish is still the authority):')}</p>
           <ul>
             {clientWarnings.map((w) => (
               <li key={w}>{w}</li>
@@ -701,19 +698,15 @@ export function WorkflowEditor({
               setShowPublishWarnings(false)
               publishMutation.mutate()
             }}
-          >
-            Publish anyway
-          </button>
+          >{t('Publish anyway')}</button>
         </div>
       )}
 
       <fieldset className="wf-card" disabled={readOnly}>
         <div className="grid-2">
-          <label>
-            Name
-            <input
+          <label>{t('Name')}<input
               value={draft.name}
-              placeholder="e.g. Inbound Putaway"
+              placeholder={t('e.g. Inbound Putaway')}
               onChange={(e) => {
                 const name = e.target.value
                 setDraft({ ...draft, name })
@@ -721,17 +714,14 @@ export function WorkflowEditor({
             />
             <span className="muted wf-code-preview">
               {draft.code ? (
-                <>
-                  Code: <code>{draft.code}</code>
+                <>{t('Code:')}{' '}<code>{draft.code}</code>
                 </>
               ) : (
-                'The code is generated when you save.'
+                t('The code is generated when you save.')
               )}
             </span>
           </label>
-          <label>
-            Description
-            <input
+          <label>{t('Description')}<input
               value={draft.description ?? ''}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             />
@@ -740,9 +730,7 @@ export function WorkflowEditor({
       </fieldset>
 
       <fieldset className="wf-card" disabled={readOnly}>
-        <legend>
-          Variables
-          <button
+        <legend>{t('Variables')}<button
             type="button"
             className="btn small"
             onClick={() =>
@@ -751,26 +739,24 @@ export function WorkflowEditor({
                 variables: [...draft.variables, emptyVariable(draft.variables.length)],
               })
             }
-          >
-            + Variable
-          </button>
+          >{t('+ Variable')}</button>
         </legend>
         {draft.variables.length > 0 && (
-          <div className="var-table" tabIndex={0} aria-label="Variables table, scroll horizontally">
+          <div className="var-table" tabIndex={0} aria-label={t('Variables table, scroll horizontally')}>
             <div className="var-row var-row--head" aria-hidden>
-              <span>Key</span>
-              <span>Name</span>
-              <span>Type</span>
-              <span>Source</span>
-              <span>Required</span>
-              <span>Configured value</span>
+              <span>{t('Key')}</span>
+              <span>{t('Name')}</span>
+              <span>{t('Type')}</span>
+              <span>{t('Source')}</span>
+              <span>{t('Required')}</span>
+              <span>{t('Configured value')}</span>
               <span />
             </div>
             {draft.variables.map((variable, index) => (
               <div key={index} className="var-row">
                 {variable.source === 'SYSTEM_VALUE' ? (
                   <select
-                    aria-label="System variable key"
+                    aria-label={t('System variable key')}
                     value={variable.key}
                     onChange={(e) => {
                       const sys = metadata.systemVariables.find((s) => s.key === e.target.value)
@@ -782,7 +768,7 @@ export function WorkflowEditor({
                       })
                     }}
                   >
-                    <option value="">Select SYSTEM_VALUE…</option>
+                    <option value="">{t('Select SYSTEM_VALUE…')}</option>
                     {metadata.systemVariables.map((s) => (
                       <option key={s.key} value={s.key}>
                         {s.key}
@@ -791,20 +777,20 @@ export function WorkflowEditor({
                   </select>
                 ) : (
                   <input
-                    placeholder="key"
-                    aria-label="Variable key"
+                    placeholder={t('key')}
+                    aria-label={t('Variable key')}
                     value={variable.key}
                     onChange={(e) => updateVariable(index, { key: e.target.value })}
                   />
                 )}
                 <input
-                  placeholder="name"
-                  aria-label="Variable name"
+                  placeholder={t('name')}
+                  aria-label={t('Variable name')}
                   value={variable.name}
                   onChange={(e) => updateVariable(index, { name: e.target.value })}
                 />
                 <select
-                  aria-label="Data type"
+                  aria-label={t('Data type')}
                   value={variable.dataType}
                   disabled={variable.source === 'SYSTEM_VALUE'}
                   onChange={(e) =>
@@ -820,7 +806,7 @@ export function WorkflowEditor({
                   ))}
                 </select>
                 <select
-                  aria-label="Variable source"
+                  aria-label={t('Variable source')}
                   value={variable.source}
                   onChange={(e) =>
                     updateVariable(index, {
@@ -851,8 +837,8 @@ export function WorkflowEditor({
                         : 'text'
                     }
                     step={variable.dataType === 'DECIMAL' ? 'any' : undefined}
-                    placeholder="configured value"
-                    aria-label="Configured value"
+                    placeholder={t('configured value')}
+                    aria-label={t('Configured value')}
                     value={
                       variable.configuredValue == null ||
                       (typeof variable.configuredValue === 'number' &&
@@ -888,9 +874,7 @@ export function WorkflowEditor({
                       variables: draft.variables.filter((_, i) => i !== index),
                     })
                   }
-                >
-                  Remove
-                </button>
+                >{t('Remove')}</button>
               </div>
             ))}
           </div>
@@ -898,9 +882,7 @@ export function WorkflowEditor({
       </fieldset>
 
       <fieldset className="wf-card wf-tree" disabled={readOnly}>
-        <legend>
-          Tasks &amp; Steps
-          <button
+        <legend>{t('Tasks & Steps')}<button
             type="button"
             className="btn small"
             onClick={() => {
@@ -911,21 +893,16 @@ export function WorkflowEditor({
               setSelectedTask(draft.tasks.length)
               setSelectedStep(0)
             }}
-          >
-            + Task
-          </button>
+          >{t('+ Task')}</button>
         </legend>
-        <p className="wf-tree__hint muted">
-          Steps belong to the task above them. Click + Step to open its config right away. Drag the
-          handle to reorder steps.
-        </p>
+        <p className="wf-tree__hint muted">{t('Steps belong to the task above them. Click + Step to open its config right away. Drag the handle to reorder steps.')}</p>
 
         {draft.tasks.length === 0 && (
-          <p className="muted">No tasks yet. Add a task, then add steps under that task.</p>
+          <p className="muted">{t('No tasks yet. Add a task, then add steps under that task.')}</p>
         )}
 
         <div className="wf-tree__list">
-          {draft.tasks.map((t, taskIndex) => {
+          {draft.tasks.map((taskBlock, taskIndex) => {
             const taskOpen = selectedTask === taskIndex
             return (
               <div
@@ -939,28 +916,26 @@ export function WorkflowEditor({
                     aria-expanded={taskOpen}
                     onClick={() => {
                       setSelectedTask(taskIndex)
-                      if (t.steps.length > 0) setSelectedStep(0)
+                      if (taskBlock.steps.length > 0) setSelectedStep(0)
                     }}
                   >
                     <span className="wf-task-block__chevron" aria-hidden>
                       {taskOpen ? '▾' : '▸'}
                     </span>
-                    <span className="wf-task-block__title">
-                      Task {taskIndex + 1}
-                      {t.name ? (
+                    <span className="wf-task-block__title">{t('Task {value}', { value: taskIndex + 1 })}{taskBlock.name ? (
                         <>
-                          : <strong>{t.name}</strong>
+                          : <strong>{taskBlock.name}</strong>
                         </>
                       ) : null}
                     </span>
                     <span className="wf-task-block__count">
-                      {t.steps.length} {t.steps.length === 1 ? 'step' : 'steps'}
+                      {taskBlock.steps.length} {taskBlock.steps.length === 1 ? t('step') : t('steps')}
                     </span>
                   </button>
                   <button
                     type="button"
                     className="btn small danger"
-                    title="Remove task"
+                    title={t('Remove task')}
                     onClick={() => {
                       const nextTasks = draft.tasks.filter((_, i) => i !== taskIndex)
                       setDraft({ ...draft, tasks: nextTasks })
@@ -969,18 +944,14 @@ export function WorkflowEditor({
                       }
                       setSelectedStep(0)
                     }}
-                  >
-                    Remove
-                  </button>
+                  >{t('Remove')}</button>
                 </div>
 
                 {taskOpen && (
                   <div className="wf-task-block__body">
                     <div className="grid-2">
-                      <label>
-                        Name
-                        <input
-                          value={t.name}
+                      <label>{t('Name')}<input
+                          value={taskBlock.name}
                           onChange={(e) => updateTask(taskIndex, { name: e.target.value })}
                         />
                       </label>
@@ -988,27 +959,25 @@ export function WorkflowEditor({
 
                     <div className="wf-steps-under-task">
                       <div className="wf-steps-under-task__bar">
-                        <strong>Steps in this task</strong>
+                        <strong>{t('Steps in this task')}</strong>
                         <button
                           type="button"
                           className="btn small"
                           onClick={() => {
-                            const next = emptyStep(t.steps.length + 1)
-                            updateTask(taskIndex, { steps: [...t.steps, next] })
+                            const next = emptyStep(taskBlock.steps.length + 1)
+                            updateTask(taskIndex, { steps: [...taskBlock.steps, next] })
                             setSelectedTask(taskIndex)
-                            setSelectedStep(t.steps.length)
+                            setSelectedStep(taskBlock.steps.length)
                           }}
-                        >
-                          + Step
-                        </button>
+                        >{t('+ Step')}</button>
                       </div>
 
-                      {t.steps.length === 0 && (
-                        <p className="muted">No steps in this task yet.</p>
+                      {taskBlock.steps.length === 0 && (
+                        <p className="muted">{t('No steps in this task yet.')}</p>
                       )}
 
                       <ul className="wf-step-list">
-                        {t.steps.map((s, stepIndex) => {
+                        {taskBlock.steps.map((s, stepIndex) => {
                           const stepOpen =
                             selectedTask === taskIndex && selectedStep === stepIndex
                           const isDropTarget =
@@ -1047,7 +1016,7 @@ export function WorkflowEditor({
                                 setDropStep(null)
                                 if (from === to) return
                                 updateTask(taskIndex, {
-                                  steps: reorderItem(t.steps, from, to),
+                                  steps: reorderItem(taskBlock.steps, from, to),
                                 })
                                 setSelectedTask(taskIndex)
                                 setSelectedStep(to)
@@ -1057,9 +1026,9 @@ export function WorkflowEditor({
                                 <button
                                   type="button"
                                   className="wf-step-card__handle"
-                                  title="Drag to reorder"
+                                  title={t('Drag to reorder')}
                                   draggable={!readOnly}
-                                  aria-label={`Drag step ${stepIndex + 1}`}
+                                  aria-label={t('Drag step {value}', { value: stepIndex + 1 })}
                                   onDragStart={(e: DragEvent) => {
                                     e.dataTransfer.effectAllowed = 'move'
                                     e.dataTransfer.setData('text/plain', String(stepIndex))
@@ -1081,9 +1050,9 @@ export function WorkflowEditor({
                                     setSelectedStep(stepIndex)
                                   }}
                                 >
-                                  <span className="wf-step-list__index">Step {stepIndex + 1}</span>
+                                  <span className="wf-step-list__index">{t('Step')}{' '}{stepIndex + 1}</span>
                                   <span className="wf-step-list__label">
-                                    {s.name || 'Untitled step'}
+                                    {s.name || t('Untitled step')}
                                   </span>
                                   <span className="wf-step-list__meta muted">
                                     {s.stepType}
@@ -1093,9 +1062,9 @@ export function WorkflowEditor({
                                 <button
                                   type="button"
                                   className="btn small danger"
-                                  title="Remove step"
+                                  title={t('Remove step')}
                                   onClick={() => {
-                                    const nextSteps = t.steps.filter((_, i) => i !== stepIndex)
+                                    const nextSteps = taskBlock.steps.filter((_, i) => i !== stepIndex)
                                     updateTask(taskIndex, { steps: nextSteps })
                                     if (
                                       selectedTask === taskIndex &&
@@ -1104,17 +1073,13 @@ export function WorkflowEditor({
                                       setSelectedStep(Math.max(0, nextSteps.length - 1))
                                     }
                                   }}
-                                >
-                                  Remove
-                                </button>
+                                >{t('Remove')}</button>
                               </div>
 
                               {stepOpen && step && (
                                 <div className="step-form">
                                   <div className="grid-2">
-                                    <label>
-                                      Name
-                                      <input
+                                    <label>{t('Name')}<input
                                         value={step.name}
                                         onChange={(e) =>
                                           updateStep(taskIndex, stepIndex, {
@@ -1123,9 +1088,7 @@ export function WorkflowEditor({
                                         }
                                       />
                                     </label>
-                                    <label>
-                                      Step type
-                                      <select
+                                    <label>{t('Step type')}<select
                                         value={step.stepType}
                                         onChange={(e) =>
                                           updateStep(taskIndex, stepIndex, {
@@ -1142,13 +1105,11 @@ export function WorkflowEditor({
                                         ))}
                                       </select>
                                     </label>
-                                    <label>
-                                      Operation
-                                      <select
+                                    <label>{t('Operation')}<select
                                         value={step.operationCode}
                                         onChange={(e) => applyOperationCode(e.target.value)}
                                       >
-                                        <option value="">Select…</option>
+                                        <option value="">{t('Select…')}</option>
                                         {stepTypeMeta?.operations.map((o) => (
                                           <option key={o.code} value={o.code}>
                                             {o.code}
@@ -1156,9 +1117,7 @@ export function WorkflowEditor({
                                         ))}
                                       </select>
                                     </label>
-                                    <label>
-                                      On failure
-                                      <select
+                                    <label>{t('On failure')}<select
                                         value={step.onFailure}
                                         onChange={(e) =>
                                           updateStep(taskIndex, stepIndex, {
@@ -1174,9 +1133,7 @@ export function WorkflowEditor({
                                         ))}
                                       </select>
                                     </label>
-                                    <label>
-                                      Timeout (s)
-                                      <input
+                                    <label>{t('Timeout (s)')}<input
                                         type="number"
                                         value={step.timeoutSeconds}
                                         onChange={(e) =>
@@ -1195,30 +1152,24 @@ export function WorkflowEditor({
                                         stopAction={operationMeta.stopActionFilter}
                                       />
                                       {operationMeta.executionScope === 'ONCE_PER_JOB' && (
-                                        <span className="muted scope-hint">
-                                          CURRENT_MOVEMENT is not available for this operation.
-                                        </span>
+                                        <span className="muted scope-hint">{t('CURRENT_MOVEMENT is not available for this operation.')}</span>
                                       )}
                                     </div>
                                   )}
 
                                   {needsAssignedRobotId && (
                                     <div className="add-system-var-prompt">
-                                      <span>This operation requires robotId.</span>
+                                      <span>{t('This operation requires robotId.')}</span>
                                       <button
                                         type="button"
                                         className="btn small"
                                         onClick={addAssignedRobotId}
-                                      >
-                                        Add required system variable: assignedRobotId
-                                      </button>
+                                      >{t('Add required system variable: assignedRobotId')}</button>
                                     </div>
                                   )}
 
                                   {step.stepType === 'HUMAN_INTERACTION' && (
-                                    <label>
-                                      Instruction
-                                      <input
+                                    <label>{t('Instruction')}<input
                                         value={step.instructionText ?? ''}
                                         onChange={(e) =>
                                           updateStep(taskIndex, stepIndex, {
@@ -1229,9 +1180,9 @@ export function WorkflowEditor({
                                     </label>
                                   )}
 
-                                  <h3>Input bindings</h3>
+                                  <h3>{t('Input bindings')}</h3>
                                   {!operationMeta && (
-                                    <p className="muted">Select an operation to bind inputs.</p>
+                                    <p className="muted">{t('Select an operation to bind inputs.')}</p>
                                   )}
                                   {operationMeta?.inputs.map((input) => (
                                     <BindingEditor
@@ -1262,7 +1213,7 @@ export function WorkflowEditor({
 
                                   {operationMeta && operationMeta.outputs.length > 0 && (
                                     <>
-                                      <h3>Outputs (read-only metadata)</h3>
+                                      <h3>{t('Outputs (read-only metadata)')}</h3>
                                       <ul className="muted">
                                         {operationMeta.outputs.map((o) => (
                                           <li key={o.key}>

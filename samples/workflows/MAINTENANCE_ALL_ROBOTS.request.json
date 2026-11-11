@@ -1,0 +1,97 @@
+{
+  "code": "MAINTENANCE_ALL_ROBOTS",
+  "name": "Maintenance of all robots",
+  "description": "Each robot goes to the maintenance bay in turn and a person confirms the work. One Job per robot, one robot at a time.",
+  "variables": [
+    {
+      "key": "maintenanceEndpointId",
+      "name": "Maintenance bay",
+      "dataType": "UUID",
+      "source": "STAFF_INPUT",
+      "isRequired": true,
+      "description": "Chosen when the run starts.",
+      "sequenceNo": 0
+    },
+    {
+      "key": "assignedRobotId",
+      "name": "Assigned robot",
+      "dataType": "UUID",
+      "source": "SYSTEM_VALUE",
+      "isRequired": true,
+      "description": "Resolved at runtime from the job assignment.",
+      "sequenceNo": 1
+    }
+  ],
+  "tasks": [
+    {
+      "taskKey": "MAINTAIN",
+      "name": "Maintain one robot",
+      "sequenceNo": 1,
+      "steps": [
+        {
+          "stepKey": "CHECK_EMPTY",
+          "name": "Check nothing is on board",
+          "stepType": "CHECK",
+          "sequenceNo": 1,
+          "operationCode": "LOAD_STATE",
+          "timeoutSeconds": 30,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "expectedLoadState": {
+              "sourceType": "CONSTANT",
+              "constantValue": "EMPTY"
+            }
+          }
+        },
+        {
+          "stepKey": "MOVE_BAY",
+          "name": "Drive to the maintenance bay",
+          "stepType": "MOVE",
+          "sequenceNo": 2,
+          "operationCode": "TRANSIT",
+          "timeoutSeconds": 600,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "FAIL_JOB",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            },
+            "targetEndpointId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "maintenanceEndpointId"
+            },
+            "purpose": {
+              "sourceType": "CONSTANT",
+              "constantValue": "TRANSIT"
+            }
+          }
+        },
+        {
+          "stepKey": "MAINTENANCE_CONFIRM",
+          "name": "A person confirms the maintenance",
+          "stepType": "HUMAN_INTERACTION",
+          "sequenceNo": 3,
+          "operationCode": "MAINTENANCE_CONFIRM",
+          "timeoutSeconds": 3600,
+          "maxAttempts": 1,
+          "retryBackoffSeconds": 0,
+          "onFailure": "PAUSE_FOR_OPERATOR",
+          "inputBindings": {
+            "robotId": {
+              "sourceType": "WORKFLOW_VAR",
+              "sourceReference": "assignedRobotId"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

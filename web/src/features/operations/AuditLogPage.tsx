@@ -6,7 +6,7 @@ import { formatIsoDateTime } from '@/shared/lib/format'
 import { SearchInput } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
-
+import { t } from '@/shared/i18n'
 const ENTITY_TYPES = ['', 'ACCOUNT', 'ROBOT', 'JOB', 'JOB_STEP', 'REQUEST', 'MAP', 'CONTAINER', 'ISSUE', 'WORKFLOW']
 
 function changes(entry: AuditLogEntry): string {
@@ -32,17 +32,17 @@ export function AuditLogPage() {
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
-        <SectionHead title="Audit log" hint="Account, map, transport, job and robot actions with who did them and when.">
-          <SearchInput className="w-64" placeholder="Action prefix, e.g. account." value={action} onChange={setAction} />
+        <SectionHead title={t('Audit log')} hint={t('Account, map, transport, job and robot actions with who did them and when.')}>
+          <SearchInput className="w-64" placeholder={t('Action prefix, e.g. account.')} value={action} onChange={setAction} />
           <select
             className={controlClass('pill')}
-            aria-label="Filter by entity"
+            aria-label={t('Filter by entity')}
             value={entityType}
             onChange={(event) => setEntityType(event.target.value)}
           >
             {ENTITY_TYPES.map((type) => (
               <option key={type} value={type}>
-                {type || 'All entities'}
+                {type || t('All entities')}
               </option>
             ))}
           </select>
@@ -50,11 +50,11 @@ export function AuditLogPage() {
         <Table>
           <thead>
             <tr>
-              <Th>When</Th>
-              <Th>Who</Th>
-              <Th>Action</Th>
-              <Th>Entity</Th>
-              <Th>Change</Th>
+              <Th>{t('When')}</Th>
+              <Th>{t('Who')}</Th>
+              <Th>{t('Action')}</Th>
+              <Th>{t('Entity')}</Th>
+              <Th>{t('Change')}</Th>
             </tr>
           </thead>
           <tbody>
@@ -64,7 +64,7 @@ export function AuditLogPage() {
                   {formatIsoDateTime(entry.occurredAt)}
                 </Td>
                 <Td>
-                  {entry.actorUsername ?? 'system'}
+                  {entry.actorUsername ?? t('system')}
                   {entry.actorRole ? <span className="ml-1 text-xs text-muted">{entry.actorRole}</span> : null}
                 </Td>
                 <Td tone="strong">{entry.action}</Td>
@@ -80,14 +80,12 @@ export function AuditLogPage() {
                 </Td>
               </Tr>
             ))}
-            {logs.data?.items.length === 0 ? <EmptyRow colSpan={5}>Nothing recorded for this filter.</EmptyRow> : null}
-            {logs.isLoading ? <EmptyRow colSpan={5}>Loading…</EmptyRow> : null}
-            {logs.isError ? <EmptyRow colSpan={5}>Could not load the audit log.</EmptyRow> : null}
+            {logs.data?.items.length === 0 ? <EmptyRow colSpan={5}>{t('Nothing recorded for this filter.')}</EmptyRow> : null}
+            {logs.isLoading ? <EmptyRow colSpan={5}>{t('Loading…')}</EmptyRow> : null}
+            {logs.isError ? <EmptyRow colSpan={5}>{t('Could not load the audit log.')}</EmptyRow> : null}
           </tbody>
         </Table>
-        <p className="mt-4 text-xs text-muted">
-          Showing the latest {logs.data?.items.length ?? 0} of {logs.data?.total ?? 0}. Passwords and tokens are never recorded.
-        </p>
+        <p className="mt-4 text-xs text-muted">{t('Showing the latest {value} of {value2}. Passwords and tokens are never recorded.', { value: logs.data?.items.length ?? 0, value2: logs.data?.total ?? 0 })}</p>
       </div>
     </div>
   )

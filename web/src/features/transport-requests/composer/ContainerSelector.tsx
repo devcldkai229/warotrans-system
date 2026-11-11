@@ -6,8 +6,9 @@ import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
 import { controlClass } from '@/shared/ui/controlClass'
 import { humanize } from '@/shared/lib/format'
 import type { ComposerContainer, ComposerData } from './types'
-
+import { t } from '@/shared/i18n'
 interface ContainerSelectorProps {
+
   data: ComposerData
   excludeIds: Set<string>
   onCancel: () => void
@@ -58,16 +59,16 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0 space-y-3 border-b border-outline/60 px-4 py-3">
-        <h2 className="text-sm font-medium">Select containers</h2>
+        <h2 className="text-sm font-medium">{t('Select containers')}</h2>
         <SearchInput
           variant="field"
           value={data.containerSearch}
           onChange={data.setContainerSearch}
-          placeholder="code / product / barcode"
+          placeholder={t('code / product / barcode')}
         />
         <div className="grid grid-cols-3 gap-2">
           <select className={controlClass('sm')} value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
-            <option value="">Location</option>
+            <option value="">{t('Location')}</option>
             {locations.map((code) => (
               <option key={code} value={code}>
                 {code}
@@ -75,7 +76,7 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
             ))}
           </select>
           <select className={controlClass('sm')} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">Status</option>
+            <option value="">{t('Status')}</option>
             {statuses.map((status) => (
               <option key={status} value={status}>
                 {humanize(status)}
@@ -83,7 +84,7 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
             ))}
           </select>
           <select className={controlClass('sm')} value={productFilter} onChange={(e) => setProductFilter(e.target.value)}>
-            <option value="">Product</option>
+            <option value="">{t('Product')}</option>
             {products.map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -94,7 +95,7 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
       </header>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3">
-        {rows.length === 0 ? <p className="px-1 text-xs text-muted">No containers match.</p> : null}
+        {rows.length === 0 ? <p className="px-1 text-xs text-muted">{t('No containers match.')}</p> : null}
         {rows.map((item) => (
           <label
             key={item.id}
@@ -112,9 +113,7 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
                 <StatusBadge tone={CONTAINER_STATUS_TONE[item.status]}>{item.status}</StatusBadge>
               </div>
               <p className="mt-0.5 truncate text-xs text-ink-2">{item.productName}</p>
-              <p className="mt-1 text-[11px] text-muted">
-                Current:{' '}
-                {item.currentLocationCode
+              <p className="mt-1 text-[11px] text-muted">{t('Current:{value}', { value: ' ' })}{item.currentLocationCode
                   ? `${item.currentLocationCode}${item.currentLevelNo != null ? ` · L${item.currentLevelNo}` : ''}`
                   : item.currentEndpointName ?? '—'}
               </p>
@@ -124,18 +123,14 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
       </div>
 
       <footer className="flex shrink-0 items-center gap-2 border-t border-outline/60 px-4 py-3">
-        <span className="text-xs text-muted">Selected: {picked.length}</span>
-        <Button variant="ghost" size="sm" className="ml-auto" onClick={onCancel}>
-          Cancel
-        </Button>
+        <span className="text-xs text-muted">{t('Selected:')}{' '}{picked.length}</span>
+        <Button variant="ghost" size="sm" className="ml-auto" onClick={onCancel}>{t('Cancel')}</Button>
         <Button
           variant="primary"
           size="sm"
           disabled={picked.length === 0}
           onClick={() => onAdd(picked)}
-        >
-          Add {picked.length || ''} container{picked.length === 1 ? '' : 's'}
-        </Button>
+        >{t('Add {value} container{value2}', { value: picked.length || '', value2: picked.length === 1 ? '' : 's' })}</Button>
       </footer>
     </div>
   )

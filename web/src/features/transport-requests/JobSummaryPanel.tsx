@@ -6,8 +6,10 @@ import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { JOB_CONTAINER_STATUS_TONE, JOB_STATUS_TONE, STEP_STATUS_TONE } from '@/shared/ui/statusTones'
-import { Drawer, DrawerHeading, FailureNote, LineItem, MetaList, MetaRow } from './panelParts'
-
+import { FailureExplanation } from '@/features/jobs/FailureExplanation'
+import { explainJobProblem } from '@/features/jobs/failureCatalog'
+import { Drawer, DrawerHeading, LineItem, MetaList, MetaRow } from './panelParts'
+import { t } from '@/shared/i18n'
 const LIVE_JOB_STATUSES: JobStatus[] = ['CREATED', 'QUEUED', 'ASSIGNED', 'RUNNING', 'PAUSED', 'REASSIGNING', 'RECOVERY_REQUIRED']
 
 interface JobSummaryPanelProps {
@@ -40,7 +42,7 @@ export function JobSummaryPanel({ jobRef, jobId, containerBarcodes, onClose, onO
 
   return (
     <Drawer
-      label={`${jobRef.jobNo} summary`}
+      label={t('{jobNo} summary', { jobNo: jobRef.jobNo })}
       kind="Job"
       code={jobRef.jobNo}
       status={status}
@@ -48,24 +50,22 @@ export function JobSummaryPanel({ jobRef, jobId, containerBarcodes, onClose, onO
       onClose={onClose}
     >
       <MetaList>
-        <MetaRow label="Robot">{jobRef.robotCode ?? 'Unassigned'}</MetaRow>
-        {elapsed !== null ? <MetaRow label="Elapsed">{formatDuration(elapsed)}</MetaRow> : null}
+        <MetaRow label={t('Robot')}>{jobRef.robotCode ?? t('Unassigned')}</MetaRow>
+        {elapsed !== null ? <MetaRow label={t('Elapsed')}>{formatDuration(elapsed)}</MetaRow> : null}
       </MetaList>
 
       {job ? (
         <>
           <div className="mt-5 flex flex-col gap-2 text-xs text-muted">
             <Meter percent={steps.length === 0 ? 0 : (done / steps.length) * 100} tone="blue" />
-            <span>
-              {done} of {steps.length} steps done
-            </span>
+            <span>{t('{done} of {length} steps done', { done, length: steps.length })}</span>
           </div>
 
-          {job.failureMessage ? <FailureNote>{job.failureMessage}</FailureNote> : null}
+          {explainJobProblem(job) ? <FailureExplanation problem={explainJobProblem(job)!} message={job.failureMessage} className="mt-4" /> : null}
 
           {job.containers.length > 0 ? (
             <>
-              <DrawerHeading>Containers</DrawerHeading>
+              <DrawerHeading>{t('Containers')}</DrawerHeading>
               <ol>
                 {job.containers.map((container) => (
                   <LineItem
@@ -73,7 +73,7 @@ export function JobSummaryPanel({ jobRef, jobId, containerBarcodes, onClose, onO
                     sequence={container.sequenceNo}
                     title={containerBarcodes.get(container.containerId) ?? container.containerId.slice(0, 8)}
                     code
-                    note={container.deliveredAt ? 'Delivered' : container.loadedAt ? 'On the robot' : 'Waiting for pickup'}
+                    note={container.deliveredAt ? t('Delivered') : container.loadedAt ? t('On the robot') : t('Waiting for pickup')}
                     status={container.status}
                     tone={JOB_CONTAINER_STATUS_TONE[container.status]}
                   />
@@ -82,7 +82,7 @@ export function JobSummaryPanel({ jobRef, jobId, containerBarcodes, onClose, onO
             </>
           ) : null}
 
-          <DrawerHeading>Steps</DrawerHeading>
+          <DrawerHeading>{t('Steps')}</DrawerHeading>
           <ol>
             {steps.map((step, index) => (
               <LineItem
@@ -99,21 +99,16 @@ export function JobSummaryPanel({ jobRef, jobId, containerBarcodes, onClose, onO
       ) : (
         <p className="mt-6 text-xs text-muted">
           {jobQuery.isError ? (
-            <>
-              The job could not be loaded.{' '}
-              <button type="button" className="font-medium text-ink underline" onClick={() => void jobQuery.refetch()}>
-                Retry
-              </button>
+            <>{t('The job could not be loaded.{value}', { value: ' ' })}<button type="button" className="font-medium text-ink underline" onClick={() => void jobQuery.refetch()}>{t('Retry')}</button>
             </>
           ) : (
-            'Loading job…'
+            t('Loading job…')
           )}
         </p>
       )}
 
       {onOpenFull ? (
-        <Button variant="primary" block className="mt-6" onClick={onOpenFull}>
-          View job detail <Icon name="arrowRight" size={14} />
+        <Button variant="primary" block className="mt-6" onClick={onOpenFull}>{t('View job detail')}{' '}<Icon name="arrowRight" size={14} />
         </Button>
       ) : null}
     </Drawer>

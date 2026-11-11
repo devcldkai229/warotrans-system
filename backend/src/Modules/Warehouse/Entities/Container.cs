@@ -12,6 +12,11 @@ public sealed class Container
     public ContainerStatus Status { get; set; }
     public Guid? CurrentStorageLocationId { get; set; }
     public short? CurrentLevelNo { get; set; }
+
+    /// <summary>FL-03: measured, null until someone enters it.</summary>
+    public decimal? WeightKg { get; set; }
+    public double? LengthM { get; set; }
+    public double? WidthM { get; set; }
     public Guid CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

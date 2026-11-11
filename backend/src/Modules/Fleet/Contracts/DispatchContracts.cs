@@ -15,6 +15,14 @@ public static class DispatchReasons
     public const string BatteryLow = "battery_low";
     public const string BatteryUnknown = "battery_unknown";
     public const string BatteryStale = "battery_stale";
+    public const string PayloadExceeded = "robot_payload_exceeded";
+    public const string ContainerLimitExceeded = "robot_container_limit_exceeded";
+    public const string LargerThanTrafficFootprint = "robot_larger_than_traffic_footprint";
+
+    /// <summary>Not a reason to refuse: the figures were missing, so the load could not be checked.</summary>
+    public const string CapacityUnknown = "capacity_unknown";
+
+    public static bool IsCapacity(string reason) => reason is PayloadExceeded or ContainerLimitExceeded or LargerThanTrafficFootprint;
 
     /// <summary>
     /// The only reasons an operator override (dispatch.override + a reason) may skip: the battery is not known to be
@@ -24,7 +32,15 @@ public static class DispatchReasons
 }
 
 /// <summary>Where the work starts (the pickup endpoint), for the distance score. Null = score without distance.</summary>
-public sealed record DispatchQuery(Guid MapVersionId, double? PickupX, double? PickupY, IReadOnlySet<Guid> BusyRobotIds);
+public sealed record DispatchQuery(Guid MapVersionId, double? PickupX, double? PickupY, IReadOnlySet<Guid> BusyRobotIds)
+{
+    /// <summary>FL-03: what the Job carries. Null weight = at least one Container has none on record.</summary>
+    public int? ContainerCount { get; init; }
+    public decimal? TotalWeightKg { get; init; }
+}
+
+/// <summary>FL-03: the most any robot in service on a map can carry. Null when a robot has not declared it: nothing can be concluded then.</summary>
+public sealed record FleetCapacity(int? LargestMaxContainers, decimal? LargestPayloadKg);
 
 /// <summary>
 /// One robot as dispatch saw it: eligible or not and why, with the factors of its score (lower = better).
@@ -43,6 +59,9 @@ public sealed record DispatchCandidate(
     string Status,
     bool IsOnline)
 {
+    /// <summary>Things worth knowing that did not refuse the robot (capacity_unknown).</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+
     /// <summary>Not eligible, but every reason may be overridden by an operator with a reason.</summary>
     public bool Overridable => !Eligible && Reasons.Count > 0 && Reasons.All(DispatchReasons.IsOverridable);
 }
@@ -54,7 +73,11 @@ public sealed record DispatchDecisionRecord(
     string Trigger,
     Guid? ActorId,
     string? OverrideReason,
-    IReadOnlyList<DispatchCandidate> Candidates);
+    IReadOnlyList<DispatchCandidate> Candidates)
+{
+    /// <summary>Set when <see cref="SelectedRobotId"/> was named but refused; that robot was not assigned.</summary>
+    public string? RefusalCode { get; init; }
+}
 
 public sealed record DispatchDecisionView(
     Guid Id,
@@ -65,7 +88,8 @@ public sealed record DispatchDecisionView(
     Guid? ActorId,
     string? OverrideReason,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<DispatchCandidate> Candidates);
+    IReadOnlyList<DispatchCandidate> Candidates,
+    string? RefusalCode = null);
 
 public static class DispatchTriggers
 {
