@@ -36,7 +36,7 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
     private sealed record Floor(Guid WarehouseId, Guid MapVersionId, Guid ShelfA, Guid ShelfB, Guid Outbound, Guid Dock, Guid[] Containers);
 
     [Fact]
-    public async Task Outbound_of_two_containers_from_two_shelves_is_one_job_with_one_dropoff_stop()
+    public async Task Outbound_of_two_containers_from_two_shelves_runs_through_the_published_steps()
     {
         var floor = await SeedFloorAsync();
         var workflows = await SeedWorkflowsAsync();
@@ -49,13 +49,16 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
 
         var queued = await Client.PostAsync($"{Route}/{requestId}/queue", null);
         Assert.Equal(HttpStatusCode.OK, queued.StatusCode);
-        var job = Assert.Single((await queued.Content.ReadFromJsonAsync<QueueDto>(JsonOptions))!.Jobs);
-        Assert.Equal(2, job.JobContainerCount);
+        var jobs = (await queued.Content.ReadFromJsonAsync<QueueDto>(JsonOptions))!.Jobs;
 
-        var keys = await StepKeysAsync(job.JobId);
-        Assert.Equal(
-            ["MOVE_TO_PICKUP", "CONFIRM_PICKUP", "MOVE_TO_PICKUP", "CONFIRM_PICKUP", "MOVE_TO_DROPOFF", "CONFIRM_DROPOFF", "CONFIRM_DROPOFF"],
-            keys);
+        // JobPlanning:MaxContainersPerJob is 1 in appsettings (WH-08): one Job per Container, each pickup then dropoff.
+        // Collecting both before one dropoff stop is the planner's job when the limit allows it (JobBatchSplitTests).
+        Assert.Equal(2, jobs.Count);
+        foreach (var job in jobs)
+        {
+            Assert.Equal(1, job.JobContainerCount);
+            Assert.Equal(["MOVE_TO_PICKUP", "CONFIRM_PICKUP", "MOVE_TO_DROPOFF", "CONFIRM_DROPOFF"], await StepKeysAsync(job.JobId));
+        }
     }
 
     [Fact]
