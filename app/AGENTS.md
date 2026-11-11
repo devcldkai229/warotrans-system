@@ -34,5 +34,6 @@
 - Sau sửa code: chạy `npm run typecheck` trong app và test liên quan (`npm test`); build web khi ảnh hưởng bundle. Không coi web pass là native/robot E2E pass.
 - Sửa docs/comment: kiểm tra link, tham chiếu và diff; không cần tạo test cho văn bản. Chỉ ghi kết quả đã chạy và giới hạn còn lại.
 - Git theo [rules/11](../rules/11-GIT-CICD-RULES.md): dùng `feature/*`, không push trực tiếp main/develop; chỉ stage phạm vi app và commit theo mẫu đang có trong repo.
+- Theo yêu cầu chủ dự án: triển khai từng task/nhóm nhỏ, chạy kiểm tra rồi đưa bước nghiệm thu để người dùng tự xác minh. Chờ người dùng xác nhận đạt mới commit và push nhóm đó; hoàn tất mốc này mới bắt đầu nhóm tiếp theo. Phản hồi chưa đạt thì sửa và kiểm tra lại trong cùng nhóm.
 - Chỉ duy trì hai file: AGENTS cho instruction ổn định; README cho context, cách chạy và gap BE. Cập nhật đúng mục bị ảnh hưởng.
 - Không tạo thêm plan/progress/findings/audit/history/backup Markdown trừ khi người dùng yêu cầu. Không copy transcript/artifact vào repo, không nhân bản rules hoặc bảng token từ source.

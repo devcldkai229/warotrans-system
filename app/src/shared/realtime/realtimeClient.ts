@@ -44,12 +44,16 @@ export interface RobotTelemetryEvent {
 
 export interface LiveNotificationEvent {
   id: string;
+  kind?: string;
   category: 'ROBOT_ARRIVED' | 'HAZARD' | 'JOB_ASSIGNED' | 'BATTERY_LOW' | 'SYSTEM';
   title: string;
   message: string;
   timeLabel: string;
   robotId?: string;
   jobId?: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  createdAt?: string;
   isRead: boolean;
 }
 
@@ -64,6 +68,7 @@ export interface ServerNotificationEvent {
   entityId?: string | null;
   route?: string | null;
   createdAt: string;
+  isRead?: boolean;
 }
 
 /** Maps a server notification onto the app's live-notification shape. */
@@ -71,17 +76,23 @@ export function toLiveNotification(data: ServerNotificationEvent): LiveNotificat
   const category: LiveNotificationEvent['category'] =
     data.kind === 'ROBOT_BATTERY_LOW' ? 'BATTERY_LOW'
       : data.kind === 'ISSUE_ASSIGNED' || data.kind === 'JOB_STEP_WAITING_FOR_PERSON' ? 'JOB_ASSIGNED'
-        : data.kind.startsWith('ISSUE') ? 'HAZARD'
+        : data.kind.startsWith('ISSUE') && data.kind !== 'ISSUE_RESOLVED' ? 'HAZARD'
           : 'SYSTEM';
   return {
     id: data.id,
+    kind: data.kind,
     category,
     title: data.title,
     message: data.content,
-    timeLabel: 'now',
+    timeLabel: Number.isFinite(Date.parse(data.createdAt))
+      ? new Date(data.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : 'Time Unavailable',
     robotId: data.entityType === 'ROBOT' ? data.entityId ?? undefined : undefined,
     jobId: data.entityType === 'JOB' ? data.entityId ?? undefined : undefined,
-    isRead: false,
+    entityType: data.entityType,
+    entityId: data.entityId,
+    createdAt: data.createdAt,
+    isRead: data.isRead === true,
   };
 }
 

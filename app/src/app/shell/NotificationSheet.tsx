@@ -1,12 +1,11 @@
-import React, { useEffect } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   AlertTriangle,
-  CheckCheck,
+  Bell,
   CheckCircle2,
   PackageCheck,
   Truck,
-  X,
 } from 'lucide-react-native';
 import { colors, ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
@@ -15,8 +14,9 @@ import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { toast } from '../../shared/context/ToastContext';
 import { useRealtime, LiveNotificationEvent } from '../../shared/realtime';
+import { notificationDestination } from '../../shared/realtime/notificationInbox';
+import { useAuth } from '../../features/auth/authContext';
 import { useNavigation } from '../navigation/NavigationContext';
 
 export interface NotificationSheetProps {
@@ -25,12 +25,7 @@ export interface NotificationSheetProps {
   onUnreadCountChange?: (count: number) => void;
 }
 
-/**
- * Native Bottom Sheet for Operational Notifications.
- *
- * Slides up from the bottom of the screen with a native drag pill,
- * full backdrop tap-to-dismiss, and compact mark-all-read action.
- */
+/** Compact notification popover; tap outside or use the accessibility escape gesture to close. */
 export function NotificationSheet({
   visible,
   onClose,
@@ -39,33 +34,52 @@ export function NotificationSheet({
   const topInset = useTopInset();
   const styles = useThemedStyles(createStyles);
   const { navigate } = useNavigation();
+  const { session } = useAuth();
+  const open = useRef(visible);
+  open.current = visible;
+  useEffect(() => {
+    open.current = visible;
+    return () => { open.current = false; };
+  }, [visible]);
   const {
     notifications,
     unreadCount,
     markAllNotificationsRead,
     markNotificationRead,
+    notificationsAvailable,
+    notificationsLoading,
+    notificationsRefreshing,
+    notificationsError,
+    notificationReadError,
+    isSavingNotification,
+    refreshNotifications,
   } = useRealtime();
+  const compact = notifications.length === 0 && !notificationsError && !notificationReadError;
 
   useEffect(() => {
     onUnreadCountChange?.(unreadCount);
   }, [unreadCount, onUnreadCountChange]);
 
   const handleMarkAllRead = () => {
-    markAllNotificationsRead();
-    toast.info('Marked as read for this app session.');
+    // Errors stay in this modal. Read state changes only after the server answers.
+    void markAllNotificationsRead().catch(() => {});
   };
 
-  const handleItemPress = (item: LiveNotificationEvent) => {
+  const handleItemPress = async (item: LiveNotificationEvent) => {
     triggerHaptic('tap');
-    markNotificationRead(item.id);
-    if (item.jobId) {
+    try {
+      if (!item.isRead) await markNotificationRead(item.id);
+    } catch { return; }
+    if (!open.current) return;
+    const destination = notificationDestination(item, session);
+    if (destination) {
       onClose();
-      navigate('job_detail', { jobId: item.jobId });
+      navigate(destination.screen, destination.params);
     }
   };
 
   const renderIcon = (item: LiveNotificationEvent) => {
-    const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
+    const isCompleted = item.kind === 'ISSUE_RESOLVED';
     if (isCompleted) {
       return <CheckCircle2 size={16} color={colors.success} strokeWidth={2.2} />;
     }
@@ -90,7 +104,7 @@ export function NotificationSheet({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={StyleSheet.absoluteFill}>
+      <View style={StyleSheet.absoluteFill} onAccessibilityEscape={onClose}>
         {/* Dismiss Backdrop */}
         <Pressable
           style={styles.backdrop}
@@ -100,49 +114,52 @@ export function NotificationSheet({
         />
 
         {/* Anchored Popover Card below Header Bell */}
-        <View style={[styles.cardContainer, { top: topInset + 54 }]}>
+        <View style={[styles.cardContainer, compact && styles.cardCompact, { top: topInset + 54 }]}>
           {/* Top Anchor Caret pointing directly to Notification Bell */}
           <View style={styles.caret} />
 
           <View style={styles.card}>
-            {/* Minimalist Popover Header */}
-            <View style={styles.header}>
-              <Text variant="headline" color={colors.textPrimary} style={styles.title}>
-                Job Activity
-              </Text>
-
-              <View style={styles.headerActions}>
-                {unreadCount > 0 && (
+            {(notificationReadError || notificationsError) && (
+              <View style={styles.state}>
+                {notificationReadError && <Text variant="caption" color="dangerText" accessibilityRole="alert">{notificationReadError}</Text>}
+                {notificationsError && <Text variant="caption" color="dangerText" accessibilityRole="alert">{notificationsError}</Text>}
+                {notificationsAvailable && (
                   <Pressable
-                    onPress={handleMarkAllRead}
+                    onPress={() => { void refreshNotifications(); }}
+                    disabled={notificationsRefreshing || isSavingNotification}
                     accessibilityRole="button"
-                    accessibilityLabel="Mark all as read"
-                    style={({ pressed }) => [styles.iconActionBtn, pressed && styles.btnPressed]}
+                    accessibilityState={{ disabled: notificationsRefreshing || isSavingNotification, busy: notificationsRefreshing }}
+                    style={({ pressed }) => [styles.retry, pressed && styles.btnPressed]}
                   >
-                    <CheckCheck size={14} color={colors.primary} strokeWidth={2.2} />
+                    <Text variant="caption" color="primary" fontWeight="600">Try Again</Text>
                   </Pressable>
                 )}
-
-                <Pressable
-                  onPress={onClose}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close notifications"
-                  style={({ pressed }) => [styles.iconActionBtn, pressed && styles.btnPressed]}
-                >
-                  <X size={14} color={colors.textSecondary} strokeWidth={2.2} />
-                </Pressable>
               </View>
-            </View>
+            )}
+
+            {!notificationsAvailable ? (
+              <View style={styles.emptyState}>
+                <Text variant="caption" color="textSecondary">Notifications unavailable</Text>
+              </View>
+            ) : notificationsLoading ? (
+              <View style={styles.emptyState}>
+                <ActivityIndicator color={colors.primary} accessibilityLabel="Loading notifications" />
+              </View>
+            ) : !notificationsError && notifications.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Bell size={22} color={colors.textMuted} strokeWidth={1.5} />
+                <Text variant="caption" color="textSecondary">No notifications yet</Text>
+              </View>
+            ) : null}
 
             {/* Notification items list */}
-            <Text variant="caption" color={colors.textSecondary} style={{ paddingHorizontal: 16, paddingBottom: 8 }}>Job snapshots and live updates. Read status is saved for this session only.</Text>
-            <ScrollView
+            {notifications.length > 0 && <ScrollView
               style={styles.list}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
             >
               {notifications.map((item) => {
-                const isCompleted = item.title?.includes('Completed') || item.message?.includes('Completed');
+                const isCompleted = item.kind === 'ISSUE_RESOLVED';
                 const isHazard = item.category === 'HAZARD';
                 const isReadyOrAssigned =
                   item.category === 'JOB_ASSIGNED' ||
@@ -155,9 +172,11 @@ export function NotificationSheet({
                 return (
                   <Pressable
                     key={item.id}
-                    onPress={() => handleItemPress(item)}
+                    onPress={() => { void handleItemPress(item); }}
+                    disabled={isSavingNotification}
                     accessibilityRole="button"
-                    accessibilityLabel={`${displayTitle}, ${item.timeLabel}`}
+                    accessibilityLabel={`${displayTitle}, ${item.timeLabel}, ${item.isRead ? 'read' : 'unread'}`}
+                    accessibilityState={{ disabled: isSavingNotification }}
                     style={({ pressed }) => [
                       styles.item,
                       !item.isRead && styles.itemUnread,
@@ -206,7 +225,20 @@ export function NotificationSheet({
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </ScrollView>}
+            {unreadCount > 0 && (
+              <Pressable
+                onPress={handleMarkAllRead}
+                disabled={isSavingNotification}
+                accessibilityRole="button"
+                accessibilityLabel="Mark all as read"
+                accessibilityState={{ disabled: isSavingNotification, busy: isSavingNotification }}
+                style={({ pressed }) => [styles.footerAction, pressed && styles.btnPressed]}
+              >
+                {isSavingNotification && <ActivityIndicator size="small" color={colors.primary} />}
+                <Text variant="caption" color="primary" fontWeight="600">{isSavingNotification ? 'Saving…' : 'Mark All As Read'}</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
@@ -226,64 +258,67 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       width: 280,
       zIndex: 1000,
     },
+    cardCompact: {
+      width: 240,
+    },
     caret: {
       position: 'absolute',
       top: -5,
-      right: 64,
+      // Bell center is 84 from the screen edge; subtract the card inset (14) and half the caret (5).
+      right: 65,
       width: 10,
       height: 10,
-      backgroundColor: colors.surfaceSubtle,
-      borderTopWidth: 1,
-      borderLeftWidth: 1,
-      borderColor: colors.borderStrong,
+      backgroundColor: colors.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
       transform: [{ rotate: '45deg' }],
       zIndex: 10,
     },
     card: {
-      width: 280,
+      width: '100%',
       maxHeight: 320,
       backgroundColor: colors.surface,
       borderRadius: radii.lg,
-      borderWidth: 1,
-      borderColor: colors.borderStrong,
-      overflow: 'hidden',
-      ...shadows.lg,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.surfaceSubtle,
-    },
-    title: {
-      fontWeight: '800',
-      fontSize: 14,
-    },
-    headerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    iconActionBtn: {
-      width: 26,
-      height: 26,
-      borderRadius: radii.sm,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      alignItems: 'center',
-      justifyContent: 'center',
+      overflow: 'hidden',
+      ...shadows.md,
     },
     btnPressed: {
       opacity: 0.65,
     },
     list: {
       maxHeight: 260,
+      flexShrink: 1,
       backgroundColor: colors.surface,
+    },
+    state: {
+      paddingHorizontal: 16,
+      paddingTop: 14,
+    },
+    emptyState: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      gap: 8,
+    },
+    retry: {
+      alignSelf: 'flex-start',
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    footerAction: {
+      minHeight: 44,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
     },
     listContent: {
       paddingBottom: 4,
@@ -354,12 +389,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       flexShrink: 0,
     },
     itemDesc: {
-      fontSize: 11,
-      lineHeight: 15,
+      fontSize: 12,
+      lineHeight: 17,
       marginTop: 2,
     },
     itemTime: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '500',
       marginTop: 3,
     },
