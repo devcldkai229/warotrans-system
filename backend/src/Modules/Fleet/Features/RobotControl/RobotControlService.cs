@@ -114,6 +114,11 @@ public sealed class RobotControlService(
         await db.Robots.Where(r => r.Id == robotId).ExecuteUpdateAsync(
             s => s.SetProperty(r => r.MotionHeld, false).SetProperty(r => r.MotionHoldChangedAt, clock.GetUtcNow()),
             cancellationToken);
+        if (robot.MotionHeld)
+        {
+            db.ChangeTracker.Clear();
+            await RobotStateJournal.WriteAsync(db, robotId, robot.Status, "motion_released", RobotStateEventSource.OPERATOR, cancellationToken);
+        }
         return await GetStopStateAsync(robotId, cancellationToken);
     }
 
@@ -131,7 +136,7 @@ public sealed class RobotControlService(
             return new StopStateResponse(robotId, StopStates.None, robot.MotionHeld, null, null, null, null, null, null, null);
         }
 
-        var state = StateOf(stop, robot.IsOnline);
+        var state = StateOf(stop, robot.IsOnline, clock.GetUtcNow());
         string? mode = null;
         try
         {
@@ -147,12 +152,14 @@ public sealed class RobotControlService(
     }
 
     /// <summary>Pure mapping, unit tested: a stop counts as verified only when the robot reported SUCCEEDED.</summary>
-    public static string StateOf(RobotCommand stop, bool robotOnline) => stop.Status switch
+    /// <remarks>FLT-02: accepted but no result for too long is not "still stopping": nobody knows, so it says UNKNOWN.</remarks>
+    public static string StateOf(RobotCommand stop, bool robotOnline, DateTimeOffset? now = null) => stop.Status switch
     {
         RobotCommandStatus.COMPLETED when stop.Outcome == "SUCCEEDED" => StopStates.StoppedVerified,
         RobotCommandStatus.REJECTED => StopStates.Rejected,
         RobotCommandStatus.SENT when robotOnline => StopStates.Requested,
-        RobotCommandStatus.ACKED or RobotCommandStatus.RUNNING when robotOnline => StopStates.Accepted,
+        RobotCommandStatus.ACKED or RobotCommandStatus.RUNNING
+            when robotOnline && (now is not { } at || at - (stop.AckedAt ?? stop.IssuedAt) <= RobotCommandCatalog.StopVerifyTimeout) => StopStates.Accepted,
         _ => StopStates.Unknown
     };
 

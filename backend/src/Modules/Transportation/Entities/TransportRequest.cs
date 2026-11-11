@@ -21,6 +21,12 @@ public sealed class TransportRequest
     public int PlanSchemaVersion { get; set; }
     public Dictionary<string, JsonElement>? WorkflowInputs { get; set; }
     public string? Note { get; set; }
+
+    /// <summary>FL-07: -1 low, 0 normal, 1 high. Its Jobs inherit it.</summary>
+    public int Priority { get; set; }
+
+    /// <summary>FL-07: when this should be done by. It moves the Jobs up the queue; nothing happens by itself when it passes.</summary>
+    public DateTimeOffset? DeadlineAt { get; set; }
     public DateTimeOffset SubmittedAt { get; set; }
     public DateTimeOffset? QueuedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }

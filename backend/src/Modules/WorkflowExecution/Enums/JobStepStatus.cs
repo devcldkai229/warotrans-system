@@ -9,5 +9,8 @@ public enum JobStepStatus
     PAUSED,
     COMPLETED,
     FAILED,
-    CANCELLED
+    CANCELLED,
+
+    /// <summary>Not needed any more: it only served a Container that failed on its own (WH-10).</summary>
+    SKIPPED
 }

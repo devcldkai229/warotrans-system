@@ -16,6 +16,8 @@ public sealed class JobStepConfiguration : IEntityTypeConfiguration<JobStep>
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.ErrorCode).HasMaxLength(50);
         builder.Property(x => x.ErrorMessage).HasMaxLength(500);
+        builder.Property(x => x.ClaimVersion).IsConcurrencyToken();
+        builder.HasIndex(x => new { x.Status, x.StepType });
 
         builder.Property(x => x.ResolvedInputs)
             .HasColumnType("jsonb")

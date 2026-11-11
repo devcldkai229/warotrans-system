@@ -17,7 +17,9 @@ public static class ListJobsEndpoint
             Guid? transportRequestId,
             Guid? robotId,
             int? take,
+            int? skip,
             JobQueries queries,
+            JobSummaryEnricher enricher,
             IFleetModule fleet,
             CancellationToken cancellationToken) =>
         {
@@ -39,8 +41,8 @@ public static class ListJobsEndpoint
             // A Job does not store its robot as a column; Fleet's assignments say which Jobs a robot ran. Assignments
             // can outlive a deleted Job (no cross-module FK), so ask for spare ids; the query keeps `limit` real Jobs.
             var jobIds = robotId is { } id ? await fleet.GetRecentJobIdsAsync(id, limit * 2, cancellationToken) : null;
-            var (items, total) = await queries.ListAsync(parsed, transportRequestId, limit, cancellationToken, jobIds);
-            return Results.Ok(new { items, total });
+            var (items, total) = await queries.ListAsync(parsed, transportRequestId, limit, cancellationToken, jobIds, Math.Max(skip ?? 0, 0));
+            return Results.Ok(new { items = await enricher.EnrichAsync(items, cancellationToken), total });
         })
         .RequirePermission(Permissions.JobRead)
         .WithName("ListJobs")

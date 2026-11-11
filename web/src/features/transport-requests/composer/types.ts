@@ -8,6 +8,8 @@ export interface TransportRequestDraft {
   workflowId: string
   workflowInputs: Record<string, string>
   note: string | null
+  /** FL-07: -1 low, 1 high; empty is normal. */
+  priority?: number
   movements: MovementDraft[]
 }
 

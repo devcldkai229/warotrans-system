@@ -11,10 +11,11 @@ public sealed record HumanConfirmationSource(
     Guid? UserId = null,
     Guid? RobotId = null,
     Guid? MessageId = null,
-    string? Note = null)
+    string? Note = null,
+    string? ScannedBarcode = null)
 {
-    public static HumanConfirmationSource StaffApp(Guid userId, string? note = null) =>
-        new(ConfirmationSource.STAFF_APP, UserId: userId, Note: note);
+    public static HumanConfirmationSource StaffApp(Guid userId, string? note = null, string? scannedBarcode = null) =>
+        new(ConfirmationSource.STAFF_APP, UserId: userId, Note: note, ScannedBarcode: scannedBarcode);
 
     public static HumanConfirmationSource RobotButton(Guid robotId, Guid messageId) =>
         new(ConfirmationSource.ROBOT_BUTTON, RobotId: robotId, MessageId: messageId);

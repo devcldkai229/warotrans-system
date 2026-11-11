@@ -45,11 +45,13 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
         return await action(scope.ServiceProvider.GetRequiredService<WarehouseDbContext>());
     }
 
+    private readonly Guid _jobId = Guid.NewGuid();
+
     private async Task DeliverAsync(Guid containerId, Guid? shelfId, short? level)
     {
         await using var scope = Factory.Services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<IContainerMovementRecorder>()
-            .RecordDeliveredAsync(new ContainerDelivery(containerId, shelfId, level));
+            .RecordDeliveredAsync(new ContainerDelivery(containerId, shelfId, level, _jobId, Guid.NewGuid()));
     }
 
     private Task<(WarehouseEntity Warehouse, Product Product, StorageLocation Shelf)> SeedAsync() => WithDbAsync(async db =>
@@ -191,6 +193,54 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
             new { warehouseId = warehouse.Id, type = "INBOUND" });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_same_pickup_posted_at_once_takes_one_container_off_the_shelf()
+    {
+        var (_, product, shelf) = await SeedAsync();
+        var containerId = await SeedStoredContainerAsync(product, shelf);
+        await SeedStoredContainerAsync(product, shelf);
+
+        async Task PickUpAsync()
+        {
+            await using var scope = Factory.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<IContainerMovementRecorder>()
+                .RecordPickedUpAsync(new ContainerPickup(containerId, _jobId, Guid.NewGuid()));
+        }
+
+        await Task.WhenAll(PickUpAsync(), PickUpAsync(), PickUpAsync());
+
+        Assert.Equal(1, await StockAsync(product.Id, shelf.Id));
+        Assert.Equal(1, await WithDbAsync(db => db.ContainerMovements.CountAsync(m => m.ContainerId == containerId)));
+    }
+
+    [Fact]
+    public async Task Staff_recovers_a_container_in_transit_and_a_technician_may_not()
+    {
+        var (_, product, shelf) = await SeedAsync();
+        var containerId = await SeedStoredContainerAsync(product, shelf);
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IContainerMovementRecorder>()
+                .RecordPickedUpAsync(new ContainerPickup(containerId, _jobId, Guid.NewGuid()));
+        }
+
+        Assert.Equal(0, await StockAsync(product.Id, shelf.Id));
+        var url = $"/api/warehouse/containers/{containerId}/recover";
+        var body = new { storageLocationId = shelf.Id, levelNo = 1, note = "found on shelf" };
+
+        var (techClient, techToken) = await SignInAsync(AccountRole.TECHNICIAN, "tina");
+        Assert.Equal(HttpStatusCode.Forbidden, (await techClient.SendWithTokenAsync(HttpMethod.Post, url, techToken, body)).StatusCode);
+
+        var (client, token) = await SignInAsync();
+        var recovered = await client.SendWithTokenAsync(HttpMethod.Post, url, token, body);
+        Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
+        Assert.Equal(1, await StockAsync(product.Id, shelf.Id));
+
+        var again = await client.SendWithTokenAsync(HttpMethod.Post, url, token, body);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        Assert.Equal("container_not_recoverable", await again.ReadErrorCodeAsync());
     }
 
     [Fact]

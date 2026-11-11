@@ -36,7 +36,8 @@ public sealed record ContainerSnapshot(
     string Barcode,
     ContainerStatus Status,
     Guid? CurrentStorageLocationId,
-    short? CurrentLevelNo);
+    short? CurrentLevelNo,
+    decimal? WeightKg = null);
 
 public sealed record StorageLocationSnapshot(
     Guid Id,

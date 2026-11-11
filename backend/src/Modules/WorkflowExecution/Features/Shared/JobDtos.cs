@@ -23,7 +23,11 @@ public sealed record JobSummaryDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
-    string? FailureCode);
+    string? FailureCode,
+    string? WorkflowName = null,
+    string? RobotCode = null,
+    IReadOnlyList<string>? RequestCodes = null,
+    IReadOnlyList<string>? ContainerBarcodes = null);
 
 public sealed record JobDetailDto(
     Guid Id,
@@ -44,7 +48,11 @@ public sealed record JobDetailDto(
     IReadOnlyList<JobContainerDto> Containers,
     IReadOnlyList<JobTaskDto> Tasks,
     // BOTH-04: what this caller may do to the Job now, decided by the same rule the endpoints enforce.
-    IReadOnlyList<ActionAvailability> AvailableActions);
+    IReadOnlyList<ActionAvailability> AvailableActions,
+    int Priority = 0,
+    DateTimeOffset? DeadlineAt = null,
+    DateTimeOffset? QueuedAt = null,
+    string? BlockingReason = null);
 
 public sealed record JobContainerDto(
     Guid Id,
@@ -53,7 +61,10 @@ public sealed record JobContainerDto(
     int SequenceNo,
     string Status,
     DateTimeOffset? LoadedAt,
-    DateTimeOffset? DeliveredAt);
+    DateTimeOffset? DeliveredAt,
+    string? FailureCode,
+    string? FailureMessage,
+    DateTimeOffset? FailedAt);
 
 public sealed record JobTaskDto(
     Guid Id,
@@ -80,10 +91,15 @@ public sealed record JobStepDto(
     string? ErrorCode,
     string? ErrorMessage,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    Guid? ClaimedBy = null,
+    string? ClaimedByName = null,
+    DateTimeOffset? ClaimExpiresAt = null,
+    DateTimeOffset? DeadlineAt = null,
+    DateTimeOffset? EscalatedAt = null);
 
 /// <summary>Read model for Job APIs (list / detail). JobBatchPlan is never exposed.</summary>
-public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser currentUser)
+public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser currentUser, IAccountNameLookup? accountNames = null)
 {
     public async Task<JobDetailDto> GetDetailAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -105,7 +121,12 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
         var taskKeys = steps.Values.GroupBy(s => s.WorkflowTaskId).ToDictionary(g => g.Key, g => g.First().TaskKey);
 
         var orderedSteps = job.JobTasks.OrderBy(t => t.SequenceNo).SelectMany(t => t.JobSteps.OrderBy(s => s.SequenceNo)).ToList();
-        var current = orderedSteps.FirstOrDefault(s => s.Status != JobStepStatus.COMPLETED);
+        var current = orderedSteps.FirstOrDefault(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED));
+        var now = DateTimeOffset.UtcNow;
+        var holders = orderedSteps.Where(s => s.ClaimExpiresAt > now).Select(s => s.ClaimedBy).OfType<Guid>().Distinct().ToList();
+        var claimants = holders.Count == 0 || accountNames is null
+            ? new Dictionary<Guid, string>()
+            : new Dictionary<Guid, string>(await accountNames.GetNamesAsync(holders, cancellationToken));
 
         return new JobDetailDto(
             job.Id,
@@ -115,7 +136,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
             job.MapVersionId,
             AssignedRobot(job),
             job.JobContainers.Select(c => c.TransportRequestId).Distinct().ToList(),
-            orderedSteps.Count(s => s.Status == JobStepStatus.COMPLETED),
+            orderedSteps.Count(s => s.Status is JobStepStatus.COMPLETED or JobStepStatus.SKIPPED),
             orderedSteps.Count,
             job.Status is JobStatus.COMPLETED ? null : current?.Id,
             job.CreatedAt,
@@ -125,7 +146,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
             job.FailureMessage,
             job.JobContainers
                 .OrderBy(c => c.SequenceNo)
-                .Select(c => new JobContainerDto(c.Id, c.TransportRequestId, c.ContainerId, c.SequenceNo, c.Status.ToString(), c.LoadedAt, c.DeliveredAt))
+                .Select(c => new JobContainerDto(c.Id, c.TransportRequestId, c.ContainerId, c.SequenceNo, c.Status.ToString(), c.LoadedAt, c.DeliveredAt, c.FailureCode, c.FailureMessage, c.FailedAt))
                 .ToList(),
             job.JobTasks
                 .OrderBy(t => t.SequenceNo)
@@ -146,11 +167,21 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                             return new JobStepDto(
                                 s.Id, s.SequenceNo, w.StepKey, w.Name, s.StepType.ToString(), w.OperationCode,
                                 s.Status.ToString(), s.TargetEndpointId, s.ResolvedInputs, s.OutputValues,
-                                s.ErrorCode, s.ErrorMessage, s.StartedAt, s.CompletedAt);
+                                s.ErrorCode, s.ErrorMessage, s.StartedAt, s.CompletedAt,
+                                // A claim that ran out is nobody's: the scan clears it within seconds, the read does not wait.
+                                s.ClaimExpiresAt > now ? s.ClaimedBy : null,
+                                s.ClaimExpiresAt > now && s.ClaimedBy is { } holder ? claimants.GetValueOrDefault(holder) : null,
+                                s.ClaimExpiresAt > now ? s.ClaimExpiresAt : null,
+                                s.DeadlineAt,
+                                s.EscalatedAt);
                         })
                         .ToList()))
                 .ToList(),
-            JobActionPolicy.Evaluate(job.Status, currentUser.Can));
+            JobActionPolicy.Evaluate(job.Status, currentUser.Can),
+            job.Priority,
+            job.DeadlineAt,
+            job.QueuedAt,
+            job.BlockingReason);
     }
 
     public async Task<(IReadOnlyList<JobSummaryDto> Items, int Total)> ListAsync(
@@ -158,7 +189,8 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
         Guid? transportRequestId,
         int take,
         CancellationToken cancellationToken,
-        IReadOnlyCollection<Guid>? jobIds = null)
+        IReadOnlyCollection<Guid>? jobIds = null,
+        int skip = 0)
     {
         var query = db.Jobs.AsNoTracking().AsQueryable();
         if (jobIds is not null)
@@ -179,6 +211,8 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
         var total = await query.CountAsync(cancellationToken);
         var jobs = await query
             .OrderByDescending(j => j.CreatedAt)
+            .ThenBy(j => j.Id)
+            .Skip(skip)
             .Take(take)
             .Include(j => j.JobContainers)
             .Include(j => j.JobTasks).ThenInclude(t => t.JobSteps)
@@ -192,7 +226,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                 j.Id, j.JobNo, j.Status.ToString(), j.WorkflowId, j.MapVersionId, AssignedRobot(j),
                 j.JobContainers.Select(c => c.TransportRequestId).Distinct().ToList(),
                 j.JobContainers.Count,
-                all.Count(x => x.Status == JobStepStatus.COMPLETED),
+                all.Count(x => x.Status is JobStepStatus.COMPLETED or JobStepStatus.SKIPPED),
                 all.Count,
                 j.CreatedAt, j.StartedAt, j.CompletedAt, j.FailureCode);
         }).ToList();

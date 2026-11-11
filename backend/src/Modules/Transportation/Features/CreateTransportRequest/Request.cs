@@ -12,7 +12,9 @@ public sealed record CreateTransportRequestRequest(
     Guid WorkflowId,
     Dictionary<string, JsonElement>? WorkflowInputs,
     string? Note,
-    List<CreateTransportRequestDetailRequest>? Details);
+    List<CreateTransportRequestDetailRequest>? Details,
+    int Priority = 0,
+    DateTimeOffset? DeadlineAt = null);
 
 public sealed record CreateTransportRequestDetailRequest(
     int SequenceNo,

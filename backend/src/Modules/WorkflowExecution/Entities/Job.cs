@@ -22,6 +22,13 @@ public sealed class Job
     public string? FailureCode { get; set; }
     public string? FailureMessage { get; set; }
 
+    /// <summary>FL-07: copied from the request.</summary>
+    public int Priority { get; set; }
+    public DateTimeOffset? DeadlineAt { get; set; }
+
+    /// <summary>FL-07: why a queued Job has not been dispatched, as last tried. Null when nothing is holding it.</summary>
+    public string? BlockingReason { get; set; }
+
     public ICollection<JobTask> JobTasks { get; set; } = [];
     public ICollection<JobContainer> JobContainers { get; set; } = [];
 

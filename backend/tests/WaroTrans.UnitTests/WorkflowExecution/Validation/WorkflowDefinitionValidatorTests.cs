@@ -56,6 +56,55 @@ public class WorkflowDefinitionValidatorTests
     }
 
     [Fact]
+    public void Every_check_in_the_catalog_can_be_evaluated()
+    {
+        var catalog = StepTypeRegistry.Get(StepType.CHECK).Operations.Select(o => o.Code).Order().ToList();
+        Assert.Equal(catalog, CheckOperations.Executable.Order().ToList());
+        Assert.Equal(Enum.GetNames<CheckConditionCode>().Order().ToList(), catalog);
+    }
+
+    [Fact]
+    public void Inventory_check_binds_its_container_to_the_movement_at_the_pickup()
+    {
+        var model = InternalRelocationWorkflowFactory.CreateValid();
+        var pickup = model.Tasks.First(t => t.Steps.Any(s => s.StepKey == "PICKUP_CONFIRM"));
+        var position = pickup.Steps.FindIndex(s => s.StepKey == "PICKUP_CONFIRM");
+        var check = System.Text.Json.JsonSerializer.Deserialize<WaroTrans.WorkflowExecution.Validation.WorkflowStepModel>(
+            System.Text.Json.JsonSerializer.Serialize(pickup.Steps[position]))!;
+        check.StepKey = "CHECK_INVENTORY";
+        check.StepType = StepType.CHECK;
+        check.OperationCode = nameof(CheckConditionCode.INVENTORY_AVAILABLE);
+        check.InputBindings = new Dictionary<string, StepInputBinding>
+        {
+            ["containerId"] = new() { SourceType = BindingSourceType.CURRENT_MOVEMENT, SourceReference = "containerId" }
+        };
+        pickup.Steps.Insert(position, check);
+
+        var result = WorkflowDefinitionValidator.ValidateForPublish(model);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors.Select(e => $"{e.Path}: {e.Message}")));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, "maxAttempts")]
+    [InlineData(21, 0, 0, "maxAttempts")]
+    [InlineData(1, -1, 0, "retryBackoffSeconds")]
+    [InlineData(1, 3601, 0, "retryBackoffSeconds")]
+    [InlineData(1, 0, -1, "timeoutSeconds")]
+    public void Retry_settings_out_of_range_are_refused(int attempts, int backoff, int timeout, string field)
+    {
+        var model = InternalRelocationWorkflowFactory.CreateValid();
+        var step = model.Tasks.SelectMany(t => t.Steps).First(s => s.StepKey == "CHECK_REQUEST");
+        step.MaxAttempts = attempts;
+        step.RetryBackoffSeconds = backoff;
+        step.TimeoutSeconds = timeout;
+
+        var result = WorkflowDefinitionValidator.ValidateForPublish(model);
+
+        Assert.Contains(result.Errors, e => e.Path.EndsWith(field, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Publish_fails_on_unknown_current_movement_path()
     {
         var model = InternalRelocationWorkflowFactory.CreateValid();

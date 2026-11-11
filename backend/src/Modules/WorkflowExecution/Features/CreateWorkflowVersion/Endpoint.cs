@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.WorkflowExecution.Features.CreateWorkflowVersion;
@@ -17,7 +18,8 @@ public static class CreateWorkflowVersionEndpoint
             var response = await handler.HandleAsync(id, cancellationToken);
             return Results.Created($"/api/workflow-execution/workflows/{response.Id}", response);
         })
-            .RequirePermission(Permissions.WorkflowWrite);
+            .RequirePermission(Permissions.WorkflowWrite)
+            .Audited("workflow.version_created", "WORKFLOW");
 
         return group;
     }

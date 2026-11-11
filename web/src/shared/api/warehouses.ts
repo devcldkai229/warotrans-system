@@ -259,6 +259,26 @@ export function cancelStockVoucher(id: string) {
   return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/cancel`, { method: 'POST' })
 }
 
+/** WH-01: names the shelf of an IN_TRANSIT or HOLD Container. 409 `container_in_active_transport` while a request moves it. */
+export function recoverContainer(id: string, body: { storageLocationId: string; levelNo: number; note?: string }) {
+  return apiRequest<unknown>(`/api/warehouse/containers/${id}/recover`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+/** FL-03: measured weight and size. A field left null means not known. */
+export interface ContainerPhysical {
+  weightKg: number | null
+  lengthM: number | null
+  widthM: number | null
+}
+
+export function getContainerPhysical(id: string) {
+  return apiRequest<ContainerPhysical>(`/api/warehouse/containers/${id}/physical`)
+}
+
+export function setContainerPhysical(id: string, body: ContainerPhysical) {
+  return apiRequest<ContainerPhysical>(`/api/warehouse/containers/${id}/physical`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
 export function listStorageLocations(params: { warehouseId: string; activeOnly?: boolean }) {
   const query = new URLSearchParams()
   query.set('warehouseId', params.warehouseId)

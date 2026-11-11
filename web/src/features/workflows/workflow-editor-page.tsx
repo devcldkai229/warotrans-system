@@ -281,12 +281,12 @@ function collectClientWarnings(
         }
       }
 
-      // INVENTORY_AVAILABLE: ONCE_PER_JOB + required containerId — no CURRENT_MOVEMENT.
+      // INVENTORY_AVAILABLE runs once per Container at the pickup: containerId comes from the movement.
       if (step.operationCode === 'INVENTORY_AVAILABLE') {
         const containerBinding = step.inputBindings.containerId
         if (!containerBinding) {
           warnings.push(
-            `CHECK INVENTORY_AVAILABLE ('${stepLabel(step)}') requires containerId. CURRENT_MOVEMENT is not allowed at ONCE_PER_JOB scope — use WORKFLOW_VAR/CONSTANT/STEP_OUTPUT, or omit this step until backend scope is redesigned.`,
+            `CHECK INVENTORY_AVAILABLE ('${stepLabel(step)}') requires containerId. Bind it to CURRENT_MOVEMENT containerId.`,
           )
         }
       }

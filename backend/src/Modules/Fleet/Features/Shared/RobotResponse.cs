@@ -38,7 +38,11 @@ public sealed record RobotResponse(
     DateTimeOffset? BatteryMeasuredAt = null,
     double? BatteryVoltage = null,
     string? BatteryEstimationMode = null,
-    string? BatteryConfidence = null)
+    string? BatteryConfidence = null,
+    decimal? MaxPayloadKg = null,
+    int? MaxContainers = null,
+    double? LengthM = null,
+    double? WidthM = null)
 {
     public static RobotResponse From(Robot robot) => new(
         robot.Id,
@@ -74,5 +78,9 @@ public sealed record RobotResponse(
         robot.BatteryMeasuredAt,
         robot.BatteryVoltage,
         robot.BatteryEstimationMode,
-        robot.BatteryConfidence);
+        robot.BatteryConfidence,
+        robot.MaxPayloadKg,
+        robot.MaxContainers,
+        robot.LengthM,
+        robot.WidthM);
 }

@@ -16,6 +16,11 @@ public sealed class JobContainer
     public JobContainerStatus Status { get; set; }
     public DateTimeOffset? LoadedAt { get; set; }
     public DateTimeOffset? DeliveredAt { get; set; }
+
+    /// <summary>WH-10: why this Container failed while the rest of its Job went on.</summary>
+    public string? FailureCode { get; set; }
+    public string? FailureMessage { get; set; }
+    public DateTimeOffset? FailedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

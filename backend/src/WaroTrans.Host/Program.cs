@@ -134,6 +134,8 @@ builder.Services.AddScoped<IIntegrationEventHandler<RobotErrorReported>, AdminNo
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepStatusChanged>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobWaitingToStart>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepWaitingForPerson>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<HumanTaskOffered>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<HumanStepOverdue>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestClosedByOperator>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, SignalRJobRealtimeForwarder>();
