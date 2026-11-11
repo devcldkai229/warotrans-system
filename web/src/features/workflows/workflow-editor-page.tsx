@@ -30,6 +30,9 @@ import {
   updateWorkflow,
 } from '@/shared/api/workflows'
 import { BindingEditor } from './binding-editor'
+import { shouldLoadDraft } from './draftSync'
+import { ReadOnlyNotice, WorkflowReadOnlyView } from './WorkflowReadOnlyView'
+import { ScopeBadge } from './scope-badge'
 import {
   isMovementFieldAvailable,
   preferredMovementEndpointPath,
@@ -80,38 +83,6 @@ function toUpsert(detail: {
       })),
     })),
   }
-}
-
-const SCOPE_LABELS: Record<string, string> = {
-  ONCE_PER_JOB: t('Once per job'),
-  ONCE_PER_STOP: t('Once per stop'),
-  PER_CONTAINER_AT_STOP: t('Per container at stop'),
-}
-
-const SCOPE_TOOLTIPS: Record<string, string> = {
-  ONCE_PER_JOB: t('Step runs once for the entire Job, regardless of containers or stops.'),
-  ONCE_PER_STOP:
-    t('Step runs once for each endpoint stop, even if that stop contains multiple containers.'),
-  PER_CONTAINER_AT_STOP: t('Step runs separately for each container at each stop.'),
-}
-
-function ScopeBadge({
-  scope,
-  stopAction,
-}: {
-  scope?: string | null
-  stopAction?: string | null
-}) {
-  if (!scope) return null
-  const label = SCOPE_LABELS[scope] ?? scope
-  const action =
-    stopAction === 'PICKUP' ? t(' · Pickup') : stopAction === 'DROPOFF' ? t(' · Dropoff') : ''
-  return (
-    <span className="scope-badge" title={SCOPE_TOOLTIPS[scope] ?? scope}>
-      {label}
-      {action}
-    </span>
-  )
 }
 
 function findOperation(
@@ -334,7 +305,8 @@ export function WorkflowEditor({
 
   const loadedKey = isNew ? 'new' : (detailQuery.data?.id ?? 'loading')
   const [draft, setDraft] = useState<WorkflowUpsert>(emptyWorkflow())
-  const [draftKey, setDraftKey] = useState(loadedKey)
+  // Which workflow the draft was loaded from. Starts as null so that a workflow that is already cached is still loaded.
+  const [draftKey, setDraftKey] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState(0)
   const [selectedStep, setSelectedStep] = useState(0)
   const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>('DRAFT')
@@ -345,7 +317,7 @@ export function WorkflowEditor({
   const [dropStep, setDropStep] = useState<{ taskIndex: number; stepIndex: number } | null>(null)
 
   // Sync local draft when route/query identity changes (avoid cascading setState-in-effect lint).
-  if (loadedKey !== 'loading' && draftKey !== loadedKey && (isNew || detailQuery.data)) {
+  if (shouldLoadDraft(draftKey, loadedKey, isNew || Boolean(detailQuery.data))) {
     setDraftKey(loadedKey)
     if (isNew) {
       setDraft(emptyWorkflow())
@@ -702,7 +674,14 @@ export function WorkflowEditor({
         </div>
       )}
 
-      <fieldset className="wf-card" disabled={readOnly}>
+      {readOnly ? (
+        <>
+          <ReadOnlyNotice published={status === 'PUBLISHED'} canWrite={canWrite} />
+          <WorkflowReadOnlyView draft={draft} metadata={metadata} showIdentity={isPanel} />
+        </>
+      ) : (
+        <>
+      <fieldset className="wf-card">
         <div className="grid-2">
           <label>{t('Name')}<input
               value={draft.name}
@@ -729,7 +708,7 @@ export function WorkflowEditor({
         </div>
       </fieldset>
 
-      <fieldset className="wf-card" disabled={readOnly}>
+      <fieldset className="wf-card">
         <legend>{t('Variables')}<button
             type="button"
             className="btn small"
@@ -881,7 +860,7 @@ export function WorkflowEditor({
         )}
       </fieldset>
 
-      <fieldset className="wf-card wf-tree" disabled={readOnly}>
+      <fieldset className="wf-card wf-tree">
         <legend>{t('Tasks & Steps')}<button
             type="button"
             className="btn small"
@@ -1237,6 +1216,8 @@ export function WorkflowEditor({
           })}
         </div>
       </fieldset>
+        </>
+      )}
     </>
   )
 
