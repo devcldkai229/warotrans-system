@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Enums;
+using WaroTrans.Identity.Enums;
+using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Persistence;
@@ -269,6 +271,35 @@ public sealed class WorkflowTemplateIntegrationTests(WaroTransWebApplicationFact
         Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await Client.GetAsync($"/api/workflow-execution/workflows/{v1.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await Client.GetAsync($"/api/workflow-execution/workflows/{v2.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Publish_records_who_and_which_version_in_the_row_and_the_audit_trail()
+    {
+        var admin = await Factory.CreateAccountAsync("wf_admin", AccountRole.ADMIN);
+        var client = CreateAnonymousClient();
+        var token = (await client.LoginAsync("wf_admin")).AccessToken;
+        const string root = "/api/workflow-execution/workflows";
+
+        var create = await client.SendWithTokenAsync(
+            HttpMethod.Post, root, token, JsonSerializer.SerializeToElement(BuildValidPayload("WF_POL_" + Guid.NewGuid().ToString("N")[..8]), JsonOptions));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var id = (await create.Content.ReadFromJsonAsync<WorkflowDetailDto>(JsonOptions))!.Id;
+
+        var publish = await client.SendWithTokenAsync(HttpMethod.Post, $"{root}/{id}/publish", token);
+        Assert.Equal(HttpStatusCode.OK, publish.StatusCode);
+        Assert.Equal(admin.Id, (await publish.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("publishedBy").GetGuid());
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        Assert.Equal(admin.Id, (await db.Workflows.AsNoTracking().FirstAsync(w => w.Id == id)).PublishedBy);
+
+        var logs = await client.GetWithTokenAsync($"/api/operations/audit-logs?entityId={id}", token);
+        var items = (await logs.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items").EnumerateArray().ToList();
+        var entry = Assert.Single(items, i => i.GetProperty("action").GetString() == "workflow.published");
+        Assert.Equal(admin.Id, entry.GetProperty("actorAccountId").GetGuid());
+        Assert.Equal(1, entry.GetProperty("after").GetProperty("versionNo").GetInt32());
+        Assert.Contains(items, i => i.GetProperty("action").GetString() == "workflow.created");
     }
 
     /// <summary>The payload the UI sends for a new workflow: no code, no task keys, no step keys.</summary>

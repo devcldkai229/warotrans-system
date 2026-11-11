@@ -41,8 +41,19 @@ public sealed class CreateTransportRequestHandler(
         TransportRequestDetailStatus.IN_PROGRESS
     ];
 
-    public async Task<CreateTransportRequestResponse> HandleAsync(
+    public Task<CreateTransportRequestResponse> HandleAsync(
         CreateTransportRequestRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var requestedBy = currentUser.AccountId
+            ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
+        return CreateForAsync(request, requestedBy, cancellationToken);
+    }
+
+    /// <summary>For work with no signed-in user behind it (a schedule's wave): every check still applies.</summary>
+    public async Task<CreateTransportRequestResponse> CreateForAsync(
+        CreateTransportRequestRequest request,
+        Guid requestedBy,
         CancellationToken cancellationToken = default)
     {
         var validationResult = await validator.ValidateAsync(request, cancellationToken);
@@ -50,9 +61,6 @@ public sealed class CreateTransportRequestHandler(
         {
             throw new ValidationException(validationResult.Errors);
         }
-
-        var requestedBy = currentUser.AccountId
-            ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
 
         IReadOnlyList<CreateTransportRequestDetailRequest> details = request.Details!;
 
@@ -84,6 +92,8 @@ public sealed class CreateTransportRequestHandler(
                 d.DestinationEndpointId,
                 d.DestinationLevelNo)).ToList(),
             DateTimeOffset.UtcNow);
+        transportRequest.Priority = request.Priority;
+        transportRequest.DeadlineAt = request.DeadlineAt;
 
         await workflowRequestValidator.ValidateAsync(
             transportRequest.WorkflowId,

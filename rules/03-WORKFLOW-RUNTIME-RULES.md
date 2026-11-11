@@ -249,6 +249,8 @@ REQUEST_ACTIVE
 INVENTORY_AVAILABLE
 ```
 
+`LOAD_STATE` reads the handovers people confirmed (`JobContainer` ONBOARD): the robot has no load sensor, so it is custody as the software knows it. `INVENTORY_AVAILABLE` runs once per Container at the pickup and reads Warehouse when the step runs. A CHECK that does not pass fails its step, or waits and is evaluated again while `MaxAttempts` and `TimeoutSeconds` allow; MOVE is never retried by itself. An operation the engine cannot evaluate is refused at publish.
+
 If `INVENTORY_AVAILABLE` is used, it must respect the Container/InventoryStock model and must not imply item-level robot transport.
 Prefer `containerId` in V1 when product/quantity paths are not yet supported by Warehouse.
 Registry outputs for V1: `passed`, `reason`, `checkedAt` (no item-quantity fields).

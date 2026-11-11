@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Features.Shared;
@@ -7,7 +8,7 @@ using WaroTrans.WorkflowExecution.Validation;
 
 namespace WaroTrans.WorkflowExecution.Features.PublishWorkflow;
 
-public sealed class PublishWorkflowHandler(WorkflowExecutionDbContext db)
+public sealed class PublishWorkflowHandler(WorkflowExecutionDbContext db, ICurrentUser currentUser, IAuditTrail audit)
 {
     public async Task<WorkflowDetailDto> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -27,7 +28,21 @@ public sealed class PublishWorkflowHandler(WorkflowExecutionDbContext db)
 
         workflow.Status = WorkflowStatus.PUBLISHED;
         workflow.PublishedAt = DateTimeOffset.UtcNow;
+        workflow.PublishedBy = currentUser.AccountId;
         await db.SaveChangesAsync(cancellationToken);
+
+        await audit.RecordAsync(
+            new AuditEntry(
+                "workflow.published",
+                "WORKFLOW",
+                workflow.Id,
+                After: new Dictionary<string, object?>
+                {
+                    ["code"] = workflow.Code,
+                    ["versionNo"] = workflow.VersionNo,
+                    ["publishedBy"] = workflow.PublishedBy
+                }),
+            cancellationToken);
 
         return WorkflowMapping.ToDetail(workflow);
     }

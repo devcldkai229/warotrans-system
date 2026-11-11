@@ -14,6 +14,7 @@ import { MapEditorPage } from '@/features/maps/MapEditorPage'
 import { FleetPage } from '@/features/robots/FleetPage'
 import { RobotManualPage } from '@/features/robots/manual/RobotManualPage'
 import { TransportRequestsPage } from '@/features/transport-requests/TransportRequestsPage'
+import { SchedulesPage } from '@/features/transport-requests/SchedulesPage'
 import { WorkflowEditorPage } from '@/features/workflows/workflow-editor-page'
 import { WorkflowsListPage } from '@/features/workflows/workflows-list-page'
 
@@ -38,6 +39,7 @@ function App() {
             <Route path="/monitor/fleet" element={<FleetPage />} />
             <Route path="/monitor/fleet/:robotCode" element={<FleetPage />} />
             <Route path="/monitor/requests" element={<TransportRequestsPage />} />
+            <Route path="/monitor/schedules" element={<SchedulesPage />} />
             <Route path="/monitor/jobs" element={<Navigate to="/monitor/requests" replace />} />
             <Route path="/monitor/jobs/:jobId" element={<JobDetailPage />} />
             <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />

@@ -5,10 +5,12 @@ using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.GetRobotStatistics;
 
-public sealed class GetRobotStatisticsHandler(FleetDbContext db)
+public sealed class GetRobotStatisticsHandler(FleetDbContext db, Microsoft.Extensions.Options.IOptions<WaroTrans.Fleet.Features.Dispatch.BatteryOptions>? battery = null)
 {
-    /// <summary>A robot at or below this charge is counted as low on battery.</summary>
+    /// <summary>Used when no options are given. In the Host it comes from BatteryOptions.LowPercent, like dispatch.</summary>
     public const decimal LowBatteryPercent = 20m;
+
+    private decimal LowPercent => battery?.Value.LowPercent is { } low ? (decimal)low : LowBatteryPercent;
 
     public async Task<RobotStatisticsResponse> HandleAsync(StatisticsRange range, CancellationToken cancellationToken)
     {
@@ -32,7 +34,7 @@ public sealed class GetRobotStatisticsHandler(FleetDbContext db)
             robots.Count,
             enabled.Count,
             robots.Count(r => r.IsOnline),
-            enabled.Count(r => r.BatteryPercent <= LowBatteryPercent),
+            enabled.Count(r => r.BatteryPercent <= LowPercent),
             enabled.Count == 0 ? null : (double)enabled.Average(r => r.BatteryPercent),
             Enum.GetValues<RobotStatus>()
                 .Select(status => new RobotStatusCount(status.ToString(), robots.Count(r => r.Status == status)))

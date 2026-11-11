@@ -16,6 +16,18 @@ public interface IFleetModule
     /// </summary>
     Task<IReadOnlyList<Guid>> GetRecentJobIdsAsync(Guid robotId, int take, CancellationToken cancellationToken = default);
 
+    /// <summary>FL-03: the most any enabled robot on this map can carry. Default: unknown (test doubles).</summary>
+    Task<FleetCapacity> GetCapacityAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new FleetCapacity(null, null));
+
+    /// <summary>FL-08: enabled, online, available, not held and not driven by hand, with when each last got a command.</summary>
+    Task<IReadOnlyList<IdleRobot>> GetIdleRobotsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<IdleRobot>>([]);
+
+    /// <summary>BOTH-01: the robot's most recent command, whatever its kind. Null when it has none.</summary>
+    Task<RobotCommandSummary?> GetLatestCommandAsync(Guid robotId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<RobotCommandSummary?>(null);
+
     /// <summary>Robots that may take new work on a map (FL-01 eligible, ignoring other Jobs); best first.</summary>
     Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(
         Guid mapVersionId,
@@ -116,6 +128,19 @@ public sealed record RobotSnapshot(
     bool MotionHeld = false,
     bool InManualMode = false,
     DateTimeOffset? BatteryMeasuredAt = null);
+
+/// <summary>
+/// FL-06: whether a robot still holds a Job that is going on. Fleet owns this contract and WorkflowExecution implements it, because
+/// WorkflowExecution already depends on Fleet.
+/// </summary>
+public interface IRobotWorkQuery
+{
+    Task<bool> HasActiveJobAsync(Guid robotId, CancellationToken cancellationToken = default);
+}
+
+public sealed record IdleRobot(RobotSnapshot Robot, DateTimeOffset? LastCommandAt);
+
+public sealed record RobotCommandSummary(Guid Id, string Type, string Status, DateTimeOffset IssuedAt, DateTimeOffset? AckedAt, DateTimeOffset? CompletedAt);
 
 /// <summary>Traffic route grant attached to NAVIGATE_TO_POSE (graph hash + authorized edge ids).</summary>
 public sealed record RouteGrantSnapshot(string GraphHash, IReadOnlyList<int> EdgeIds);

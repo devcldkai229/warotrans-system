@@ -46,7 +46,9 @@ public static class FleetModule
 
         services.AddValidatorsFromAssembly(typeof(FleetModule).Assembly);
 
+        services.AddHostedService<Services.RobotHistoryRetentionHostedService>();
         services.AddScoped<RegisterRobotHandler>();
+        services.AddScoped<Features.ReconcileTrafficRobot.ReleaseAfterClearanceHandler>();
         services.AddScoped<GetRobotHandler>();
         services.AddScoped<ListRobotsHandler>();
         services.AddScoped<GetRobotStatisticsHandler>();
@@ -109,6 +111,8 @@ public static class FleetModule
         group.MapEnableRobot();
         group.MapDisableRobot();
         group.MapPutRobotInService();
+        Features.RobotCapacity.RobotCapacityEndpoint.MapSetRobotCapacity(group);
+        Features.RobotHistory.RobotHistoryEndpoints.MapRobotHistory(group);
         group.MapChangeRobotMap();
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();

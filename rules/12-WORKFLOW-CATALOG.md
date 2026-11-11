@@ -58,6 +58,7 @@ Move a prepared Container from reserve/storage to picking/forward location.
 Robot workflow does not manipulate item quantity.
 
 ### MAINTENANCE_ALL_ROBOTS
+`POST /maintenance-runs`: a Job per robot, started one at a time by the queue service; a robot that failed does not hold up the others.
 Fleet-level orchestration.
 Do not create one Job that concurrently controls every Robot.
 Expand into per-Robot execution/Jobs according to the finalized implementation.
@@ -69,9 +70,11 @@ V1 recommendation: `maxConcurrentRobots = 1`.
 Move Container to inspection area and record inspection result.
 
 ### ROBOT_RETURN_TO_PARK
+`POST /robots/{id}/return-to-park`. Automatic return exists behind `FleetIdle:AutoReturnToPark`, off by default: with it on a robot drives with nobody asking. It never runs while a Job is queued.
 Validate Robot idle/empty and return it to Parking Endpoint/EndpointGroup.
 
 ### ROBOT_CHARGING
+`POST /robots/{id}/go-to-charger`. Like parking, it may go on a low battery; new work may not.
 Robot navigates to charging Endpoint.
 Physical connect/disconnect remains manual and is confirmed with HUMAN_INTERACTION.
 

@@ -1,6 +1,7 @@
 using WaroTrans.Fleet.Contracts;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Navigation.Traffic;
 
 namespace WaroTrans.Fleet.Features.Dispatch;
 
@@ -30,9 +31,12 @@ public static class DispatchEligibility
         DateTimeOffset now,
         DateTimeOffset? lastCommandAt,
         BatteryOptions battery,
-        DispatchOptions weights)
+        DispatchOptions weights,
+        TrafficFootprintOptions? footprint = null)
     {
         var reasons = new List<string>();
+        var notes = new List<string>();
+        AddCapacityReasons(robot, query, footprint, reasons, notes);
         if (!robot.IsEnabled) reasons.Add(DispatchReasons.Disabled);
         if (!robot.IsOnline) reasons.Add(DispatchReasons.Offline);
         if (robot.Status == RobotStatus.MAINTENANCE) reasons.Add(DispatchReasons.InMaintenance);
@@ -84,7 +88,47 @@ public static class DispatchEligibility
             idle is null ? null : Math.Round(idle.Value),
             Math.Round(score, 3),
             robot.Status.ToString(),
-            robot.IsOnline);
+            robot.IsOnline)
+        {
+            Notes = notes
+        };
+    }
+
+    /// <summary>
+    /// FL-03. Missing figures do not refuse a robot, because then nothing could run until everything is measured; the
+    /// decision records that it was not checked. Traffic reserves one footprint for every robot, so a robot smaller than
+    /// it is safe (it just reserves more than it needs) and a larger one is not.
+    /// </summary>
+    private static void AddCapacityReasons(Robot robot, DispatchQuery query, TrafficFootprintOptions? footprint, List<string> reasons, List<string> notes)
+    {
+        if (footprint is not null
+            && ((robot.LengthM is { } length && length > footprint.LengthMeters) || (robot.WidthM is { } width && width > footprint.WidthMeters)))
+        {
+            reasons.Add(DispatchReasons.LargerThanTrafficFootprint);
+        }
+
+        if (query.ContainerCount is not { } count)
+        {
+            return;
+        }
+
+        if (robot.MaxContainers is { } limit)
+        {
+            if (count > limit) reasons.Add(DispatchReasons.ContainerLimitExceeded);
+        }
+        else
+        {
+            notes.Add(DispatchReasons.CapacityUnknown);
+        }
+
+        if (query.TotalWeightKg is { } weight && robot.MaxPayloadKg is { } payload)
+        {
+            if (weight > payload) reasons.Add(DispatchReasons.PayloadExceeded);
+        }
+        else if (!notes.Contains(DispatchReasons.CapacityUnknown))
+        {
+            notes.Add(DispatchReasons.CapacityUnknown);
+        }
     }
 
     /// <summary>Eligible robots first, best score first; then the rest, by code.</summary>

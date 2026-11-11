@@ -16,7 +16,8 @@ public sealed class QueueTransportRequestHandler(
     TransportationDbContext dbContext,
     IJobBatchPlanner jobBatchPlanner,
     IJobRuntimeProvisioner jobRuntimeProvisioner,
-    ILogger<QueueTransportRequestHandler> logger)
+    ILogger<QueueTransportRequestHandler> logger,
+    IJobPlanLimitsQuery? jobPlanLimits = null)
 {
     public async Task<QueueTransportRequestResponse> HandleAsync(Guid id, CancellationToken cancellationToken = default)
     {
@@ -33,7 +34,9 @@ public sealed class QueueTransportRequestHandler(
         }
 
         var snapshot = TransportRequestSnapshotMapper.ToExecutionSnapshot(transportRequest);
-        var batches = jobBatchPlanner.Plan(snapshot);
+        var batches = jobBatchPlanner.Plan(
+            snapshot,
+            jobPlanLimits is null ? null : await jobPlanLimits.GetAsync(snapshot, cancellationToken));
 
         // Committed by WorkflowExecution in its own transaction. If the status update below fails,
         // calling queue again returns the same Jobs (same ProvisioningKey) and retries the update.

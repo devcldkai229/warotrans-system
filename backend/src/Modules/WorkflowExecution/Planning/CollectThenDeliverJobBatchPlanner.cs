@@ -6,36 +6,91 @@ namespace WaroTrans.WorkflowExecution.Planning;
 /// <summary>
 /// V1 deterministic "collect first, deliver after" planner.
 /// <list type="bullet">
-/// <item>One batch per request: WaroTrans has no Robot/Container capacity model yet, so all
-/// request Containers go into a single batch. Capacity-based splitting is NOT performed.</item>
+/// <item>One batch per request while its Containers fit the limit (<see cref="JobPlanningOptions.MaxContainersPerJob"/>).
+/// Above it (WH-08) Containers with the same source and destination stay together, in Detail order, up to the limit.
+/// Keys and contents depend only on the Details, so planning again gives the same batches.</item>
 /// <item>PICKUP stops: Details grouped by SourceEndpointId, groups ordered by their minimum Detail SequenceNo.</item>
 /// <item>DROPOFF stops: Details grouped by DestinationEndpointId, ordered the same way.</item>
 /// <item>All PICKUP stops precede all DROPOFF stops; Containers inside a stop follow Detail SequenceNo.</item>
 /// </list>
 /// No route optimisation (TSP / shortest path) — that is not a Job Planner responsibility.
 /// </summary>
-public sealed class CollectThenDeliverJobBatchPlanner : IJobBatchPlanner
+public sealed class CollectThenDeliverJobBatchPlanner(int? maxContainersPerJob = null) : IJobBatchPlanner
 {
     /// <summary>
     /// Stable key so re-planning the same request yields the same ProvisioningKey (TransportRequestId:BatchKey).
     /// </summary>
     public const string SingleBatchKey = "BATCH-001";
 
-    public IReadOnlyList<JobBatchPlan> Plan(TransportRequestExecutionSnapshot request)
+    public IReadOnlyList<JobBatchPlan> Plan(TransportRequestExecutionSnapshot request, JobPlanLimits? limits = null)
     {
         var details = request.Details.OrderBy(d => d.SequenceNo).ToList();
 
-        var stops = new List<JobStopPlan>();
-        AddStops(stops, details, d => d.SourceEndpointId, JobStopAction.PICKUP);
-        AddStops(stops, details, d => d.DestinationEndpointId, JobStopAction.DROPOFF);
-
-        var batches = new List<JobBatchPlan>
-        {
-            new(SingleBatchKey, 1, details.Select(d => d.ContainerId).ToList(), stops)
-        };
+        var batches = Split(details, limits)
+            .Select((group, index) => ToBatch(group, index + 1))
+            .ToList();
 
         EnsureValid(request, batches);
         return batches;
+    }
+
+    private IEnumerable<IReadOnlyList<TransportRequestDetailSnapshot>> Split(
+        IReadOnlyList<TransportRequestDetailSnapshot> details,
+        JobPlanLimits? limits)
+    {
+        // The smaller of the configured limit and what the largest robot carries (FL-03).
+        int? count = (maxContainersPerJob, limits?.MaxContainers) switch
+        {
+            ({ } configured, { } robots) => Math.Min(configured, robots),
+            ({ } configured, null) => configured,
+            (null, { } robots) => robots,
+            _ => null
+        };
+        var payload = limits?.MaxPayloadKg;
+        decimal WeightOf(TransportRequestDetailSnapshot d) => limits?.WeightsKg.GetValueOrDefault(d.ContainerId) ?? 0;
+
+        var fitsOne = (count is null || details.Count <= Math.Max(count.Value, 1))
+                      && (payload is null || details.Sum(WeightOf) <= payload);
+        if (fitsOne)
+        {
+            return [details];
+        }
+
+        var batches = new List<IReadOnlyList<TransportRequestDetailSnapshot>>();
+        foreach (var route in details.GroupBy(d => (d.SourceEndpointId, d.DestinationEndpointId)))
+        {
+            var current = new List<TransportRequestDetailSnapshot>();
+            decimal weight = 0;
+            foreach (var detail in route)
+            {
+                var full = count is { } most && current.Count >= Math.Max(most, 1);
+                var heavy = payload is { } limit && current.Count > 0 && weight + WeightOf(detail) > limit;
+                if (full || heavy)
+                {
+                    batches.Add(current);
+                    current = [];
+                    weight = 0;
+                }
+
+                current.Add(detail);
+                weight += WeightOf(detail);
+            }
+
+            if (current.Count > 0)
+            {
+                batches.Add(current);
+            }
+        }
+
+        return batches;
+    }
+
+    private static JobBatchPlan ToBatch(IReadOnlyList<TransportRequestDetailSnapshot> details, int sequenceNo)
+    {
+        var stops = new List<JobStopPlan>();
+        AddStops(stops, details, d => d.SourceEndpointId, JobStopAction.PICKUP);
+        AddStops(stops, details, d => d.DestinationEndpointId, JobStopAction.DROPOFF);
+        return new JobBatchPlan($"BATCH-{sequenceNo:000}", sequenceNo, details.Select(d => d.ContainerId).ToList(), stops);
     }
 
     // details are already ordered by SequenceNo, so GroupBy keeps first-appearance (minimum SequenceNo)

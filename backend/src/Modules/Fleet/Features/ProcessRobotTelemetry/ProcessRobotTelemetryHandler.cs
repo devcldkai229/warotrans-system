@@ -16,8 +16,11 @@ public sealed class ProcessRobotTelemetryHandler(
     IRobotRealtimeNotifier realtimeNotifier,
     IIntegrationEventPublisher events,
     TrafficShadowObserver? trafficShadow,
-    ILogger<ProcessRobotTelemetryHandler> logger)
+    ILogger<ProcessRobotTelemetryHandler> logger,
+    Microsoft.Extensions.Options.IOptions<WaroTrans.Fleet.Features.Dispatch.BatteryOptions>? battery = null)
 {
+    private decimal LowBattery => battery?.Value.LowPercent is { } low ? (decimal)low : GetRobotStatisticsHandler.LowBatteryPercent;
+
     public async Task HandleAsync(RobotTelemetryMessage message, CancellationToken cancellationToken)
     {
         var robot = await db.Robots
@@ -80,7 +83,8 @@ public sealed class ProcessRobotTelemetryHandler(
 
         // RB-03: the robot is the truth about whether it holds motion. Older robots send no field: keep the value.
         var motionHeld = message.MotionHold ?? robot.MotionHeld;
-        var holdChangedAt = motionHeld != robot.MotionHeld ? utcNow : robot.MotionHoldChangedAt;
+        var holdChanged = motionHeld != robot.MotionHeld;
+        var holdChangedAt = holdChanged ? utcNow : robot.MotionHoldChangedAt;
 
         // Same concurrency-safe path as heartbeat: avoid stale UpdatedAt dropping liveness.
         await db.Robots
@@ -110,11 +114,15 @@ public sealed class ProcessRobotTelemetryHandler(
                     .SetProperty(r => r.UpdatedAt, robot.UpdatedAt),
                 cancellationToken);
         db.ChangeTracker.Clear();
+        if (holdChanged)
+        {
+            await RobotStateJournal.WriteAsync(db, robot.Id, robot.Status, motionHeld ? "motion_held" : "motion_released", RobotStateEventSource.ROBOT, cancellationToken);
+        }
 
         // Admin notifications: only the moment something starts, not every reading while it lasts.
-        if (batteryBefore > GetRobotStatisticsHandler.LowBatteryPercent
+        if (batteryBefore > LowBattery
             && message.BatteryPercent is not null
-            && robot.BatteryPercent <= GetRobotStatisticsHandler.LowBatteryPercent
+            && robot.BatteryPercent <= LowBattery
             && robot.Status != RobotStatus.CHARGING)
         {
             await events.PublishAsync(new RobotBatteryLow(robot.Id, robot.Code, robot.BatteryPercent), cancellationToken);

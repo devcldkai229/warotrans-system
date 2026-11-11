@@ -19,6 +19,9 @@ export interface CreateTransportRequestBody {
   workflowInputs: Record<string, unknown>
   note: string | null
   details: CreateTransportRequestDetailBody[]
+  /** FL-07: -1 low, 0 normal, 1 high. */
+  priority?: number
+  deadlineAt?: string | null
 }
 
 export interface TransportRequestDetailResponse {
@@ -43,6 +46,7 @@ export interface CreateTransportRequestResponse {
   workflowId: string
   planSchemaVersion: number
   requestedBy: string
+  requestedByName?: string | null
   note: string | null
   workflowInputs: Record<string, unknown>
   submittedAt: string
@@ -69,6 +73,7 @@ export interface TransportRequestListItem {
   mapVersionId: string
   workflowId: string
   requestedBy: string
+  requestedByName?: string | null
   note: string | null
   submittedAt: string
   detailCount: number
@@ -110,6 +115,7 @@ export interface TransportRequestDetailDto {
   workflowId: string
   planSchemaVersion: number
   requestedBy: string
+  requestedByName?: string | null
   note: string | null
   workflowInputs: Record<string, unknown>
   submittedAt: string
@@ -139,12 +145,14 @@ export function listTransportRequests(params?: {
   warehouseId?: string
   status?: string
   search?: string
+  skip?: number
   take?: number
 }) {
   const query = new URLSearchParams()
   if (params?.warehouseId) query.set('warehouseId', params.warehouseId)
   if (params?.status) query.set('status', params.status)
   if (params?.search) query.set('search', params.search)
+  if (params?.skip !== undefined) query.set('skip', String(params.skip))
   if (params?.take !== undefined) query.set('take', String(params.take))
   const qs = query.toString()
   return apiRequest<ListTransportRequestsResponse>(

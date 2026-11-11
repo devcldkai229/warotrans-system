@@ -15,6 +15,7 @@ public sealed class Workflow
     public Guid CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
+    public Guid? PublishedBy { get; set; }
 
     public ICollection<WorkflowTask> Tasks { get; set; } = [];
 }

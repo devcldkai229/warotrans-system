@@ -9,6 +9,9 @@ namespace WaroTrans.WorkflowExecution.Validation;
 
 public static class WorkflowDefinitionValidator
 {
+    private const int MaxStepAttempts = 20;
+    private const int MaxRetryBackoffSeconds = 3600;
+
     public static WorkflowDefinitionValidationResult ValidateDraft(WorkflowDefinitionModel model)
     {
         var result = new WorkflowDefinitionValidationResult();
@@ -256,6 +259,28 @@ public static class WorkflowDefinitionValidator
                 $"{stepPath}.operationCode",
                 $"WAIT.{step.OperationCode} is not supported yet; only WAIT.DURATION can run.");
             return;
+        }
+
+        // WH-05: nothing that is certain to fail on the floor may be published.
+        if (step.StepType == StepType.CHECK && !CheckOperations.Executable.Contains(step.OperationCode))
+        {
+            result.Add($"{stepPath}.operationCode", $"CHECK.{step.OperationCode} cannot be evaluated yet.");
+            return;
+        }
+
+        if (step.MaxAttempts is < 1 or > MaxStepAttempts)
+        {
+            result.Add($"{stepPath}.maxAttempts", $"maxAttempts must be between 1 and {MaxStepAttempts}.");
+        }
+
+        if (step.RetryBackoffSeconds is < 0 or > MaxRetryBackoffSeconds)
+        {
+            result.Add($"{stepPath}.retryBackoffSeconds", $"retryBackoffSeconds must be between 0 and {MaxRetryBackoffSeconds}.");
+        }
+
+        if (step.TimeoutSeconds < 0)
+        {
+            result.Add($"{stepPath}.timeoutSeconds", "timeoutSeconds cannot be negative.");
         }
 
         if (!OperationExecutionScopeCatalog.TryGet(step.StepType, step.OperationCode, out var scopeDef))

@@ -47,6 +47,24 @@ public sealed class JobRuntimeProvisioner(
         var detailsByContainer = request.Details.ToDictionary(d => d.ContainerId);
         var summaries = new List<ProvisionedJobSummary>();
 
+        // WH-08: queueing again returns the Jobs it already made, even if the limit changed since: never a second set.
+        var existing = await db.Jobs
+            .Include(j => j.JobContainers)
+            .Include(j => j.JobTasks)
+            .ThenInclude(t => t.JobSteps)
+            .AsNoTracking()
+            .Where(j => j.JobContainers.Any(c => c.TransportRequestId == request.TransportRequestId))
+            .ToListAsync(cancellationToken);
+        var covered = existing.SelectMany(j => j.JobContainers).Select(c => c.ContainerId).ToHashSet();
+        if (existing.Count > 0 && request.Details.All(d => covered.Contains(d.ContainerId)))
+        {
+            return new ProvisionJobRuntimeResult(
+                request.TransportRequestId,
+                existing.OrderBy(j => j.ProvisioningKey, StringComparer.Ordinal)
+                    .Select(j => ToSummary(j, j.ProvisioningKey[(j.ProvisioningKey.LastIndexOf(':') + 1)..]))
+                    .ToList());
+        }
+
         foreach (var batch in batches.OrderBy(b => b.SequenceNo))
         {
             summaries.Add(await ProvisionBatchAsync(
@@ -59,6 +77,44 @@ public sealed class JobRuntimeProvisioner(
         }
 
         return new ProvisionJobRuntimeResult(request.TransportRequestId, summaries);
+    }
+
+    public async Task<Guid> ProvisionRobotJobAsync(RobotJobRequest request, CancellationToken cancellationToken = default)
+    {
+        var existing = await FindExistingJobAsync(request.ProvisioningKey, cancellationToken);
+        if (existing is not null)
+        {
+            return existing.Id;
+        }
+
+        var workflow = await db.Workflows
+            .Include(w => w.Tasks)
+            .ThenInclude(t => t.Steps)
+            .FirstOrDefaultAsync(w => w.Id == request.WorkflowId, cancellationToken)
+            ?? throw new NotFoundException($"Workflow '{request.WorkflowId}' was not found.", "workflow_not_found");
+        if (workflow.Status != WorkflowStatus.PUBLISHED)
+        {
+            throw new DomainValidationException($"Workflow must be PUBLISHED (current: {workflow.Status}).", "workflow_not_published");
+        }
+
+        if (workflow.Tasks.SelectMany(t => t.Steps).Any(s =>
+                OperationExecutionScopeCatalog.Get(s.StepType, s.Config.OperationCode).Scope != ExecutionScope.ONCE_PER_JOB))
+        {
+            throw new DomainValidationException($"Workflow {workflow.Code} moves containers; it needs a transport request.", "workflow_not_robot_level");
+        }
+
+        var snapshot = new TransportRequestExecutionSnapshot(
+            Guid.Empty, request.WarehouseId, request.MapVersionId, request.WorkflowId, 1, request.Inputs, []);
+        var job = await CreateJobGraphAsync(
+            snapshot,
+            new JobBatchPlan("ROBOT", 1, [], []),
+            request.ProvisioningKey,
+            workflow.Tasks.OrderBy(t => t.SequenceNo).ToList(),
+            new Dictionary<Guid, TransportRequestDetailSnapshot>(),
+            workflow.VariablesSchema,
+            cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return job.Id;
     }
 
     public static string BuildProvisioningKey(Guid transportRequestId, string batchKey) =>
@@ -185,6 +241,8 @@ public sealed class JobRuntimeProvisioner(
             MapVersionId = request.MapVersionId,
             ProvisioningKey = provisioningKey,
             Status = JobStatus.CREATED,
+            Priority = request.Priority,
+            DeadlineAt = request.DeadlineAt,
             ContextValues = BuildJobContext(request, batch, variables),
             CreatedAt = now,
             QueuedAt = null,

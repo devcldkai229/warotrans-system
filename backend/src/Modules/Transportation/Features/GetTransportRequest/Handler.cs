@@ -15,7 +15,8 @@ public sealed class GetTransportRequestHandler(
     IWarehouseModule warehouseModule,
     INavigationModule navigationModule,
     ITransportRequestJobControl jobControl,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IAccountNameLookup accounts)
 {
     public async Task<GetTransportRequestResponse> HandleAsync(
         Guid id,
@@ -36,6 +37,8 @@ public sealed class GetTransportRequestHandler(
             cancellationToken);
 
         var jobs = (await jobControl.GetJobsAsync([request.Id], cancellationToken)).GetValueOrDefault(request.Id) ?? [];
+
+        var names = await accounts.GetNamesAsync([request.RequestedBy], cancellationToken);
 
         return new GetTransportRequestResponse(
             request.Id,
@@ -100,6 +103,7 @@ public sealed class GetTransportRequestHandler(
             request.RejectReason,
             request.RejectedAt,
             jobs,
-            TransportRequestActionPolicy.Evaluate(request, jobs, currentUser.Can));
+            TransportRequestActionPolicy.Evaluate(request, jobs, currentUser.Can),
+            names.GetValueOrDefault(request.RequestedBy));
     }
 }

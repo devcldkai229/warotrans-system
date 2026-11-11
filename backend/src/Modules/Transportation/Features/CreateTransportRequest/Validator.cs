@@ -13,6 +13,10 @@ public sealed class CreateTransportRequestValidator : AbstractValidator<CreateTr
         RuleFor(x => x.MapVersionId).NotEmpty().WithMessage("MapVersionId is required.");
         RuleFor(x => x.WorkflowId).NotEmpty().WithMessage("WorkflowId is required.");
 
+        RuleFor(x => x.Priority)
+            .InclusiveBetween(-1, 1)
+            .WithMessage("Priority must be -1 (low), 0 (normal) or 1 (high).");
+
         RuleFor(x => x.Note)
             .MaximumLength(500)
             .WithMessage("Note must not exceed 500 characters.");
