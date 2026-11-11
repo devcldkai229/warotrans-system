@@ -1,10 +1,11 @@
 import { StyleSheet } from 'react-native';
 import { ThemeColors } from '../../shared/theme/colors';
+import { ThemeShadows } from '../../shared/theme/shadows';
 import { radii } from '../../shared/theme/radii';
 
-export const createVoucherStyles = (colors: ThemeColors) => StyleSheet.create({
+export const createVoucherStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, gap: 18, paddingBottom: 24 },
+  content: { padding: 16, gap: 18, paddingBottom: 24, flexGrow: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   flex: { flex: 1, minWidth: 0, gap: 4 },
@@ -20,9 +21,14 @@ export const createVoucherStyles = (colors: ThemeColors) => StyleSheet.create({
   ledgerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4 },
   error: { padding: 14, gap: 10, backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: 1, borderColor: colors.warningBorder },
   pressed: { opacity: 0.7 },
-  sheetHeader: { paddingHorizontal: 18, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sheetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 18, minHeight: 56 },
-  sheetContent: { paddingBottom: 20 },
+  dropdownAnchor: { position: 'relative' },
+  dropdownLayer: { zIndex: 20 },
+  dropdownDismiss: { zIndex: 10 },
+  warehouseMenu: { position: 'absolute', top: 50, left: 0, width: 240, maxWidth: '100%', backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingVertical: 4, zIndex: 30, ...shadows.md },
+  statusMenu: { position: 'absolute', top: 50, right: 0, width: 188, backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingVertical: 4, zIndex: 30, ...shadows.md },
+  dropdownScroll: { maxHeight: 240 },
+  dropdownOption: { minHeight: 44, marginHorizontal: 4, borderRadius: radii.sm, paddingHorizontal: 10, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dropdownSelected: { backgroundColor: colors.primaryLight },
   formSection: { gap: 16 },
   typeCard: { padding: 16, gap: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg, backgroundColor: colors.surface },
   footer: { padding: 16, gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.surface },
