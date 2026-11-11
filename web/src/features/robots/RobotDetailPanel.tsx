@@ -3,12 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import type { RobotView } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
-import { disableRobot, enableRobot } from '@/shared/api/fleet'
+import { disableRobot, enableRobot, localizeRobot } from '@/shared/api/fleet'
+import { listEndpoints } from '@/shared/api/navigation'
 import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
 import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, secondsBetween } from '@/shared/lib/format'
+import { BatteryLevel } from '@/shared/ui/BatteryLevel'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
@@ -28,8 +30,59 @@ interface RobotDetailPanelProps {
  */
 const ACTIONS: { label: string; icon: IconName; unavailable?: string }[] = [
   { label: 'Manual', icon: 'gamepad' },
-  { label: 'Localize', icon: 'crosshair', unavailable: 'The robot does not accept a re-localize command yet.' },
+  { label: 'Localize', icon: 'crosshair' },
 ]
+
+/**
+ * Re-localize: the operator puts the robot on an endpoint and says which one; the robot sets its pose estimate there.
+ * Wrong endpoint = wrong pose, so it asks to confirm the robot really stands there.
+ */
+function LocalizePanel({ robot, onClose }: { robot: RobotView; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [endpointId, setEndpointId] = useState('')
+  const endpoints = useQuery({
+    queryKey: ['map-endpoints', robot.currentMapVersionId],
+    queryFn: () => listEndpoints(robot.currentMapVersionId),
+  })
+  const localize = useMutation({
+    mutationFn: () => localizeRobot(robot.id, endpointId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['robot', robot.id] })
+      void queryClient.invalidateQueries({ queryKey: ['robots'] })
+    },
+  })
+  const chosen = endpoints.data?.find((e) => e.id === endpointId)
+
+  return (
+    <section className="mb-4 flex flex-col gap-3 rounded-md border border-outline-soft p-4 text-sm">
+      <p className="text-ink-2">Place {robot.code} on an endpoint, facing the endpoint's direction, then choose it here.</p>
+      <select className="rounded-md border border-outline-soft bg-surface p-2" value={endpointId} onChange={(e) => setEndpointId(e.target.value)}>
+        <option value="">Choose where the robot stands…</option>
+        {(endpoints.data ?? [])
+          .filter((e) => e.isEnabled !== false)
+          .map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name || e.code} ({e.code})
+            </option>
+          ))}
+      </select>
+      <div className="flex gap-2">
+        <Button variant="primary" size="sm" disabled={!chosen || localize.isPending} onClick={() => localize.mutate()}>
+          {localize.isPending ? 'Sending…' : chosen ? `Robot is at ${chosen.name || chosen.code}: localize` : 'Localize'}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      {localize.isSuccess ? (
+        <p className="text-xs text-ink-2">
+          Sent. Localization now: <b className="font-medium">{robot.localizationStatus ?? 'unknown'}</b> (updates within a few seconds).
+        </p>
+      ) : null}
+      {localize.error ? <p className="text-xs text-red-ink">{localize.error instanceof ApiError ? localize.error.message : 'Localize failed.'}</p> : null}
+    </section>
+  )
+}
 
 const TIMELINE = 'divide-y divide-outline-soft'
 const TIMELINE_NOTE = 'mt-1 block text-xs text-muted'
@@ -118,14 +171,7 @@ function buildSections(robot: RobotView, recent: RecentJobs): Section[] {
       body: (
         <dl>
           <Field label="Battery">
-            {hasTelemetry ? (
-              <>
-                {formatBattery(robot.batteryPercent)}{' '}
-                {robot.batteryPercent === null ? null : <Meter percent={robot.batteryPercent} tone="green" className="w-12" />}
-              </>
-            ) : (
-              '—'
-            )}
+            {hasTelemetry ? <BatteryLevel percent={robot.batteryPercent} /> : '—'}
           </Field>
           <Field label="Pose X">{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
           <Field label="Pose Y">{hasTelemetry ? `${robot.poseY.toFixed(2)} m` : '—'}</Field>
@@ -274,6 +320,8 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
   const [confirmed, setConfirmed] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [localizing, setLocalizing] = useState(false)
+  const mayCommand = canActOnRobot(capabilities, PERMISSIONS.robotCommand, robot.id)
   const error = robot.telemetry?.error
   const navigationState = robot.telemetry?.navigationState
 
@@ -360,9 +408,20 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
               key={action.label}
               type="button"
               className="group flex flex-col items-center gap-2 text-xs text-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={Boolean(action.unavailable) || (action.label === 'Manual' && (!onManual || !mayDrive))}
-              title={action.unavailable ?? (action.label === 'Manual' && !mayDrive ? 'You may not drive this robot.' : undefined)}
-              onClick={action.label === 'Manual' ? onManual : undefined}
+              disabled={
+                Boolean(action.unavailable) ||
+                (action.label === 'Manual' && (!onManual || !mayDrive)) ||
+                (action.label === 'Localize' && (!mayCommand || !robot.isOnline))
+              }
+              title={
+                action.unavailable ??
+                (action.label === 'Manual' && !mayDrive
+                  ? 'You may not drive this robot.'
+                  : action.label === 'Localize' && !robot.isOnline
+                    ? 'The robot is offline.'
+                    : undefined)
+              }
+              onClick={action.label === 'Manual' ? onManual : action.label === 'Localize' ? () => setLocalizing(true) : undefined}
             >
               <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-enabled:group-hover:bg-container-higher">
                 <Icon name={action.icon} size={18} />
@@ -371,6 +430,7 @@ export function RobotDetailPanel({ robot, onBack, onManual }: RobotDetailPanelPr
             </button>
           ))}
         </div>
+        {localizing ? <LocalizePanel robot={robot} onClose={() => setLocalizing(false)} /> : null}
         <ul className="mt-3 mb-6 flex flex-col gap-1 text-xs text-muted">
           {ACTIONS.filter((action) => action.unavailable).map((action) => (
             <li key={action.label}>

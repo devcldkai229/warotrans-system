@@ -11,5 +11,7 @@ public enum RobotCommandType
     STOP,
     RESUME,
     /// <summary>RESTART_STACK / REBOOT / SHUTDOWN of the robot computer (RB-09).</summary>
-    SYSTEM_ACTION
+    SYSTEM_ACTION,
+    /// <summary>Re-localize: the robot sets its pose estimate to a map endpoint where an operator says it stands.</summary>
+    LOCALIZE
 }
