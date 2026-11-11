@@ -9,6 +9,7 @@ import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { MapVersionToolbar } from '@/shared/map/MapVersionToolbar'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { useNotificationsHub, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
+import { BatteryLevel } from '@/shared/ui/BatteryLevel'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { SearchInput } from '@/shared/ui/Field'
 import { Icon } from '@/shared/ui/Icon'
@@ -77,7 +78,11 @@ export function FleetPage() {
                 poseX: live.poseX,
                 poseY: live.poseY,
                 poseYaw: live.poseYaw,
+                batteryPercent: live.batteryPercent ?? robot.batteryPercent,
                 navigationStatus: (live.navigationStatus as Robot['navigationStatus']) ?? robot.navigationStatus,
+                localizationStatus:
+                  (live.localizationStatus as Robot['localizationStatus']) ?? robot.localizationStatus,
+                lastTelemetryAt: live.lastTelemetryAt ?? robot.lastTelemetryAt,
               }
             : robot,
         )
@@ -85,8 +90,27 @@ export function FleetPage() {
     [countsQuery.data, livePoses],
   )
   const robots = useMemo(
-    () => (listQuery.data?.items ?? []).map(toRobotView),
-    [listQuery.data],
+    () =>
+      (listQuery.data?.items ?? []).map((robot) => {
+        const live = livePoses[robot.id]
+        const fresher = live && (!robot.lastTelemetryAt || (live.lastTelemetryAt ?? '') >= robot.lastTelemetryAt)
+        return toRobotView(
+          fresher
+            ? {
+                ...robot,
+                poseX: live.poseX,
+                poseY: live.poseY,
+                poseYaw: live.poseYaw,
+                batteryPercent: live.batteryPercent ?? robot.batteryPercent,
+                navigationStatus: (live.navigationStatus as Robot['navigationStatus']) ?? robot.navigationStatus,
+                localizationStatus:
+                  (live.localizationStatus as Robot['localizationStatus']) ?? robot.localizationStatus,
+                lastTelemetryAt: live.lastTelemetryAt ?? robot.lastTelemetryAt,
+              }
+            : robot,
+        )
+      }),
+    [listQuery.data, livePoses],
   )
   const totalForHeader = countsQuery.data?.total ?? robotsForCounts.length
 
@@ -210,9 +234,12 @@ export function FleetPage() {
                             {!robot.isEnabled ? ' · Disabled' : ''}
                           </span>
                         </span>
-                        <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
-                          {robot.status}
-                        </StatusBadge>
+                        <span className="flex flex-col items-end gap-1">
+                          <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
+                            {robot.status}
+                          </StatusBadge>
+                          <BatteryLevel percent={robot.batteryPercent} size="sm" />
+                        </span>
                         {robot.activity ? (
                           <>
                             <Meter percent={robot.activity.progressPercent} tone={ROBOT_STATUS_TONE[robot.status]} />

@@ -75,7 +75,8 @@ public sealed class RobotControlService(
     ICurrentUser currentUser,
     IHttpContextAccessor httpContextAccessor,
     IAuditTrail audit,
-    TimeProvider clock)
+    TimeProvider clock,
+    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null)
 {
     /// <summary>A lease is renewed by the client while the operator keeps driving; it lapses on its own otherwise.</summary>
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
@@ -416,6 +417,39 @@ public sealed class RobotControlService(
 
         return await SendAsync(robot, RobotCommandType.SYSTEM_ACTION, RobotCommandTypes.SystemAction,
             new SystemActionPayload { Action = action }, cancellationToken);
+    }
+
+    // ------------------------------------------------------------------ localize
+
+    /// <summary>
+    /// An operator says the robot stands on this endpoint: the robot sets its pose estimate there (/initialpose).
+    /// The pose comes from the endpoint in the database, on the robot's own map. Refused while the robot runs a command,
+    /// because moving its belief under a running goal would send it somewhere else; the robot checks that too.
+    /// </summary>
+    public async Task<Guid> LocalizeAsync(Guid robotId, Guid endpointId, CancellationToken cancellationToken)
+    {
+        if (navigation is null)
+        {
+            throw new AppException("Localize is not available.", 503, "localize_unavailable");
+        }
+
+        var robot = await LoadAsync(robotId, cancellationToken);
+        if (!robot.IsOnline) throw new ConflictException($"Robot {robot.Code} is offline.", "robot_offline");
+        if (robot.CurrentCommandId is not null || robot.Status is RobotStatus.EXECUTING)
+        {
+            throw new ConflictException($"Robot {robot.Code} is running a command; cancel or stop it first.", "robot_busy");
+        }
+
+        var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken)
+            ?? throw new NotFoundException($"Endpoint '{endpointId}' was not found.", "endpoint_not_found");
+        if (pose.MapVersionId != robot.CurrentMapVersionId)
+        {
+            throw new DomainValidationException(
+                $"That endpoint is on another map than robot {robot.Code}.", "endpoint_not_on_robot_map");
+        }
+
+        return await SendAsync(robot, RobotCommandType.LOCALIZE, RobotCommandTypes.Localize,
+            new { x = pose.X, y = pose.Y, yaw = pose.Yaw, frameId = "map", endpointCode = pose.Code }, cancellationToken);
     }
 
     // ------------------------------------------------------------------ helpers

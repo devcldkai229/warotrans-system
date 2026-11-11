@@ -1,0 +1,670 @@
+{
+    "edges": [
+        {
+            "id": "3e1d9b9a-a758-4d9b-bb7e-68e929c5bf97",
+            "code": "EDGE-LANE-BTT-BOUND",
+            "name": "Lane BTT Bound",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        0.154,
+                        -1.085
+                    ],
+                    [
+                        0.154,
+                        -0.063
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.65,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5"
+        },
+        {
+            "id": "a9b63e28-f54e-44c2-bee6-95dcf79b83da",
+            "code": "EDGE-LANE-BTT-ZONE-A",
+            "name": "Lane BTT Zone A",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        0.147,
+                        1.503
+                    ],
+                    [
+                        0.147,
+                        2.223
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.65,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5"
+        },
+        {
+            "id": "9a75ff49-eb5f-428d-ac5f-f68766df9427",
+            "code": "EDGE-LANE-LTR-B---3",
+            "name": "Lane LTR B",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        0.318,
+                        0.614
+                    ],
+                    [
+                        1.433,
+                        0.608
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.65,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5"
+        },
+        {
+            "id": "1564b723-d41a-445b-9080-6dc9961efa59",
+            "code": "EDGE-LANE-LTR-ZONE-A",
+            "name": "Lane LTR Zone A",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        0.313,
+                        2.384
+                    ],
+                    [
+                        1.032,
+                        2.384
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.65,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5"
+        },
+        {
+            "id": "98d87e40-5f83-422f-9c7d-fcd8e0847693",
+            "code": "EDGE-LANE-RTL",
+            "name": "Lane RTL",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        1.438,
+                        1.264
+                    ],
+                    [
+                        0.321,
+                        1.28
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.65,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5"
+        },
+        {
+            "id": "c4209b03-03b3-412b-836c-567d50c4af93",
+            "code": "EDGE-LANE-RTL-ZONE-A",
+            "name": "Lane RTL Zone A",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        1.24,
+                        3.093
+                    ],
+                    [
+                        -0.515,
+                        3.093
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.65,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5"
+        },
+        {
+            "id": "1c0bdf31-678e-4ff3-86ed-0f576ca53a8c",
+            "code": "EDGE-LANE-TTB-BOUND",
+            "name": "Lane TTB Bound",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        -0.507,
+                        -0.058
+                    ],
+                    [
+                        -0.507,
+                        -1.085
+                    ]
+                ]
+            },
+            "direction": "ONE_WAY",
+            "is_active": true,
+            "max_speed": null,
+            "width_meters": 0.65,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5"
+        }
+    ],
+    "zones": [
+        {
+            "id": "46d70171-2880-41b7-b89d-b48bc502bcf3",
+            "code": "ZONE-KEEP-OUT-ZONE-A",
+            "name": "Keep Out Zone A",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            -0.177,
+                            2.72
+                        ],
+                        [
+                            0.948,
+                            2.72
+                        ],
+                        [
+                            0.923,
+                            2.745
+                        ],
+                        [
+                            -0.177,
+                            2.745
+                        ],
+                        [
+                            -0.177,
+                            2.72
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "KEEP_OUT",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "69f364e1-ab75-4c84-9a5b-a80f97971c66",
+            "code": "ZONE-NO-STOP-OVERLAY-SINGLE-ZONE-B",
+            "name": "No Stop Overlay Single Zone B",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            1.243,
+                            1.587
+                        ],
+                        [
+                            1.86,
+                            1.587
+                        ],
+                        [
+                            1.86,
+                            0.249
+                        ],
+                        [
+                            1.24,
+                            0.249
+                        ],
+                        [
+                            1.243,
+                            1.587
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "58ad7d83-c06a-4829-b705-98cb48e5f6d4",
+            "code": "ZONE-NO-STOP-ZONE-A",
+            "name": "No Stop Zone A",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            -0.171,
+                            2.712
+                        ],
+                        [
+                            -0.171,
+                            2.093
+                        ],
+                        [
+                            0.474,
+                            2.093
+                        ],
+                        [
+                            0.469,
+                            2.712
+                        ],
+                        [
+                            -0.171,
+                            2.712
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "NO_STOP",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "ae7f2166-7007-4089-a891-ece9281ce328",
+            "code": "ZONE-SINGLE-CENTER-ZONE",
+            "name": "Single Center Zone",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            0.469,
+                            1.603
+                        ],
+                        [
+                            -0.171,
+                            1.603
+                        ],
+                        [
+                            -0.171,
+                            1.306
+                        ],
+                        [
+                            -0.562,
+                            1.306
+                        ],
+                        [
+                            -0.697,
+                            0.577
+                        ],
+                        [
+                            -0.817,
+                            -0.267
+                        ],
+                        [
+                            0.48,
+                            -0.267
+                        ],
+                        [
+                            0.469,
+                            1.603
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "SINGLE_OCCUPANCY",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "eb1e538b-3651-451b-8295-d6c67608b933",
+            "code": "ZONE-SINGLE-QUEUE-ZONE",
+            "name": "Single Queue Zone",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            0.485,
+                            -0.506
+                        ],
+                        [
+                            0.485,
+                            -0.889
+                        ],
+                        [
+                            1.29,
+                            -0.889
+                        ],
+                        [
+                            1.29,
+                            -0.501
+                        ],
+                        [
+                            0.485,
+                            -0.506
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "SINGLE_OCCUPANCY",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "5ccd8c3d-8602-4d61-8032-bc8c54f31fee",
+            "code": "ZONE-SINGLE-ZONE-A",
+            "name": "Single Zone A",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            0.948,
+                            2.072
+                        ],
+                        [
+                            1.87,
+                            2.061
+                        ],
+                        [
+                            1.881,
+                            3.389
+                        ],
+                        [
+                            0.948,
+                            3.395
+                        ],
+                        [
+                            0.948,
+                            2.072
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "SINGLE_OCCUPANCY",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "f0e2de1b-46a9-40dd-8804-969e871d73b3",
+            "code": "ZONE-SINGLE-ZONE-B",
+            "name": "Single Zone B",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            1.235,
+                            0.259
+                        ],
+                        [
+                            1.875,
+                            0.259
+                        ],
+                        [
+                            1.868,
+                            1.587
+                        ],
+                        [
+                            1.261,
+                            1.593
+                        ],
+                        [
+                            1.235,
+                            0.259
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": null,
+            "zone_type": "SINGLE_OCCUPANCY",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        },
+        {
+            "id": "85a1ba22-aac6-446e-a350-ad92723ec3d0",
+            "code": "ZONE-SPEED-ZONE-BOUND",
+            "name": "Speed Zone Bound",
+            "policy": null,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            -0.807,
+                            -0.913
+                        ],
+                        [
+                            -0.807,
+                            -1.486
+                        ],
+                        [
+                            1.313,
+                            -1.499
+                        ],
+                        [
+                            1.313,
+                            -0.913
+                        ],
+                        [
+                            -0.807,
+                            -0.913
+                        ]
+                    ]
+                ]
+            },
+            "is_active": true,
+            "max_speed": 0.6,
+            "zone_type": "SPEED",
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "policy_schema_version": 1
+        }
+    ],
+    "format": "warotrans-map-snapshot/1",
+    "endpoints": [
+        {
+            "x": -0.911,
+            "y": 3.098,
+            "id": "5fe2fcd0-bf49-413e-8e9c-46150f4a8088",
+            "yaw": 0,
+            "code": "EP-CHARGE",
+            "name": "Charge",
+            "is_enabled": true,
+            "endpoint_type": "CHARGER",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": 1.459,
+            "y": -1.043,
+            "id": "61e1930e-4d5b-47e1-b6a0-ff21c394a93b",
+            "yaw": 3.141592653589793,
+            "code": "EP-INBOUND",
+            "name": "Inbound",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": -0.953,
+            "y": 0.197,
+            "id": "efc52bc6-124b-46fb-af9d-2a1c4f95ce62",
+            "yaw": 0,
+            "code": "EP-INSPECTION",
+            "name": "Inspection",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": -0.953,
+            "y": -1.048,
+            "id": "4aeb0df5-e212-44d7-975c-77f981ad6230",
+            "yaw": 0,
+            "code": "EP-OUTBOUND",
+            "name": "Outbound",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.05,
+            "source_endpoint_id": null
+        },
+        {
+            "x": -0.541,
+            "y": 2.468,
+            "id": "0ac07400-31db-4c8b-88e8-b680e3f28b3a",
+            "yaw": 3.141592653589793,
+            "code": "EP-PARKING-A",
+            "name": "Parking A",
+            "is_enabled": true,
+            "endpoint_type": "PARK",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": -0.52,
+            "y": 1.775,
+            "id": "698bc6dd-b42b-4f02-8b7d-c02081fe3790",
+            "yaw": 3.141592653589793,
+            "code": "EP-PARKING-B",
+            "name": "Parking B",
+            "is_enabled": true,
+            "endpoint_type": "PARK",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": 0.938,
+            "y": -0.751,
+            "id": "0219813e-8515-4a60-bbf9-f1451c9e1099",
+            "yaw": -1.5707963267948966,
+            "code": "EP-QUEUE-POINT",
+            "name": "Queue Point",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": 1.36,
+            "y": 1.994,
+            "id": "3b9d83ce-d4b9-4976-a519-31dc5ce918d7",
+            "yaw": 1.5707963267948966,
+            "code": "EP-SHELF-A-01",
+            "name": "Shelf A 01",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": 1.573,
+            "y": -0.085,
+            "id": "910305b0-959f-40f3-a450-ba9f67bfb84a",
+            "yaw": 1.5707963267948966,
+            "code": "EP-SHELF-B-01",
+            "name": "Shelf B 01",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": 1.219,
+            "y": -0.085,
+            "id": "3e31a808-cd4e-4b8e-9d00-dd22e0fdf590",
+            "yaw": 0,
+            "code": "EP-SHELF-B-02",
+            "name": "Shelf B 02",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        },
+        {
+            "x": -0.953,
+            "y": -0.111,
+            "id": "6db35a41-aa0d-4fc5-9a5d-779acf2440db",
+            "yaw": 0,
+            "code": "EP-SHELF-C-01",
+            "name": "Shelf C 01",
+            "is_enabled": true,
+            "endpoint_type": "WAYPOINT",
+            "yaw_tolerance": 0.017453292519943295,
+            "map_version_id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+            "position_tolerance": 0.06,
+            "source_endpoint_id": null
+        }
+    ],
+    "exportedAt": "2026-11-10T10:21:50.450055+00:00",
+    "mapVersion": {
+        "id": "888005f8-1ba0-402a-ac8c-9b0af0c153b5",
+        "code": "MAP-ONE-V005",
+        "name": "Kho ONE V2",
+        "negate": false,
+        "status": "PUBLISHED",
+        "map_uri": "/map-assets/55c88958-d994-48d3-ae5d-11991476673f/888005f8-1ba0-402a-ac8c-9b0af0c153b5/map.pgm",
+        "frame_id": "map",
+        "origin_x": -1.424,
+        "origin_y": -1.658,
+        "created_at": "2026-11-10T09:45:10.071534+00:00",
+        "origin_yaw": 0,
+        "resolution": 0.05,
+        "version_no": 5,
+        "content_hash": "d2b797da99ce99b5e6fba268cdd79c53380408af30ea1b5b6e180e9a7846ed78",
+        "map_yaml_uri": "/map-assets/55c88958-d994-48d3-ae5d-11991476673f/888005f8-1ba0-402a-ac8c-9b0af0c153b5/map.yaml",
+        "published_at": "2026-11-10T10:11:09.57422+00:00",
+        "warehouse_id": "55c88958-d994-48d3-ae5d-11991476673f",
+        "free_threshold": 0.196,
+        "preview_image_uri": "/map-assets/55c88958-d994-48d3-ae5d-11991476673f/888005f8-1ba0-402a-ac8c-9b0af0c153b5/map-preview.png",
+        "image_width_pixels": 70,
+        "occupied_threshold": 0.65,
+        "image_height_pixels": 102,
+        "source_map_version_id": null
+    },
+    "endpointGroups": [
+    ],
+    "endpointGroupMembers": [
+    ]
+}

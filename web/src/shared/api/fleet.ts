@@ -212,6 +212,14 @@ export function stopRobot(id: string, reason?: string, mode: 'STOP' | 'PAUSE' = 
   return apiFetch<StopState>(`/api/fleet/robots/${id}/commands/stop`, { method: 'POST', body: JSON.stringify({ mode, reason }) })
 }
 
+/** The robot sets its pose estimate to this endpoint of its map (where it was placed). Watch localizationStatus. */
+export function localizeRobot(id: string, endpointId: string) {
+  return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/commands/localize`, {
+    method: 'POST',
+    body: JSON.stringify({ endpointId }),
+  })
+}
+
 export function resumeRobot(id: string) {
   return apiFetch<StopState>(`/api/fleet/robots/${id}/commands/resume`, { method: 'POST' })
 }

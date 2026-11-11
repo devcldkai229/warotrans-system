@@ -15,6 +15,8 @@ public sealed record StartMaintenanceRequest(string Reason);
 
 public sealed record SystemActionRequest(string Action, string ConfirmRobotCode);
 
+public sealed record LocalizeRobotRequest(Guid EndpointId);
+
 /// <summary>Robot control endpoints: stop / resume (RB-03), manual lease (RB-04), maintenance (RB-08), power (RB-09).</summary>
 public static class RobotControlEndpoints
 {
@@ -83,6 +85,14 @@ public static class RobotControlEndpoints
             .RequireRobotScope()
             .WithName("CompleteRobotMaintenance")
             .WithDescription("Returns the robot to service only when sensorsOk, localizationOk, stopTestOk and trafficClear are all true.");
+
+        group.MapPost("/robots/{id:guid}/commands/localize", async (Guid id, LocalizeRobotRequest request, RobotControlService control, CancellationToken ct) =>
+                Results.Accepted(null, new { commandId = await control.LocalizeAsync(id, request.EndpointId, ct) }))
+            .RequirePermission(Permissions.RobotCommand)
+            .RequireRobotScope()
+            .Audited("robot.localize_requested", "ROBOT", "id")
+            .WithName("LocalizeRobot")
+            .WithDescription("The robot sets its pose estimate to the given endpoint of its map (where an operator placed it). Refused while it runs a command. Follow localizationStatus on the robot.");
 
         group.MapPost("/robots/{id:guid}/system-actions", async (Guid id, SystemActionRequest request, RobotControlService control, CancellationToken ct) =>
                 Results.Accepted(null, new { commandId = await control.SystemActionAsync(id, request.Action, request.ConfirmRobotCode, ct) }))
