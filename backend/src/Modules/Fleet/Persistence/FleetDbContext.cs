@@ -33,8 +33,10 @@ public sealed class FleetDbContext(DbContextOptions<FleetDbContext> options) : D
             if (held.IsModified && held.OriginalValue != held.CurrentValue) reasons.Add(held.CurrentValue ? "motion_held" : "motion_released");
             if (reasons.Count > 0)
             {
+                // The robot is about to be saved, so its own current values are the snapshot, not what the database still holds.
                 RobotStateEvents.Add(await RobotStateJournal.NewEventAsync(
-                    this, entry.Entity.Id, status.OriginalValue, status.CurrentValue, string.Join(",", reasons), RobotStateEventSource.SYSTEM, cancellationToken));
+                    this, entry.Entity.Id, status.OriginalValue, status.CurrentValue, string.Join(",", reasons), RobotStateEventSource.SYSTEM,
+                    RobotStateDetails.From(entry.Entity), cancellationToken));
             }
         }
 

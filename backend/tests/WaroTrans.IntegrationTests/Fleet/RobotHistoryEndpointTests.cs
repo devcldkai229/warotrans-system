@@ -83,6 +83,104 @@ public sealed class RobotHistoryEndpointTests(WaroTransWebApplicationFactory fac
     }
 
     [Fact]
+    public async Task The_history_can_be_filtered_by_kind_and_by_source_and_a_typo_is_refused()
+    {
+        var id = await SeedRobotAsync();
+        await ChangeAsync(id, r => r.IsOnline = false); // a SYSTEM state change
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+            db.RobotCommands.Add(WaroTrans.Fleet.Entities.RobotCommand.CreateNavigate(id, Guid.NewGuid(), "{}", DateTimeOffset.UtcNow, null, null));
+            db.RobotStateEvents.Add(new WaroTrans.Fleet.Entities.RobotStateEvent
+            {
+                Id = Guid.NewGuid(),
+                RobotId = id,
+                FromStatus = RobotStatus.AVAILABLE,
+                ToStatus = RobotStatus.AVAILABLE,
+                Reason = "motion_released",
+                Source = RobotStateEventSource.OPERATOR,
+                OccurredAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        async Task<JsonElement> Get(string query) =>
+            await Client.GetFromJsonAsync<JsonElement>($"/api/fleet/robots/{id}/state-history{query}");
+
+        Assert.Equal(3, (await Get("")).GetProperty("total").GetInt32());
+
+        var states = await Get("?kind=STATE");
+        Assert.Equal(2, states.GetProperty("total").GetInt32());
+        Assert.All(states.GetProperty("items").EnumerateArray(), i => Assert.Equal("STATE", i.GetProperty("kind").GetString()));
+
+        var commands = await Get("?kind=command");
+        Assert.Equal(1, commands.GetProperty("total").GetInt32());
+        Assert.Equal("COMMAND", Assert.Single(commands.GetProperty("items").EnumerateArray()).GetProperty("kind").GetString());
+
+        var operator_ = await Get("?source=operator");
+        Assert.Equal(1, operator_.GetProperty("total").GetInt32());
+        Assert.Equal("OPERATOR", Assert.Single(operator_.GetProperty("items").EnumerateArray()).GetProperty("source").GetString());
+
+        // A command has no source, so asking for commands from a source matches nothing.
+        Assert.Equal(0, (await Get("?kind=COMMAND&source=SYSTEM")).GetProperty("total").GetInt32());
+        // The filters count and page together.
+        var paged = await Get("?kind=STATE&skip=1&take=1");
+        Assert.Equal(2, paged.GetProperty("total").GetInt32());
+        Assert.Single(paged.GetProperty("items").EnumerateArray());
+
+        foreach (var (query, code) in new[] { ("?kind=ROBOT", "robot_history_kind_invalid"), ("?source=bogus", "robot_history_source_invalid"), ("?source=1", "robot_history_source_invalid") })
+        {
+            var refused = await Client.GetAsync($"/api/fleet/robots/{id}/state-history{query}");
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+            Assert.Equal(code, (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task A_state_line_keeps_the_battery_and_error_of_that_moment_and_never_a_battery_nobody_measured()
+    {
+        var measured = await SeedRobotAsync();
+        await ChangeAsync(measured, r =>
+        {
+            r.BatteryPercent = 18.04m;
+            r.BatteryMeasuredAt = DateTimeOffset.UtcNow;
+            r.ErrorCode = "LIDAR_TIMEOUT";
+            r.Status = RobotStatus.ERROR;
+        });
+
+        var line = (await Client.GetFromJsonAsync<JsonElement>($"/api/fleet/robots/{measured}/state-history")).GetProperty("items")[0];
+        var details = line.GetProperty("details");
+        // The robot's own values as it was saved, not what the database held a moment before.
+        Assert.Equal("ERROR", line.GetProperty("toStatus").GetString());
+        Assert.Equal(18.0m, details.GetProperty("batteryPercent").GetDecimal());
+        Assert.Equal("LIDAR_TIMEOUT", details.GetProperty("errorCode").GetString());
+
+        // A robot that never reported a battery has no percentage, which is not 0 %.
+        var unmeasured = await SeedRobotAsync();
+        await ChangeAsync(unmeasured, r => r.IsOnline = false);
+        var quiet = (await Client.GetFromJsonAsync<JsonElement>($"/api/fleet/robots/{unmeasured}/state-history")).GetProperty("items")[0].GetProperty("details");
+        Assert.Equal(JsonValueKind.Null, quiet.GetProperty("batteryPercent").ValueKind);
+        Assert.Equal(JsonValueKind.Null, quiet.GetProperty("errorCode").ValueKind);
+
+        // A line written before details were kept has none, and a command never has.
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+            db.RobotStateEvents.Add(new WaroTrans.Fleet.Entities.RobotStateEvent
+            {
+                Id = Guid.NewGuid(), RobotId = unmeasured, ToStatus = RobotStatus.OFFLINE, Reason = "offline",
+                Source = RobotStateEventSource.SYSTEM, OccurredAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+            });
+            db.RobotCommands.Add(WaroTrans.Fleet.Entities.RobotCommand.CreateNavigate(unmeasured, Guid.NewGuid(), "{}", DateTimeOffset.UtcNow.AddMinutes(-2), null, null));
+            await db.SaveChangesAsync();
+        }
+
+        var items = (await Client.GetFromJsonAsync<JsonElement>($"/api/fleet/robots/{unmeasured}/state-history")).GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(JsonValueKind.Null, items.Single(i => i.GetProperty("reason").GetString() == "offline" && i.GetProperty("details").ValueKind == JsonValueKind.Null).GetProperty("details").ValueKind);
+        Assert.Equal(JsonValueKind.Null, items.Single(i => i.GetProperty("kind").GetString() == "COMMAND").GetProperty("details").ValueKind);
+    }
+
+    [Fact]
     public async Task The_catalog_offers_nothing_the_robot_cannot_do()
     {
         var id = await SeedRobotAsync();

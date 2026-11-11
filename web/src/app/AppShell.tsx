@@ -50,6 +50,7 @@ const NAV: NavGroup[] = [
     items: [
       { label: t('Issues'), to: '/operations/issues', requires: PERMISSIONS.issueRead },
       { label: t('Notifications'), to: '/operations/notifications', requires: PERMISSIONS.notificationRead },
+      { label: t('Robot history'), to: '/operations/robot-history', requires: PERMISSIONS.robotRead },
       { label: t('Audit log'), to: '/operations/audit', requires: PERMISSIONS.auditRead },
     ],
   },

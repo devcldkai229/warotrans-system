@@ -1,5 +1,5 @@
 import { apiFetch, getAccessToken, getApiUrl } from './client'
-import type { Robot, RobotStatus } from './contracts'
+import type { Robot, RobotStateEventSource, RobotStatus } from './contracts'
 
 export interface ListRobotsParams {
   warehouseId?: string
@@ -170,6 +170,68 @@ export function sendRobotToCharger(robotId: string) {
 }
 
 /** FLT-02: what this robot can be asked now. An unsupported item must not be offered. */
+export type RobotHistoryKind = 'STATE' | 'COMMAND'
+
+/** One line of a robot's history: a change of state or a command, whichever happened (BOTH-02). */
+export interface RobotHistoryItem {
+  kind: RobotHistoryKind
+  occurredAt: string
+  /** STATE only. `fromStatus` is null for the first state recorded. */
+  fromStatus: string | null
+  toStatus: string | null
+  /** STATE only: a code such as `status`, `online`, `offline`, `motion_held`, `motion_released`, comma-joined when several apply. */
+  reason: string | null
+  /** STATE only: where the change came from. Commands carry none. */
+  source: RobotStateEventSource | null
+  jobId: string | null
+  /** COMMAND only. */
+  commandId: string | null
+  commandType: string | null
+  commandStatus: string | null
+  commandOutcome: string | null
+  jobStepId: string | null
+  /** STATE only: what was true of the robot then. Null on lines written before this was kept, and on commands. */
+  details: RobotHistoryDetails | null
+}
+
+/** The battery and the error the robot reported when the state was recorded. A battery nobody measured is null, never 0. */
+export interface RobotHistoryDetails {
+  batteryPercent?: number | null
+  errorCode?: string | null
+}
+
+export interface RobotHistoryQuery {
+  kind?: RobotHistoryKind
+  /** Only state changes have a source, so a source leaves commands out. */
+  source?: RobotStateEventSource
+  /** ISO times, both ends inclusive. */
+  from?: string
+  to?: string
+  skip?: number
+  take?: number
+}
+
+export interface RobotHistoryResponse {
+  items: RobotHistoryItem[]
+  /** Everything the filters match, not only this page. */
+  total: number
+  skip: number
+  take: number
+}
+
+/** Needs robot.read, and for a Technician the robot must be in their scope. Newest first. */
+export function getRobotHistory(robotId: string, params: RobotHistoryQuery = {}) {
+  const query = new URLSearchParams()
+  if (params.kind) query.set('kind', params.kind)
+  if (params.source) query.set('source', params.source)
+  if (params.from) query.set('from', params.from)
+  if (params.to) query.set('to', params.to)
+  if (params.skip !== undefined) query.set('skip', String(params.skip))
+  if (params.take !== undefined) query.set('take', String(params.take))
+  const qs = query.toString()
+  return apiFetch<RobotHistoryResponse>(`/api/fleet/robots/${robotId}/state-history${qs ? `?${qs}` : ''}`)
+}
+
 export interface RobotCommandCatalogItem {
   code: 'STOP' | 'PAUSE' | 'RESUME' | 'MANUAL_DRIVE' | 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN' | 'LOCALIZE' | 'DOCK' | 'CHARGE'
   supported: boolean
