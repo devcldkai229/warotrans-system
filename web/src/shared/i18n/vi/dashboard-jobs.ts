@@ -163,4 +163,9 @@ export const vi_dashboard_jobs: Record<string, string> = {
   'There are no jobs yet.': 'Chưa có công việc nào.',
   'Showing {shown} of {total}': 'Hiển thị {shown} trên {total}',
   'Load more': 'Tải thêm',
+  'Go when a robot is free': 'Chạy khi có robot rảnh',
+  'Take this': 'Nhận việc này',
+  'Give back': 'Trả lại',
+  'Why are you taking this over?': 'Vì sao bạn tiếp quản việc này?',
+  'Take over': 'Tiếp quản',
 }

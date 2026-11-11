@@ -35,6 +35,7 @@ const GROUPS: GroupDefinition[] = [
       { code: 'warehouse.read', label: msg('View warehouses, products and stock') },
       { code: 'warehouse.write', label: msg('Change warehouse master data') },
       { code: 'container.create', label: msg('Receive and create containers') },
+      { code: 'container.recover', label: msg('Record where a container that lost its place really is') },
       { code: 'voucher.write', label: msg('Create and confirm stock vouchers') },
     ],
   },
@@ -58,6 +59,7 @@ const GROUPS: GroupDefinition[] = [
       { code: 'job.operate', label: msg('Start and resume jobs, confirm steps') },
       { code: 'job.pause', label: msg('Pause jobs') },
       { code: 'job.cancel', label: msg('Cancel jobs') },
+      { code: 'job.takeover', label: msg('Take over a step someone else is handling') },
     ],
   },
   {

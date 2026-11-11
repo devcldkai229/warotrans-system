@@ -288,7 +288,7 @@ export function ManagementPage() {
             {tab === 'categories' ? (
               <CategoriesSection categories={categories} setCategories={setCategories} products={products} loadState={catalogState} />
             ) : null}
-            {tab === 'containers' ? <ContainersSection listing={containers} loadState={containerState} /> : null}
+            {tab === 'containers' ? <ContainersSection listing={containers} loadState={containerState} locations={locationListing.items} onChanged={reloadContainers} /> : null}
             {tab === 'inventory' ? <InventorySection listing={inventory} loadState={inventoryState} /> : null}
             {tab === 'vouchers' ? <VouchersSection warehouse={locationListing.warehouse} products={products} /> : null}
             {tab === 'locations' ? (

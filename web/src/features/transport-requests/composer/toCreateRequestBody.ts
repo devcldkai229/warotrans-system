@@ -47,6 +47,7 @@ export function toCreateRequestBody(
     workflowId: draft.workflowId,
     workflowInputs,
     note: draft.note,
+    ...(draft.priority ? { priority: draft.priority } : {}),
     details: draft.movements.map((movement) => ({
       sequenceNo: movement.sequenceNo,
       containerId: movement.containerId,

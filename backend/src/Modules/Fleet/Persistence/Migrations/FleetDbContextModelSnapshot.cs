@@ -53,6 +53,11 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("override_reason");
 
+                    b.Property<string>("RefusalCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("refusal_code");
+
                     b.Property<Guid?>("RobotId")
                         .HasColumnType("uuid")
                         .HasColumnName("robot_id");
@@ -290,6 +295,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("last_telemetry_sequence");
 
+                    b.Property<double?>("LengthM")
+                        .HasColumnType("double precision")
+                        .HasColumnName("length_m");
+
                     b.Property<double?>("LinearVelocity")
                         .HasColumnType("double precision")
                         .HasColumnName("linear_velocity");
@@ -325,6 +334,14 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("map_version_code");
+
+                    b.Property<int?>("MaxContainers")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_containers");
+
+                    b.Property<decimal?>("MaxPayloadKg")
+                        .HasColumnType("numeric")
+                        .HasColumnName("max_payload_kg");
 
                     b.Property<bool>("MotionHeld")
                         .HasColumnType("boolean")
@@ -371,6 +388,10 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                     b.Property<Guid>("WarehouseId")
                         .HasColumnType("uuid")
                         .HasColumnName("warehouse_id");
+
+                    b.Property<double?>("WidthM")
+                        .HasColumnType("double precision")
+                        .HasColumnName("width_m");
 
                     b.HasKey("Id")
                         .HasName("p_k_robots");
@@ -475,6 +496,85 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasDatabaseName("i_x_robot_commands_robot_id_status");
 
                     b.ToTable("robot_commands", "fleet");
+                });
+
+            modelBuilder.Entity("WaroTrans.Fleet.Entities.RobotPositioningIntent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CancelRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancel_requested_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("end_reason");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("MapVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("map_version_id");
+
+                    b.Property<Guid?>("NavigateCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("navigate_command_id");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TargetEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_endpoint_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("YieldToJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("yield_to_job_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_robot_positioning_intents");
+
+                    b.HasIndex("NavigateCommandId")
+                        .HasDatabaseName("i_x_robot_positioning_intents_navigate_command_id");
+
+                    b.HasIndex("RobotId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_positioning_live_robot")
+                        .HasFilter("status IN ('NAVIGATING', 'YIELDING')");
+
+                    b.HasIndex("TargetEndpointId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_positioning_live_endpoint")
+                        .HasFilter("status IN ('NAVIGATING', 'YIELDING')");
+
+                    b.ToTable("robot_positioning_intents", "fleet");
                 });
 
             modelBuilder.Entity("WaroTrans.Fleet.Entities.RobotStateEvent", b =>

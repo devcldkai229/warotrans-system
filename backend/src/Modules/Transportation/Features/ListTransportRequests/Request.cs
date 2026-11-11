@@ -7,4 +7,5 @@ public sealed record ListTransportRequestsRequest(
     TransportRequestStatus? Status,
     string? Search,
     int Take,
+    int Skip = 0,
     IReadOnlyList<Guid>? Ids = null);

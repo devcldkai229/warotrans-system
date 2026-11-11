@@ -46,6 +46,7 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(c => c.Barcode)
+            .Skip(request.Skip)
             .Take(request.Take)
             .Select(c => new ContainerListItemResponse(
                 c.Id,

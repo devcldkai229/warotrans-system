@@ -20,6 +20,7 @@ public static class ListJobsEndpoint
             int? skip,
             int? take,
             JobQueries queries,
+            JobSummaryEnricher enricher,
             IFleetModule fleet,
             CancellationToken cancellationToken) =>
         {
@@ -43,7 +44,7 @@ public static class ListJobsEndpoint
             var offset = Math.Clamp(skip ?? 0, 0, 10_000);
             var jobIds = robotId is { } id ? await fleet.GetRecentJobIdsAsync(id, (offset + limit) * 2, cancellationToken) : null;
             var (items, total) = await queries.ListAsync(parsed, transportRequestId, limit, cancellationToken, jobIds, search, offset);
-            return Results.Ok(new { items, total });
+            return Results.Ok(new { items = await enricher.EnrichAsync(items, cancellationToken), total });
         })
         .RequirePermission(Permissions.JobRead)
         .WithName("ListJobs")

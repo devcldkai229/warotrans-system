@@ -274,7 +274,8 @@ export type JobStepStatus =
   | 'PAUSED'
   | 'COMPLETED'
   | 'FAILED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'SKIPPED';
 
 /** `WorkflowExecution/Enums/JobContainerStatus.cs`. */
 export type JobContainerStatus =
@@ -637,6 +638,7 @@ export interface CreateTransportRequestResponse {
   workflowId: string;
   planSchemaVersion: number;
   requestedBy: string;
+  requestedByName?: string | null;
   note: string | null;
   workflowInputs: Record<string, JsonValue>;
   submittedAt: UtcDateTime;

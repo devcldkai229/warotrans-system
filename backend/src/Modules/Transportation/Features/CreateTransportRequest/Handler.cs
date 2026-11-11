@@ -41,8 +41,19 @@ public sealed class CreateTransportRequestHandler(
         TransportRequestDetailStatus.IN_PROGRESS
     ];
 
-    public async Task<CreateTransportRequestResponse> HandleAsync(
+    public Task<CreateTransportRequestResponse> HandleAsync(
         CreateTransportRequestRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var requestedBy = currentUser.AccountId
+            ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
+        return CreateForAsync(request, requestedBy, cancellationToken);
+    }
+
+    /// <summary>For work with no signed-in user behind it (a schedule's wave): every check still applies.</summary>
+    public async Task<CreateTransportRequestResponse> CreateForAsync(
+        CreateTransportRequestRequest request,
+        Guid requestedBy,
         CancellationToken cancellationToken = default)
     {
         var validationResult = await validator.ValidateAsync(request, cancellationToken);
@@ -50,9 +61,6 @@ public sealed class CreateTransportRequestHandler(
         {
             throw new ValidationException(validationResult.Errors);
         }
-
-        var requestedBy = currentUser.AccountId
-            ?? throw new AppException("An authenticated account is required.", 401, "unauthenticated");
 
         IReadOnlyList<CreateTransportRequestDetailRequest> details = request.Details!;
 
@@ -62,6 +70,7 @@ public sealed class CreateTransportRequestHandler(
         details = await AttachShelvesAsync(request.WarehouseId, details, cancellationToken);
         await EnsureStorageLocationsAsync(request.WarehouseId, details, cancellationToken);
         var containers = await EnsureContainersAsync(details, cancellationToken);
+        EnsureContainersAtSource(details, containers);
         await EnsureStockVouchersAsync(request.WarehouseId, details, containers, cancellationToken);
 
         var requestCode = await businessCodeGenerator.NextRequestCodeAsync(cancellationToken: cancellationToken);
@@ -84,6 +93,8 @@ public sealed class CreateTransportRequestHandler(
                 d.DestinationEndpointId,
                 d.DestinationLevelNo)).ToList(),
             DateTimeOffset.UtcNow);
+        transportRequest.Priority = request.Priority;
+        transportRequest.DeadlineAt = request.DeadlineAt;
 
         await workflowRequestValidator.ValidateAsync(
             transportRequest.WorkflowId,
@@ -316,6 +327,27 @@ public sealed class CreateTransportRequestHandler(
         }
 
         return containers;
+    }
+
+    /// <summary>
+    /// A Container on a shelf is collected from that shelf: a request naming another source would send the robot where
+    /// the Container is not, and the stock would be booked off a shelf that never held it.
+    /// </summary>
+    private static void EnsureContainersAtSource(
+        IReadOnlyList<CreateTransportRequestDetailRequest> details,
+        IReadOnlyDictionary<Guid, ContainerSnapshot> containers)
+    {
+        foreach (var detail in details)
+        {
+            var container = containers[detail.ContainerId];
+            if (container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } shelf }
+                && detail.SourceStorageLocationId != shelf)
+            {
+                throw new DomainValidationException(
+                    $"Container '{container.Barcode}' is stored on another storage location than the Detail's source.",
+                    "container_not_at_source");
+            }
+        }
     }
 
     /// <summary>

@@ -19,6 +19,7 @@ import { FleetPage } from '@/features/robots/FleetPage'
 import { RobotManualPage } from '@/features/robots/manual/RobotManualPage'
 import { RobotTechnicalPage } from '@/features/robots/technical/RobotTechnicalPage'
 import { TransportRequestsPage } from '@/features/transport-requests/TransportRequestsPage'
+import { SchedulesPage } from '@/features/transport-requests/SchedulesPage'
 import { WorkflowEditorPage } from '@/features/workflows/workflow-editor-page'
 import { WorkflowsListPage } from '@/features/workflows/workflows-list-page'
 
@@ -44,6 +45,7 @@ function App() {
             <Route path="/monitor/fleet/:robotCode" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
             <Route path="/monitor/fleet/:robotCode/technical" element={<Guard permission={PERMISSIONS.robotRead}><RobotTechnicalPage /></Guard>} />
             <Route path="/monitor/requests" element={<Guard permission={PERMISSIONS.transportRead}><TransportRequestsPage /></Guard>} />
+            <Route path="/monitor/schedules" element={<Guard permission={PERMISSIONS.transportRead}><SchedulesPage /></Guard>} />
             <Route path="/monitor/jobs" element={<Guard permission={PERMISSIONS.jobRead}><JobsPage /></Guard>} />
             <Route path="/monitor/jobs/:jobId" element={<Guard permission={PERMISSIONS.jobRead}><JobDetailPage /></Guard>} />
             <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />

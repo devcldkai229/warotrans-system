@@ -83,6 +83,15 @@ public sealed class WorkflowRequestValidator(WorkflowExecutionDbContext db) : IW
                     "detail_destination_endpoint_required");
             }
 
+            // The planner makes a PICKUP stop and a DROPOFF stop of every Detail: on the same Endpoint the robot would
+            // "deliver" where it collected, and the stock would not move.
+            if (detail.SourceEndpointId == detail.DestinationEndpointId)
+            {
+                throw new DomainValidationException(
+                    $"Detail for container '{detail.ContainerId}' picks up and drops off at the same Endpoint.",
+                    "detail_same_endpoint");
+            }
+
             if (detail.SourceLevelNo is not null && detail.SourceStorageLocationId is null)
             {
                 throw new DomainValidationException(
@@ -111,6 +120,8 @@ public sealed class WorkflowRequestValidator(WorkflowExecutionDbContext db) : IW
                 $"Workflow '{workflow.Code}' must be PUBLISHED (current: {workflow.Status}).",
                 "workflow_not_published");
         }
+
+        WorkflowMovementRules.Ensure(workflow.Code, request.Details);
 
         var model = WorkflowMapping.ToDefinitionModel(workflow);
         var inputs = request.WorkflowInputs ?? new Dictionary<string, JsonElement>();

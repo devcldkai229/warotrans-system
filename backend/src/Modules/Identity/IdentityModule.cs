@@ -57,6 +57,7 @@ public static class IdentityModule
         services.AddScoped<IValidator<SetAccountRobotScopeRequest>, SetAccountRobotScopeValidator>();
         services.AddScoped<AccountRobotScopeHandler>();
         services.AddScoped<IRobotAccessScope, RobotAccessScope>();
+        services.AddScoped<WaroTrans.BuildingBlocks.Abstractions.IAccountNameLookup, AccountNameLookup>();
 
         return services;
     }

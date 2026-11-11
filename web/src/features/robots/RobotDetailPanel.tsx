@@ -3,13 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import type { RobotView } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
-import { disableRobot, enableRobot, getRobotHealth } from '@/shared/api/fleet'
+import { disableRobot, enableRobot, getRobotHealth, localizeRobot } from '@/shared/api/fleet'
+import { listEndpoints } from '@/shared/api/navigation'
 import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
 import { RobotFaultCard } from './fault/RobotFaultCard'
+import { RobotCapacityCard } from './RobotCapacityCard'
+import { TrafficClearanceCard } from './TrafficClearanceCard'
 import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, humanize, secondsBetween } from '@/shared/lib/format'
+import { BatteryLevel } from '@/shared/ui/BatteryLevel'
 import { Button } from '@/shared/ui/Button'
 import { Icon, type IconName } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
@@ -34,9 +38,60 @@ interface RobotDetailPanelProps {
  */
 const ACTIONS: { id: 'manual' | 'localize' | 'technical'; label: string; icon: IconName; unavailable?: string }[] = [
   { id: 'manual', label: t('Manual'), icon: 'gamepad' },
-  { id: 'localize', label: t('Localize'), icon: 'crosshair', unavailable: t('The robot does not accept a re-localize command yet.') },
+  { id: 'localize', label: t('Localize'), icon: 'crosshair' },
   { id: 'technical', label: t('Technical'), icon: 'sliders' },
 ]
+
+/**
+ * Re-localize: the operator puts the robot on an endpoint and says which one; the robot sets its pose estimate there.
+ * Wrong endpoint = wrong pose, so it asks to confirm the robot really stands there.
+ */
+function LocalizePanel({ robot, onClose }: { robot: RobotView; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [endpointId, setEndpointId] = useState('')
+  const endpoints = useQuery({
+    queryKey: ['map-endpoints', robot.currentMapVersionId],
+    queryFn: () => listEndpoints(robot.currentMapVersionId),
+  })
+  const localize = useMutation({
+    mutationFn: () => localizeRobot(robot.id, endpointId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['robot', robot.id] })
+      void queryClient.invalidateQueries({ queryKey: ['robots'] })
+    },
+  })
+  const chosen = endpoints.data?.find((e) => e.id === endpointId)
+
+  return (
+    <section className="mb-4 flex flex-col gap-3 rounded-md border border-outline-soft p-4 text-sm">
+      <p className="text-ink-2">Place {robot.code} on an endpoint, facing the endpoint's direction, then choose it here.</p>
+      <select className="rounded-md border border-outline-soft bg-surface p-2" value={endpointId} onChange={(e) => setEndpointId(e.target.value)}>
+        <option value="">Choose where the robot stands…</option>
+        {(endpoints.data ?? [])
+          .filter((e) => e.isEnabled !== false)
+          .map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name || e.code} ({e.code})
+            </option>
+          ))}
+      </select>
+      <div className="flex gap-2">
+        <Button variant="primary" size="sm" disabled={!chosen || localize.isPending} onClick={() => localize.mutate()}>
+          {localize.isPending ? 'Sending…' : chosen ? `Robot is at ${chosen.name || chosen.code}: localize` : 'Localize'}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      {localize.isSuccess ? (
+        <p className="text-xs text-ink-2">
+          Sent. Localization now: <b className="font-medium">{robot.localizationStatus ?? 'unknown'}</b> (updates within a few seconds).
+        </p>
+      ) : null}
+      {localize.error ? <p className="text-xs text-red-ink">{localize.error instanceof ApiError ? localize.error.message : 'Localize failed.'}</p> : null}
+    </section>
+  )
+}
 
 const TIMELINE = 'divide-y divide-outline-soft'
 const TIMELINE_NOTE = 'mt-1 block text-xs text-muted'
@@ -175,14 +230,7 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
       body: (
         <dl>
           <Field label={t('Battery')}>
-            {hasTelemetry ? (
-              <>
-                {formatBattery(robot.batteryPercent)}{' '}
-                {robot.batteryPercent === null ? null : <Meter percent={robot.batteryPercent} tone="green" className="w-12" />}
-              </>
-            ) : (
-              '—'
-            )}
+            {hasTelemetry ? <BatteryLevel percent={robot.batteryPercent} /> : '—'}
           </Field>
           <Field label={t('Pose X')}>{hasTelemetry ? `${robot.poseX.toFixed(2)} m` : '—'}</Field>
           <Field label={t('Pose Y')}>{hasTelemetry ? `${robot.poseY.toFixed(2)} m` : '—'}</Field>
@@ -334,6 +382,8 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
   )
   const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
   const [actionError, setActionError] = useState<string | null>(null)
+  const [localizing, setLocalizing] = useState(false)
+  const mayCommand = canActOnRobot(capabilities, PERMISSIONS.robotCommand, robot.id)
   const navigationState = robot.telemetry?.navigationState
 
   const enableMutation = useMutation({
@@ -396,6 +446,8 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
         {actionError ? <p className="mb-4 text-xs text-red-ink">{actionError}</p> : null}
 
         <RobotControlCard robotId={robot.id} robotCode={robot.code} />
+        <TrafficClearanceCard robotId={robot.id} robotCode={robot.code} />
+        <RobotCapacityCard key={robot.id} robot={robot} />
 
         <RobotFaultCard robot={robot} />
 
@@ -408,17 +460,20 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
               disabled={
                 Boolean(action.unavailable) ||
                 (action.id === 'manual' && (!onManual || !mayDrive)) ||
+                (action.id === 'localize' && (!mayCommand || !robot.isOnline)) ||
                 (action.id === 'technical' && (!onTechnical || !mayDiagnose))
               }
               title={
                 action.unavailable ??
                 (action.id === 'manual' && !mayDrive
                   ? t('You may not drive this robot.')
-                  : action.id === 'technical' && !mayDiagnose
-                    ? t('You do not have access to the diagnostics of this robot.')
-                    : undefined)
+                  : action.id === 'localize' && !robot.isOnline
+                    ? t('The robot is offline.')
+                    : action.id === 'technical' && !mayDiagnose
+                      ? t('You do not have access to the diagnostics of this robot.')
+                      : undefined)
               }
-              onClick={action.id === 'manual' ? onManual : action.id === 'technical' ? onTechnical : undefined}
+              onClick={action.id === 'manual' ? onManual : action.id === 'localize' ? () => setLocalizing(true) : action.id === 'technical' ? onTechnical : undefined}
             >
               <span className="grid size-12 place-items-center rounded-full bg-surface text-ink transition-colors duration-200 group-enabled:group-hover:bg-container-higher">
                 <Icon name={action.icon} size={18} />
@@ -427,6 +482,7 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
             </button>
           ))}
         </div>
+        {localizing ? <LocalizePanel robot={robot} onClose={() => setLocalizing(false)} /> : null}
         <ul className="mt-3 mb-6 flex flex-col gap-1 text-xs text-muted">
           {ACTIONS.filter((action) => action.unavailable).map((action) => (
             <li key={action.label}>

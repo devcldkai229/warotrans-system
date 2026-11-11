@@ -192,6 +192,17 @@ export function RequestSetupPanel({
           <Field label={t('Requested by')}>
             <input className={controlClass('sm')} value={data.requestedByName} disabled readOnly />
           </Field>
+          <Field label={t('Priority')}>
+            <select
+              className={controlClass('sm')}
+              value={draft.priority ?? 0}
+              onChange={(event) => onChange({ ...draft, priority: Number(event.target.value) })}
+            >
+              <option value={1}>{t('High')}</option>
+              <option value={0}>{t('Normal')}</option>
+              <option value={-1}>{t('Low')}</option>
+            </select>
+          </Field>
           <Field label={t('Note')} hint={t('Optional')}>
             <textarea
               className={controlClass('area')}

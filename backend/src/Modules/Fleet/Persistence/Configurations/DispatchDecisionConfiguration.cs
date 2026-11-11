@@ -15,6 +15,7 @@ public sealed class DispatchDecisionConfiguration : IEntityTypeConfiguration<Dis
         builder.Property(x => x.CandidateEvaluations).HasColumnType("jsonb").IsRequired();
 
         builder.Property(x => x.Trigger).HasMaxLength(20);
+        builder.Property(x => x.RefusalCode).HasMaxLength(100);
         builder.Property(x => x.OverrideReason).HasMaxLength(500);
         builder.HasIndex(x => x.JobId);
     }

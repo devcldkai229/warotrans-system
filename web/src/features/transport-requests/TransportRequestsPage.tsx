@@ -334,7 +334,7 @@ export function TransportRequestsPage() {
       jobs: requestJobs.map((job) => ({
         jobNo: job.jobNo,
         status: job.status,
-        robotCode: job.assignedRobotId ? robotCodeById.get(job.assignedRobotId) ?? null : null,
+        robotCode: job.robotCode ?? (job.assignedRobotId ? robotCodeById.get(job.assignedRobotId) ?? null : null),
       })),
     }
   }, [selectedBase, requestJobs, robotsQuery.data])

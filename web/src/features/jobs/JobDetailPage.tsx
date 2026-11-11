@@ -3,10 +3,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
 import { getRobot } from '@/shared/api/fleet'
-import { confirmJobStep, getJob, type JobDetailDto, type JobStepDto, type JobTaskDto } from '@/shared/api/jobs'
+import { useAuth } from '@/features/auth/authContext'
+import {
+  claimJobStep,
+  confirmHandoverBatch,
+  confirmJobStep,
+  failJobContainer,
+  getJob,
+  releaseJobStep,
+  takeOverJobStep,
+  type HandoverBatchOutcome,
+  type HandoverBatchResult,
+  type JobDetailDto,
+  type JobStepDto,
+  type JobTaskDto,
+} from '@/shared/api/jobs'
 import { getTransportRequest } from '@/shared/api/transportRequests'
 import { DispatchPanel } from './DispatchPanel'
 import { JobOperatorActions } from './JobOperatorActions'
+import { JobRecoveryPanel } from './JobRecoveryPanel'
 import { cx } from '@/shared/lib/cx'
 import { formatBattery, formatClock, formatDuration, humanize, secondsBetween } from '@/shared/lib/format'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
@@ -70,6 +85,63 @@ interface Labels {
   value: (value: unknown) => string
 }
 
+const BATCH_OUTCOME_TEXT: Record<HandoverBatchOutcome, string> = {
+  confirmed: 'confirmed',
+  already_confirmed: 'already confirmed',
+  mismatch: 'not on this job',
+  not_reached: 'not its turn yet, nothing changed',
+  refused: 'refused, nothing changed',
+}
+
+/** APP-OPS-02: confirms the handovers of this stop at once. Each container shows its own result. */
+function HandoverBatchPanel({ job, labels }: { job: JobDetailDto; labels: Labels }) {
+  const queryClient = useQueryClient()
+  const [results, setResults] = useState<HandoverBatchResult[] | null>(null)
+  const open = job.tasks.flatMap((task) =>
+    task.steps
+      .filter((s) => (s.operationCode === 'PICKUP_CONFIRM' || s.operationCode === 'DROPOFF_CONFIRM') && (s.status === 'WAITING' || s.status === 'PENDING'))
+      .map((s) => ({ step: s, containerId: task.containerId })),
+  )
+  const current = open.find((o) => o.step.status === 'WAITING')
+  const sameKind = current ? open.filter((o) => o.step.operationCode === current.step.operationCode && o.containerId) : []
+  const batch = useMutation({
+    mutationFn: () =>
+      confirmHandoverBatch(
+        job.id,
+        current?.step.operationCode === 'PICKUP_CONFIRM' ? 'PICKUP' : 'DROPOFF',
+        sameKind.map((o) => o.containerId as string),
+      ),
+    onSuccess: (response) => {
+      queryClient.setQueryData(['job', job.id], response.job)
+      setResults(response.results)
+    },
+  })
+
+  if (job.status !== 'RUNNING' && !results) return null
+  if (sameKind.length < 2 && !results) return null
+
+  return (
+    <div className="mt-4 rounded-md border border-outline-soft p-3 text-sm">
+      {sameKind.length >= 2 ? (
+        <Button variant="primary" disabled={batch.isPending} onClick={() => batch.mutate()}>
+          <Icon name="check" size={15} /> Confirm all ({sameKind.length})
+        </Button>
+      ) : null}
+      {batch.error ? <p className="mt-2 text-xs text-red-ink">{errorText(batch.error)}</p> : null}
+      {results ? (
+        <ul className="mt-2 flex flex-col gap-1 text-xs">
+          {results.map((r) => (
+            <li key={r.containerId} className={r.outcome === 'confirmed' || r.outcome === 'already_confirmed' ? 'text-ink-2' : 'text-red-ink'}>
+              <b className="font-medium">{labels.container(r.containerId)}</b>: {BATCH_OUTCOME_TEXT[r.outcome]}
+              {r.code ? ` (${r.code})` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
 /** One JobStep: a single line by default, its inputs, outputs and confirmation open on click. */
 function StepRow({
   jobId,
@@ -88,6 +160,9 @@ function StepRow({
   canConfirm: boolean
 }) {
   const queryClient = useQueryClient()
+  const { account, can } = useAuth()
+  const accountId = account?.id ?? null
+  const canTakeOver = can('job.takeover')
   const [open, setOpen] = useState(defaultOpen)
   const tone = STEP_STATUS_TONE[step.status]
   const waiting = step.status === 'WAITING'
@@ -101,6 +176,24 @@ function StepRow({
     mutationFn: () => confirmJobStep(step.id, expectedContainer, `confirmed from web (${labels.container(expectedContainer)})`),
     onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
   })
+  const failContainer = useMutation({
+    mutationFn: (reason: string) => failJobContainer(step.id, expectedContainer as string, reason),
+    onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
+  })
+  const claim = useMutation({
+    mutationFn: () => claimJobStep(step.id),
+    onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
+  })
+  const release = useMutation({
+    mutationFn: () => releaseJobStep(step.id),
+    onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
+  })
+  const takeOver = useMutation({
+    mutationFn: (reason: string) => takeOverJobStep(step.id, reason),
+    onSuccess: (detail) => queryClient.setQueryData(['job', jobId], detail),
+  })
+  const mine = Boolean(step.claimedBy) && step.claimedBy === accountId
+  const heldByOther = Boolean(step.claimedBy) && !mine
 
   return (
     <div className={cx('rounded-md', STEP_SURFACE[tone] ?? 'bg-surface')}>
@@ -151,14 +244,63 @@ function StepRow({
                   <p className="text-xs text-ink-2">{t('Expected container:')}{' '}<b className="font-medium text-ink">{labels.container(expectedContainer)}</b>
                   </p>
                 ) : null}
+                {waiting ? (
+                  <p className="text-xs text-ink-2">
+                    {mine
+                      ? `You are handling this until ${formatClock(step.claimExpiresAt ?? null)}.`
+                      : heldByOther
+                        ? `${step.claimedByName ?? 'Someone else'} is handling this until ${formatClock(step.claimExpiresAt ?? null)}.`
+                        : 'Nobody is handling this yet.'}
+                    {step.deadlineAt ? ` Deadline ${formatClock(step.deadlineAt)}.` : ''}
+                    {step.escalatedAt ? ' Overdue: the floor has been told.' : ''}
+                  </p>
+                ) : null}
                 {waiting && canConfirm ? (
-                  <div className="mt-2 flex gap-2">
-                    <Button variant="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending}>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {!mine && !heldByOther ? (
+                      <Button variant="ghost" onClick={() => claim.mutate()} disabled={claim.isPending}>
+                        {t('Take this')}
+                      </Button>
+                    ) : null}
+                    {mine ? (
+                      <Button variant="ghost" onClick={() => release.mutate()} disabled={release.isPending}>
+                        {t('Give back')}
+                      </Button>
+                    ) : null}
+                    {heldByOther && canTakeOver ? (
+                      <Button
+                        variant="ghost"
+                        disabled={takeOver.isPending}
+                        onClick={() => {
+                          const reason = window.prompt(t('Why are you taking this over?'))
+                          if (reason?.trim()) takeOver.mutate(reason.trim())
+                        }}
+                      >
+                        {t('Take over')}
+                      </Button>
+                    ) : null}
+                    <Button variant="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending || heldByOther}>
                       <Icon name="check" size={15} /> {confirm.isPending ? t('Confirming…') : t('Confirm')}
                     </Button>
+                    {expectedContainer ? (
+                      <Button
+                        variant="ghost"
+                        disabled={failContainer.isPending || heldByOther}
+                        onClick={() => {
+                          const reason = window.prompt('Why can this container not go on?')
+                          if (reason?.trim()) failContainer.mutate(reason.trim())
+                        }}
+                      >
+                        Container failed
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
                 {confirm.error ? <p className="text-xs text-red-ink">{errorText(confirm.error)}</p> : null}
+                {failContainer.error ? <p className="text-xs text-red-ink">{errorText(failContainer.error)}</p> : null}
+                {claim.error ? <p className="text-xs text-red-ink">{errorText(claim.error)}</p> : null}
+                {release.error ? <p className="text-xs text-red-ink">{errorText(release.error)}</p> : null}
+                {takeOver.error ? <p className="text-xs text-red-ink">{errorText(takeOver.error)}</p> : null}
               </div>
             </>
           ) : null}
@@ -213,6 +355,8 @@ function taskTitle(task: JobTaskDto, labels: Labels) {
       return t('{action} stop · {value}', { action, value: labels.endpoint(task.stopEndpointId) })
     case 'PER_CONTAINER_AT_STOP':
       return `${action} ${labels.container(task.containerId)} · ${labels.endpoint(task.stopEndpointId)}`
+    case 'RECOVERY':
+      return `Recovery robot to ${labels.endpoint(task.stopEndpointId)}`
     default:
       return task.taskKey
   }
@@ -479,6 +623,8 @@ export function JobDetailPage() {
 
         <DispatchPanel job={job} />
 
+        <JobRecoveryPanel job={job} endpoints={endpoints} containerLabel={labels.container} />
+
         <div className="mt-4 grid flex-1 grid-cols-[1fr_1.05fr] items-start gap-4">
           <section className="rounded-lg border border-outline-soft border-l-4 border-l-purple bg-surface p-6 shadow-float">
             <header className="flex items-baseline justify-between gap-3">
@@ -508,6 +654,7 @@ export function JobDetailPage() {
               </TaskGroup>
             ))}
 
+            <HandoverBatchPanel job={job} labels={labels} />
           </section>
 
           {/* Stays in view while the (long) list of steps scrolls past it. */}

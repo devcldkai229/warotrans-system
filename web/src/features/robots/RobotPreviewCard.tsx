@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import type { RobotView } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
-import { formatBattery, formatRelativeTime } from '@/shared/lib/format'
+import { formatRelativeTime } from '@/shared/lib/format'
 import { poseToPercent } from '@/shared/lib/mapView'
+import { BatteryLevel } from '@/shared/ui/BatteryLevel'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
@@ -62,8 +63,7 @@ export function RobotPreviewCard({ robot, onClose, onOpenDetails }: RobotPreview
 
       <dl className="mt-3">
         <Row label={t('Battery')}>
-          {formatBattery(robot.batteryPercent)}
-          {robot.batteryPercent === null ? null : <Meter percent={robot.batteryPercent} tone="green" className="w-12" />}
+          <BatteryLevel percent={robot.batteryPercent} />
         </Row>
         <Row label={t('Heartbeat')}>{formatRelativeTime(robot.lastHeartbeatAt)}</Row>
         <Row label={t('Position')}>

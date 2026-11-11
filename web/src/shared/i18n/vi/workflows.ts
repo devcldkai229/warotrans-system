@@ -39,7 +39,7 @@ export const vi_workflows: Record<string, string> = {
   'Step \'{value}\' \'{key}\' type mismatch: variable {dataType} vs input {dataType2}.': 'Bước \'{value}\' \'{key}\' sai kiểu: biến {dataType} so với đầu vào {dataType2}.',
   'Step \'{value}\' CONSTANT \'{key}\'="{value2}" is not an allowed value.': 'CONSTANT \'{key}\'="{value2}" của bước \'{value}\' không phải giá trị được phép.',
   'Step \'{value}\' STEP_OUTPUT for \'{key}\' is incomplete.': 'STEP_OUTPUT của bước \'{value}\' cho \'{key}\' chưa đầy đủ.',
-  'CHECK INVENTORY_AVAILABLE (\'{value}\') requires containerId. CURRENT_MOVEMENT is not allowed at ONCE_PER_JOB scope — use WORKFLOW_VAR/CONSTANT/STEP_OUTPUT, or omit this step until backend scope is redesigned.': 'CHECK INVENTORY_AVAILABLE (\'{value}\') yêu cầu containerId. CURRENT_MOVEMENT không được dùng ở phạm vi ONCE_PER_JOB: hãy dùng WORKFLOW_VAR/CONSTANT/STEP_OUTPUT, hoặc bỏ bước này cho đến khi backend thiết kế lại phạm vi.',
+  'CHECK INVENTORY_AVAILABLE (\'{value}\') requires containerId. Bind it to CURRENT_MOVEMENT containerId.': 'CHECK INVENTORY_AVAILABLE (\'{value}\') yêu cầu containerId. Hãy gắn nó với containerId của CURRENT_MOVEMENT.',
   'Saved.': 'Đã lưu.',
   'Published.': 'Đã xuất bản.',
   ' It is published: transport requests can no longer pick it.': ' Quy trình đã xuất bản: các yêu cầu vận chuyển không còn chọn được nữa.',

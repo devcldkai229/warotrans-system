@@ -125,4 +125,6 @@ export const vi_requests: Record<string, string> = {
   'Hide panels': 'Ẩn các bảng',
   'Facility E-stop': 'E-stop cả cơ sở',
   'That transport request was not found. It may have been removed, or you may not have access to it.': 'Không tìm thấy yêu cầu vận chuyển đó. Có thể yêu cầu đã bị xóa, hoặc bạn không có quyền xem.',
+  'Priority': 'Độ ưu tiên',
+  'Normal': 'Bình thường',
 }

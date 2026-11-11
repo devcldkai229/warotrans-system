@@ -111,4 +111,5 @@ export const vi_shell: Record<string, string> = {
   '{hours} h ago': '{hours} giờ trước',
   'Unknown': 'Không rõ',
   'Search': 'Tìm kiếm',
+  'Schedules': 'Lịch định kỳ',
 }

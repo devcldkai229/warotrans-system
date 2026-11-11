@@ -21,7 +21,7 @@ public sealed class ConfirmJobStepHandler(
         await engine.ConfirmHumanStepAsync(
             jobStepId,
             request.ContainerId,
-            HumanConfirmationSource.StaffApp(userId, request.Note),
+            HumanConfirmationSource.StaffApp(userId, request.Note, request.ScannedBarcode),
             cancellationToken);
 
         var jobId = await db.JobSteps.AsNoTracking()

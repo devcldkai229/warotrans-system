@@ -22,6 +22,9 @@ public static class Permissions
     public const string WarehouseWrite = "warehouse.write";
     public const string ContainerCreate = "container.create";
 
+    /// <summary>Say which shelf a Container that lost its place is really on.</summary>
+    public const string ContainerRecover = "container.recover";
+
     /// <summary>Open, change, confirm and cancel inbound and outbound stock vouchers.</summary>
     public const string VoucherWrite = "voucher.write";
 
@@ -39,6 +42,9 @@ public static class Permissions
     /// <summary>Start / resume a Job and confirm its human steps.</summary>
     public const string JobOperate = "job.operate";
     public const string JobPause = "job.pause";
+
+    /// <summary>WH-03: take a human step from whoever holds it. Admin only, with a reason.</summary>
+    public const string HumanTaskTakeover = "job.takeover";
     public const string JobCancel = "job.cancel";
 
     // Fleet
@@ -77,9 +83,9 @@ public static class Permissions
     [
         UserManage, ConsoleAccess,
         MapRead, MapWrite,
-        WarehouseRead, WarehouseWrite, ContainerCreate, VoucherWrite,
+        WarehouseRead, WarehouseWrite, ContainerCreate, ContainerRecover, VoucherWrite,
         TransportRead, TransportCreate, TransportCancel, TransportReject,
-        WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel,
+        WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel, HumanTaskTakeover,
         RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotStop, RobotManualDrive,
         RobotMaintenance, RobotPower, RobotDiagnostics, TrafficRead, TrafficManage, DispatchOverride,
         NotificationRead, IssueRead, IssueCreate, IssueManage, AuditRead,

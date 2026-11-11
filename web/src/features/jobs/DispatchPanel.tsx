@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/authContext'
 import { ApiError } from '@/shared/api/client'
 import type { DispatchCandidate } from '@/shared/api/contracts'
-import { dispatchJob, getDispatchCandidates, getDispatchDecisions, type JobDetailDto } from '@/shared/api/jobs'
+import { dispatchJob, enqueueJob, getDispatchCandidates, getDispatchDecisions, type JobDetailDto } from '@/shared/api/jobs'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import { cx } from '@/shared/lib/cx'
 import { formatBattery, formatClock, humanize } from '@/shared/lib/format'
@@ -46,6 +46,12 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
     queryKey: ['job', job.id, 'dispatch-decisions', job.status],
     queryFn: () => getDispatchDecisions(job.id),
   })
+  const enqueue = useMutation({
+    mutationFn: () => enqueueJob(job.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['job', job.id] })
+    },
+  })
   const dispatch = useMutation({
     mutationFn: (body: { robotId?: string; overrideReason?: string }) => dispatchJob(job.id, body),
     onSuccess: () => {
@@ -81,8 +87,19 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
       {canStart ? (
         <div className="mt-3 flex items-center gap-3">
           <Button size="sm" variant="primary" disabled={dispatch.isPending} onClick={() => dispatch.mutate({})}>{t('Dispatch to best robot')}</Button>
+          {job.status === 'CREATED' ? (
+            <Button size="sm" variant="ghost" disabled={enqueue.isPending} onClick={() => enqueue.mutate()}>
+              {t('Go when a robot is free')}
+            </Button>
+          ) : null}
           {error ? <span className="text-xs text-red-ink">{error}</span> : null}
         </div>
+      ) : null}
+      {job.status === 'QUEUED' ? (
+        <p className="mt-2 text-xs text-ink-2">
+          Waiting in the queue{job.priority ? ` (${job.priority > 0 ? 'high' : 'low'} priority)` : ''}.
+          {job.blockingReason ? ` Not started yet: ${job.blockingReason}` : ''}
+        </p>
       ) : null}
 
       <table className="mt-4 w-full text-left text-sm">
@@ -98,7 +115,7 @@ export function DispatchPanel({ job }: { job: JobDetailDto }) {
         </thead>
         <tbody>
           {(candidates.data ?? []).map((c) => {
-            const chosen = last?.selectedRobotId === c.robotId
+            const chosen = last?.type === 'SELECTED' && last.selectedRobotId === c.robotId
             return (
               <tr key={c.robotId} className={cx('border-t border-outline-soft', chosen && 'bg-blue-soft/40')}>
                 <td className="py-2 font-mono">

@@ -4,4 +4,5 @@ public sealed record ListContainersRequest(
     Guid WarehouseId,
     string? Search,
     bool EligibleOnly,
-    int Take);
+    int Take,
+    int Skip = 0);

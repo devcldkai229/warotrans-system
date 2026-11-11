@@ -195,4 +195,5 @@ export const vi_operations_robots: Record<string, string> = {
   'This records that you have seen "{error}" and are dealing with it. It is saved as an issue assigned to you.': 'Thao tác này ghi lại rằng bạn đã thấy lỗi "{error}" và đang xử lý. Lỗi được lưu thành một sự cố giao cho bạn.',
   'What did you see or do? (optional)': 'Bạn đã thấy hoặc đã làm gì? (không bắt buộc)',
   'The error could not be acknowledged.': 'Không thể xác nhận lỗi này.',
+  'The robot is offline.': 'Robot đang ngoại tuyến.',
 }

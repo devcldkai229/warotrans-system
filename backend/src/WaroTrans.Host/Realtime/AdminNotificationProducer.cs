@@ -26,6 +26,8 @@ public sealed class AdminNotificationProducer(
         IIntegrationEventHandler<JobStepStatusChanged>,
         IIntegrationEventHandler<JobWaitingToStart>,
         IIntegrationEventHandler<JobStepWaitingForPerson>,
+        IIntegrationEventHandler<HumanTaskOffered>,
+        IIntegrationEventHandler<HumanStepOverdue>,
         IIntegrationEventHandler<TransportRequestProgressed>,
         IIntegrationEventHandler<TransportRequestClosedByOperator>
 {
@@ -149,6 +151,8 @@ public sealed class AdminNotificationProducer(
             if (e.Status != "WAITING")
             {
                 await notifications.ResolveAsync($"step:{e.JobStepId}:person", cancellationToken);
+                await notifications.ResolveAsync($"step:{e.JobStepId}:overdue", cancellationToken);
+                await notifications.ResolveAsync($"step:{e.JobStepId}:offered", cancellationToken);
             }
         });
 
@@ -163,6 +167,34 @@ public sealed class AdminNotificationProducer(
                 e.JobId,
                 $"job:{e.JobId}:unstarted",
                 OncePerSituation: true),
+            cancellationToken));
+
+    public Task HandleAsync(HumanTaskOffered e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(() => notifications.PublishAsync(
+            new NotificationDraft(
+                NotificationType.WARNING,
+                "HUMAN_TASK_OFFERED",
+                $"Job {e.JobNo} needs someone to take over",
+                $"Nobody holds the step \"{e.StepName}\" any more. Anyone on the floor can take it.",
+                Job,
+                e.JobId,
+                $"step:{e.JobStepId}:offered",
+                OncePerSituation: true,
+                Audience: NotificationAudience.Floor),
+            cancellationToken));
+
+    public Task HandleAsync(HumanStepOverdue e, CancellationToken cancellationToken = default) =>
+        SafelyAsync(() => notifications.PublishAsync(
+            new NotificationDraft(
+                NotificationType.WARNING,
+                "HUMAN_STEP_OVERDUE",
+                $"Job {e.JobNo} is overdue at a handover",
+                $"The step \"{e.StepName}\" passed its deadline. The robot is still waiting there; someone has to go or take it over.",
+                Job,
+                e.JobId,
+                $"step:{e.JobStepId}:overdue",
+                OncePerSituation: true,
+                Audience: NotificationAudience.Floor),
             cancellationToken));
 
     public Task HandleAsync(JobStepWaitingForPerson e, CancellationToken cancellationToken = default) =>
