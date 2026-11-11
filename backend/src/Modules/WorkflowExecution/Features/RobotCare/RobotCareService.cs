@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Fleet.Contracts;
+using WaroTrans.Fleet.Enums;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.WorkflowExecution.Contracts;
@@ -26,6 +27,25 @@ public sealed class FleetIdleOptions
     public bool AutoReturnToPark { get; set; }
 
     public int IdleSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Where an idle robot goes when every parking place is taken: endpoint codes, comma separated, tried nearest first.
+    /// Empty: it stays where it is. A robot already standing on one of them stays there until a parking place frees up.
+    /// </summary>
+    public string FallbackEndpointCodes { get; set; } = "EP-QUEUE-POINT";
+
+    /// <summary>
+    /// A robot this close to an endpoint occupies it, whatever the endpoint's own tolerance (0.06 m on MAP-ONE). The lab
+    /// measured localization errors of 0.16-0.28 m after a stop: with the tolerance alone a parked robot looked like it was
+    /// elsewhere, so a second robot could be sent to its place.
+    /// </summary>
+    public double OccupiedRadiusMeters { get; set; } = 0.30;
+
+    /// <summary>The robot itself counts as already parked within this distance, so it is not sent to park again and again.</summary>
+    public double ParkedRadiusMeters { get; set; } = 0.25;
+
+    internal IReadOnlyList<string> FallbackCodes() =>
+        (FallbackEndpointCodes ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 /// <summary>
@@ -57,7 +77,7 @@ public sealed class RobotCareService(
     public async Task<Job> ReturnToParkAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, EndpointType.PARK, ParkInput, cancellationToken)
+        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken)
             ?? throw new ConflictException("No parking place is free on this map.", "no_free_parking");
         return await RunAsync(robot, ParkWorkflow, ParkInput, target, actor, cancellationToken);
     }
@@ -65,7 +85,7 @@ public sealed class RobotCareService(
     public async Task<Job> GoToChargerAsync(Guid robotId, Guid? endpointId, Guid? actor, CancellationToken cancellationToken)
     {
         var robot = await RobotAsync(robotId, cancellationToken);
-        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, EndpointType.CHARGER, ChargerInput, cancellationToken)
+        var target = endpointId ?? await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.CHARGER, ChargerInput, cancellationToken)
             ?? throw new ConflictException("No charger is free on this map.", "no_free_charger");
         return await RunAsync(robot, ChargeWorkflow, ChargerInput, target, actor, cancellationToken);
     }
@@ -148,9 +168,18 @@ public sealed class RobotCareService(
     /// <summary>
     /// FL-08: sends robots with nothing to do back to parking, only when turned on, and never while work is waiting: a Job
     /// in the queue is about to need a robot, and sending one away would only delay it.
+    /// <para>
+    /// This is a Fleet positioning intent, not a ROBOT_RETURN_TO_PARK Job: such a Job holds the robot (one robot per
+    /// Job), so a Job arriving while the robot drives to parking could not have it. The intent holds nothing: Dispatch
+    /// still offers the robot, and the new Job's first MOVE waits until the parking NAVIGATE is cancelled and traffic is
+    /// reconciled. The ROBOT_RETURN_TO_PARK Job stays for an operator who asks for it (<see cref="ReturnToParkAsync"/>).
+    /// </para>
     /// </summary>
     public async Task<int> ReturnIdleRobotsAsync(CancellationToken cancellationToken)
     {
+        // Intents end with their NAVIGATE; close them whether auto-return is on or not.
+        await fleet.SettlePositioningAsync(cancellationToken);
+
         if (!idle.Value.AutoReturnToPark
             || await db.Jobs.AsNoTracking().AnyAsync(j => j.Status == JobStatus.QUEUED, cancellationToken))
         {
@@ -158,38 +187,67 @@ public sealed class RobotCareService(
         }
 
         var now = clock.GetUtcNow();
+        var positioning = await fleet.GetPositioningRobotIdsAsync(cancellationToken);
         var sent = 0;
         foreach (var candidate in await fleet.GetIdleRobotsAsync(cancellationToken))
         {
+            var robot = candidate.Robot;
             var quietSince = candidate.LastCommandAt;
-            if (quietSince is { } last && (now - last).TotalSeconds < idle.Value.IdleSeconds)
+            if (positioning.Contains(robot.Id)
+                || (quietSince is { } last && (now - last).TotalSeconds < idle.Value.IdleSeconds)
+                // Its pose decides the nearest free place and what traffic reserves: no guess from a stale or lost pose.
+                || robot.LocalizationStatus != LocalizationStatus.LOCALIZED
+                || robot.LastTelemetryAt is not { } seen || (now - seen).TotalSeconds > FreshPoseSeconds)
             {
                 continue;
             }
 
-            var robot = candidate.Robot;
             var holdsJob = await db.JobRobotAssignments.AsNoTracking().AnyAsync(a => a.RobotId == robot.Id && a.EndedAt == null, cancellationToken);
             var endpoints = await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken);
-            var alreadyParked = endpoints.Any(e => e.EndpointType == EndpointType.PARK && Distance(robot, e) <= e.PositionTolerance);
+            var alreadyParked = endpoints.Any(e => e.EndpointType == EndpointType.PARK && Distance(robot, e) <= ParkedRadius(e));
             if (holdsJob || alreadyParked)
             {
                 continue;
             }
 
+            // A parking place first; when all are taken, the fallback (the queue point), unless the robot already stands on it.
+            var fallbackCodes = idle.Value.FallbackCodes();
+            var target = await ChooseFreeEndpointAsync(robot, e => e.EndpointType == EndpointType.PARK, ParkInput, cancellationToken);
+            if (target is null)
+            {
+                var atFallback = endpoints.Any(e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal) && Distance(robot, e) <= ParkedRadius(e));
+                target = atFallback
+                    ? null
+                    : await ChooseFreeEndpointAsync(robot, e => fallbackCodes.Contains(e.Code, StringComparer.Ordinal), ParkInput, cancellationToken);
+                if (target is not null)
+                {
+                    logger.LogInformation("Robot {RobotCode}: every parking place is taken, going to the fallback endpoint", robot.Code);
+                }
+            }
+
+            var pose = target is { } id ? await navigation.GetEndpointPoseAsync(id, cancellationToken) : null;
+            if (pose is not { IsEnabled: true })
+            {
+                logger.LogInformation("Robot {RobotCode} stays where it is: no free parking place or fallback endpoint", robot.Code);
+                continue;
+            }
+
             try
             {
-                await ReturnToParkAsync(robot.Id, null, null, cancellationToken);
+                await fleet.StartReturnToParkAsync(robot.Id, pose.Id, pose.X, pose.Y, pose.Yaw, cancellationToken);
                 sent++;
             }
             catch (AppException refused)
             {
-                db.ChangeTracker.Clear();
                 logger.LogInformation("Robot {RobotCode} stays where it is: {Code}", robot.Code, refused.Code);
             }
         }
 
         return sent;
     }
+
+    /// <summary>Telemetry older than this does not count as knowing where the robot is.</summary>
+    private const double FreshPoseSeconds = 10;
 
     private async Task<Job> RunAsync(RobotSnapshot robot, string workflowCode, string input, Guid endpointId, Guid? actor, CancellationToken cancellationToken)
     {
@@ -237,18 +295,23 @@ public sealed class RobotCareService(
         return id ?? throw new ConflictException($"Publish the workflow {code} first (samples/workflows has one).", "workflow_not_published");
     }
 
-    /// <summary>The nearest enabled place of this kind where no other robot is standing and none is headed.</summary>
-    private async Task<Guid?> ChooseFreeEndpointAsync(RobotSnapshot robot, EndpointType type, string input, CancellationToken cancellationToken)
+    /// <summary>The nearest enabled place matching <paramref name="kind"/> where no other robot is standing and none is headed.</summary>
+    private async Task<Guid?> ChooseFreeEndpointAsync(RobotSnapshot robot, Func<EndpointPoseWithType, bool> kind, string input, CancellationToken cancellationToken)
     {
         var endpoints = (await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken))
-            .Where(e => e.EndpointType == type && e.IsEnabled)
+            .Where(e => kind(e) && e.IsEnabled)
             .ToList();
         if (endpoints.Count == 0)
         {
             return null;
         }
 
-        var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken)).Where(r => r.Id != robot.Id).ToList();
+        var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken))
+            .Concat((await fleet.GetIdleRobotsAsync(cancellationToken)).Select(i => i.Robot))
+            .Where(r => r.Id != robot.Id && r.CurrentMapVersionId == robot.CurrentMapVersionId)
+            .ToList();
+        // FL-08: a place another robot is already driving to on its own is taken too.
+        var claimed = await fleet.GetPositioningTargetsAsync(robot.CurrentMapVersionId, cancellationToken);
         var liveJobs = await db.Jobs.AsNoTracking()
             .Where(j => j.ProvisioningKey.StartsWith("robot-care:") && Live.Contains(j.Status))
             .ToListAsync(cancellationToken);
@@ -258,11 +321,15 @@ public sealed class RobotCareService(
             .ToHashSet();
 
         return endpoints
-            .Where(e => !headedFor.Contains(e.Id) && !others.Any(r => Distance(r, e) <= e.PositionTolerance))
+            .Where(e => !headedFor.Contains(e.Id) && !claimed.Contains(e.Id) && !others.Any(r => Distance(r, e) <= OccupiedRadius(e)))
             .OrderBy(e => Distance(robot, e))
             .Select(e => (Guid?)e.Id)
             .FirstOrDefault();
     }
+
+    private double OccupiedRadius(EndpointPoseWithType endpoint) => Math.Max(endpoint.PositionTolerance, idle.Value.OccupiedRadiusMeters);
+
+    private double ParkedRadius(EndpointPoseWithType endpoint) => Math.Max(endpoint.PositionTolerance, idle.Value.ParkedRadiusMeters);
 
     private static double Distance(RobotSnapshot robot, EndpointPoseWithType endpoint) =>
         Math.Sqrt(Math.Pow(robot.PoseX - endpoint.X, 2) + Math.Pow(robot.PoseY - endpoint.Y, 2));

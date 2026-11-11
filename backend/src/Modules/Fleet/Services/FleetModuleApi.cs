@@ -19,8 +19,24 @@ public sealed class FleetModuleApi(
     WaroTrans.Fleet.Features.RobotControl.RobotControlService robotControl,
     IMqttRobotInteractionPublisher interactionPublisher,
     WaroTrans.Fleet.Features.Dispatch.DispatchService dispatch,
-    ILogger<FleetModuleApi> logger) : IFleetModule
+    ILogger<FleetModuleApi> logger,
+    WaroTrans.Fleet.Features.Positioning.RobotPositioningService positioning) : IFleetModule
 {
+    public Task<IReadOnlySet<Guid>> GetPositioningRobotIdsAsync(CancellationToken cancellationToken = default) =>
+        positioning.LiveRobotIdsAsync(cancellationToken);
+
+    public Task<IReadOnlySet<Guid>> GetPositioningTargetsAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+        positioning.LiveTargetsAsync(mapVersionId, cancellationToken);
+
+    public Task<Guid> StartReturnToParkAsync(Guid robotId, Guid endpointId, double x, double y, double yaw, CancellationToken cancellationToken = default) =>
+        positioning.StartReturnToParkAsync(robotId, endpointId, x, y, yaw, cancellationToken);
+
+    public Task<PositioningYield> YieldPositioningAsync(Guid robotId, Guid jobId, CancellationToken cancellationToken = default) =>
+        positioning.YieldAsync(robotId, jobId, cancellationToken);
+
+    public Task<int> SettlePositioningAsync(CancellationToken cancellationToken = default) =>
+        positioning.SettleAsync(cancellationToken);
+
     public Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(DispatchQuery query, CancellationToken cancellationToken = default) =>
         dispatch.EvaluateAsync(query, cancellationToken);
 

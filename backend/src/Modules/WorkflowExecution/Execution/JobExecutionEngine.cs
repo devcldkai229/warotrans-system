@@ -144,7 +144,8 @@ public sealed class JobExecutionEngine(
                 ?? throw new NotFoundException($"Robot '{requested}' was not found.", "robot_not_found");
             try
             {
-                EnsureRobotCanTakeJob(robot, job, busyRobots);
+                EnsureRobotCanTakeJob(robot, job, busyRobots,
+                    (await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(robot.Id));
                 EnsureCapacityAllows(candidates.FirstOrDefault(c => c.RobotId == requested), robot);
                 if (dispatchOverride?.RobotCare != true)
                 {
@@ -201,6 +202,7 @@ public sealed class JobExecutionEngine(
             new DispatchDecisionRecord(job.Id, robot.Id, DispatchTriggers.Start, dispatchOverride?.ActorId, dispatchOverride?.Reason, candidates),
             cancellationToken);
         logger.LogInformation("Job {JobNo} started on robot {RobotCode}", job.JobNo, robot.Code);
+        await fleet.YieldPositioningAsync(robot.Id, job.Id, cancellationToken);
         return (job, true);
     }
 
@@ -260,7 +262,8 @@ public sealed class JobExecutionEngine(
         }
 
         var busyForResume = await RobotsBusyWithOtherJobsAsync(job.Id, cancellationToken);
-        EnsureRobotCanTakeJob(robot, job, busyForResume);
+        EnsureRobotCanTakeJob(robot, job, busyForResume,
+            (await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(robot.Id));
         EnsureRobotLocalized(robot, DateTimeOffset.UtcNow);
         // A robot whose battery is known to be low takes no more work; an unknown battery does not block a resume
         // (the robot was already on this job), it is recorded in the decision.
@@ -1475,6 +1478,10 @@ public sealed class JobExecutionEngine(
     }
 
     public const string WaitUntilKey = "waitUntil";
+    public const string PositioningWaitSinceKey = "positioningWaitSince";
+
+    /// <summary>How long a MOVE waits for a robot to stop returning to parking before the step fails (then its OnFailure applies).</summary>
+    public const int PositioningYieldTimeoutSeconds = 60;
     public const string CheckAttemptKey = "checkAttempt";
     public const string CheckFirstAttemptKey = "checkFirstAttemptAt";
 
@@ -1492,7 +1499,7 @@ public sealed class JobExecutionEngine(
         var now = DateTimeOffset.UtcNow;
         var jobIds = await db.Jobs.AsNoTracking()
             .Where(j => j.Status == JobStatus.RUNNING
-                        && j.JobTasks.Any(t => t.JobSteps.Any(s => (s.StepType == StepType.WAIT || s.StepType == StepType.CHECK) && s.Status == JobStepStatus.WAITING)))
+                        && j.JobTasks.Any(t => t.JobSteps.Any(s => (s.StepType == StepType.WAIT || s.StepType == StepType.CHECK || s.StepType == StepType.MOVE) && s.Status == JobStepStatus.WAITING)))
             .Select(j => j.Id)
             .ToListAsync(cancellationToken);
 
@@ -1506,7 +1513,9 @@ public sealed class JobExecutionEngine(
             }
 
             var due = OrderedSteps(job)
-                .Where(x => x.Step.StepType is StepType.WAIT or StepType.CHECK && x.Step.Status == JobStepStatus.WAITING
+                .Where(x => x.Step.Status == JobStepStatus.WAITING
+                            && (x.Step.StepType is StepType.WAIT or StepType.CHECK
+                                || (x.Step.StepType == StepType.MOVE && x.Step.OutputValues.ContainsKey(PositioningWaitSinceKey)))
                             && x.Step.OutputValues.TryGetValue(WaitUntilKey, out var until)
                             && until.GetDateTimeOffset() <= now)
                 .ToList();
@@ -1520,8 +1529,9 @@ public sealed class JobExecutionEngine(
                 .ToDictionaryAsync(s => s.Id, s => s.StepKey, cancellationToken);
             foreach (var (task, step) in due)
             {
-                if (step.StepType == StepType.CHECK)
+                if (step.StepType is StepType.CHECK or StepType.MOVE)
                 {
+                    // CHECK: next attempt. MOVE: ask again whether the robot stopped returning to parking.
                     var kept = new Dictionary<string, JsonElement>(step.OutputValues);
                     kept.Remove(WaitUntilKey);
                     step.OutputValues = kept;
@@ -1552,6 +1562,40 @@ public sealed class JobExecutionEngine(
     {
         var now = DateTimeOffset.UtcNow;
         var robotId = step.ResolvedInputs["robotId"].GetGuid();
+
+        // FL-08: the robot may still be on its own way to parking. No NAVIGATE for the Job goes out until that one has
+        // ended and traffic was reconciled from the robot's pose (a cancelled NAVIGATE leaves it quarantined).
+        var positioning = await fleet.YieldPositioningAsync(robotId, job.Id, cancellationToken);
+        if (!positioning.IsReady)
+        {
+            var since = step.OutputValues.TryGetValue(PositioningWaitSinceKey, out var s) ? s.GetDateTimeOffset() : now;
+            if ((now - since).TotalSeconds >= PositioningYieldTimeoutSeconds)
+            {
+                Fail(job, task, step, stepKey, "positioning_yield_timeout",
+                    $"The robot did not finish handing over from its return to parking within {PositioningYieldTimeoutSeconds} s ({positioning.WaitingFor}).",
+                    now);
+                return true;
+            }
+
+            step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+            {
+                [PositioningWaitSinceKey] = JsonSerializer.SerializeToElement(since),
+                [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1)),
+                ["waitingFor"] = JsonSerializer.SerializeToElement(positioning.WaitingFor)
+            };
+            SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
+            return false;
+        }
+
+        if (step.OutputValues.ContainsKey(PositioningWaitSinceKey))
+        {
+            var kept = new Dictionary<string, JsonElement>(step.OutputValues);
+            kept.Remove(PositioningWaitSinceKey);
+            kept.Remove(WaitUntilKey);
+            kept.Remove("waitingFor");
+            step.OutputValues = kept;
+        }
+
         var endpointId = step.ResolvedInputs["targetEndpointId"].GetGuid();
         var pose = await navigation.GetEndpointPoseAsync(endpointId, cancellationToken);
         if (pose is null || !pose.IsEnabled || pose.MapVersionId != job.MapVersionId)
@@ -2606,7 +2650,8 @@ public sealed class JobExecutionEngine(
         }
     }
 
-    private static void EnsureRobotCanTakeJob(RobotSnapshot robot, Job job, HashSet<Guid> busyRobots)
+    /// <param name="returningToPark">FL-08: the robot is only on its own way to parking; it stops for this Job.</param>
+    private static void EnsureRobotCanTakeJob(RobotSnapshot robot, Job job, HashSet<Guid> busyRobots, bool returningToPark = false)
     {
         if (robot.CurrentMapVersionId != job.MapVersionId)
         {
@@ -2614,7 +2659,9 @@ public sealed class JobExecutionEngine(
                 $"Robot {robot.Code} is on another map version than the Job.", "robot_map_mismatch");
         }
 
-        if (!robot.IsEnabled || !robot.IsOnline || robot.Status != RobotStatus.AVAILABLE)
+        var free = robot.Status == RobotStatus.AVAILABLE
+                   || (returningToPark && robot.Status is RobotStatus.RESERVED or RobotStatus.EXECUTING);
+        if (!robot.IsEnabled || !robot.IsOnline || !free)
         {
             throw new ConflictException(
                 $"Robot {robot.Code} is not available (online={robot.IsOnline}, enabled={robot.IsEnabled}, status={robot.Status}).",

@@ -36,9 +36,18 @@ public sealed class DispatchService(
             .Select(g => new { RobotId = g.Key, Last = g.Max(c => c.IssuedAt) })
             .ToDictionaryAsync(x => x.RobotId, x => x.Last, cancellationToken);
 
+        // FL-08: a robot only returning to park gives way to work, so it is a candidate like an idle one.
+        var positioning = (await db.RobotPositioningIntents.AsNoTracking()
+                .Where(i => ids.Contains(i.RobotId)
+                            && (i.Status == PositioningIntentStatus.NAVIGATING || i.Status == PositioningIntentStatus.YIELDING))
+                .Select(i => i.RobotId)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+
         var now = clock.GetUtcNow();
         return DispatchEligibility.Rank(robots.Select(r =>
-            DispatchEligibility.Evaluate(r, query, now, lastCommands.TryGetValue(r.Id, out var last) ? last : null, battery.Value, weights.Value, traffic?.Value.Footprint)));
+            DispatchEligibility.Evaluate(r, query, now, lastCommands.TryGetValue(r.Id, out var last) ? last : null, battery.Value, weights.Value,
+                traffic?.Value.Footprint, positioning.Contains(r.Id))));
     }
 
     public async Task RecordAsync(DispatchDecisionRecord record, CancellationToken cancellationToken)
