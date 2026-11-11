@@ -141,3 +141,13 @@ test('draft form limits follow the supported wire contract and unknown writes re
   for (const status of [0, 500, 502, 503]) assert.equal(uncertainDraftWrite(new ApiError(status)), true);
   for (const status of [400, 401, 403, 409]) assert.equal(uncertainDraftWrite(new ApiError(status)), false);
 });
+
+test('voucher contents editor never accepts missing or duplicate Container identities from the server', async () => {
+  const line = { id: 'line-1', containerId: 'container-1', containerBarcode: 'CT-01', containerStatus: 'PACKED', productName: 'Rice', productSku: 'RICE' };
+  for (const lines of [[{ ...line, containerId: undefined }], [line, { ...line, id: 'line-2' }], [line, { ...line, id: 'line-2', containerId: 'container-2' }]]) {
+    const api = modules(async () => detail({ containerCount: lines.length, lines }))('src/shared/api/warehouseApi.ts');
+    await assert.rejects(api.getStockVoucher('voucher-1'), error => error.code === 'voucher_response_invalid');
+  }
+  const api = modules(async () => detail({ containerCount: 1, lines: [line] }))('src/shared/api/warehouseApi.ts');
+  assert.equal((await api.getStockVoucher('voucher-1')).lines[0].containerId, 'container-1');
+});

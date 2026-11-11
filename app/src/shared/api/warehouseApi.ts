@@ -7,7 +7,7 @@ export interface ContainerListItem {
   id: string; barcode: string; status: ContainerStatus | string; productId: string; productSku: string; productName: string;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentEndpointCode?: string | null; currentLevelNo: number | null;
-  supplierPackageBarcode?: string | null; updatedAt?: string;
+  supplierPackageBarcode?: string | null; updatedAt?: string; inActiveTransport?: boolean;
   qty?: number; category?: string; zoneLabel?: string;
 }
 export interface ListContainersResponse { items: ContainerListItem[]; total: number }
@@ -48,8 +48,8 @@ function queryString(params: Record<string, string | number | boolean | undefine
 export function listWarehouses(params: { isActive?: boolean; skip?: number; take?: number } = {}, signal?: AbortSignal) {
   return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${queryString(params)}`, { signal });
 }
-export async function listContainers(params: { warehouseId: string; search?: string; eligibleOnly?: boolean; take?: number }): Promise<ListContainersResponse> {
-  const response = await apiFetch<ListContainersResponse>(`/api/warehouse/containers${queryString(params)}`);
+export async function listContainers(params: { warehouseId: string; search?: string; eligibleOnly?: boolean; take?: number; skip?: number }, signal?: AbortSignal): Promise<ListContainersResponse> {
+  const response = await apiFetch<ListContainersResponse>(`/api/warehouse/containers${queryString(params)}`, { signal });
   containersSnapshot = response.items;
   return response;
 }
@@ -147,9 +147,13 @@ function validVoucherDetail(result: StockVoucherDetail | null): result is StockV
   return !!result && typeof result.id === 'string' && !!result.id && typeof result.code === 'string'
     && typeof result.warehouseId === 'string' && ['INBOUND', 'OUTBOUND'].includes(result.type)
     && ['DRAFT', 'CONFIRMED', 'CANCELLED'].includes(result.status) && Number.isInteger(result.containerCount) && result.containerCount >= 0
-    && Array.isArray(result.lines) && result.containerCount === result.lines.length && result.lines.every(line => line && typeof line.id === 'string'
+    && Array.isArray(result.lines) && result.containerCount === result.lines.length && result.lines.every(line => line && typeof line.id === 'string' && !!line.id
+      && typeof line.containerId === 'string' && !!line.containerId.trim()
       && typeof line.containerBarcode === 'string' && !!line.containerBarcode.trim() && typeof line.containerStatus === 'string'
-      && typeof line.productName === 'string' && typeof line.productSku === 'string');
+      && typeof line.productName === 'string' && typeof line.productSku === 'string')
+    && new Set(result.lines.map(line => line.id)).size === result.lines.length
+    && new Set(result.lines.map(line => line.containerId)).size === result.lines.length
+    && new Set(result.lines.map(line => line.containerBarcode)).size === result.lines.length;
 }
 export async function getStockVoucher(id: string, signal?: AbortSignal) {
   const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}`, { signal });
