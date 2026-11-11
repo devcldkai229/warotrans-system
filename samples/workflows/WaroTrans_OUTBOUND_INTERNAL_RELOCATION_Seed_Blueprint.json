@@ -1,0 +1,229 @@
+{
+  "_type": "LOGICAL_SEED_SPEC_NOT_DIRECT_DB_JSON",
+  "_sources": [
+    "Report 3 SRS sections 3.5, 3.7, 3.8, 5.1 and 5.4",
+    "BM04 workflow commitments WF-02/WF-03",
+    "Report 4 SDD section 3.2"
+  ],
+  "_notes": [
+    "Check real EF entities, operation codes, step metadata, binding sources/field names, repeat scope options, OnFailure policy and migrations before seeding.",
+    "Only MOVE and HUMAN_INTERACTION; do not insert WAIT or CHECK.",
+    "V1 planner is one batch/Job per TR; all pickups before all dropoffs. Multi-container stop grouping must be verified. Never use first container as implicit identity for container-level HUMAN step.",
+    "Create DRAFT, validate, then PUBLISH. Do not mutate an existing published version; repeated seed runs idempotent.",
+    "Automatic parking is a separate, low-priority Fleet positioning intent, not the last step of transport workflows."
+  ],
+  "templates": [
+    {
+      "code": "OUTBOUND_RETRIEVAL",
+      "name": "Outbound Retrieval",
+      "description": "Retrieve an identified Container from its storage source and deliver it to an outbound/shipping point.",
+      "initialStatus": "DRAFT",
+      "publishAfterValidation": true,
+      "context": {
+        "warehouse": "From TransportRequest",
+        "mapVersion": "PUBLISHED and shared by every Endpoint",
+        "robot": "Selected by Fleet at Job start",
+        "requestDetails": "One identified Container per movement"
+      },
+      "validations": {
+        "pickup": "Container at recorded, active StorageLocation bound to pickup Endpoint",
+        "dropoff": "Configured outbound/shipping Endpoint; same PUBLISHED MapVersion",
+        "containers": "Unique per TR, eligible and not in another active TR; for storage origin verify current location and policy",
+        "route": "Pickup and dropoff must be different enabled Endpoints on same map"
+      },
+      "taskExecutionOrder": "Collect all pickups, then deliver all dropoffs (V1 planner)",
+      "tasks": [
+        {
+          "key": "COLLECT_CONTAINERS",
+          "order": 1,
+          "steps": [
+            {
+              "key": "MOVE_TO_PICKUP",
+              "order": 1,
+              "stepType": "MOVE",
+              "purpose": "PICKUP",
+              "operation": "LOOKUP_REAL_MOVE_OPERATION_IN_STEP_METADATA",
+              "scope": "ONCE_PER_DISTINCT_PICKUP_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "targetEndpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "sourceEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            },
+            {
+              "key": "CONFIRM_PICKUP",
+              "order": 2,
+              "stepType": "HUMAN_INTERACTION",
+              "operation": "PICKUP_CONFIRM",
+              "scope": "ONCE_PER_CONTAINER_AT_PICKUP_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "containerId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "containerId"
+                },
+                {
+                  "targetParameter": "endpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "sourceEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            }
+          ]
+        },
+        {
+          "key": "DELIVER_CONTAINERS",
+          "order": 2,
+          "steps": [
+            {
+              "key": "MOVE_TO_DROPOFF",
+              "order": 1,
+              "stepType": "MOVE",
+              "purpose": "DROPOFF",
+              "operation": "LOOKUP_REAL_MOVE_OPERATION_IN_STEP_METADATA",
+              "scope": "ONCE_PER_DISTINCT_DROPOFF_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "targetEndpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "destinationEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            },
+            {
+              "key": "CONFIRM_DROPOFF",
+              "order": 2,
+              "stepType": "HUMAN_INTERACTION",
+              "operation": "DROPOFF_CONFIRM",
+              "scope": "ONCE_PER_CONTAINER_AT_DROPOFF_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "containerId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "containerId"
+                },
+                {
+                  "targetParameter": "endpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "destinationEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "INTERNAL_RELOCATION",
+      "name": "Internal Relocation",
+      "description": "Move an identified Container between two valid internal storage locations.",
+      "initialStatus": "DRAFT",
+      "publishAfterValidation": true,
+      "context": {
+        "warehouse": "From TransportRequest",
+        "mapVersion": "PUBLISHED and shared by every Endpoint",
+        "robot": "Selected by Fleet at Job start",
+        "requestDetails": "One identified Container per movement"
+      },
+      "validations": {
+        "pickup": "Recorded StorageLocation bound to pickup Endpoint",
+        "dropoff": "Different active StorageLocation bound to dropoff Endpoint; same PUBLISHED MapVersion",
+        "containers": "Unique per TR, eligible and not in another active TR; for storage origin verify current location and policy",
+        "route": "Pickup and dropoff must be different enabled Endpoints on same map"
+      },
+      "taskExecutionOrder": "Collect all pickups, then deliver all dropoffs (V1 planner)",
+      "tasks": [
+        {
+          "key": "COLLECT_CONTAINERS",
+          "order": 1,
+          "steps": [
+            {
+              "key": "MOVE_TO_PICKUP",
+              "order": 1,
+              "stepType": "MOVE",
+              "purpose": "PICKUP",
+              "operation": "LOOKUP_REAL_MOVE_OPERATION_IN_STEP_METADATA",
+              "scope": "ONCE_PER_DISTINCT_PICKUP_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "targetEndpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "sourceEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            },
+            {
+              "key": "CONFIRM_PICKUP",
+              "order": 2,
+              "stepType": "HUMAN_INTERACTION",
+              "operation": "PICKUP_CONFIRM",
+              "scope": "ONCE_PER_CONTAINER_AT_PICKUP_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "containerId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "containerId"
+                },
+                {
+                  "targetParameter": "endpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "sourceEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            }
+          ]
+        },
+        {
+          "key": "DELIVER_CONTAINERS",
+          "order": 2,
+          "steps": [
+            {
+              "key": "MOVE_TO_DROPOFF",
+              "order": 1,
+              "stepType": "MOVE",
+              "purpose": "DROPOFF",
+              "operation": "LOOKUP_REAL_MOVE_OPERATION_IN_STEP_METADATA",
+              "scope": "ONCE_PER_DISTINCT_DROPOFF_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "targetEndpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "destinationEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            },
+            {
+              "key": "CONFIRM_DROPOFF",
+              "order": 2,
+              "stepType": "HUMAN_INTERACTION",
+              "operation": "DROPOFF_CONFIRM",
+              "scope": "ONCE_PER_CONTAINER_AT_DROPOFF_STOP",
+              "bindings": [
+                {
+                  "targetParameter": "containerId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "containerId"
+                },
+                {
+                  "targetParameter": "endpointId",
+                  "source": "CURRENT_MOVEMENT",
+                  "field": "destinationEndpointId"
+                }
+              ],
+              "onFailure": "PAUSE_FOR_OPERATOR"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

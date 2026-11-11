@@ -51,6 +51,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<UpdateWorkflowHandler>();
         services.AddScoped<PublishWorkflowHandler>();
         services.AddScoped<CreateWorkflowVersionHandler>();
+        services.AddScoped<WaroTrans.WorkflowExecution.Seeding.StandardWorkflowSeeder>();
         services.AddScoped<DeleteWorkflowHandler>();
         services.AddScoped<GetJobStatisticsHandler>();
 

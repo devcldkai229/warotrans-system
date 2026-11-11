@@ -62,6 +62,7 @@ public sealed class CreateTransportRequestHandler(
         details = await AttachShelvesAsync(request.WarehouseId, details, cancellationToken);
         await EnsureStorageLocationsAsync(request.WarehouseId, details, cancellationToken);
         var containers = await EnsureContainersAsync(details, cancellationToken);
+        EnsureContainersAtSource(details, containers);
         await EnsureStockVouchersAsync(request.WarehouseId, details, containers, cancellationToken);
 
         var requestCode = await businessCodeGenerator.NextRequestCodeAsync(cancellationToken: cancellationToken);
@@ -316,6 +317,27 @@ public sealed class CreateTransportRequestHandler(
         }
 
         return containers;
+    }
+
+    /// <summary>
+    /// A Container on a shelf is collected from that shelf: a request naming another source would send the robot where
+    /// the Container is not, and the stock would be booked off a shelf that never held it.
+    /// </summary>
+    private static void EnsureContainersAtSource(
+        IReadOnlyList<CreateTransportRequestDetailRequest> details,
+        IReadOnlyDictionary<Guid, ContainerSnapshot> containers)
+    {
+        foreach (var detail in details)
+        {
+            var container = containers[detail.ContainerId];
+            if (container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } shelf }
+                && detail.SourceStorageLocationId != shelf)
+            {
+                throw new DomainValidationException(
+                    $"Container '{container.Barcode}' is stored on another storage location than the Detail's source.",
+                    "container_not_at_source");
+            }
+        }
     }
 
     /// <summary>
