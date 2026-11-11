@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { SemanticTone, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { radii } from '../theme/radii';
 import { useThemeColors } from '../theme/ThemeContext';
 import {
@@ -113,7 +114,8 @@ const TONE_BY_STATUS: Record<string, SemanticTone> = {
 /** `RECOVERY_REQUIRED` -> `Recovery Required`. */
 export function statusLabel(status: string): string {
   const spaced = status.replace(/_/g, ' ').trim().toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  const human = spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return translateText(status) !== status ? translateText(status) : translateText(human);
 }
 
 /** Tone a status renders as. Unknown values fall back to `neutral`. */

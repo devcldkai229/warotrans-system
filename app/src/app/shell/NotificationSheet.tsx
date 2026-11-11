@@ -13,6 +13,7 @@ import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
+import { localizedNotificationText, translateText } from '../../shared/i18n';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime, LiveNotificationEvent } from '../../shared/realtime';
 import { notificationDestination } from '../../shared/realtime/notificationInbox';
@@ -165,9 +166,14 @@ export function NotificationSheet({
                   item.category === 'JOB_ASSIGNED' ||
                   item.title?.toLowerCase().includes('ready') ||
                   item.message?.toLowerCase().includes('ready');
-                const displayTitle = item.title.startsWith('Job JOB-')
+                const rawDisplayTitle = item.title.startsWith('Job JOB-')
                   ? item.title.slice(4)
                   : item.title;
+                const localized = localizedNotificationText({
+                  title: rawDisplayTitle,
+                  content: item.message,
+                });
+                const localizedTime = translateText(item.timeLabel);
 
                 return (
                   <Pressable
@@ -175,7 +181,7 @@ export function NotificationSheet({
                     onPress={() => { void handleItemPress(item); }}
                     disabled={isSavingNotification}
                     accessibilityRole="button"
-                    accessibilityLabel={`${displayTitle}, ${item.timeLabel}, ${item.isRead ? 'read' : 'unread'}`}
+                    accessibilityLabel={`${localized.title}, ${localizedTime}, ${translateText(item.isRead ? 'read' : 'unread')}`}
                     accessibilityState={{ disabled: isSavingNotification }}
                     style={({ pressed }) => [
                       styles.item,
@@ -206,7 +212,7 @@ export function NotificationSheet({
                           color={colors.textPrimary}
                           style={[styles.itemTitle, !item.isRead && styles.itemTitleUnread]}
                         >
-                          {displayTitle}
+                          {localized.title}
                         </Text>
                       </View>
 
@@ -215,11 +221,11 @@ export function NotificationSheet({
                         color={colors.textSecondary}
                         style={styles.itemDesc}
                       >
-                        {item.message}
+                        {localized.content}
                       </Text>
 
                       <Text variant="caption" color={colors.textMuted} style={styles.itemTime}>
-                        {item.timeLabel}
+                        {localizedTime}
                       </Text>
                     </View>
                   </Pressable>

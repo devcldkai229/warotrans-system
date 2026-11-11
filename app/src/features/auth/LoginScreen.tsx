@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Globe,
   Lock,
   LogIn,
   MapPin,
@@ -26,6 +27,7 @@ import {
 import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
+import { useLanguage } from '../../shared/i18n/LanguageContext';
 import { colors, ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { ThemeShadows } from '../../shared/theme/shadows';
@@ -67,6 +69,7 @@ export function LoginScreen() {
   const { loginAsync } = useAuth();
   const { success: showToastSuccess } = useToast();
   const { mode, cycleMode } = useTheme();
+  const { language, toggleLanguage, t } = useLanguage();
   const styles = useThemedStyles(createStyles);
   const topInset = useTopInset();
   const [username, setUsername] = useState('');
@@ -87,13 +90,13 @@ export function LoginScreen() {
     if (!username.trim()) {
       triggerHaptic('error');
       setPasswordError(null);
-      setError('Staff Username is required.');
+      setError(t('Staff Username is required.'));
       return;
     }
     if (!password) {
       triggerHaptic('error');
       setError(null);
-      setPasswordError('Access Password is required.');
+      setPasswordError(t('Access Password is required.'));
       return;
     }
 
@@ -104,11 +107,16 @@ export function LoginScreen() {
     try {
       const session = await loginAsync(username, password, selectedZone);
       triggerHaptic('success');
-      showToastSuccess(`Signed in as ${session.fullName} (${selectedZone})`);
+      showToastSuccess(
+        t('Signed in as {name} ({zone})', {
+          name: session.fullName,
+          zone: t(selectedZone),
+        }),
+      );
     } catch (err: any) {
       triggerHaptic('error');
-      const msg = err?.message || 'Authentication failed. Please verify credentials.';
-      setError(msg);
+      const msg = err?.message || t('Authentication failed. Please verify credentials.');
+      setError(t(msg));
     } finally {
       setIsSubmitting(false);
     }
@@ -117,6 +125,9 @@ export function LoginScreen() {
   const activeZoneObj =
     WORK_ZONES.find((z) => z.value === selectedZone || z.label.includes(selectedZone)) ||
     WORK_ZONES[0];
+
+  const modeLabel = t(mode === 'system' ? 'Auto' : mode === 'dark' ? 'Dark' : 'Light');
+  const langLabel = language === 'vi' ? 'Tiếng Việt' : 'English';
 
   return (
     <View style={styles.outerWrapper}>
@@ -131,10 +142,25 @@ export function LoginScreen() {
               <Pressable
                 onPress={() => {
                   triggerHaptic('tap');
+                  toggleLanguage();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('Language: {lang}. Tap to switch language.', { lang: langLabel })}
+                style={({ pressed }) => [styles.themeCyclePill, pressed && styles.themeCyclePillPressed]}
+              >
+                <Globe size={13} color={colors.primaryText} strokeWidth={2.2} />
+                <Text style={styles.themeCycleLabel}>
+                  {language === 'vi' ? 'VI · Tiếng Việt' : 'EN · English'}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  triggerHaptic('tap');
                   cycleMode();
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Appearance: ${mode === 'system' ? 'Auto' : mode === 'dark' ? 'Dark' : 'Light'}. Tap to switch theme.`}
+                accessibilityLabel={t('Appearance: {mode}. Tap to switch theme.', { mode: modeLabel })}
                 style={({ pressed }) => [styles.themeCyclePill, pressed && styles.themeCyclePillPressed]}
               >
                 {mode === 'system' ? (
@@ -145,7 +171,7 @@ export function LoginScreen() {
                   <Sun size={13} color={colors.warningText} strokeWidth={2.2} />
                 )}
                 <Text style={styles.themeCycleLabel}>
-                  {mode === 'system' ? 'Auto' : mode === 'dark' ? 'Dark' : 'Light'}
+                  {modeLabel}
                 </Text>
               </Pressable>
             </View>
@@ -156,43 +182,43 @@ export function LoginScreen() {
                 <BrandMark size={56} />
               </View>
               <Text style={styles.brandTitle}>WAROTRANS</Text>
-              <Text style={styles.brandSubtitle}>Autonomous Fleet Operator Console</Text>
+              <Text style={styles.brandSubtitle}>{t('Autonomous Fleet Operator Console')}</Text>
             </View>
 
             {/* Form Fields */}
             <View style={styles.formSection}>
               <Input
-                label="Staff Username"
+                label={t('Staff Username')}
                 value={username}
                 onFocus={() => setIsZoneDropdownOpen(false)}
                 onChangeText={(text) => {
                   setUsername(text);
                   if (error) setError(null);
                 }}
-                placeholder="e.g. alex.tran"
+                placeholder={t('e.g. alex.tran')}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="next"
                 leftIcon={<User size={18} color={colors.textSecondary} />}
                 containerStyle={styles.fieldSpacing}
                 inputStyle={styles.identifierInput}
-                error={error || undefined}
+                error={error ? t(error) : undefined}
               />
 
               <Input
-                label="Access Password"
+                label={t('Access Password')}
                 value={password}
                 onFocus={() => setIsZoneDropdownOpen(false)}
                 onChangeText={(text) => {
                   setPassword(text);
                   if (passwordError) setPasswordError(null);
                 }}
-                placeholder="Enter password"
+                placeholder={t('Enter password')}
                 secureTextEntry={!showPassword}
                 returnKeyType="done"
                 leftIcon={<Lock size={18} color={colors.textSecondary} />}
                 containerStyle={styles.fieldSpacing}
-                error={passwordError || undefined}
+                error={passwordError ? t(passwordError) : undefined}
                 rightIcon={
                   <Pressable
                     onPress={() => {
@@ -202,7 +228,7 @@ export function LoginScreen() {
                     hitSlop={12}
                     style={({ pressed }) => [styles.passwordToggle, pressed && styles.passwordTogglePressed]}
                     accessibilityRole="button"
-                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                    accessibilityLabel={t(showPassword ? 'Hide password' : 'Show password')}
                     accessibilityState={{ selected: showPassword }}
                   >
                     {showPassword ? (
@@ -216,7 +242,7 @@ export function LoginScreen() {
 
               {/* Assigned Work Zone Selector Field */}
               <View style={styles.zoneField}>
-                <Text style={styles.inputLabel}>Assigned Work Zone</Text>
+                <Text style={styles.inputLabel}>{t('Assigned Work Zone')}</Text>
                 <Pressable
                   onPress={handleToggleZoneDropdown}
                   style={({ pressed }) => [
@@ -225,18 +251,18 @@ export function LoginScreen() {
                     pressed && styles.zoneSelectorPressed,
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel="Select assigned work zone"
-                  accessibilityHint="Double tap to choose the work zone for this shift"
+                  accessibilityLabel={t('Select assigned work zone')}
+                  accessibilityHint={t('Double tap to choose the work zone for this shift')}
                   accessibilityState={{ expanded: isZoneDropdownOpen }}
                 >
                   <View style={styles.zoneLeft}>
                     <MapPin size={18} color={colors.primary} style={styles.mapPinIcon} />
                     <View style={styles.zoneDetails}>
                       <Text style={styles.zoneName} numberOfLines={1}>
-                        {activeZoneObj.label}
+                        {t(activeZoneObj.label)}
                       </Text>
                       <Text style={styles.zoneDetailText} numberOfLines={1}>
-                        {activeZoneObj.detail}
+                        {t(activeZoneObj.detail)}
                       </Text>
                     </View>
                   </View>
@@ -277,7 +303,7 @@ export function LoginScreen() {
                               !isLast && styles.dropdownItemDivider,
                             ]}
                             accessibilityRole="button"
-                            accessibilityLabel={`Select ${zone.label}`}
+                            accessibilityLabel={`${t('Select')} ${t(zone.label)}`}
                             accessibilityState={{ selected: isSelected }}
                           >
                             <View style={styles.dropdownItemContent}>
@@ -287,9 +313,9 @@ export function LoginScreen() {
                                   isSelected && styles.dropdownItemTitleSelected,
                                 ]}
                               >
-                                {zone.label}
+                                {t(zone.label)}
                               </Text>
-                              <Text style={styles.dropdownItemDesc}>{zone.detail}</Text>
+                              <Text style={styles.dropdownItemDesc}>{t(zone.detail)}</Text>
                             </View>
                             {isSelected && (
                               <Check size={16} color={colors.primary} strokeWidth={2.6} />
@@ -310,12 +336,12 @@ export function LoginScreen() {
             {error && (
               <View style={styles.errorAlert}>
                 <AlertCircle size={16} color={colors.danger} style={styles.errorAlertIcon} />
-                <Text style={styles.errorAlertText}>{error}</Text>
+                <Text style={styles.errorAlertText}>{t(error)}</Text>
               </View>
             )}
 
             <Button
-              label={isSubmitting ? 'Signing In...' : 'Sign In'}
+              label={t(isSubmitting ? 'Signing In...' : 'Sign In')}
               icon={<LogIn size={18} color="#ffffff" strokeWidth={2.4} />}
               onPress={handleLogin}
               size="lg"
@@ -360,6 +386,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     themeBar: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
+      gap: 8,
       paddingTop: 8,
     },
     themeCyclePill: {

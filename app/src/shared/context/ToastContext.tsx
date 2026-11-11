@@ -22,6 +22,7 @@ import {
   MapPin,
 } from 'lucide-react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
@@ -164,7 +165,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               onPress={hideToast}
               style={styles.toastPressable}
               accessibilityRole="alert"
-              accessibilityLabel={currentToast.message}
+              accessibilityLabel={translateText(currentToast.message)}
             >
               <View style={styles.iconCol}>
                 {currentToast.icon ? (
@@ -188,11 +189,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
               <View style={styles.textCol}>
                 <Text style={styles.toastMessage} numberOfLines={2}>
-                  {currentToast.message}
+                  {translateText(currentToast.message)}
                 </Text>
                 {currentToast.description ? (
                   <Text style={styles.toastDesc} numberOfLines={2}>
-                    {currentToast.description}
+                    {translateText(currentToast.description)}
                   </Text>
                 ) : null}
               </View>

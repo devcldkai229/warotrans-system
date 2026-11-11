@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { useThemeColors } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
@@ -20,7 +21,7 @@ export function Badge({ label, tone = 'neutral', size = 'md' }: BadgeProps) {
   return (
     <View style={[styles.badge, toneStyles.container, isSm && styles.badgeSm]}>
       <Text style={[styles.label, toneStyles.text, isSm && styles.labelSm]}>
-        {label}
+        {translateText(label)}
       </Text>
     </View>
   );

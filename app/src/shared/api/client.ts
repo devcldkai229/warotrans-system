@@ -8,6 +8,7 @@
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { localizeServerMessage, t } from '../i18n';
 import {
   getStoredRefreshToken,
   saveStoredAccessToken,
@@ -99,7 +100,7 @@ export class ApiError extends Error {
 }
 
 export function getUserErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+  return error instanceof ApiError ? error.message : t(fallback);
 }
 
 function isAbortError(error: unknown): boolean {
@@ -109,20 +110,20 @@ function isAbortError(error: unknown): boolean {
 function networkError(init: RequestInit = {}, path = ''): ApiError {
   const isWrite = !path.startsWith('/api/identity/') && init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase());
   return new ApiError(0, 'NETWORK_ERROR', isWrite
-    ? 'Could not confirm the result. Reconnect and check the latest status before trying again.'
-    : 'Cannot reach the server. Check your connection and try again.');
+    ? t('Could not confirm the result. Reconnect and check the latest status before trying again.')
+    : t('Cannot reach the server. Check your connection and try again.'));
 }
 
 function httpErrorMessage(status: number): string {
-  if (status >= 500) return 'The server is temporarily unavailable. Please try again shortly.';
+  if (status >= 500) return t('The server is temporarily unavailable. Please try again shortly.');
   switch (status) {
-    case 400: return 'Check the information entered and try again.';
-    case 401: return 'Your session could not be verified. Please sign in again.';
-    case 403: return 'You do not have permission to perform this action.';
-    case 404: return 'This record is no longer available. Refresh to see the latest information.';
-    case 409: return 'This action conflicts with the current status. Refresh before trying again.';
-    case 429: return 'Too many requests. Wait a moment and try again.';
-    default: return 'The request could not be completed. Please try again.';
+    case 400: return t('Check the information entered and try again.');
+    case 401: return t('Your session could not be verified. Please sign in again.');
+    case 403: return t('You do not have permission to perform this action.');
+    case 404: return t('This record is no longer available. Refresh to see the latest information.');
+    case 409: return t('This action conflicts with the current status. Refresh before trying again.');
+    case 429: return t('Too many requests. Wait a moment and try again.');
+    default: return t('The request could not be completed. Please try again.');
   }
 }
 
@@ -132,7 +133,7 @@ async function readResponse<T>(response: Response): Promise<T> {
     return await response.json() as T;
   } catch (error) {
     if (isAbortError(error)) throw error;
-    throw new ApiError(502, 'INVALID_RESPONSE', 'The server response could not be read. Refresh to check the latest status.');
+    throw new ApiError(502, 'INVALID_RESPONSE', t('The server response could not be read. Refresh to check the latest status.'));
   }
 }
 
@@ -198,14 +199,19 @@ async function parseApiError(response: Response): Promise<ApiError> {
       if (Array.isArray(data.errors)) {
         errors = data.errors.flatMap((error: unknown): ProblemError[] => {
           if (typeof error !== 'object' || error === null || !('message' in error) || typeof error.message !== 'string') return [];
+          const errCode = 'code' in error && typeof error.code === 'string' ? error.code : 'validation';
           return [{ property: 'property' in error && typeof error.property === 'string' ? error.property : '',
-            code: 'code' in error && typeof error.code === 'string' ? error.code : 'validation', message: error.message }];
+            code: errCode, message: localizeServerMessage(errCode, error.message) }];
         });
       } else if (data.errors && typeof data.errors === 'object') {
         errors = Object.entries(data.errors).flatMap(([property, messages]) =>
-          (Array.isArray(messages) ? messages : [messages]).map(message => ({ property, code: 'validation', message: String(message) })));
+          (Array.isArray(messages) ? messages : [messages]).map(msg => ({ property, code: 'validation', message: localizeServerMessage(null, String(msg)) })));
       }
-      if (errors.length) message = errors.map(error => error.message).join('\n');
+      if (errors.length) {
+        message = errors.map(error => error.message).join('\n');
+      } else {
+        message = localizeServerMessage(code, message);
+      }
     }
   } catch (error) {
     if (isAbortError(error)) throw error;
@@ -297,7 +303,7 @@ async function performTokenRefresh(): Promise<string | null> {
       setAccessToken(data.accessToken);
       return data.accessToken;
     }
-    throw new ApiError(502, 'INVALID_RESPONSE', 'The server response could not be read. Please try again.');
+    throw new ApiError(502, 'INVALID_RESPONSE', t('The server response could not be read. Please try again.'));
   } catch (err) {
     if (version !== tokenVersion) return null;
     if (isAbortError(err) || err instanceof ApiError) throw err;

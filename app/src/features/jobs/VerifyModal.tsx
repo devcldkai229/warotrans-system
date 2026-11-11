@@ -23,6 +23,7 @@ import { radii } from '../../shared/theme/radii';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { Button, Card, Text, TextField } from '../../shared/ui';
+import { translateText } from '../../shared/i18n';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { ApiError, confirmHandover, failJobContainer, getContainerByBarcode } from '../../shared/api';
@@ -318,7 +319,7 @@ export function VerifyModal({
                 ) : (
                   <View>
                     <TextInput
-                      placeholder="Why can this container not go on?"
+                      placeholder={translateText('Why can this container not go on?')}
                       value={failReason}
                       onChangeText={setFailReason}
                       style={styles.failReasonInput}

@@ -22,6 +22,7 @@ import { ToastProvider } from './src/shared/context/ToastContext';
 import { RealtimeProvider } from './src/shared/realtime';
 import { ThemeColors } from './src/shared/theme/colors';
 import { SIMULATED_STATUS_BAR } from './src/shared/theme/layout';
+import { LanguageProvider } from './src/shared/i18n/LanguageContext';
 import { ThemeProvider, useTheme, useThemedStyles } from './src/shared/theme/ThemeContext';
 import { typography } from './src/shared/theme/typography';
 
@@ -38,9 +39,11 @@ function AuthenticatedShell() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <ThemedAppShell />
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <ThemedAppShell />
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }
 

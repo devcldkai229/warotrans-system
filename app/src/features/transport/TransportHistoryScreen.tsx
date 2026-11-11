@@ -7,10 +7,11 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
+import { translateText } from '../../shared/i18n';
+import { RawText as Text } from '../../shared/ui/Text';
 import {
   AlertTriangle,
   ArrowRight,
@@ -338,10 +339,10 @@ export function TransportHistoryScreen() {
             <View style={styles.searchBox}>
               <Search size={16} color={colors.textMuted} style={styles.searchIcon} />
               <TextInput
-                accessibilityLabel="Search transport requests"
+                accessibilityLabel={translateText('Search transport requests')}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search TR, route or container..."
+                placeholder={translateText('Search TR, route or container...')}
                 placeholderTextColor={colors.textMuted}
                 style={styles.searchInput}
               />

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { radii } from '../theme/radii';
 import { ThemeShadows } from '../theme/shadows';
 import { useThemedStyles } from '../theme/ThemeContext';
@@ -46,7 +47,7 @@ export function SegmentedControl<TValue extends string = string>({
   return (
     <View
       accessibilityRole="tablist"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel ? translateText(accessibilityLabel) : undefined}
       style={[styles.track, isSm ? styles.trackSm : styles.trackMd, style]}
     >
       {options.map((option) => {
@@ -57,7 +58,7 @@ export function SegmentedControl<TValue extends string = string>({
             onPress={() => onChange(option.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
-            accessibilityLabel={option.label}
+            accessibilityLabel={translateText(option.label)}
             /**
              * `hitSlop` only exists for `sm`, where the caller has squeezed the
              * control into a filter strip. `md` is already at the 44pt floor.

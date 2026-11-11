@@ -9,6 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
@@ -39,13 +40,14 @@ export function Button({
 }: ButtonProps) {
   const { baseStyles, pressedStyles, textStyles } = useThemedStyles(createButtonStyles);
   const isInteractive = !disabled && !loading;
+  const resolvedLabel = translateText(label);
 
   return (
     <Pressable
       onPress={isInteractive ? onPress : undefined}
       disabled={!isInteractive}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={resolvedLabel}
       accessibilityState={{ disabled: !isInteractive, busy: loading }}
       style={({ pressed }) => [
         baseStyles.base,
@@ -73,7 +75,7 @@ export function Button({
               textStyle,
             ]}
           >
-            {label}
+            {resolvedLabel}
           </Text>
           {rightIcon && <View style={baseStyles.iconRight}>{rightIcon}</View>}
         </View>

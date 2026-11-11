@@ -10,6 +10,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { radii } from '../theme/radii';
 import { useThemeColors } from '../theme/ThemeContext';
 import { Text, TextColor } from './Text';
@@ -83,7 +84,7 @@ export function Button({
       onPress={isInteractive ? onPress : undefined}
       disabled={!isInteractive}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityLabel={translateText(accessibilityLabel ?? title)}
       accessibilityState={{ disabled, busy: loading }}
       style={({ pressed }) => [
         styles.base,

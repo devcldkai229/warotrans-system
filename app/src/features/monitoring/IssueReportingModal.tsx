@@ -5,10 +5,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
+import { translateText } from '../../shared/i18n';
+import { RawText as Text } from '../../shared/ui/Text';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -277,10 +278,10 @@ export function IssueReportingModal({
           <View style={styles.notesCard}>
             <Text style={styles.sectionLabel}>Operator description</Text>
             <TextInput
-              accessibilityLabel="Operator description"
+              accessibilityLabel={translateText('Operator description')}
               value={notes}
               onChangeText={setNotes}
-              placeholder="e.g. Left corner cracked, 2 units dislodged onto lane 2..."
+              placeholder={translateText('e.g. Left corner cracked, 2 units dislodged onto lane 2...')}
               placeholderTextColor={colors.textMuted}
               multiline
               numberOfLines={3}

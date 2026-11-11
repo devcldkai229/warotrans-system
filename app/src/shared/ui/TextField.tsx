@@ -10,6 +10,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { radii } from '../theme/radii';
 import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
@@ -84,11 +85,16 @@ export function TextField({
         {leftIcon ? <View style={styles.adornment}>{leftIcon}</View> : null}
         <TextInput
           {...props}
+          placeholder={props.placeholder ? translateText(props.placeholder) : props.placeholder}
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
           editable={editable}
-          accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityLabel={
+            (accessibilityLabel ?? label)
+              ? translateText((accessibilityLabel ?? label)!)
+              : undefined
+          }
           placeholderTextColor={props.placeholderTextColor ?? colors.textMuted}
           onFocus={(event) => {
             setIsFocused(true);

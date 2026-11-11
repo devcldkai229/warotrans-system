@@ -5,9 +5,9 @@ import { useRealtime } from '../../shared/realtime';
 import {
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { RawText as Text } from '../../shared/ui/Text';
 import {
   RefreshCw,
   WifiOff,

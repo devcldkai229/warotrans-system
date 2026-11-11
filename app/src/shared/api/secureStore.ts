@@ -6,6 +6,8 @@ const REFRESH_TOKEN_KEY = 'warotrans_refresh_token';
 const USER_SESSION_KEY = 'warotrans_user_session';
 export const THEME_MODE_KEY = 'warotrans.theme_mode';
 export type StoredThemeMode = 'system' | 'light' | 'dark';
+export const LANGUAGE_KEY = 'warotrans.language';
+export type StoredLanguage = 'en' | 'vi';
 
 /**
  * Persist access token in hardware-backed secure storage on mobile devices,
@@ -222,6 +224,48 @@ export async function getStoredThemeMode(): Promise<StoredThemeMode | null> {
     }
   }
   if (raw === 'system' || raw === 'light' || raw === 'dark') {
+    return raw;
+  }
+  return null;
+}
+
+/**
+ * Persist UI language preference ('en' | 'vi').
+ */
+export async function saveStoredLanguage(language: StoredLanguage): Promise<void> {
+  if (Platform.OS === 'web') {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(LANGUAGE_KEY, language);
+      }
+    } catch {}
+  } else {
+    try {
+      await SecureStore.setItemAsync(LANGUAGE_KEY, language);
+    } catch (err) {
+      console.warn('SecureStore setItemAsync error for language:', err);
+    }
+  }
+}
+
+export async function getStoredLanguage(): Promise<StoredLanguage | null> {
+  let raw: string | null = null;
+  if (Platform.OS === 'web') {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        raw = window.localStorage.getItem(LANGUAGE_KEY);
+      }
+    } catch {
+      return null;
+    }
+  } else {
+    try {
+      raw = await SecureStore.getItemAsync(LANGUAGE_KEY);
+    } catch {
+      return null;
+    }
+  }
+  if (raw === 'en' || raw === 'vi') {
     return raw;
   }
   return null;

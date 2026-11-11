@@ -5,9 +5,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { RawText as Text } from '../../shared/ui/Text';
 import {
   AlertTriangle,
   Box,
