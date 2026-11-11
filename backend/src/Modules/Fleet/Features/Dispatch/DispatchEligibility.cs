@@ -32,7 +32,8 @@ public static class DispatchEligibility
         DateTimeOffset? lastCommandAt,
         BatteryOptions battery,
         DispatchOptions weights,
-        TrafficFootprintOptions? footprint = null)
+        TrafficFootprintOptions? footprint = null,
+        bool returningToPark = false)
     {
         var reasons = new List<string>();
         var notes = new List<string>();
@@ -40,7 +41,10 @@ public static class DispatchEligibility
         if (!robot.IsEnabled) reasons.Add(DispatchReasons.Disabled);
         if (!robot.IsOnline) reasons.Add(DispatchReasons.Offline);
         if (robot.Status == RobotStatus.MAINTENANCE) reasons.Add(DispatchReasons.InMaintenance);
-        else if (robot.IsOnline && robot.Status != RobotStatus.AVAILABLE) reasons.Add(DispatchReasons.NotAvailable);
+        // FL-08: busy only with its own way to parking (RESERVED / EXECUTING that NAVIGATE): the Job takes it over.
+        else if (robot.IsOnline && robot.Status != RobotStatus.AVAILABLE
+                 && !(returningToPark && robot.Status is RobotStatus.RESERVED or RobotStatus.EXECUTING)) reasons.Add(DispatchReasons.NotAvailable);
+        if (returningToPark) notes.Add("returning_to_park: stops for this Job");
         if (robot.MotionHeld) reasons.Add(DispatchReasons.MotionHeld);
         if (robot.HasActiveManualLease(now)) reasons.Add(DispatchReasons.ManualMode);
         if (robot.CurrentMapVersionId != query.MapVersionId) reasons.Add(DispatchReasons.MapMismatch);

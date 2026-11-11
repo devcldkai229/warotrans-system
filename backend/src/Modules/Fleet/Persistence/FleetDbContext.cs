@@ -13,6 +13,7 @@ public sealed class FleetDbContext(DbContextOptions<FleetDbContext> options) : D
     public DbSet<JobAssignment> JobAssignments => Set<JobAssignment>();
     public DbSet<RobotCommand> RobotCommands => Set<RobotCommand>();
     public DbSet<MaintenanceRecord> MaintenanceRecords => Set<MaintenanceRecord>();
+    public DbSet<RobotPositioningIntent> RobotPositioningIntents => Set<RobotPositioningIntent>();
 
     /// <summary>
     /// BOTH-02: a robot's status, connectivity or motion hold changing is history. Heartbeats and telemetry change none of

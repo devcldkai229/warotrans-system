@@ -72,6 +72,7 @@ public static class FleetModule
         services.Configure<Features.Dispatch.BatteryOptions>(configuration.GetSection(Features.Dispatch.BatteryOptions.SectionName));
         services.Configure<Features.Dispatch.DispatchOptions>(configuration.GetSection(Features.Dispatch.DispatchOptions.SectionName));
         services.AddScoped<Features.Dispatch.DispatchService>();
+        services.AddScoped<Features.Positioning.RobotPositioningService>();
         services.AddHttpClient(StreamRobotCameraHandler.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddScoped<StreamRobotCameraHandler>();
         services.AddScoped<IRobotMqttIngress, RobotMqttIngress>();

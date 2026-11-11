@@ -810,10 +810,14 @@ public sealed class JobExecutionEngineTests
         Assert.Empty(_fleet.Commands);
 
         await Engine().CancelJobAsync(queued, "not needed");
+        var jobsBefore = await _db.Jobs.CountAsync();
         Assert.Equal(1, await Care(on).ReturnIdleRobotsAsync(default));
         Assert.Equal(6.0, _fleet.Commands[^1].X);
+        // FL-08: a Fleet positioning intent, not a ROBOT_RETURN_TO_PARK Job.
+        Assert.Equal(Guid.Empty, _fleet.Commands[^1].JobStepId);
+        Assert.Equal(jobsBefore, await _db.Jobs.CountAsync());
 
-        // Now busy with that Job: not sent again.
+        // Already on its way: not sent again.
         Assert.Equal(0, await Care(on).ReturnIdleRobotsAsync(default));
     }
 
@@ -1996,6 +2000,23 @@ public sealed class JobExecutionEngineTests
             Task.FromResult(Robots.TryGetValue(robotId, out var r) ? r with { BatteryPercent = Battery } : null);
 
         public List<Guid> Idle { get; } = [];
+
+        /// <summary>FL-08 positioning intents: robot -> parking Endpoint it is heading for.</summary>
+        public Dictionary<Guid, Guid> Positioning { get; } = [];
+
+        public Task<IReadOnlySet<Guid>> GetPositioningRobotIdsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlySet<Guid>>(Positioning.Keys.ToHashSet());
+
+        public Task<IReadOnlySet<Guid>> GetPositioningTargetsAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlySet<Guid>>(Positioning.Values.ToHashSet());
+
+        public Task<Guid> StartReturnToParkAsync(Guid robotId, Guid endpointId, double x, double y, double yaw, CancellationToken cancellationToken = default)
+        {
+            Positioning[robotId] = endpointId;
+            var commandId = Guid.NewGuid();
+            Commands.Add((robotId, x, y, Guid.Empty, commandId)); // a NAVIGATE that belongs to no Job step
+            return Task.FromResult(Guid.NewGuid());
+        }
 
         public Task<IReadOnlyList<IdleRobot>> GetIdleRobotsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<IdleRobot>>(Idle.Select(id => new IdleRobot(Robots[id], null)).ToList());
