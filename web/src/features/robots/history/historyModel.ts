@@ -1,7 +1,7 @@
 import type { RobotStateEventSource } from '@/shared/api/contracts'
 import type { RobotHistoryItem, RobotHistoryKind, RobotHistoryQuery } from '@/shared/api/fleet'
 import { t } from '@/shared/i18n'
-import { formatBattery, humanize } from '@/shared/lib/format'
+import { endOfAppDay, formatBattery, humanize, startOfAppDay } from '@/shared/lib/format'
 import type { Tone } from '@/shared/ui/statusTones'
 
 /** The sources the backend writes. A command has none, only a state change records where it came from. */
@@ -10,7 +10,7 @@ export const HISTORY_SOURCES: readonly RobotStateEventSource[] = ['SYSTEM', 'HEA
 export interface HistoryFilters {
   kind: RobotHistoryKind | ''
   source: RobotStateEventSource | ''
-  /** `YYYY-MM-DD` as a date input gives it, in the viewer's own time zone. */
+  /** `YYYY-MM-DD` as a date input gives it: a day in Vietnam. */
   fromDate: string
   toDate: string
 }
@@ -26,16 +26,14 @@ export function sourceApplies(filters: HistoryFilters): boolean {
   return filters.kind !== 'COMMAND'
 }
 
-/** Midnight at the start of the viewer's day, as an ISO instant. Null for an empty or unreadable date. */
+/** Midnight at the start of the day in Vietnam, as an ISO instant. Null for an empty or unreadable date. */
 export function startOfDay(date: string): string | null {
-  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : null
-  return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : null
+  return startOfAppDay(date)?.toISOString() ?? null
 }
 
-/** The last millisecond of the viewer's day, so a "to" date includes that whole day. */
+/** The last millisecond of the day in Vietnam, so a "to" date includes that whole day. */
 export function endOfDay(date: string): string | null {
-  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T23:59:59.999`) : null
-  return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : null
+  return endOfAppDay(date)?.toISOString() ?? null
 }
 
 /** A range that ends before it starts matches nothing; the screen says so instead of asking. */

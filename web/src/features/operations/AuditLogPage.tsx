@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { SectionHead } from '@/features/management/SectionHead'
 import { listAuditLogs, type AuditLogEntry } from '@/shared/api/operations'
-import { formatIsoDateTime } from '@/shared/lib/format'
+import { formatIsoDateTime, jsonText } from '@/shared/lib/format'
 import { SearchInput } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
@@ -15,7 +15,7 @@ function changes(entry: AuditLogEntry): string {
     .map((key) => {
       const before = entry.before?.[key]
       const after = entry.after?.[key]
-      return before === undefined ? `${key}: ${JSON.stringify(after)}` : `${key}: ${JSON.stringify(before)} → ${JSON.stringify(after)}`
+      return before === undefined ? `${key}: ${jsonText(after)}` : `${key}: ${jsonText(before)} → ${jsonText(after)}`
     })
     .join(' · ')
 }

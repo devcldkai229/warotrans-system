@@ -155,8 +155,8 @@ describe('the filters', () => {
   })
 
   it('turn a date into the start and the end of that day, so the "to" day is included', () => {
-    expect(startOfDay('2026-11-10')).toBe(new Date('2026-11-10T00:00:00').toISOString())
-    expect(endOfDay('2026-11-10')).toBe(new Date('2026-11-10T23:59:59.999').toISOString())
+    expect(startOfDay('2026-11-10')).toBe('2026-11-09T17:00:00.000Z')
+    expect(endOfDay('2026-11-10')).toBe('2026-11-10T16:59:59.999Z')
     expect(historyQuery(filters({ fromDate: '2026-11-09', toDate: '2026-11-10' }), 0, 20)).toMatchObject({
       from: startOfDay('2026-11-09'),
       to: endOfDay('2026-11-10'),

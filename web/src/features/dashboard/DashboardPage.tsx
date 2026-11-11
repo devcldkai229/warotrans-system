@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { JobStatistics, RequestStatistics, RobotStatistics } from '@/shared/api/contracts'
 import { getJobStatistics, getRequestStatistics, getRobotStatistics } from '@/shared/api/statistics'
 import { cx } from '@/shared/lib/cx'
-import { formatRelativeTime, humanize } from '@/shared/lib/format'
+import { formatRelativeTime, humanize, windowOfDays } from '@/shared/lib/format'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
@@ -21,13 +21,9 @@ const RANGES: { id: RangeId; label: string; days: number }[] = [
   { id: '30d', label: t('30 days'), days: 30 },
 ]
 
-/** From local midnight of the first day to now, so the per-day buckets line up with the viewer's calendar days. */
+/** From midnight (Vietnam) of the first day to now, so the per-day buckets line up with Vietnam's calendar days. */
 function windowFor(days: number) {
-  const to = new Date()
-  const from = new Date(to)
-  from.setHours(0, 0, 0, 0)
-  from.setDate(from.getDate() - (days - 1))
-  return { from, to }
+  return windowOfDays(days)
 }
 
 const count = (value: number) => value.toLocaleString(getLocale())
