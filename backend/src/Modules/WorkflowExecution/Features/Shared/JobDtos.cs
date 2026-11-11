@@ -66,10 +66,16 @@ public sealed record JobContainerDto(
     string? FailureMessage,
     DateTimeOffset? FailedAt);
 
+/// <summary>
+/// One execution segment of the Job. A Workflow Task can become several of these (checks once per Job, a stop once per
+/// stop, a hand-over once per Container), so segments that share a <c>TaskKey</c> belong to the same Workflow Task, whose
+/// <c>TaskName</c> is what the workflow calls it.
+/// </summary>
 public sealed record JobTaskDto(
     Guid Id,
     int SequenceNo,
     string TaskKey,
+    string TaskName,
     string Status,
     string? ExecutionScope,
     string? StopAction,
@@ -117,8 +123,9 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                 .ToListAsync(cancellationToken))
             .ToDictionary(
                 s => s.Id,
-                s => new { s.StepKey, s.Name, s.Config.OperationCode, s.WorkflowTask.TaskKey, s.WorkflowTaskId });
+                s => new { s.StepKey, s.Name, s.Config.OperationCode, s.WorkflowTask.TaskKey, TaskName = s.WorkflowTask.Name, s.WorkflowTaskId });
         var taskKeys = steps.Values.GroupBy(s => s.WorkflowTaskId).ToDictionary(g => g.Key, g => g.First().TaskKey);
+        var taskNames = steps.Values.GroupBy(s => s.WorkflowTaskId).ToDictionary(g => g.Key, g => g.First().TaskName);
 
         var orderedSteps = job.JobTasks.OrderBy(t => t.SequenceNo).SelectMany(t => t.JobSteps.OrderBy(s => s.SequenceNo)).ToList();
         var current = orderedSteps.FirstOrDefault(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED));
@@ -154,6 +161,7 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                     t.Id,
                     t.SequenceNo,
                     taskKeys.GetValueOrDefault(t.WorkflowTaskId, ""),
+                    taskNames.GetValueOrDefault(t.WorkflowTaskId, ""),
                     t.Status.ToString(),
                     Text(t.ContextValues, "executionScope"),
                     Text(t.ContextValues, "stopAction"),

@@ -114,6 +114,22 @@ public sealed class HumanTaskEndpointTests(WaroTransWebApplicationFactory factor
     }
 
     [Fact]
+    public async Task The_job_names_the_workflow_task_each_segment_came_from()
+    {
+        var (jobId, _) = await WaitingStepAsync();
+
+        var detail = await Client.GetFromJsonAsync<JsonElement>($"{Root}/jobs/{jobId}");
+        var tasks = detail.GetProperty("tasks").EnumerateArray().ToList();
+
+        // One Workflow Task can become several segments (checks, a stop, a hand-over per Container); they share its key and
+        // name, so a screen can show the workflow's tasks again. Every segment says which task it came from.
+        var byKey = tasks.GroupBy(t => t.GetProperty("taskKey").GetString()).ToList();
+        Assert.NotEmpty(tasks);
+        Assert.All(tasks, t => Assert.False(string.IsNullOrWhiteSpace(t.GetProperty("taskName").GetString())));
+        Assert.All(byKey, g => Assert.Single(g.Select(t => t.GetProperty("taskName").GetString()).Distinct()));
+    }
+
+    [Fact]
     public async Task A_technician_cannot_claim_or_confirm_handovers()
     {
         var (jobId, stepId) = await WaitingStepAsync();
