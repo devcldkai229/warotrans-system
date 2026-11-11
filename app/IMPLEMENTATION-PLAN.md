@@ -19,7 +19,7 @@ Ngày lập: 10/11/2026. Owner app: Nguyễn Thành Đạt.
 
 | Task | Kết quả V1 | Owner phối hợp / phụ thuộc |
 |---|---|---|
-| APP-CAP-02 | Pack Container có danh sách/chi tiết/tạo phiếu nhập-xuất; nhập hàng cấp mã từng thùng, điền thông tin, lưu nháp và xác nhận. Tính tồn tại Inbound khi phiếu nhập có hiệu lực; phiếu xuất lập sau tập kết và trừ tồn khi xác nhận. | Warehouse, Transportation; WH-02, WHM-02 và contract tồn kho |
+| APP-CAP-02 | Stock Vouchers có danh sách/chi tiết/tạo phiếu nhập-xuất; nhập hàng cấp mã từng thùng, điền thông tin, lưu nháp và xác nhận. Tính tồn tại Inbound khi phiếu nhập có hiệu lực; phiếu xuất lập sau tập kết và trừ tồn khi xác nhận. | Warehouse, Transportation; WH-02, WHM-02 và contract tồn kho |
 | APP-CAP-03 | Chọn/tìm/quét Product thật khi điền thông tin kiện; unknown không giữ Product cũ hoặc sinh Product giả. Quick-create là thao tác chủ động có quyền riêng. | Warehouse, Identity; WH-02 |
 | APP-CAP-01 | Nhận độc quyền một lượt bàn giao tại một điểm dừng; bắt đầu, nhường, hết hạn/no-show và batch confirm cả lượt trên app/nút robot. | WorkflowExecution, Identity, Robot; WH-03 |
 | APP-CAP-07 | Staff Pause Job trong kho kèm lý do; Resume bởi người Pause hoặc Admin, sau readiness check. Theo dõi yêu cầu và dừng thực tế. | WorkflowExecution, Fleet; WFX-03, RB-03 |
@@ -105,7 +105,7 @@ Task: APP-CAP-03, APP-CAP-02; phối hợp BE Warehouse/Transportation/Identity.
 
 - [ ] Chốt/cung cấp cấp mã và phiếu nháp; barcode đã cấp được giữ để in/dán trước demo, không đoán dãy mã sắp sinh hoặc reset DB để khớp tem.
 - [ ] Resolve Product qua endpoint thật; bỏ Product cũ khi scan mới/unknown, hiển thị loading/not-found/duplicate/inactive. Quick-create là form chủ động, không tự tạo từ mã lạ.
-- [ ] Mở rộng Pack Container hiện có thành danh sách/chi tiết phiếu nhập-xuất và luồng tạo phiếu; giữ shell và subsection UI đang dùng.
+- [ ] Dùng Stock Vouchers làm trang danh sách/chi tiết phiếu nhập-xuất và luồng tạo phiếu; giữ shell và subsection UI đang dùng.
 - [ ] Nhập lô N kiện, barcode riêng từng kiện, Product/số lượng mô tả, default Inbound từ BE; khôi phục draft sau gián đoạn và giữ kết quả cấp mã đã xác nhận.
 - [ ] Xác nhận phiếu nhập mới tăng tồn. Tạo TR Putaway sau đó; không cộng lại ở dropoff.
 - [ ] TR Outbound chọn Product + số Container theo FIFO, đóng băng lựa chọn thực tế và chống phân bổ trùng. FIFO theo mốc nhập được BE định nghĩa, không theo lúc cấp tem trước demo.
@@ -113,7 +113,7 @@ Task: APP-CAP-03, APP-CAP-02; phối hợp BE Warehouse/Transportation/Identity.
 - [ ] Sửa retry/reconcile Warehouse sau delivery; đảm bảo vị trí/custody và tổng tồn nhất quán qua pickup, dropoff, lỗi và retry.
 - [ ] Nối BOTH-10/SY-06: handover đã ghi nhưng Warehouse chưa áp dụng phải hiện chờ đồng bộ/lỗi và có đường phục hồi bền vững. Giữ trace phiếu → Container → Detail/Job/lượt bàn giao; phiếu đa TR vẫn đối soát được.
 
-File app chính: `src/features/inventory/CreateContainerScreen.tsx`, `receivingData.ts`, `src/shared/api/warehouseApi.ts`, `src/features/transport/TransportScreen.tsx`, `transportDraft.ts`, `dispatchSubmission.ts` và navigation liên quan. Tách component/module trong feature khi có trách nhiệm thực, không thay cả screen bằng form generic.
+File app chính: `src/features/inventory/StockVouchersScreen.tsx`, `CreateStockVoucherScreen.tsx`, `StockVoucherDetailScreen.tsx`, `stockVoucherData.ts`, `ReceivingProductPicker.tsx`, `src/shared/api/warehouseApi.ts`, `src/features/transport/TransportScreen.tsx` và navigation liên quan. Link create-container cũ mở workspace phiếu. Giữ module Product lookup để nối vào Contents khi contract cấp mã đã sẵn sàng.
 
 Gate M1: tạo/query đúng ID/barcode; phiếu nháp không tăng tồn; confirm nhập tăng, vận chuyển giữ tổng, confirm xuất giảm. Retry/confirm đồng thời không double-post; sai Product/kho/vị trí và offline có lỗi thật.
 
@@ -222,6 +222,7 @@ Dùng [Map UI Implementation Plan](MAP-UI-IMPLEMENTATION-PLAN.md) cho chi tiết
 
 - Thực hiện theo nhóm nhỏ: thống nhất phạm vi → triển khai → kiểm tra tự động → chủ dự án kiểm chứng trực tiếp → sửa/kiểm lại đến khi được chấp thuận → commit và push → nhóm tiếp theo. Không tự commit/push hoặc chuyển nhóm khi người dùng chưa nghiệm thu.
 - Nhóm triển khai đầu tiên: phần độc lập của APP-OPS-04, nối GET inbox và POST read/read-all đang có, số chưa đọc theo server, tải bù foreground/reconnect, điều hướng Job/Request đã có màn chi tiết. Còn chờ nghiệm thu trên iPhone 12; chưa đóng toàn bộ APP-OPS-04, các link Issue/Recovery/Container và audience theo kho vẫn phụ thuộc contract/màn tương ứng.
+- Nhóm hiện tại: Stock Vouchers thay form Receive Goods, có ledger/chi tiết và tạo nháp metadata qua API thật. Trang tạo nháp không ghi tồn; thứ tự đích vẫn cấp barcode → nội dung từng Container → xác nhận nhập, hoặc chọn các Container đã ở Outbound → review → xác nhận xuất. Allocation, số lượng trong kiện, staged-outbound và stock posting chưa đủ contract; giữ thao tác tương ứng unavailable và không dùng FIFO của phiếu cũ để thay lựa chọn nguyên kiện. Chờ chủ dự án kiểm chứng trước commit/push.
 - Mỗi slice có danh sách file app đổi, contract BE/robot được dùng, kết quả kiểm thử và phần chưa có evidence.
 - Capability chỉ mở sau khi route/DTO/quyền/response tương ứng được kiểm chứng. Chưa có API thì giữ unavailable rõ; không thêm thành công giả để đi tiếp demo.
 - Mọi code/model mới giữ boundary module; không tự thêm entity/table/status/Step Type/broker hoặc sửa schema ngoài owner chỉ để làm DTO app khớp.

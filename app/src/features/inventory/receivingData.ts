@@ -1,4 +1,4 @@
-import type { ProductItem, StorageLocationListItem } from '../../shared/api/warehouseApi';
+import type { StorageLocationListItem } from '../../shared/api/warehouseApi';
 import type { MapVersionDetailDto } from '../../shared/api/navigationApi';
 
 export function receivingCount(value: string): number | null {
@@ -6,15 +6,6 @@ export function receivingCount(value: string): number | null {
   if (!/^\d+$/.test(text)) return null;
   const count = Number(text);
   return Number.isInteger(count) && count >= 1 && count <= 10 ? count : null;
-}
-
-/** Only a unique exact catalog match can be selected without an operator choice. */
-export function productForScannedBarcode(products: ProductItem[], barcode: string): ProductItem | null {
-  const code = barcode.trim().toLowerCase();
-  if (!code) return null;
-  const matches = products.filter(product => product.isActive &&
-    [product.sku, product.supplierBarcode].some(value => value?.trim().toLowerCase() === code));
-  return matches.length === 1 ? matches[0] : null;
 }
 
 /** A configured location is an actual receiving choice; an arbitrary endpoint is not. */

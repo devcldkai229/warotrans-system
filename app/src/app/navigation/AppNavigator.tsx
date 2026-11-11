@@ -5,6 +5,9 @@ import { ChangePasswordScreen } from '../../features/auth/ChangePasswordScreen';
 import { LoginScreen } from '../../features/auth/LoginScreen';
 import { HomeScreen } from '../../features/home/HomeScreen';
 import { CreateContainerScreen } from '../../features/inventory/CreateContainerScreen';
+import { StockVouchersScreen } from '../../features/inventory/StockVouchersScreen';
+import { CreateStockVoucherScreen } from '../../features/inventory/CreateStockVoucherScreen';
+import { StockVoucherDetailScreen } from '../../features/inventory/StockVoucherDetailScreen';
 import { InventoryLookupScreen } from '../../features/inventory/InventoryLookupScreen';
 import { JobDetailScreen } from '../../features/jobs/JobDetailScreen';
 import { JobsScreen } from '../../features/jobs/JobsScreen';
@@ -47,6 +50,12 @@ export function AppNavigator() {
 
   const renderScreen = () => {
     switch (currentScreen) {
+      case 'stock_vouchers':
+        return <StockVouchersScreen />;
+      case 'stock_voucher_create':
+        return <CreateStockVoucherScreen />;
+      case 'stock_voucher_detail':
+        return <StockVoucherDetailScreen />;
       case 'home':
         return <HomeScreen />;
       case 'jobs':

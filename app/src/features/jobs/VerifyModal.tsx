@@ -434,7 +434,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     marginBottom: 8,
-    color: colors.text,
+    color: colors.textPrimary,
   },
   modalOverlay: {
     flex: 1,

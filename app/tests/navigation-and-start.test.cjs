@@ -18,6 +18,12 @@ test('workflow aliases preserve the intended workflow instead of substituting In
   assert.equal(parseNavigationUrl('https://app.test/?screen=point-to-point').params.workflow, 'POINT_TO_POINT_TRANSPORT');
   assert.equal(parseNavigationUrl('https://app.test/?screen=replenishment').params.workflow, 'REPLENISHMENT');
 });
+test('voucher links preserve document/warehouse identity and remain separate from transport creation', () => {
+  assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=stock-vouchers&warehouseId=wh')), { screen: 'stock_vouchers', params: { warehouseId: 'wh' } });
+  assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=stock-voucher&voucherId=pn-1&warehouseId=wh')), { screen: 'stock_voucher_detail', params: { warehouseId: 'wh', voucherId: 'pn-1' } });
+  assert.deepEqual(plain(parseNavigationUrl('https://app.test/?screen=stock-voucher-new&warehouseId=wh&voucherType=OUTBOUND')), { screen: 'stock_voucher_create', params: { warehouseId: 'wh', voucherType: 'OUTBOUND' } });
+  assert.equal(parseNavigationUrl('https://app.test/?screen=create-container').screen, 'create_container');
+});
 test('Home roster is scoped to the current warehouse and map, retaining actual offline/disabled states', () => {
   const context = { warehouse: { id: 'wh' }, map: { id: 'map-new', warehouseId: 'wh' } };
   const base = { warehouseId: 'wh', currentMapVersionId: 'map-new', isEnabled: true, isOnline: true, status: 'AVAILABLE', batteryPercent: 75, linearVelocity: 0 };

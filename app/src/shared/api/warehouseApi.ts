@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { apiFetch, ApiError, getAccessToken } from './client';
 import { requireMobileCapability } from './capabilities';
 import type { ContainerStatus, ShelfSlotOccupancy, StockVoucherStatus, StockVoucherType } from '../types/contracts';
 export interface WarehouseListItem { id: string; code: string; name: string; isActive: boolean; createdAt: string }
@@ -45,8 +45,8 @@ function queryString(params: Record<string, string | number | boolean | undefine
   Object.entries(params).forEach(([key, value]) => { if (value !== undefined) query.set(key, String(value)); });
   return query.size ? `?${query}` : '';
 }
-export function listWarehouses(params: { isActive?: boolean; skip?: number; take?: number } = {}) {
-  return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${queryString(params)}`);
+export function listWarehouses(params: { isActive?: boolean; skip?: number; take?: number } = {}, signal?: AbortSignal) {
+  return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${queryString(params)}`, { signal });
 }
 export async function listContainers(params: { warehouseId: string; search?: string; eligibleOnly?: boolean; take?: number }): Promise<ListContainersResponse> {
   const response = await apiFetch<ListContainersResponse>(`/api/warehouse/containers${queryString(params)}`);
@@ -69,16 +69,17 @@ export function getContainerByBarcode(barcode: string) {
 export function listInventory(params: { warehouseId: string; search?: string; skip?: number; take?: number }) {
   return apiFetch<{ items: InventoryStockItem[]; total: number }>(`/api/warehouse/inventory${queryString(params)}`);
 }
-export function listProducts(params: { search?: string; categoryId?: string; isActive?: boolean; skip?: number; take?: number } = {}) {
-  return apiFetch<{ items: ProductItem[]; total: number }>(`/api/warehouse/products${queryString(params)}`);
+export function listProducts(params: { search?: string; categoryId?: string; isActive?: boolean; skip?: number; take?: number } = {}, signal?: AbortSignal) {
+  return apiFetch<{ items: ProductItem[]; total: number }>(`/api/warehouse/products${queryString(params)}`, { signal });
 }
-export function listProductCategories() {
-  return apiFetch<{ items: ProductCategoryItem[]; total: number }>('/api/warehouse/product-categories');
+export function listProductCategories(signal?: AbortSignal) {
+  return apiFetch<{ items: ProductCategoryItem[]; total: number }>('/api/warehouse/product-categories', { signal });
 }
-export function resolveProduct(params: { barcode?: string; search?: string }) {
+export interface ResolveProductResponse { exactMatch: ProductItem | null; items: ProductItem[] }
+export function resolveProduct(params: { barcode?: string; search?: string }, signal?: AbortSignal) {
   requireMobileCapability('resolveProduct');
   // The API names the keyword `query`.
-  return apiFetch<{ exactMatch: ProductItem | null; items: ProductItem[] }>(`/api/warehouse/products/resolve${queryString({ barcode: params.barcode, query: params.search })}`);
+  return apiFetch<ResolveProductResponse>(`/api/warehouse/products/resolve${queryString({ barcode: params.barcode?.trim(), query: params.search?.trim() })}`, { signal });
 }
 export async function listStorageLocations(params: { warehouseId: string; activeOnly?: boolean }): Promise<ListStorageLocationsResponse> {
   const response = await apiFetch<{ items: Omit<StorageLocationListItem, 'shelfSlots' | 'zone' | 'zoneLabel'>[]; total: number }>(
@@ -126,14 +127,57 @@ export interface StockVoucherListItem {
   id: string; code: string; type: StockVoucherType; status: StockVoucherStatus; referenceNo: string | null; note: string | null;
   createdAt: string; confirmedAt: string | null; containerCount: number; doneCount: number;
 }
-export function listStockVouchers(params: { warehouseId: string; type?: StockVoucherType; status?: StockVoucherStatus; take?: number }) {
-  return apiFetch<{ items: StockVoucherListItem[]; total: number }>(`/api/warehouse/stock-vouchers${queryString(params)}`);
+export interface StockVoucherPage { items: StockVoucherListItem[]; total: number }
+export interface StockVoucherLine {
+  id: string; lineNo: number; containerId: string; containerBarcode: string; containerStatus: string;
+  productId: string; productSku: string; productName: string;
+  currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
+  currentEndpointId: string | null; currentLevelNo: number | null; done: boolean;
+}
+export interface StockVoucherDetail extends StockVoucherListItem {
+  warehouseId: string; warehouseCode: string; warehouseName: string; createdBy: string; updatedAt: string;
+  confirmedBy: string | null; cancelledBy: string | null; cancelledAt: string | null;
+  products: { productId: string; productSku: string; productName: string; containerCount: number; doneCount: number }[];
+  lines: StockVoucherLine[];
+}
+export function listStockVouchers(params: { warehouseId: string; type?: StockVoucherType; status?: StockVoucherStatus; search?: string; skip?: number; take?: number }, signal?: AbortSignal) {
+  return apiFetch<StockVoucherPage>(`/api/warehouse/stock-vouchers${queryString(params)}`, { signal });
+}
+function validVoucherDetail(result: StockVoucherDetail | null): result is StockVoucherDetail {
+  return !!result && typeof result.id === 'string' && !!result.id && typeof result.code === 'string'
+    && typeof result.warehouseId === 'string' && ['INBOUND', 'OUTBOUND'].includes(result.type)
+    && ['DRAFT', 'CONFIRMED', 'CANCELLED'].includes(result.status) && Number.isInteger(result.containerCount) && result.containerCount >= 0
+    && Array.isArray(result.lines) && result.containerCount === result.lines.length && result.lines.every(line => line && typeof line.id === 'string'
+      && typeof line.containerBarcode === 'string' && !!line.containerBarcode.trim() && typeof line.containerStatus === 'string'
+      && typeof line.productName === 'string' && typeof line.productSku === 'string');
+}
+export async function getStockVoucher(id: string, signal?: AbortSignal) {
+  const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}`, { signal });
+  if (result?.id !== id) throw new ApiError(502, 'voucher_identity_mismatch', 'This voucher could not be verified. Refresh and try again.');
+  if (!validVoucherDetail(result)) throw new ApiError(502, 'voucher_response_invalid', 'The voucher details could not be read. Refresh and try again.');
+  return result;
+}
+export interface CreateStockVoucherDraftBody {
+  warehouseId: string; type: StockVoucherType; referenceNo?: string; note?: string;
+}
+/** Creates only document metadata. No stock is posted and no Container codes are allocated. */
+export async function createStockVoucherDraft(body: CreateStockVoucherDraftBody, signal?: AbortSignal) {
+  requireMobileCapability('createStockVoucherDraft');
+  const result = await apiFetch<StockVoucherDetail>('/api/warehouse/stock-vouchers', {
+    method: 'POST', signal,
+    body: JSON.stringify({ warehouseId: body.warehouseId, type: body.type, referenceNo: body.referenceNo?.trim() || null, note: body.note?.trim() || null }),
+  }, getAccessToken());
+  if (!validVoucherDetail(result) || !result.code || result.warehouseId !== body.warehouseId || result.type !== body.type || result.status !== 'DRAFT') {
+    throw new ApiError(502, 'voucher_creation_unverified', 'Could not verify the created draft. Check the voucher list before creating again.');
+  }
+  return result;
 }
 /** WH-01: names the shelf of an IN_TRANSIT or HOLD Container. 409 `container_in_active_transport` while a request moves it. */
 export function recoverContainer(id: string, body: { storageLocationId: string; levelNo: number; note?: string }) {
   return apiFetch<unknown>(`/api/warehouse/containers/${id}/recover`, { method: 'POST', body: JSON.stringify(body) });
 }
-/** Putaway needs the phiếu nhập CONFIRMED; confirming does not wait for robots. */
+/** Gated until confirming also posts stock according to the approved Inbound/Outbound rules. */
 export function confirmStockVoucher(id: string) {
+  requireMobileCapability('confirmStockVoucher');
   return apiFetch<StockVoucherListItem>(`/api/warehouse/stock-vouchers/${id}/confirm`, { method: 'POST' });
 }
