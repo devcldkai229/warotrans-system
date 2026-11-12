@@ -21,6 +21,8 @@ public sealed class RobotControlEndpointTests(WaroTransWebApplicationFactory fac
         var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
         var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), "RBT-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(), "R", DateTimeOffset.UtcNow);
         robot.IsOnline = online;
+        // The connectivity monitor (1 s tick, 2 s timeout in tests) turns an online robot without a heartbeat OFFLINE mid-test.
+        robot.LastHeartbeatAt = online ? DateTimeOffset.UtcNow.AddHours(1) : null;
         robot.Status = online ? RobotStatus.AVAILABLE : RobotStatus.OFFLINE;
         change?.Invoke(robot);
         db.Robots.Add(robot);

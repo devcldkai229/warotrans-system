@@ -476,6 +476,8 @@ public sealed class RobotPositioningTests(WaroTransWebApplicationFactory factory
         var now = DateTimeOffset.UtcNow;
         var robot = Robot.Register(seed.WarehouseId, seed.MapVersionId, "RBT-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(), "R", now);
         robot.IsOnline = online;
+        // The connectivity monitor (1 s tick, 2 s timeout in tests) turns an online robot without a heartbeat OFFLINE mid-test.
+        robot.LastHeartbeatAt = online ? DateTimeOffset.UtcNow.AddHours(1) : null;
         robot.Status = RobotStatus.AVAILABLE;
         robot.LocalizationStatus = LocalizationStatus.LOCALIZED;
         robot.LastHeartbeatAt = now;

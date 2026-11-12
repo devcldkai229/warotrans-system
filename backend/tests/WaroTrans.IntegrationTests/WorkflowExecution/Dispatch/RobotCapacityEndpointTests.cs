@@ -23,6 +23,8 @@ public sealed class RobotCapacityEndpointTests(WaroTransWebApplicationFactory fa
         var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
         var robot = Robot.Register(seed.WarehouseId, seed.MapVersionId, "RBT-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(), "R", DateTimeOffset.UtcNow);
         robot.IsOnline = true;
+        // The connectivity monitor (1 s tick, 2 s timeout in tests) turns an online robot without a heartbeat OFFLINE mid-test.
+        robot.LastHeartbeatAt = DateTimeOffset.UtcNow.AddHours(1);
         robot.Status = RobotStatus.AVAILABLE;
         robot.LocalizationStatus = LocalizationStatus.LOCALIZED;
         robot.LastHeartbeatAt = DateTimeOffset.UtcNow;

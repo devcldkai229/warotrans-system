@@ -65,6 +65,8 @@ public sealed class SensitiveRouteAuthorizationTests(WaroTransWebApplicationFact
         var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
         var robot = Robot.Register(Guid.NewGuid(), Guid.NewGuid(), code, "Robot " + code, DateTimeOffset.UtcNow);
         robot.IsOnline = online;
+        // The connectivity monitor (1 s tick, 2 s timeout in tests) turns an online robot without a heartbeat OFFLINE mid-test.
+        robot.LastHeartbeatAt = online ? DateTimeOffset.UtcNow.AddHours(1) : null;
         db.Robots.Add(robot);
         await db.SaveChangesAsync();
         return robot.Id;

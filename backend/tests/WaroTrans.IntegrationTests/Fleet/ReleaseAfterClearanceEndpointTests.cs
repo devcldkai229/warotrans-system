@@ -22,6 +22,8 @@ public sealed class ReleaseAfterClearanceEndpointTests(WaroTransWebApplicationFa
         var code = "RBT-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         var robot = Robot.Register(seed.WarehouseId, seed.MapVersionId, code, "R", DateTimeOffset.UtcNow);
         robot.IsOnline = online;
+        // The connectivity monitor (1 s tick, 2 s timeout in tests) turns an online robot without a heartbeat OFFLINE mid-test.
+        robot.LastHeartbeatAt = online ? DateTimeOffset.UtcNow.AddHours(1) : null;
         robot.Status = RobotStatus.AVAILABLE;
         robot.LocalizationStatus = localization ?? LocalizationStatus.LOST;
         robot.LastTelemetryAt = DateTimeOffset.UtcNow;
