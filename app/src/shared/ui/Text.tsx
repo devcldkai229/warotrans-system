@@ -5,7 +5,8 @@ import {
   TextProps as RNTextProps,
   TextStyle,
 } from 'react-native';
-import { ColorToken, colors } from '../theme/colors';
+import { ColorToken, LIGHT_HEX_TO_TOKEN, ThemeColors } from '../theme/colors';
+import { useThemeColors } from '../theme/ThemeContext';
 import { TextVariant, typography } from '../theme/typography';
 
 /**
@@ -27,31 +28,30 @@ export type TextColor = ColorToken | (string & {});
  * Resolve a `Text` `color` prop: token name first, then the literal string,
  * then the per-variant default.
  */
-function resolveColor(color: TextColor | undefined, fallback: string): string {
+function resolveColor(
+  color: TextColor | undefined,
+  fallback: string,
+  activeColors: ThemeColors,
+): string {
   if (color == null) return fallback;
-  if (Object.prototype.hasOwnProperty.call(colors, color)) {
-    const token = (colors as Record<string, unknown>)[color];
+  if (Object.prototype.hasOwnProperty.call(activeColors, color)) {
+    const token = (activeColors as Record<string, unknown>)[color];
     if (typeof token === 'string') return token;
+  }
+  const normalized = color.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(LIGHT_HEX_TO_TOKEN, normalized)) {
+    const mappedToken = LIGHT_HEX_TO_TOKEN[normalized];
+    return activeColors[mappedToken];
   }
   return color;
 }
 
-/**
- * Default foreground per variant, so `<Text variant="caption">` is readable
- * without restating a colour at every call site. Anything that carries meaning
- * an operator must not skim past (a step title, a barcode) uses `body` or
- * heavier, which defaults to full-strength `textPrimary`.
- */
-const DEFAULT_COLOR: Record<TextVariant, string> = {
-  display: colors.textPrimary,
-  title: colors.textPrimary,
-  headline: colors.textPrimary,
-  body: colors.textPrimary,
-  bodyMedium: colors.textPrimary,
-  label: colors.textSecondary,
-  caption: colors.textSecondary,
-  code: colors.textPrimary,
-};
+function defaultColorForVariant(variant: TextVariant, activeColors: ThemeColors): string {
+  if (variant === 'label' || variant === 'caption') {
+    return activeColors.textSecondary;
+  }
+  return activeColors.textPrimary;
+}
 
 export interface TextProps extends Omit<RNTextProps, 'style'> {
   /** Typographic step. Defaults to `body`. */
@@ -90,6 +90,7 @@ export function Text({
   children,
   ...rest
 }: TextProps) {
+  const activeColors = useThemeColors();
   const useMono = mono ?? variant === 'code';
 
   return (
@@ -98,7 +99,7 @@ export function Text({
       style={[
         typography[variant],
         { fontFamily: useMono ? typography.fontMono : typography.fontSans },
-        { color: resolveColor(color, DEFAULT_COLOR[variant]) },
+        { color: resolveColor(color, defaultColorForVariant(variant, activeColors), activeColors) },
         textAlign ? { textAlign } : null,
         fontWeight ? { fontWeight } : null,
         style,

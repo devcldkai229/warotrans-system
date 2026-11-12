@@ -72,13 +72,13 @@ export function listMapVersionsForWarehouse(warehouseId: string) {
   return apiFetch<MapVersionDto[]>(`/api/navigation/warehouses/${warehouseId}/maps`);
 }
 
-export function getMapVersionDetail(id: string) {
-  return apiFetch<MapVersionDetailDto>(`/api/navigation/maps/${id}/detail`);
+export function getMapVersionDetail(id: string, signal?: AbortSignal) {
+  return apiFetch<MapVersionDetailDto>(`/api/navigation/maps/${id}/detail`, { signal });
 }
 
-export async function getActiveMapVersion(warehouseId: string): Promise<MapVersionDto | null> {
+export async function getActiveMapVersion(warehouseId: string, signal?: AbortSignal): Promise<MapVersionDto | null> {
   try {
-    return await apiFetch<MapVersionDto>(`/api/navigation/warehouses/${warehouseId}/active-map`);
+    return await apiFetch<MapVersionDto>(`/api/navigation/warehouses/${warehouseId}/active-map`, { signal });
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.code === 'active_map_not_found')) {
       return null;

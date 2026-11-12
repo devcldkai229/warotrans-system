@@ -3,7 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import type { RobotResponse } from '../../types/contracts';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
-import { colors } from '../../theme/colors';
+import { ThemeColors } from '../../theme/colors';
+import { useThemeColors, useThemedStyles } from '../../theme/ThemeContext';
 import { Text } from '../../ui';
 import { MapAnchor } from '../MapAnchor';
 import { mapHeading } from '../mapModel';
@@ -14,6 +15,8 @@ import { MapControl } from '../MapHud';
 
 interface Props {map:MapVersionDetailDto;frame:MapFrame;robots:RobotResponse[];camera:MapCameraController;selected:string;now:number;updateMode?:MapUpdateMode;onSelect:(code:string)=>void}
 export function RobotLayer({map,frame,robots,camera,selected,now,updateMode='polling',onSelect}:Props) {
+  const colors = useThemeColors();
+  const styles = useThemedStyles(createStyles);
   return <View style={StyleSheet.absoluteFill} pointerEvents="box-none">{robots.filter(robot=>robot.currentMapVersionId===map.id).map(robot=>{
     const state=mapRobotState(robot,map,now,updateMode),point=worldToBase({x:robot.poseX,y:robot.poseY},map,frame);
     if(!state.showPose||!point)return null;
@@ -33,7 +36,7 @@ export function RobotLayer({map,frame,robots,camera,selected,now,updateMode='pol
     </MapAnchor>;
   })}</View>;
 }
-const styles=StyleSheet.create({
+const createStyles=(colors:ThemeColors)=>StyleSheet.create({
   target:{flex:1,minHeight:48,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong,borderRadius:12},
   selected:{borderWidth:2,borderColor:colors.primary,backgroundColor:colors.primaryLight},lastReported:{borderStyle:'dashed'},
 });

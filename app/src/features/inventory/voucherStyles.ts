@@ -1,0 +1,43 @@
+import { StyleSheet } from 'react-native';
+import { ThemeColors } from '../../shared/theme/colors';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { radii } from '../../shared/theme/radii';
+
+export const createVoucherStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 16, gap: 18, paddingBottom: 24, flexGrow: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  flex: { flex: 1, minWidth: 0, gap: 4 },
+  iconButton: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.primaryLight },
+  warehouse: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, alignSelf: 'flex-start', maxWidth: '100%', paddingRight: 10 },
+  toolbar: { gap: 12 },
+  statusBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  statusFilter: { flexDirection: 'row', alignItems: 'center', minHeight: 44, gap: 6, paddingHorizontal: 10, borderRadius: radii.sm, backgroundColor: colors.surface },
+  ledger: { backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden' },
+  ledgerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, minHeight: 92, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  direction: { width: 36, height: 36, borderRadius: radii.control, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
+  outbound: { backgroundColor: colors.warningBg },
+  ledgerMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4 },
+  error: { padding: 14, gap: 10, backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: 1, borderColor: colors.warningBorder },
+  pressed: { opacity: 0.7 },
+  dropdownAnchor: { position: 'relative' },
+  dropdownLayer: { zIndex: 20 },
+  dropdownDismiss: { zIndex: 10 },
+  warehouseMenu: { position: 'absolute', top: 50, left: 0, width: 240, maxWidth: '100%', backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingVertical: 4, zIndex: 30, ...shadows.md },
+  statusMenu: { position: 'absolute', top: 50, right: 0, width: 188, backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingVertical: 4, zIndex: 30, ...shadows.md },
+  dropdownScroll: { maxHeight: 240 },
+  dropdownOption: { minHeight: 44, marginHorizontal: 4, borderRadius: radii.sm, paddingHorizontal: 10, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dropdownSelected: { backgroundColor: colors.primaryLight },
+  formSection: { gap: 16 },
+  typeCard: { padding: 16, gap: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg, backgroundColor: colors.surface },
+  footer: { padding: 16, gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.surface },
+  stepTrack: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  step: { flex: 1, gap: 6, alignItems: 'center' },
+  stepNumber: { width: 28, height: 28, borderRadius: radii.full, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  stepCurrent: { backgroundColor: colors.primaryLight },
+  stepLine: { height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong, flex: 0.3, marginTop: 14 },
+  containerRow: { paddingVertical: 14, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  stat: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  state: { paddingVertical: 28, gap: 12, alignItems: 'center' },
+});

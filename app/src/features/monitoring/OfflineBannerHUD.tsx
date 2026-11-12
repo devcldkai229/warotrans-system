@@ -15,12 +15,14 @@ import {
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 
 export function OfflineBannerHUD() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { goBack } = useNavigation();
   const { isConnected } = useRealtime();
   const connection = useQuery({ queryKey: ['connection-check'], queryFn: getCurrentAccount, retry: false });
@@ -46,13 +48,13 @@ export function OfflineBannerHUD() {
         <View style={styles.queueHeader}><Text style={styles.queueTitle}>If An Action Fails</Text></View>
         <Text style={styles.taskLabel}>Reconnect, reopen the Job or request, and check its current status before trying again. The server may have received an action even if its response was lost.</Text>
       </View>
-      <Button label="Check Connection" icon={<RefreshCw size={18} color={colors.textInverse} />}
+      <Button label="Check Connection" icon={<RefreshCw size={18} color="#ffffff" />}
         onPress={() => { void connection.refetch(); }} loading={connection.isFetching} size="lg" />
     </ScrollView>
   </View>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -94,7 +96,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   retryPill: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
     paddingHorizontal: 8,
@@ -126,7 +128,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   queueCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,

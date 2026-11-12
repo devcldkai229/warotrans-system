@@ -1,20 +1,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { receivingCount, productForScannedBarcode, receivingLocations, registerReceivingBatch } = require('./load-module.cjs')()('src/features/inventory/receivingData.ts');
+const { receivingCount, receivingLocations, registerReceivingBatch } = require('./load-module.cjs')()('src/features/inventory/receivingData.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 
 test('registration count rejects fractions, scientific notation and counts outside the existing batch limit', () => {
   for (const value of ['', '0', '-1', '1.5', '1e1', '11', 'ten']) assert.equal(receivingCount(value), null);
   assert.equal(receivingCount(' 1 '), 1);
   assert.equal(receivingCount('10'), 10);
-});
-test('scanned product needs a unique exact active catalog match', () => {
-  const product = { id: 'p1', sku: 'SKU-1', supplierBarcode: 'BAR-1', isActive: true };
-  assert.equal(productForScannedBarcode([product], ' bar-1 '), product);
-  assert.equal(productForScannedBarcode([product], 'sku-1'), product);
-  assert.equal(productForScannedBarcode([product], 'BAR'), null);
-  assert.equal(productForScannedBarcode([{ ...product, isActive: false }], 'BAR-1'), null);
-  assert.equal(productForScannedBarcode([product, { ...product, id: 'duplicate' }], 'BAR-1'), null);
 });
 test('receiving choices exclude another map, warehouse, disabled or non-storage targets', () => {
   const endpoint = { id: 'ep', mapVersionId: 'current-map', endpointType: 'WAYPOINT', isEnabled: true };

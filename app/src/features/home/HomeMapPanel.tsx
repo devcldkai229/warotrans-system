@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { MapPin } from 'lucide-react-native';
 import { getOperatingContext, getMapVersionDetail } from '../../shared/api';
 import { Button, Text } from '../../shared/ui';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { hasMapCalibration } from '../../shared/utils/mapCoordinates';
 import { OperationalMap } from './OperationalMap';
 import type { RobotDto } from '../../shared/api';
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props) {
+  const styles = useThemedStyles(createStyles);
   const operating = useQuery({ queryKey: ['operating-context'], queryFn: () => getOperatingContext(), staleTime: 0, refetchInterval: 30_000 });
   const active = operating.data?.map;
   const warehouseId = operating.data?.warehouse.id;
@@ -46,7 +48,7 @@ export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props
     </View>}
   </View>;
 }
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   state: { position: 'absolute', top: 0, left: 24, right: 24, justifyContent: 'center', alignItems: 'center', gap: 14 },
   icon: { width: 56, height: 56, borderRadius: 18, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
 });

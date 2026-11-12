@@ -10,9 +10,10 @@ import { zoneColor, zoneLabel } from '../../shared/maps/mapPresentation';
 import { resolveMapPreviewUri, worldToMapPercent } from '../../shared/utils/mapCoordinates';
 import { Button, Text } from '../../shared/ui';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { MapViewport } from '../../shared/maps/MapViewport';
 import { interactiveMapEnabled } from '../../shared/maps/mapFeatures';
 import { mapRobotState, mapUpdateLabel, type MapUpdateMode } from '../../shared/maps/mapTelemetry';
@@ -33,6 +34,7 @@ export function OperationalMap(props: Props) {
 }
 
 function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bottomInset, updateMode = 'polling' }: Props) {
+  const styles = useThemedStyles(createStyles);
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [layersOpen, setLayersOpen] = useState(false);
   const [endpointId, setEndpointId] = useState<string | null>(null);
@@ -163,12 +165,13 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
 }
 
 function LocationSheet({endpoint,onClose}:{endpoint:EndpointDto;onClose:()=>void}) {
+  const styles = useThemedStyles(createStyles);
   return <BottomSheet onClose={onClose} accessibilityLabel="location details"><View style={styles.sheetTitle}><Text variant="title" style={styles.flex}>Location Details</Text><Button title="Close" icon={X} variant="ghost" size="sm" onPress={onClose} /></View>
     <ScrollView contentContainerStyle={styles.sheetContent}><Text variant="title">{endpoint.name}</Text><Text variant="code">{endpoint.code}</Text><Text variant="body">{endpoint.endpointType}</Text><Text variant="body">X {endpoint.x.toFixed(2)} m · Y {endpoint.y.toFixed(2)} m</Text><Text variant="caption">Configured By Admin</Text></ScrollView>
   </BottomSheet>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   root:{...StyleSheet.absoluteFill,backgroundColor:colors.background,overflow:'hidden'},
   floatingTool:{position:'absolute',top:12,right:16,zIndex:10},
   heading:{position:'absolute',top:0,left:0,right:0,padding:16,gap:12}, headingRow:{flexDirection:'row',gap:12,alignItems:'center'}, titleGroup:{flex:1,minWidth:0,gap:3},

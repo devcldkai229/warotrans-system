@@ -28,9 +28,9 @@ import {
 import type { EndpointDto, MapVersionDetailDto } from '../api/navigationApi';
 import { getAccessToken, getApiBaseUrl } from '../api/client';
 import type { RobotResponse } from '../types/contracts';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
-import { shadows } from '../theme/shadows';
+import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 import { Button, SegmentedControl, StatusPill, Text } from '../ui';
 import { BottomSheet } from '../ui/BottomSheet';
@@ -68,56 +68,58 @@ interface LayerItemConfig {
   tint: string;
 }
 
-const LAYER_ITEMS: LayerItemConfig[] = [
-  {
-    key: 'stations',
-    label: 'Stations & Docks',
-    desc: 'Pick, drop & charging points',
-    icon: MapPin,
-    bg: colors.primaryLight,
-    tint: colors.primary,
-  },
-  {
-    key: 'labels',
-    label: 'Labels & Identifiers',
-    desc: 'Station & rack code tags',
-    icon: Tag,
-    bg: colors.surfaceMuted,
-    tint: colors.textSecondary,
-  },
-  {
-    key: 'zones',
-    label: 'Operational Zones',
-    desc: 'Staging, buffer & storage areas',
-    icon: Layers,
-    bg: '#ede9fe',
-    tint: '#7c3aed',
-  },
-  {
-    key: 'lanes',
-    label: 'Lane Directions',
-    desc: 'Movement corridor paths',
-    icon: Navigation,
-    bg: '#e0f2fe',
-    tint: '#0284c7',
-  },
-  {
-    key: 'grid',
-    label: '1m Metric Grid',
-    desc: 'Floor measurement overlay',
-    icon: Grid3X3,
-    bg: colors.surfaceMuted,
-    tint: colors.textSecondary,
-  },
-  {
-    key: 'scan',
-    label: 'SLAM Occupancy Scan',
-    desc: 'Raw laser sensor footprint',
-    icon: Scan,
-    bg: '#fef3c7',
-    tint: '#d97706',
-  },
-];
+function getLayerItems(colors: ThemeColors, isDark: boolean): LayerItemConfig[] {
+  return [
+    {
+      key: 'stations',
+      label: 'Stations & Docks',
+      desc: 'Pick, drop & charging points',
+      icon: MapPin,
+      bg: colors.primaryLight,
+      tint: colors.primaryText,
+    },
+    {
+      key: 'labels',
+      label: 'Labels & Identifiers',
+      desc: 'Station & rack code tags',
+      icon: Tag,
+      bg: colors.surfaceMuted,
+      tint: colors.textSecondary,
+    },
+    {
+      key: 'zones',
+      label: 'Operational Zones',
+      desc: 'Staging, buffer & storage areas',
+      icon: Layers,
+      bg: isDark ? 'rgba(139, 92, 246, 0.22)' : '#ede9fe',
+      tint: isDark ? '#c4b5fd' : '#7c3aed',
+    },
+    {
+      key: 'lanes',
+      label: 'Lane Directions',
+      desc: 'Movement corridor paths',
+      icon: Navigation,
+      bg: colors.infoBg,
+      tint: colors.infoText,
+    },
+    {
+      key: 'grid',
+      label: '1m Metric Grid',
+      desc: 'Floor measurement overlay',
+      icon: Grid3X3,
+      bg: colors.surfaceMuted,
+      tint: colors.textSecondary,
+    },
+    {
+      key: 'scan',
+      label: 'SLAM Occupancy Scan',
+      desc: 'Raw laser sensor footprint',
+      icon: Scan,
+      bg: colors.warningBg,
+      tint: colors.warningText,
+    },
+  ];
+}
 
 const PRESET_OPTIONS = [
   { label: 'Operations', value: 'operations' },
@@ -134,6 +136,7 @@ function AppleSwitch({
   onToggle: () => void;
   accessibilityLabel: string;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable
       onPress={onToggle}
@@ -157,6 +160,7 @@ function AppleSwitch({
 
 /** Shared presentation only: screens own API, auth, map identity and navigation. */
 export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Overview',showHeader=true,fullBleed=false,...props}:Props) {
+  const styles = useThemedStyles(createStyles);
   const [bounds,setBounds]=useState({width:0,height:0});
   const [headerHeight,setHeaderHeight]=useState(showHeader ? 68 : 0);
   const {map,robots,selectedRobot,updateMode='polling'}=props;
@@ -185,6 +189,9 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
 }
 
 function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const layerItems = useMemo(() => getLayerItems(colors, isDark), [colors, isDark]);
   const {now,active,reducedMotion}=useMapEnvironment();
   const [following,setFollowing]=useState(false);
   const stopFollowing=useCallback(()=>setFollowing(false),[]);
@@ -375,8 +382,8 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                   DISPLAY LAYERS
                 </Text>
                 <View style={styles.groupedCard}>
-                  {LAYER_ITEMS.map((item, idx) => {
-                    const isLast = idx === LAYER_ITEMS.length - 1;
+                  {layerItems.map((item, idx) => {
+                    const isLast = idx === layerItems.length - 1;
                     const isActive = layers[item.key];
                     const Icon = item.icon;
                     return (
@@ -757,7 +764,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
   </>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) => StyleSheet.create({
   root: { ...StyleSheet.absoluteFill, backgroundColor: colors.background, overflow: 'hidden' },
   heading: { position: 'absolute', left: 16, right: 16, gap: 3, paddingTop: 8, paddingBottom: 6 },
   smallState: { position: 'absolute', left: 24, right: 24, justifyContent: 'center' },
@@ -894,7 +901,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   switchTrackInactive: {
-    backgroundColor: '#dcdfe4',
+    backgroundColor: isDark ? colors.borderStrong : '#dcdfe4',
   },
   switchThumb: {
     width: 22,

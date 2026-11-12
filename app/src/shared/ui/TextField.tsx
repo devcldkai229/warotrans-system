@@ -9,8 +9,9 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 import { Text } from './Text';
 
@@ -56,6 +57,7 @@ export function TextField({
   ...props
 }: TextFieldProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const styles = useThemedStyles(createStyles);
   /**
    * `showClearButton` is a request, not a command: clearing a read-only field
    * would leave the operator staring at a value they cannot edit or remove, so
@@ -136,60 +138,58 @@ export function TextField({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-  },
-  label: {
-    marginBottom: 6,
-  },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 48,
-    paddingHorizontal: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.control,
-  },
-  fieldFocused: {
-    borderColor: colors.primary,
-  },
-  fieldError: {
-    borderColor: colors.danger,
-    backgroundColor: colors.dangerBg,
-  },
-  fieldDisabled: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  adornment: {
-    marginRight: 8,
-    flexShrink: 0,
-  },
-  input: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: 12,
-    // Same step as `<Text variant="body">`, including the family: a raw
-    // `fontSize` here left the field rendering in the browser's default face on
-    // web while every label around it rendered in Inter.
-    ...typography.bodyMedium,
-    fontFamily: typography.fontSans,
-    color: colors.textPrimary,
-  },
-  clearBtn: {
-    width: 28,
-    height: 28,
-    marginLeft: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.pill,
-  },
-  clearBtnPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  helper: {
-    marginTop: 6,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      width: '100%',
+    },
+    label: {
+      marginBottom: 6,
+    },
+    field: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 48,
+      paddingHorizontal: 12,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radii.control,
+    },
+    fieldFocused: {
+      borderColor: colors.primary,
+    },
+    fieldError: {
+      borderColor: colors.danger,
+      backgroundColor: colors.dangerBg,
+    },
+    fieldDisabled: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    adornment: {
+      marginRight: 8,
+      flexShrink: 0,
+    },
+    input: {
+      flex: 1,
+      minWidth: 0,
+      paddingVertical: 12,
+      ...typography.bodyMedium,
+      fontFamily: typography.fontSans,
+      color: colors.textPrimary,
+    },
+    clearBtn: {
+      width: 28,
+      height: 28,
+      marginLeft: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radii.pill,
+    },
+    clearBtnPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    helper: {
+      marginTop: 6,
+    },
+  });

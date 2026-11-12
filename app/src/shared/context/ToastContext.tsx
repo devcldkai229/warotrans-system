@@ -21,7 +21,8 @@ import {
   Info,
   MapPin,
 } from 'lucide-react-native';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';
@@ -81,6 +82,7 @@ export const toast = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const styles = useThemedStyles(createStyles);
   const [currentToast, setCurrentToast] = useState<ToastOptions | null>(null);
   const animValue = useRef(new Animated.Value(0)).current;
   const isWeb = Platform.OS === 'web';
@@ -210,56 +212,57 @@ export function useToast() {
   return context;
 }
 
-const styles = StyleSheet.create({
-  toastContainer: {
-    position: 'absolute',
-    top: Platform.select({ android: 14, default: 54 }),
-    left: 0,
-    right: 0,
-    zIndex: 999999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    elevation: 999999,
-  },
-  toastCard: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 22,
-    elevation: 12,
-  },
-  toastPressable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  iconCol: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textCol: {
-    flex: 1,
-  },
-  toastMessage: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    fontFamily: typography.fontSans,
-  },
-  toastDesc: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    fontFamily: typography.fontSans,
-    marginTop: 2,
-  },
-});
+const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) =>
+  StyleSheet.create({
+    toastContainer: {
+      position: 'absolute',
+      top: Platform.select({ android: 14, default: 54 }),
+      left: 0,
+      right: 0,
+      zIndex: 999999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      elevation: 999999,
+    },
+    toastCard: {
+      width: '100%',
+      maxWidth: 420,
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: isDark ? 0.45 : 0.12,
+      shadowRadius: 22,
+      elevation: 12,
+    },
+    toastPressable: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 11,
+      paddingHorizontal: 14,
+      gap: 10,
+    },
+    iconCol: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    textCol: {
+      flex: 1,
+    },
+    toastMessage: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      fontFamily: typography.fontSans,
+    },
+    toastDesc: {
+      fontSize: 10,
+      fontWeight: '500',
+      color: colors.textSecondary,
+      fontFamily: typography.fontSans,
+      marginTop: 2,
+    },
+  });

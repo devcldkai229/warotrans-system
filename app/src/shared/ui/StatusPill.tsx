@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors, SemanticTone } from '../theme/colors';
+import { SemanticTone, ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
+import { useThemeColors } from '../theme/ThemeContext';
 import {
   ContainerStatus,
   JobContainerStatus,
@@ -149,8 +150,9 @@ export function StatusPill({
   dot = false,
   style,
 }: StatusPillProps) {
+  const colors = useThemeColors();
   const resolvedTone = tone ?? statusTone(status);
-  const palette = TONE_PALETTE[resolvedTone];
+  const palette = getTonePalette(colors)[resolvedTone];
   const isSm = size === 'sm';
 
   return (
@@ -179,36 +181,37 @@ export function StatusPill({
   );
 }
 
-const TONE_PALETTE: Record<
-  SemanticTone,
-  { container: ViewStyle; text: string; dot: string }
-> = {
-  neutral: {
-    container: { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
-    text: colors.textSecondary,
-    dot: colors.textMuted,
-  },
-  info: {
-    container: { backgroundColor: colors.infoBg, borderColor: colors.infoBorder },
-    text: colors.infoText,
-    dot: colors.info,
-  },
-  success: {
-    container: { backgroundColor: colors.successBg, borderColor: colors.successBorder },
-    text: colors.successText,
-    dot: colors.success,
-  },
-  warning: {
-    container: { backgroundColor: colors.warningBg, borderColor: colors.warningBorder },
-    text: colors.warningText,
-    dot: colors.warning,
-  },
-  danger: {
-    container: { backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder },
-    text: colors.dangerText,
-    dot: colors.danger,
-  },
-};
+function getTonePalette(
+  colors: ThemeColors,
+): Record<SemanticTone, { container: ViewStyle; text: string; dot: string }> {
+  return {
+    neutral: {
+      container: { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+      text: colors.textSecondary,
+      dot: colors.textMuted,
+    },
+    info: {
+      container: { backgroundColor: colors.infoBg, borderColor: colors.infoBorder },
+      text: colors.infoText,
+      dot: colors.info,
+    },
+    success: {
+      container: { backgroundColor: colors.successBg, borderColor: colors.successBorder },
+      text: colors.successText,
+      dot: colors.success,
+    },
+    warning: {
+      container: { backgroundColor: colors.warningBg, borderColor: colors.warningBorder },
+      text: colors.warningText,
+      dot: colors.warning,
+    },
+    danger: {
+      container: { backgroundColor: colors.dangerBg, borderColor: colors.dangerBorder },
+      text: colors.dangerText,
+      dot: colors.danger,
+    },
+  };
+}
 
 const styles = StyleSheet.create({
   base: {

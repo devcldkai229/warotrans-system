@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Check, Clock, Navigation, ShieldCheck, User } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import type { JobStepResponse, StepType } from '../../shared/types/contracts';
 import { StatusPill, Text } from '../../shared/ui';
@@ -16,6 +17,7 @@ const STEP_TYPES: Record<StepType, { label: string; icon: typeof Check }> = {
 };
 
 export function JobStepper({ steps, endpointCode }: { steps: JobStepResponse[]; endpointCode?: string }) {
+  const { styles, colors } = useThemedStyles(createStyles);
   if (!steps.length) return <Text variant="body" color={colors.textSecondary}>No steps are available for this task.</Text>;
   return (
     <View>
@@ -30,7 +32,7 @@ export function JobStepper({ steps, endpointCode }: { steps: JobStepResponse[]; 
           <View key={step.id} style={styles.step}>
             <View style={styles.spine}>
               <View style={[styles.circle, completed && styles.completedCircle, active && styles.activeCircle, failed && styles.failedCircle]}>
-                {completed ? <Check size={14} color={colors.textInverse} /> : <Text variant="caption" color={failed ? colors.dangerText : active ? colors.primaryText : colors.textSecondary}>{index + 1}</Text>}
+                {completed ? <Check size={14} color="#ffffff" /> : <Text variant="caption" color={failed ? colors.dangerText : active ? colors.primaryText : colors.textSecondary}>{index + 1}</Text>}
               </View>
               {index < steps.length - 1 && <View style={[styles.line, completed && styles.completedLine]} />}
             </View>
@@ -70,7 +72,7 @@ export function formatJobTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   step: { flexDirection: 'row', gap: 12 },
   spine: { width: 28, alignItems: 'center' },
   circle: { width: 26, height: 26, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },

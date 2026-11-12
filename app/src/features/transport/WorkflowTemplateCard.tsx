@@ -14,9 +14,10 @@ import {
   RotateCw,
   Truck,
 } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui/Text';
 import { WorkflowItem } from './workflowTemplates';
 
@@ -29,6 +30,7 @@ export function WorkflowTemplateCard({
   workflow,
   onSelect,
 }: WorkflowTemplateCardProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const isSafety = workflow.category === 'SAFETY';
 
   const renderIcon = () => {
@@ -86,7 +88,7 @@ export function WorkflowTemplateCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderWidth: 1,

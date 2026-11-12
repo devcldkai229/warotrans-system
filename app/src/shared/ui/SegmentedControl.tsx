@@ -1,8 +1,9 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors } from '../theme/colors';
+import { colors, ThemeColors } from '../theme/colors';
 import { radii } from '../theme/radii';
-import { shadows } from '../theme/shadows';
+import { ThemeShadows } from '../theme/shadows';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { Text } from './Text';
 
 export interface SegmentedControlOption<TValue extends string = string> {
@@ -39,6 +40,7 @@ export function SegmentedControl<TValue extends string = string>({
   accessibilityLabel,
   style,
 }: SegmentedControlProps<TValue>) {
+  const styles = useThemedStyles(createStyles);
   const isSm = size === 'sm';
 
   return (
@@ -82,53 +84,45 @@ export function SegmentedControl<TValue extends string = string>({
   );
 }
 
-const styles = StyleSheet.create({
-  track: {
-    flexDirection: 'row',
-    alignSelf: 'stretch',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  trackSm: {
-    padding: 3,
-  },
-  trackMd: {
-    // The track is a floor, not a fixed height: 44pt segment + 2x4pt padding +
-    // the 1px border lands at 54pt, which is what the Jobs filter bar wants.
-    // `minHeight` only has to guarantee the control is never smaller than the
-    // 48pt touch target if a future caller compresses it.
-    minHeight: 48,
-    padding: 4,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    // `minWidth: 0` + `flexShrink: 1` on the label are what let a long segment
-    // ("My Tasks (12)") ellipsize instead of forcing the track to overflow —
-    // without them the widest label sets the width of all three segments.
-    // 44pt is the touch floor (iOS HIG / Material), not a visual size: the
-    // segment is the whole target here, so it cannot lean on `hitSlop`.
-    minHeight: 44,
-    minWidth: 0,
-    paddingHorizontal: 8,
-    borderRadius: radii.sm,
-  },
-  segmentActive: {
-    backgroundColor: colors.surface,
-    ...shadows.sm,
-  },
-  segmentPressed: {
-    opacity: 0.6,
-  },
-  label: {
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  labelActive: {
-    fontWeight: '600',
-  },
-});
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+  StyleSheet.create({
+    track: {
+      flexDirection: 'row',
+      alignSelf: 'stretch',
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    trackSm: {
+      padding: 3,
+    },
+    trackMd: {
+      minHeight: 48,
+      padding: 4,
+    },
+    segment: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+      minWidth: 0,
+      paddingHorizontal: 8,
+      borderRadius: radii.sm,
+    },
+    segmentActive: {
+      backgroundColor: colors.surface,
+      ...shadows.sm,
+    },
+    segmentPressed: {
+      opacity: 0.6,
+    },
+    label: {
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    labelActive: {
+      fontWeight: '600',
+    },
+  });

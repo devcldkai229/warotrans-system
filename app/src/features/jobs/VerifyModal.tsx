@@ -18,9 +18,9 @@ import {
   X,
   ScanLine,
 } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { toast } from '../../shared/context/ToastContext';
@@ -78,6 +78,7 @@ export function VerifyModal({
   onReportIssue,
   onRefreshJob,
 }: VerifyModalProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState(initialBarcodeInput || (initialMismatch ? 'BOX-999' : ''));
   const [mismatch, setMismatch] = useState(initialMismatch);
@@ -426,13 +427,14 @@ export function VerifyModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   failReasonInput: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     padding: 10,
     marginBottom: 8,
+    color: colors.textPrimary,
   },
   modalOverlay: {
     flex: 1,
@@ -654,7 +656,7 @@ const styles = StyleSheet.create({
   comparisonColRight: {
     borderLeftWidth: 1,
     borderLeftColor: colors.border,
-    backgroundColor: '#fff5f5',
+    backgroundColor: colors.dangerBg,
   },
   comparisonLabel: {
     fontSize: 10,

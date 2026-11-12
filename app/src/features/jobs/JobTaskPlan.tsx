@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AlertTriangle, Check, ChevronRight, Layers, MapPin, Package } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { ProgressMeter, StatusPill, Text } from '../../shared/ui';
 import type { JobStatus } from '../../shared/types/contracts';
@@ -14,6 +15,7 @@ interface JobTaskPlanProps {
 }
 
 export function JobTaskPlan({ tasks, jobStatus, onSelectTask }: JobTaskPlanProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const completedCount = tasks.filter(task => task.status === 'COMPLETED').length;
   return (
     <View style={styles.container}>
@@ -74,7 +76,7 @@ export function JobTaskPlan({ tasks, jobStatus, onSelectTask }: JobTaskPlanProps
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { backgroundColor: colors.surface, borderRadius: radii.lg, padding: 16, borderWidth: 1, borderColor: colors.border, gap: 16 },
   heading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headingIcon: { width: 36, height: 36, borderRadius: radii.md, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },

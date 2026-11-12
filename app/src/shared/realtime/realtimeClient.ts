@@ -44,12 +44,16 @@ export interface RobotTelemetryEvent {
 
 export interface LiveNotificationEvent {
   id: string;
+  kind?: string;
   category: 'ROBOT_ARRIVED' | 'HAZARD' | 'JOB_ASSIGNED' | 'BATTERY_LOW' | 'SYSTEM';
   title: string;
   message: string;
   timeLabel: string;
   robotId?: string;
   jobId?: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  createdAt?: string;
   isRead: boolean;
 }
 
@@ -64,6 +68,7 @@ export interface ServerNotificationEvent {
   entityId?: string | null;
   route?: string | null;
   createdAt: string;
+  isRead?: boolean;
 }
 
 /** Maps a server notification onto the app's live-notification shape. */
@@ -71,17 +76,23 @@ export function toLiveNotification(data: ServerNotificationEvent): LiveNotificat
   const category: LiveNotificationEvent['category'] =
     data.kind === 'ROBOT_BATTERY_LOW' ? 'BATTERY_LOW'
       : data.kind === 'ISSUE_ASSIGNED' || data.kind === 'JOB_STEP_WAITING_FOR_PERSON' ? 'JOB_ASSIGNED'
-        : data.kind.startsWith('ISSUE') ? 'HAZARD'
+        : data.kind.startsWith('ISSUE') && data.kind !== 'ISSUE_RESOLVED' ? 'HAZARD'
           : 'SYSTEM';
   return {
     id: data.id,
+    kind: data.kind,
     category,
     title: data.title,
     message: data.content,
-    timeLabel: 'now',
+    timeLabel: Number.isFinite(Date.parse(data.createdAt))
+      ? new Date(data.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : 'Time Unavailable',
     robotId: data.entityType === 'ROBOT' ? data.entityId ?? undefined : undefined,
     jobId: data.entityType === 'JOB' ? data.entityId ?? undefined : undefined,
-    isRead: false,
+    entityType: data.entityType,
+    entityId: data.entityId,
+    createdAt: data.createdAt,
+    isRead: data.isRead === true,
   };
 }
 
@@ -127,73 +138,89 @@ class RealtimeClient {
 
     const baseUrl = getApiBaseUrl();
     const hubUrl = `${baseUrl.replace(/\/$/, '')}/hubs/notifications`;
+    let conn: HubConnection | null = null;
 
     try {
-      this.connection = new HubConnectionBuilder()
+      conn = new HubConnectionBuilder()
         .withUrl(hubUrl, {
           // Refreshed first when about to expire: the server closes the connection when its token expires (RTM-01).
           accessTokenFactory: async () => (await getFreshAccessToken()) ?? '',
           transport: HttpTransportType.WebSockets | HttpTransportType.LongPolling,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-        .configureLogging(LogLevel.Warning)
+        .configureLogging(LogLevel.None)
         .build();
+      this.connection = conn;
 
-      this.connection.on('robotConnectivityChanged', (data: RobotConnectivityEvent) => {
+      conn.on('robotConnectivityChanged', (data: RobotConnectivityEvent) => {
         this.connectivityListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.on('robotTelemetryUpdated', (data: RobotTelemetryEvent) => {
+      conn.on('robotTelemetryUpdated', (data: RobotTelemetryEvent) => {
         this.telemetryListeners.forEach((fn) => fn(data));
       });
 
       // Backend NotificationsHub sends "notificationCreated" to the person / role it is for (OPS-03).
-      this.connection.on('notificationCreated', (data: ServerNotificationEvent) => {
+      conn.on('notificationCreated', (data: ServerNotificationEvent) => {
         const event = toLiveNotification(data);
         this.notificationListeners.forEach((fn) => fn(event));
       });
 
-      this.connection.on('transportRequestUpdated', (data: TransportStatusEvent) => {
+      conn.on('notificationReceived', (data: LiveNotificationEvent) => {
+        this.notificationListeners.forEach((fn) => fn(data));
+      });
+
+      conn.on('transportRequestUpdated', (data: TransportStatusEvent) => {
         this.transportStatusListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.on('jobUpdated', (data: JobUpdatedRealtimeEvent) => {
+      conn.on('transportRequestStatusChanged', (data: TransportStatusEvent) => {
+        this.transportStatusListeners.forEach((fn) => fn(data));
+      });
+
+      conn.on('jobUpdated', (data: JobUpdatedRealtimeEvent) => {
         this.jobUpdatedListeners.forEach((fn) => fn(data));
       });
 
-      this.connection.onreconnecting(() => {
+      conn.onreconnecting(() => {
         this.notifyConnectionState(false);
       });
 
-      this.connection.onreconnected(() => {
+      conn.onreconnected(() => {
         this.notifyConnectionState(true);
       });
 
-      this.connection.onclose(() => {
+      conn.onclose(() => {
         this.notifyConnectionState(false);
       });
 
-      await this.connection.start();
-      this.notifyConnectionState(true);
+      await conn.start();
+      if (this.connection === conn) {
+        this.isConnecting = false;
+        this.notifyConnectionState(true);
+      }
     } catch (err) {
-      // In local dev/demo without backend running, log quietly without halting runtime
-      console.warn('Realtime Hub connection offline or unreachable:', hubUrl);
-      this.connection = null;
-      this.notifyConnectionState(false);
-    } finally {
-      this.isConnecting = false;
+      // Ignore intentional cancellation when stop()/restart() is called during negotiation
+      if (this.connection === conn) {
+        console.warn('Realtime Hub connection offline or unreachable:', hubUrl);
+        this.connection = null;
+        this.isConnecting = false;
+        this.notifyConnectionState(false);
+      }
     }
   }
 
   public async stop(): Promise<void> {
-    if (this.connection) {
+    const conn = this.connection;
+    if (conn) {
+      this.connection = null;
+      this.isConnecting = false;
+      this.notifyConnectionState(false);
       try {
-        await this.connection.stop();
+        await conn.stop();
       } catch {
         // quiet shutdown
       }
-      this.connection = null;
-      this.notifyConnectionState(false);
     }
   }
 

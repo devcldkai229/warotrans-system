@@ -9,7 +9,8 @@ import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { Button, EmptyState, SegmentedControl, Text, TextField } from '../../shared/ui';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import {
   getContainer, getContainerByBarcode, getMapVersionDetail, getOperatingContext, getTransportRequest,
@@ -52,6 +53,7 @@ async function loadContext(repeatId: string, barcodes: string[]) {
 }
 
 export function TransportCreationScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, goBack, params } = useNavigation();
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
@@ -373,7 +375,7 @@ export function TransportCreationScreen() {
   </KeyboardAvoidingView>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background }, flex: { flex: 1, minWidth: 0 },
   content: { padding: 20, gap: 16 }, list: { paddingHorizontal: 16, paddingBottom: 20 }, listHeader: { gap: 14, paddingBottom: 10 },
   contextRow: { paddingHorizontal: 18, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6 },

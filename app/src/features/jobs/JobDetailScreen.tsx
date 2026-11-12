@@ -29,9 +29,10 @@ import {
   X,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { toast } from '../../shared/context/ToastContext';
@@ -50,6 +51,7 @@ import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { createJobRefresh } from './jobRefresh';
 
 export function JobDetailScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, goBack, params } = useNavigation();
   const topInset = useTopInset();
   const { session } = useAuth();
@@ -759,7 +761,7 @@ export function JobDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   refreshWarning: { padding: 12, gap: 8, backgroundColor: colors.warningBg, borderRadius: radii.md },
   robotSelectorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   robotSelectorChip: {

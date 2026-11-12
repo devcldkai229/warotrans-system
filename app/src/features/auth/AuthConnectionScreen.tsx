@@ -2,9 +2,10 @@ import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { WifiOff } from 'lucide-react-native';
 import { Button, Card, Text } from '../../shared/ui';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { useTopInset } from '../../shared/theme/layout';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 
 interface Props {
   message: string;
@@ -15,6 +16,7 @@ interface Props {
 
 export function AuthConnectionScreen({ message, loading, onRetry, onSignOut }: Props) {
   const topInset = useTopInset();
+  const styles = useThemedStyles(createStyles);
   return <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingTop: topInset + 32 }]}>
     <Card gap={16} padding="lg">
       <View style={styles.icon}><WifiOff size={28} color={colors.warningText} /></View>
@@ -27,7 +29,7 @@ export function AuthConnectionScreen({ message, loading, onRetry, onSignOut }: P
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 32 },
   icon: { width: 52, height: 52, borderRadius: radii.lg, backgroundColor: colors.warningBg, alignItems: 'center', justifyContent: 'center' },

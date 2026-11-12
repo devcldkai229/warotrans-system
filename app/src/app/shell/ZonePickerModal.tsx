@@ -1,10 +1,11 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { Check, MapPin } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
@@ -37,6 +38,7 @@ export function ZonePickerModal({
   onSelect,
 }: ZonePickerModalProps) {
   const topInset = useTopInset();
+  const styles = useThemedStyles(createStyles);
 
   const handleSelect = (option: string) => {
     triggerHaptic('tap');
@@ -106,65 +108,66 @@ export function ZonePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-  },
-  dropdownCard: {
-    position: 'absolute',
-    left: 16,
-    width: 265,
-    backgroundColor: '#ffffff',
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 8,
-    ...shadows.lg,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
-    marginBottom: 4,
-  },
-  headerLabel: {
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  list: {
-    gap: 1,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: colors.borderSubtle,
-    marginHorizontal: 6,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 40,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: radii.sm,
-  },
-  optionSelected: {
-    backgroundColor: colors.primaryLight,
-  },
-  optionPressed: {
-    backgroundColor: colors.surfaceSubtle,
-  },
-  optionText: {
-    flex: 1,
-    minWidth: 0,
-    fontWeight: '400',
-  },
-  optionTextSelected: {
-    fontWeight: '600',
-  },
-});
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+  StyleSheet.create({
+    backdrop: {
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.overlay,
+    },
+    dropdownCard: {
+      position: 'absolute',
+      left: 16,
+      width: 265,
+      backgroundColor: colors.surface,
+      borderRadius: radii.lg,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      padding: 8,
+      ...shadows.lg,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSubtle,
+      marginBottom: 4,
+    },
+    headerLabel: {
+      fontWeight: '600',
+      letterSpacing: 0.2,
+    },
+    list: {
+      gap: 1,
+    },
+    separator: {
+      height: 1,
+      backgroundColor: colors.borderSubtle,
+      marginHorizontal: 6,
+    },
+    option: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      minHeight: 40,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: radii.sm,
+    },
+    optionSelected: {
+      backgroundColor: colors.primaryLight,
+    },
+    optionPressed: {
+      backgroundColor: colors.surfaceSubtle,
+    },
+    optionText: {
+      flex: 1,
+      minWidth: 0,
+      fontWeight: '400',
+    },
+    optionTextSelected: {
+      fontWeight: '600',
+    },
+  });

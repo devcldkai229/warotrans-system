@@ -28,9 +28,10 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useToast } from '../../shared/context/ToastContext';
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { Text } from '../../shared/ui/Text';
@@ -58,6 +59,7 @@ const hasActiveRobotCommand = (robot: RobotUiItem) =>
   Boolean(robot.currentCommandId) || robot.status.toUpperCase() === 'BUSY' || robot.status.toUpperCase() === 'EXECUTING';
 
 export function FleetRecallScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { goBack } = useNavigation();
   const { success: showToastSuccess, error: showToastError } = useToast();
   const { robotTelemetry, robotConnectivity, isConnected } = useRealtime();
@@ -446,7 +448,7 @@ export function FleetRecallScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -602,22 +604,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   onlineTagActive: {
-    backgroundColor: '#dcfce7',
-    borderColor: '#86efac',
+    backgroundColor: colors.successBg,
+    borderColor: colors.successBorder,
   },
   onlineTagInactive: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#fca5a5',
+    backgroundColor: colors.dangerBg,
+    borderColor: colors.dangerBorder,
   },
   onlineTagText: {
     fontSize: 9,
     fontWeight: '800',
   },
   onlineTextActive: {
-    color: '#166534',
+    color: colors.successText,
   },
   onlineTextInactive: {
-    color: '#991b1b',
+    color: colors.dangerText,
   },
   /* Telemetry Grid */
   telemetryGrid: {

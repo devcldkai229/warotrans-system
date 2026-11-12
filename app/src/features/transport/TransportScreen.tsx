@@ -15,20 +15,23 @@ import {
   ChevronUp,
   History,
   LifeBuoy,
-  PackagePlus,
+  FileText,
   PauseCircle,
   Plus,
   Search,
   ShieldAlert,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { useAuth } from '../auth/authContext';
+import { canReadVouchers } from '../inventory/stockVoucherData';
 import { JOB_STATUS_PRESENTATION } from '../jobs/jobData';
 import { requestStatusLabel } from './dispatchData';
 import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { toast } from '../../shared/context/ToastContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -59,7 +62,9 @@ export interface RecentDispatchItem {
  *   - Recent Dispatches: Structured, high-contrast operational audit cards.
  */
 export function TransportScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, dockHeight } = useNavigation();
+  const { session } = useAuth();
   const { lastJobUpdate } = useRealtime();
   const { isHolding } = useSafetyHold();
   const recent = useQuery({ queryKey: ['recent-dispatches'], queryFn: () => listTransportRequests({ take: 3 }), refetchInterval: 15_000 });
@@ -152,35 +157,37 @@ export function TransportScreen() {
               </View>
 
               <View style={styles.heroBtnContent}>
-                <Text variant="bodyMedium" color={colors.textInverse} style={styles.heroBtnTitle}>
+                <Text variant="bodyMedium" color="#ffffff" style={styles.heroBtnTitle}>
                   New Request
                 </Text>
               </View>
             </Pressable>
 
-            {/* Receiving entry */}
+            {/* Warehouse documents, independent of transport requests. */}
             <Pressable
               onPress={() => {
                 triggerHaptic('tap');
-                navigate('create_container');
+                navigate('stock_vouchers');
               }}
               style={({ pressed }) => [
                 styles.heroBtnSecondary,
                 pressed && styles.heroBtnPressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Receive goods"
+              accessibilityLabel="Stock vouchers"
+              accessibilityState={{ disabled: !canReadVouchers(session) }}
+              disabled={!canReadVouchers(session)}
             >
               <View style={styles.heroBtnTopRow}>
                 <View style={styles.secondaryIconWell}>
-                  <PackagePlus size={18} color={colors.textPrimary} strokeWidth={2.2} />
+                  <FileText size={18} color={colors.textPrimary} strokeWidth={2.2} />
                 </View>
                 <ArrowRight size={16} color={colors.textMuted} />
               </View>
 
               <View style={styles.heroBtnContent}>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={styles.heroBtnTitle}>
-                  Receive Goods
+                  Stock Vouchers
                 </Text>
               </View>
             </Pressable>
@@ -368,7 +375,7 @@ export function TransportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

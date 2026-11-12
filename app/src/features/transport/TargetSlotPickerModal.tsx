@@ -14,9 +14,10 @@ import {
   Sparkles,
   X,
 } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { Text } from '../../shared/ui/Text';
 import { triggerHaptic } from '../../shared/utils/haptics';
@@ -56,6 +57,7 @@ export function TargetSlotPickerModal({
   onSelectSlot,
   onClose,
 }: TargetSlotPickerModalProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const [selectedZoneTab, setSelectedZoneTab] = useState<WarehouseZoneCode>(activeZone);
 
   React.useEffect(() => {
@@ -161,7 +163,7 @@ export function TargetSlotPickerModal({
               </Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#121317' }]} />
+              <View style={[styles.legendDot, { backgroundColor: colors.textPrimary }]} />
               <Text variant="caption" color={colors.textSecondary}>
                 Selected for {containerBarcode}
               </Text>
@@ -192,7 +194,7 @@ export function TargetSlotPickerModal({
                 <View key={rack.id} style={styles.rackCard}>
                   <View style={styles.rackHeader}>
                     <View style={styles.rackTitleRow}>
-                      <Layers size={16} color="#121317" />
+                      <Layers size={16} color={colors.textPrimary} />
                       <Text variant="bodyMedium" style={styles.rackCode}>
                         {rack.code}
                       </Text>
@@ -322,14 +324,14 @@ export function TargetSlotPickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.48)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '84%',
@@ -344,7 +346,7 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   headerBadgeRow: {
     flexDirection: 'row',
@@ -353,7 +355,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   toteBadge: {
-    backgroundColor: '#121317',
+    backgroundColor: colors.darkAction,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -366,13 +368,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: '800',
-    color: '#121317',
+    color: colors.textPrimary,
   },
   closeBtn: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -381,24 +383,24 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 18,
     paddingVertical: 10,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surfaceSubtle,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   zoneTab: {
     flex: 1,
     paddingVertical: 8,
     paddingHorizontal: 8,
     borderRadius: radii.sm,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   zoneTabActive: {
-    backgroundColor: '#121317',
-    borderColor: '#121317',
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
   },
   zoneTabText: {
     fontSize: 11.5,
@@ -416,7 +418,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.borderSubtle,
   },
   legendItem: {
     flexDirection: 'row',
@@ -436,10 +438,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   rackCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     padding: 12,
     gap: 10,
   },
@@ -457,27 +459,27 @@ const styles = StyleSheet.create({
   rackCode: {
     fontWeight: '800',
     fontFamily: typography.fontMono,
-    color: '#121317',
+    color: colors.textPrimary,
   },
   freeBadge: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.successBg,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: colors.successBorder,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: radii.full,
   },
   freeBadgeFull: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
   },
   freeBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#059669',
+    color: colors.successText,
   },
   freeBadgeTextFull: {
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   levelsGrid: {
     flexDirection: 'row',
@@ -493,20 +495,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   levelCellAvailable: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#10B981',
+    backgroundColor: colors.successBg,
+    borderColor: colors.success,
   },
   levelCellSelected: {
-    backgroundColor: '#121317',
-    borderColor: '#121317',
+    backgroundColor: colors.darkAction,
+    borderColor: colors.darkAction,
   },
   levelCellBatchUsed: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#F59E0B',
+    backgroundColor: colors.warningBg,
+    borderColor: colors.warning,
   },
   levelCellOccupied: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
     opacity: 0.75,
   },
   levelTopRow: {
@@ -517,7 +519,7 @@ const styles = StyleSheet.create({
   levelTitle: {
     fontWeight: '700',
     fontSize: 12,
-    color: '#121317',
+    color: colors.textPrimary,
   },
   levelStatusText: {
     fontSize: 10.5,

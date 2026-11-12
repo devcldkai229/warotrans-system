@@ -26,9 +26,10 @@ import {
   X,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { toast } from '../../shared/context/ToastContext';
@@ -128,6 +129,7 @@ type CategoryFilter = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'INTERNAL';
 export type TabFilter = 'TOTAL' | 'ACTIVE' | 'DONE' | 'VOID';
 
 export function TransportHistoryScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { navigate, goBack } = useNavigation();
   const { lastJobUpdate, lastTransportStatus } = useRealtime();
   const [filter, setFilter] = useState<TabFilter>('TOTAL');
@@ -578,7 +580,7 @@ export function TransportHistoryScreen() {
                         accessibilityLabel={`View request ${order.requestCode}`}
                       >
                         <Text style={styles.actionBtnPrimaryText}>View Request</Text>
-                        <ArrowRight size={14} color={colors.textInverse} style={{ marginLeft: 8 }} />
+                        <ArrowRight size={14} color="#ffffff" style={{ marginLeft: 8 }} />
                       </Pressable>
                     ) : isCompleted ? (
                       <>
@@ -649,7 +651,7 @@ export function TransportHistoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -672,7 +674,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     paddingVertical: 8,
     paddingHorizontal: 4,
     alignItems: 'center',
@@ -681,7 +683,7 @@ const styles = StyleSheet.create({
   metricCardActive: {
     borderColor: colors.darkAction,
     borderWidth: 1.5,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     ...shadows.panel,
   },
   metricNumber: {
@@ -717,7 +719,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -743,7 +745,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -795,7 +797,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -831,7 +833,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   orderCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1040,7 +1042,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

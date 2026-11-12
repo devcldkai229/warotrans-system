@@ -21,9 +21,10 @@ import {
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { Button } from '../../shared/components/Button';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { completePayloadRecoveryJob, getJobDetail, listJobs, listRobots, listContainers, getMapVersionDetail } from '../../shared/api';
@@ -31,6 +32,7 @@ import { completePayloadRecoveryJob, getJobDetail, listJobs, listRobots, listCon
 type RescuePhase = 'briefing' | 'rendezvous' | 'transfer' | 'resuming' | 'completed';
 
 export function PayloadRecoveryScreen() {
+  const { styles, colors } = useThemedStyles(createStyles);
   const { goBack, navigate, params } = useNavigation();
   const [phase, setPhase] = useState<RescuePhase>('briefing');
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
@@ -418,7 +420,7 @@ export function PayloadRecoveryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -445,7 +447,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     padding: 18,
     ...shadows.panel,
   },
@@ -525,7 +527,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: 'rgba(220, 38, 38, 0.25)',
     borderRadius: radii.lg,
@@ -574,7 +576,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -629,7 +631,7 @@ const styles = StyleSheet.create({
   },
   diagFaulted: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: 'rgba(220, 38, 38, 0.25)',
@@ -638,7 +640,7 @@ const styles = StyleSheet.create({
   },
   diagRescue: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: 'rgba(22, 163, 74, 0.25)',
@@ -691,7 +693,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   cargoCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -749,7 +751,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
   },
   actionCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,

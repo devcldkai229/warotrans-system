@@ -1,10 +1,14 @@
 import { ApiError } from './client';
 
-// Which backend features exist (not who may use them: that is the session's permissions).
+// Operations verified for the approved mobile workflow; permissions are checked separately.
 // 08/11/2026: issue reports are served by POST /api/operations/issues (OPS-01).
 export const mobileCapabilities = {
   createContainer: false,
-  resolveProduct: false,
+  createStockVoucherDraft: true,
+  // The current confirm handler changes the document only; it does not post stock at Inbound/Outbound.
+  confirmStockVoucher: false,
+  // Warehouse maps ResolveProduct with warehouse.read + StaffOrAdmin; wire contract is exactMatch/items.
+  resolveProduct: true,
   claimHumanTask: false,
   reportIssue: true,
   pauseJob: false,

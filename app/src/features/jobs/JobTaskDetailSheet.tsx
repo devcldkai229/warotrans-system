@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { X } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { ThemeColors } from '../../shared/theme/colors';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
 import { StatusPill, Text } from '../../shared/ui';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
@@ -17,6 +18,7 @@ interface JobTaskDetailSheetProps {
 }
 
 export function JobTaskDetailSheet({ task, jobNo, jobStatus, onClose }: JobTaskDetailSheetProps) {
+  const { styles, colors } = useThemedStyles(createStyles);
   const completed = task.steps.filter(step => step.status === 'COMPLETED').length;
   return (
     <BottomSheet onClose={onClose}>
@@ -45,7 +47,7 @@ export function JobTaskDetailSheet({ task, jobNo, jobStatus, onClose }: JobTaskD
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   heading: { flex: 1, minWidth: 0, gap: 4 },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

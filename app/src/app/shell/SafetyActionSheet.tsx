@@ -11,9 +11,10 @@ import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
-import { shadows } from '../../shared/theme/shadows';
+import { ThemeShadows } from '../../shared/theme/shadows';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
@@ -67,6 +68,7 @@ export function SafetyActionSheet({
   onOpenMaintenance,
 }: SafetyActionSheetProps) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
 
   const actions: SafetyAction[] = [
     {
@@ -249,127 +251,128 @@ const handlePress = (action: SafetyAction) => {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    ...shadows.lg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  iconWell: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primaryLight,
-  },
-  headerText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  closeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceSubtle,
-  },
-  closeBtnPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  list: {
-    gap: 8,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    minHeight: 60,
-    padding: 12,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  rowPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  rowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  rowIconActive: {
-    backgroundColor: colors.warningBg,
-    borderColor: colors.warningBorder,
-  },
-  rowIconDanger: {
-    backgroundColor: colors.dangerBg,
-    borderColor: colors.dangerBorder,
-  },
-  rowText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  statePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-  },
-  statePillIdle: {
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
-  },
-  statePillActive: {
-    backgroundColor: colors.warningBg,
-    borderColor: colors.warningBorder,
-  },
-  statePillText: {
-    fontWeight: '600',
-  },
-  /** `info` tint, not `warning`: nothing is wrong, the capability is missing. */
-  notice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginTop: 12,
-    padding: 12,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.infoBorder,
-    backgroundColor: colors.infoBg,
-  },
-  noticeIcon: {
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  noticeText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  closeAction: {
-    marginTop: 16,
-  },
-});
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      ...shadows.lg,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 16,
+    },
+    iconWell: {
+      width: 40,
+      height: 40,
+      borderRadius: radii.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primaryLight,
+    },
+    headerText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    closeBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceSubtle,
+    },
+    closeBtnPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    list: {
+      gap: 8,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      minHeight: 60,
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+    },
+    rowPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    rowIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    rowIconActive: {
+      backgroundColor: colors.warningBg,
+      borderColor: colors.warningBorder,
+    },
+    rowIconDanger: {
+      backgroundColor: colors.dangerBg,
+      borderColor: colors.dangerBorder,
+    },
+    rowText: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    statePill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: radii.pill,
+      borderWidth: 1,
+    },
+    statePillIdle: {
+      backgroundColor: colors.surface,
+      borderColor: colors.borderStrong,
+    },
+    statePillActive: {
+      backgroundColor: colors.warningBg,
+      borderColor: colors.warningBorder,
+    },
+    statePillText: {
+      fontWeight: '600',
+    },
+    /** `info` tint, not `warning`: nothing is wrong, the capability is missing. */
+    notice: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      marginTop: 12,
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: colors.infoBorder,
+      backgroundColor: colors.infoBg,
+    },
+    noticeIcon: {
+      flexShrink: 0,
+      marginTop: 1,
+    },
+    noticeText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    closeAction: {
+      marginTop: 16,
+    },
+  });

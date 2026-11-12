@@ -3,8 +3,9 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClipboardList, Home, Navigation } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { colors } from '../../shared/theme/colors';
+import { colors, ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
+import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { MainTab, useNavigation } from './NavigationContext';
@@ -31,6 +32,7 @@ const FALLBACK_BOTTOM_INSET = 10;
 export function BottomTabBar() {
   const { activeTab, switchTab, activeJobCount, setDockHeight } = useNavigation();
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
   const bottomInset = insets.bottom || FALLBACK_BOTTOM_INSET;
 
   const handleTabPress = (tab: MainTab) => {
@@ -97,66 +99,67 @@ const TABS: ReadonlyArray<{
   { label: 'Transport', value: 'transport', icon: Navigation },
 ];
 
-const styles = StyleSheet.create({
-  bar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 90,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    ...(Platform.OS === 'android' ? { elevation: 8 } : null),
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 24,
-  },
-  tabBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 72,
-    height: 44,
-    borderRadius: radii.full,
-    paddingHorizontal: 18,
-  },
-  tabBtnActive: {
-    backgroundColor: 'rgba(21, 87, 208, 0.08)',
-  },
-  tabBtnPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.94 }],
-  },
-  iconSlot: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  /** Lighter warm amber badge chip with crisp white border */
-  badge: {
-    position: 'absolute',
-    top: -6,
-    right: -13,
-    minWidth: 18,
-    paddingHorizontal: 4,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.full,
-    backgroundColor: '#fbbf24', // Amber 400: bright, light, warm golden
-    borderWidth: 1.5,
-    borderColor: '#ffffff',
-  },
-  badgeText: {
-    fontWeight: '800',
-    fontSize: 11,
-    lineHeight: 13,
-    color: '#78350f',
-  },
-  safeArea: {
-    backgroundColor: colors.surface,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    bar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 90,
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      ...(Platform.OS === 'android' ? { elevation: 8 } : null),
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      paddingHorizontal: 24,
+    },
+    tabBtn: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: 72,
+      height: 44,
+      borderRadius: radii.full,
+      paddingHorizontal: 18,
+    },
+    tabBtnActive: {
+      backgroundColor: colors.primaryLight,
+    },
+    tabBtnPressed: {
+      opacity: 0.7,
+      transform: [{ scale: 0.94 }],
+    },
+    iconSlot: {
+      position: 'relative',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    /** Lighter warm amber badge chip with crisp surface border */
+    badge: {
+      position: 'absolute',
+      top: -6,
+      right: -13,
+      minWidth: 18,
+      paddingHorizontal: 4,
+      height: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radii.full,
+      backgroundColor: '#fbbf24', // Amber 400: bright, light, warm golden
+      borderWidth: 1.5,
+      borderColor: colors.surface,
+    },
+    badgeText: {
+      fontWeight: '800',
+      fontSize: 11,
+      lineHeight: 13,
+      color: '#78350f',
+    },
+    safeArea: {
+      backgroundColor: colors.surface,
+    },
+  });

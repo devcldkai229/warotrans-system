@@ -9,3 +9,4 @@ export * from './operatingContextApi';
 export * from './executionApi';
 export * from './secureStore';
 export * from './capabilities';
+export * from './notificationsApi';

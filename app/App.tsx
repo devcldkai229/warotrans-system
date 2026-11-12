@@ -20,8 +20,9 @@ import { AuthConnectionScreen } from './src/features/auth/AuthConnectionScreen';
 import { SafetyHoldProvider } from './src/shared/context/SafetyHoldContext';
 import { ToastProvider } from './src/shared/context/ToastContext';
 import { RealtimeProvider } from './src/shared/realtime';
-import { colors } from './src/shared/theme/colors';
+import { ThemeColors } from './src/shared/theme/colors';
 import { SIMULATED_STATUS_BAR } from './src/shared/theme/layout';
+import { ThemeProvider, useTheme, useThemedStyles } from './src/shared/theme/ThemeContext';
 import { typography } from './src/shared/theme/typography';
 
 function AuthenticatedShell() {
@@ -36,6 +37,17 @@ function AuthenticatedShell() {
 }
 
 export default function App() {
+  return (
+    <ThemeProvider>
+      <ThemedAppShell />
+    </ThemeProvider>
+  );
+}
+
+function ThemedAppShell() {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const updateScale = () => {
@@ -182,7 +194,6 @@ export default function App() {
             box-shadow: 0 25px 70px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 50px rgba(0, 92, 209, 0.15) !important;
             overflow: hidden !important;
             position: relative !important;
-            background-color: #f8fafc !important;
             flex-shrink: 0 !important;
           }
           @media (max-width: 500px) {
@@ -263,7 +274,7 @@ export default function App() {
     <SafeAreaProvider>
       <QueryProvider>
         <GestureHandlerRootView style={styles.appContainer}>
-          <StatusBar style="dark" />
+          <StatusBar style={isDark ? 'light' : 'dark'} />
           <AuthProvider>
             <AuthenticatedShell />
           </AuthProvider>
@@ -298,7 +309,7 @@ export default function App() {
                 <View style={[styles.webSignalBar, { height: 7.5 }]} />
                 <View style={[styles.webSignalBar, { height: 9.5 }]} />
               </View>
-              <Wifi size={13} color="#0f172a" strokeWidth={2.4} />
+              <Wifi size={13} color={colors.textPrimary} strokeWidth={2.4} />
               <View style={styles.webBattery}>
                 <View style={styles.webBatteryBody}>
                   <View style={styles.webBatteryFill} />
@@ -317,91 +328,92 @@ export default function App() {
   return content;
 }
 
-const styles = StyleSheet.create({
-  webRoot: {
-    flex: 1,
-    backgroundColor: '#090d16',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    height: '100%',
-  },
-  webFrame: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: colors.background,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  appContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    position: 'relative',
-  },
-  webStatusBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: SIMULATED_STATUS_BAR,
-    zIndex: 9999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    pointerEvents: 'none',
-  },
-  webStatusTime: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#0f172a',
-    fontFamily: typography.fontSans,
-    letterSpacing: -0.2,
-    paddingTop: 1,
-  },
-  webStatusIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingTop: 1,
-  },
-  webSignal: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 1.5,
-    height: 10,
-    marginRight: 1,
-  },
-  webSignalBar: {
-    width: 2.8,
-    backgroundColor: '#0f172a',
-    borderRadius: 0.75,
-  },
-  webBattery: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  webBatteryBody: {
-    width: 20,
-    height: 11,
-    borderRadius: 3.5,
-    borderWidth: 1.5,
-    borderColor: '#0f172a',
-    padding: 1.2,
-    justifyContent: 'center',
-  },
-  webBatteryFill: {
-    width: '75%',
-    height: '100%',
-    borderRadius: 1,
-    backgroundColor: '#0f172a',
-  },
-  webBatteryCap: {
-    width: 1.5,
-    height: 4,
-    borderTopRightRadius: 1,
-    borderBottomRightRadius: 1,
-    backgroundColor: '#0f172a',
-    marginLeft: 1,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    webRoot: {
+      flex: 1,
+      backgroundColor: '#090d16',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '100%',
+      height: '100%',
+    },
+    webFrame: {
+      width: '100%',
+      height: '100%',
+      backgroundColor: colors.background,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    appContainer: {
+      flex: 1,
+      backgroundColor: colors.background,
+      position: 'relative',
+    },
+    webStatusBar: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: SIMULATED_STATUS_BAR,
+      zIndex: 9999,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 24,
+      pointerEvents: 'none',
+    },
+    webStatusTime: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      fontFamily: typography.fontSans,
+      letterSpacing: -0.2,
+      paddingTop: 1,
+    },
+    webStatusIcons: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingTop: 1,
+    },
+    webSignal: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 1.5,
+      height: 10,
+      marginRight: 1,
+    },
+    webSignalBar: {
+      width: 2.8,
+      backgroundColor: colors.textPrimary,
+      borderRadius: 0.75,
+    },
+    webBattery: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    webBatteryBody: {
+      width: 20,
+      height: 11,
+      borderRadius: 3.5,
+      borderWidth: 1.5,
+      borderColor: colors.textPrimary,
+      padding: 1.2,
+      justifyContent: 'center',
+    },
+    webBatteryFill: {
+      width: '75%',
+      height: '100%',
+      borderRadius: 1,
+      backgroundColor: colors.textPrimary,
+    },
+    webBatteryCap: {
+      width: 1.5,
+      height: 4,
+      borderTopRightRadius: 1,
+      borderBottomRightRadius: 1,
+      backgroundColor: colors.textPrimary,
+      marginLeft: 1,
+    },
+  });
