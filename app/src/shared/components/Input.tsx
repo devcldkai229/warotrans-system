@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { radii } from '../theme/radii';
 import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
@@ -55,7 +56,12 @@ export function Input({
         {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
         <TextInput
           {...props}
-          accessibilityLabel={accessibilityLabel ?? label}
+          placeholder={props.placeholder ? translateText(props.placeholder) : props.placeholder}
+          accessibilityLabel={
+            (accessibilityLabel ?? label)
+              ? translateText((accessibilityLabel ?? label)!)
+              : undefined
+          }
           placeholderTextColor={colors.textMuted}
           style={[styles.input, inputStyle]}
           onFocus={(event) => { setIsFocused(true); props.onFocus?.(event); }}

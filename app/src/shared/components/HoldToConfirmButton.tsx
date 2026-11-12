@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { useThemedStyles } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 
@@ -85,6 +86,7 @@ export function HoldToConfirmButton({
   };
 
   const isHalfway = progress > 50;
+  const resolvedLabel = translateText(label);
 
   return (
     <Pressable
@@ -97,7 +99,7 @@ export function HoldToConfirmButton({
         style,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={resolvedLabel}
     >
       {/* Background fill progress */}
       <View
@@ -120,7 +122,7 @@ export function HoldToConfirmButton({
             isHalfway && styles.labelWhite,
           ]}
         >
-          {label}
+          {resolvedLabel}
         </Text>
       </View>
     </Pressable>

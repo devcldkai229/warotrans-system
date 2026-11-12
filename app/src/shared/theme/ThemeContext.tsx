@@ -26,6 +26,7 @@ import {
   syncActiveShadows,
   ThemeShadows,
 } from './shadows';
+import { getLanguage, Language, onLanguageChange } from '../i18n';
 
 export type ThemeMode = StoredThemeMode;
 
@@ -37,6 +38,7 @@ export interface ThemeContextValue {
   shadows: ThemeShadows;
   setMode: (mode: ThemeMode) => void;
   cycleMode: () => void;
+  language?: Language;
 }
 
 export function resolveThemeScheme(
@@ -90,6 +92,13 @@ export function ThemeProvider({
 }) {
   const rnSystemScheme = useColorScheme();
   const [mode, setModeState] = useState<ThemeMode>(() => initialMode ?? getInitialWebThemeMode());
+  const [language, setLanguageState] = useState<Language>(() => getLanguage());
+
+  useEffect(() => {
+    return onLanguageChange((next) => {
+      setLanguageState(next);
+    });
+  }, []);
 
   useEffect(() => {
     if (initialMode !== undefined) return;
@@ -144,8 +153,9 @@ export function ThemeProvider({
       shadows: activeShadows,
       setMode,
       cycleMode,
+      language,
     }),
-    [mode, resolvedScheme, isDark, activeColors, activeShadows, setMode, cycleMode],
+    [mode, resolvedScheme, isDark, activeColors, activeShadows, setMode, cycleMode, language],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

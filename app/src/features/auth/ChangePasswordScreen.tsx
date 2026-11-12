@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Globe } from 'lucide-react-native';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { ApiError } from '../../shared/api/client';
+import { translateText } from '../../shared/i18n';
+import { useLanguage } from '../../shared/i18n/LanguageContext';
 import { colors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { typography } from '../../shared/theme/typography';
+import { triggerHaptic } from '../../shared/utils/haptics';
 import { useAuth } from './authContext';
 import { MIN_PASSWORD_LENGTH, passwordProblem } from './passwordPolicy';
 
@@ -25,6 +29,7 @@ function describeError(error: unknown): string {
  */
 export function ChangePasswordScreen() {
   const { session, changePassword, logout } = useAuth();
+  const { language, toggleLanguage, t } = useLanguage();
   const topInset = useTopInset();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -49,27 +54,45 @@ export function ChangePasswordScreen() {
     }
   };
 
+  const langLabel = language === 'vi' ? 'Tiếng Việt' : 'English';
+
   return (
-    <ScrollView contentContainerStyle={[styles.root, { paddingTop: topInset + 32 }]} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={[styles.root, { paddingTop: topInset + 16 }]} keyboardShouldPersistTaps="handled">
+      <View style={styles.topBar}>
+        <Pressable
+          onPress={() => {
+            triggerHaptic('tap');
+            toggleLanguage();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('Language: {lang}. Tap to switch language.', { lang: langLabel })}
+          style={styles.langPill}
+        >
+          <Globe size={13} color={colors.primaryText} strokeWidth={2.2} />
+          <Text style={styles.langLabel}>
+            {language === 'vi' ? 'VI · Tiếng Việt' : 'EN · English'}
+          </Text>
+        </Pressable>
+      </View>
       <BrandMark />
-      <Text style={styles.title}>Choose your own password</Text>
+      <Text style={styles.title}>{t('Choose your own password')}</Text>
       <Text style={styles.subtitle}>
-        You signed in with a temporary password. Replace it before you start work.
+        {t('You signed in with a temporary password. Replace it before you start work.')}
       </Text>
       <View style={styles.form}>
-        <Input label="Temporary password" secureTextEntry value={current} onChangeText={setCurrent} autoCapitalize="none" />
+        <Input label={t('Temporary password')} secureTextEntry value={current} onChangeText={setCurrent} autoCapitalize="none" />
         <Input
-          label="New password"
+          label={t('New password')}
           secureTextEntry
           value={next}
           onChangeText={setNext}
           autoCapitalize="none"
-          hint={`At least ${MIN_PASSWORD_LENGTH} characters, with a letter and a digit.`}
+          hint={t('At least {min} characters, with a letter and a digit.', { min: MIN_PASSWORD_LENGTH })}
         />
-        <Input label="Repeat new password" secureTextEntry value={confirm} onChangeText={setConfirm} autoCapitalize="none" />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button label={busy ? 'Saving…' : 'Save password'} onPress={submit} disabled={busy} loading={busy} />
-        <Button label="Sign out" variant="outline" onPress={logout} disabled={busy} />
+        <Input label={t('Repeat new password')} secureTextEntry value={confirm} onChangeText={setConfirm} autoCapitalize="none" />
+        {error ? <Text style={styles.error}>{translateText(error)}</Text> : null}
+        <Button label={t(busy ? 'Saving…' : 'Save password')} onPress={submit} disabled={busy} loading={busy} />
+        <Button label={t('Sign out')} variant="outline" onPress={logout} disabled={busy} />
       </View>
     </ScrollView>
   );
@@ -77,7 +100,25 @@ export function ChangePasswordScreen() {
 
 const styles = StyleSheet.create({
   root: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 32, backgroundColor: colors.surface, gap: 12 },
-  title: { marginTop: 24, fontSize: 24, fontWeight: '600', color: colors.textPrimary, fontFamily: typography.fontSans },
+  topBar: { flexDirection: 'row', justifyContent: 'flex-end' },
+  langPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  langLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    fontFamily: typography.fontSans,
+  },
+  title: { marginTop: 12, fontSize: 24, fontWeight: '600', color: colors.textPrimary, fontFamily: typography.fontSans },
   subtitle: { fontSize: 15, color: colors.textSecondary, fontFamily: typography.fontSans },
   form: { marginTop: 16, gap: 16 },
   error: { color: colors.danger, fontSize: 14, fontFamily: typography.fontSans },

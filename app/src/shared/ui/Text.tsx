@@ -6,6 +6,7 @@ import {
   TextStyle,
 } from 'react-native';
 import { ColorToken, LIGHT_HEX_TO_TOKEN, ThemeColors } from '../theme/colors';
+import { translateNode } from '../i18n';
 import { useThemeColors } from '../theme/ThemeContext';
 import { TextVariant, typography } from '../theme/typography';
 
@@ -106,7 +107,16 @@ export function Text({
       ]}
       {...rest}
     >
-      {children}
+      {translateNode(children) as React.ReactNode}
     </RNText>
   );
+}
+
+/**
+ * Drop-in replacement for React Native's `Text` that preserves caller styles
+ * verbatim while translating text children through the active i18n dictionary.
+ */
+export function RawText({ children, ...rest }: RNTextProps) {
+  useThemeColors();
+  return <RNText {...rest}>{translateNode(children) as React.ReactNode}</RNText>;
 }

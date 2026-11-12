@@ -1,8 +1,9 @@
-import { LogOut, Monitor, Moon, Sun } from 'lucide-react-native';
+import { Globe, LogOut, Monitor, Moon, Sun } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { toast } from '../../shared/context/ToastContext';
+import { Language, LANGUAGES, useLanguage } from '../../shared/i18n/LanguageContext';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
@@ -52,19 +53,28 @@ export function AccountSheet({
 }: AccountSheetProps) {
   const topInset = useTopInset();
   const { mode, setMode, colors } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const styles = useThemedStyles(createStyles);
 
   const handleSignOut = () => {
     triggerHaptic('warning');
     onClose();
     onLogout?.();
-    toast.info('Signed out of the shift console.');
+    toast.info(t('Signed out of the shift console.'));
   };
 
   const handleThemeSelect = (nextMode: ThemeMode) => {
     triggerHaptic('tap');
     setMode(nextMode);
   };
+
+  const handleLanguageSelect = (nextLanguage: Language) => {
+    triggerHaptic('tap');
+    setLanguage(nextLanguage);
+  };
+
+  const roleText = t(operatorRole.toUpperCase());
+  const zoneText = t(zone);
 
   return (
     <Modal
@@ -79,7 +89,7 @@ export function AccountSheet({
           style={styles.backdrop}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close account menu"
+          accessibilityLabel={t('Close account menu')}
         />
 
         <View style={[styles.dropdownCard, { top: topInset + 50 }]}>
@@ -96,8 +106,8 @@ export function AccountSheet({
               </Text>
               <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
                 {operatorUsername
-                  ? `@${operatorUsername} · ${operatorRole.toUpperCase()} · ${zone}`
-                  : `${operatorRole.toUpperCase()} · ${zone}`}
+                  ? `@${operatorUsername} · ${roleText} · ${zoneText}`
+                  : `${roleText} · ${zoneText}`}
               </Text>
             </View>
           </View>
@@ -127,7 +137,7 @@ export function AccountSheet({
                     onPress={() => handleThemeSelect(option.mode)}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={`Appearance: ${option.label}`}
+                    accessibilityLabel={`${t('Appearance')}: ${t(option.label)}`}
                     style={({ pressed }) => [
                       styles.themeSegment,
                       isSelected && styles.themeSegmentActive,
@@ -155,12 +165,54 @@ export function AccountSheet({
             </View>
           </View>
 
+          {/* Language Switcher */}
+          <View style={styles.appearanceSection}>
+            <Text variant="caption" color={colors.textSecondary} style={styles.appearanceLabel}>
+              Language
+            </Text>
+            <View style={styles.themeTrack} accessibilityRole="radiogroup">
+              {LANGUAGES.map((option) => {
+                const isSelected = language === option.code;
+                return (
+                  <Pressable
+                    key={option.code}
+                    onPress={() => handleLanguageSelect(option.code)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`${t('Language')}: ${option.label}`}
+                    style={({ pressed }) => [
+                      styles.themeSegment,
+                      isSelected && styles.themeSegmentActive,
+                      pressed && !isSelected && styles.themeSegmentPressed,
+                    ]}
+                  >
+                    <Globe
+                      size={13}
+                      color={isSelected ? colors.primaryText : colors.textSecondary}
+                      strokeWidth={isSelected ? 2.4 : 2.0}
+                    />
+                    <Text
+                      variant="caption"
+                      color={isSelected ? colors.primaryText : colors.textSecondary}
+                      style={[
+                        styles.themeSegmentText,
+                        isSelected && styles.themeSegmentTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Sign Out Action */}
           {onLogout ? (
             <Pressable
               onPress={handleSignOut}
               accessibilityRole="button"
-              accessibilityLabel="Sign out of shift"
+              accessibilityLabel={t('Sign out of shift')}
               style={({ pressed }) => [styles.signOutBtn, pressed && styles.signOutBtnPressed]}
             >
               <LogOut size={15} color={colors.dangerText} />

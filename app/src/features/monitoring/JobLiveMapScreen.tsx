@@ -5,9 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { RawText as Text } from '../../shared/ui/Text';
 import {
   Clock3,
   RefreshCw,

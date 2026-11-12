@@ -5,10 +5,11 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
+import { translateText } from '../../shared/i18n';
+import { RawText as Text } from '../../shared/ui/Text';
 import {
   Keyboard,
   QrCode,
@@ -143,8 +144,8 @@ export function BarcodeScannerHUD({
           {/* Manual entry remains available when the camera is unavailable. */}
           <View style={styles.actionsBox}>
             <TextInput ref={manualInput} value={manualBarcode} onChangeText={setManualBarcode}
-              placeholder={placeholder} placeholderTextColor="#c4c8d0"
-              autoCapitalize="none" autoCorrect={false} accessibilityLabel={manualLabel}
+              placeholder={translateText(placeholder)} placeholderTextColor="#c4c8d0"
+              autoCapitalize="none" autoCorrect={false} accessibilityLabel={translateText(manualLabel)}
               onSubmitEditing={() => submitBarcode(manualBarcode)}
               style={{ minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#c4c8d0', paddingHorizontal: 12, color: '#ffffff', fontSize: 14 }} />
 

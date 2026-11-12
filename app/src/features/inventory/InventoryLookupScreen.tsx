@@ -7,7 +7,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import {
@@ -27,7 +26,7 @@ import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { SegmentedControl } from '../../shared/ui/SegmentedControl';
-import { Text as StatusText } from '../../shared/ui/Text';
+import { RawText as Text, Text as StatusText } from '../../shared/ui/Text';
 import { containerLocationFilters, getContainerLocation, groupInventoryByProduct } from './inventoryData';
 import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { radii } from '../theme/radii';
 import { ThemeShadows } from '../theme/shadows';
 import { useTopInset } from '../theme/layout';
@@ -36,7 +37,7 @@ export function SubScreenHeader({
             pressed && styles.backBtnPressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={translateText('Go back')}
         >
           <ArrowLeft size={20} color={colors.textPrimary} />
         </Pressable>

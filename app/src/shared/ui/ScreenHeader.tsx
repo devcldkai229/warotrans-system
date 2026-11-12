@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { colors, ThemeColors } from '../theme/colors';
+import { translateText } from '../i18n';
 import { useTopInset } from '../theme/layout';
 import { radii } from '../theme/radii';
 import { ThemeShadows } from '../theme/shadows';
@@ -76,7 +77,7 @@ export function ScreenHeader({
           <Pressable
             onPress={onBack}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={translateText('Go back')}
             hitSlop={6}
             style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
           >
