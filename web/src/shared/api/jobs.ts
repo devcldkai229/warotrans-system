@@ -51,7 +51,10 @@ export interface JobStepDto {
 export interface JobTaskDto {
   id: string
   sequenceNo: number
+  /** Segments of one Workflow Task share its key: it expands into several per Job (checks, stop, per Container). */
   taskKey: string
+  /** What the workflow calls that task, e.g. "Pick up at source rack". */
+  taskName: string
   status: string
   /** RECOVERY: the second robot of a payload recovery driving to the safe endpoint (WFX-04). */
   executionScope: 'ONCE_PER_JOB' | 'ONCE_PER_STOP' | 'PER_CONTAINER_AT_STOP' | 'RECOVERY' | null

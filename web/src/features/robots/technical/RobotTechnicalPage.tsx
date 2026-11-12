@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { explainJobProblem } from '@/features/jobs/failureCatalog'
 import { RobotFaultCard } from '../fault/RobotFaultCard'
+import { RobotHistoryCard } from '../history/RobotHistoryCard'
 import { useAuth } from '@/features/auth/authContext'
 import { getRobot, getRobotHealth, listRobots, type RobotHealth } from '@/shared/api/fleet'
 import { listJobs } from '@/shared/api/jobs'
@@ -242,7 +243,7 @@ export function RobotTechnicalPage() {
               : null}
 
             <Card title={t('State history')}>
-              <p className="text-sm text-muted">{t('State changes of this robot are not recorded yet.')}</p>
+              <RobotHistoryCard robot={robot} />
             </Card>
           </div>
 

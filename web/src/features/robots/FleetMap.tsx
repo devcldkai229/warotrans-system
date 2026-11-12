@@ -1,13 +1,12 @@
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import type { Edge, Endpoint, RobotView, Zone } from '@/shared/api/contracts'
-import { getTrafficSnapshot, type TrafficSnapshot } from '@/shared/api/fleet'
 import type { MapVersionDto } from '@/shared/api/navigation'
 import type { MapBounds } from '@/shared/lib/mapView'
 import { humanize } from '@/shared/lib/format'
-import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot, type MapTrafficOverlay } from '@/shared/map/WarehouseMap'
+import { WarehouseMap, type MapCallout, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { findEndpointByName } from '@/shared/map/scene'
 import { isMapAlignDebugEnabled, MapAlignDebugOverlay } from './MapAlignDebugOverlay'
+import { useTrafficOverlay } from './useTrafficOverlay'
 import { RobotPreviewCard } from './RobotPreviewCard'
 import { t } from '@/shared/i18n'
 interface FleetMapProps {
@@ -54,34 +53,11 @@ export function FleetMap({
   mapVersion = null,
 }: FleetMapProps) {
   const alignDebug = isMapAlignDebugEnabled()
-  const trafficQuery = useQuery({
-    queryKey: ['fleet-traffic-snapshot'],
-    queryFn: getTrafficSnapshot,
-    refetchInterval: 2000,
-    enabled: enableTrafficOverlay,
-    retry: false,
-  })
-  const snap = trafficQuery.data as TrafficSnapshot | undefined
+  const { snap, overlay: trafficOverlay } = useTrafficOverlay(robots, enableTrafficOverlay)
   // The map version the Fleet page is showing; a draft or archived one is said so, since robots run on the published map.
   const mapLabel = mapVersion
     ? `${mapVersion.code} · v${mapVersion.versionNo}${mapVersion.status === 'PUBLISHED' ? '' : ` · ${humanize(String(mapVersion.status))}`}`
     : t('No map selected')
-
-  const trafficOverlay = useMemo<MapTrafficOverlay | null>(() => {
-    if (!snap) return null
-    const authorizedEdgeIds = snap.robots.flatMap((r) => r.authority?.edgeIds ?? [])
-    const occupiedResourceIds = snap.resources.filter((r) => r.holders.length > 0).map((r) => r.resourceId)
-    // Stage-3: also surface zone:/cell: ids held via semantic grants.
-    const semanticHeld = snap.robots.flatMap((r) => r.authority?.resourceIds ?? r.occupiedResourceIds ?? [])
-    const allOccupied = Array.from(new Set([...occupiedResourceIds, ...semanticHeld]))
-    const quarantined = new Set(
-      snap.robots.filter((r) => r.phase === 'Quarantined' || r.quarantineReason).map((r) => r.robotId),
-    )
-    const quarantinedRobotCodes = robots
-      .filter((robot) => quarantined.has(robot.id))
-      .map((robot) => robot.code)
-    return { authorizedEdgeIds, occupiedResourceIds: allOccupied, quarantinedRobotCodes }
-  }, [snap, robots])
 
   const mapRobots = useMemo<MapRobot[]>(
     () =>

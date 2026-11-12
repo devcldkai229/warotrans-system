@@ -285,18 +285,6 @@ export interface RobotView extends Robot {
   telemetry?: RobotTelemetry
 }
 
-/** fleet.robot_state_events. TODO(backend): no read endpoint yet. */
-export interface RobotStateEvent {
-  id: string
-  robotId: string
-  jobId: string | null
-  fromStatus: RobotStatus | null
-  toStatus: RobotStatus
-  reason: string | null
-  source: RobotStateEventSource
-  occurredAt: string
-}
-
 /** A Robot's JobAssignment joined with its Job. TODO(backend): no read endpoint yet. */
 export interface RobotJobHistoryItem {
   id: string

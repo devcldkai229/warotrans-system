@@ -8,6 +8,7 @@ import {
 import type { Tone } from '@/shared/ui/statusTones'
 
 import { t } from '@/shared/i18n'
+import { APP_TIME_ZONE } from '@/shared/lib/format'
 export const VOUCHERS_KEY = ['warehouse', 'stock-vouchers'] as const
 
 /** The working Warehouse's vouchers, newest first. Shared by the menu count and the section. */
@@ -62,8 +63,8 @@ export function printVoucher(voucher: StockVoucherDetail) {
     ['Số phiếu', voucher.code],
     ['Kho', `${voucher.warehouseCode} · ${voucher.warehouseName}`],
     ['Chứng từ tham chiếu', voucher.referenceNo ?? '—'],
-    ['Ngày lập', new Date(voucher.createdAt).toLocaleString('vi-VN')],
-    ['Ngày xác nhận', voucher.confirmedAt ? new Date(voucher.confirmedAt).toLocaleString('vi-VN') : 'Chưa xác nhận'],
+    ['Ngày lập', new Date(voucher.createdAt).toLocaleString('vi-VN', { timeZone: APP_TIME_ZONE })],
+    ['Ngày xác nhận', voucher.confirmedAt ? new Date(voucher.confirmedAt).toLocaleString('vi-VN', { timeZone: APP_TIME_ZONE }) : 'Chưa xác nhận'],
     ['Ghi chú', voucher.note ?? '—'],
   ]
     .map(([label, value]) => `<div><b>${label}:</b> ${escapeHtml(value)}</div>`)

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
 import { getRobot } from '@/shared/api/fleet'
 import { useAuth } from '@/features/auth/authContext'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import {
   claimJobStep,
   confirmHandoverBatch,
@@ -16,14 +17,14 @@ import {
   type HandoverBatchResult,
   type JobDetailDto,
   type JobStepDto,
-  type JobTaskDto,
 } from '@/shared/api/jobs'
 import { getTransportRequest } from '@/shared/api/transportRequests'
 import { DispatchPanel } from './DispatchPanel'
+import { useTrafficOverlay } from '@/features/robots/useTrafficOverlay'
 import { JobOperatorActions } from './JobOperatorActions'
 import { JobRecoveryPanel } from './JobRecoveryPanel'
 import { cx } from '@/shared/lib/cx'
-import { formatBattery, formatClock, formatDuration, humanize, secondsBetween } from '@/shared/lib/format'
+import { formatBattery, formatClock, formatDuration, formatValue, humanize, secondsBetween } from '@/shared/lib/format'
 import { useMonitorMapVersion } from '@/shared/map/useMonitorMapVersion'
 import { WarehouseMap, type MapMovement, type MapRobot } from '@/shared/map/WarehouseMap'
 import { useNotificationsHub, type JobUpdatedMessage, type RobotTelemetryMessage } from '@/shared/realtime/useNotificationsHub'
@@ -35,8 +36,11 @@ import { JOB_STATUS_TONE, ROBOT_STATUS_TONE, STEP_STATUS_TONE, type Tone } from 
 
 import { t } from '@/shared/i18n'
 import { FailureExplanation } from './FailureExplanation'
+import { ExecutionSteps } from './ExecutionSteps'
+import { groupTasks } from './taskGroups'
 import { explainJobProblem, failureTitle } from './failureCatalog'
-const show = (value: unknown) => (typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value))
+/** A step's value as text; a timestamp is shown as the date and time in Vietnam, not as the server wrote it. */
+const show = formatValue
 
 const CARD = 'flex flex-col rounded-lg border border-outline-soft bg-surface p-6 shadow-float'
 const CARD_LABEL = 'text-sm text-ink-2'
@@ -345,80 +349,6 @@ function StepRow({
   )
 }
 
-/** "Job checks", "Pickup stop · Rack A-02", "Drop-off CTN-… · Dock 1": what a task is, from its scope and stop. */
-function taskTitle(task: JobTaskDto, labels: Labels) {
-  const action = task.stopAction === 'PICKUP' ? t('Pickup') : task.stopAction === 'DROPOFF' ? t('Drop-off') : ''
-  switch (task.executionScope) {
-    case 'ONCE_PER_JOB':
-      return t('Job checks')
-    case 'ONCE_PER_STOP':
-      return t('{action} stop · {value}', { action, value: labels.endpoint(task.stopEndpointId) })
-    case 'PER_CONTAINER_AT_STOP':
-      return `${action} ${labels.container(task.containerId)} · ${labels.endpoint(task.stopEndpointId)}`
-    case 'RECOVERY':
-      return `Recovery robot to ${labels.endpoint(task.stopEndpointId)}`
-    default:
-      return task.taskKey
-  }
-}
-
-/** A task still in play: one of its steps is running, waiting, paused or failed, or it is where the job is now. */
-function isActiveTask(task: JobTaskDto, currentStepId: string | null) {
-  return task.steps.some(
-    (step) =>
-      step.id === currentStepId || ['EXECUTING', 'READY', 'WAITING', 'PAUSED', 'FAILED'].includes(step.status),
-  )
-}
-
-/**
- * One task of the job as a group that opens and closes. It is open while the task is in play and closed otherwise,
- * so a long job does not push the step in question off the screen; opening a closed one is one click, and a task
- * that becomes active (the job reaches it) opens itself.
- */
-function TaskGroup({
-  task,
-  title,
-  active,
-  children,
-}: {
-  task: JobTaskDto
-  title: string
-  active: boolean
-  children: ReactNode
-}) {
-  const [open, setOpen] = useState(active)
-  const [wasActive, setWasActive] = useState(active)
-  if (active !== wasActive) {
-    setWasActive(active)
-    if (active) setOpen(true)
-  }
-
-  const done = task.steps.filter((step) => step.status === 'COMPLETED').length
-  const waiting = task.steps.some((step) => step.status === 'WAITING')
-  const failed = task.steps.some((step) => step.status === 'FAILED')
-
-  return (
-    <div className="mt-3 first:mt-6">
-      <button
-        type="button"
-        className="flex w-full items-center gap-3 rounded-md px-1 py-2 text-left transition-colors hover:bg-container-high"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={16} className="text-muted" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-base font-medium">{title}</span>
-          <span className="mt-0.5 block text-xs text-muted">{t('Task {sequenceNo} · {done} of {length}', { sequenceNo: task.sequenceNo, done, length: task.steps.length })}{' '}{task.steps.length === 1 ? t('step') : t('steps')}{' '}{t('done')}</span>
-        </span>
-        <StatusBadge tone={failed ? 'red' : waiting ? 'amber' : done === task.steps.length ? 'green' : 'blue'} surface>
-          {task.status}
-        </StatusBadge>
-      </button>
-      {open ? <div className="mt-1 mb-2 flex flex-col gap-1.5">{children}</div> : null}
-    </div>
-  )
-}
-
 function allSteps(job: JobDetailDto) {
   return job.tasks.flatMap((task) => task.steps)
 }
@@ -464,6 +394,10 @@ export function JobDetailPage() {
     refetchInterval: job && ACTIVE_JOB_STATUSES.includes(job.status) ? 5000 : false,
   })
   const robot = robotQuery.data ?? null
+  // The map shows the lanes and zones of the map version, and, while the Job is live, who holds what (as on Monitor).
+  const { can } = useAuth()
+  const robotsOnMap = useMemo(() => (robot ? [{ id: robot.id, code: robot.code }] : []), [robot])
+  const traffic = useTrafficOverlay(robotsOnMap, can(PERMISSIONS.trafficRead) && job !== null && ACTIVE_JOB_STATUSES.includes(job.status))
 
   const requestId = job?.transportRequestIds[0] ?? null
   const requestQuery = useQuery({
@@ -511,6 +445,7 @@ export function JobDetailPage() {
 
   const problem = explainJobProblem(job)
   const steps = allSteps(job)
+  const groups = groupTasks(job.tasks)
   const done = steps.filter((s) => s.status === 'COMPLETED').length
   const progress = {
     done,
@@ -537,7 +472,18 @@ export function JobDetailPage() {
         ? { x: robot.poseX, y: robot.poseY, yaw: robot.poseYaw }
         : null
   const mapRobots: MapRobot[] =
-    robot && pose ? [{ code: robot.code, status: robot.status, x: pose.x, y: pose.y, yaw: pose.yaw, alert: robot.status === 'ERROR' }] : []
+    robot && pose
+      ? [
+          {
+            code: robot.code,
+            status: robot.status,
+            x: pose.x,
+            y: pose.y,
+            yaw: pose.yaw,
+            alert: robot.status === 'ERROR' || (traffic.overlay?.quarantinedRobotCodes?.includes(robot.code) ?? false),
+          },
+        ]
+      : []
   const movements: MapMovement[] =
     origin && destination ? [{ from: origin, to: destination, label: containerLabels[0] }] : []
   // Only the person-confirm of a waiting step is offered here; the backend refuses it in any other state.
@@ -630,29 +576,24 @@ export function JobDetailPage() {
             <header className="flex items-baseline justify-between gap-3">
               <h2 className="text-xl font-book">{t('Execution steps')}</h2>
               <span className="text-xs text-muted">
-                {job.tasks.length} {job.tasks.length === 1 ? t('task') : t('tasks')}{t(', {total} steps', { total: progress.total })}</span>
+                {groups.length} {groups.length === 1 ? t('task') : t('tasks')}{t(', {total} steps', { total: progress.total })}</span>
             </header>
 
-            {job.tasks.map((task) => (
-              <TaskGroup
-                key={task.id}
-                task={task}
-                title={taskTitle(task, labels)}
-                active={isActiveTask(task, job.currentStepId)}
-              >
-                {task.steps.map((step) => (
-                  <StepRow
-                    key={step.id}
-                    jobId={job.id}
-                    step={step}
-                    number={steps.indexOf(step) + 1}
-                    defaultOpen={step.status === 'WAITING' || step.status === 'FAILED'}
-                    labels={labels}
-                    canConfirm={canConfirm}
-                  />
-                ))}
-              </TaskGroup>
-            ))}
+            <ExecutionSteps
+              groups={groups}
+              currentStepId={job.currentStepId}
+              labels={labels}
+              renderStep={(step) => (
+                <StepRow
+                  jobId={job.id}
+                  step={step}
+                  number={steps.indexOf(step) + 1}
+                  defaultOpen={step.status === 'WAITING' || step.status === 'FAILED'}
+                  labels={labels}
+                  canConfirm={canConfirm}
+                />
+              )}
+            />
 
             <HandoverBatchPanel job={job} labels={labels} />
           </section>
@@ -663,8 +604,9 @@ export function JobDetailPage() {
               <WarehouseMap
                 yawUnit="rad"
                 endpoints={endpoints}
-                edges={[]}
-                zones={[]}
+                edges={monitorMap.geometry.edges}
+                zones={monitorMap.geometry.zones}
+                trafficOverlay={traffic.overlay}
                 bounds={monitorMap.geometry.bounds}
                 occupancyImageUrl={monitorMap.geometry.occupancyImageUrl}
                 robots={mapRobots}

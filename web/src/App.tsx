@@ -12,6 +12,7 @@ import { JobsPage } from '@/features/jobs/JobsPage'
 import { ManagementPage } from '@/features/management/ManagementPage'
 import { AuditLogPage } from '@/features/operations/AuditLogPage'
 import { IssuesPage } from '@/features/operations/IssuesPage'
+import { RobotHistoryPage } from '@/features/operations/RobotHistoryPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { FacilityPage } from '@/features/maps/FacilityPage'
 import { MapEditorPage } from '@/features/maps/MapEditorPage'
@@ -55,6 +56,7 @@ function App() {
             <Route path="/management" element={<Guard permission={[PERMISSIONS.userManage, PERMISSIONS.warehouseRead]}><ManagementPage /></Guard>} />
             <Route path="/operations/issues" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
             <Route path="/operations/issues/:issueId" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
+            <Route path="/operations/robot-history" element={<Guard permission={PERMISSIONS.robotRead}><RobotHistoryPage /></Guard>} />
             <Route path="/operations/audit" element={<Guard permission={PERMISSIONS.auditRead}><AuditLogPage /></Guard>} />
             <Route path="/operations/notifications" element={<Guard permission={PERMISSIONS.notificationRead}><NotificationsPage /></Guard>} />
           </Route>

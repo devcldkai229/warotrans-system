@@ -10,6 +10,7 @@ import { useAuth } from '@/features/auth/authContext'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { RobotControlCard } from './RobotControlCard'
 import { RobotFaultCard } from './fault/RobotFaultCard'
+import { RobotHistoryCard } from './history/RobotHistoryCard'
 import { RobotCapacityCard } from './RobotCapacityCard'
 import { TrafficClearanceCard } from './TrafficClearanceCard'
 import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, humanize, secondsBetween } from '@/shared/lib/format'
@@ -347,9 +348,15 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
     {
       id: 'history',
       label: t('State history'),
-      // TODO(backend): nothing writes fleet.robot_state_events yet, so there is no history to show.
-      summary: t('Not recorded'),
-      body: <p className={EMPTY}>{t('State changes of this robot are not recorded yet.')}</p>,
+      summary: t('State changes and commands'),
+      body: (
+        <>
+          <RobotHistoryCard robot={robot} />
+          <Link to={`/operations/robot-history?robot=${encodeURIComponent(robot.code)}`} className="mb-2 inline-block text-xs text-ink-2 underline-offset-2 hover:text-ink hover:underline">
+            {t('Open the full history')}
+          </Link>
+        </>
+      ),
     },
   ]
 }
