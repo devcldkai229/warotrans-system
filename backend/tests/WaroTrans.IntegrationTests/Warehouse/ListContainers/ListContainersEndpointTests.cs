@@ -208,6 +208,39 @@ public sealed class ListContainersEndpointTests(WaroTransWebApplicationFactory f
         Assert.Equal(3, body.Total);
     }
 
+    [Fact]
+    public async Task List_filters_by_status_and_pages_with_skip()
+    {
+        var (client, token) = await SignInAsync();
+        var warehouse = await SeedWarehouseAsync("WH-A");
+        var product = await SeedProductAsync();
+        await SeedContainerAsync(product, "CTN-1", ContainerStatus.HOLD);
+        await SeedContainerAsync(product, "CTN-2", ContainerStatus.CREATED);
+        await SeedContainerAsync(product, "CTN-3", ContainerStatus.HOLD);
+        await SeedContainerAsync(product, "CTN-4", ContainerStatus.HOLD);
+
+        var first = await ReadAsync(await client.GetWithTokenAsync(Url(warehouse.Id, "&eligibleOnly=false&status=HOLD&take=2"), token));
+        var second = await ReadAsync(await client.GetWithTokenAsync(Url(warehouse.Id, "&eligibleOnly=false&status=HOLD&take=2&skip=2"), token));
+
+        Assert.Equal(["CTN-1", "CTN-3"], first.Items.Select(c => c.Barcode));
+        Assert.Equal(["CTN-4"], second.Items.Select(c => c.Barcode));
+        Assert.Equal(3, first.Total);
+        Assert.Equal(3, second.Total);
+    }
+
+    [Theory]
+    [InlineData("&status=hold")]
+    [InlineData("&status=LOST")]
+    public async Task List_with_an_unknown_status_returns_400(string query)
+    {
+        var (client, token) = await SignInAsync();
+        var warehouse = await SeedWarehouseAsync("WH-A");
+
+        var response = await client.GetWithTokenAsync(Url(warehouse.Id, query), token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("&take=0")]
     [InlineData("&take=501")]

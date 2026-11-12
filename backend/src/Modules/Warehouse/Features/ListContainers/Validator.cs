@@ -1,4 +1,5 @@
 using FluentValidation;
+using WaroTrans.Warehouse.Enums;
 
 namespace WaroTrans.Warehouse.Features.ListContainers;
 
@@ -12,5 +13,9 @@ public sealed class ListContainersRequestValidator : AbstractValidator<ListConta
         RuleFor(x => x.Search)
             .MaximumLength(100)
             .When(x => x.Search is not null);
+        RuleFor(x => x.Status)
+            .IsEnumName(typeof(ContainerStatus), caseSensitive: true)
+            .When(x => !string.IsNullOrEmpty(x.Status))
+            .WithMessage("Status must be a container status such as STORED.");
     }
 }
