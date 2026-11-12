@@ -112,7 +112,7 @@ export function ProductsSection({ products, setProducts, categories, loadState }
 
   return (
     <>
-      <SectionHead title={t('Products')} hint={t('The product master catalog. A Container always holds one product type.')}>
+      <SectionHead title={t('Products')}>
         <SearchInput className="w-72" placeholder={t('Search SKU, name or barcode')} value={query} onChange={setQuery} />
         <select
           className={controlClass('pill')}

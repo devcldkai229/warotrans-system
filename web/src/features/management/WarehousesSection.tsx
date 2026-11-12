@@ -79,10 +79,7 @@ export function WarehousesSection() {
 
   return (
     <>
-      <SectionHead
-        title={t('Warehouses')}
-        hint={t('Sites that own maps, robots, and transport requests. Create one before importing maps on Facility.')}
-      >
+      <SectionHead title={t('Warehouses')}>
         <Can permission={PERMISSIONS.warehouseWrite}>
           <AddButton onClick={open}>{t('Add warehouse')}</AddButton>
         </Can>

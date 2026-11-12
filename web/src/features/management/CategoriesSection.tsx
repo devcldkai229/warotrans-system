@@ -67,7 +67,7 @@ export function CategoriesSection({ categories, setCategories, products, loadSta
 
   return (
     <>
-      <SectionHead title={t('Categories')} hint={t('Groups that products belong to.')}>
+      <SectionHead title={t('Categories')}>
         <Can permission={PERMISSIONS.warehouseWrite}>
           <AddButton onClick={open}>{t('Add category')}</AddButton>
         </Can>

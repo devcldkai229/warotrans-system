@@ -18,6 +18,7 @@ import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
 import { ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
+import { shownRobotStatus } from './robotStatus'
 import { FleetMap } from './FleetMap'
 import { RegisterRobotDialog } from './RegisterRobotDialog'
 import { RobotDetailPanel } from './RobotDetailPanel'
@@ -257,8 +258,8 @@ export function FleetPage() {
                           </span>
                         </span>
                         <span className="flex flex-col items-end gap-1">
-                          <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
-                            {robot.status}
+                          <StatusBadge tone={ROBOT_STATUS_TONE[shownRobotStatus(robot)]} withDot>
+                            {shownRobotStatus(robot)}
                           </StatusBadge>
                           <BatteryLevel percent={robot.batteryPercent} size="sm" />
                         </span>

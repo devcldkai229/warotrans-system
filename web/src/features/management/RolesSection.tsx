@@ -22,7 +22,7 @@ export function RolesSection({ accounts }: { accounts: Account[] }) {
 
   return (
     <>
-      <SectionHead title={t('Roles')} hint={t('What each kind of account is allowed to do.')} />
+      <SectionHead title={t('Roles')} />
 
       <Table>
         <thead>

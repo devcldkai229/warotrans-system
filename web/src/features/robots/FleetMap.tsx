@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { Edge, Endpoint, RobotView, Zone } from '@/shared/api/contracts'
+import { shownRobotStatus } from './robotStatus'
 import type { MapVersionDto } from '@/shared/api/navigation'
 import type { MapBounds } from '@/shared/lib/mapView'
 import { humanize } from '@/shared/lib/format'
@@ -63,7 +64,8 @@ export function FleetMap({
     () =>
       robots.map((robot) => ({
         code: robot.code,
-        status: robot.status,
+        // A robot that stopped reporting is drawn grey (Offline) at the last place it reported.
+        status: shownRobotStatus(robot),
         x: robot.poseX,
         y: robot.poseY,
         yaw: robot.poseYaw,

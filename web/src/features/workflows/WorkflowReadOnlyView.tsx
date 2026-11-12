@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { OperationMetadata, WorkflowMetadata, WorkflowUpsert } from '@/shared/api/types'
 import { t } from '@/shared/i18n'
 import { Button } from '@/shared/ui/Button'
+import { InfoTip } from '@/shared/ui/InfoTip'
 import { inputRows, valueText, variableValue } from './readOnlyView'
 import { ScopeBadge } from './scope-badge'
 
@@ -9,18 +10,14 @@ function operationOf(metadata: WorkflowMetadata, stepType: string, operationCode
   return metadata.stepTypes.find((s) => s.stepType === stepType)?.operations.find((o) => o.code === operationCode) ?? null
 }
 
-/** Why the workflow cannot be changed here, and what to do instead. */
-export function ReadOnlyNotice({ published, canWrite }: { published: boolean; canWrite: boolean }) {
+/** Why the workflow cannot be changed here, and what to do instead: an "i" beside the status badge. */
+export function ReadOnlyInfo({ published, canWrite }: { published: boolean; canWrite: boolean }) {
   const text = published
     ? canWrite
       ? t('This workflow is published, so it is fixed: Jobs that ran on it can always be traced back to what it said. Everything is open to read below. To change it, create a new version; the new version starts as a draft.')
       : t('This workflow is published, so it is fixed. Everything is open to read below.')
     : t('You can read this draft but not change it: changing workflows needs the workflow.write permission.')
-  return (
-    <p role="note" className="wf-view__notice">
-      {text}
-    </p>
-  )
+  return <InfoTip label={t('Why this workflow cannot be changed')}>{text}</InfoTip>
 }
 
 /**
@@ -118,7 +115,6 @@ export function WorkflowReadOnlyView({
             </Button>
           ) : null}
         </div>
-        <p className="wf-view__hint muted">{t('Open a task to see its steps, and a step to see how it is set up.')}</p>
         {draft.tasks.length === 0 ? <p className="muted">{t('This workflow has no tasks.')}</p> : null}
 
         <div className="wf-tree__list">
@@ -215,39 +211,75 @@ export function WorkflowReadOnlyView({
                                   ) : null}
                                 </dl>
 
-                                <h3 className="wf-view__sub">{t('Input bindings')}</h3>
+                                {/* Inputs and outputs as one table each: a row per input, its note under its name and
+                                    a rule between rows, so a description can never be read as the next input's. */}
+                                <h3 className="wf-view__sub">{t('Inputs')}</h3>
                                 {inputs.length === 0 ? (
                                   <p className="muted">{t('This step takes no inputs.')}</p>
                                 ) : (
-                                  <ul className="wf-view__inputs">
-                                    {inputs.map((input) => (
-                                      <li key={input.key}>
-                                        <div className="wf-view__input-head">
-                                          <strong>{input.key}</strong>
-                                          {input.dataType ? (
-                                            <span className="muted">
-                                              {input.dataType}
-                                              {input.required === null ? '' : input.required ? t(' · required') : t(' · optional')}
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                        <div className="wf-view__binding">{input.text}</div>
-                                        {input.description ? <small className="muted">{input.description}</small> : null}
-                                      </li>
-                                    ))}
-                                  </ul>
+                                  <div className="wf-view__scroll">
+                                    <table className="wf-view__io">
+                                      <thead>
+                                        <tr>
+                                          <th>{t('Input')}</th>
+                                          <th>{t('Type')}</th>
+                                          <th>{t('Source')}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {inputs.map((input) => (
+                                          <tr key={input.key}>
+                                            <td>
+                                              <code className="wf-view__io-key">{input.key}</code>
+                                              {input.required !== null || input.description ? (
+                                                <span className="wf-view__io-note">
+                                                  {[
+                                                    input.required === null ? null : input.required ? t('Required') : t('Optional'),
+                                                    input.description,
+                                                  ]
+                                                    .filter(Boolean)
+                                                    .join(' · ')}
+                                                </span>
+                                              ) : null}
+                                            </td>
+                                            <td className="wf-view__io-type">{input.dataType ?? '—'}</td>
+                                            <td>
+                                              <span className="wf-view__io-kind">{input.source.kind}</span>
+                                              {input.source.value !== null ? <code className="wf-view__io-value">{input.source.value}</code> : null}
+                                              {input.source.note ? <span className="wf-view__io-note">{input.source.note}</span> : null}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 )}
 
                                 {operation && operation.outputs.length > 0 ? (
                                   <>
                                     <h3 className="wf-view__sub">{t('Outputs (read-only metadata)')}</h3>
-                                    <ul className="muted wf-view__outputs">
-                                      {operation.outputs.map((output) => (
-                                        <li key={output.key}>
-                                          {output.key}: {output.dataType} — {output.description}
-                                        </li>
-                                      ))}
-                                    </ul>
+                                    <div className="wf-view__scroll">
+                                      <table className="wf-view__io">
+                                        <thead>
+                                          <tr>
+                                            <th>{t('Output')}</th>
+                                            <th>{t('Type')}</th>
+                                            <th>{t('Description')}</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {operation.outputs.map((output) => (
+                                            <tr key={output.key}>
+                                              <td>
+                                                <code className="wf-view__io-key">{output.key}</code>
+                                              </td>
+                                              <td className="wf-view__io-type">{output.dataType}</td>
+                                              <td className="wf-view__io-desc">{output.description || '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
                                   </>
                                 ) : null}
                               </div>

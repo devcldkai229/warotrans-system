@@ -13,6 +13,8 @@ import { RobotFaultCard } from './fault/RobotFaultCard'
 import { RobotHistoryCard } from './history/RobotHistoryCard'
 import { RobotCapacityCard } from './RobotCapacityCard'
 import { TrafficClearanceCard } from './TrafficClearanceCard'
+import { shownRobotStatus } from './robotStatus'
+import { listWarehouses } from '@/shared/api/warehouses'
 import { formatBattery, formatDateTimeWithYear, formatDuration, formatRelativeTime, humanize, secondsBetween } from '@/shared/lib/format'
 import { BatteryLevel } from '@/shared/ui/BatteryLevel'
 import { Button } from '@/shared/ui/Button'
@@ -65,9 +67,9 @@ function LocalizePanel({ robot, onClose }: { robot: RobotView; onClose: () => vo
 
   return (
     <section className="mb-4 flex flex-col gap-3 rounded-md border border-outline-soft p-4 text-sm">
-      <p className="text-ink-2">Place {robot.code} on an endpoint, facing the endpoint's direction, then choose it here.</p>
+      <p className="text-ink-2">{t('Place {robotCode} on an endpoint, facing the endpoint\'s direction, then choose it here.', { robotCode: robot.code })}</p>
       <select className="rounded-md border border-outline-soft bg-surface p-2" value={endpointId} onChange={(e) => setEndpointId(e.target.value)}>
-        <option value="">Choose where the robot stands…</option>
+        <option value="">{t('Choose where the robot stands…')}</option>
         {(endpoints.data ?? [])
           .filter((e) => e.isEnabled !== false)
           .map((e) => (
@@ -78,18 +80,22 @@ function LocalizePanel({ robot, onClose }: { robot: RobotView; onClose: () => vo
       </select>
       <div className="flex gap-2">
         <Button variant="primary" size="sm" disabled={!chosen || localize.isPending} onClick={() => localize.mutate()}>
-          {localize.isPending ? 'Sending…' : chosen ? `Robot is at ${chosen.name || chosen.code}: localize` : 'Localize'}
+          {localize.isPending
+            ? t('Sending…')
+            : chosen
+              ? t('Robot is at {endpoint}: localize', { endpoint: chosen.name || chosen.code })
+              : t('Localize')}
         </Button>
         <Button variant="ghost" size="sm" onClick={onClose}>
-          Close
+          {t('Close')}
         </Button>
       </div>
       {localize.isSuccess ? (
         <p className="text-xs text-ink-2">
-          Sent. Localization now: <b className="font-medium">{robot.localizationStatus ?? 'unknown'}</b> (updates within a few seconds).
+          {t('Sent. Localization now: {status} (updates within a few seconds).', { status: robot.localizationStatus ?? t('unknown') })}
         </p>
       ) : null}
-      {localize.error ? <p className="text-xs text-red-ink">{localize.error instanceof ApiError ? localize.error.message : 'Localize failed.'}</p> : null}
+      {localize.error ? <p className="text-xs text-red-ink">{localize.error instanceof ApiError ? localize.error.message : t('Localize failed.')}</p> : null}
     </section>
   )
 }
@@ -169,46 +175,34 @@ interface Diagnostics {
 
 const HEALTH_TONE = { OK: 'green', WARN: 'amber', ERROR: 'red', STALE: 'amber', UNKNOWN: 'grey' } as const
 
+/** "Last heard 2 h ago", or that the robot never reported. */
+function lastHeard(robot: RobotView) {
+  return robot.lastHeartbeatAt
+    ? t('Last heard {age}', { age: formatRelativeTime(robot.lastHeartbeatAt) })
+    : t('Never connected')
+}
+
 // Every section is backed by persisted data: fleet.robots, the active JobAssignment and the robot's Job assignments.
-function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagnostics): Section[] {
+// Status, enabled and online are in the panel header, so no section repeats them.
+function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagnostics, warehouseName: string | undefined): Section[] {
   const activity = robot.activity
   const recentJobs = recent.items
   const hasTelemetry = Boolean(robot.lastTelemetryAt)
+  // Names, not ids: the id only when the name cannot be read (no access to warehouses, or not loaded yet).
+  const warehouse = warehouseName ?? dash(robot.warehouseId)
+  const mapVersion = robot.mapVersionCode ?? dash(robot.currentMapVersionId)
 
   return [
     {
       id: 'identity',
       label: t('Identity'),
-      summary: robot.name,
+      summary: robot.name !== robot.code ? robot.name : warehouse,
       body: (
         <dl>
           <Field label={t('Code')}>{robot.code}</Field>
-          <Field label={t('Name')}>{robot.name}</Field>
-          <Field label={t('Warehouse')}>{dash(robot.warehouseId)}</Field>
-          <Field label={t('Current map version')}>{dash(robot.currentMapVersionId)}</Field>
-        </dl>
-      ),
-    },
-    {
-      id: 'operational',
-      label: t('Operational'),
-      summary: (
-        <>
-          <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
-            {robot.status}
-          </StatusBadge>
-          <span className="text-muted">{robot.isEnabled ? t('Enabled') : t('Disabled')}</span>
-        </>
-      ),
-      body: (
-        <dl>
-          <Field label={t('Operational status')}>
-            <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
-              {robot.status}
-            </StatusBadge>
-          </Field>
-          <Field label={t('Enabled')}>{robot.isEnabled ? t('Yes') : t('No')}</Field>
-          <Field label={t('Connectivity')}>{robot.isOnline ? t('Online') : t('Offline')}</Field>
+          {robot.name !== robot.code ? <Field label={t('Name')}>{robot.name}</Field> : null}
+          <Field label={t('Warehouse')}>{warehouse}</Field>
+          <Field label={t('Current map version')}>{mapVersion}</Field>
         </dl>
       ),
     },
@@ -248,7 +242,7 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
     {
       id: 'connectivity',
       label: t('Connectivity'),
-      summary: robot.isOnline ? t('Online') : t('Offline'),
+      summary: robot.isOnline ? t('Online') : lastHeard(robot),
       body: (
         <dl>
           <Field label={t('Online')}>{robot.isOnline ? t('Yes') : t('No')}</Field>
@@ -258,7 +252,6 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
               {formatDateTimeWithYear(robot.lastHeartbeatAt)}
             </span>
           </Field>
-          <Field label={t('Map version code')}>{dash(robot.mapVersionCode)}</Field>
         </dl>
       ),
     },
@@ -272,7 +265,7 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
     {
       id: 'system',
       label: t('System'),
-      summary: formatDateTimeWithYear(robot.createdAt),
+      summary: t('Created {date}', { date: formatDateTimeWithYear(robot.createdAt) }),
       body: (
         <dl>
           <Field label={t('Created')}>{formatDateTimeWithYear(robot.createdAt)}</Field>
@@ -379,6 +372,14 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
     enabled: mayDiagnose,
     refetchInterval: 10_000,
   })
+  // Same key as Management's warehouse list, so it is shared; a role without warehouse.read keeps the id instead.
+  const warehousesQuery = useQuery({
+    queryKey: ['warehouses', 'all'],
+    queryFn: () => listWarehouses({ take: 100 }),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+  const warehouseName = warehousesQuery.data?.items.find((item) => item.id === robot.warehouseId)?.name
   const sections = buildSections(
     robot,
     {
@@ -386,8 +387,10 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
       items: recentQuery.data?.items ?? [],
     },
     { allowed: mayDiagnose, health: healthQuery.data },
+    warehouseName,
   )
-  const [openIds, setOpenIds] = useState<string[]>(['identity', 'operational'])
+  const [openIds, setOpenIds] = useState<string[]>(['identity'])
+  const status = shownRobotStatus(robot)
   const [actionError, setActionError] = useState<string | null>(null)
   const [localizing, setLocalizing] = useState(false)
   const mayCommand = canActOnRobot(capabilities, PERMISSIONS.robotCommand, robot.id)
@@ -424,11 +427,14 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
           <Icon name="arrowLeft" size={14} />{' '}{t('Fleet')}</Button>
         <div className="mt-3 mb-2 flex items-center justify-between gap-3">
           <h1 className="text-3xl font-book">{robot.code}</h1>
-          <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
-            {robot.status}
-          </StatusBadge>
+          <span title={status === robot.status ? undefined : t('Last reported status: {status}', { status: humanize(robot.status) })}>
+            <StatusBadge tone={ROBOT_STATUS_TONE[status]} withDot>
+              {status}
+            </StatusBadge>
+          </span>
         </div>
-        <p className="mb-4 text-sm text-muted">{t('Connectivity:')}{' '}{robot.isOnline ? t('Online') : t('Offline')}
+        <p className="mb-4 text-sm text-muted">
+          {robot.isOnline ? t('Online') : lastHeard(robot)}
           {' · '}
           {robot.isEnabled ? t('Enabled') : t('Disabled')}
         </p>

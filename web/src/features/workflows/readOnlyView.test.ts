@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { OperationMetadata, StepInputBinding, WorkflowStepDraft, WorkflowTaskDraft, WorkflowVariable } from '@/shared/api/types'
-import { describeBinding, inputRows, valueText, variableValue } from './readOnlyView'
+import { bindingParts, describeBinding, inputRows, valueText, variableValue } from './readOnlyView'
 
 function step(overrides: Partial<WorkflowStepDraft> = {}): WorkflowStepDraft {
   return {
@@ -125,5 +125,23 @@ describe('inputRows', () => {
     const rows = inputRows(step({ inputBindings: { a: binding({ sourceType: 'CONSTANT', constantValue: 'x' }) } }), null, tasks, variables)
 
     expect(rows.map((r) => r.key)).toEqual(['a'])
+  })
+})
+
+describe('bindingParts', () => {
+  it('splits a binding into the kind of source and the value', () => {
+    expect(bindingParts(binding({ sourceType: 'WORKFLOW_VAR', sourceReference: 'jobId' }), tasks, variables)).toEqual({ kind: 'Workflow variable', value: 'jobId', note: null })
+    expect(bindingParts(binding({ sourceType: 'CURRENT_MOVEMENT', sourceReference: 'source.endpointId' }), tasks, variables)).toEqual({ kind: 'Current movement', value: 'source.endpointId', note: null })
+    expect(bindingParts(binding({ sourceType: 'CONSTANT', constantValue: 360 }), tasks, variables)).toEqual({ kind: 'Constant', value: '360', note: null })
+    expect(bindingParts(binding({ sourceType: 'STEP_OUTPUT', sourceReference: 'CHECK_READY', outputKey: 'robotId' }), tasks, variables)).toEqual({ kind: 'Output of "Check robot is ready"', value: 'robotId', note: null })
+  })
+
+  it('names a variable whose display name differs from its key', () => {
+    expect(bindingParts(binding({ sourceType: 'WORKFLOW_VAR', sourceReference: 'minBatteryPercent' }), tasks, variables).note).toBe('Minimum battery (%)')
+  })
+
+  it('says when an input is not bound, with no value', () => {
+    expect(bindingParts(undefined, tasks, variables)).toEqual({ kind: 'Not bound', value: null, note: null })
+    expect(bindingParts(binding({ sourceType: 'STEP_OUTPUT', sourceReference: 'CHECK_READY', outputKey: null }), tasks, variables).value).toBeNull()
   })
 })

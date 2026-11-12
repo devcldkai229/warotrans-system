@@ -1,8 +1,8 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes, ComponentPropsWithRef } from 'react'
 import { cx } from '@/shared/lib/cx'
 import { buttonClass, type ButtonStyle } from './buttonClass'
 
-type ButtonProps = ButtonStyle & ButtonHTMLAttributes<HTMLButtonElement>
+type ButtonProps = ButtonStyle & ComponentPropsWithRef<'button'>
 
 export function Button({ variant, size, block, className, type = 'button', ...rest }: ButtonProps) {
   return <button type={type} className={buttonClass({ variant, size, block }, className)} {...rest} />

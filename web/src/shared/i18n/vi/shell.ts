@@ -111,4 +111,8 @@ export const vi_shell: Record<string, string> = {
   '{hours} h ago': '{hours} giờ trước',
   'Unknown': 'Không rõ',
   'Search': 'Tìm kiếm',
+  'Pagination': 'Phân trang',
+  'Previous page': 'Trang trước',
+  'Next page': 'Trang sau',
+  'Page {page}': 'Trang {page}',
 }

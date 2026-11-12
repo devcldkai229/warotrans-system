@@ -121,18 +121,39 @@ async function pickWarehouse() {
   return warehouses.find((item) => item.id === preferredWarehouseId()) ?? warehouses[0]
 }
 
+/** One page of a Management list: the server filters and counts, so `total` is every match, not just this page. */
+export interface PageQuery {
+  search?: string
+  skip?: number
+  take?: number
+}
+
+const contains = (value: string, needle: string) => value.toLowerCase().includes(needle.toLowerCase())
+
 /**
- * GET /api/warehouse/containers for the working Warehouse, every status (the default would hide reserved, in-transit
- * and held ones). Containers are scoped to a Warehouse through their storage location; those not yet on a shelf are
- * listed for every Warehouse.
+ * GET /api/warehouse/containers for the working Warehouse, every status unless `status` names one (the server default
+ * would hide reserved, in-transit and held ones). Containers are scoped to a Warehouse through their storage location;
+ * those not yet on a shelf are listed for every Warehouse.
  */
-export async function listManagedContainers(): Promise<ContainerListing> {
-  if (MOCK_MODE) return { warehouseName: 'Warehouse A', items: CONTAINERS, total: CONTAINERS.length }
+export async function listManagedContainers({
+  search,
+  status,
+  skip = 0,
+  take = 50,
+}: PageQuery & { status?: ContainerView['status'] } = {}): Promise<ContainerListing> {
+  if (MOCK_MODE) {
+    const matches = CONTAINERS.filter(
+      (item) =>
+        (!status || item.status === status) &&
+        (!search || [item.barcode, item.sku, item.productName, item.supplierPackageBarcode ?? ''].some((v) => contains(v, search))),
+    )
+    return { warehouseName: 'Warehouse A', items: matches.slice(skip, skip + take), total: matches.length }
+  }
 
   const warehouse = await pickWarehouse()
   if (!warehouse) return { warehouseName: null, items: [], total: 0 }
 
-  const response = await listContainers({ warehouseId: warehouse.id, eligibleOnly: false, take: 500 })
+  const response = await listContainers({ warehouseId: warehouse.id, eligibleOnly: false, search, status, skip, take })
   return {
     warehouseName: warehouse.name,
     total: response.total,
@@ -164,13 +185,18 @@ export interface InventoryListing {
  * one storage location and shelf level; the numbers change only through the Container lifecycle, so the table is
  * read-only. It stays empty until Containers are put away on shelves.
  */
-export async function listManagedInventory(): Promise<InventoryListing> {
-  if (MOCK_MODE) return { warehouseName: 'Warehouse A', items: INVENTORY, total: INVENTORY.length }
+export async function listManagedInventory({ search, skip = 0, take = 50 }: PageQuery = {}): Promise<InventoryListing> {
+  if (MOCK_MODE) {
+    const matches = INVENTORY.filter(
+      (row) => !search || [row.sku, row.productName, row.locationCode].some((v) => contains(v, search)),
+    )
+    return { warehouseName: 'Warehouse A', items: matches.slice(skip, skip + take), total: matches.length }
+  }
 
   const warehouse = await pickWarehouse()
   if (!warehouse) return { warehouseName: null, items: [], total: 0 }
 
-  const response = await listInventory({ warehouseId: warehouse.id, take: 500 })
+  const response = await listInventory({ warehouseId: warehouse.id, search, skip, take })
   return {
     warehouseName: warehouse.name,
     total: response.total,

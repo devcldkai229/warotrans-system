@@ -453,10 +453,6 @@
   gap: 0.35rem;
 }
 
-.wf-tree__hint {
-  margin: 0 0 0.75rem;
-}
-
 .wf-tree__list {
   display: flex;
   flex-direction: column;
@@ -1123,16 +1119,6 @@
   gap: 1rem;
 }
 
-.wf-view__notice {
-  margin: 0;
-  padding: 0.75rem 1rem;
-  border-radius: 0.65rem;
-  background: var(--color-blue-soft);
-  color: var(--color-blue-ink);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
 .wf-view__title {
   margin: 0 0 0.75rem;
   font-size: 0.95rem;
@@ -1149,11 +1135,6 @@
 
 .wf-view__bar .wf-view__title {
   margin: 0;
-}
-
-.wf-view__hint {
-  margin: 0.5rem 0 0.9rem;
-  font-size: 0.85rem;
 }
 
 .wf-view__scroll {
@@ -1215,33 +1196,69 @@
   font-weight: 600;
 }
 
-.wf-view__inputs {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wf-view__input-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.6rem;
-}
-
-.wf-view__binding {
-  margin-top: 0.15rem;
-  padding: 0.35rem 0.6rem;
-  border-radius: 0.4rem;
-  background: var(--color-container-high);
+/* Inputs and outputs of a step: one row each, the name's note under the name, a rule between rows. */
+.wf-view__io {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.85rem;
+}
+
+.wf-view__io th {
+  padding: 0.35rem 0.75rem 0.35rem 0;
+  border-bottom: 1px solid var(--color-outline);
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+/* Name | type | source: the name and the source get the room, the type a narrow column. */
+.wf-view__io th:nth-child(1) {
+  width: 38%;
+}
+
+.wf-view__io th:nth-child(2) {
+  width: 7rem;
+}
+
+.wf-view__io td {
+  padding: 0.6rem 0.75rem 0.6rem 0;
+  border-bottom: 1px solid var(--color-outline-soft);
+  vertical-align: top;
   overflow-wrap: anywhere;
 }
 
-.wf-view__outputs {
-  margin: 0;
-  padding-left: 1.1rem;
-  font-size: 0.85rem;
+.wf-view__io tr:last-child td {
+  border-bottom: none;
+}
+
+.wf-view__io-key {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.wf-view__io-note {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.wf-view__io-type {
+  font-size: 0.78rem;
+  color: var(--color-ink-2);
+}
+
+.wf-view__io-kind {
+  margin-right: 0.4rem;
+  color: var(--color-muted);
+}
+
+.wf-view__io-value {
+  color: var(--color-ink);
+}
+
+.wf-view__io-desc {
+  color: var(--color-ink-2);
 }

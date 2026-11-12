@@ -1,19 +1,25 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
+import { InfoTip } from '@/shared/ui/InfoTip'
 
 interface SectionHeadProps {
   title: string
   hint?: string
+  /** A longer explanation kept behind an "i" beside the title, for rules that are not obvious from the screen. */
+  info?: { label: string; text: ReactNode }
   children?: ReactNode
 }
 
 /** Title line of a Management section: what it is, and the filters / add button on the right. */
-export function SectionHead({ title, hint, children }: SectionHeadProps) {
+export function SectionHead({ title, hint, info, children }: SectionHeadProps) {
   return (
-    <header className="mb-6 flex items-end justify-between gap-8">
+    <header className="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
       <div className="min-w-0">
-        <h2 className="text-xl font-book">{title}</h2>
+        <h2 className="flex items-center gap-1.5 text-xl font-book">
+          {title}
+          {info ? <InfoTip label={info.label}>{info.text}</InfoTip> : null}
+        </h2>
         {hint ? <p className="mt-1.5 text-sm text-ink-2">{hint}</p> : null}
       </div>
       {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}

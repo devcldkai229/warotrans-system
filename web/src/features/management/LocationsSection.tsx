@@ -100,11 +100,7 @@ export function LocationsSection({ listing, setItems, loadState }: LocationsSect
     <>
       <SectionHead
         title={t('Storage locations')}
-        hint={
-          warehouse
-            ? t('Places where Containers are stored in {name}. Each one points at one map Endpoint.', { name: warehouse.name })
-            : t('Places where Containers are stored. Each one points at one map Endpoint.')
-        }
+        hint={warehouse?.name}
       >
         {warehouse ? (
           <Can permission={PERMISSIONS.warehouseWrite}>

@@ -97,7 +97,7 @@ export function AccountsSection({ accounts, setAccounts, loadState }: AccountsSe
 
   return (
     <>
-      <SectionHead title={t('Accounts')} hint={t('People who can sign in. The role decides what each person may do.')}>
+      <SectionHead title={t('Accounts')}>
         <SearchInput className="w-72" placeholder={t('Search name, username or email')} value={query} onChange={setQuery} />
         <select
           className={controlClass('pill')}
