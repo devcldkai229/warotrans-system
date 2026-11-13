@@ -39,6 +39,17 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
             query = query.Where(c => c.Status == status);
         }
 
+        var byVoucher = !string.IsNullOrEmpty(request.VoucherType);
+        if (byVoucher)
+        {
+            var type = Enum.Parse<StockVoucherType>(request.VoucherType!);
+            query = query.Where(c => db.StockVoucherLines.Any(l =>
+                l.ContainerId == c.Id
+                && l.StockVoucher.Type == type
+                && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED
+                && l.StockVoucher.WarehouseId == request.WarehouseId));
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();
@@ -51,8 +62,14 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(c => c.Barcode)
+        // Newest confirmed voucher first when filtering by voucher: the phiếu just made comes on top.
+        var ordered = byVoucher
+            ? query.OrderByDescending(c => db.StockVoucherLines
+                    .Where(l => l.ContainerId == c.Id && l.StockVoucher.Status == StockVoucherStatus.CONFIRMED)
+                    .Max(l => l.StockVoucher.ConfirmedAt))
+                .ThenBy(c => c.Barcode)
+            : query.OrderBy(c => c.Barcode);
+        var items = await ordered
             .Skip(request.Skip)
             .Take(request.Take)
             .Select(c => new ContainerListItemResponse(
@@ -70,6 +87,25 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
                 c.UpdatedAt,
                 false))
             .ToListAsync(cancellationToken);
+
+        // The latest voucher each Container is on (cancelled ones do not count).
+        var ids = items.Select(i => i.Id).ToList();
+        var vouchers = (await db.StockVoucherLines.AsNoTracking()
+                .Where(l => ids.Contains(l.ContainerId) && l.StockVoucher.Status != StockVoucherStatus.CANCELLED)
+                .Select(l => new
+                {
+                    l.ContainerId,
+                    Voucher = new ContainerVoucherResponse(
+                        l.StockVoucher.Id, l.StockVoucher.Code, l.StockVoucher.Type.ToString(), l.StockVoucher.Status.ToString(),
+                        l.StockVoucher.CreatedAt, l.StockVoucher.ConfirmedAt)
+                })
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.ContainerId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Voucher).OrderByDescending(v => v.CreatedAt).First());
+        if (vouchers.Count > 0)
+        {
+            items = items.Select(i => vouchers.TryGetValue(i.Id, out var v) ? i with { Voucher = v } : i).ToList();
+        }
 
         // Transport Requests live in another module, so the flag is filled in after the query.
         var moving = await transports.GetContainersInActiveTransportAsync(items.Select(i => i.Id).ToList(), cancellationToken);

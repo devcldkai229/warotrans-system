@@ -26,6 +26,13 @@ public static class RobotCapacityEndpoint
                     throw new DomainValidationException("Capacity and size must be above zero, or empty when not known.", "robot_capacity_invalid");
                 }
 
+                if (request.MaxContainers > WaroTrans.BuildingBlocks.RobotLoad.MaxContainers)
+                {
+                    throw new DomainValidationException(
+                        $"A robot carries at most {WaroTrans.BuildingBlocks.RobotLoad.MaxContainers} containers.",
+                        "robot_capacity_above_limit");
+                }
+
                 var robot = await db.Robots.FirstOrDefaultAsync(r => r.Id == id, cancellationToken)
                     ?? throw new NotFoundException($"Robot '{id}' was not found.", "robot_not_found");
                 robot.MaxPayloadKg = request.MaxPayloadKg;

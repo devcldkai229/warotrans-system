@@ -372,7 +372,8 @@ public sealed class RobotInteractionConfirmedHandlerTests
             Guid jobStepId,
             CancellationToken cancellationToken = default,
             RouteGrantSnapshot? route = null,
-            double? timeoutSeconds = null)
+            double? timeoutSeconds = null,
+            double? positionTolerance = null)
         {
             var commandId = Guid.NewGuid();
             Commands.Add((robotId, x, y, jobStepId, commandId));

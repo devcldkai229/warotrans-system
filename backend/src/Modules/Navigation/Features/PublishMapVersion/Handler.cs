@@ -12,6 +12,7 @@ namespace WaroTrans.Navigation.Features.PublishMapVersion;
 public sealed class PublishMapVersionHandler(
     NavigationDbContext dbContext,
     IStorageLocationEndpointRebinder storageLocations,
+    EndpointStorage endpointStorage,
     ILogger<PublishMapVersionHandler> logger)
 {
     /// <summary>Longest clone-of-a-clone chain followed when re-binding storage locations.</summary>
@@ -50,6 +51,16 @@ public sealed class PublishMapVersionHandler(
                 "map_assets_pending");
         }
 
+        // Endpoints marked as storage locations get them once published: refuse now rather than publish without them.
+        var takenCodes = await endpointStorage.TakenMarkedCodesAsync(mapVersion, cancellationToken);
+        if (takenCodes.Count > 0)
+        {
+            throw new ConflictException(
+                $"Storage location code(s) '{string.Join(", ", takenCodes)}' already used in this warehouse. "
+                + "Change them on the endpoints before publishing.",
+                "storage_location_code_used");
+        }
+
         var currentlyPublishedMaps = await dbContext.MapVersions
             .Where(m => m.WarehouseId == mapVersion.WarehouseId && m.Status == MapStatus.PUBLISHED && m.Id != id)
             .ToListAsync(cancellationToken);
@@ -74,6 +85,15 @@ public sealed class PublishMapVersionHandler(
                 "Map {MapCode} published: {Rebound} storage location(s) moved to its cloned endpoints",
                 mapVersion.Code,
                 rebound);
+        }
+
+        var created = await endpointStorage.CreateMarkedAsync(mapVersion, cancellationToken);
+        if (created > 0)
+        {
+            logger.LogInformation(
+                "Map {MapCode} published: {Created} storage location(s) created for its marked endpoints",
+                mapVersion.Code,
+                created);
         }
 
         return MapVersionResponse.From(mapVersion);

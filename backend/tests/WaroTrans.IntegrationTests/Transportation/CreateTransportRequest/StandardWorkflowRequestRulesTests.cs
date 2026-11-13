@@ -51,14 +51,12 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
         Assert.Equal(HttpStatusCode.OK, queued.StatusCode);
         var jobs = (await queued.Content.ReadFromJsonAsync<QueueDto>(JsonOptions))!.Jobs;
 
-        // JobPlanning:MaxContainersPerJob is 1 in appsettings (WH-08): one Job per Container, each pickup then dropoff.
-        // Collecting both before one dropoff stop is the planner's job when the limit allows it (JobBatchSplitTests).
-        Assert.Equal(2, jobs.Count);
-        foreach (var job in jobs)
-        {
-            Assert.Equal(1, job.JobContainerCount);
-            Assert.Equal(["MOVE_TO_PICKUP", "CONFIRM_PICKUP", "MOVE_TO_DROPOFF", "CONFIRM_DROPOFF"], await StepKeysAsync(job.JobId));
-        }
+        // One robot carries up to 3: one trip collects at both shelves, then drops both at the outbound point.
+        var job = Assert.Single(jobs);
+        Assert.Equal(2, job.JobContainerCount);
+        Assert.Equal(
+            ["MOVE_TO_PICKUP", "CONFIRM_PICKUP", "MOVE_TO_PICKUP", "CONFIRM_PICKUP", "MOVE_TO_DROPOFF", "CONFIRM_DROPOFF", "CONFIRM_DROPOFF"],
+            await StepKeysAsync(job.JobId));
     }
 
     [Fact]
@@ -97,6 +95,37 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
     }
 
     [Fact]
+    public async Task Inbound_of_a_received_container_onto_a_shelf_is_accepted()
+    {
+        var floor = await SeedFloorAsync(unshelvedContainer: true, inboundVoucher: true);
+        var workflows = await SeedWorkflowsAsync();
+
+        var response = await Client.PostAsJsonAsync(Route, Body(floor, workflows["INBOUND"],
+            Detail(1, floor.Containers[3], floor.Dock, floor.ShelfA)));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(3, "D", "O", true, "inbound_destination_not_storage")]   // inbound goes onto a shelf
+    [InlineData(3, "D", "A", false, "inbound_voucher_required")]         // no confirmed phiếu nhập
+    [InlineData(0, "D", "B", true, "container_already_stored")]          // already on shelf A
+    [InlineData(3, "A", "B", true, "container_not_stored")]              // not on a shelf: cannot be collected from one
+    public async Task Inbound_requests_that_do_not_fit_are_refused(
+        int containerIndex, string from, string to, bool inboundVoucher, string expectedCode)
+    {
+        var floor = await SeedFloorAsync(unshelvedContainer: true, inboundVoucher: inboundVoucher);
+        var workflows = await SeedWorkflowsAsync();
+
+        var response = await Client.PostAsJsonAsync(Route, Body(floor, workflows["INBOUND"],
+            Detail(1, floor.Containers[containerIndex], Point(floor, from), Point(floor, to))));
+
+        Assert.False(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(expectedCode, problem.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task Outbound_from_a_point_that_is_not_a_shelf_is_refused()
     {
         var floor = await SeedFloorAsync(unshelvedContainer: true);
@@ -113,6 +142,7 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
     {
         "A" => floor.ShelfA,
         "B" => floor.ShelfB,
+        "D" => floor.Dock,
         _ => floor.Outbound
     };
 
@@ -152,7 +182,7 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
         destinationEndpointId = destination
     };
 
-    private async Task<Floor> SeedFloorAsync(bool unshelvedContainer = false)
+    private async Task<Floor> SeedFloorAsync(bool unshelvedContainer = false, bool inboundVoucher = false)
     {
         var warehouseId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -214,6 +244,13 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
             };
             db.Containers.Add(loose);
             containers.Add(loose.Id);
+            if (inboundVoucher)
+            {
+                var receipt = StockVoucher.Create("PN-WF-000001", StockVoucherType.INBOUND, warehouseId, null, null, TestAccountId, now);
+                receipt.AddLine(loose, now);
+                receipt.Confirm(TestAccountId, now);
+                db.StockVouchers.Add(receipt);
+            }
         }
 
         outboundVoucher.Confirm(TestAccountId, now);

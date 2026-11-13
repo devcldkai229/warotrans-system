@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 
 namespace WaroTrans.Navigation.Features.UpdateEndpoint;
 
 public sealed class UpdateEndpointHandler(
     NavigationDbContext dbContext,
+    EndpointStorage endpointStorage,
     IValidator<UpdateEndpointRequest> validator)
 {
     public async Task<UpdateEndpointResponse> HandleAsync(
@@ -29,11 +31,10 @@ public sealed class UpdateEndpointHandler(
             throw new NotFoundException($"Endpoint with ID '{id}' was not found.", "endpoint_not_found");
         }
 
-        var mapStatus = await dbContext.MapVersions
+        var mapVersion = await dbContext.MapVersions
             .AsNoTracking()
-            .Where(m => m.Id == endpoint.MapVersionId)
-            .Select(m => (MapStatus?)m.Status)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(m => m.Id == endpoint.MapVersionId, cancellationToken);
+        var mapStatus = mapVersion?.Status;
 
         if (mapStatus is null)
         {
@@ -57,6 +58,12 @@ public sealed class UpdateEndpointHandler(
         endpoint.PositionTolerance = request.PositionTolerance;
         endpoint.YawTolerance = request.YawTolerance;
         endpoint.IsEnabled = request.IsEnabled;
+        endpoint.StorageLocationCode = EndpointStorage.Normalize(request.StorageLocationCode);
+
+        if (endpoint.StorageLocationCode is { } storageCode)
+        {
+            await endpointStorage.EnsureCanMarkAsync(mapVersion!, endpoint, storageCode, cancellationToken);
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -71,6 +78,7 @@ public sealed class UpdateEndpointHandler(
             endpoint.Yaw,
             endpoint.PositionTolerance,
             endpoint.YawTolerance,
-            endpoint.IsEnabled);
+            endpoint.IsEnabled,
+            endpoint.StorageLocationCode);
     }
 }

@@ -115,7 +115,8 @@ public sealed class IssueNavigateCommandHandler(
                 }
                 : null,
             Authority = request.Authority,
-            TimeoutSeconds = request.TimeoutSeconds is > 0 ? request.TimeoutSeconds : null
+            TimeoutSeconds = request.TimeoutSeconds is > 0 ? request.TimeoutSeconds : null,
+            PositionTolerance = request.PositionTolerance is > 0 ? request.PositionTolerance : null
         };
         var payloadJson = JsonSerializer.Serialize(posePayload, JsonOptions);
 

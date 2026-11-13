@@ -21,7 +21,7 @@ public sealed class JobBatchSplitTests
                 Guid.NewGuid(), i + 1, Guid.NewGuid(), null, m.Source, null, null, m.Destination, null)).ToList());
 
     [Fact]
-    public void No_limit_keeps_one_batch_as_before()
+    public void Within_the_robot_hard_cap_one_batch_as_before()
     {
         var plan = new CollectThenDeliverJobBatchPlanner().Plan(Request((A, D), (B, E), (A, D)));
 
@@ -46,16 +46,63 @@ public sealed class JobBatchSplitTests
     }
 
     [Fact]
-    public void Same_route_stays_together_up_to_the_limit()
+    public void Trips_fill_up_to_the_limit_and_mix_routes()
     {
         var request = Request((A, D), (B, E), (A, D), (A, D));
 
         var plan = new CollectThenDeliverJobBatchPlanner(2).Plan(request);
 
-        Assert.Equal(3, plan.Count);
+        // Pickup stop order first (A, then B), then dropoff stop order, then Detail order.
+        Assert.Equal(2, plan.Count);
         Assert.Equal([request.Details[0].ContainerId, request.Details[2].ContainerId], plan[0].ContainerIds);
-        Assert.Equal([request.Details[3].ContainerId], plan[1].ContainerIds);
-        Assert.Equal([request.Details[1].ContainerId], plan[2].ContainerIds);
+        Assert.Equal([request.Details[3].ContainerId, request.Details[1].ContainerId], plan[1].ContainerIds);
+        // A trip with two routes collects at both sources before it delivers.
+        Assert.Equal(
+            [(A, JobStopAction.PICKUP), (B, JobStopAction.PICKUP), (D, JobStopAction.DROPOFF), (E, JobStopAction.DROPOFF)],
+            plan[1].Stops.Select(s => (s.EndpointId, s.Action)));
+    }
+
+    [Fact]
+    public void Inbound_takes_up_to_three_at_the_pickup_point_and_delivers_them_to_several_shelves()
+    {
+        Guid inbound = Guid.NewGuid(), s1 = Guid.NewGuid(), s2 = Guid.NewGuid(), s3 = Guid.NewGuid();
+        var request = Request((inbound, s1), (inbound, s2), (inbound, s3), (inbound, s1), (inbound, s2));
+
+        var plan = new CollectThenDeliverJobBatchPlanner().Plan(request);
+
+        Assert.Equal([3, 2], plan.Select(b => b.ContainerIds.Count));
+        var first = plan[0];
+        Assert.Equal(JobStopAction.PICKUP, first.Stops[0].Action);
+        Assert.Equal(inbound, first.Stops[0].EndpointId);
+        Assert.Equal(3, first.Stops[0].ContainerIds.Count);
+        Assert.Equal([s1, s2], first.Stops.Skip(1).Select(s => s.EndpointId));
+        // Containers bound for the same shelf travel together.
+        Assert.Equal(2, first.Stops[1].ContainerIds.Count);
+        Assert.Equal([inbound, s2, s3], plan[1].Stops.Select(s => s.EndpointId));
+    }
+
+    [Fact]
+    public void Outbound_collects_from_up_to_three_shelves_then_delivers_once()
+    {
+        Guid outbound = Guid.NewGuid(), s1 = Guid.NewGuid(), s2 = Guid.NewGuid(), s3 = Guid.NewGuid(), s4 = Guid.NewGuid();
+        var request = Request((s1, outbound), (s2, outbound), (s3, outbound), (s4, outbound));
+
+        var plan = new CollectThenDeliverJobBatchPlanner().Plan(request);
+
+        Assert.Equal([3, 1], plan.Select(b => b.ContainerIds.Count));
+        Assert.Equal(
+            [(s1, JobStopAction.PICKUP), (s2, JobStopAction.PICKUP), (s3, JobStopAction.PICKUP), (outbound, JobStopAction.DROPOFF)],
+            plan[0].Stops.Select(s => (s.EndpointId, s.Action)));
+    }
+
+    [Fact]
+    public void A_configured_limit_above_the_robot_hard_cap_is_capped()
+    {
+        var request = Request((A, D), (A, D), (A, D), (A, D));
+
+        var plan = new CollectThenDeliverJobBatchPlanner(10).Plan(request);
+
+        Assert.Equal([JobPlanningOptions.HardMaxContainersPerRobot, 1], plan.Select(b => b.ContainerIds.Count));
     }
 
     [Fact]

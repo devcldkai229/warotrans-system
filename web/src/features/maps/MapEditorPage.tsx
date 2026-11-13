@@ -49,6 +49,7 @@ import { MAP_STATUS_TONE } from '@/shared/ui/statusTones'
 import { lineStringToPoints, pointsToLineString, pointsToPolygon, polygonToPoints } from '@/shared/map/geoJson'
 import { worldToPixel, type PixelCoord, type WorldCoord } from '@/shared/map/mapCoordinateTransform'
 import { WorkflowEditor } from '@/features/workflows/workflow-editor-page'
+import { EndpointStorageField } from './EndpointStorageField'
 import { HeadingDial } from './HeadingDial'
 import { EDGE_TEMPLATES, ENDPOINT_TEMPLATES, ZONE_TEMPLATES } from './constants'
 import { MapEditorCanvas, type EditorTool } from './editor/MapEditorCanvas'
@@ -131,7 +132,15 @@ function toEndpoint(e: EndpointDto): Endpoint {
     positionTolerance: e.positionTolerance,
     yawTolerance: e.yawTolerance,
     isEnabled: e.isEnabled,
+    storageLocation: e.storageLocation ?? null,
+    storageLocationCode: pendingStorageCode(e),
   }
+}
+
+/** The code an endpoint is marked with in a draft (the location is created on publish), or null. */
+function pendingStorageCode(e: EndpointDto): string | null {
+  if (e.storageLocation) return e.storageLocation.state === 'PENDING' ? e.storageLocation.code : null
+  return e.storageLocationCode ?? null
 }
 
 function toEdge(e: EdgeDto): Edge {
@@ -481,7 +490,7 @@ export function MapEditorPage() {
     if (!ep) return
     setEdgeDraft(null)
     setZoneDraft(null)
-    setEpDraft({ ...ep })
+    setEpDraft({ ...ep, storageLocationCode: ep.storageLocation?.state === 'PENDING' ? ep.storageLocation.code : null })
     setMode({ kind: 'endpoint', endpointId: id })
     setTool('select')
   }
@@ -579,6 +588,7 @@ export function MapEditorPage() {
       positionTolerance: DEFAULT_POS_TOL_M,
       yawTolerance: degToRad(DEFAULT_YAW_TOL_DEG),
       isEnabled: true,
+      storageLocationCode: null,
     })
     setMode({ kind: 'endpoint', endpointId: NEW_ENTITY_ID })
     setTool('select')
@@ -592,16 +602,23 @@ export function MapEditorPage() {
       setActionError(t('Name is required — code is generated as EP-{NAME}.'))
       return
     }
+    const endpointType = (epDraft.endpointType as EndpointType) ?? 'WAYPOINT'
+    const storageLocationCode = endpointType === 'WAYPOINT' ? (epDraft.storageLocationCode ?? null) : null
+    if (storageLocationCode !== null && !storageLocationCode.trim()) {
+      setActionError(t('Enter a location code, or untick "Use as a storage location".'))
+      return
+    }
     setActionError(null)
     const body = {
       name: trimmed,
-      endpointType: (epDraft.endpointType as EndpointType) ?? 'WAYPOINT',
+      endpointType,
       x: Number(epDraft.x),
       y: Number(epDraft.y),
       yaw: Number(epDraft.yaw),
       positionTolerance: Number(epDraft.positionTolerance),
       yawTolerance: Number(epDraft.yawTolerance),
       isEnabled: epDraft.isEnabled ?? true,
+      storageLocationCode: storageLocationCode?.trim() || null,
     }
     try {
       if (isUnsavedId(mode.endpointId)) {
@@ -1392,6 +1409,14 @@ export function MapEditorPage() {
                 disabled={!isDraft}
                 onChange={(e) => setEpDraft({ ...epDraft, isEnabled: e.target.checked })}
               />{t('Enabled')}</label>
+            <EndpointStorageField
+              current={selectedEndpoint.storageLocation}
+              code={epDraft.storageLocationCode ?? null}
+              name={epDraft.name ?? ''}
+              isWaypoint={(epDraft.endpointType ?? 'WAYPOINT') === 'WAYPOINT'}
+              isDraft={isDraft}
+              onChange={(code) => setEpDraft({ ...epDraft, storageLocationCode: code })}
+            />
             {isDraft ? (
               <div className="mt-4 flex gap-2">
                 <Button variant="primary" onClick={() => void saveEndpoint()}>{t('Save')}</Button>

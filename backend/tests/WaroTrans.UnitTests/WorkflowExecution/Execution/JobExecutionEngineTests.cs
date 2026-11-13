@@ -140,6 +140,40 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
+    public async Task Navigate_carries_the_target_endpoints_position_tolerance()
+    {
+        var jobId = await ProvisionAsync();
+        var pickup = _navigation.Poses.Values.Single(p => p.X == 1.0);
+        _navigation.Poses[pickup.Id] = pickup with { PositionTolerance = 0.12 };
+
+        await Engine().StartAsync(jobId, null);
+
+        Assert.Equal(0.12, Assert.Single(_fleet.PositionTolerances));
+    }
+
+    [Fact]
+    public async Task A_pickup_beyond_what_the_robot_carries_is_refused_and_the_step_keeps_waiting()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        // The robot's capacity was lowered after dispatch: it may carry one Container only.
+        _fleet.Robots[_fleet.RobotId] = _fleet.Robots[_fleet.RobotId] with { MaxContainers = 1 };
+
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId);
+        await Engine().ConfirmHumanStepAsync(await CurrentStepIdAsync(jobId), C1, HumanConfirmationSource.StaffApp(_staff));
+        var waiting = await CurrentStepIdAsync(jobId);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() =>
+            Engine().ConfirmHumanStepAsync(waiting, C2, HumanConfirmationSource.StaffApp(_staff)));
+
+        Assert.Equal("robot_capacity_full", refused.Code);
+        _db.ChangeTracker.Clear();
+        Assert.Equal(JobStepStatus.WAITING, (await _db.JobSteps.SingleAsync(s => s.Id == waiting)).Status);
+        var job = await _db.Jobs.Include(j => j.JobContainers).SingleAsync(j => j.Id == jobId);
+        Assert.Equal(JobContainerStatus.ASSIGNED, job.JobContainers.Single(c => c.ContainerId == C2).Status);
+    }
+
+    [Fact]
     public async Task Full_job_runs_moves_and_staff_confirmations_to_completion()
     {
         var jobId = await ProvisionAsync();
@@ -1982,6 +2016,7 @@ public sealed class JobExecutionEngineTests
         public List<(Guid RobotId, Guid JobStepId, Guid ConfirmMessageId, bool Accepted, string? ReasonCode)> InteractionResults { get; } = [];
         public Guid RobotId { get; private set; }
         public decimal Battery { get; set; } = 90m;
+        public List<double?> PositionTolerances { get; } = [];
 
         public Guid AddRobot(Guid mapVersionId)
         {
@@ -2036,10 +2071,12 @@ public sealed class JobExecutionEngineTests
             Guid jobStepId,
             CancellationToken cancellationToken = default,
             RouteGrantSnapshot? route = null,
-            double? timeoutSeconds = null)
+            double? timeoutSeconds = null,
+            double? positionTolerance = null)
         {
             var commandId = Guid.NewGuid();
             Commands.Add((robotId, x, y, jobStepId, commandId));
+            PositionTolerances.Add(positionTolerance);
             Timeouts.Add(timeoutSeconds);
             return Task.FromResult(commandId);
         }

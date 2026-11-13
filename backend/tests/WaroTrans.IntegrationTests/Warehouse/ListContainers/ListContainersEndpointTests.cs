@@ -23,7 +23,11 @@ public sealed record ContainerItemDto(
     Guid? CurrentEndpointId,
     short? CurrentLevelNo,
     string? SupplierPackageBarcode,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    bool InActiveTransport = false,
+    ContainerVoucherDto? Voucher = null);
+
+public sealed record ContainerVoucherDto(Guid Id, string Code, string Type, string Status);
 
 public sealed record ListContainersDto(IReadOnlyList<ContainerItemDto> Items, int Total);
 
@@ -130,6 +134,47 @@ public sealed class ListContainersEndpointTests(WaroTransWebApplicationFactory f
         Assert.Equal("SKU-1", transit.ProductSku);
         Assert.Equal("Carton", transit.ProductName);
         Assert.True(transit.UpdatedAt > DateTimeOffset.UtcNow.AddMinutes(-5));
+    }
+
+    [Fact]
+    public async Task Voucher_type_lists_the_containers_of_confirmed_vouchers_newest_first_and_each_item_tells_its_voucher()
+    {
+        var (client, token) = await SignInAsync();
+        var warehouse = await SeedWarehouseAsync("WH-A");
+        var product = await SeedProductAsync();
+        var older = await SeedContainerAsync(product, "CTN-OLD", ContainerStatus.CREATED);
+        var newer = await SeedContainerAsync(product, "CTN-NEW", ContainerStatus.CREATED);
+        var draft = await SeedContainerAsync(product, "CTN-DRAFT", ContainerStatus.CREATED);
+        await SeedContainerAsync(product, "CTN-NONE", ContainerStatus.CREATED);
+        await WithDbAsync(async db =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            StockVoucher Voucher(string code, Container container, DateTimeOffset at, bool confirm)
+            {
+                var voucher = StockVoucher.Create(code, StockVoucherType.INBOUND, warehouse.Id, null, null, Guid.NewGuid(), at);
+                voucher.AddLine(container, at);
+                if (confirm) voucher.Confirm(Guid.NewGuid(), at);
+                db.StockVouchers.Add(voucher);
+                return voucher;
+            }
+
+            Voucher("PN-OLD", older, now.AddHours(-2), true);
+            Voucher("PN-NEW", newer, now.AddHours(-1), true);
+            Voucher("PN-DRAFT", draft, now, false);
+            await db.SaveChangesAsync();
+            return 0;
+        });
+
+        var body = await ReadAsync(await client.GetWithTokenAsync(Url(warehouse.Id, "&voucherType=INBOUND"), token));
+
+        Assert.Equal(["CTN-NEW", "CTN-OLD"], body.Items.Select(c => c.Barcode));
+        Assert.Equal("PN-NEW", body.Items[0].Voucher!.Code);
+        Assert.Equal("CONFIRMED", body.Items[0].Voucher!.Status);
+
+        // Without the filter a draft voucher still shows on its Container; a Container on none has no voucher.
+        var all = await ReadAsync(await client.GetWithTokenAsync(Url(warehouse.Id), token));
+        Assert.Equal("DRAFT", all.Items.Single(c => c.Barcode == "CTN-DRAFT").Voucher!.Status);
+        Assert.Null(all.Items.Single(c => c.Barcode == "CTN-NONE").Voucher);
     }
 
     [Fact]

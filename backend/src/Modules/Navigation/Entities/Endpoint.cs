@@ -21,4 +21,10 @@ public sealed class Endpoint
     /// On publish, storage locations bound to the source endpoint (or its own sources) move to this one.
     /// </summary>
     public Guid? SourceEndpointId { get; set; }
+
+    /// <summary>
+    /// Set in a DRAFT map: the code of the storage location to create for this Endpoint when the map is published
+    /// (a location may only point at a published Endpoint). Cleared once the location exists.
+    /// </summary>
+    public string? StorageLocationCode { get; set; }
 }
