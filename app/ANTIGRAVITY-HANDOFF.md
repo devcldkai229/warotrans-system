@@ -31,7 +31,7 @@ Nếu tài liệu cũ khác quyết định mới, ưu tiên người dùng rồ
 - Stock Vouchers thay Receive Goods/Pack Container trong Transport Hub, độc lập với TransportRequest/workflow.
 - Phiếu nhập diễn ra trước TR Putaway. Staff chuẩn bị cả lô: tổng N thùng → N barcode riêng → chia số thùng theo Product → quantity/unit trong từng thùng → chuyển sang kiểm tra/lập phiếu với toàn bộ lô đã chọn sẵn.
 - Một Container có một Product type. Một lô có nhiều Product. Ví dụ 10 thùng = 6 A + 4 B; tổng số thùng các nhóm phải đúng N.
-- Mỗi nhóm có quantity/unit chung; cho chỉnh riêng quantity của từng thùng và reset về giá trị chung. Không nhân contents quantity vào `InventoryStock.ContainerCount`.
+- Mỗi nhóm chỉ cần Product, số lượng thùng của nhóm và quantity/unit mỗi thùng (bỏ chỉnh riêng từng thùng và bỏ nút scan barcode ở bước tạo nhóm vì Container chưa có mã WaroTrans; Product chọn từ catalog `Choose Product`). Không nhân contents quantity vào `InventoryStock.ContainerCount`.
 - Cấp mã, dán tem hoặc lưu nháp chưa tăng tồn. Chỉ xác nhận phiếu nhập có hiệu lực mới tăng tồn tại Inbound đúng một lần. Putaway/relocation/đang trên robot chỉ đổi vị trí/custody, giữ tổng tồn toàn kho.
 - Địa điểm Inbound và identity phải do server lưu/kiểm tra. Barcode nhà cung cấp chỉ bổ sung, không thay mã WaroTrans của Container.
 - Demo dùng hộp giấy dán sẵn mã được server cấp thật. Không đoán sequence, reset DB hay sinh mã giả để khớp tem.
@@ -43,7 +43,7 @@ Nếu tài liệu cũ khác quyết định mới, ưu tiên người dùng rồ
 ### UI vừa thiết kế và các sở thích phải giữ
 
 - Tự dùng kho có map PUBLISHED mới nhất, cùng resolver Home/Inventory; tên kho chỉ ở header danh sách. Không bắt chọn kho, không hiện tên kho trong form tạo phiếu.
-- Form Nhập có hai bước `Batch` → `Review`. Bước đầu có tổng thùng, nhóm Product, số thùng/nhóm, quantity/unit chung, chỉnh từng thùng và thêm/xóa nhóm. Review tổng hợp các nhóm và ngoại lệ.
+- Form Nhập có hai bước `Batch` → `Review`. Bước đầu có tổng thùng, nhóm Product (chọn từ catalog), số thùng/nhóm, quantity/unit mỗi thùng và thêm/xóa nhóm. Review tổng hợp các nhóm.
 - Form Xuất đưa danh sách preview chọn/quét kiện tại Outbound lên trước khi tạo nháp.
 - Reference/Note là tùy chọn trong `Additional Details`. Reference đối chiếu chứng từ ngoài (PO/phiếu giao/đơn bán), khác mã phiếu server sinh; Note là thông tin bổ sung.
 - Người dùng thích UI gọn, ít chú thích. Đã bỏ nhãn Voucher Type, tên kho trong form, thẻ hướng dẫn dài và hai dòng `Saved On This Device`/`Draft Only · Stock Unchanged` ở form tạo. Giữ lỗi và thông tin thiết yếu ở nơi cần quyết định; không rải lại các banner giải thích.
@@ -56,7 +56,7 @@ Nếu tài liệu cũ khác quyết định mới, ưu tiên người dùng rồ
 
 **BE chưa có đủ contract cho cấp N barcode trước Product, lưu nội dung kiện/lô, canonical staged-outbound eligibility, lưu lựa chọn và confirm ghi tồn.** Confirm handler cũ chỉ đổi trạng thái chứng từ; không mở nó như thể đã post stock.
 
-- Nhóm `group-*` và số thứ tự thùng là kế hoạch local, không phải Container UUID/barcode. `contents` theo ID thật trong detail khác với nhóm dự kiến.
+- Nhóm `group-*` là kế hoạch local, không phải Container UUID/barcode. `contents` theo ID thật trong detail khác với nhóm dự kiến.
 - Preparation lưu trên thiết bị theo account/kho/phiếu, native SecureStore/web localStorage. Đây không phải server draft đã lưu contents và không phải hàng đợi offline sync.
 - `Create Empty Draft` chỉ gửi metadata được API hiện có hỗ trợ; sau thành công copy kế hoạch sang cache theo ID phiếu thật. Detail nháp trống hiển thị Batch Plan/On This Device. Không gọi API thiếu, không báo đã tạo thùng/cấp mã/ghi tồn.
 - Review mới hiển thị số mã thực là 0, Generate Barcodes khóa. Khi BE cung cấp allocation, cần mapping ổn định nhóm/ordinal ↔ allocation/Container ID/barcode, receipt, idempotency, version và phục hồi partial success. Không tự ghép theo vị trí mảng khi contract chưa cam kết.
@@ -67,7 +67,7 @@ Nếu tài liệu cũ khác quyết định mới, ưu tiên người dùng rồ
 
 Đọc `CreateStockVoucherScreen.tsx`, `ContainerCountField.tsx`, `InboundBatchEditor.tsx`, `InboundBatchSummary.tsx`, `inboundBatch.ts`, `voucherPreparation.ts`, `useVoucherPreparation.ts`, `preparationStorage.ts`, `preparationDeviceStore.ts`, `StockVouchersScreen.tsx`, `StockVoucherDetailScreen.tsx`, `VoucherDraftWorkspace.tsx`, `OutboundVoucherSelection.tsx`, `outboundPreparation.ts`, `ReceivingProductPicker.tsx`, `productLookup.ts`, `stockVoucherData.ts`, `useVoucherWarehouse.ts` trong `app/src/features/inventory/`; API/capabilities trong `app/src/shared/api/`.
 
-Mốc vừa kiểm tra: typecheck, 27 file test (9 ca batch, 15 preparation, 13 voucher contract/logic cùng các suite khác), export web và iOS đều qua trong workspace hiện tại. Browser đã thử Product thật, lô 11 thùng chia 8+3, quantity riêng, exact lookup qua nhập mã, chặn tổng sai, chuyển Nhập/Xuất, reload giữ nhóm/ngoại lệ và wheel khi focus. Không tạo chứng từ trên server để test, không chạy DB integration/seed/reset. Chưa nghiệm thu camera/iPhone/VoiceOver hoặc robot thật.
+Mốc vừa kiểm tra: cập nhật form Inbound Batch giản lược (chọn Product từ danh mục, bỏ scan barcode và bỏ chỉnh riêng từng thùng). Chưa nghiệm thu camera/iPhone/VoiceOver hoặc robot thật.
 
 ## 4. Plan lớn còn dang dở
 
@@ -132,7 +132,7 @@ Contract do Codex/owner BE xác nhận trước khi nối. Không tự bịa URL
 ## 7. Điểm bắt đầu ngay
 
 1. Mở đúng workspace FE/feature branch và bảo toàn 3 file SDK dirty.
-2. Xem form tạo phiếu hiện tại. Chạy lại kịch bản lô 10 thùng = 6 Product A + 4 Product B, quantity chung/riêng, tổng sai, Product unknown/inactive, chuyển loại, Back/reload và account/kho thay đổi. Dùng Product thật, không tạo dữ liệu DB chỉ để có ảnh đẹp.
+2. Xem form tạo phiếu hiện tại. Chạy lại kịch bản lô 10 thùng = 6 Product A + 4 Product B, quantity/unit mỗi thùng, tổng sai, Product unknown/inactive, chuyển loại, Back/reload và account/kho thay đổi. Dùng Product thật, không tạo dữ liệu DB chỉ để có ảnh đẹp.
 3. Rà UX và lỗi trên iPhone 12/Expo, keyboard, scan, scroll, accessibility, cache và kết quả chưa xác định; giữ layout đã chốt và sửa điểm chưa đạt theo phản hồi người dùng.
 4. Giữ cấp mã/confirm chưa mở khi BE chưa sẵn sàng; chuyển yêu cầu M1 cho Codex theo audit. In/xuất tem, mapping barcode theo nhóm, server draft/contents và stock posting là các đầu việc tích hợp tiếp khi có contract.
 5. Khi M1 đạt gate với BE và thiết bị, tiếp tục M2 → M6 theo plan, không tự đánh dấu hoàn tất chỉ từ UI hoặc unit test.

@@ -21,10 +21,9 @@ Chuẩn bị trên thiết bị được tách theo account, warehouse và vouch
 
 ### Cập nhật luồng lô hàng 13/11/2026
 
-- Form nhập chia thành chuẩn bị lô và kiểm tra phiếu: tổng N thùng, nhóm Product thật, số thùng mỗi nhóm, quantity/unit chung và override quantity cho từng số thứ tự trong nhóm. Tổng nhóm phải bằng N; mỗi thùng thuộc một Product. Đây là kế hoạch local, chưa có Container/stock được tạo.
-- Nhóm dùng key local `group-*`, override dùng số thứ tự bắt đầu từ 1. Các giá trị này **không phải Container ID/barcode**, không được dùng thay UUID BE khi lưu lines. BE cần trả mapping allocation/Container ID/barcode ↔ nhóm và ordinal ổn định, kể cả retry hoặc cấp một phần.
-- Contract lưu lô cần phân biệt quantity mặc định với quantity riêng, kiểm tra đủ dữ liệu theo từng thùng và bảo đảm N mã riêng. Frontend không tự gán mã thật có sẵn vào nhóm theo thứ tự mảng response chưa được cam kết.
-- Khi giảm số thùng của nhóm, override ngoài phạm vi được giữ trong cache để phục hồi input nếu tăng lại; không đưa các override đó vào Review hay payload thực. BE chỉ nhận các thùng còn thuộc lô sau xác nhận của Staff.
+- Form nhập chia thành chuẩn bị lô và kiểm tra phiếu: tổng N thùng, nhóm Product thật (chọn từ catalog `Choose Product`, bỏ scan ở bước tạo phiếu vì Container chưa có mã WaroTrans), số thùng mỗi nhóm, quantity/unit mỗi thùng cho từng nhóm (bỏ chỉnh riêng từng thùng). Tổng nhóm phải bằng N; mỗi thùng thuộc một Product. Đây là kế hoạch local, chưa có Container/stock được tạo.
+- Nhóm dùng key local `group-*`. Giá trị này **không phải Container ID/barcode**, không được dùng thay UUID BE khi lưu lines. BE cần trả mapping allocation/Container ID/barcode ↔ nhóm ổn định, kể cả retry hoặc cấp một phần.
+- Contract lưu lô chỉ cần nhận danh sách nhóm (`productId`, `containerCount`, `contentsQuantity`, `contentsUnit`) hoặc mapping tương ứng và bảo đảm N mã riêng tương ứng. Frontend không tự gán mã thật có sẵn vào nhóm theo thứ tự mảng response chưa được cam kết.
 - Cấp mã vẫn khóa; Review hiển thị số mã cấp thực là 0. Nút Create Empty Draft hiện chỉ gọi API metadata đã có; app copy kế hoạch sang cache theo ID phiếu thật và thể hiện Batch Plan/On This Device trên nháp trống. Không coi điều này là lô đã lưu server.
 - Form xuất đã đưa danh sách preview chọn/quét trước bước tạo nháp, thay vì tạo chứng từ rỗng rồi mới chọn. Vẫn cần canonical eligibility và lưu tập Container IDs thật trên BE.
 
