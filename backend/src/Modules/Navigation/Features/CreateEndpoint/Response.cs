@@ -11,5 +11,6 @@ public sealed record EndpointResponse(
     double Yaw,
     double PositionTolerance,
     double YawTolerance,
-    bool IsEnabled
+    bool IsEnabled,
+    string? StorageLocationCode = null
 );

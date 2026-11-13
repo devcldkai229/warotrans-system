@@ -70,6 +70,7 @@ public static class WarehouseModule
 
         services.AddScoped<IWarehouseModule, WarehouseModuleApi>();
         services.AddScoped<IStorageLocationEndpointRebinder, StorageLocationEndpointRebinder>();
+        services.AddScoped<IEndpointStorageLocations, EndpointStorageLocations>();
         services.AddScoped<ContainerMovementRecorder>();
         services.AddScoped<IContainerMovementRecorder>(sp => sp.GetRequiredService<ContainerMovementRecorder>());
         services.AddScoped<RecoverContainerHandler>();

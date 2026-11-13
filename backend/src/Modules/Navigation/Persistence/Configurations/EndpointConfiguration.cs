@@ -20,5 +20,10 @@ public sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
         builder.HasIndex(x => x.Code);
         builder.HasIndex(x => x.IsEnabled);
         builder.HasIndex(x => x.SourceEndpointId);
+
+        builder.Property(x => x.StorageLocationCode).HasMaxLength(100);
+        builder.HasIndex(x => new { x.MapVersionId, x.StorageLocationCode })
+            .IsUnique()
+            .HasFilter("storage_location_code IS NOT NULL");
     }
 }
