@@ -528,6 +528,21 @@ export interface Endpoint {
   positionTolerance: number
   yawTolerance: number
   isEnabled: boolean
+  /** The storage location this endpoint serves, takes over on publish, or gets on publish (see EndpointStorageLocation). */
+  storageLocation?: EndpointStorageLocation | null
+  /** Editor draft only: the code to mark this endpoint with (null = not marked). Sent as `storageLocationCode`. */
+  storageLocationCode?: string | null
+}
+
+/**
+ * LINKED: the location points at this endpoint. INHERITED: it points at the endpoint this one was cloned from and
+ * moves here when the map is published. PENDING: marked in this draft, created when the map is published.
+ */
+export interface EndpointStorageLocation {
+  code: string
+  name: string
+  state: 'LINKED' | 'INHERITED' | 'PENDING'
+  isActive: boolean
 }
 
 /* ---------------------------------------------------------------- Dashboard */

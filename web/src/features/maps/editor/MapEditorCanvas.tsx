@@ -9,7 +9,7 @@ import {
 } from 'react'
 import type { Edge, Endpoint, Point, Zone } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
-import { MAP_CARD, MAP_HALO, MAP_IMAGE_FILTER, MAP_PAPER } from '@/shared/map/mapStyle'
+import { MAP_CARD, MAP_HALO, MAP_IMAGE_FILTER, MAP_PAPER, MAP_STORAGE } from '@/shared/map/mapStyle'
 import { Icon } from '@/shared/ui/Icon'
 import { lineStringToPoints, polygonToPoints } from '@/shared/map/geoJson'
 import { CHEVRON_PATH, laneGlyphs } from '@/shared/map/laneGlyphs'
@@ -630,7 +630,24 @@ export function MapEditorCanvas({
                   strokeLinecap="round"
                   transform={`rotate(${headingDeg(ep.yaw)})`}
                 />
-                <circle r={px(isSel ? 5 : 4)} fill={color} stroke={MAP_HALO} strokeWidth={px(1.5)} />
+                {ep.storageLocation ? (
+                  // A storage location (a shelf): a square instead of a dot; dashed while it is only marked in the draft.
+                  <rect
+                    x={-px(isSel ? 6 : 5)}
+                    y={-px(isSel ? 6 : 5)}
+                    width={px(isSel ? 12 : 10)}
+                    height={px(isSel ? 12 : 10)}
+                    rx={px(2)}
+                    fill={isSel ? '#2d88ff' : ep.storageLocation.state === 'PENDING' ? MAP_HALO : MAP_STORAGE}
+                    stroke={ep.storageLocation.state === 'PENDING' && !isSel ? MAP_STORAGE : MAP_HALO}
+                    strokeWidth={px(1.75)}
+                    strokeDasharray={ep.storageLocation.state === 'PENDING' && !isSel ? `${px(2.5)} ${px(1.5)}` : undefined}
+                  >
+                    <title>{`${ep.storageLocation.code} · ${ep.storageLocation.name}`}</title>
+                  </rect>
+                ) : (
+                  <circle r={px(isSel ? 5 : 4)} fill={color} stroke={MAP_HALO} strokeWidth={px(1.5)} />
+                )}
                 <text
                   y={px(15)}
                   textAnchor="middle"

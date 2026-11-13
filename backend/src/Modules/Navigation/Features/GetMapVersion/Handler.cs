@@ -2,10 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Features.Shared;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 
 namespace WaroTrans.Navigation.Features.GetMapVersion;
 
-public sealed class GetMapVersionHandler(NavigationDbContext dbContext)
+public sealed class GetMapVersionHandler(NavigationDbContext dbContext, EndpointStorage endpointStorage)
 {
     public async Task<IReadOnlyList<MapVersionResponse>> GetByWarehouseIdAsync(
         Guid warehouseId,
@@ -45,10 +46,13 @@ public sealed class GetMapVersionHandler(NavigationDbContext dbContext)
             .FirstOrDefaultAsync(m => m.Id == id, cancellationToken)
             ?? throw new NotFoundException($"MapVersion with ID '{id}' was not found.", "map_version_not_found");
 
-        var endpoints = await dbContext.Endpoints
+        var endpointRows = await dbContext.Endpoints
             .AsNoTracking()
             .Where(e => e.MapVersionId == id)
             .OrderBy(e => e.Code)
+            .ToListAsync(cancellationToken);
+        var storage = await endpointStorage.DescribeAsync(mapVersion.WarehouseId, endpointRows, cancellationToken);
+        var endpoints = endpointRows
             .Select(e => new EndpointListItemDto(
                 e.Id,
                 e.MapVersionId,
@@ -60,8 +64,9 @@ public sealed class GetMapVersionHandler(NavigationDbContext dbContext)
                 e.Yaw,
                 e.PositionTolerance,
                 e.YawTolerance,
-                e.IsEnabled))
-            .ToListAsync(cancellationToken);
+                e.IsEnabled,
+                storage.GetValueOrDefault(e.Id)))
+            .ToList();
 
         var edges = await dbContext.Edges
             .AsNoTracking()

@@ -84,6 +84,7 @@ public static class NavigationModule
         services.AddScoped<Features.EndpointGroups.EndpointGroupService>();
         RegisterMapAssetStore(services, configuration);
 
+        services.AddScoped<EndpointStorage>();
         services.AddScoped<INavigationModule, NavigationModuleApi>();
         services.AddScoped<WaroTrans.Warehouse.Contracts.IMapEndpointCatalog, MapEndpointCatalog>();
 

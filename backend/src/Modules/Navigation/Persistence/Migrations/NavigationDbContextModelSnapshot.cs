@@ -133,6 +133,11 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("source_endpoint_id");
 
+                    b.Property<string>("StorageLocationCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("storage_location_code");
+
                     b.Property<double>("X")
                         .HasColumnType("double precision")
                         .HasColumnName("x");
@@ -167,6 +172,11 @@ namespace WaroTrans.Navigation.Persistence.Migrations
                     b.HasIndex("MapVersionId", "Code")
                         .IsUnique()
                         .HasDatabaseName("i_x_endpoints_map_version_id_code");
+
+                    b.HasIndex("MapVersionId", "StorageLocationCode")
+                        .IsUnique()
+                        .HasDatabaseName("i_x_endpoints_map_version_id_storage_location_code")
+                        .HasFilter("storage_location_code IS NOT NULL");
 
                     b.ToTable("endpoints", "navigation");
                 });

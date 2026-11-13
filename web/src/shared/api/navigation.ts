@@ -1,6 +1,7 @@
 import { ApiError, apiFetch, apiRequest, getAccessToken } from './client'
 import type {
   EdgeDirection,
+  EndpointStorageLocation,
   EndpointType,
   GeoJsonLineString,
   GeoJsonPolygon,
@@ -49,6 +50,10 @@ export interface EndpointDto {
   positionTolerance: number
   yawTolerance: number
   isEnabled: boolean
+  /** Map detail only: the storage location side of the endpoint. */
+  storageLocation?: EndpointStorageLocation | null
+  /** Create / update responses: the code it is marked with in a draft. */
+  storageLocationCode?: string | null
 }
 
 export interface EdgeDto {
@@ -269,6 +274,8 @@ export function createEndpoint(
     positionTolerance: number
     yawTolerance: number
     code?: string
+    /** Marks the endpoint as a storage location, created when the map is published. */
+    storageLocationCode?: string | null
   },
 ) {
   return apiRequest<EndpointDto>(`/api/navigation/maps/${mapVersionId}/endpoints`, {
@@ -288,6 +295,8 @@ export function updateEndpoint(
     positionTolerance: number
     yawTolerance: number
     isEnabled: boolean
+    /** Replaces the mark: a code marks the endpoint as a storage location created on publish, null removes it. */
+    storageLocationCode: string | null
   },
 ) {
   return apiRequest<EndpointDto>(`/api/navigation/endpoints/${id}`, {

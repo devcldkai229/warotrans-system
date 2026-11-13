@@ -94,7 +94,14 @@ public sealed record EndpointListItemDto(
     double Yaw,
     double PositionTolerance,
     double YawTolerance,
-    bool IsEnabled);
+    bool IsEnabled,
+    EndpointStorageLocationDto? StorageLocation = null);
+
+/// <param name="State">
+/// LINKED: the location points at this Endpoint. INHERITED: it points at the Endpoint this one was cloned from and
+/// moves here on publish. PENDING: marked in this DRAFT, created on publish.
+/// </param>
+public sealed record EndpointStorageLocationDto(string Code, string Name, string State, bool IsActive);
 
 public sealed record EdgeListItemDto(
     Guid Id,
