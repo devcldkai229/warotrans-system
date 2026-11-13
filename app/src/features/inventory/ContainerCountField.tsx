@@ -58,9 +58,9 @@ export function ContainerCountField({ value, onChange, editable }: Props) {
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   number: { fontSize: 28, lineHeight: 36, fontWeight: '700', fontVariant: ['tabular-nums'], paddingVertical: 14, paddingLeft: 4 },
-  stepper: { position: 'relative', width: 44, marginVertical: 4, marginRight: -16, borderRadius: 6, backgroundColor: colors.surfaceSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden' },
+  stepper: { position: 'relative', width: 44, marginVertical: 4, marginRight: -16, borderRadius: 6, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden' },
   stepButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   divider: { position: 'absolute', top: 44, left: 8, right: 8, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  pressed: { backgroundColor: colors.primaryLight },
+  pressed: { backgroundColor: colors.primaryLight, transform: [{ scale: 0.95 }] },
   disabled: { opacity: 0.3 },
 });

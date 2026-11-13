@@ -4,6 +4,7 @@ import { Box, Check, ChevronRight, Plus, Trash2 } from 'lucide-react-native';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import type { ThemeColors } from '../../shared/theme/colors';
+import type { ThemeShadows } from '../../shared/theme/shadows';
 import { radii } from '../../shared/theme/radii';
 import { Button, Text, TextField } from '../../shared/ui';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
@@ -42,7 +43,7 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
             </View>
             <ChevronRight size={18} color={group.product ? colors.textMuted : colors.primaryText} />
           </Pressable>
-          {groups.length > 1 && <Pressable style={styles.action} disabled={!editable} accessibilityRole="button" accessibilityState={{ disabled: !editable }} accessibilityLabel={t('Remove Product Group {group}', { group: index + 1 })} onPress={() => onChange(groups.filter(item => item.key !== group.key))}><Trash2 size={18} color={colors.textMuted} /></Pressable>}
+          {groups.length > 1 && <Pressable style={({ pressed }) => [styles.action, pressed && editable && styles.actionPressed]} disabled={!editable} accessibilityRole="button" accessibilityState={{ disabled: !editable }} accessibilityLabel={t('Remove Product Group {group}', { group: index + 1 })} onPress={() => onChange(groups.filter(item => item.key !== group.key))}><Trash2 size={18} color={colors.textMuted} /></Pressable>}
         </View>
         <View style={styles.groupDivider} />
         <View style={styles.fields}>
@@ -57,7 +58,7 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
   </View>;
 }
 
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   section: { gap: 12 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   progressPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
@@ -66,14 +67,15 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   progressText: { fontWeight: '600', fontVariant: ['tabular-nums'] },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   flex: { flex: 1, minWidth: 0, gap: 2 },
-  group: { padding: 14, gap: 12, backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border },
-  product: { flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4, borderRadius: radii.md },
+  group: { padding: 14, gap: 12, backgroundColor: colors.surface, borderRadius: radii.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, ...shadows.sm },
+  product: { flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4, borderRadius: radii.md, borderCurve: 'continuous' },
   productEmpty: { backgroundColor: colors.surfaceSubtle, paddingHorizontal: 10, paddingVertical: 6 },
-  pressed: { opacity: 0.7 },
-  productIcon: { width: 36, height: 36, backgroundColor: colors.surfaceMuted, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.88, transform: [{ scale: 0.985 }] },
+  productIcon: { width: 36, height: 36, backgroundColor: colors.surfaceMuted, borderRadius: radii.sm, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center' },
   productIconActive: { backgroundColor: colors.primaryLight },
   groupDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  action: { minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  action: { minWidth: 44, minHeight: 44, borderRadius: radii.sm, borderCurve: 'continuous', justifyContent: 'center', alignItems: 'center' },
+  actionPressed: { backgroundColor: colors.dangerBg, transform: [{ scale: 0.95 }] },
   fields: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   fieldWide: { flex: 1.1, minWidth: 0 },
   fieldNarrow: { flex: 0.85, minWidth: 0 },

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Barcode, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Barcode, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { getUserErrorMessage } from '../../shared/api/client';
 import { createStockVoucherDraft } from '../../shared/api/warehouseApi';
@@ -110,7 +110,6 @@ export function CreateStockVoucherScreen() {
     } finally { pending.current = false; if (alive.current) setSaving(false); }
   };
   const selected = Object.values(preparation.value.selected);
-  const steps = [inbound ? 'Batch' : 'Containers', 'Review'];
   return <View style={styles.screen}>
     <ScreenHeader title={review ? inbound ? 'Review Inbound Voucher' : 'Review Outbound Voucher' : 'New Voucher'} canGoBack onBack={back} />
     {!allowed ? <EmptyState title="Voucher Access Unavailable" /> : <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -120,12 +119,6 @@ export function CreateStockVoucherScreen() {
           actionTitle={query.isError ? 'Retry' : !query.isPending ? 'Back To Vouchers' : undefined}
           onAction={query.isError ? () => { void query.refetch(); } : () => replace('stock_vouchers')} /> : <>
           {!review && !saving && !uncertain && <SegmentedControl value={type} onChange={setType} accessibilityLabel="New voucher type" options={[{ label: 'Inbound', value: 'INBOUND' }, { label: 'Outbound', value: 'OUTBOUND' }]} />}
-          <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
-            {!!index && <View style={styles.stepLine} />}
-            <View style={styles.step}><View style={[styles.stepNumber, index === Number(review) && styles.stepCurrent]}>
-              {index < Number(review) ? <Check size={15} color={colors.primaryText} /> : <Text variant="caption" color={index === Number(review) ? 'primaryText' : 'textMuted'}>{index + 1}</Text>}
-            </View><Text variant="caption" color={index === Number(review) ? 'textPrimary' : 'textMuted'}>{label}</Text></View>
-          </React.Fragment>)}</View>
           {preparation.ready ? <>
             {!review && inbound && <>
               <View style={styles.typeCard}><ContainerCountField value={requestedCount} onChange={editCount} editable={editable} /></View>
