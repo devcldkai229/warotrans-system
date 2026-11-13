@@ -5,7 +5,6 @@ import { ApiError } from '@/shared/api/client'
 import {
   completeMaintenance,
   getRobot,
-  getRobotHealth,
   getRobotCommandCatalog,
   getStopState,
   resumeRobot,
@@ -31,15 +30,14 @@ const STOP_COPY: Record<StopStateName, { label: string; tone: Tone }> = {
   UNKNOWN: { label: t('Unknown: no confirmation from the robot'), tone: 'red' },
 }
 
-const LEVEL_TONE: Record<string, Tone> = { OK: 'green', WARN: 'amber', ERROR: 'red', STALE: 'red', UNKNOWN: 'grey' }
-
 function message(error: unknown): string {
   return error instanceof ApiError ? error.message : t('The robot could not be reached.')
 }
 
 /**
- * Robot control (RB-03 stop / resume, RB-08 maintenance, RB-09 power, RB-10 health). Every state shown here comes from
- * the robot: a stop is "stopped" only once the robot verified it, and a value it cannot measure stays "unknown".
+ * Robot control (RB-03 stop / resume, RB-08 maintenance, RB-09 power). Every state shown here comes from the robot: a
+ * stop is "stopped" only once the robot verified it, and once the robot stops reporting it is shown as last known.
+ * Health (RB-10) is in the panel's Health section.
  */
 export function RobotControlCard({ robotId, robotCode }: { robotId: string; robotCode: string }) {
   const queryClient = useQueryClient()
@@ -60,13 +58,6 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
   })
   // FLT-02: until the catalog has loaded nothing is hidden, so a stop is never missing because of a slow request.
   const offered = (code: string) => catalog.data?.items.find((item) => item.code === code)?.supported ?? true
-  const mayDiagnose = canActOnRobot(capabilities, PERMISSIONS.robotDiagnostics, robotId)
-  const health = useQuery({
-    queryKey: ['robot-health', robotId],
-    queryFn: () => getRobotHealth(robotId),
-    enabled: mayDiagnose,
-    refetchInterval: 10_000,
-  })
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['robot', robotId] })
@@ -91,7 +82,14 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
   const mayResume = canActOnRobot(capabilities, PERMISSIONS.robotConfigure, robotId)
   const mayMaintain = canActOnRobot(capabilities, PERMISSIONS.robotMaintenance, robotId)
   const mayPower = canActOnRobot(capabilities, PERMISSIONS.robotPower, robotId)
-  const stopCopy = STOP_COPY[stop.data?.state ?? 'NONE']
+  // A robot that is not reporting can take no command (the server refuses them with robot_offline), and what it last
+  // said about a stop is history, not the present. Maintenance is the exception: it is recorded, not sent.
+  const offline = robot.data ? !robot.data.isOnline : false
+  const lastStop = STOP_COPY[stop.data?.state ?? 'NONE']
+  const stopCopy = offline && stop.data?.state && stop.data.state !== 'NONE'
+    ? { label: t('Last known: {state}', { state: lastStop.label }), tone: 'grey' as Tone }
+    : lastStop
+  const offlineReason = offline ? t('The robot is offline.') : undefined
   const allChecked = Object.values(checklist).every(Boolean)
   const announced = robot.data?.capabilities ?? []
 
@@ -107,22 +105,28 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
           {stopCopy.label}
         </StatusBadge>
       </p>
-      <p className="mt-1 text-xs text-muted">{t('A software stop is not an emergency stop: use the robot\'s physical E-stop when people are at risk.')}</p>
+      {offline ? (
+        <p role="status" className="mt-2 rounded-sm bg-amber-soft px-3 py-2 text-xs text-amber-ink">
+          {t('The robot is offline: no command can reach it. Use its physical E-stop if people are at risk.')}
+        </p>
+      ) : (
+        <p className="mt-1 text-xs text-muted">{t('A software stop is not an emergency stop: use the robot\'s physical E-stop when people are at risk.')}</p>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {mayStop && offered('STOP') ? (
-          <Button size="sm" variant="primary" disabled={act.isPending} onClick={() => act.mutate(() => stopRobot(robotId, t('Stopped from the console')))}>{t('Stop')}</Button>
+          <Button size="sm" variant="primary" disabled={act.isPending || offline} title={offlineReason} onClick={() => act.mutate(() => stopRobot(robotId, t('Stopped from the console')))}>{t('Stop')}</Button>
         ) : null}
         {mayResume && held && offered('RESUME') ? (
-          <Button size="sm" variant="surface" disabled={act.isPending} onClick={() => act.mutate(() => resumeRobot(robotId))}>{t('Resume')}</Button>
+          <Button size="sm" variant="surface" disabled={act.isPending || offline} title={offlineReason} onClick={() => act.mutate(() => resumeRobot(robotId))}>{t('Resume')}</Button>
         ) : null}
         {canActOnRobot(capabilities, PERMISSIONS.robotCommand, robotId) && !held && !inMaintenance ? (
           <>
-            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate(() => returnRobotToPark(robotId))}>
-              Return to park
+            <Button size="sm" variant="ghost" disabled={act.isPending || offline} title={offlineReason} onClick={() => act.mutate(() => returnRobotToPark(robotId))}>
+              {t('Return to park')}
             </Button>
-            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate(() => sendRobotToCharger(robotId))}>
-              Go to charger
+            <Button size="sm" variant="ghost" disabled={act.isPending || offline} title={offlineReason} onClick={() => act.mutate(() => sendRobotToCharger(robotId))}>
+              {t('Go to charger')}
             </Button>
           </>
         ) : null}
@@ -184,8 +188,8 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
               key={action}
               size="sm"
               variant="ghost"
-              disabled={!held || act.isPending}
-              title={held ? undefined : t('Stop the robot first')}
+              disabled={!held || act.isPending || offline}
+              title={offlineReason ?? (held ? undefined : t('Stop the robot first'))}
               onClick={() => {
                 const typed = window.prompt(t('Type {robotCode} to confirm {action}.', { robotCode, action }))
                 if (typed) act.mutate(() => robotSystemAction(robotId, action as 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN', typed))
@@ -198,31 +202,7 @@ export function RobotControlCard({ robotId, robotCode }: { robotId: string; robo
       ) : null}
 
       {error ? <p className="mt-3 text-xs text-red-ink">{error}</p> : null}
-
-      {mayDiagnose ? (
-        <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-medium text-muted">{t('Diagnostics')}</h3>
-            {health.data ? (
-              <StatusBadge tone={LEVEL_TONE[health.data.overall] ?? 'grey'}>{health.data.overall}</StatusBadge>
-            ) : null}
-          </div>
-          <ul className="mt-2 flex flex-col gap-1 text-xs">
-            {health.data?.items.map((item) => (
-              <li key={item.name} className="flex items-center justify-between gap-2">
-                <span>{item.name.replace('_', ' ')}</span>
-                <span className="flex items-center gap-2">
-                  <span className="tabular-nums text-muted">
-                    {item.value === null ? '—' : `${item.value}${item.unit ? ` ${item.unit}` : ''}`}
-                  </span>
-                  <StatusBadge tone={LEVEL_TONE[item.level] ?? 'grey'}>{item.level}</StatusBadge>
-                </span>
-              </li>
-            ))}
-            {health.data && health.data.items.length === 0 ? <li className="text-muted">{t('No diagnostics received yet.')}</li> : null}
-          </ul>
-        </div>
-      ) : null}
+      {/* Diagnostics are in the panel's Health section and on the Technical page, not repeated here. */}
     </section>
   )
 }

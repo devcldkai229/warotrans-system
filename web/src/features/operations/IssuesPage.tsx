@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/authContext'
 import { SectionHead } from '@/features/management/SectionHead'
 import { ApiError } from '@/shared/api/client'
@@ -14,8 +14,12 @@ import {
   type IssueStatus,
 } from '@/shared/api/operations'
 import { PERMISSIONS } from '@/shared/auth/permissions'
+import { cx } from '@/shared/lib/cx'
 import { formatIsoDateTime } from '@/shared/lib/format'
-import { Button } from '@/shared/ui/Button'
+import { pageCountOf } from '@/shared/lib/pagination'
+import { Button, IconButton } from '@/shared/ui/Button'
+import { Icon } from '@/shared/ui/Icon'
+import { Pagination } from '@/shared/ui/Pagination'
 import { FormError } from '@/shared/ui/Field'
 import { controlClass } from '@/shared/ui/controlClass'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
@@ -33,6 +37,7 @@ const STATUS_TONE: Record<IssueStatus, Tone> = {
 
 const SEVERITY_TONE: Record<IssueSeverity, Tone> = { LOW: 'grey', MEDIUM: 'blue', HIGH: 'amber', CRITICAL: 'red' }
 const STATUSES: IssueStatus[] = ['OPEN', 'ACKNOWLEDGED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
+const PAGE_SIZE = 50
 
 function describe(error: unknown): string {
   if (error instanceof ApiError) {
@@ -46,23 +51,69 @@ function describe(error: unknown): string {
 export function IssuesPage() {
   const { issueId } = useParams()
   const navigate = useNavigate()
-  const [status, setStatus] = useState<IssueStatus | ''>('')
+  const [params, setParams] = useSearchParams()
+  const status = (STATUSES as string[]).includes(params.get('status') ?? '') ? (params.get('status') as IssueStatus) : ''
+  const page = Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1)
+
+  // A new filter starts again from page 1.
+  const setParam = useCallback(
+    (key: string, value: string) => {
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          if (value) next.set(key, value)
+          else next.delete(key)
+          if (key !== 'page') next.delete('page')
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setParams],
+  )
+  // Opening or closing an issue keeps the page and the filter.
+  const open = (id?: string) => navigate({ pathname: id ? `/operations/issues/${id}` : '/operations/issues', search: params.toString() })
+
   const list = useQuery({
-    queryKey: ['issues', status],
-    queryFn: () => listIssues({ status }),
+    queryKey: ['issues', status, page],
+    queryFn: () => listIssues({ status, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+    // Keep the old page on screen while the next one loads.
+    placeholderData: keepPreviousData,
     refetchInterval: 30_000,
   })
+  const items = list.data?.items ?? []
+  const total = list.data?.total ?? 0
+  const pageCount = pageCountOf(total, PAGE_SIZE)
+  const firstShown = (page - 1) * PAGE_SIZE + 1
+
+  // A page past the end (an old link, or issues gone since) moves to the last page there is.
+  const settled = list.data !== undefined && !list.isPlaceholderData
+  useEffect(() => {
+    if (settled && page > pageCount) setParam('page', pageCount > 1 ? String(pageCount) : '')
+  }, [settled, page, pageCount, setParam])
+
+  const scroller = useRef<HTMLDivElement>(null)
+  const goToPage = (target: number) => {
+    setParam('page', target > 1 ? String(target) : '')
+    scroller.current?.scrollTo({ top: 0 })
+  }
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="mx-auto grid max-w-[1500px] grid-cols-[minmax(0,1fr)_420px] gap-8 px-10 pt-8 pb-16">
+    <div ref={scroller} className="h-full overflow-auto">
+      {/* The detail column only exists while an issue is open; below xl it sits above the list instead of beside it. */}
+      <div
+        className={cx(
+          'mx-auto px-4 pt-6 pb-16 sm:px-6 lg:px-10 lg:pt-8',
+          issueId ? 'grid max-w-[1500px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:gap-8' : 'max-w-[1300px]',
+        )}
+      >
         <section className="min-w-0">
-          <SectionHead title={t('Issues')} hint={t('Problems reported by Staff, Technicians and workflow steps.')}>
+          <SectionHead title={t('Issues')}>
             <select
               className={controlClass('pill')}
               aria-label={t('Filter by status')}
               value={status}
-              onChange={(event) => setStatus(event.target.value as IssueStatus | '')}
+              onChange={(event) => setParam('status', event.target.value)}
             >
               <option value="">{t('All statuses')}</option>
               {STATUSES.map((s) => (
@@ -72,53 +123,71 @@ export function IssuesPage() {
               ))}
             </select>
           </SectionHead>
-          <Table>
-            <thead>
-              <tr>
-                <Th>{t('Code')}</Th>
-                <Th>{t('Type')}</Th>
-                <Th>{t('Severity')}</Th>
-                <Th>{t('Description')}</Th>
-                <Th>{t('Reported')}</Th>
-                <Th>{t('Status')}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.data?.items.map((issue) => (
-                <Tr key={issue.id} className={issue.id === issueId ? 'bg-container-high' : 'cursor-pointer'}>
-                  <Td tone="strong">
-                    <button type="button" className="underline-offset-2 hover:underline" onClick={() => navigate(`/operations/issues/${issue.id}`)}>
-                      {issue.code}
-                    </button>
-                  </Td>
-                  <Td>{issue.issueType}</Td>
-                  <Td>
-                    <StatusBadge tone={SEVERITY_TONE[issue.severity]}>{issue.severity}</StatusBadge>
-                  </Td>
-                  <Td className="max-w-[360px] truncate">{issue.description}</Td>
-                  <Td tone="faint" className="tabular-nums">
-                    {formatIsoDateTime(issue.reportedAt)}
-                  </Td>
-                  <Td>
-                    <StatusBadge tone={STATUS_TONE[issue.status]} withDot>
-                      {issue.status}
-                    </StatusBadge>
-                  </Td>
-                </Tr>
-              ))}
-              {list.data?.items.length === 0 ? <EmptyRow colSpan={6}>{t('No issues.')}</EmptyRow> : null}
-              {list.isLoading ? <EmptyRow colSpan={6}>{t('Loading issues…')}</EmptyRow> : null}
-              {list.isError ? <EmptyRow colSpan={6}>{t('Could not load issues.')}</EmptyRow> : null}
-            </tbody>
-          </Table>
+          <div className={cx('overflow-x-auto transition-opacity duration-200', list.isPlaceholderData && 'opacity-60')}>
+            <Table className="min-w-[760px]">
+              <thead>
+                <tr>
+                  <Th>{t('Code')}</Th>
+                  <Th>{t('Type')}</Th>
+                  <Th>{t('Severity')}</Th>
+                  <Th>{t('Description')}</Th>
+                  <Th>{t('Reported')}</Th>
+                  <Th>{t('Status')}</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((issue) => (
+                  <Tr
+                    key={issue.id}
+                    className={issue.id === issueId ? 'bg-container-high' : undefined}
+                    onClick={() => open(issue.id)}
+                  >
+                    <Td tone="strong">
+                      <button type="button" className="underline-offset-2 hover:underline" onClick={(event) => { event.stopPropagation(); open(issue.id) }}>
+                        {issue.code}
+                      </button>
+                    </Td>
+                    <Td>{issue.issueType}</Td>
+                    <Td>
+                      <StatusBadge tone={SEVERITY_TONE[issue.severity]}>{issue.severity}</StatusBadge>
+                    </Td>
+                    <Td className="max-w-[360px] truncate">{issue.description}</Td>
+                    <Td tone="faint" className="tabular-nums">
+                      {formatIsoDateTime(issue.reportedAt)}
+                    </Td>
+                    <Td>
+                      <StatusBadge tone={STATUS_TONE[issue.status]} withDot>
+                        {issue.status}
+                      </StatusBadge>
+                    </Td>
+                  </Tr>
+                ))}
+                {list.data && items.length === 0 ? <EmptyRow colSpan={6}>{t('No issues.')}</EmptyRow> : null}
+                {list.isLoading ? <EmptyRow colSpan={6}>{t('Loading issues…')}</EmptyRow> : null}
+                {list.isError ? <EmptyRow colSpan={6}>{t('Could not load issues.')}</EmptyRow> : null}
+              </tbody>
+            </Table>
+          </div>
+          {items.length > 0 ? (
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+              <p className="text-xs text-muted">
+                {t('Showing {from}–{to} of {total}', { from: firstShown, to: firstShown + items.length - 1, total })}
+              </p>
+              <Pagination page={Math.min(page, pageCount)} pageCount={pageCount} onChange={goToPage} />
+            </div>
+          ) : null}
         </section>
-        <aside className="sticky top-4 self-start">{issueId ? <IssueDetail id={issueId} /> : null}</aside>
+        {issueId ? (
+          <aside className="order-first self-start xl:sticky xl:top-4 xl:order-none">
+            <IssueDetail id={issueId} onClose={() => open()} />
+          </aside>
+        ) : null}
       </div>
     </div>
   )
 }
 
-function IssueDetail({ id }: { id: string }) {
+function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const queryClient = useQueryClient()
   const { account, can } = useAuth()
   const [resolution, setResolution] = useState('')
@@ -149,11 +218,14 @@ function IssueDetail({ id }: { id: string }) {
 
   return (
     <div className="rounded-md bg-surface p-5 shadow-float">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-book">{current.code}</h2>
+      <div className="flex items-center gap-3">
+        <h2 className="min-w-0 flex-1 truncate text-xl font-book">{current.code}</h2>
         <StatusBadge tone={STATUS_TONE[current.status]} withDot>
           {current.status}
         </StatusBadge>
+        <IconButton size="sm" aria-label={t('Close')} onClick={onClose}>
+          <Icon name="close" size={16} />
+        </IconButton>
       </div>
       <p className="mt-3 text-sm whitespace-pre-wrap">{current.description}</p>
       <dl className="mt-4 grid grid-cols-[120px_1fr] gap-y-1.5 text-sm">

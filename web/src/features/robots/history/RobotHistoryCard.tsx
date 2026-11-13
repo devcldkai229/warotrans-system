@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useMemo, useRef, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/authContext'
 import type { Robot } from '@/shared/api/contracts'
 import { getRobotHistory } from '@/shared/api/fleet'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { t } from '@/shared/i18n'
+import { cx } from '@/shared/lib/cx'
 import { formatDateTimeWithYear } from '@/shared/lib/format'
+import { pageCountOf } from '@/shared/lib/pagination'
 import { Button } from '@/shared/ui/Button'
 import { controlClass } from '@/shared/ui/controlClass'
+import { Pagination } from '@/shared/ui/Pagination'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import {
   describeDetails,
@@ -36,32 +39,54 @@ export function RobotHistoryCard({ robot }: { robot: Pick<Robot, 'id' | 'code'> 
   const { capabilities } = useAuth()
   const allowed = canActOnRobot(capabilities, PERMISSIONS.robotRead, robot.id)
   const [filters, setFilters] = useState<HistoryFilters>(NO_FILTERS)
+  // The page is kept here, not in the address: the card also sits in the Fleet robot panel, whose address is its own.
+  const [page, setPage] = useState(1)
+  // The Fleet panel keeps this card while another robot is picked: that robot's history starts on page 1.
+  const [pageRobot, setPageRobot] = useState(robot.id)
+  if (pageRobot !== robot.id) {
+    setPageRobot(robot.id)
+    setPage(1)
+  }
   const backwards = rangeIsBackwards(filters)
-  const set = (change: Partial<HistoryFilters>) => setFilters((current) => ({ ...current, ...change }))
+  // A new filter starts again from page 1.
+  const set = (change: Partial<HistoryFilters>) => {
+    setFilters((current) => ({ ...current, ...change }))
+    setPage(1)
+  }
 
-  const history = useInfiniteQuery({
-    queryKey: ['robot-history', robot.id, filters],
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) => getRobotHistory(robot.id, historyQuery(filters, pageParam, PAGE_SIZE)),
-    getNextPageParam: (last, pages) => {
-      const loaded = pages.reduce((count, page) => count + page.items.length, 0)
-      return last.items.length > 0 && loaded < last.total ? loaded : undefined
-    },
+  const history = useQuery({
+    queryKey: ['robot-history', robot.id, filters, page],
+    queryFn: () => getRobotHistory(robot.id, historyQuery(filters, (page - 1) * PAGE_SIZE, PAGE_SIZE)),
+    // Keep the old page on screen while the next one loads.
+    placeholderData: keepPreviousData,
     enabled: allowed && !backwards,
     // No hub event says "the robot changed state", so the newest lines are looked for now and then.
     refetchInterval: 15_000,
     retry: false,
   })
 
-  const items = useMemo(() => uniqueLines((history.data?.pages ?? []).flatMap((page) => page.items)), [history.data])
-  const total = history.data?.pages[0]?.total ?? 0
+  const items = useMemo(() => uniqueLines(history.data?.items ?? []), [history.data])
+  const total = history.data?.total ?? 0
+  const pageCount = pageCountOf(total, PAGE_SIZE)
+  const firstShown = (page - 1) * PAGE_SIZE + 1
+
+  // New lines push older ones onto later pages; if this page is now past the end, show the last one there is.
+  // Adjusted while rendering (React's pattern for state that follows other state), not in an effect.
+  const settled = history.data !== undefined && !history.isPlaceholderData
+  if (settled && page > pageCount) setPage(pageCount)
+
+  const top = useRef<HTMLDivElement>(null)
+  const goToPage = (target: number) => {
+    setPage(target)
+    top.current?.scrollIntoView({ block: 'nearest' })
+  }
 
   if (!allowed) {
     return <p className="py-3 text-sm text-muted">{t('You do not have access to the history of this robot.')}</p>
   }
 
   return (
-    <div className="py-2">
+    <div ref={top} className="py-2">
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-xs text-muted">
           {t('Show')}
@@ -113,7 +138,14 @@ export function RobotHistoryCard({ robot }: { robot: Pick<Robot, 'id' | 'code'> 
           />
         </label>
         {filtersAreActive(filters) ? (
-          <Button variant="ghost" size="sm" onClick={() => setFilters(NO_FILTERS)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFilters(NO_FILTERS)
+              setPage(1)
+            }}
+          >
             {t('Clear filters')}
           </Button>
         ) : null}
@@ -138,7 +170,7 @@ export function RobotHistoryCard({ robot }: { robot: Pick<Robot, 'id' | 'code'> 
         </p>
       ) : (
         <>
-          <ol>
+          <ol className={cx('transition-opacity duration-200', history.isPlaceholderData && 'opacity-60')}>
             {items.map((item) => {
               const badge = historyStatus(item)
               const source = sourceLabel(item.source)
@@ -167,13 +199,11 @@ export function RobotHistoryCard({ robot }: { robot: Pick<Robot, 'id' | 'code'> 
               )
             })}
           </ol>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-xs text-muted">{t('Showing {shown} of {total}', { shown: items.length, total })}</p>
-            {history.hasNextPage ? (
-              <Button variant="outline" size="sm" disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
-                {history.isFetchingNextPage ? t('Loading…') : t('Load more')}
-              </Button>
-            ) : null}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted">
+              {t('Showing {from}–{to} of {total}', { from: firstShown, to: firstShown + items.length - 1, total })}
+            </p>
+            <Pagination page={Math.min(page, pageCount)} pageCount={pageCount} onChange={goToPage} />
           </div>
         </>
       )}

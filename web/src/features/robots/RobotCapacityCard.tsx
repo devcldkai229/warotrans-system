@@ -6,9 +6,26 @@ import type { Robot } from '@/shared/api/contracts'
 import { setRobotCapacity } from '@/shared/api/fleet'
 import { canActOnRobot, PERMISSIONS } from '@/shared/auth/permissions'
 import { Button } from '@/shared/ui/Button'
+import { t } from '@/shared/i18n'
 
 const toText = (value: number | null | undefined) => (value == null ? '' : String(value))
 const toNumber = (value: string) => (value.trim() === '' ? null : Number(value))
+
+/**
+ * One line about what the robot can carry. Nothing entered yet says so instead of a row of question marks; a figure
+ * that is missing reads "—".
+ */
+function capacityText(robot: Robot): string {
+  const figures = [robot.maxPayloadKg, robot.maxContainers, robot.lengthM, robot.widthM]
+  if (figures.every((value) => value == null)) return t('Capacity not set yet.')
+  const show = (value: number | null | undefined) => (value == null ? '—' : String(value))
+  return t('Carries {load} kg, {containers} containers. Size {length} × {width} m.', {
+    load: show(robot.maxPayloadKg),
+    containers: show(robot.maxContainers),
+    length: show(robot.lengthM),
+    width: show(robot.widthM),
+  })
+}
 
 /** FL-03: enter what was measured. An empty field means not known; dispatch records that it could not check. */
 export function RobotCapacityCard({ robot }: { robot: Robot }) {
@@ -37,11 +54,9 @@ export function RobotCapacityCard({ robot }: { robot: Robot }) {
   if (!open) {
     return (
       <div className="mb-4 flex items-center gap-3 text-sm text-ink-2">
-        <span>
-          Carries {robot.maxPayloadKg ?? '?'} kg, {robot.maxContainers ?? '?'} containers. Size {robot.lengthM ?? '?'} × {robot.widthM ?? '?'} m.
-        </span>
+        <span>{capacityText(robot)}</span>
         <Button variant="ghost" onClick={() => setOpen(true)}>
-          Edit
+          {t('Edit')}
         </Button>
       </div>
     )
@@ -57,20 +72,20 @@ export function RobotCapacityCard({ robot }: { robot: Robot }) {
   return (
     <section className="mb-4 flex flex-col gap-3 rounded-md border border-outline-soft p-4 text-sm">
       <div className="flex flex-wrap gap-3">
-        {input('Max load (kg)', payload, setPayload)}
-        {input('Max containers', containers, setContainers)}
-        {input('Length (m)', length, setLength)}
-        {input('Width (m)', width, setWidth)}
+        {input(t('Max load (kg)'), payload, setPayload)}
+        {input(t('Max containers'), containers, setContainers)}
+        {input(t('Length (m)'), length, setLength)}
+        {input(t('Width (m)'), width, setWidth)}
       </div>
       <div className="flex gap-2">
         <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
-          Save
+          {t('Save')}
         </Button>
         <Button variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
-      {save.error ? <p className="text-xs text-red-ink">{save.error instanceof ApiError ? save.error.message : 'It could not be saved.'}</p> : null}
+      {save.error ? <p className="text-xs text-red-ink">{save.error instanceof ApiError ? save.error.message : t('It could not be saved.')}</p> : null}
     </section>
   )
 }

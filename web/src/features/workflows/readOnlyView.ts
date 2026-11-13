@@ -61,12 +61,51 @@ export function describeBinding(
   }
 }
 
+/**
+ * The same binding as two parts for a table cell: what kind of source it is (in words, shown quietly) and the value
+ * itself (shown as code). `note` is a variable's display name when it differs from its key.
+ */
+export interface BindingParts {
+  kind: string
+  value: string | null
+  note: string | null
+}
+
+export function bindingParts(
+  binding: StepInputBinding | null | undefined,
+  tasks: readonly WorkflowTaskDraft[],
+  variables: readonly WorkflowVariable[],
+): BindingParts {
+  const unbound = { kind: t('Not bound'), value: null, note: null }
+  if (!binding || !binding.sourceType) return unbound
+  const reference = binding.sourceReference ?? ''
+  switch (binding.sourceType) {
+    case 'WORKFLOW_VAR': {
+      if (!reference) return unbound
+      const variable = variables.find((candidate) => candidate.key === reference)
+      return { kind: t('Workflow variable'), value: reference, note: variable?.name && variable.name !== reference ? variable.name : null }
+    }
+    case 'CURRENT_MOVEMENT':
+      return reference ? { kind: t('Current movement'), value: reference, note: null } : unbound
+    case 'STEP_OUTPUT': {
+      if (!reference || !binding.outputKey) return unbound
+      const step = findStep(tasks, reference)
+      return { kind: t('Output of "{step}"', { step: step?.name || reference }), value: binding.outputKey, note: null }
+    }
+    case 'CONSTANT':
+      return { kind: t('Constant'), value: valueText(binding.constantValue), note: null }
+    default:
+      return { kind: binding.sourceType, value: reference || null, note: null }
+  }
+}
+
 export interface InputRow {
   key: string
   dataType: string | null
   required: boolean | null
   description: string | null
   text: string
+  source: BindingParts
 }
 
 /**
@@ -86,11 +125,19 @@ export function inputRows(
     required: input.required,
     description: input.description || null,
     text: describeBinding(bindings[input.key], tasks, variables),
+    source: bindingParts(bindings[input.key], tasks, variables),
   }))
   const listed = new Set(rows.map((row) => row.key))
   for (const [key, binding] of Object.entries(bindings)) {
     if (listed.has(key)) continue
-    rows.push({ key, dataType: null, required: null, description: null, text: describeBinding(binding, tasks, variables) })
+    rows.push({
+      key,
+      dataType: null,
+      required: null,
+      description: null,
+      text: describeBinding(binding, tasks, variables),
+      source: bindingParts(binding, tasks, variables),
+    })
   }
   return rows
 }

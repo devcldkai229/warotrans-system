@@ -28,7 +28,7 @@ import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { CONTAINER_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
-import { AddButton, SectionHead, SectionNote } from './SectionHead'
+import { AddButton, SectionHead } from './SectionHead'
 import {
   VOUCHER_STATUS_TONE,
   VOUCHER_TYPE_LABEL,
@@ -94,7 +94,11 @@ export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
     <>
       <SectionHead
         title={t('Stock vouchers')}
-        hint={current ? t('Phiếu nhập and phiếu xuất of {name}. Quantities are Containers, not units.', { name: current.name }) : t('Phiếu nhập and phiếu xuất. Quantities are Containers, not units.')}
+        hint={[current?.name, t('Quantities are Containers, not units.')].filter(Boolean).join(' · ')}
+        info={{
+          label: t('How stock vouchers work'),
+          text: t('Confirming a voucher does not wait for robots: progress fills in as Containers reach a shelf (inbound) or are issued at the outbound dock (outbound). Only a draft can be changed or cancelled.'),
+        }}
       >
         <select
           className={controlClass('pill', 'shrink-0')}
@@ -183,7 +187,6 @@ export function VouchersSection({ warehouse, products }: VouchersSectionProps) {
           ) : null}
         </tbody>
       </Table>
-      <SectionNote>{t('Confirming a voucher does not wait for robots: progress fills in as Containers reach a shelf (inbound) or are issued at the outbound dock (outbound). Only a draft can be changed or cancelled.')}</SectionNote>
 
       {creating && warehouseId ? (
         <CreateVoucherDialog

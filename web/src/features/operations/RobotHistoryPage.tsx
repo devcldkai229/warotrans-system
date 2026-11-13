@@ -26,7 +26,7 @@ export function RobotHistoryPage() {
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto max-w-[1000px] px-10 pt-8 pb-16">
-        <SectionHead title={t('Robot history')} hint={t('What each robot went through: its changes of state and the commands it was given, newest first.')}>
+        <SectionHead title={t('Robot history')}>
           <select
             className={controlClass('pill')}
             aria-label={t('Robot')}

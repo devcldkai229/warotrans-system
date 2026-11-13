@@ -433,10 +433,20 @@ export function JobDetailPage() {
   }, [endpoints, request])
 
   if (jobId === null || jobQuery.error || (!job && !jobQuery.isLoading)) {
+    // Links from notifications can outlive their Job: say so in words, like the robot and request screens do.
+    const error = jobQuery.error
+    const notFound = error instanceof ApiError && (error.status === 404 || error.code === 'job_not_found')
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-5">
-        <h1 className="text-xl font-book">{jobQuery.error ? errorText(jobQuery.error) : t('No job selected')}</h1>
-        <Link to="/monitor/requests" className={buttonClass({ variant: 'primary' })}>{t('Back to transport requests')}</Link>
+      <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
+        <h1 className="max-w-xl text-xl font-book">
+          {notFound
+            ? t('That job was not found. It may have been removed, or you may not have access to it.')
+            : error
+              ? t('The job could not be loaded.')
+              : t('No job selected')}
+        </h1>
+        {error && !notFound ? <p className="-mt-2 text-sm text-muted">{errorText(error)}</p> : null}
+        <Link to="/monitor/jobs" className={buttonClass({ variant: 'primary' })}>{t('Back to jobs')}</Link>
       </div>
     )
   }

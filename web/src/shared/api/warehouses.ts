@@ -115,12 +115,17 @@ export function listContainers(params: {
   warehouseId: string
   search?: string
   eligibleOnly?: boolean
+  /** One ContainerStatus name; omitted for every status. */
+  status?: string
+  skip?: number
   take?: number
 }) {
   const query = new URLSearchParams()
   query.set('warehouseId', params.warehouseId)
   if (params.search) query.set('search', params.search)
   if (params.eligibleOnly !== undefined) query.set('eligibleOnly', String(params.eligibleOnly))
+  if (params.status) query.set('status', params.status)
+  if (params.skip) query.set('skip', String(params.skip))
   if (params.take !== undefined) query.set('take', String(params.take))
   return apiFetch<ListContainersResponse>(`/api/warehouse/containers?${query}`)
 }

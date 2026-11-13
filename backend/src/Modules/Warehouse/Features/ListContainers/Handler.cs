@@ -32,6 +32,13 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
             query = query.Where(c => EligibleStatuses.Contains(c.Status));
         }
 
+        // The validator has already refused a name that is not a ContainerStatus.
+        if (!string.IsNullOrEmpty(request.Status))
+        {
+            var status = Enum.Parse<ContainerStatus>(request.Status);
+            query = query.Where(c => c.Status == status);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();

@@ -99,9 +99,7 @@ export function ManagementPage() {
   const [categories, setCategories] = useState<ProductCategory[]>([])
   const [catalogState, setCatalogState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [containers, setContainers] = useState<ContainerListing>({ warehouseName: null, items: [], total: 0 })
-  const [containerState, setContainerState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [inventory, setInventory] = useState<InventoryListing>({ warehouseName: null, items: [], total: 0 })
-  const [inventoryState, setInventoryState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [locationListing, setLocationListing] = useState<LocationListing>({ warehouse: null, items: [] })
   const [locationState, setLocationState] = useState<'loading' | 'ready' | 'error'>('loading')
 
@@ -157,30 +155,25 @@ export function ManagementPage() {
     }
   }, [])
 
+  // These two only feed the counts of the left menu; each section loads its own page of rows.
   const reloadContainers = useCallback(() => {
     if (!canWarehouse) return
-    listManagedContainers()
+    listManagedContainers({ take: 1 })
       .then((listing) => {
-        if (!mounted.current) return
-        setContainers(listing)
-        setContainerState('ready')
+        if (mounted.current) setContainers(listing)
       })
-      .catch(() => {
-        if (mounted.current) setContainerState((current) => (current === 'ready' ? current : 'error'))
-      })
+      // A count that cannot be loaded keeps its last value; the section shows the error itself.
+      .catch(() => undefined)
   }, [canWarehouse])
 
   const reloadInventory = useCallback(() => {
     if (!canWarehouse) return
-    listManagedInventory()
+    // The menu shows Containers on shelves, summed over the stock rows (at most 500 rows, the server's page limit).
+    listManagedInventory({ take: 500 })
       .then((listing) => {
-        if (!mounted.current) return
-        setInventory(listing)
-        setInventoryState('ready')
+        if (mounted.current) setInventory(listing)
       })
-      .catch(() => {
-        if (mounted.current) setInventoryState((current) => (current === 'ready' ? current : 'error'))
-      })
+      .catch(() => undefined)
   }, [canWarehouse])
 
   useEffect(() => {
@@ -208,6 +201,8 @@ export function ManagementPage() {
       reloadContainers()
       reloadInventory()
       void queryClient.invalidateQueries({ queryKey: VOUCHERS_KEY })
+      void queryClient.invalidateQueries({ queryKey: ['management-containers'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-inventory'] })
     }, 1500)
   }, [reloadContainers, reloadInventory, queryClient])
   useNotificationsHub({ jobUpdated: onJobUpdated })
@@ -250,7 +245,6 @@ export function ManagementPage() {
       <div className="mx-auto max-w-[1500px] px-10 pt-8 pb-16">
         <header>
           <h1 className="text-4xl font-book">{t('Management')}</h1>
-          <p className="mt-3 text-base text-ink-2">{t('Accounts, roles and warehouse master data in one place.')}</p>
         </header>
 
         <div className="mt-10 grid grid-cols-[220px_minmax(0,1fr)] items-start gap-10">
@@ -288,8 +282,8 @@ export function ManagementPage() {
             {tab === 'categories' ? (
               <CategoriesSection categories={categories} setCategories={setCategories} products={products} loadState={catalogState} />
             ) : null}
-            {tab === 'containers' ? <ContainersSection listing={containers} loadState={containerState} locations={locationListing.items} onChanged={reloadContainers} /> : null}
-            {tab === 'inventory' ? <InventorySection listing={inventory} loadState={inventoryState} /> : null}
+            {tab === 'containers' ? <ContainersSection locations={locationListing.items} onChanged={reloadContainers} /> : null}
+            {tab === 'inventory' ? <InventorySection /> : null}
             {tab === 'vouchers' ? <VouchersSection warehouse={locationListing.warehouse} products={products} /> : null}
             {tab === 'locations' ? (
               <LocationsSection

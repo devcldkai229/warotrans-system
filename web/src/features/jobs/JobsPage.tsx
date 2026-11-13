@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { SectionHead, SectionNote } from '@/features/management/SectionHead'
+import { SectionHead } from '@/features/management/SectionHead'
 import type { JobStatus } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { listJobs, type JobSummaryDto } from '@/shared/api/jobs'
 import { listTransportRequests } from '@/shared/api/transportRequests'
+import { cx } from '@/shared/lib/cx'
 import { formatIsoDateTime, formatRelativeTime, humanize } from '@/shared/lib/format'
+import { pageCountOf } from '@/shared/lib/pagination'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { useNotificationsHub } from '@/shared/realtime/useNotificationsHub'
-import { Button } from '@/shared/ui/Button'
 import { controlClass } from '@/shared/ui/controlClass'
 import { SearchInput } from '@/shared/ui/Field'
 import { Meter } from '@/shared/ui/Meter'
+import { Pagination } from '@/shared/ui/Pagination'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
@@ -48,7 +50,9 @@ export function JobsPage() {
   const [params, setParams] = useSearchParams()
   const status = (JOB_STATUSES as string[]).includes(params.get('status') ?? '') ? (params.get('status') as JobStatus) : undefined
   const robotId = params.get('robot') ?? undefined
+  const page = Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1)
 
+  // A new search or filter starts again from page 1.
   const setParam = useCallback(
     (key: string, value: string) => {
       setParams(
@@ -56,6 +60,7 @@ export function JobsPage() {
           const next = new URLSearchParams(current)
           if (value) next.set(key, value)
           else next.delete(key)
+          if (key !== 'page') next.delete('page')
           return next
         },
         { replace: true },
@@ -73,24 +78,31 @@ export function JobsPage() {
     if (addressSearch !== (search ?? '')) setParam('q', search ?? '')
   }, [search, addressSearch, setParam])
 
-  const jobs = useInfiniteQuery({
-    queryKey: ['jobs', 'list', search ?? '', status ?? '', robotId ?? ''],
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) => listJobs({ search, status, robotId, skip: pageParam, take: PAGE_SIZE }),
-    getNextPageParam: (last, pages) => {
-      const loaded = pages.reduce((count, page) => count + page.items.length, 0)
-      return last.items.length > 0 && loaded < last.total ? loaded : undefined
-    },
+  const jobs = useQuery({
+    queryKey: ['jobs', 'list', search ?? '', status ?? '', robotId ?? '', page],
+    queryFn: () => listJobs({ search, status, robotId, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+    // Keep the old page on screen while the next one loads, instead of flashing "Loading".
+    placeholderData: keepPreviousData,
     // The hub says "a Job moved"; the poll is the fallback while the connection is down.
     refetchInterval: 30_000,
   })
 
-  // A Job that moves while paging shifts the later pages, so the same one can arrive twice.
-  const items = useMemo(() => {
-    const seen = new Set<string>()
-    return (jobs.data?.pages ?? []).flatMap((page) => page.items).filter((job) => !seen.has(job.id) && seen.add(job.id))
-  }, [jobs.data])
-  const total = jobs.data?.pages[0]?.total ?? 0
+  const items = useMemo(() => jobs.data?.items ?? [], [jobs.data])
+  const total = jobs.data?.total ?? 0
+  const pageCount = pageCountOf(total, PAGE_SIZE)
+  const firstShown = (page - 1) * PAGE_SIZE + 1
+
+  // A page past the end (an old link, or Jobs gone since) moves to the last page there is.
+  const settled = jobs.data !== undefined && !jobs.isPlaceholderData
+  useEffect(() => {
+    if (settled && page > pageCount) setParam('page', pageCount > 1 ? String(pageCount) : '')
+  }, [settled, page, pageCount, setParam])
+
+  const scroller = useRef<HTMLDivElement>(null)
+  const goToPage = (target: number) => {
+    setParam('page', target > 1 ? String(target) : '')
+    scroller.current?.scrollTo({ top: 0 })
+  }
 
   const robots = useQuery({ queryKey: ['fleet-robots', 'jobs-page'], queryFn: () => listRobots({ take: 100 }), staleTime: 30_000 })
   const robotCodes = useMemo(() => new Map((robots.data?.items ?? []).map((robot) => [robot.id, robot.code])), [robots.data])
@@ -121,9 +133,9 @@ export function JobsPage() {
   const filtered = Boolean(search || status || robotId)
 
   return (
-    <div className="h-full overflow-auto">
+    <div ref={scroller} className="h-full overflow-auto">
       <div className="mx-auto max-w-[1300px] px-10 pt-8 pb-16">
-        <SectionHead title={t('Jobs')} hint={t('Every Job, newest first. Open one to see its steps and what you can do with it.')}>
+        <SectionHead title={t('Jobs')}>
           <div className="w-72">
             <SearchInput placeholder={t('Job number or id')} value={text} onChange={setText} />
           </div>
@@ -155,45 +167,45 @@ export function JobsPage() {
           </select>
         </SectionHead>
 
-        <Table>
-          <thead>
-            <tr>
-              <Th>{t('Job')}</Th>
-              <Th>{t('Status')}</Th>
-              <Th>{t('Robot')}</Th>
-              <Th>{t('Request')}</Th>
-              <Th align="right">{t('Containers')}</Th>
-              <Th>{t('Progress')}</Th>
-              <Th>{t('Problem')}</Th>
-              <Th>{t('Created')}</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((job) => (
-              <JobRow
-                key={job.id}
-                job={job}
-                robotCode={job.assignedRobotId ? robotCodes.get(job.assignedRobotId) : undefined}
-                requestCodes={requestCodes}
-                onOpen={() => navigate(`/monitor/jobs/${job.id}`)}
-              />
-            ))}
-            {jobs.isLoading ? <EmptyRow colSpan={8}>{t('Loading jobs…')}</EmptyRow> : null}
-            {jobs.isError ? <EmptyRow colSpan={8}>{(jobs.error as Error).message || t('Could not load jobs.')}</EmptyRow> : null}
-            {!jobs.isLoading && !jobs.isError && items.length === 0 ? (
-              <EmptyRow colSpan={8}>{filtered ? t('No jobs match these filters.') : t('There are no jobs yet.')}</EmptyRow>
-            ) : null}
-          </tbody>
-        </Table>
+        <div className={cx('transition-opacity duration-200', jobs.isPlaceholderData && 'opacity-60')}>
+          <Table>
+            <thead>
+              <tr>
+                <Th>{t('Job')}</Th>
+                <Th>{t('Status')}</Th>
+                <Th>{t('Robot')}</Th>
+                <Th>{t('Request')}</Th>
+                <Th align="right">{t('Containers')}</Th>
+                <Th>{t('Progress')}</Th>
+                <Th>{t('Problem')}</Th>
+                <Th>{t('Created')}</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((job) => (
+                <JobRow
+                  key={job.id}
+                  job={job}
+                  robotCode={job.assignedRobotId ? robotCodes.get(job.assignedRobotId) : undefined}
+                  requestCodes={requestCodes}
+                  onOpen={() => navigate(`/monitor/jobs/${job.id}`)}
+                />
+              ))}
+              {jobs.isLoading ? <EmptyRow colSpan={8}>{t('Loading jobs…')}</EmptyRow> : null}
+              {jobs.isError ? <EmptyRow colSpan={8}>{(jobs.error as Error).message || t('Could not load jobs.')}</EmptyRow> : null}
+              {!jobs.isLoading && !jobs.isError && items.length === 0 ? (
+                <EmptyRow colSpan={8}>{filtered ? t('No jobs match these filters.') : t('There are no jobs yet.')}</EmptyRow>
+              ) : null}
+            </tbody>
+          </Table>
+        </div>
 
         {items.length > 0 ? (
           <div className="mt-6 flex items-center justify-between gap-4">
-            <SectionNote>{t('Showing {shown} of {total}', { shown: items.length, total })}</SectionNote>
-            {jobs.hasNextPage ? (
-              <Button variant="outline" disabled={jobs.isFetchingNextPage} onClick={() => void jobs.fetchNextPage()}>
-                {jobs.isFetchingNextPage ? t('Loading…') : t('Load more')}
-              </Button>
-            ) : null}
+            <p className="text-xs text-muted">
+              {t('Showing {from}–{to} of {total}', { from: firstShown, to: firstShown + items.length - 1, total })}
+            </p>
+            <Pagination page={Math.min(page, pageCount)} pageCount={pageCount} onChange={goToPage} />
           </div>
         ) : null}
       </div>

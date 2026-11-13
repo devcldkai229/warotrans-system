@@ -7,6 +7,7 @@ import { ApiError } from '@/shared/api/client'
 import { formatDateTimeWithYear } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
+import { InfoTip } from '@/shared/ui/InfoTip'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import type { Tone } from '@/shared/ui/statusTones'
 import type {
@@ -31,7 +32,7 @@ import {
 } from '@/shared/api/workflows'
 import { BindingEditor } from './binding-editor'
 import { shouldLoadDraft } from './draftSync'
-import { ReadOnlyNotice, WorkflowReadOnlyView } from './WorkflowReadOnlyView'
+import { ReadOnlyInfo, WorkflowReadOnlyView } from './WorkflowReadOnlyView'
 import { ScopeBadge } from './scope-badge'
 import {
   isMovementFieldAvailable,
@@ -594,9 +595,12 @@ export function WorkflowEditor({
             {isNew ? t('New workflow template') : draft.name || draft.code || t('Workflow editor')}
           </h1>
           <div className="wf-page-hero__meta">
-            <StatusBadge tone={statusTone} withDot>
-              {status}
-            </StatusBadge>
+            <span className="inline-flex items-center gap-1">
+              <StatusBadge tone={statusTone} withDot>
+                {status}
+              </StatusBadge>
+              {readOnly ? <ReadOnlyInfo published={status === 'PUBLISHED'} canWrite={canWrite} /> : null}
+            </span>
             {!isNew && detailQuery.data?.createdAt ? (
               <span>{t('Created')}{' '}{formatDateTimeWithYear(detailQuery.data.createdAt)}</span>
             ) : null}
@@ -637,6 +641,7 @@ export function WorkflowEditor({
           {!isNew && detailQuery.data ? (
             <span className="muted">v{detailQuery.data.versionNo}</span>
           ) : null}
+          {readOnly ? <ReadOnlyInfo published={status === 'PUBLISHED'} canWrite={canWrite} /> : null}
         </p>
       </div>
     </header>
@@ -676,7 +681,6 @@ export function WorkflowEditor({
 
       {readOnly ? (
         <>
-          <ReadOnlyNotice published={status === 'PUBLISHED'} canWrite={canWrite} />
           <WorkflowReadOnlyView draft={draft} metadata={metadata} showIdentity={isPanel} />
         </>
       ) : (
@@ -691,14 +695,11 @@ export function WorkflowEditor({
                 setDraft({ ...draft, name })
               }}
             />
-            <span className="muted wf-code-preview">
-              {draft.code ? (
-                <>{t('Code:')}{' '}<code>{draft.code}</code>
-                </>
-              ) : (
-                t('The code is generated when you save.')
-              )}
-            </span>
+            {draft.code ? (
+              <span className="muted wf-code-preview">
+                {t('Code:')}{' '}<code>{draft.code}</code>
+              </span>
+            ) : null}
           </label>
           <label>{t('Description')}<input
               value={draft.description ?? ''}
@@ -861,7 +862,15 @@ export function WorkflowEditor({
       </fieldset>
 
       <fieldset className="wf-card wf-tree">
-        <legend>{t('Tasks & Steps')}<button
+        <legend>
+          {/* How to use the tree is kept behind an "i": needed the first time, noise every time after. */}
+          <span className="inline-flex items-center gap-1.5">
+            {t('Tasks & Steps')}
+            <InfoTip label={t('How to edit tasks and steps')}>
+              {t('Steps belong to the task above them. Click + Step to open its config right away. Drag the handle to reorder steps.')}
+            </InfoTip>
+          </span>
+          <button
             type="button"
             className="btn small"
             onClick={() => {
@@ -874,7 +883,6 @@ export function WorkflowEditor({
             }}
           >{t('+ Task')}</button>
         </legend>
-        <p className="wf-tree__hint muted">{t('Steps belong to the task above them. Click + Step to open its config right away. Drag the handle to reorder steps.')}</p>
 
         {draft.tasks.length === 0 && (
           <p className="muted">{t('No tasks yet. Add a task, then add steps under that task.')}</p>

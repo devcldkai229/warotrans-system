@@ -16,6 +16,7 @@ public static class ListContainersEndpoint
             bool? eligibleOnly,
             int? take,
             int? skip,
+            string? status,
             IValidator<ListContainersRequest> validator,
             ListContainersHandler handler,
             CancellationToken cancellationToken) =>
@@ -25,7 +26,8 @@ public static class ListContainersEndpoint
                 search,
                 eligibleOnly ?? true,
                 take ?? 50,
-                skip ?? 0);
+                skip ?? 0,
+                status);
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
@@ -35,7 +37,8 @@ public static class ListContainersEndpoint
         .WithSummary("List containers for a warehouse")
         .WithDescription(
             "Returns containers scoped to a warehouse via their current storage location. " +
-            "Containers without a location (inbound) are included. Defaults to eligible statuses only.");
+            "Containers without a location (inbound) are included. Defaults to eligible statuses only. " +
+            "`status` narrows the list to one container status; `skip` / `take` page it and `total` counts every match.");
 
         return group;
     }

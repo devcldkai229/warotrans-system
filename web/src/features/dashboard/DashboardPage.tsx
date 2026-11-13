@@ -1,10 +1,13 @@
-import { useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import type { JobStatistics, RequestStatistics, RobotStatistics } from '@/shared/api/contracts'
 import { getJobStatistics, getRequestStatistics, getRobotStatistics } from '@/shared/api/statistics'
 import { cx } from '@/shared/lib/cx'
-import { formatRelativeTime, humanize, windowOfDays } from '@/shared/lib/format'
-import { Button, IconButton } from '@/shared/ui/Button'
+import { rangeWindow, readRange, writeRange, type RangeChoice } from '@/shared/lib/dateRange'
+import { appToday, formatRelativeTime, humanize } from '@/shared/lib/format'
+import { IconButton } from '@/shared/ui/Button'
+import { DateRangePicker } from '@/shared/ui/DateRangePicker'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge, ToneDot } from '@/shared/ui/StatusBadge'
@@ -13,19 +16,6 @@ import { JOB_STATUS_TONE, REQUEST_STATUS_TONE, ROBOT_STATUS_TONE, TONE_SOLID, ty
 
 import { getLocale, t } from '@/shared/i18n'
 import { explainFailureCode, failureTitle } from '@/features/jobs/failureCatalog'
-type RangeId = 'today' | '7d' | '30d'
-
-const RANGES: { id: RangeId; label: string; days: number }[] = [
-  { id: 'today', label: t('Today'), days: 1 },
-  { id: '7d', label: t('7 days'), days: 7 },
-  { id: '30d', label: t('30 days'), days: 30 },
-]
-
-/** From midnight (Vietnam) of the first day to now, so the per-day buckets line up with Vietnam's calendar days. */
-function windowFor(days: number) {
-  return windowOfDays(days)
-}
-
 const count = (value: number) => value.toLocaleString(getLocale())
 
 /** `45s`, `12m 05s`, `2h 10m`: a Job takes minutes, a Request can take hours. */
@@ -67,21 +57,36 @@ function Delta({ current, previous, neutral = false }: { current: number; previo
 
 function Section({
   title,
-  note,
+  aside,
   children,
 }: {
   title: string
-  note?: string
+  /** Shown at the right of the title, e.g. a chart legend. */
+  aside?: ReactNode
   children: ReactNode
 }) {
   return (
     <section className="mt-14">
-      <header className="mb-4">
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <h2 className="text-xl font-book">{title}</h2>
-        {note ? <p className="mt-1 text-sm text-ink-2">{note}</p> : null}
+        {aside}
       </header>
       {children}
     </section>
+  )
+}
+
+/** Which colour is which in a chart. */
+function Legend({ items }: { items: { label: string; tone: Tone }[] }) {
+  return (
+    <ul className="flex items-center gap-4 text-xs text-ink-2">
+      {items.map((item) => (
+        <li key={item.label} className="flex items-center gap-1.5">
+          <ToneDot tone={item.tone} size="sm" />
+          {item.label}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -123,12 +128,14 @@ function DailyBars({
   const max = Math.max(1, ...days.map((d) => d.primary + (d.secondary ?? 0)))
   const empty = days.every((d) => d.primary + (d.secondary ?? 0) === 0)
   const labelEvery = Math.ceil(days.length / 8)
+  // A year is 366 columns: the gaps shrink so the bars keep some width.
+  const gap = days.length <= 31 ? 'gap-1.5' : days.length <= 120 ? 'gap-px' : 'gap-0'
   return (
     <div className="relative rounded-lg bg-container p-6">
       {empty ? (
         <p className="absolute inset-x-0 top-[4.5rem] text-center text-sm text-muted">{emptyText}</p>
       ) : null}
-      <div className="flex h-40 items-end gap-1.5">
+      <div className={cx('flex h-40 items-end', gap)}>
         {days.map((day) => {
           const failed = day.secondary ?? 0
           const total = day.primary + failed
@@ -152,12 +159,19 @@ function DailyBars({
           )
         })}
       </div>
-      <div className="mt-2 flex gap-1.5 text-[11px] text-muted">
-        {days.map((day, index) => (
-          <span key={day.date} className="min-w-0 flex-1 truncate text-center">
-            {index % labelEvery === 0 ? shortDate(day.date) : ''}
-          </span>
-        ))}
+      {/* Placed by position, not one cell per day: on a long range a day is a few pixels wide. */}
+      <div className="relative mt-2 h-4 text-[11px] text-muted">
+        {days.map((day, index) =>
+          index % labelEvery === 0 ? (
+            <span
+              key={day.date}
+              className="absolute -translate-x-1/2 whitespace-nowrap"
+              style={{ left: `${((index + 0.5) / days.length) * 100}%` }}
+            >
+              {shortDate(day.date)}
+            </span>
+          ) : null,
+        )}
       </div>
     </div>
   )
@@ -238,7 +252,17 @@ function JobsSection({ stats }: { stats: JobStatistics }) {
         </section>
       </div>
 
-      <Section title={t('Jobs finished per day')} note={t('Completed jobs, with failed jobs stacked in red.')}>
+      <Section
+        title={t('Jobs finished per day')}
+        aside={
+          <Legend
+            items={[
+              { label: t('Completed'), tone: 'blue' },
+              { label: t('Failed'), tone: 'red' },
+            ]}
+          />
+        }
+      >
         <DailyBars
           emptyText={t('No jobs finished in this period.')}
           days={stats.daily.map((day) => ({
@@ -454,23 +478,30 @@ function RequestsSection({ stats }: { stats: RequestStatistics }) {
 }
 
 export function DashboardPage() {
-  const [rangeId, setRangeId] = useState<RangeId>('7d')
-  const range = RANGES.find((item) => item.id === rangeId) ?? RANGES[1]
+  // The range lives in the address (`?range=last-month`, `?from=…&to=…`), so a report can be shared as a link.
+  const [params, setParams] = useSearchParams()
+  const today = appToday()
+  const { preset, range } = readRange(params, today)
+  const choose = (choice: RangeChoice) => setParams((current) => writeRange(current, choice), { replace: true })
 
-  // The window is built when the request is sent, so every refresh reaches up to "now".
+  // The window is built when the request is sent, so every refresh of a range that reaches today counts up to "now".
+  const key = [range.from, range.to]
   const jobs = useQuery({
-    queryKey: ['statistics', 'jobs', rangeId],
-    queryFn: () => getJobStatistics(windowFor(range.days)),
+    queryKey: ['statistics', 'jobs', ...key],
+    queryFn: () => getJobStatistics(rangeWindow(range)),
+    placeholderData: keepPreviousData,
     refetchInterval: 60_000,
   })
   const robots = useQuery({
-    queryKey: ['statistics', 'robots', rangeId],
-    queryFn: () => getRobotStatistics(windowFor(range.days)),
+    queryKey: ['statistics', 'robots', ...key],
+    queryFn: () => getRobotStatistics(rangeWindow(range)),
+    placeholderData: keepPreviousData,
     refetchInterval: 60_000,
   })
   const requests = useQuery({
-    queryKey: ['statistics', 'requests', rangeId],
-    queryFn: () => getRequestStatistics(windowFor(range.days)),
+    queryKey: ['statistics', 'requests', ...key],
+    queryFn: () => getRequestStatistics(rangeWindow(range)),
+    placeholderData: keepPreviousData,
     refetchInterval: 60_000,
   })
 
@@ -485,21 +516,13 @@ export function DashboardPage() {
         <header className="flex items-end justify-between gap-6">
           <div>
             <h1 className="text-4xl font-book">{t('Statistics')}</h1>
-            <p className="mt-3 text-base text-ink-2">{t('All warehouses,')}{' '}{range.id === 'today' ? t('today') : t('last {days} days', { days: range.days })}
+            <p className="mt-3 text-base text-ink-2">
+              {t('All warehouses')}
               {Number.isFinite(updatedAt) ? t(', updated {value}', { value: formatRelativeTime(new Date(updatedAt).toISOString()) }) : ''}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {RANGES.map((item) => (
-              <Button
-                key={item.id}
-                variant={item.id === rangeId ? 'primary' : 'tonal'}
-                aria-pressed={item.id === rangeId}
-                onClick={() => setRangeId(item.id)}
-              >
-                {item.label}
-              </Button>
-            ))}
+            <DateRangePicker preset={preset} range={range} today={today} onChange={choose} />
             <IconButton
               aria-label={t('Refresh')}
               disabled={refreshing}
@@ -514,13 +537,13 @@ export function DashboardPage() {
           {jobs.data ? <JobsSection stats={jobs.data} /> : null}
         </QueryState>
 
-        <Section title={t('Robot fleet')} note={t('Robots and their status right now; assignment outcomes cover the selected period.')}>
+        <Section title={t('Robot fleet')}>
           <QueryState isLoading={robots.isLoading} error={robots.error}>
             {robots.data ? <RobotsSection stats={robots.data} /> : null}
           </QueryState>
         </Section>
 
-        <Section title={t('Transport requests')} note={t('Requests submitted in the selected period.')}>
+        <Section title={t('Transport requests')}>
           <QueryState isLoading={requests.isLoading} error={requests.error}>
             {requests.data ? <RequestsSection stats={requests.data} /> : null}
           </QueryState>

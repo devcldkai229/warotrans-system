@@ -5,6 +5,7 @@ import { ApiError } from '@/shared/api/client'
 import { releaseTrafficAfterClearance } from '@/shared/api/fleet'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import { Button } from '@/shared/ui/Button'
+import { t } from '@/shared/i18n'
 
 /**
  * WEB-FLEET-06: frees the zones a robot holds. Two steps, and the code must be typed. A silent robot cannot say where
@@ -33,7 +34,7 @@ export function TrafficClearanceCard({ robotId, robotCode }: { robotId: string; 
     return (
       <div className="mb-4">
         <Button variant="ghost" onClick={() => setOpen(true)}>
-          Release traffic zones…
+          {t('Release traffic zones…')}
         </Button>
       </div>
     )
@@ -42,29 +43,29 @@ export function TrafficClearanceCard({ robotId, robotCode }: { robotId: string; 
   return (
     <section className="mb-4 flex flex-col gap-3 rounded-md border border-red-ink/40 p-4 text-sm">
       <p className="text-red-ink">
-        Another robot may drive into these zones as soon as they are free. The system cannot verify this for a robot that does not report: it relies on you. Go and look first.
+        {t('Another robot may drive into these zones as soon as they are free. The system cannot verify this for a robot that does not report: it relies on you. Go and look first.')}
       </p>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-        I checked on site that {robotCode} is out of the zones it holds.
+        {t('I checked on site that {robotCode} is out of the zones it holds.', { robotCode })}
       </label>
       <label className="flex flex-col gap-1">
-        What did you check?
+        {t('What did you check?')}
         <textarea className="rounded-md border border-outline-soft bg-surface p-2" value={reason} onChange={(e) => setReason(e.target.value)} />
       </label>
       <label className="flex flex-col gap-1">
-        Type {robotCode} to confirm
+        {t('Type {robotCode} to confirm', { robotCode })}
         <input className="rounded-md border border-outline-soft bg-surface p-2 font-mono" value={typed} onChange={(e) => setTyped(e.target.value)} />
       </label>
       <div className="flex gap-2">
         <Button variant="primary" disabled={!checked || !reason.trim() || typed.trim() !== robotCode || release.isPending} onClick={() => release.mutate()}>
-          Release zones
+          {t('Release zones')}
         </Button>
         <Button variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
-      {release.error ? <p className="text-xs text-red-ink">{release.error instanceof ApiError ? release.error.message : 'The release failed.'}</p> : null}
+      {release.error ? <p className="text-xs text-red-ink">{release.error instanceof ApiError ? release.error.message : t('The release failed.')}</p> : null}
     </section>
   )
 }
