@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { BackHandler, Keyboard, KeyboardAvoidingView, LayoutAnimation, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, ChevronDown, ChevronUp } from 'lucide-react-native';
@@ -77,14 +77,16 @@ export function CreateStockVoucherScreen() {
     const message = t(problem.message);
     return index < 0 ? message : t('Group {group}: {message}', { group: index + 1, message });
   };
+  const animateLayout = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
   const openReview = () => {
     if (!editable || !preparation.ready || (!inbound && !outboundReady)) return;
     Keyboard.dismiss();
     const problem = validate();
     if (problem) { showError(problem); return; }
+    animateLayout();
     setError(null); setReview(true); scroll.current?.scrollTo({ y: 0, animated: false });
   };
-  const back = () => { if (review && !saving && !uncertain) { setReview(false); setError(null); } else goBack(); };
+  const back = () => { if (review && !saving && !uncertain) { animateLayout(); setReview(false); setError(null); } else goBack(); };
   const create = async () => {
     if (pending.current || !editable || !warehouse || !preparation.ready || !review) return;
     const problem = validate();
@@ -126,7 +128,7 @@ export function CreateStockVoucherScreen() {
             </>}
             {!review && !inbound && <OutboundVoucherSelection key={`${session?.id}:${warehouse.id}`} accountId={session?.id || ''} warehouseId={warehouse.id} value={preparation.value} update={preparation.update} onReview={openReview} onReadinessChange={setOutboundReady} showReviewAction={false} editable={editable} />}
             {review && <Card gap={12} style={styles.reviewCard}>
-              <View style={styles.between}><Text variant="headline">{inbound ? 'Inbound Batch' : 'Selected Containers'}</Text><Button title="Edit" variant="ghost" size="sm" style={styles.editButton} disabled={!editable} onPress={() => setReview(false)} /></View>
+              <View style={styles.between}><Text variant="headline">{inbound ? 'Inbound Batch' : 'Selected Containers'}</Text><Button title="Edit" variant="ghost" size="sm" style={styles.editButton} disabled={!editable} onPress={() => { animateLayout(); setReview(false); }} /></View>
               <View style={styles.batchStatBar}>
                 <View style={styles.stat}><Text variant="title" style={styles.tabular}>{inbound ? requestedCount : selected.length}</Text><Text variant="bodyMedium" color="textSecondary">Containers</Text></View>
                 {inbound && <Text variant="caption" color="textSecondary" style={[styles.tabular, { fontWeight: '600' }]}>{t('{count} product groups', { count: groups.length })}</Text>}
@@ -145,7 +147,7 @@ export function CreateStockVoucherScreen() {
               ))}
             </Card>}
             <View style={styles.detailsCard}>
-              <Pressable onPress={() => setDetailsOpen(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={({ pressed }) => [styles.detailsHeader, pressed && styles.pressed]}>
+              <Pressable onPress={() => { animateLayout(); setDetailsOpen(value => !value); }} accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={({ pressed }) => [styles.detailsHeader, pressed && styles.pressed]}>
                 <View style={styles.row}><Text variant="bodyMedium">Additional Details</Text>{!detailsOpen && (!!referenceNo.trim() || !!note.trim()) && <View style={styles.detailsDot} />}</View>
                 {detailsOpen ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
               </Pressable>

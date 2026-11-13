@@ -1168,6 +1168,8 @@ export const vi: Record<string, string> = {
   'Containers Unavailable': 'Container không khả dụng',
   'Refresh to try again.': 'Hãy làm mới để thử lại.',
   '{selected} selected · {visible} matching containers': 'Đã chọn {selected} · {visible} container khớp',
+  '{count} selected': 'Đã chọn {count}',
+  '{count} matching containers': '{count} container khớp',
   'selected ·': 'đã chọn ·',
   'matching containers': 'container khớp',
   'No Containers At Outbound': 'Không có Container tại khu Xuất kho',

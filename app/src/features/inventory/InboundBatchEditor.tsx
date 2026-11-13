@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 import { Box, Check, ChevronRight, Plus, Trash2 } from 'lucide-react-native';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -43,7 +43,7 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
             </View>
             <ChevronRight size={18} color={group.product ? colors.textMuted : colors.primaryText} />
           </Pressable>
-          {groups.length > 1 && <Pressable style={({ pressed }) => [styles.action, pressed && editable && styles.actionPressed]} disabled={!editable} accessibilityRole="button" accessibilityState={{ disabled: !editable }} accessibilityLabel={t('Remove Product Group {group}', { group: index + 1 })} onPress={() => onChange(groups.filter(item => item.key !== group.key))}><Trash2 size={18} color={colors.textMuted} /></Pressable>}
+          {groups.length > 1 && <Pressable style={({ pressed }) => [styles.action, pressed && editable && styles.actionPressed]} disabled={!editable} accessibilityRole="button" accessibilityState={{ disabled: !editable }} accessibilityLabel={t('Remove Product Group {group}', { group: index + 1 })} onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); onChange(groups.filter(item => item.key !== group.key)); }}><Trash2 size={18} color={colors.textMuted} /></Pressable>}
         </View>
         <View style={styles.groupDivider} />
         <View style={styles.fields}>
@@ -53,7 +53,7 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
         </View>
       </View>
     ))}
-    <Button title="Add Product" icon={Plus} variant="outline" disabled={!editable || !total || groups.length >= total} onPress={() => onChange([...groups, newBatchGroup(groups, remaining && remaining > 0 ? String(remaining) : '')])} />
+    <Button title="Add Product" icon={Plus} variant="outline" disabled={!editable || !total || groups.length >= total} onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); onChange([...groups, newBatchGroup(groups, remaining && remaining > 0 ? String(remaining) : '')]); }} />
     {picker && editable && groups.some(group => group.key === picker) && <ReceivingProductPicker selectedProduct={groups.find(group => group.key === picker)?.product || null} initialBarcode={null} onClose={() => setPicker(null)} onSelect={product => { onChange(applyBatchGroupProduct(groups, picker, product)); setPicker(null); }} />}
   </View>;
 }

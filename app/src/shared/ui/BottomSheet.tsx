@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import {
   DimensionValue,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -52,37 +54,40 @@ export function BottomSheet({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay} onLayout={event => setAvailableHeight(event.nativeEvent.layout.height)}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Dismiss ${accessibilityLabel}`} />
-        <View
-          accessibilityViewIsModal
-          onAccessibilityEscape={onClose}
-          style={[
-            styles.sheet,
-            heightStyle,
-            { paddingBottom: Math.max(insets.bottom, 16) },
-          ]}
-        >
-          <View {...pan.panHandlers}>
-            <Pressable
-              onPress={() => setExpanded(value => !value)}
-              accessibilityRole="button"
-              accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${accessibilityLabel}`}
-              accessibilityState={{ expanded }}
-              style={styles.handleTarget}
-            >
-              <View style={styles.handle} />
-            </Pressable>
+      <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.overlay} onLayout={event => setAvailableHeight(event.nativeEvent.layout.height)}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Dismiss ${accessibilityLabel}`} />
+          <View
+            accessibilityViewIsModal
+            onAccessibilityEscape={onClose}
+            style={[
+              styles.sheet,
+              heightStyle,
+              { paddingBottom: Math.max(insets.bottom, 16) },
+            ]}
+          >
+            <View {...pan.panHandlers}>
+              <Pressable
+                onPress={() => setExpanded(value => !value)}
+                accessibilityRole="button"
+                accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${accessibilityLabel}`}
+                accessibilityState={{ expanded }}
+                style={styles.handleTarget}
+              >
+                <View style={styles.handle} />
+              </Pressable>
+            </View>
+            {children}
           </View>
-          {children}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) =>
   StyleSheet.create({
+    keyboard: { flex: 1 },
     overlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end', alignItems: 'center' },
     sheet: {
       width: '100%',
@@ -90,6 +95,7 @@ const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) =
       backgroundColor: colors.surface,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
+      borderCurve: 'continuous',
       overflow: 'hidden',
       shadowColor: '#000000',
       shadowOffset: { width: 0, height: -6 },

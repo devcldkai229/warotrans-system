@@ -50,6 +50,12 @@ export const createVoucherStyles = (colors: ThemeColors, shadows: ThemeShadows) 
   summaryInfo: { flex: 1, minWidth: 0, gap: 2 },
   summaryMetrics: { alignItems: 'flex-end', gap: 2, flexShrink: 0 },
   tabular: { fontVariant: ['tabular-nums'] },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
+  statusPillActive: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  selectableRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 10, marginHorizontal: -6, borderRadius: radii.md, borderCurve: 'continuous', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  selectableRowActive: { backgroundColor: colors.primaryLight, borderBottomColor: 'transparent' },
+  checkCircle: { width: 22, height: 22, borderRadius: radii.full, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  checkCircleActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   stat: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   state: { paddingVertical: 28, gap: 12, alignItems: 'center' },
 });

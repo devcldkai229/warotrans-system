@@ -45,25 +45,24 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
   };
   if (!prep.ready) return <Card gap={12}><Text variant="body">{prep.error || 'Loading Preparation…'}</Text>{prep.error && <Button title="Retry" variant="outline" onPress={prep.retry} />}</Card>;
   return <>
-    <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
+    {(!inbound || !prep.value.groups?.length || !!data.lines.length) && <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
       {!!index && <View style={styles.stepLine} />}
       <View style={styles.step}><View style={[styles.stepNumber, index <= currentStep && styles.stepCurrent]}>
         {index < currentStep ? <Check size={15} color={colors.primaryText} /> : <Text variant="caption" color={index === currentStep ? 'primaryText' : 'textMuted'}>{index + 1}</Text>}
       </View><Text variant="caption" color={index === currentStep ? 'textPrimary' : 'textMuted'}>{label}</Text></View>
-    </React.Fragment>)}</View>
-    <View style={styles.between}><Text variant="caption" color="textSecondary">{prep.saved ? 'Preparation saved on this device' : 'Saving preparation…'}</Text><Text variant="caption" color="textMuted">Stock unchanged</Text></View>
+    </React.Fragment>)}</View>}
     {prep.error && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{prep.error}</Text><Button title="Retry Save" variant="outline" onPress={() => { void prep.persist().catch(() => {}); }} /></View>}
     {!writable && <Text variant="body" color="textSecondary">Preparation is read-only. Check access or refresh this voucher.</Text>}
     {inbound && !review && <>
-      <Card gap={14}>
+      {!data.lines.length && !prep.value.groups?.length && <Card gap={14} style={styles.reviewCard}>
         <View style={styles.row}><Barcode size={22} color={colors.primaryText} /><Text variant="headline">Container Barcodes</Text></View>
         <ContainerCountField value={prep.value.requestedCount} onChange={requestedCount => prep.update(previous => ({ ...previous, requestedCount }))} editable={writable} />
         <Text variant="bodyMedium">{data.lines.length} codes allocated{prep.value.requestedCount ? ` · ${prep.value.requestedCount} requested` : ''}</Text>
         <Button title="Generate Barcodes" disabled onPress={() => {}} />
         <Text variant="caption" color="textSecondary">Barcode allocation is awaiting server support. No codes are generated on this device.</Text>
-      </Card>
-      {!data.lines.length && !!prep.value.groups?.length && <Card gap={8}>
-        <View style={styles.between}><Text variant="headline">Batch Plan</Text><Text variant="caption" color="textMuted">On This Device</Text></View>
+      </Card>}
+      {!data.lines.length && !!prep.value.groups?.length && <Card gap={12} style={styles.reviewCard}>
+        <View style={styles.between}><Text variant="headline">Batch Plan</Text><View style={styles.statusPill}><Text variant="caption" color="textSecondary" style={{ fontWeight: '600' }}>On This Device</Text></View></View>
         <InboundBatchSummary groups={prep.value.groups} />
       </Card>}
       {!!data.lines.length && <Card gap={8}>
