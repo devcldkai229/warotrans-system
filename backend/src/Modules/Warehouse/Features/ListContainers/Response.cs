@@ -14,7 +14,9 @@ public sealed record ContainerListItemResponse(
     short? CurrentLevelNo,
     string? SupplierPackageBarcode,
     DateTimeOffset UpdatedAt,
-    bool InActiveTransport = false);
+    bool InActiveTransport = false,
+    decimal? ContentsQuantity = null,
+    string? ContentsUnit = null);
 
 public sealed record ListContainersResponse(
     IReadOnlyList<ContainerListItemResponse> Items,

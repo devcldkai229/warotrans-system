@@ -68,7 +68,7 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
                 c.CurrentLevelNo,
                 c.SupplierPackageBarcode,
                 c.UpdatedAt,
-                false))
+                false, c.ContentsQuantity, c.ContentsUnit))
             .ToListAsync(cancellationToken);
 
         // Transport Requests live in another module, so the flag is filled in after the query.

@@ -36,6 +36,16 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("barcode");
 
+                    b.Property<decimal?>("ContentsQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("contents_quantity");
+
+                    b.Property<string>("ContentsUnit")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("contents_unit");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -43,6 +53,28 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.Property<Guid>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
+
+                    b.Property<string>("CreationGroupKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("creation_group_key");
+
+                    b.Property<int?>("CreationGroupOrdinal")
+                        .HasColumnType("integer")
+                        .HasColumnName("creation_group_ordinal");
+
+                    b.Property<int?>("CreationOrdinal")
+                        .HasColumnType("integer")
+                        .HasColumnName("creation_ordinal");
+
+                    b.Property<string>("CreationRequestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("creation_request_hash");
+
+                    b.Property<Guid?>("CreationRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creation_request_id");
 
                     b.Property<short?>("CurrentLevelNo")
                         .HasColumnType("smallint")
@@ -97,7 +129,17 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.HasIndex("ProductId")
                         .HasDatabaseName("i_x_containers_product_id");
 
-                    b.ToTable("containers", "warehouse");
+                    b.HasIndex("CreationRequestId", "CreationOrdinal")
+                        .IsUnique()
+                        .HasDatabaseName("ux_containers_creation_request")
+                        .HasFilter("creation_request_id IS NOT NULL");
+
+                    b.ToTable("containers", "warehouse", t =>
+                        {
+                            t.HasCheckConstraint("ck_containers_contents", "(contents_quantity IS NULL AND contents_unit IS NULL) OR (contents_quantity IS NOT NULL AND contents_quantity > 0 AND contents_unit IS NOT NULL AND length(btrim(contents_unit)) > 0)");
+
+                            t.HasCheckConstraint("ck_containers_creation_receipt", "(creation_request_id IS NULL AND creation_request_hash IS NULL AND creation_ordinal IS NULL AND creation_group_key IS NULL AND creation_group_ordinal IS NULL) OR (creation_request_id IS NOT NULL AND creation_request_hash IS NOT NULL AND length(creation_request_hash) = 64 AND creation_ordinal IS NOT NULL AND creation_ordinal > 0 AND creation_group_key IS NOT NULL AND length(btrim(creation_group_key)) > 0 AND creation_group_ordinal IS NOT NULL AND creation_group_ordinal > 0 AND contents_quantity IS NOT NULL AND contents_unit IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("WaroTrans.Warehouse.Entities.ContainerMovement", b =>

@@ -28,6 +28,9 @@ public sealed class CreateContainerHandler(
             throw new ValidationException(validationResult.Errors);
         }
 
+        if (request.Groups is not null)
+            throw new DomainValidationException("Use batch receiving for a grouped request.", "container_request_shape_invalid");
+
         var product = await dbContext.Products
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == request.ProductId && p.IsActive, cancellationToken);

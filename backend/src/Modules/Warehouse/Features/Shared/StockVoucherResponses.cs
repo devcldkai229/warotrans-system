@@ -19,7 +19,9 @@ public sealed record StockVoucherLineResponse(
     string? CurrentStorageLocationCode,
     Guid? CurrentEndpointId,
     short? CurrentLevelNo,
-    bool Done);
+    bool Done,
+    decimal? ContentsQuantity = null,
+    string? ContentsUnit = null);
 
 public sealed record StockVoucherProductSummary(
     Guid ProductId,
@@ -113,7 +115,9 @@ internal static class StockVoucherQueries
                 l.Container.CurrentStorageLocationId,
                 LocationCode = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.Code : null,
                 EndpointId = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.EndpointId : (Guid?)null,
-                l.Container.CurrentLevelNo
+                l.Container.CurrentLevelNo,
+                l.Container.ContentsQuantity,
+                l.Container.ContentsUnit
             })
             .ToListAsync(cancellationToken);
 
@@ -131,7 +135,7 @@ internal static class StockVoucherQueries
                 r.LocationCode,
                 r.EndpointId,
                 r.CurrentLevelNo,
-                StockVoucherProgress.IsDone(voucher.Type, r.ContainerStatus)))
+                StockVoucherProgress.IsDone(voucher.Type, r.ContainerStatus), r.ContentsQuantity, r.ContentsUnit))
             .ToList();
 
         var products = lines
