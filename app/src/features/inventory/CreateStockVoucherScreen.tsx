@@ -144,13 +144,16 @@ export function CreateStockVoucherScreen() {
               </Card>}
               <Text variant="caption" color="textSecondary">{inbound ? 'Barcode allocation is unavailable. An empty server draft can be created; batch contents stay on this device.' : 'Only an empty server draft can be created. The container selection stays on this device.'}</Text>
             </>}
-            <Pressable onPress={() => setDetailsOpen(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={[styles.between, { minHeight: 44 }]}>
-              <Text variant="bodyMedium">Additional Details</Text>{detailsOpen ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
-            </Pressable>
-            {detailsOpen && <View style={styles.formSection}>
-              <TextField label="Reference (Optional)" value={referenceNo} onChangeText={value => edit('referenceNo', value)} maxLength={100} editable={editable} autoCorrect={false} placeholder="Document number" />
-              <TextField label="Note (Optional)" value={note} onChangeText={value => edit('note', value)} maxLength={500} editable={editable} placeholder="Add a note" multiline inputStyle={{ minHeight: 88, textAlignVertical: 'top', paddingTop: 12 }} />
-            </View>}
+            <View style={styles.detailsCard}>
+              <Pressable onPress={() => setDetailsOpen(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={({ pressed }) => [styles.detailsHeader, pressed && styles.pressed]}>
+                <View style={styles.row}><Text variant="bodyMedium">Additional Details</Text>{!detailsOpen && (!!referenceNo.trim() || !!note.trim()) && <View style={styles.detailsDot} />}</View>
+                {detailsOpen ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
+              </Pressable>
+              {detailsOpen && <View style={styles.detailsBody}>
+                <TextField label="Reference (Optional)" value={referenceNo} onChangeText={value => edit('referenceNo', value)} maxLength={100} editable={editable} autoCorrect={false} placeholder="Document number" />
+                <TextField label="Note (Optional)" value={note} onChangeText={value => edit('note', value)} maxLength={500} editable={editable} placeholder="Add a note" multiline inputStyle={{ minHeight: 88, textAlignVertical: 'top', paddingTop: 12 }} />
+              </View>}
+            </View>
           </> : !preparation.error && <Text variant="body">Loading Preparation…</Text>}
           {preparation.error && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{preparation.error}</Text><Button title="Retry" variant="outline" onPress={() => { if (preparation.ready) void preparation.persist().catch(() => {}); else preparation.retry(); }} /></View>}
         </>}
