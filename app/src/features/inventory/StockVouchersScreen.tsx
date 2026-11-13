@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown, ChevronRight, FileText, Plus, Search, Warehouse } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
+import { t } from '../../shared/i18n';
 import { listStockVouchers } from '../../shared/api/warehouseApi';
 import type { StockVoucherStatus, StockVoucherType } from '../../shared/types/contracts';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -58,14 +59,14 @@ export function StockVouchersScreen() {
 
   return <View style={styles.screen} onAccessibilityEscape={() => setDropdown(null)}>
     <ScreenHeader title="Stock Vouchers" subtitle={allowed ? warehouse?.name || (warehouseQuery.isPending ? 'Loading Warehouse…' : 'Warehouse Unavailable') : undefined} canGoBack onBack={() => { if (dropdown) setDropdown(null); else goBack(); }} rightAction={allowed ?
-      <Pressable accessibilityRole="button" accessibilityLabel="Create stock voucher" accessibilityState={{ disabled: !canCreate }} disabled={!canCreate}
+      <Pressable accessibilityRole="button" accessibilityLabel={t('Create stock voucher')} accessibilityState={{ disabled: !canCreate }} disabled={!canCreate}
         onPress={() => { if (dropdown) setDropdown(null); else newVoucher(); }} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><Plus size={21} color={canCreate ? colors.primaryText : colors.textMuted} /></Pressable> : undefined} />
     {!allowed ? <EmptyState title="Voucher Access Unavailable" message="Sign in with a Staff or Admin account." /> :
       <ScrollView scrollEnabled={!dropdown} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
         refreshControl={<RefreshControl refreshing={warehouseQuery.isRefetching || vouchers.isRefetching && !vouchers.isFetchingNextPage} onRefresh={refresh} tintColor={colors.primary} />}>
         <View style={styles.toolbar}>
           <SegmentedControl value={type} onChange={value => { setDropdown(null); setType(value); }} accessibilityLabel="Voucher type" options={[{ label: 'All', value: 'ALL' }, { label: 'Inbound', value: 'INBOUND' }, { label: 'Outbound', value: 'OUTBOUND' }]} />
-          <TextField value={search} onFocus={() => setDropdown(null)} onChangeText={setSearch} placeholder="Voucher code or reference" accessibilityLabel="Search vouchers" maxLength={100}
+          <TextField value={search} onFocus={() => setDropdown(null)} onChangeText={value => { setSearch(value); if (!value.trim()) setServerSearch(''); }} placeholder="Voucher code or reference" accessibilityLabel="Search vouchers" maxLength={100}
             autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={18} color={colors.textMuted} />} />
         </View>
         {warehouseError && <View style={styles.error}><Text variant="body" color="dangerText">{warehouseError}</Text><Button title="Retry" variant="outline" size="sm" onPress={() => { void warehouseQuery.refetch(); }} /></View>}
@@ -75,10 +76,10 @@ export function StockVouchersScreen() {
           <View style={[styles.statusBar, dropdown === 'status' && styles.dropdownLayer]}>
             <Text variant="caption" color="textSecondary">{pages.length ? `${pages[0].total} vouchers` : 'Vouchers'}</Text>
             <View style={[styles.dropdownAnchor, dropdown === 'status' && styles.dropdownLayer]}>
-            <Pressable accessibilityRole="button" accessibilityState={{ expanded: dropdown === 'status' }} accessibilityLabel="Filter voucher status" onPress={() => openDropdown('status')} style={styles.statusFilter}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: dropdown === 'status' }} accessibilityLabel={t('Filter voucher status')} onPress={() => openDropdown('status')} style={styles.statusFilter}>
               <Text variant="caption">{STATUSES.find(item => item.value === status)?.label}</Text><ChevronDown size={14} color={colors.textMuted} />
             </Pressable>
-            {dropdown === 'status' && <View style={styles.statusMenu} accessibilityLabel="Voucher status">
+            {dropdown === 'status' && <View style={styles.statusMenu} accessibilityLabel={t('Voucher status')}>
               {STATUSES.map(item => <Pressable key={item.value} accessibilityRole="radio" accessibilityState={{ checked: status === item.value }}
                 onPress={() => { setStatus(item.value); setDropdown(null); }} style={({ pressed }) => [styles.dropdownOption, status === item.value && styles.dropdownSelected, pressed && styles.pressed]}>
                 <Text variant="body" style={{ flex: 1 }}>{item.label}</Text>{status === item.value && <Check size={16} color={colors.primary} />}
@@ -90,7 +91,7 @@ export function StockVouchersScreen() {
             <Button title="Retry" variant="outline" size="sm" onPress={() => { if (vouchers.isFetchNextPageError) void vouchers.fetchNextPage(); else void vouchers.refetch(); }} /></View>}
           {rows.length ? <View style={styles.ledger}>{rows.map(item => <Pressable key={item.id}
             onPress={() => navigate('stock_voucher_detail', { voucherId: item.id, warehouseId: warehouse.id })}
-            disabled={search.trim() !== serverSearch} accessibilityRole="button" accessibilityLabel={`${item.code}, ${item.type}, ${item.status}, ${item.containerCount} containers`}
+            disabled={search.trim() !== serverSearch} accessibilityRole="button" accessibilityLabel={t('{code}, {type}, {status}, {count} containers', { code: item.code, type: item.type, status: item.status, count: item.containerCount })}
             style={({ pressed }) => [styles.ledgerRow, pressed && styles.pressed]}>
             <View style={[styles.direction, item.type === 'OUTBOUND' && styles.outbound]}>{item.type === 'INBOUND' ? <ArrowDownLeft size={20} color={colors.primaryText} /> : <ArrowUpRight size={20} color={colors.warningText} />}</View>
             <View style={styles.flex}>
@@ -107,7 +108,7 @@ export function StockVouchersScreen() {
           {vouchers.hasNextPage && <Button title={vouchers.isFetchingNextPage ? 'Loading…' : 'Load More'} variant="outline" loading={vouchers.isFetchingNextPage} disabled={vouchers.isFetchingNextPage} onPress={() => { void vouchers.fetchNextPage(); }} />}
           {!!rows.length && incompleteVoucherPages(pages) && <View style={styles.error}><Text variant="caption">Some vouchers could not be loaded.</Text><Button title="Refresh" variant="outline" size="sm" onPress={() => { void vouchers.refetch(); }} /></View>}
         </>}
-        {dropdown && <Pressable style={[StyleSheet.absoluteFill, styles.dropdownDismiss]} accessibilityRole="button" accessibilityLabel="Close dropdown" onPress={() => setDropdown(null)} />}
+        {dropdown && <Pressable style={[StyleSheet.absoluteFill, styles.dropdownDismiss]} accessibilityRole="button" accessibilityLabel={t('Close dropdown')} onPress={() => setDropdown(null)} />}
       </ScrollView>}
   </View>;
 }

@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Check, ScanLine, Search, Square } from 'lucide-react-native';
 import { getUserErrorMessage } from '../../shared/api/client';
+import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, Text, TextField } from '../../shared/ui';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
@@ -34,11 +35,11 @@ export function OutboundVoucherSelection({ accountId, warehouseId, value, update
   const ready = usable && selected.length > 0 && missing.length === 0;
   useEffect(() => { onReadinessChange?.(ready); }, [ready, onReadinessChange]);
   return <Card gap={14}>
-    <View style={styles.between}><Text variant="headline">Select Containers</Text><Button title="Refresh" variant="ghost" size="sm" loading={query.isFetching} onPress={() => { void query.refetch(); }} /></View>
+    <View style={styles.between}><Text variant="headline">Select Containers</Text><Button title="Refresh" variant="ghost" size="sm" loading={query.isFetching} disabled={!editable || query.isFetching} onPress={() => { void query.refetch(); }} /></View>
     <Text variant="caption" color="textSecondary">Location preview only; final validation is pending.</Text>
     <View style={styles.row}>
-      <TextField containerStyle={{ flex: 1 }} accessibilityLabel="Search outbound containers" placeholder="Barcode, Product Or SKU" value={search} onChangeText={value => { setSearch(value); setLimit(25); }} leftIcon={<Search size={18} color={colors.textMuted} />} />
-      <Pressable disabled={!editable} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Scan container barcode" onPress={() => setScanner(true)}><ScanLine size={22} color={colors.primaryText} /></Pressable>
+      <TextField containerStyle={{ flex: 1 }} accessibilityLabel="Search outbound containers" placeholder="Barcode, Product Or SKU" value={search} onChangeText={value => { setSearch(value); setLimit(25); }} editable={editable} showClearButton autoCapitalize="none" autoCorrect={false} leftIcon={<Search size={18} color={colors.textMuted} />} />
+      <Pressable disabled={!editable} style={styles.iconButton} accessibilityRole="button" accessibilityState={{ disabled: !editable }} accessibilityLabel={t('Scan container barcode')} onPress={() => setScanner(true)}><ScanLine size={22} color={colors.primaryText} /></Pressable>
     </View>
     {query.isPending || query.isFetching ? <Text variant="body">Checking Locations…</Text> : query.isError ? <EmptyState compact title="Containers Unavailable" message={getUserErrorMessage(query.error, 'Refresh to try again.')} /> : <>
       <Text variant="caption" color="textSecondary">{selected.length} selected · {visible.length} matching containers</Text>

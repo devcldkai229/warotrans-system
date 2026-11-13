@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
 const load = createLoader();
-const { batchCounts, batchQuantity, batchOverrides, inboundBatchProblem, newBatchGroup } = load('src/features/inventory/inboundBatch.ts');
+const { applyBatchGroupProduct, batchCounts, batchOverrideReveal, batchQuantity, batchOverrides, inboundBatchProblem, newBatchGroup } = load('src/features/inventory/inboundBatch.ts');
 const { emptyPreparation, validPreparation } = load('src/features/inventory/voucherPreparation.ts');
 const { createPreparationStorage } = load('src/features/inventory/preparationStorage.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -93,4 +93,22 @@ test('batch plans and per-box overrides survive device persistence scoped to the
   assert.equal(validPreparation(restored, 'INBOUND'), true);
   assert.equal(await store.read({ ...scope, accountId: 'another-staff' }), null);
   assert.equal(Object.keys(restored.contents).length, 0);
+});
+
+test('scanning a new barcode clears any previous product on the target group before lookup', () => {
+  const initial = [group('group-1'), group('group-2', { product: { ...product, id: 'p-2', sku: 'BEANS' } })];
+  const cleared = applyBatchGroupProduct(initial, 'group-1', null);
+  assert.equal(cleared[0].product, null);
+  assert.equal(cleared[1].product.id, 'p-2');
+  assert.equal(inboundBatchProblem('12', cleared).groupKey, 'group-1');
+  const replaced = applyBatchGroupProduct(cleared, 'group-1', { ...product, id: 'p-3', sku: 'CORN' });
+  assert.equal(replaced[0].product.id, 'p-3');
+});
+
+test('batchOverrideReveal expands the offending group and reveals overrides past the initial page', () => {
+  const value = group('group-1', { containerCount: '15', quantities: { '14': '0' } });
+  const problem = inboundBatchProblem('15', [value]);
+  assert.deepEqual(plain(batchOverrideReveal(problem, 10)), { groupKey: 'group-1', limit: 20 });
+  assert.equal(batchOverrideReveal({ groupKey: 'group-1', message: 'Enter a unit.' }, 10), null);
+  assert.equal(batchOverrideReveal(null, 10), null);
 });

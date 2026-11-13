@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Box, ChevronDown, ChevronRight, ChevronUp, Plus, RotateCcw, ScanLine, Trash2 } from 'lucide-react-native';
 import { t } from '../../shared/i18n';
@@ -8,11 +8,11 @@ import { radii } from '../../shared/theme/radii';
 import { Button, Text, TextField } from '../../shared/ui';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
-import { batchCounts, batchQuantity, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
+import { applyBatchGroupProduct, batchCounts, batchOverrideReveal, batchQuantity, newBatchGroup, type BatchProblem, type InboundBatchGroup } from './inboundBatch';
 import { preparationCount } from './voucherPreparation';
 
-interface Props { requestedCount: string; groups: InboundBatchGroup[]; editable: boolean; onChange: (groups: InboundBatchGroup[]) => void }
-export function InboundBatchEditor({ requestedCount, groups, editable, onChange }: Props) {
+interface Props { requestedCount: string; groups: InboundBatchGroup[]; editable: boolean; problem?: BatchProblem | null; onChange: (groups: InboundBatchGroup[]) => void }
+export function InboundBatchEditor({ requestedCount, groups, editable, problem, onChange }: Props) {
   const { styles, colors } = useThemedStyles(createStyles);
   const [picker, setPicker] = useState<{ key: string; barcode: string | null } | null>(null);
   const [scanKey, setScanKey] = useState<string | null>(null);
@@ -22,6 +22,12 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
   const edit = (key: string, apply: (group: InboundBatchGroup) => InboundBatchGroup) => {
     if (editable) onChange(groups.map(group => group.key === key ? apply(group) : group));
   };
+  useEffect(() => {
+    const reveal = batchOverrideReveal(problem, 10);
+    if (!reveal) return;
+    setIndividual(reveal.groupKey);
+    setLimit(current => individual === reveal.groupKey ? Math.max(current, reveal.limit) : reveal.limit);
+  }, [problem]);
   return <View style={styles.section}>
     <View style={styles.between}><Text variant="headline">Products</Text><Text variant="caption" color="textSecondary">{t('{assigned}/{total} assigned', { assigned, total: total ?? '—' })}</Text></View>
     {groups.map((group, index) => {
@@ -60,8 +66,8 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
       </View>;
     })}
     <Button title="Add Product" icon={Plus} variant="outline" disabled={!editable || !total || groups.length >= total} onPress={() => onChange([...groups, newBatchGroup(groups, remaining && remaining > 0 ? String(remaining) : '')])} />
-    {picker && editable && groups.some(group => group.key === picker.key) && <ReceivingProductPicker selectedProduct={groups.find(group => group.key === picker.key)?.product || null} initialBarcode={picker.barcode} onClose={() => setPicker(null)} onSelect={product => { edit(picker.key, previous => ({ ...previous, product })); setPicker(null); }} />}
-    {scanKey && editable && <BarcodeScannerHUD visible title="Scan Product Barcode" manualLabel="Product Or Supplier Barcode" onClose={() => setScanKey(null)} onScanResult={barcode => { setPicker({ key: scanKey, barcode }); setScanKey(null); }} />}
+    {picker && editable && groups.some(group => group.key === picker.key) && <ReceivingProductPicker selectedProduct={groups.find(group => group.key === picker.key)?.product || null} initialBarcode={picker.barcode} onClose={() => setPicker(null)} onSelect={product => { onChange(applyBatchGroupProduct(groups, picker.key, product)); setPicker(null); }} />}
+    {scanKey && editable && <BarcodeScannerHUD visible title="Scan Product Barcode" manualLabel="Product Or Supplier Barcode" onClose={() => setScanKey(null)} onScanResult={barcode => { onChange(applyBatchGroupProduct(groups, scanKey, null)); setPicker({ key: scanKey, barcode }); setScanKey(null); }} />}
   </View>;
 }
 

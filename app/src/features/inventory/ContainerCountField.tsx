@@ -2,10 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
+import { t } from '../../shared/i18n';
 import { Text, TextField } from '../../shared/ui';
 import { radii } from '../../shared/theme/radii';
 import type { ThemeColors } from '../../shared/theme/colors';
-import { stepContainerCount } from './voucherPreparation';
+import { preparationCount, stepContainerCount } from './voucherPreparation';
 
 interface Props { value: string; onChange: (value: string) => void; editable: boolean }
 export function ContainerCountField({ value, onChange, editable }: Props) {
@@ -42,9 +43,10 @@ export function ContainerCountField({ value, onChange, editable }: Props) {
         onKeyPress={event => { if (event.nativeEvent.key === 'ArrowUp') step(1); if (event.nativeEvent.key === 'ArrowDown') step(-1); }}
         rightIcon={<View style={styles.stepper}>
           {([1, -1] as const).map(direction => {
-            const disabled = !editable || (direction === 1 ? Number(value) >= 9999 : Number(value) === 1);
+            const count = preparationCount(value);
+            const disabled = !editable || (direction === 1 ? count !== null && count >= 9999 : count === 1);
             return <Pressable key={direction} style={({ pressed }) => [styles.stepButton, pressed && !disabled && styles.pressed, disabled && styles.disabled]}
-              accessibilityRole="button" accessibilityLabel={direction === 1 ? 'Increase Container Count' : 'Decrease Container Count'} accessibilityState={{ disabled }} disabled={disabled} onPress={() => step(direction)}>
+              accessibilityRole="button" accessibilityLabel={t(direction === 1 ? 'Increase Container Count' : 'Decrease Container Count')} accessibilityState={{ disabled }} disabled={disabled} onPress={() => step(direction)}>
               {direction === 1 ? <ChevronUp size={18} strokeWidth={1.8} color={colors.textSecondary} /> : <ChevronDown size={18} strokeWidth={1.8} color={colors.textSecondary} />}
             </Pressable>;
           })}

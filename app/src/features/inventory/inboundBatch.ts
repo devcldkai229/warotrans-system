@@ -30,6 +30,13 @@ export function batchOverrides(group: InboundBatchGroup) {
   return Object.entries(group.quantities).filter(([key]) => /^[1-9]\d*$/.test(key) && Number(key) <= count)
     .map(([key, quantity]) => ({ containerNo: Number(key), quantity })).sort((a, b) => a.containerNo - b.containerNo);
 }
+export function applyBatchGroupProduct(groups: InboundBatchGroup[], groupKey: string, product: ProductItem | null): InboundBatchGroup[] {
+  return groups.map(group => group.key === groupKey ? { ...group, product } : group);
+}
+export function batchOverrideReveal(problem: BatchProblem | null | undefined, currentLimit = 10): { groupKey: string; limit: number } | null {
+  if (!problem?.groupKey || !problem.containerNo || problem.containerNo < 1) return null;
+  return { groupKey: problem.groupKey, limit: Math.max(currentLimit, Math.ceil(problem.containerNo / 10) * 10) };
+}
 export function inboundBatchProblem(requested: string, groups: InboundBatchGroup[]): BatchProblem | null {
   const { total, grouped } = batchCounts(requested, groups);
   if (total === null || total > 9999) return { message: 'Enter between 1 and 9,999 containers.' };

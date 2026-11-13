@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, Search, X } from 'lucide-react-native';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
+import { t } from '../../shared/i18n';
 import { listProductCategories, listProducts, type ProductItem } from '../../shared/api/warehouseApi';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { ThemeColors } from '../../shared/theme/colors';
@@ -68,11 +69,11 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
   return <BottomSheet onClose={onClose} accessibilityLabel="product catalog">
     <View style={styles.sheetHeader}>
       <Text variant="headline">Choose Product</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close product catalog" onPress={onClose} style={styles.closeButton}><X size={20} color={colors.textPrimary} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('Close product catalog')} onPress={onClose} style={styles.closeButton}><X size={20} color={colors.textPrimary} /></Pressable>
     </View>
     <View style={styles.sheetSearch}>
       <TextField accessibilityLabel="Search product catalog" value={search}
-        onChangeText={value => { setSearch(value); setLookup(null); }} placeholder="Product, SKU, or supplier barcode"
+        onChangeText={value => { setSearch(value); setLookup(null); if (!value.trim()) setServerSearch(''); }} placeholder="Product, SKU, or supplier barcode"
         autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={18} color={colors.textMuted} />}
         onSubmitEditing={() => setServerSearch(search.trim())} />
     </View>
@@ -87,7 +88,7 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
             <Text variant="bodyMedium">{multiple ? 'Multiple Products Match This Code' : 'Confirm The Product'}</Text>
             <Text variant="caption">{multiple ? 'Select the correct product.' : 'Choose a product or refine your search.'}</Text>
             <Button title="Browse Catalog" variant="outline" size="sm" onPress={browse} />
-          </View> : busy && choices.length ? <ActivityIndicator color={colors.primary} accessibilityLabel="Refreshing products" /> : undefined}
+          </View> : busy && choices.length ? <ActivityIndicator color={colors.primary} accessibilityLabel={t('Refreshing products')} /> : undefined}
         renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: selectedProduct?.id === item.id, disabled: busy || !!error || !item.isActive }}
           accessibilityLabel={`${item.name}, ${item.sku}`} disabled={busy || !!error || !item.isActive}
           onPress={() => onSelect(item)} style={[styles.catalogRow, selectedProduct?.id === item.id && styles.catalogSelected, (busy || !!error || !item.isActive) && styles.disabled]}>

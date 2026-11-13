@@ -59,6 +59,17 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
     translateText('3 selected · 12 matching containers'),
     'Đã chọn 3 · 12 container khớp',
   );
+  assert.equal(translateText('1 container'), '1 container');
+  assert.equal(translateText('Reference (Optional)'), 'Số tham chiếu (Tùy chọn)');
+  assert.equal(translateText('Note (Optional)'), 'Ghi chú (Tùy chọn)');
+  assert.equal(translateText('Back To Vouchers'), 'Quay lại danh sách phiếu');
+  assert.equal(translateText('No Published Warehouse'), 'Chưa có kho phát hành bản đồ');
+  assert.equal(
+    translateText('The published warehouse has changed. Return to Stock Vouchers before creating a new draft.'),
+    'Kho có bản đồ phát hành đã thay đổi. Quay lại danh sách phiếu kho trước khi tạo phiếu nháp mới.',
+  );
+  assert.equal(t('Increase Container Count'), 'Tăng số lượng thùng');
+  assert.equal(t('Decrease Container Count'), 'Giảm số lượng thùng');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(

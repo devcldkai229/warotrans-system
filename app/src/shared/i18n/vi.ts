@@ -1554,4 +1554,11 @@ export const vi: Record<string, string> = {
   "Barcode allocation is unavailable. An empty server draft can be created; batch contents stay on this device.": "Chưa hỗ trợ cấp barcode. Có thể tạo phiếu nháp trống; nội dung lô hàng chỉ lưu trên thiết bị này.",
   "Only an empty server draft can be created. The container selection stays on this device.": "Có thể tạo phiếu nháp trống; danh sách thùng đã chọn chỉ lưu trên thiết bị này.",
   "Location preview only; final validation is pending.": "Vị trí tham khảo; chưa xác nhận đủ điều kiện xuất.",
+  "Increase Container Count": "Tăng số lượng thùng",
+  "Decrease Container Count": "Giảm số lượng thùng",
+  "Reference (Optional)": "Số tham chiếu (Tùy chọn)",
+  "Note (Optional)": "Ghi chú (Tùy chọn)",
+  "Back To Vouchers": "Quay lại danh sách phiếu",
+  "No Published Warehouse": "Chưa có kho phát hành bản đồ",
+  "The published warehouse has changed. Return to Stock Vouchers before creating a new draft.": "Kho có bản đồ phát hành đã thay đổi. Quay lại danh sách phiếu kho trước khi tạo phiếu nháp mới.",
 };

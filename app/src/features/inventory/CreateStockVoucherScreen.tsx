@@ -18,7 +18,7 @@ import { preparationDeviceStore } from './preparationDeviceStore';
 import { ContainerCountField } from './ContainerCountField';
 import { InboundBatchEditor } from './InboundBatchEditor';
 import { InboundBatchSummary } from './InboundBatchSummary';
-import { inboundBatchProblem, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
+import { inboundBatchProblem, newBatchGroup, type BatchProblem, type InboundBatchGroup } from './inboundBatch';
 import { OutboundVoucherSelection } from './OutboundVoucherSelection';
 
 export function CreateStockVoucherScreen() {
@@ -33,6 +33,7 @@ export function CreateStockVoucherScreen() {
   const { referenceNo, note, requestedCount, groups = [] } = preparation.value;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [batchProblem, setBatchProblem] = useState<BatchProblem | null>(null);
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef(false);
   const alive = useRef(true);
@@ -44,12 +45,12 @@ export function CreateStockVoucherScreen() {
   const writable = canCreateVoucher(session) && !!warehouse && !query.isError && !selectionError;
   const editable = writable && !saving && !uncertain;
   useEffect(() => { alive.current = true; return () => { alive.current = false; request.current?.abort(); }; }, [session?.id]);
-  useEffect(() => { setReview(false); setError(null); setOutboundReady(false); }, [session?.id, warehouse?.id, type]);
+  useEffect(() => { setReview(false); setError(null); setBatchProblem(null); setOutboundReady(false); setUncertain(false); }, [session?.id, warehouse?.id, type]);
   useEffect(() => {
     if (preparation.ready && inbound && !preparation.value.groups?.length) {
       preparation.update(previous => ({ ...previous, groups: [newBatchGroup([], previous.requestedCount)] }));
     }
-  }, [preparation.ready, inbound]);
+  }, [preparation.ready, inbound, preparation.value.groups?.length]);
   useEffect(() => {
     if (!review || saving || uncertain) return;
     const listener = BackHandler.addEventListener('hardwareBackPress', () => { setReview(false); return true; });
@@ -57,21 +58,22 @@ export function CreateStockVoucherScreen() {
   }, [review, saving, uncertain]);
   const edit = (field: 'referenceNo' | 'note', value: string) => {
     if (!editable) return;
-    setError(null); preparation.update(previous => ({ ...previous, [field]: value }));
+    setError(null); setBatchProblem(null); preparation.update(previous => ({ ...previous, [field]: value }));
   };
   const editCount = (count: string) => {
     if (!editable) return;
-    setError(null);
+    setError(null); setBatchProblem(null);
     preparation.update(previous => ({ ...previous, requestedCount: count, groups: previous.groups?.map((group, index, all) =>
       all.length === 1 && index === 0 && (!group.containerCount || group.containerCount === previous.requestedCount) ? { ...group, containerCount: count } : group) }));
   };
-  const editGroups = (next: InboundBatchGroup[]) => { if (editable) { setError(null); preparation.update(previous => ({ ...previous, groups: next })); } };
+  const editGroups = (next: InboundBatchGroup[]) => { if (editable) { setError(null); setBatchProblem(null); preparation.update(previous => ({ ...previous, groups: next })); } };
   const showError = (message: string) => { setError(message); requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: false })); };
   const validate = () => {
     const metadata = draftValidation(referenceNo, note);
-    if (metadata) return t(metadata);
-    if (!inbound) return Object.keys(preparation.value.selected).length ? null : t('Select at least one container.');
+    if (metadata) { setBatchProblem(null); return t(metadata); }
+    if (!inbound) { setBatchProblem(null); return Object.keys(preparation.value.selected).length ? null : t('Select at least one container.'); }
     const problem = inboundBatchProblem(requestedCount, groups);
+    setBatchProblem(problem);
     if (!problem) return null;
     const index = groups.findIndex(group => group.key === problem.groupKey);
     const message = t(problem.message);
@@ -84,7 +86,7 @@ export function CreateStockVoucherScreen() {
     Keyboard.dismiss();
     const problem = validate();
     if (problem) { showError(problem); return; }
-    setError(null); setReview(true); scroll.current?.scrollTo({ y: 0, animated: false });
+    setError(null); setBatchProblem(null); setReview(true); scroll.current?.scrollTo({ y: 0, animated: false });
   };
   const back = () => { if (review && !saving && !uncertain) { setReview(false); setError(null); } else goBack(); };
   const create = async () => {
@@ -131,7 +133,7 @@ export function CreateStockVoucherScreen() {
           {preparation.ready ? <>
             {!review && inbound && <>
               <View style={styles.typeCard}><ContainerCountField value={requestedCount} onChange={editCount} editable={editable} /></View>
-              <InboundBatchEditor requestedCount={requestedCount} groups={groups} editable={editable} onChange={editGroups} />
+              <InboundBatchEditor requestedCount={requestedCount} groups={groups} editable={editable} problem={batchProblem} onChange={editGroups} />
             </>}
             {!review && !inbound && <OutboundVoucherSelection key={`${session?.id}:${warehouse.id}`} accountId={session?.id || ''} warehouseId={warehouse.id} value={preparation.value} update={preparation.update} onReview={openReview} onReadinessChange={setOutboundReady} showReviewAction={false} editable={editable} />}
             {review && <>

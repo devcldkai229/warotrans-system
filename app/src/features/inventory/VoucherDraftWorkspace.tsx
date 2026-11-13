@@ -115,6 +115,6 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
       <Text variant="caption" color="textSecondary">Saving contents, saving selection and posting stock are awaiting server support. This preparation has not changed the server voucher or stock.</Text>
     </Card>}
     {!!productFor && writable && data.lines.some(line => line.containerId === productFor) && <ReceivingProductPicker selectedProduct={prep.value.contents[productFor]?.product || null} initialBarcode={lookup} onClose={() => setProductFor(null)} onSelect={product => { editContent(productFor, { product }); setProductFor(null); }} />}
-    {!!scanFor && writable && <BarcodeScannerHUD visible title="Scan Product Barcode" manualLabel="Product Or Supplier Barcode" onClose={() => setScanFor(null)} onScanResult={barcode => { setLookup(barcode); setProductFor(scanFor); setScanFor(null); }} />}
+    {!!scanFor && writable && <BarcodeScannerHUD visible title="Scan Product Barcode" manualLabel="Product Or Supplier Barcode" onClose={() => setScanFor(null)} onScanResult={barcode => { editContent(scanFor, { product: null }); setLookup(barcode); setProductFor(scanFor); setScanFor(null); }} />}
   </>;
 }
