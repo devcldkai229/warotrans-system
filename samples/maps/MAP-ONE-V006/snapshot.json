@@ -474,7 +474,7 @@
                 ]
             },
             "is_active": true,
-            "max_speed": 0.06,
+            "max_speed": 0.2,
             "zone_type": "SPEED",
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
             "policy_schema_version": 1
@@ -493,7 +493,7 @@
             "endpoint_type": "CHARGER",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "5fe2fcd0-bf49-413e-8e9c-46150f4a8088"
         },
         {
@@ -507,7 +507,7 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "61e1930e-4d5b-47e1-b6a0-ff21c394a93b"
         },
         {
@@ -521,7 +521,7 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "efc52bc6-124b-46fb-af9d-2a1c4f95ce62"
         },
         {
@@ -535,7 +535,7 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.05,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "4aeb0df5-e212-44d7-975c-77f981ad6230"
         },
         {
@@ -549,7 +549,7 @@
             "endpoint_type": "PARK",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "0ac07400-31db-4c8b-88e8-b680e3f28b3a"
         },
         {
@@ -563,7 +563,7 @@
             "endpoint_type": "PARK",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "698bc6dd-b42b-4f02-8b7d-c02081fe3790"
         },
         {
@@ -577,7 +577,7 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "0219813e-8515-4a60-bbf9-f1451c9e1099"
         },
         {
@@ -591,7 +591,7 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "3b9d83ce-d4b9-4976-a519-31dc5ce918d7"
         },
         {
@@ -605,7 +605,7 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "910305b0-959f-40f3-a450-ba9f67bfb84a"
         },
         {
@@ -619,7 +619,7 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "3e31a808-cd4e-4b8e-9d00-dd22e0fdf590"
         },
         {
@@ -633,11 +633,11 @@
             "endpoint_type": "WAYPOINT",
             "yaw_tolerance": 0.017453292519943295,
             "map_version_id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
-            "position_tolerance": 0.06,
+            "position_tolerance": 0.1,
             "source_endpoint_id": "6db35a41-aa0d-4fc5-9a5d-779acf2440db"
         }
     ],
-    "exportedAt": "2026-11-11T00:34:36.767058+00:00",
+    "exportedAt": "2026-11-13T06:17:40.609695+00:00",
     "mapVersion": {
         "id": "e89a972a-d52f-485e-8d95-e36bc7c201b1",
         "code": "MAP-ONE-V006",
