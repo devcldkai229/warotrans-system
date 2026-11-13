@@ -7,6 +7,7 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { RequirePermission as Guard } from '@/features/auth/RequirePermission'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { PeriodReportPage } from '@/features/dashboard/PeriodReportPage'
 import { JobDetailPage } from '@/features/jobs/JobDetailPage'
 import { JobsPage } from '@/features/jobs/JobsPage'
 import { ManagementPage } from '@/features/management/ManagementPage'
@@ -61,6 +62,8 @@ function App() {
             <Route path="/operations/notifications" element={<Guard permission={PERMISSIONS.notificationRead}><NotificationsPage /></Guard>} />
           </Route>
 
+          {/* The period report to print or save as PDF (FE-20): a plain page, no app shell. */}
+          <Route path="/dashboard/report" element={<Guard permission={PERMISSIONS.statisticsRead}><PeriodReportPage /></Guard>} />
           {/* Full-screen editor: has its own header instead of the app shell. */}
           <Route path="/configure/facility/maps/:mapId/edit" element={<Guard permission={PERMISSIONS.mapRead}><MapEditorPage /></Guard>} />
           {/* Full-screen manual control of one robot (map + joystick console). */}

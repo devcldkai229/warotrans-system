@@ -52,6 +52,8 @@ public static class FleetModule
         services.AddScoped<GetRobotHandler>();
         services.AddScoped<ListRobotsHandler>();
         services.AddScoped<GetRobotStatisticsHandler>();
+        services.AddScoped<Features.RobotAvailability.GetRobotAvailabilityHandler>();
+        services.AddScoped<Features.RobotReport.RobotReportReader>();
         services.AddScoped<EnableRobotHandler>();
         services.AddScoped<DisableRobotHandler>();
         services.AddScoped<PutRobotInServiceHandler>();
@@ -109,6 +111,7 @@ public static class FleetModule
         group.MapGetRobot();
         group.MapListRobots();
         group.MapGetRobotStatistics();
+        Features.RobotAvailability.GetRobotAvailabilityEndpoint.MapGetRobotAvailability(group);
         group.MapEnableRobot();
         group.MapDisableRobot();
         group.MapPutRobotInService();

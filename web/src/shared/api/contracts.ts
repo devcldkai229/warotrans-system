@@ -614,6 +614,52 @@ export interface RequestStatistics {
   daily: { date: string; submitted: number; completed: number }[]
 }
 
+/**
+ * How one robot, or the enabled fleet, spent the window. Percentages are of `coveredSeconds`: the part of the window
+ * the kept state history can tell about (null when it covers none of it).
+ */
+export interface RobotAvailabilityFigures {
+  periodSeconds: number
+  coveredSeconds: number
+  coveragePercent: number | null
+  onlinePercent: number | null
+  /** Online and neither in maintenance nor in error. */
+  availablePercent: number | null
+  /** Reserved for, running or pausing a Job. */
+  busyPercent: number | null
+  byStatus: { status: RobotStatus; seconds: number; percent: number | null }[]
+}
+
+/** GET /api/fleet/statistics/availability. Replayed from the robots' state history over the window. */
+export interface RobotAvailability {
+  from: string
+  to: string
+  /** `to`, or now when the window reaches into the future. */
+  measuredUntil: string
+  historyKeptSince: string
+  fleet: RobotAvailabilityFigures
+  robots: {
+    id: string
+    code: string
+    name: string
+    isEnabled: boolean
+    measuredFrom: string | null
+    figures: RobotAvailabilityFigures
+  }[]
+}
+
+/** GET /api/reports/period: the statistics responses for one window, for the print view. */
+export interface PeriodReport {
+  from: string
+  to: string
+  utcOffsetMinutes: number
+  generatedAt: string
+  jobs: JobStatistics
+  requests: RequestStatistics
+  robots: RobotStatistics
+  availability: RobotAvailability
+}
+
 /* ------------------------------------------------------------ Notifications */
 
 /** One item of the notification inbox: the bell and the Notifications page (GET /api/operations/notifications). */
