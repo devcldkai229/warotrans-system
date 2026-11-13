@@ -1539,6 +1539,7 @@ export const vi: Record<string, string> = {
   "Quantity In Box {number} Of Group {group}": "Số lượng hàng trong thùng {number} của nhóm {group}",
   "Reset Box {number} Of Group {group}": "Dùng số lượng chung cho thùng {number} của nhóm {group}",
   "{count} boxes": "{count} thùng",
+  "{count} product groups": "{count} nhóm sản phẩm",
   "{quantity} {unit} per box": "{quantity} {unit}/thùng",
   "{count} individual quantities": "{count} thùng có số lượng riêng",
   "Box {number}: {quantity} {unit}": "Thùng {number}: {quantity} {unit}",

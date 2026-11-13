@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Barcode, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Barcode, Box, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { getUserErrorMessage } from '../../shared/api/client';
 import { createStockVoucherDraft } from '../../shared/api/warehouseApi';
@@ -128,14 +128,39 @@ export function CreateStockVoucherScreen() {
             {review && <>
               <Card gap={12}>
                 <View style={styles.between}><Text variant="headline">{inbound ? 'Inbound Batch' : 'Selected Containers'}</Text><Button title="Edit" variant="ghost" size="sm" disabled={!editable} onPress={() => setReview(false)} /></View>
-                <View style={styles.stat}><Text variant="title">{inbound ? requestedCount : selected.length}</Text><Text variant="body" color="textSecondary">Containers</Text></View>
-                {inbound ? <InboundBatchSummary groups={groups} /> : selected.map(item => <View key={item.id} style={styles.containerRow}><Text variant="code" selectable>{item.barcode}</Text><Text variant="bodyMedium">{item.productName}</Text><Text variant="caption" color="textSecondary">{item.productSku}</Text></View>)}
+                <View style={styles.batchStatBar}>
+                  <View style={styles.stat}><Text variant="title" style={styles.tabular}>{inbound ? requestedCount : selected.length}</Text><Text variant="bodyMedium" color="textSecondary">Containers</Text></View>
+                  {inbound && <Text variant="caption" color="textSecondary" style={[styles.tabular, { fontWeight: '600' }]}>{t('{count} product groups', { count: groups.length })}</Text>}
+                </View>
+                {inbound ? <InboundBatchSummary groups={groups} /> : <>
+                  {selected.map((item, index) => (
+                    <View key={item.id} style={[styles.summaryRow, index === 0 && { paddingTop: 4 }, index === selected.length - 1 && { borderBottomWidth: 0, paddingBottom: 2 }]}>
+                      <View style={styles.summaryIcon}>
+                        <Box size={18} strokeWidth={1.8} color={colors.primaryText} />
+                      </View>
+                      <View style={styles.summaryInfo}>
+                        <Text variant="code" selectable>{item.barcode}</Text>
+                        <Text variant="bodyMedium" numberOfLines={1}>{item.productName}</Text>
+                        <Text variant="code" color="textSecondary" numberOfLines={1}>{item.productSku}</Text>
+                      </View>
+                    </View>
+                  ))}
+                  <Text variant="caption" color="textSecondary">Only an empty server draft can be created. The container selection stays on this device.</Text>
+                </>}
               </Card>
               {inbound && <Card gap={12}>
-                <View style={styles.between}><View style={styles.row}><Barcode size={20} color={colors.textSecondary} /><Text variant="headline">Barcodes</Text></View><Text variant="bodyMedium">{t('0/{count} allocated', { count: requestedCount })}</Text></View>
-                <Button title="Generate Barcodes" disabled onPress={() => {}} />
+                <View style={styles.between}>
+                  <View style={styles.row}>
+                    <View style={styles.summaryIconMuted}><Barcode size={18} color={colors.textSecondary} /></View>
+                    <Text variant="headline">Barcodes</Text>
+                  </View>
+                  <View style={styles.statusPill}>
+                    <Text variant="caption" color="textSecondary" style={[styles.tabular, { fontWeight: '600' }]}>{t('0/{count} allocated', { count: requestedCount })}</Text>
+                  </View>
+                </View>
+                <Button title="Generate Barcodes" variant="secondary" size="sm" disabled onPress={() => {}} />
+                <Text variant="caption" color="textSecondary">Barcode allocation is unavailable. An empty server draft can be created; batch contents stay on this device.</Text>
               </Card>}
-              <Text variant="caption" color="textSecondary">{inbound ? 'Barcode allocation is unavailable. An empty server draft can be created; batch contents stay on this device.' : 'Only an empty server draft can be created. The container selection stays on this device.'}</Text>
             </>}
             <View style={styles.detailsCard}>
               <Pressable onPress={() => setDetailsOpen(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={({ pressed }) => [styles.detailsHeader, pressed && styles.pressed]}>
