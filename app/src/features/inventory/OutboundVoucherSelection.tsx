@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Check, ScanLine, Search, Square } from 'lucide-react-native';
@@ -13,9 +13,12 @@ import type { VoucherPreparation } from './voucherPreparation';
 interface Props {
   accountId: string; warehouseId: string; value: VoucherPreparation;
   onReview: () => void;
+  onReadinessChange?: (ready: boolean) => void;
+  showReviewAction?: boolean;
+  editable?: boolean;
   update: (apply: (value: VoucherPreparation) => VoucherPreparation) => void;
 }
-export function OutboundVoucherSelection({ accountId, warehouseId, value, update, onReview }: Props) {
+export function OutboundVoucherSelection({ accountId, warehouseId, value, update, onReview, onReadinessChange, showReviewAction = true, editable = true }: Props) {
   const { styles, colors } = useThemedStyles(createVoucherStyles);
   const [search, setSearch] = useState('');
   const [limit, setLimit] = useState(25);
@@ -28,17 +31,19 @@ export function OutboundVoucherSelection({ accountId, warehouseId, value, update
   const visible = candidates.filter(item => [item.barcode, item.productSku, item.productName].some(field => field.toLocaleLowerCase().includes(term)));
   const selected = Object.values(value.selected);
   const missing = staleOutboundSelections(selected, candidates);
+  const ready = usable && selected.length > 0 && missing.length === 0;
+  useEffect(() => { onReadinessChange?.(ready); }, [ready, onReadinessChange]);
   return <Card gap={14}>
     <View style={styles.between}><Text variant="headline">Select Containers</Text><Button title="Refresh" variant="ghost" size="sm" loading={query.isFetching} onPress={() => { void query.refetch(); }} /></View>
-    <Text variant="caption" color="textSecondary">Location preview only. Server readiness checks and saving the selection are pending.</Text>
+    <Text variant="caption" color="textSecondary">Location preview only; final validation is pending.</Text>
     <View style={styles.row}>
       <TextField containerStyle={{ flex: 1 }} accessibilityLabel="Search outbound containers" placeholder="Barcode, Product Or SKU" value={search} onChangeText={value => { setSearch(value); setLimit(25); }} leftIcon={<Search size={18} color={colors.textMuted} />} />
-      <Pressable style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Scan container barcode" onPress={() => setScanner(true)}><ScanLine size={22} color={colors.primaryText} /></Pressable>
+      <Pressable disabled={!editable} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Scan container barcode" onPress={() => setScanner(true)}><ScanLine size={22} color={colors.primaryText} /></Pressable>
     </View>
     {query.isPending || query.isFetching ? <Text variant="body">Checking Locations…</Text> : query.isError ? <EmptyState compact title="Containers Unavailable" message={getUserErrorMessage(query.error, 'Refresh to try again.')} /> : <>
       <Text variant="caption" color="textSecondary">{selected.length} selected · {visible.length} matching containers</Text>
       {!visible.length && <EmptyState compact title={term ? 'No Matching Containers' : 'No Containers At Outbound'} />}
-      {visible.slice(0, limit).map(item => <Pressable key={item.id} style={[styles.containerRow, styles.row]} accessibilityRole="checkbox" accessibilityState={{ checked: !!value.selected[item.id] }} accessibilityLabel={`${item.barcode}, ${item.productName}`}
+      {visible.slice(0, limit).map(item => <Pressable key={item.id} disabled={!editable} style={[styles.containerRow, styles.row]} accessibilityRole="checkbox" accessibilityState={{ checked: !!value.selected[item.id] }} accessibilityLabel={`${item.barcode}, ${item.productName}`}
         onPress={() => update(previous => {
           const next = { ...previous.selected };
           if (next[item.id]) delete next[item.id];
@@ -52,10 +57,10 @@ export function OutboundVoucherSelection({ accountId, warehouseId, value, update
     </>}
     {!!selected.length && <View style={styles.formSection}>
       <Text variant="label">Selected On This Device</Text>
-      {selected.map(item => <View key={item.id} style={styles.between}><View style={styles.flex}><Text variant="code" selectable>{item.barcode}</Text><Text variant="caption">{item.productName}</Text></View><Button title="Remove" variant="ghost" size="sm" onPress={() => update(previous => { const next = { ...previous.selected }; delete next[item.id]; return { ...previous, selected: next }; })} /></View>)}
+      {selected.map(item => <View key={item.id} style={styles.between}><View style={styles.flex}><Text variant="code" selectable>{item.barcode}</Text><Text variant="caption">{item.productName}</Text></View><Button title="Remove" disabled={!editable} variant="ghost" size="sm" onPress={() => update(previous => { const next = { ...previous.selected }; delete next[item.id]; return { ...previous, selected: next }; })} /></View>)}
       {usable && !!missing.length && <Text variant="caption" color="dangerText" accessibilityRole="alert">{missing.length} selected container(s) no longer match this location preview. Remove or refresh before review.</Text>}
     </View>}
-    <Button title="Review Selection" variant="outline" disabled={!usable || !selected.length || !!missing.length} onPress={onReview} />
+    {showReviewAction && <Button title="Review Selection" variant="outline" disabled={!editable || !ready} onPress={onReview} />}
     {scanner && <BarcodeScannerHUD visible onClose={() => setScanner(false)} onScanResult={barcode => { setScanner(false); setSearch(barcode); setLimit(25); }} />}
   </Card>;
 }

@@ -52,7 +52,7 @@ export function BarcodeScannerHUD({
   const [manualBarcode, setManualBarcode] = useState('');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const scanned = useRef(false);
-  const manualInput = useRef<TextInput>(null);
+  const manualInput = useRef<React.ComponentRef<typeof TextInput>>(null);
   useEffect(() => { scanned.current = false; setManualBarcode(''); setCameraActive(false); setCameraError(null); }, [visible]);
   const submitBarcode = (value: string) => {
     const barcode = value.trim();

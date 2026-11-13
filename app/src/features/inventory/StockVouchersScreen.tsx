@@ -20,15 +20,15 @@ const STATUSES = [
 
 export function StockVouchersScreen() {
   const { styles, colors } = useThemedStyles(createVoucherStyles);
-  const { navigate, replace, goBack } = useNavigation();
+  const { navigate, goBack } = useNavigation();
   const insets = useSafeAreaInsets();
-  const { session, allowed, query: warehouseQuery, warehouse, warehouses, selectionError } = useVoucherWarehouse();
+  const { session, allowed, query: warehouseQuery, warehouse, selectionError } = useVoucherWarehouse();
   const [type, setType] = useState<StockVoucherType | 'ALL'>('ALL');
   const [status, setStatus] = useState<StockVoucherStatus | ''>('');
   const [search, setSearch] = useState('');
   const [serverSearch, setServerSearch] = useState('');
-  const [dropdown, setDropdown] = useState<'warehouse' | 'status' | null>(null);
-  const openDropdown = (value: 'warehouse' | 'status') => { Keyboard.dismiss(); setDropdown(current => current === value ? null : value); };
+  const [dropdown, setDropdown] = useState<'status' | null>(null);
+  const openDropdown = (value: 'status') => { Keyboard.dismiss(); setDropdown(current => current === value ? null : value); };
   useEffect(() => {
     if (!dropdown) return;
     const back = BackHandler.addEventListener('hardwareBackPress', () => { setDropdown(null); return true; });
@@ -57,35 +57,20 @@ export function StockVouchersScreen() {
   const warehouseError = selectionError || (warehouseQuery.error ? getUserErrorMessage(warehouseQuery.error, 'Warehouses could not be loaded.') : null);
 
   return <View style={styles.screen} onAccessibilityEscape={() => setDropdown(null)}>
-    <ScreenHeader title="Stock Vouchers" canGoBack onBack={() => { if (dropdown) setDropdown(null); else goBack(); }} rightAction={allowed ?
+    <ScreenHeader title="Stock Vouchers" subtitle={allowed ? warehouse?.name || (warehouseQuery.isPending ? 'Loading Warehouse…' : 'Warehouse Unavailable') : undefined} canGoBack onBack={() => { if (dropdown) setDropdown(null); else goBack(); }} rightAction={allowed ?
       <Pressable accessibilityRole="button" accessibilityLabel="Create stock voucher" accessibilityState={{ disabled: !canCreate }} disabled={!canCreate}
         onPress={() => { if (dropdown) setDropdown(null); else newVoucher(); }} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><Plus size={21} color={canCreate ? colors.primaryText : colors.textMuted} /></Pressable> : undefined} />
     {!allowed ? <EmptyState title="Voucher Access Unavailable" message="Sign in with a Staff or Admin account." /> :
       <ScrollView scrollEnabled={!dropdown} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
         refreshControl={<RefreshControl refreshing={warehouseQuery.isRefetching || vouchers.isRefetching && !vouchers.isFetchingNextPage} onRefresh={refresh} tintColor={colors.primary} />}>
-        <View style={[styles.toolbar, dropdown === 'warehouse' && styles.dropdownLayer]}>
-          <View style={[styles.dropdownAnchor, dropdown === 'warehouse' && styles.dropdownLayer]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Choose warehouse" accessibilityState={{ expanded: dropdown === 'warehouse' }} disabled={!warehouses.length} onPress={() => openDropdown('warehouse')} style={styles.warehouse}>
-            <Warehouse size={17} color={colors.textSecondary} /><Text variant="bodyMedium" style={{ flexShrink: 1 }}>{warehouse?.name || (warehouseQuery.isPending ? 'Loading Warehouses…' : 'Choose Warehouse')}</Text>
-            {warehouses.length > 0 && <ChevronDown size={15} color={colors.textMuted} />}
-          </Pressable>
-          {dropdown === 'warehouse' && <View style={styles.warehouseMenu} accessibilityLabel="Warehouses">
-            <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.dropdownScroll}>
-              {warehouses.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ checked: warehouse?.id === item.id }}
-                onPress={() => { setDropdown(null); replace('stock_vouchers', { warehouseId: item.id }); }} style={({ pressed }) => [styles.dropdownOption, warehouse?.id === item.id && styles.dropdownSelected, pressed && styles.pressed]}>
-                <Text variant="body" style={{ flex: 1 }}>{item.name}</Text>{warehouse?.id === item.id && <Check size={16} color={colors.primary} />}
-              </Pressable>)}
-            </ScrollView>
-          </View>}
-          </View>
+        <View style={styles.toolbar}>
           <SegmentedControl value={type} onChange={value => { setDropdown(null); setType(value); }} accessibilityLabel="Voucher type" options={[{ label: 'All', value: 'ALL' }, { label: 'Inbound', value: 'INBOUND' }, { label: 'Outbound', value: 'OUTBOUND' }]} />
           <TextField value={search} onFocus={() => setDropdown(null)} onChangeText={setSearch} placeholder="Voucher code or reference" accessibilityLabel="Search vouchers" maxLength={100}
             autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={18} color={colors.textMuted} />} />
         </View>
         {warehouseError && <View style={styles.error}><Text variant="body" color="dangerText">{warehouseError}</Text><Button title="Retry" variant="outline" size="sm" onPress={() => { void warehouseQuery.refetch(); }} /></View>}
         {!warehouse && !warehouseError ? warehouseQuery.isPending ? <View style={styles.state}><ActivityIndicator color={colors.primary} /></View> :
-          <EmptyState compact icon={Warehouse} title={warehouses.length ? 'Choose A Warehouse' : 'No Active Warehouses'}
-            actionTitle={warehouses.length ? 'Choose Warehouse' : 'Retry'} onAction={warehouses.length ? () => openDropdown('warehouse') : () => { void warehouseQuery.refetch(); }} /> : null}
+          <EmptyState compact icon={Warehouse} title="No Published Warehouse" actionTitle="Retry" onAction={() => { void warehouseQuery.refetch(); }} /> : null}
         {warehouse && <>
           <View style={[styles.statusBar, dropdown === 'status' && styles.dropdownLayer]}>
             <Text variant="caption" color="textSecondary">{pages.length ? `${pages[0].total} vouchers` : 'Vouchers'}</Text>

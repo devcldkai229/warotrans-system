@@ -1,6 +1,6 @@
 # Stock Vouchers — bàn giao bổ sung BE
 
-Đối chiếu source ngày 11/11/2026. Phạm vi: app mobile và nghiệp vụ chủ dự án đã chốt trong [README](README.md#nghiệp-vụ-staff-đã-chốt). Đây là yêu cầu tích hợp và các gap quan sát từ source, không phải bằng chứng API đã được nghiệm thu trên môi trường chạy. Không sửa BE/DB trong đợt app này.
+Đối chiếu source ngày 11/11/2026. Cập nhật quyết định UI: Stock Vouchers tự dùng kho có map PUBLISHED mới nhất cùng resolver Home/Inventory; không còn chọn kho thủ công. Chưa có map publish thì hiện lỗi/Retry, không lấy kho đầu tiên làm fallback. Phạm vi: app mobile và nghiệp vụ chủ dự án đã chốt trong [README](README.md#nghiệp-vụ-staff-đã-chốt). Đây là yêu cầu tích hợp và các gap quan sát từ source, không phải bằng chứng API đã được nghiệm thu trên môi trường chạy. Không sửa BE/DB trong đợt app này.
 
 ## 1. Trạng thái app để BE tiếp nối
 
@@ -18,6 +18,15 @@
 Chuẩn bị trên thiết bị được tách theo account, warehouse và voucher (form mới còn tách theo loại phiếu). Native dùng SecureStore, web dùng localStorage; có báo đang lưu/lưu lỗi và Retry. Đây không phải server draft hoặc hàng đợi đồng bộ offline. Không dùng dữ liệu local để suy ra tồn, trạng thái phiếu hay hàng đã được cấp mã. Sau khi tạo server draft, app copy phần chuẩn bị sang ID phiếu thật; lỗi copy không làm app tạo lại phiếu.
 
 **Giới hạn quan trọng của preview xuất:** `EndpointType` hiện chỉ có WAYPOINT/CHARGER/PARK. App nhận diện các WAYPOINT bật có mã khớp từ OUTBOUND theo quy ước hiện có của màn Transport. Chỉ hiển thị Container STORED có location/endpoint tương ứng và `inActiveTransport === false`. Không suy từ tên hiển thị, không coi thiếu flag là false. Đây là đối chiếu vị trí sơ bộ, không chứng minh quyền xuất, stock membership hoặc không thuộc phiếu khác. Khi refresh thấy barcode/Product/endpoint đổi hoặc kiện biến mất, app chặn review tới khi chọn lại. Thiếu map/điểm hoặc danh sách bị cắt là lỗi rõ ràng. BE phải cung cấp eligibility chính thức, app sẽ thay preview này bằng contract đó.
+
+### Cập nhật luồng lô hàng 13/11/2026
+
+- Form nhập chia thành chuẩn bị lô và kiểm tra phiếu: tổng N thùng, nhóm Product thật, số thùng mỗi nhóm, quantity/unit chung và override quantity cho từng số thứ tự trong nhóm. Tổng nhóm phải bằng N; mỗi thùng thuộc một Product. Đây là kế hoạch local, chưa có Container/stock được tạo.
+- Nhóm dùng key local `group-*`, override dùng số thứ tự bắt đầu từ 1. Các giá trị này **không phải Container ID/barcode**, không được dùng thay UUID BE khi lưu lines. BE cần trả mapping allocation/Container ID/barcode ↔ nhóm và ordinal ổn định, kể cả retry hoặc cấp một phần.
+- Contract lưu lô cần phân biệt quantity mặc định với quantity riêng, kiểm tra đủ dữ liệu theo từng thùng và bảo đảm N mã riêng. Frontend không tự gán mã thật có sẵn vào nhóm theo thứ tự mảng response chưa được cam kết.
+- Khi giảm số thùng của nhóm, override ngoài phạm vi được giữ trong cache để phục hồi input nếu tăng lại; không đưa các override đó vào Review hay payload thực. BE chỉ nhận các thùng còn thuộc lô sau xác nhận của Staff.
+- Cấp mã vẫn khóa; Review hiển thị số mã cấp thực là 0. Nút Create Empty Draft hiện chỉ gọi API metadata đã có; app copy kế hoạch sang cache theo ID phiếu thật và thể hiện Batch Plan/On This Device trên nháp trống. Không coi điều này là lô đã lưu server.
+- Form xuất đã đưa danh sách preview chọn/quét trước bước tạo nháp, thay vì tạo chứng từ rỗng rồi mới chọn. Vẫn cần canonical eligibility và lưu tập Container IDs thật trên BE.
 
 ## 2. Bằng chứng và mức ưu tiên
 

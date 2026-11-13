@@ -5,10 +5,12 @@ import type { StockVoucherDetail } from '../../shared/api/warehouseApi';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
+import { InboundBatchSummary } from './InboundBatchSummary';
+import { ContainerCountField } from './ContainerCountField';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
 import { OutboundVoucherSelection } from './OutboundVoucherSelection';
 import { useVoucherPreparation } from './useVoucherPreparation';
-import { contentProblem, inboundPreparationProblem, type PreparedContent } from './voucherPreparation';
+import { contentProblem, inboundContentsProgress, inboundPreparationProblem, nextIncompleteContainer, type PreparedContent } from './voucherPreparation';
 import { createVoucherStyles } from './voucherStyles';
 
 interface Props { data: StockVoucherDetail; accountId: string; writable: boolean }
@@ -21,6 +23,8 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
   const [lookup, setLookup] = useState<string | null>(null);
   const [review, setReview] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const ids = data.lines.map(line => line.containerId);
+  const progress = inboundContentsProgress(ids, prep.value);
   const inbound = data.type === 'INBOUND';
   const steps = inbound ? ['Barcodes', 'Contents', 'Review'] : ['Containers', 'Review', 'Confirm'];
   const currentStep = review ? inbound ? 2 : 1 : inbound && data.lines.length ? 1 : 0;
@@ -33,8 +37,10 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
     prep.update(previous => ({ ...previous, contents: { ...previous.contents, [id]: { ...(previous.contents[id] || { product: null, quantity: '', unit: '' }), ...fields } } }));
   };
   const localReview = () => {
-    const error = inbound ? inboundPreparationProblem(data.lines.map(line => line.containerId), prep.value) : null;
-    setReviewError(error);
+    const error = inbound ? inboundPreparationProblem(ids, prep.value) : null;
+    const invalidLine = error && inbound && progress.firstIncomplete && error === contentProblem(prep.value.contents[progress.firstIncomplete]) ? data.lines.find(line => line.containerId === progress.firstIncomplete) : null;
+    setReviewError(invalidLine ? `${invalidLine.containerBarcode}: ${contentProblem(prep.value.contents[invalidLine.containerId])}` : error);
+    if (invalidLine) setExpanded(invalidLine.containerId);
     if (!error) { setReview(true); setExpanded(null); }
   };
   if (!prep.ready) return <Card gap={12}><Text variant="body">{prep.error || 'Loading Preparation…'}</Text>{prep.error && <Button title="Retry" variant="outline" onPress={prep.retry} />}</Card>;
@@ -51,20 +57,24 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
     {inbound && !review && <>
       <Card gap={14}>
         <View style={styles.row}><Barcode size={22} color={colors.primaryText} /><Text variant="headline">Container Barcodes</Text></View>
-        <TextField label="Number Of Containers" value={prep.value.requestedCount} onChangeText={requestedCount => prep.update(previous => ({ ...previous, requestedCount }))} keyboardType="number-pad" maxLength={4} editable={writable} placeholder="e.g. 5" />
+        <ContainerCountField value={prep.value.requestedCount} onChange={requestedCount => prep.update(previous => ({ ...previous, requestedCount }))} editable={writable} />
         <Text variant="bodyMedium">{data.lines.length} codes allocated{prep.value.requestedCount ? ` · ${prep.value.requestedCount} requested` : ''}</Text>
         <Button title="Generate Barcodes" disabled onPress={() => {}} />
         <Text variant="caption" color="textSecondary">Barcode allocation is awaiting server support. No codes are generated on this device.</Text>
       </Card>
+      {!data.lines.length && !!prep.value.groups?.length && <Card gap={8}>
+        <View style={styles.between}><Text variant="headline">Batch Plan</Text><Text variant="caption" color="textMuted">On This Device</Text></View>
+        <InboundBatchSummary groups={prep.value.groups} />
+      </Card>}
       {!!data.lines.length && <Card gap={8}>
-        <Text variant="headline">Container Contents</Text>
+        <View style={styles.between}><Text variant="headline" style={{ flex: 1 }}>Container Contents</Text><Text variant="caption" color="textSecondary">{progress.complete}/{progress.total} complete</Text></View>
         <Text variant="caption" color="textSecondary">Product, quantity and unit edits below are saved on this device only.</Text>
         {data.lines.map((line, index) => {
           const value = prep.value.contents[line.containerId];
           const problem = contentProblem(value);
           return <View key={line.id} style={styles.containerRow}>
             <Pressable style={[styles.row, { minHeight: 44 }]} accessibilityRole="button" accessibilityState={{ expanded: expanded === line.containerId }} accessibilityLabel={`Edit container ${index + 1}, ${line.containerBarcode}`} onPress={() => { setExpanded(expanded === line.containerId ? null : line.containerId); setReviewError(null); }}>
-              <View style={styles.flex}><Text variant="code" selectable>{line.containerBarcode}</Text><Text variant="bodyMedium">{value?.product?.name || line.productName}</Text><Text variant="caption" color="textSecondary">{value?.quantity && value.unit ? `${value.quantity} ${value.unit}` : 'Contents incomplete'}</Text></View>
+              <View style={styles.flex}><Text variant="caption" color="textMuted">Container {index + 1} Of {data.lines.length}</Text><Text variant="code" selectable>{line.containerBarcode}</Text><Text variant="bodyMedium">{value?.product?.name || line.productName}</Text><Text variant="caption" color="textSecondary">{!problem ? `${value.quantity} ${value.unit}` : 'Contents incomplete'}</Text></View>
               {!problem ? <Check size={20} color={colors.primaryText} /> : <ChevronRight size={20} color={colors.textMuted} />}
             </Pressable>
             {expanded === line.containerId && <View style={styles.formSection}>
@@ -77,8 +87,15 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
                 <TextField label="Contents Quantity" containerStyle={{ flex: 1 }} value={value?.quantity || ''} onChangeText={quantity => editContent(line.containerId, { quantity })} keyboardType="decimal-pad" maxLength={16} editable={writable} placeholder="e.g. 24" />
                 <TextField label="Unit" containerStyle={{ flex: 1 }} value={value?.unit || ''} onChangeText={unit => editContent(line.containerId, { unit })} maxLength={32} editable={writable} placeholder="e.g. pcs" />
               </View>
-              {problem && <Text variant="caption" color="textSecondary">{problem}</Text>}
-              <Button title="Done Editing" variant="ghost" onPress={() => setExpanded(null)} />
+              {problem && <Text variant="caption" color={reviewError?.startsWith(`${line.containerBarcode}:`) ? 'dangerText' : 'textSecondary'} accessibilityRole={reviewError?.startsWith(`${line.containerBarcode}:`) ? 'alert' : undefined}>{problem}</Text>}
+              <View style={styles.formSection}>
+                {nextIncompleteContainer(ids, line.containerId, prep.value) && <Button title="Next Incomplete Container" variant="outline" disabled={!writable} onPress={() => {
+                  const problem = contentProblem(prep.value.contents[line.containerId]);
+                  if (problem) { setReviewError(`${line.containerBarcode}: ${problem}`); return; }
+                  setReviewError(null); setExpanded(nextIncompleteContainer(ids, line.containerId, prep.value));
+                }} />}
+                <Button title="Done Editing" variant="ghost" onPress={() => setExpanded(null)} />
+              </View>
             </View>}
           </View>;
         })}

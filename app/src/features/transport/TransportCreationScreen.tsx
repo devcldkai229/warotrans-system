@@ -350,7 +350,7 @@ export function TransportCreationScreen() {
         ListFooterComponent={viewFilter === 'location' && needsLocationCount ? <View style={styles.setupNote}>
           <Text variant="caption">These existing containers need a recorded location before dispatch. Check Inventory or ask the supervisor to complete their receiving records.</Text>
           <Button title="View Inventory" variant="outline" size="sm" onPress={() => navigate('inventory_lookup')} />
-        </View> : null} />
+        </View> : undefined} />
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.sectionRow}><Text variant="bodyMedium">{selected.length} Selected</Text>
           {selectedItems.some(item => !destinationFor(item)) && <Text variant="caption" color={colors.warningText}>{selectedItems.filter(item => !destinationFor(item)).length} Need Destination</Text>}

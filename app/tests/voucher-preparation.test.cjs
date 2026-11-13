@@ -143,3 +143,29 @@ test('cleanup failure after manifest commit does not report a committed save as 
   await store.write(scope, { note: 'next' });
   assert.equal((await store.read(scope)).note, 'next');
 });
+
+test('inbound progress counts only current real containers and excludes incomplete contents', () => {
+  const value = prep.emptyPreparation('INBOUND');
+  value.contents = { a: { product, quantity: '2', unit: 'pcs' }, b: { product, quantity: '0', unit: 'pcs' }, removed: { product, quantity: '5', unit: 'pcs' } };
+  assert.deepEqual(plain(prep.inboundContentsProgress(['a', 'b', 'c'], value)), { complete: 1, total: 3, firstIncomplete: 'b' });
+  assert.deepEqual(plain(prep.inboundContentsProgress([], value)), { complete: 0, total: 0, firstIncomplete: null });
+});
+
+test('next incomplete container follows visible order, wraps and never selects removed or complete rows', () => {
+  const value = prep.emptyPreparation('INBOUND');
+  value.contents = { a: { product, quantity: '2', unit: 'pcs' } };
+  assert.equal(prep.nextIncompleteContainer(['a', 'b', 'c'], 'a', value), 'b');
+  assert.equal(prep.nextIncompleteContainer(['a', 'b', 'c'], 'c', value), 'b');
+  assert.equal(prep.nextIncompleteContainer(['a'], 'a', value), null);
+  assert.equal(prep.nextIncompleteContainer(['a', 'b'], 'removed', value), 'b');
+});
+
+test('container stepper changes one unit, starts empty input at one and respects bounds', () => {
+  assert.equal(prep.stepContainerCount('5', 1), '6');
+  assert.equal(prep.stepContainerCount('5', -1), '4');
+  assert.equal(prep.stepContainerCount('', 1), '1');
+  assert.equal(prep.stepContainerCount('', -1), '1');
+  assert.equal(prep.stepContainerCount('invalid', 1), '1');
+  assert.equal(prep.stepContainerCount('1', -1), '1');
+  assert.equal(prep.stepContainerCount('9999', 1), '9999');
+});

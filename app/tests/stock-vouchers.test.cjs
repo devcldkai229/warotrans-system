@@ -96,32 +96,17 @@ test('paging deduplicates shifted rows while retaining the first, freshest snaps
   assert.equal(incompleteVoucherPages([{ items: [], total: 0 }]), false);
 });
 
-test('voucher warehouses are loaded completely without requesting a robot map', async () => {
-  const calls = [], controller = new AbortController();
-  const load = modules(async (url, init) => {
-    const parsed = new URL(url, 'https://unit.test'); calls.push(parsed.pathname);
-    assert.equal(init.signal, controller.signal);
-    assert.equal(parsed.searchParams.get('isActive'), 'true');
-    return { items: [{ id: parsed.searchParams.get('skip') === '0' ? 'a' : 'b', isActive: true }], total: 2 };
-  });
-  const { loadVoucherWarehouses } = load('src/features/inventory/stockVoucherData.ts');
-  assert.deepEqual(plain(await loadVoucherWarehouses(controller.signal)).map(item => item.id), ['a', 'b']);
-  assert.deepEqual(calls, ['/api/warehouse/warehouses', '/api/warehouse/warehouses']);
-});
-
-test('an incomplete warehouse list is not silently accepted', async () => {
-  const { loadVoucherWarehouses } = modules(async () => ({ items: [], total: 2 }))('src/features/inventory/stockVoucherData.ts');
-  await assert.rejects(() => loadVoucherWarehouses(new AbortController().signal), error => error.code === 'warehouse_list_incomplete');
-});
-
-test('warehouse choice does not fall back to another warehouse or depend on map publication', () => {
-  const { selectVoucherWarehouse } = modules(async () => {})('src/features/inventory/stockVoucherData.ts');
-  const a = { id: 'a', isActive: true }, b = { id: 'b', isActive: true };
-  assert.equal(selectVoucherWarehouse([a], ''), a);
-  assert.equal(selectVoucherWarehouse([a, b], ''), undefined);
-  assert.equal(selectVoucherWarehouse([a, b], 'b'), b);
-  assert.equal(selectVoucherWarehouse([a, b], 'missing'), undefined);
-  assert.equal(selectVoucherWarehouse([{ ...a, isActive: false }], 'a'), undefined);
+test('voucher warehouse follows the published context and refuses to silently move an open draft', () => {
+  const { selectPublishedVoucherWarehouse } = modules(async () => {})('src/features/inventory/stockVoucherData.ts');
+  const warehouse = { id: 'published-warehouse', isActive: true };
+  const context = { warehouse, map: { warehouseId: warehouse.id, status: 'PUBLISHED' } };
+  assert.equal(selectPublishedVoucherWarehouse(context), warehouse);
+  assert.equal(selectPublishedVoucherWarehouse(context, warehouse.id), warehouse);
+  assert.equal(selectPublishedVoucherWarehouse(context, 'previous-warehouse'), undefined);
+  assert.equal(selectPublishedVoucherWarehouse(undefined), undefined);
+  assert.equal(selectPublishedVoucherWarehouse({ ...context, warehouse: { ...warehouse, isActive: false } }), undefined);
+  assert.equal(selectPublishedVoucherWarehouse({ ...context, map: { ...context.map, status: 'DRAFT' } }), undefined);
+  assert.equal(selectPublishedVoucherWarehouse({ ...context, map: { ...context.map, warehouseId: 'other' } }), undefined);
 });
 
 test('draft creation requires the actual voucher permission and the read routes remain Staff/Admin only', () => {
