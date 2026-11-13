@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { Check, Search, X } from 'lucide-react-native';
+import { Box, Check, Search, X } from 'lucide-react-native';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { t } from '../../shared/i18n';
@@ -69,16 +69,24 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
   return <BottomSheet onClose={onClose} accessibilityLabel="product catalog">
     <View style={styles.sheetHeader}>
       <Text variant="headline">Choose Product</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('Close product catalog')} onPress={onClose} style={styles.closeButton}><X size={20} color={colors.textPrimary} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('Close product catalog')} onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}>
+        <View style={styles.closeCircle}><X size={16} strokeWidth={2.2} color={colors.textSecondary} /></View>
+      </Pressable>
     </View>
     <View style={styles.sheetSearch}>
       <TextField accessibilityLabel="Search product catalog" value={search}
-        onChangeText={value => { setSearch(value); setLookup(null); if (!value.trim()) setServerSearch(''); }} placeholder="Product, SKU, or supplier barcode"
-        autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={18} color={colors.textMuted} />}
+        onChangeText={value => { setSearch(value); setLookup(null); if (!value.trim()) setServerSearch(''); }} placeholder="Search by name or SKU"
+        fieldStyle={styles.searchField} inputStyle={styles.searchInput}
+        autoCapitalize="none" autoCorrect={false} showClearButton leftIcon={<Search size={17} color={colors.textMuted} />}
         onSubmitEditing={() => setServerSearch(search.trim())} />
     </View>
     {!lookup && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryRow}>
-      {[{ id: '', name: 'All Products' }, ...(categories.data?.items ?? [])].map(category => <Pressable key={category.id} accessibilityRole="button" accessibilityState={{ selected: categoryId === category.id }} onPress={() => setCategoryId(category.id)} style={[styles.categoryChip, categoryId === category.id && styles.categorySelected]}><Text variant="caption" color={categoryId === category.id ? colors.primaryText : colors.textSecondary}>{category.name}</Text></Pressable>)}
+      {[{ id: '', name: 'All Products' }, ...(categories.data?.items ?? [])].map(category => {
+        const selected = categoryId === category.id;
+        return <Pressable key={category.id} accessibilityRole="button" accessibilityState={{ selected }} hitSlop={{ top: 6, bottom: 6 }} onPress={() => setCategoryId(category.id)} style={({ pressed }) => [styles.categoryChip, selected && styles.categorySelected, pressed && styles.pressed]}>
+          <Text variant="caption" color={selected ? colors.primaryText : colors.textSecondary} style={selected ? styles.categorySelectedText : undefined}>{category.name}</Text>
+        </Pressable>;
+      })}
     </ScrollView>}
     {!canRead ? <EmptyState compact title="Catalog Unavailable" message="Your account cannot access products." />
       : lookup && !canResolve ? <EmptyState compact title="Lookup Unavailable" message="Your account cannot look up product codes." actionTitle="Browse Catalog" onAction={browse} />
@@ -89,12 +97,29 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
             <Text variant="caption">{multiple ? 'Select the correct product.' : 'Choose a product or refine your search.'}</Text>
             <Button title="Browse Catalog" variant="outline" size="sm" onPress={browse} />
           </View> : busy && choices.length ? <ActivityIndicator color={colors.primary} accessibilityLabel={t('Refreshing products')} /> : undefined}
-        renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: selectedProduct?.id === item.id, disabled: busy || !!error || !item.isActive }}
-          accessibilityLabel={`${item.name}, ${item.sku}`} disabled={busy || !!error || !item.isActive}
-          onPress={() => onSelect(item)} style={[styles.catalogRow, selectedProduct?.id === item.id && styles.catalogSelected, (busy || !!error || !item.isActive) && styles.disabled]}>
-          <View style={styles.flex}><Text variant="bodyMedium">{item.name}</Text><Text variant="code" color={colors.textSecondary}>{item.sku}</Text></View>
-          {selectedProduct?.id === item.id ? <Check size={18} color={colors.primaryText} /> : null}
-        </Pressable>}
+        renderItem={({ item, index }) => {
+          const isSelected = selectedProduct?.id === item.id;
+          const isFirst = index === 0;
+          const isLast = index === choices.length - 1;
+          const isDisabled = busy || !!error || !item.isActive;
+          return <Pressable accessibilityRole="radio" accessibilityState={{ checked: isSelected, disabled: isDisabled }}
+            accessibilityLabel={`${item.name}, ${item.sku}`} disabled={isDisabled}
+            onPress={() => onSelect(item)} style={({ pressed }) => [
+              styles.catalogRow,
+              isFirst && styles.catalogRowFirst,
+              isLast && styles.catalogRowLast,
+              !isLast && styles.catalogRowDivider,
+              isSelected && styles.catalogSelected,
+              pressed && !isDisabled && styles.catalogPressed,
+              isDisabled && styles.disabled,
+            ]}>
+            <View style={[styles.rowIcon, isSelected && styles.rowIconSelected]}>
+              <Box size={18} strokeWidth={1.8} color={isSelected ? colors.primaryText : colors.textSecondary} />
+            </View>
+            <View style={styles.flex}><Text variant="bodyMedium" numberOfLines={1}>{item.name}</Text><Text variant="code" color={colors.textSecondary} numberOfLines={1}>{item.sku}</Text></View>
+            {isSelected ? <Check size={18} strokeWidth={2.4} color={colors.primaryText} /> : null}
+          </Pressable>;
+        }}
         ListEmptyComponent={busy ? <View style={styles.lookupNotice}><ActivityIndicator color={colors.primary} /><Text variant="body" textAlign="center">{lookup ? 'Looking Up Product…' : 'Loading Products…'}</Text></View>
           : <EmptyState compact title={notFound ? 'No Active Product Found' : error ? lookup ? 'Lookup Unavailable' : 'Catalog Unavailable' : lookup ? 'Refine Your Search' : 'No Products Found'}
             message={notFound ? 'Check the barcode or choose from the catalog.' : error ? getUserErrorMessage(error, 'Products could not be loaded.') : undefined}
@@ -105,18 +130,29 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
 }
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
-  flex: { flex: 1, minWidth: 0, gap: 3 },
-  sheetHeader: { paddingHorizontal: 18, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  closeButton: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  flex: { flex: 1, minWidth: 0, gap: 2 },
+  sheetHeader: { paddingHorizontal: 18, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  closeButton: { minHeight: 44, minWidth: 44, marginRight: -7, alignItems: 'center', justifyContent: 'center' },
+  closeCircle: { width: 30, height: 30, borderRadius: radii.full, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.72 },
   sheetSearch: { paddingHorizontal: 18, paddingBottom: 10 },
+  searchField: { minHeight: 42, backgroundColor: colors.surfaceSubtle, borderColor: 'transparent', borderRadius: radii.md, borderCurve: 'continuous' },
+  searchInput: { paddingVertical: 8 },
   categoryScroll: { flexGrow: 0 },
-  categoryRow: { paddingHorizontal: 18, gap: 8, paddingBottom: 10 },
-  categoryChip: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  categoryRow: { paddingHorizontal: 18, gap: 8, paddingBottom: 12 },
+  categoryChip: { minHeight: 32, paddingHorizontal: 13, paddingVertical: 5, justifyContent: 'center', borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
   categorySelected: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  categorySelectedText: { fontWeight: '600' },
   catalogList: { flex: 1, minHeight: 0 },
-  catalogContent: { padding: 18, gap: 8, paddingBottom: 32 },
-  catalogRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 12, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border },
-  catalogSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  catalogContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 32 },
+  catalogRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surface, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
+  catalogRowFirst: { borderTopWidth: 1, borderTopLeftRadius: radii.lg, borderTopRightRadius: radii.lg, borderCurve: 'continuous' },
+  catalogRowLast: { borderBottomWidth: 1, borderBottomLeftRadius: radii.lg, borderBottomRightRadius: radii.lg, borderCurve: 'continuous' },
+  catalogRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  catalogSelected: { backgroundColor: colors.primaryLight },
+  catalogPressed: { backgroundColor: colors.surfaceSubtle },
+  rowIcon: { width: 36, height: 36, borderRadius: radii.sm, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' },
+  rowIconSelected: { backgroundColor: colors.surface },
   lookupNotice: { paddingVertical: 16, gap: 12 },
   disabled: { opacity: 0.5 },
 });

@@ -1180,6 +1180,7 @@ export const vi: Record<string, string> = {
   'Close product catalog': 'Đóng danh mục sản phẩm',
   'Search product catalog': 'Tìm trong danh mục sản phẩm',
   'Product, SKU, or supplier barcode': 'Sản phẩm, SKU hoặc mã vạch nhà cung cấp',
+  'Search by name or SKU': 'Tìm theo tên hoặc mã SKU',
   'All Products': 'Tất cả sản phẩm',
   'Catalog Unavailable': 'Danh mục không khả dụng',
   'Your account cannot access products.': 'Tài khoản của bạn không có quyền truy cập sản phẩm.',
