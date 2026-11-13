@@ -265,6 +265,9 @@ function JobRow({ job, robotCode, requestCodes, onOpen }: JobRowProps) {
               </Link>
             ))}
             {hidden > 0 ? <span className="text-muted">+{hidden}</span> : null}
+            {job.tripNo && job.tripCount && job.tripCount > 1 ? (
+              <span className="text-muted">{t('trip {no}/{total}', { no: job.tripNo, total: job.tripCount })}</span>
+            ) : null}
           </span>
         )}
       </Td>

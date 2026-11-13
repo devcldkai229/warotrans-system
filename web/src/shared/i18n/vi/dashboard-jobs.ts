@@ -234,4 +234,5 @@ export const vi_dashboard_jobs: Record<string, string> = {
   'Day with finished jobs': 'Ngày có công việc kết thúc',
   'Day with requests': 'Ngày có yêu cầu',
   'Days without activity are left out here; the summary CSV has every day.': 'Ngày không có phát sinh được lược bỏ ở đây; file CSV tổng hợp có đủ mọi ngày.',
+  'trip {no}/{total}': 'chuyến {no}/{total}',
 }

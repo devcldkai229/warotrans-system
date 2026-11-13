@@ -27,7 +27,18 @@ public sealed record JobSummaryDto(
     string? WorkflowName = null,
     string? RobotCode = null,
     IReadOnlyList<string>? RequestCodes = null,
-    IReadOnlyList<string>? ContainerBarcodes = null);
+    IReadOnlyList<string>? ContainerBarcodes = null,
+    int? TripNo = null,
+    int? TripCount = null,
+    string? BlockingReason = null,
+    IReadOnlyList<JobTripStopDto>? Stops = null,
+    IReadOnlyList<JobTripContainerDto>? Containers = null);
+
+/// <summary>One stop of a trip (a Job): where the robot collects or delivers, and how many Containers.</summary>
+public sealed record JobTripStopDto(int SequenceNo, string Action, Guid EndpointId, int ContainerCount, string? EndpointCode = null);
+
+/// <summary>One Container of a trip and where it is in it (PENDING, ASSIGNED, ONBOARD, DELIVERED, FAILED, CANCELLED).</summary>
+public sealed record JobTripContainerDto(Guid ContainerId, int SequenceNo, string Status, string? Barcode = null);
 
 public sealed record JobDetailDto(
     Guid Id,
@@ -251,13 +262,41 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
                 j.JobContainers.Count,
                 all.Count(x => x.Status is JobStepStatus.COMPLETED or JobStepStatus.SKIPPED),
                 all.Count,
-                j.CreatedAt, j.StartedAt, j.CompletedAt, j.FailureCode);
+                j.CreatedAt, j.StartedAt, j.CompletedAt, j.FailureCode)
+            {
+                TripNo = Number(j.ContextValues, "batchSequenceNo"),
+                BlockingReason = j.BlockingReason,
+                Stops = TripStops(j),
+                Containers = j.JobContainers
+                    .OrderBy(c => c.SequenceNo)
+                    .Select(c => new JobTripContainerDto(c.ContainerId, c.SequenceNo, c.Status.ToString()))
+                    .ToList()
+            };
         }).ToList();
 
         return (items, total);
     }
 
     private static Guid? AssignedRobot(Job job) => Id(job.ContextValues, JobExecutionEngine.AssignedRobotKey);
+
+    private static int? Number(IReadOnlyDictionary<string, JsonElement> values, string key) =>
+        values.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : null;
+
+    /// <summary>The stops of a trip, from its once-per-stop tasks (provisioning writes stopSequenceNo/EndpointId/Action).</summary>
+    private static List<JobTripStopDto> TripStops(Job job) =>
+        job.JobTasks
+            .Select(t => t.ContextValues)
+            .Where(c => Number(c, "stopSequenceNo") is not null && Id(c, "stopEndpointId") is not null && Text(c, "stopAction") is not null)
+            .Select(c => new JobTripStopDto(
+                Number(c, "stopSequenceNo")!.Value,
+                Text(c, "stopAction")!,
+                Id(c, "stopEndpointId")!.Value,
+                c.TryGetValue("containerIds", out var ids) && ids.ValueKind == JsonValueKind.Array ? ids.GetArrayLength() : 0))
+            .GroupBy(s => s.SequenceNo)
+            // Per-container tasks at a stop carry the stop too; the stop task lists all its Containers.
+            .Select(g => g.MaxBy(s => s.ContainerCount)!)
+            .OrderBy(s => s.SequenceNo)
+            .ToList();
 
     private static string? Text(IReadOnlyDictionary<string, JsonElement> values, string key) =>
         values.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;

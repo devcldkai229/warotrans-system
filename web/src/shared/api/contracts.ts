@@ -829,6 +829,18 @@ export interface TransportRequest {
 
 export type TransportRequestAction = 'QUEUE' | 'CANCEL' | 'REJECT'
 
+/** A trip (Job) of a request: which robot, where it collects and delivers, and its containers. */
+export interface TransportRequestTripView {
+  jobNo: string
+  status: JobStatus
+  robotCode: string | null
+  tripNo?: number | null
+  tripCount?: number | null
+  blockingReason?: string | null
+  stops?: { sequenceNo: number; action: string; endpointCode?: string | null; containerCount: number }[] | null
+  containers?: { containerId: string; status: string; barcode?: string | null }[] | null
+}
+
 /**
  * A Request as the console lists it. TODO(backend): needs a read endpoint that joins the names, the Container
  * barcode and Endpoint labels, and the Jobs reached through JobContainer (Job itself has no TransportRequestId).
@@ -841,7 +853,8 @@ export interface TransportRequestView extends TransportRequest {
     sourceLabel: string
     destinationLabel: string
   })[]
-  jobs: { jobNo: string; status: JobStatus; robotCode: string | null }[]
+  /** One per trip: a robot load of at most 3 containers, collected first, then delivered. */
+  jobs: TransportRequestTripView[]
   /** Server-decided (BOTH-04); the endpoint re-checks with the same rule. */
   availableActions: ActionAvailability<TransportRequestAction>[]
   cancelReason?: string | null

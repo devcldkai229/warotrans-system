@@ -14,7 +14,17 @@ public sealed record ContainerListItemResponse(
     short? CurrentLevelNo,
     string? SupplierPackageBarcode,
     DateTimeOffset UpdatedAt,
-    bool InActiveTransport = false);
+    bool InActiveTransport = false,
+    ContainerVoucherResponse? Voucher = null);
+
+/// <summary>The latest stock voucher (not cancelled) the Container is on: a request composer offers it first.</summary>
+public sealed record ContainerVoucherResponse(
+    Guid Id,
+    string Code,
+    string Type,
+    string Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ConfirmedAt);
 
 public sealed record ListContainersResponse(
     IReadOnlyList<ContainerListItemResponse> Items,

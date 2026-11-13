@@ -569,6 +569,10 @@ public sealed class JobExecutionEngine(
             }
 
             await EnsureScannedBarcodeMatchesAsync(source.ScannedBarcode, expected, cancellationToken);
+            if (type == HandoverType.PICKUP)
+            {
+                await EnsureRobotHasRoomAsync(job, cancellationToken);
+            }
 
             db.HandoverConfirmations.Add(new HandoverConfirmation
             {
@@ -1688,7 +1692,7 @@ public sealed class JobExecutionEngine(
                 {
                     semanticCommandId = await fleet.NavigateAsync(
                         robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, route: null,
-                        timeoutSeconds: CommandTimeoutSeconds(step));
+                        timeoutSeconds: CommandTimeoutSeconds(step), positionTolerance: pose.PositionTolerance);
                 }
                 catch (Exception ex)
                 {
@@ -2010,7 +2014,7 @@ public sealed class JobExecutionEngine(
 
             var commandId = await fleet.NavigateAsync(
                 robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, routeGrant,
-                CommandTimeoutSeconds(step));
+                CommandTimeoutSeconds(step), pose.PositionTolerance);
             var outputs = new Dictionary<string, JsonElement>
             {
                 ["startedAt"] = JsonSerializer.SerializeToElement(now),
@@ -2621,6 +2625,28 @@ public sealed class JobExecutionEngine(
     /// there, localized: its map pose must agree with where the operator placed it. Later Jobs start wherever the last
     /// one ended (the workflow has no return-to-parking step). "First" = the coordinator has seen no plan from it yet.
     /// </summary>
+    /// <summary>
+    /// A robot does not count its load, so a pickup that would put more on it than it carries is refused here
+    /// (<see cref="WaroTrans.BuildingBlocks.RobotLoad"/>). A robot runs one Job at a time, so its load is the Job's ONBOARD.
+    /// </summary>
+    private async Task EnsureRobotHasRoomAsync(Job job, CancellationToken cancellationToken)
+    {
+        int? own = null;
+        if (AssignedRobot(job) is Guid robotId)
+        {
+            own = (await fleet.GetRobotAsync(robotId, cancellationToken))?.MaxContainers;
+        }
+
+        var most = WaroTrans.BuildingBlocks.RobotLoad.EffectiveMaxContainers(own);
+        var onboard = job.JobContainers.Count(c => c.Status == JobContainerStatus.ONBOARD);
+        if (onboard + 1 > most)
+        {
+            throw new ConflictException(
+                $"The robot of Job {job.JobNo} already carries {onboard} container(s), its limit is {most}.",
+                "robot_capacity_full");
+        }
+    }
+
     private async Task EnsureRobotAtHomeForFirstJobAsync(RobotSnapshot robot, Job job, CancellationToken cancellationToken)
     {
         if (trafficOptions?.Value is not { Mode: TrafficCoordinatorMode.Semantic } options

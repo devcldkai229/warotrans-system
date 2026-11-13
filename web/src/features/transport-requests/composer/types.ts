@@ -1,3 +1,4 @@
+import type { ContainerVoucherRef } from '@/shared/api/warehouses'
 import type { ContainerStatus, Endpoint, MapVersion } from '@/shared/api/contracts'
 import type { WorkflowRequestInputField } from '@/shared/api/types'
 
@@ -60,6 +61,19 @@ export interface ComposerContainer {
   currentEndpointId: string | null
   currentEndpointCode: string | null
   currentEndpointName: string | null
+  /** The latest stock voucher (not cancelled) the container is on. */
+  voucher?: ContainerVoucherRef | null
+}
+
+/** What the chosen workflow does with containers; decides which ones the selector offers first. */
+export type WorkflowKind = 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | null
+
+export function workflowKindOf(code: string | null | undefined): WorkflowKind {
+  const value = (code ?? '').toUpperCase()
+  if (value === 'INBOUND' || value.startsWith('INBOUND_')) return 'INBOUND'
+  if (value === 'OUTBOUND' || value.startsWith('OUTBOUND_')) return 'OUTBOUND'
+  if (value === 'INTERNAL_RELOCATION' || value.startsWith('INTERNAL')) return 'INTERNAL'
+  return null
 }
 
 export interface ComposerWorkflow {
@@ -87,6 +101,8 @@ export interface ComposerData {
   workflows: ComposerWorkflow[]
   staffInputFields: WorkflowRequestInputField[]
   containers: ComposerContainer[]
+  /** Kind of the chosen workflow (null before one is chosen or for a custom one). */
+  workflowKind: WorkflowKind
   storageLocations: ComposerStorageLocation[]
   endpoints: Endpoint[]
   requestedByName: string

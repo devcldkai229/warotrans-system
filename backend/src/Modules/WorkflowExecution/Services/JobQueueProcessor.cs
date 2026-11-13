@@ -28,10 +28,14 @@ public sealed class JobQueueProcessor(
     IOptions<JobQueueOptions> options,
     ILogger<JobQueueProcessor> logger)
 {
-    private static readonly JobStatus[] Ended = [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED];
 
-    /// <summary>The next Job of each request whose earlier Jobs have all ended, at least one having been started.</summary>
-    public static async Task<IReadOnlyList<Guid>> FindNextOfStartedRequestsAsync(WorkflowExecutionDbContext db, CancellationToken cancellationToken)
+    /// <summary>
+    /// The waiting trips (CREATED Jobs) of every request that is already running: once one trip of a request was
+    /// queued or started, all its other trips join the queue. Free robots then take them in queue order, so two robots
+    /// carry two trips at once, and one robot takes the next trip as soon as it has delivered the last one.
+    /// Trips come in ProvisioningKey (trip) order.
+    /// </summary>
+    public static async Task<IReadOnlyList<Guid>> FindWaitingTripsOfStartedRequestsAsync(WorkflowExecutionDbContext db, CancellationToken cancellationToken)
     {
         var requests = await db.JobContainers.AsNoTracking()
             .Where(c => c.Job.Status == JobStatus.CREATED)
@@ -54,14 +58,14 @@ public sealed class JobQueueProcessor(
         {
             var waiting = request.Where(j => j.Status == JobStatus.CREATED).ToList();
             var others = request.Where(j => j.Status != JobStatus.CREATED).ToList();
-            var startedBefore = others.Any(j => j.StartedAt is not null);
-            if (waiting.Count > 0 && startedBefore && others.All(j => Ended.Contains(j.Status)))
+            var running = others.Any(j => j.StartedAt is not null || j.Status == JobStatus.QUEUED);
+            if (waiting.Count > 0 && running)
             {
-                next.Add(waiting.OrderBy(j => j.ProvisioningKey, StringComparer.Ordinal).First().Id);
+                next.AddRange(waiting.OrderBy(j => j.ProvisioningKey, StringComparer.Ordinal).Select(j => j.Id));
             }
         }
 
-        return next;
+        return next.Distinct().ToList();
     }
 
     public async Task<IReadOnlyList<QueuedJobDto>> ListAsync(DateTimeOffset now, CancellationToken cancellationToken)
@@ -85,7 +89,7 @@ public sealed class JobQueueProcessor(
     /// <returns>How many Jobs started.</returns>
     public async Task<int> TickAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var next in await FindNextOfStartedRequestsAsync(db, cancellationToken))
+        foreach (var next in await FindWaitingTripsOfStartedRequestsAsync(db, cancellationToken))
         {
             await engine.EnqueueAsync(next, cancellationToken);
             db.ChangeTracker.Clear();

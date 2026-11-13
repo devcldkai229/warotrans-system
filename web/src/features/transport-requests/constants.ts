@@ -12,3 +12,6 @@ export const REQUEST_STATUS_GROUPS: TransportRequestStatus[] = [
   'CANCELLED',
   'REJECTED',
 ]
+
+/** Backend RobotLoad.MaxContainers: the most a robot carries at once (one trip). */
+export const MAX_CONTAINERS_PER_TRIP = 3
