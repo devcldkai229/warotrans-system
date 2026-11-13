@@ -181,8 +181,8 @@ export async function apiAuthRequest<T>(path: string, init: RequestInit = {}): P
   return (await response.json()) as T
 }
 
-/** Sends a JSON request. On 401 refreshes once and retries before giving up. */
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** Sends with the access token. On 401 refreshes once and retries; throws the API error of a non-2xx response. */
+async function sendSignedIn(path: string, init: RequestInit): Promise<Response> {
   let response = await send(path, init, accessToken)
 
   // After reload, accessToken is null until restore finishes — still try cookie refresh once.
@@ -196,8 +196,55 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }
 
   if (!response.ok) throw await toApiError(response)
+  return response
+}
+
+/** Sends a JSON request. On 401 refreshes once and retries before giving up. */
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await sendSignedIn(path, init)
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+/**
+ * The file name a `Content-Disposition` header gives, preferring the UTF-8 `filename*` form; null when it names none.
+ * `attachment; filename=a.csv; filename*=UTF-8''a.csv` → `a.csv`.
+ */
+export function fileNameFromDisposition(header: string | null): string | null {
+  if (!header) return null
+  const encoded = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/.exec(header)
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim().replace(/^"|"$/g, ''))
+    } catch {
+      // A malformed escape: fall back to the plain form below.
+    }
+  }
+  const plain = /filename\s*=\s*("([^"]*)"|[^;]+)/.exec(header)
+  if (!plain) return null
+  return (plain[2] ?? plain[1]).trim() || null
+}
+
+/**
+ * Downloads a file the API sends (a report export) and saves it under the name the server gives. Goes through the
+ * same sign-in and refresh as every other call, so an `<a href>` without the token is not needed.
+ */
+export async function apiDownload(path: string, fallbackName: string): Promise<void> {
+  // Errors still come back as JSON ProblemDetails, so the default Accept header is right here too.
+  const response = await sendSignedIn(path, {})
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileNameFromDisposition(response.headers.get('Content-Disposition')) ?? fallbackName
+    document.body.append(link)
+    link.click()
+    link.remove()
+  } finally {
+    // Give the browser a moment to start the download before the blob goes away.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
 }
 
 /** Alias for workflow modules that still call `apiFetch`. */

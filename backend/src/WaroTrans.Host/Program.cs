@@ -21,6 +21,7 @@ using WaroTrans.Transportation.IntegrationEvents;
 using WaroTrans.Host.Extensions;
 using WaroTrans.Host.Hubs;
 using WaroTrans.Host.Realtime;
+using WaroTrans.Host.Reporting;
 using WaroTrans.Identity;
 using WaroTrans.Navigation;
 using WaroTrans.Operations;
@@ -117,6 +118,8 @@ builder.Services.AddCors(options =>
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
+        // Report downloads name their file here; a cross-origin page cannot read the header unless it is exposed.
+        .WithExposedHeaders("Content-Disposition")
         // The web client keeps its refresh token in an HttpOnly cookie.
         .AllowCredentials()));
 
@@ -141,6 +144,7 @@ builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestClosedByOper
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestClosedByOperator>, SignalRJobRealtimeForwarder>();
 builder.Services.AddScoped<IIntegrationEventHandler<JobContainerStatusChanged>, AuditEventRecorder>();
+builder.Services.AddScoped<PeriodReportBuilder>();
 builder.Services.AddOpenApi();
 
 var postgresConnection = builder.Configuration.GetConnectionString("PostgreSQL")
@@ -217,6 +221,7 @@ app.MapWorkflowExecutionEndpoints();
 app.MapFleetEndpoints();
 app.MapNavigationEndpoints();
 app.MapOperationsEndpoints();
+app.MapReportEndpoints();
 
 app.Run();
 
