@@ -498,6 +498,69 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                     b.ToTable("robot_commands", "fleet");
                 });
 
+            modelBuilder.Entity("WaroTrans.Fleet.Entities.RobotPoseSample", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<double?>("AngularVelocity")
+                        .HasColumnType("double precision")
+                        .HasColumnName("angular_velocity");
+
+                    b.Property<Guid?>("CommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("command_id");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<double?>("LinearVelocity")
+                        .HasColumnType("double precision")
+                        .HasColumnName("linear_velocity");
+
+                    b.Property<string>("MapVersionCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("map_version_code");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<Guid>("RobotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("robot_id");
+
+                    b.Property<double>("X")
+                        .HasColumnType("double precision")
+                        .HasColumnName("x");
+
+                    b.Property<double>("Y")
+                        .HasColumnType("double precision")
+                        .HasColumnName("y");
+
+                    b.Property<double>("Yaw")
+                        .HasColumnType("double precision")
+                        .HasColumnName("yaw");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_robot_pose_samples");
+
+                    b.HasIndex("RecordedAt")
+                        .HasDatabaseName("i_x_robot_pose_samples_recorded_at");
+
+                    b.HasIndex("JobId", "RecordedAt")
+                        .HasDatabaseName("i_x_robot_pose_samples_job_id_recorded_at");
+
+                    b.HasIndex("RobotId", "RecordedAt")
+                        .HasDatabaseName("i_x_robot_pose_samples_robot_id_recorded_at");
+
+                    b.ToTable("robot_pose_samples", "fleet");
+                });
+
             modelBuilder.Entity("WaroTrans.Fleet.Entities.RobotPositioningIntent", b =>
                 {
                     b.Property<Guid>("Id")
