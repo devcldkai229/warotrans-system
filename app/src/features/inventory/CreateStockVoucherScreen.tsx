@@ -163,7 +163,7 @@ export function CreateStockVoucherScreen() {
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         {!canCreateVoucher(session) && <Text variant="caption" color="textSecondary">Your account cannot create vouchers.</Text>}
-        <Button title={review ? 'Create Empty Draft' : inbound ? 'Review Batch' : 'Review Selection'} onPress={() => { if (review) void create(); else openReview(); }} loading={saving} disabled={!editable || !preparation.ready || (!review && !inbound && !outboundReady)} fullWidth />
+        <Button title={review ? inbound ? 'Create Inbound Voucher' : 'Create Outbound Voucher' : inbound ? 'Review Batch' : 'Review Selection'} onPress={() => { if (review) void create(); else openReview(); }} loading={saving} disabled={!editable || !preparation.ready || (!review && !inbound && !outboundReady)} fullWidth />
       </View>
     </KeyboardAvoidingView>}
   </View>;

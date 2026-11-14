@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Barcode, Check, ChevronRight, ScanLine } from 'lucide-react-native';
 import type { StockVoucherDetail } from '../../shared/api/warehouseApi';
+import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
@@ -63,6 +64,10 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
       </Card>}
       {!data.lines.length && !!prep.value.groups?.length && <Card gap={12} style={styles.reviewCard}>
         <View style={styles.between}><Text variant="headline">Batch Plan</Text><View style={styles.statusPill}><Text variant="caption" color="textSecondary" style={{ fontWeight: '600' }}>On This Device</Text></View></View>
+        <View style={styles.batchStatBar}>
+          <View style={styles.stat}><Text variant="title" style={styles.tabular}>{prep.value.requestedCount || '—'}</Text><Text variant="bodyMedium" color="textSecondary">Containers</Text></View>
+          <Text variant="caption" color="textSecondary" style={[styles.tabular, { fontWeight: '600' }]}>{t('{count} product groups', { count: prep.value.groups.length })}</Text>
+        </View>
         <InboundBatchSummary groups={prep.value.groups} />
       </Card>}
       {!!data.lines.length && <Card gap={8}>
