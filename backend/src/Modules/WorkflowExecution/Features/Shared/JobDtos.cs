@@ -63,7 +63,10 @@ public sealed record JobDetailDto(
     int Priority = 0,
     DateTimeOffset? DeadlineAt = null,
     DateTimeOffset? QueuedAt = null,
-    string? BlockingReason = null);
+    string? BlockingReason = null,
+    // Which trip (robot load) of its request this Job is, and how many trips the request has.
+    int? TripNo = null,
+    int? TripCount = null);
 
 public sealed record JobContainerDto(
     Guid Id,
@@ -146,6 +149,15 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
             ? new Dictionary<Guid, string>()
             : new Dictionary<Guid, string>(await accountNames.GetNamesAsync(holders, cancellationToken));
 
+        var requestIds = job.JobContainers.Select(c => c.TransportRequestId).Distinct().ToList();
+        int? tripCount = requestIds.Count == 1
+            ? await db.JobContainers.AsNoTracking()
+                .Where(c => c.TransportRequestId == requestIds[0])
+                .Select(c => c.JobId)
+                .Distinct()
+                .CountAsync(cancellationToken)
+            : null;
+
         return new JobDetailDto(
             job.Id,
             job.JobNo,
@@ -200,7 +212,9 @@ public sealed class JobQueries(WorkflowExecutionDbContext db, ICurrentUser curre
             job.Priority,
             job.DeadlineAt,
             job.QueuedAt,
-            job.BlockingReason);
+            job.BlockingReason,
+            Number(job.ContextValues, "batchSequenceNo"),
+            tripCount);
     }
 
     public async Task<(IReadOnlyList<JobSummaryDto> Items, int Total)> ListAsync(

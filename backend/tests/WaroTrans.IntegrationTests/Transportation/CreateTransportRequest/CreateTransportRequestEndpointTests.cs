@@ -334,6 +334,11 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
         // Trip 1 runs: trip 2 joins the queue now, for a second robot or for the same one once it is free.
         await SetAsync(jobs[0].JobId, WaroTrans.WorkflowExecution.Enums.JobStatus.RUNNING);
         Assert.Equal(jobs[1].JobId, Assert.Single(await WaitingAsync()));
+
+        // The Job page says which trip it is.
+        using var detail = JsonDocument.Parse(await Client.GetStringAsync($"/api/workflow-execution/jobs/{jobs[1].JobId}"));
+        Assert.Equal(2, detail.RootElement.GetProperty("tripNo").GetInt32());
+        Assert.Equal(2, detail.RootElement.GetProperty("tripCount").GetInt32());
     }
 
     [Fact]

@@ -111,6 +111,7 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
     [InlineData(3, "D", "A", false, "inbound_voucher_required")]         // no confirmed phiếu nhập
     [InlineData(0, "D", "B", true, "container_already_stored")]          // already on shelf A
     [InlineData(3, "A", "B", true, "container_not_stored")]              // not on a shelf: cannot be collected from one
+    [InlineData(0, "A", "B", true, "inbound_source_is_storage")]         // shelf to shelf is INTERNAL_RELOCATION
     public async Task Inbound_requests_that_do_not_fit_are_refused(
         int containerIndex, string from, string to, bool inboundVoucher, string expectedCode)
     {
