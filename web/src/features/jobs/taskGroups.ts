@@ -119,9 +119,21 @@ export function sectionTitle(section: TaskSection, labels: TaskLabels, fallback:
     case 'handover': {
       const count = section.tasks.length
       const unload = section.action === 'DROPOFF'
+      // A trip collects several Containers at one stop and delivers them over several: name the stop.
+      const at = section.stopEndpointId ? labels.endpoint(section.stopEndpointId) : null
       if (count === 1) {
         const container = labels.container(section.tasks[0].containerId)
+        if (at) {
+          return unload
+            ? t('Unload {container} from the robot at {value}', { container, value: at })
+            : t('Load {container} onto the robot at {value}', { container, value: at })
+        }
         return unload ? t('Unload {container} from the robot', { container }) : t('Load {container} onto the robot', { container })
+      }
+      if (at) {
+        return unload
+          ? t('Deliver {count} containers at {value}', { count, value: at })
+          : t('Collect {count} containers at {value}', { count, value: at })
       }
       return unload ? t('Unload {count} containers from the robot', { count }) : t('Load {count} containers onto the robot', { count })
     }
