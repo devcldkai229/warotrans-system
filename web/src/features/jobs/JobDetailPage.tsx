@@ -2,7 +2,8 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/shared/api/client'
-import { getRobot } from '@/shared/api/fleet'
+import { getRobot, getRobotPoseHistory } from '@/shared/api/fleet'
+import { pathOnMap, trailSegments } from '@/features/robots/history/pathModel'
 import { useAuth } from '@/features/auth/authContext'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import {
@@ -394,6 +395,14 @@ export function JobDetailPage() {
     refetchInterval: job && ACTIVE_JOB_STATUSES.includes(job.status) ? 5000 : false,
   })
   const robot = robotQuery.data ?? null
+  // FE-19: the path the robot really took for this Job, from its movement history (none for a robot out of scope).
+  const pathQuery = useQuery({
+    queryKey: ['robot-pose-history', robotId, 'job', jobId],
+    queryFn: () => getRobotPoseHistory(robotId!, { jobId: jobId! }),
+    enabled: robotId !== null && jobId !== null,
+    retry: false,
+    refetchInterval: job && ACTIVE_JOB_STATUSES.includes(job.status) ? 5000 : false,
+  })
   // The map shows the lanes and zones of the map version, and, while the Job is live, who holds what (as on Monitor).
   const { can } = useAuth()
   const robotsOnMap = useMemo(() => (robot ? [{ id: robot.id, code: robot.code }] : []), [robot])
@@ -413,6 +422,10 @@ export function JobDetailPage() {
     enabled: job !== null,
   })
   const endpoints = monitorMap.geometry.endpoints
+  const travelled = useMemo(
+    () => trailSegments(pathOnMap(pathQuery.data?.points ?? [], monitorMap.version?.code ?? null).points),
+    [pathQuery.data, monitorMap.version?.code],
+  )
 
   const labels = useMemo<Labels>(() => {
     const endpointById = new Map(endpoints.map((e) => [e.id, e.name || e.code]))
@@ -624,6 +637,7 @@ export function JobDetailPage() {
                 labels="focus"
                 focusEndpointIds={[origin?.id, destination?.id].filter((id): id is string => Boolean(id))}
                 movements={movements}
+                trails={travelled.some((segment) => segment.length > 1) ? [{ segments: travelled }] : []}
                 callouts={
                   waiting && pose
                     ? [

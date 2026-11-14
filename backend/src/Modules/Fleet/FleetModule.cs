@@ -60,6 +60,10 @@ public static class FleetModule
         services.AddScoped<ChangeRobotMapHandler>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
         services.AddScoped<ProcessRobotTelemetryHandler>();
+        services.Configure<Features.PoseHistory.RobotHistoryOptions>(configuration.GetSection(Features.PoseHistory.RobotHistoryOptions.SectionName));
+        services.AddSingleton<Features.PoseHistory.RobotPoseTrail>();
+        services.AddScoped<Features.PoseHistory.RobotPoseHistoryRecorder>();
+        services.AddScoped<Features.PoseHistory.GetRobotPoseHistoryHandler>();
         services.AddScoped<ProcessRobotCommandAckHandler>();
         services.AddScoped<ProcessRobotCommandResultHandler>();
         services.AddScoped<ProcessRobotInteractionConfirmHandler>();
@@ -117,6 +121,7 @@ public static class FleetModule
         group.MapPutRobotInService();
         Features.RobotCapacity.RobotCapacityEndpoint.MapSetRobotCapacity(group);
         Features.RobotHistory.RobotHistoryEndpoints.MapRobotHistory(group);
+        Features.PoseHistory.GetRobotPoseHistoryEndpoint.MapGetRobotPoseHistory(group);
         group.MapChangeRobotMap();
         group.MapIssueNavigateCommand();
         group.MapIssueCancelCommand();

@@ -9,6 +9,7 @@ public sealed class FleetDbContext(DbContextOptions<FleetDbContext> options) : D
 {
     public DbSet<Robot> Robots => Set<Robot>();
     public DbSet<RobotStateEvent> RobotStateEvents => Set<RobotStateEvent>();
+    public DbSet<RobotPoseSample> RobotPoseSamples => Set<RobotPoseSample>();
     public DbSet<DispatchDecision> DispatchDecisions => Set<DispatchDecision>();
     public DbSet<JobAssignment> JobAssignments => Set<JobAssignment>();
     public DbSet<RobotCommand> RobotCommands => Set<RobotCommand>();

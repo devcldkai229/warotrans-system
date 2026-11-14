@@ -20,6 +20,7 @@ import {
   MAP_OFF,
   MAP_PAPER,
   MAP_RED,
+  MAP_TRAIL,
   ROBOT_COLOR,
   ZONE_COLOR,
   ZONE_FILL_OPACITY,
@@ -42,6 +43,14 @@ export interface MapRobot {
   yaw: number
   /** Ring the Robot (an error or a blocked Zone). */
   alert?: boolean
+}
+
+/**
+ * Where a robot went (movement history), oldest first, with its start and end marked. Each segment is a recorded
+ * stretch; between segments nothing was recorded, so that stretch is drawn faint and dashed, not as a drive.
+ */
+export interface MapTrail {
+  segments: Point[][]
 }
 
 export interface MapCallout {
@@ -103,6 +112,7 @@ export interface WarehouseMapProps {
   /** When given, every other Robot fades back. */
   focusRobotCodes?: string[]
   movements?: MapMovement[]
+  trails?: MapTrail[]
   trafficOverlay?: MapTrafficOverlay | null
   callouts?: MapCallout[]
   selected?: { zoneId?: string; edgeId?: string; endpointId?: string; robotCode?: string }
@@ -162,6 +172,7 @@ export function WarehouseMap({
   focusEndpointIds = [],
   focusRobotCodes,
   movements = [],
+  trails = [],
   trafficOverlay = null,
   callouts = [],
   selected = {},
@@ -554,6 +565,53 @@ export function WarehouseMap({
                     />
                   )
                 })}
+            </g>
+          ) : null}
+
+          {/* Trails (movement history): the path, a hollow dot where it starts and a filled one where it ends. */}
+          {trails.length > 0 ? (
+            <g pointerEvents="none">
+              {trails.map((trail, index) => {
+                const segments = trail.segments.filter((segment) => segment.length > 0)
+                if (segments.length === 0) return null
+                const first = segments[0][0]
+                const lastSegment = segments[segments.length - 1]
+                const last = lastSegment[lastSegment.length - 1]
+                return (
+                  <g key={index}>
+                    {segments.slice(1).map((segment, gap) => {
+                      const before = segments[gap][segments[gap].length - 1]
+                      return (
+                        <line
+                          key={`gap-${gap}`}
+                          x1={X(before.x)}
+                          y1={Y(before.y)}
+                          x2={X(segment[0].x)}
+                          y2={Y(segment[0].y)}
+                          stroke={MAP_TRAIL}
+                          strokeWidth={0.14 * mark}
+                          strokeDasharray={`${0.35 * mark} ${0.35 * mark}`}
+                          opacity={0.45}
+                        />
+                      )
+                    })}
+                    {segments.map((segment, part) => (
+                      <polyline
+                        key={part}
+                        points={segment.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ')}
+                        fill="none"
+                        stroke={MAP_TRAIL}
+                        strokeWidth={0.28 * mark}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        opacity={0.9}
+                      />
+                    ))}
+                    <circle cx={X(first.x)} cy={Y(first.y)} r={0.45 * mark} fill={MAP_PAPER} stroke={MAP_TRAIL} strokeWidth={0.22 * mark} />
+                    <circle cx={X(last.x)} cy={Y(last.y)} r={0.45 * mark} fill={MAP_TRAIL} stroke={MAP_PAPER} strokeWidth={0.15 * mark} />
+                  </g>
+                )
+              })}
             </g>
           ) : null}
 

@@ -9,6 +9,8 @@ using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Traffic;
 
+using WaroTrans.Fleet.Features.PoseHistory;
+
 namespace WaroTrans.Fleet.Features.ProcessRobotTelemetry;
 
 public sealed class ProcessRobotTelemetryHandler(
@@ -17,6 +19,7 @@ public sealed class ProcessRobotTelemetryHandler(
     IIntegrationEventPublisher events,
     TrafficShadowObserver? trafficShadow,
     ILogger<ProcessRobotTelemetryHandler> logger,
+    RobotPoseHistoryRecorder? poseHistory,
     Microsoft.Extensions.Options.IOptions<WaroTrans.Fleet.Features.Dispatch.BatteryOptions>? battery = null)
 {
     private decimal LowBattery => battery?.Value.LowPercent is { } low ? (decimal)low : GetRobotStatisticsHandler.LowBatteryPercent;
@@ -114,6 +117,11 @@ public sealed class ProcessRobotTelemetryHandler(
                     .SetProperty(r => r.UpdatedAt, robot.UpdatedAt),
                 cancellationToken);
         db.ChangeTracker.Clear();
+        if (poseHistory is not null)
+        {
+            await poseHistory.RecordAsync(robot, message.Pose is not null, utcNow, cancellationToken);
+        }
+
         if (holdChanged)
         {
             await RobotStateJournal.WriteAsync(db, robot.Id, robot.Status, motionHeld ? "motion_held" : "motion_released", RobotStateEventSource.ROBOT, cancellationToken);

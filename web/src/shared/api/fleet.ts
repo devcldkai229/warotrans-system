@@ -232,6 +232,55 @@ export function getRobotHistory(robotId: string, params: RobotHistoryQuery = {})
   return apiFetch<RobotHistoryResponse>(`/api/fleet/robots/${robotId}/state-history${qs ? `?${qs}` : ''}`)
 }
 
+/** One stored point of a robot's movement history (FE-09). Metres and radians, map frame. */
+export interface RobotPosePoint {
+  at: string
+  x: number
+  y: number
+  yaw: number
+  linearVelocity: number | null
+  angularVelocity: number | null
+  mapVersionCode: string | null
+  jobId: string | null
+  commandId: string | null
+}
+
+export interface RobotPoseHistory {
+  robotId: string
+  from: string | null
+  to: string | null
+  jobId: string | null
+  /** Points the filters match; `points` holds at most `limit` of them. */
+  total: number
+  /** More matched than the limit: every n-th point is returned, first and last kept. */
+  downsampled: boolean
+  /** Measured over every matching point, not only the returned ones. */
+  distanceMeters: number
+  /** Older points have been deleted. */
+  keptSince: string
+  points: RobotPosePoint[]
+}
+
+export interface RobotPoseHistoryQuery {
+  /** ISO times. Without a Job the server defaults to the last hour and allows at most 7 days. */
+  from?: string
+  to?: string
+  /** The whole run of that Job. */
+  jobId?: string
+  limit?: number
+}
+
+/** FE-09 / FE-19: where a robot went, oldest point first. Needs robot.read, and for a Technician a robot in scope. */
+export function getRobotPoseHistory(robotId: string, params: RobotPoseHistoryQuery = {}) {
+  const query = new URLSearchParams()
+  if (params.from) query.set('from', params.from)
+  if (params.to) query.set('to', params.to)
+  if (params.jobId) query.set('jobId', params.jobId)
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  const qs = query.toString()
+  return apiFetch<RobotPoseHistory>(`/api/fleet/robots/${robotId}/pose-history${qs ? `?${qs}` : ''}`)
+}
+
 export interface RobotCommandCatalogItem {
   code: 'STOP' | 'PAUSE' | 'RESUME' | 'MANUAL_DRIVE' | 'RESTART_STACK' | 'REBOOT' | 'SHUTDOWN' | 'LOCALIZE' | 'DOCK' | 'CHARGE'
   supported: boolean
