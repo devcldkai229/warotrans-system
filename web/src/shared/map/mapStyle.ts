@@ -15,6 +15,8 @@ export const MAP_LANE = 'var(--color-container-high)'
 export const MAP_OFF = 'var(--color-container-highest)'
 export const MAP_RED = 'var(--color-red)'
 export const MAP_AMBER = 'var(--color-amber)'
+/** The path a robot took (movement history). */
+export const MAP_TRAIL = 'var(--color-teal)'
 /** An endpoint that is a storage location (a shelf). */
 export const MAP_STORAGE = 'var(--color-teal)'
 /** The floor, the body of a marker or label chip, and the halo that keeps a label readable over walls and lanes. */
