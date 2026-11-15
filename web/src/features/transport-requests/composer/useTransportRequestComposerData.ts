@@ -60,20 +60,24 @@ export function useTransportRequestComposerData(options: {
     enabled: Boolean(options.warehouseId),
   })
 
+  // INBOUND offers the containers of confirmed phiếu nhập first, OUTBOUND those of confirmed phiếu xuất (newest first).
+  const workflowKind = workflowKindOf(workflowsQuery.data?.items.find((item) => item.id === options.workflowId)?.code)
+  // INTERNAL_RELOCATION moves containers that are on a shelf: ask for exactly those (STORED), so none is cut off by
+  // the page size behind containers that are still at receiving.
+  const shelfOnly = workflowKind === 'INTERNAL'
+
   const containersQuery = useQuery({
-    queryKey: ['warehouse', 'containers', options.warehouseId, debouncedSearch],
+    queryKey: ['warehouse', 'containers', options.warehouseId, debouncedSearch, shelfOnly ? 'STORED' : 'eligible'],
     queryFn: () =>
       listContainers({
         warehouseId: options.warehouseId,
         search: debouncedSearch || undefined,
         eligibleOnly: true,
-        take: 50,
+        status: shelfOnly ? 'STORED' : undefined,
+        take: shelfOnly ? 200 : 50,
       }),
     enabled: Boolean(options.warehouseId),
   })
-
-  // INBOUND offers the containers of confirmed phiếu nhập first, OUTBOUND those of confirmed phiếu xuất (newest first).
-  const workflowKind = workflowKindOf(workflowsQuery.data?.items.find((item) => item.id === options.workflowId)?.code)
   const voucherType = workflowKind === 'INBOUND' || workflowKind === 'OUTBOUND' ? workflowKind : undefined
   const voucherContainersQuery = useQuery({
     queryKey: ['warehouse', 'containers', 'by-voucher', options.warehouseId, voucherType, debouncedSearch],
@@ -228,6 +232,8 @@ export function useTransportRequestComposerData(options: {
     endpoints,
     requestedByName: account?.fullName ?? account?.username ?? '—',
     isLoading,
+    warehouseSelected: Boolean(options.warehouseId),
+    containersLoading: Boolean(options.warehouseId) && (containersQuery.isLoading || voucherContainersQuery.isLoading),
     error,
     containerSearch,
     setContainerSearch,

@@ -20,7 +20,7 @@ interface ContainerSelectorProps {
 const KIND_HINT: Record<string, string> = {
   INBOUND: 'Containers of confirmed receiving vouchers come first, newest voucher on top.',
   OUTBOUND: 'Containers of confirmed issue vouchers come first, newest voucher on top.',
-  INTERNAL: 'Containers on shelves, grouped by shelf.',
+  INTERNAL: 'Containers stored on shelves, grouped by shelf.',
 }
 
 function placeOf(item: ComposerContainer): string {
@@ -45,11 +45,13 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
     () =>
       data.containers.filter((item) => {
         if (excludeIds.has(item.id)) return false
+        // Internal relocation only moves what is stored on a shelf: the rest cannot be picked, so it is not listed.
+        if (kind === 'INTERNAL' && ineligibleReason(item, kind)) return false
         if (statusFilter && item.status !== statusFilter) return false
         if (productFilter && item.productName !== productFilter) return false
         return true
       }),
-    [data.containers, excludeIds, statusFilter, productFilter],
+    [data.containers, excludeIds, statusFilter, productFilter, kind],
   )
   const groups = useMemo(() => groupContainers(rows, kind), [rows, kind])
 
@@ -106,7 +108,15 @@ export function ContainerSelector({ data, excludeIds, onCancel, onAdd }: Contain
       </header>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-auto px-3 py-3">
-        {groups.length === 0 ? <p className="px-1 text-xs text-muted">{t('No containers match.')}</p> : null}
+        {!data.warehouseSelected ? (
+          <p className="px-1 text-xs text-muted">{t('Select a warehouse first to list its containers.')}</p>
+        ) : data.containersLoading ? (
+          <p className="px-1 text-xs text-muted">{t('Loading containers…')}</p>
+        ) : groups.length === 0 ? (
+          <p className="px-1 text-xs text-muted">
+            {kind === 'INTERNAL' ? t('No containers are stored on a shelf.') : t('No containers match.')}
+          </p>
+        ) : null}
         {groups.map((group) => {
           const eligible = group.items.filter((item) => !ineligibleReason(item, kind))
           return (
