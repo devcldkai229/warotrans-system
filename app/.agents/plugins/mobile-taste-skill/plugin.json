@@ -1,0 +1,12 @@
+{
+  "name": "mobile-taste-skill",
+  "displayName": "Mobile Taste Skill",
+  "description": "Anti-slop design suite for React Native / Expo apps: build, plan navigation, create a design system, audit, and redesign",
+  "version": "0.2.0",
+  "author": {
+    "name": "Draftbit",
+    "url": "https://draftbit.com"
+  },
+  "homepage": "https://github.com/draftbit/mobile-taste-skill",
+  "repository": "https://github.com/draftbit/mobile-taste-skill"
+}
