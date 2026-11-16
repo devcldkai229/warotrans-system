@@ -219,6 +219,8 @@ export const vi_operations_robots: Record<string, string> = {
   'Timeout': 'Hết thời gian chờ',
   'Aborted': 'Bị ngắt',
   'Robot history': 'Lịch sử robot',
+  'No robot is assigned to you yet.': 'Bạn chưa được gán robot nào.',
+  'Ask an administrator to assign the robots you maintain.': 'Hãy nhờ quản trị viên gán các robot bạn phụ trách.',
   'The robots could not be loaded.': 'Không tải được danh sách robot.',
   'There are no robots to show.': 'Không có robot nào để hiển thị.',
   'Open robot': 'Mở robot',
