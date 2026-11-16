@@ -19,6 +19,7 @@ public sealed class WorkflowTaskModel
     public string TaskKey { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int SequenceNo { get; set; }
+    public TaskRunCondition? RunCondition { get; set; }
     public List<WorkflowStepModel> Steps { get; set; } = [];
 }
 
