@@ -85,7 +85,8 @@ public sealed class UpdateWorkflowHandler(WorkflowExecutionDbContext db)
                 WorkflowId = id,
                 TaskKey = taskModel.TaskKey,
                 Name = taskModel.Name,
-                SequenceNo = taskModel.SequenceNo
+                SequenceNo = taskModel.SequenceNo,
+                RunCondition = taskModel.RunCondition
             };
 
             foreach (var stepModel in taskModel.Steps.OrderBy(s => s.SequenceNo))

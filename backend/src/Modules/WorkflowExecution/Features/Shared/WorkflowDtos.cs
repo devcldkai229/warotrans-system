@@ -34,6 +34,7 @@ public sealed record WorkflowTaskDto(
     string TaskKey,
     string Name,
     int SequenceNo,
+    TaskRunCondition? RunCondition,
     IReadOnlyList<WorkflowStepDto> Steps);
 
 public sealed record WorkflowStepDto(
@@ -64,6 +65,7 @@ public sealed class UpsertWorkflowTaskRequest
     public string TaskKey { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int SequenceNo { get; set; }
+    public TaskRunCondition? RunCondition { get; set; }
     public List<UpsertWorkflowStepRequest> Steps { get; set; } = [];
 }
 
@@ -96,6 +98,7 @@ public static class WorkflowMapping
                 TaskKey = t.TaskKey.Trim(),
                 Name = t.Name.Trim(),
                 SequenceNo = t.SequenceNo,
+                RunCondition = NormalizeRunCondition(t.RunCondition),
                 Steps = t.Steps.Select(s => new WorkflowStepModel
                 {
                     StepKey = s.StepKey.Trim(),
@@ -127,6 +130,7 @@ public static class WorkflowMapping
                     TaskKey = t.TaskKey,
                     Name = t.Name,
                     SequenceNo = t.SequenceNo,
+                    RunCondition = NormalizeRunCondition(t.RunCondition),
                     Steps = t.Steps
                         .OrderBy(s => s.SequenceNo)
                         .Select(s => new WorkflowStepModel
@@ -162,7 +166,8 @@ public static class WorkflowMapping
                 WorkflowId = workflow.Id,
                 TaskKey = taskModel.TaskKey,
                 Name = taskModel.Name,
-                SequenceNo = taskModel.SequenceNo
+                SequenceNo = taskModel.SequenceNo,
+                RunCondition = taskModel.RunCondition
             };
 
             foreach (var stepModel in taskModel.Steps.OrderBy(s => s.SequenceNo))
@@ -212,6 +217,7 @@ public static class WorkflowMapping
                     t.TaskKey,
                     t.Name,
                     t.SequenceNo,
+                    t.RunCondition,
                     t.Steps
                         .OrderBy(s => s.SequenceNo)
                         .Select(s => new WorkflowStepDto(
@@ -253,4 +259,13 @@ public static class WorkflowMapping
             .ToList();
         throw new FluentValidation.ValidationException(failures);
     }
+
+    private static TaskRunCondition? NormalizeRunCondition(TaskRunCondition? condition) =>
+        condition is null || string.IsNullOrWhiteSpace(condition.VariableKey)
+            ? null
+            : new TaskRunCondition
+            {
+                VariableKey = condition.VariableKey.Trim(),
+                EqualsValue = condition.EqualsValue
+            };
 }

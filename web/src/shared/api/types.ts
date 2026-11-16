@@ -111,10 +111,16 @@ export interface WorkflowStepDraft {
   onFailure: StepFailurePolicy
 }
 
+export interface TaskRunCondition {
+  variableKey: string
+  equals: boolean
+}
+
 export interface WorkflowTaskDraft {
   taskKey: string
   name: string
   sequenceNo: number
+  runCondition?: TaskRunCondition | null
   steps: WorkflowStepDraft[]
 }
 
