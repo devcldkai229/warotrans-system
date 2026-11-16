@@ -521,6 +521,9 @@ export function JobDetailPage() {
         <header className="mt-5 flex items-end justify-between gap-6">
           <div>
             <p className="text-sm text-muted">{t('Job of request')}{' '}<span className="font-mono text-ink-2">{request?.requestCode ?? '—'}</span>
+              {job.tripNo && job.tripCount ? (
+                <span className="ml-2 text-ink-2">· {t('Trip {no} of {total}', { no: job.tripNo, total: job.tripCount })}</span>
+              ) : null}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-4xl font-book">{job.jobNo}</h1>

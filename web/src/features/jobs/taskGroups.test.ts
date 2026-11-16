@@ -139,14 +139,19 @@ describe('sectionTitle', () => {
   it('says what each section does, with the rack and Container names', () => {
     expect(sectionTitle(pickup.sections[0], labels, 'x')).toBe('Checks before starting')
     expect(sectionTitle(pickup.sections[1], labels, 'x')).toBe('Go to the pickup rack · Rack s2')
-    expect(sectionTitle(pickup.sections[2], labels, 'x')).toBe('Load CTN-c1 onto the robot')
+    expect(sectionTitle(pickup.sections[2], labels, 'x')).toBe('Load CTN-c1 onto the robot at Rack s2')
     expect(sectionTitle(delivery.sections[0], labels, 'x')).toBe('Go to the drop-off rack · Rack s3')
-    expect(sectionTitle(delivery.sections[1], labels, 'x')).toBe('Unload CTN-c1 from the robot')
+    expect(sectionTitle(delivery.sections[1], labels, 'x')).toBe('Unload CTN-c1 from the robot at Rack s3')
   })
 
-  it('counts the Containers instead of naming one when there are several', () => {
-    expect(sectionTitle(many[0].sections[2], labels, 'x')).toBe('Load 3 containers onto the robot')
-    expect(sectionTitle(many[1].sections[1], labels, 'x')).toBe('Unload 3 containers from the robot')
+  it('counts the Containers instead of naming one when there are several, at their stop', () => {
+    expect(sectionTitle(many[0].sections[2], labels, 'x')).toBe('Collect 3 containers at Rack s2')
+    expect(sectionTitle(many[1].sections[1], labels, 'x')).toBe('Deliver 3 containers at Rack s3')
+  })
+
+  it('leaves the stop out when a handover has none', () => {
+    const [section] = groupTasks(relocation(['c1', 'c2']))[0].sections.filter((s) => s.kind === 'handover')
+    expect(sectionTitle({ ...section, stopEndpointId: null }, labels, 'x')).toBe('Load 2 containers onto the robot')
   })
 
   it('names the recovery robot and falls back to the task name for anything else', () => {

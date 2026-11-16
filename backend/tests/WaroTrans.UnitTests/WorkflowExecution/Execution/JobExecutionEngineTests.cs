@@ -604,6 +604,24 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
+    public async Task Two_free_robots_take_two_waiting_trips_at_once()
+    {
+        await ProvisionAsync();
+        var second = _fleet.AddRobot(_mapVersionId);
+        var tripOne = await ProvisionAnotherAsync();
+        var tripTwo = await ProvisionAnotherAsync();
+        await QueueSinceAsync(tripOne, 2);
+        await QueueSinceAsync(tripTwo, 1);
+
+        Assert.Equal(2, await Queue().TickAsync());
+
+        var running = await _db.Jobs.AsNoTracking().Where(j => j.Id == tripOne || j.Id == tripTwo).ToListAsync();
+        Assert.All(running, j => Assert.Equal(JobStatus.RUNNING, j.Status));
+        var robots = running.Select(j => j.ContextValues[JobExecutionEngine.AssignedRobotKey].GetGuid()).ToHashSet();
+        Assert.Equal(new HashSet<Guid> { _fleet.RobotId, second }, robots);
+    }
+
+    [Fact]
     public async Task A_low_priority_job_is_not_starved_by_newcomers()
     {
         await ProvisionAsync();
