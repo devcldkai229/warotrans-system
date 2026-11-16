@@ -62,6 +62,8 @@ export const vi_dashboard_jobs: Record<string, string> = {
   'Stopped (holding motion)': 'Đã dừng (giữ yên)',
   'Driven by hand': 'Đang điều khiển bằng tay',
   'On another map': 'Ở bản đồ khác',
+  'Runs another map bundle': 'Đang chạy gói bản đồ khác',
+  'Reports a fault': 'Đang báo lỗi',
   'Not localized': 'Chưa định vị',
   'Running another job': 'Đang chạy công việc khác',
   'Battery below dispatch minimum': 'Pin dưới mức tối thiểu để giao việc',
