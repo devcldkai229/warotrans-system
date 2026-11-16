@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import { explainJobProblem } from '@/features/jobs/failureCatalog'
 import { RobotFaultCard } from '../fault/RobotFaultCard'
 import { RobotHistoryCard } from '../history/RobotHistoryCard'
@@ -100,6 +101,7 @@ function HealthRowView({ row, now }: { row: HealthRow; now: Date }) {
 
 /** BOTH-09 / RB-02: one robot's technical state from its own reports (health snapshot, telemetry, battery, control). */
 export function RobotTechnicalPage() {
+  const paths = usePaths()
   const { robotCode = '' } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -161,7 +163,7 @@ export function RobotTechnicalPage() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
         <h1 className="text-xl font-book">{t('That robot was not found. It may have been removed, or you may not have access to it.')}</h1>
-        <Button variant="primary" onClick={() => navigate('/monitor/fleet')}>
+        <Button variant="primary" onClick={() => navigate(paths.fleet())}>
           {t('Fleet')}
         </Button>
       </div>
@@ -175,7 +177,7 @@ export function RobotTechnicalPage() {
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto max-w-[1300px] px-10 pt-4 pb-16">
-        <Button variant="ghost" size="sm" className="-ml-3" onClick={() => navigate(`/monitor/fleet/${robot.code}`)}>
+        <Button variant="ghost" size="sm" className="-ml-3" onClick={() => navigate(paths.fleet(robot.code))}>
           <Icon name="arrowLeft" size={14} />{' '}{t('Back to robot')}
         </Button>
 
@@ -344,7 +346,7 @@ export function RobotTechnicalPage() {
                 <ul className="flex flex-col gap-2">
                   {openIssues.slice(0, 5).map((issue) => (
                     <li key={issue.id} className="flex items-baseline justify-between gap-3 text-sm">
-                      <Link to={`/operations/issues/${issue.id}`} className="min-w-0 truncate underline-offset-2 hover:underline">
+                      <Link to={paths.issues(issue.id)} className="min-w-0 truncate underline-offset-2 hover:underline">
                         <span className="font-medium">{issue.code}</span>
                         <span className="text-ink-2">{' · '}{issue.description}</span>
                       </Link>
@@ -362,11 +364,12 @@ export function RobotTechnicalPage() {
 }
 
 function JobLine({ job }: { job: { id: string; jobNo: string; status: keyof typeof JOB_STATUS_TONE; failureCode: string | null; completedSteps: number; totalSteps: number } }) {
+  const paths = usePaths()
   const problem = explainJobProblem(job)
   return (
     <div className="flex flex-col gap-2 text-sm">
       <div className="flex items-center gap-3">
-        <Link to={`/monitor/jobs/${job.id}`} className="font-medium underline-offset-2 hover:underline">
+        <Link to={paths.job(job.id)} className="font-medium underline-offset-2 hover:underline">
           {job.jobNo}
         </Link>
         <StatusBadge tone={JOB_STATUS_TONE[job.status]} withDot>

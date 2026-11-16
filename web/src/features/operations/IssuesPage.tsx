@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import { useAuth } from '@/features/auth/authContext'
 import { SectionHead } from '@/features/management/SectionHead'
 import { ApiError } from '@/shared/api/client'
@@ -49,6 +50,7 @@ function describe(error: unknown): string {
 
 /** OPS-01: issues reported from the floor and by workflow steps, with their lifecycle. */
 export function IssuesPage() {
+  const paths = usePaths()
   const { issueId } = useParams()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -72,7 +74,7 @@ export function IssuesPage() {
     [setParams],
   )
   // Opening or closing an issue keeps the page and the filter.
-  const open = (id?: string) => navigate({ pathname: id ? `/operations/issues/${id}` : '/operations/issues', search: params.toString() })
+  const open = (id?: string) => navigate({ pathname: paths.issues(id), search: params.toString() })
 
   const list = useQuery({
     queryKey: ['issues', status, page],
@@ -188,6 +190,7 @@ export function IssuesPage() {
 }
 
 function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
+  const paths = usePaths()
   const queryClient = useQueryClient()
   const { account, can } = useAuth()
   const [resolution, setResolution] = useState('')
@@ -241,7 +244,7 @@ function IssueDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <>
             <dt className="text-muted">{t('Job')}</dt>
             <dd>
-              <a className="underline" href={`/monitor/jobs/${current.jobId}`}>{t('open job')}</a>
+              <Link className="underline" to={paths.job(current.jobId)}>{t('open job')}</Link>
             </dd>
           </>
         ) : null}
