@@ -75,6 +75,56 @@ public sealed class DispatchEligibilityTests
         Assert.Equal("OK", candidate.BatteryState);
     }
 
+    [Theory]
+    [InlineData("MAP-ONE-V013", "MAP-ONE-V013", true)]
+    [InlineData("map-one-v013", "MAP-ONE-V013", true)]   // case does not matter
+    [InlineData(null, "MAP-ONE-V013", true)]             // a robot that sends no map code is not refused
+    [InlineData("MAP-ONE-V013", null, true)]             // nothing to compare with
+    [InlineData("MAP-ONE-V009", "MAP-ONE-V013", false)]  // runs another bundle: never sent, not overridable
+    public void A_robot_running_another_map_than_the_jobs_is_refused(string? reported, string? jobMap, bool eligible)
+    {
+        var robot = Ready();
+        robot.MapVersionCode = reported;
+
+        var candidate = DispatchEligibility.Evaluate(
+            robot, new DispatchQuery(Map, null, null, new HashSet<Guid>()) { MapVersionCode = jobMap }, Now, null, Battery, Weights);
+
+        Assert.Equal(eligible, candidate.Eligible);
+        Assert.Equal(!eligible, candidate.Reasons.Contains(DispatchReasons.ReportedMapMismatch));
+        Assert.False(candidate.Overridable);
+    }
+
+    [Fact]
+    public void A_robot_reporting_a_fault_is_refused_until_it_clears()
+    {
+        var robot = Ready();
+        robot.ErrorCode = "LIDAR_TIMEOUT";
+
+        var faulted = Evaluate(robot);
+        Assert.False(faulted.Eligible);
+        Assert.Contains(DispatchReasons.Faulted, faulted.Reasons);
+        Assert.True(DispatchReasons.IsRobotReported(DispatchReasons.Faulted));
+        Assert.False(faulted.Overridable);
+
+        robot.ErrorCode = null;
+        Assert.True(Evaluate(robot).Eligible);
+    }
+
+    [Fact]
+    public void A_wider_robot_than_the_traffic_footprint_is_refused_and_the_shared_footprint_covers_both_robots()
+    {
+        var rbt2 = Ready("RBT-002");
+        rbt2.LengthM = 0.30;
+        rbt2.WidthM = 0.263;
+        var query = new DispatchQuery(Map, null, null, new HashSet<Guid>());
+        var old = new WaroTrans.Navigation.Traffic.TrafficFootprintOptions { LengthMeters = 0.32, WidthMeters = 0.26 };
+        var shared = new WaroTrans.Navigation.Traffic.TrafficFootprintOptions { LengthMeters = 0.32, WidthMeters = 0.27 };
+
+        Assert.Contains(DispatchReasons.LargerThanTrafficFootprint,
+            DispatchEligibility.Evaluate(rbt2, query, Now, null, Battery, Weights, old).Reasons);
+        Assert.True(DispatchEligibility.Evaluate(rbt2, query, Now, null, Battery, Weights, shared).Eligible);
+    }
+
     [Fact]
     public void A_robot_that_never_reported_its_battery_is_unknown_not_empty_and_only_overridable()
     {

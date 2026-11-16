@@ -1339,6 +1339,203 @@ public sealed class JobExecutionEngineTests
         Assert.Equal("robot_map_mismatch", ex.Code);
     }
 
+    // ------------------------------------------------------------------ multi-robot trips
+
+    /// <summary>One request of <paramref name="containers"/> containers, all from A to D: trips of at most 3.</summary>
+    private async Task<List<Guid>> ProvisionTripsAsync(int containers)
+    {
+        var workflowId = (await _db.Workflows.AsNoTracking().FirstAsync()).Id;
+        var snapshot = new TransportRequestExecutionSnapshot(
+            Guid.NewGuid(), Guid.NewGuid(), _mapVersionId, workflowId, 1, new Dictionary<string, JsonElement>(),
+            Enumerable.Range(1, containers)
+                .Select(i => new TransportRequestDetailSnapshot(Guid.NewGuid(), i, Guid.NewGuid(), null, A, null, null, D, null))
+                .ToList());
+        var result = await new JobRuntimeProvisioner(_db, new FakeJobCodeGenerator())
+            .ProvisionAsync(snapshot, new CollectThenDeliverJobBatchPlanner().Plan(snapshot));
+        return result.Jobs.Select(j => j.JobId).ToList();
+    }
+
+    /// <summary>Plays robot and staff until the Job is no longer RUNNING: every MOVE arrives, every person confirms.</summary>
+    private async Task DriveToCompletionAsync(Guid jobId)
+    {
+        for (var guard = 0; guard < 60; guard++)
+        {
+            _db.ChangeTracker.Clear();
+            var job = await _db.Jobs.Include(j => j.JobTasks).ThenInclude(t => t.JobSteps).AsNoTracking().SingleAsync(j => j.Id == jobId);
+            if (job.Status != JobStatus.RUNNING)
+            {
+                return;
+            }
+
+            var step = job.JobTasks.OrderBy(t => t.SequenceNo).SelectMany(t => t.JobSteps.OrderBy(x => x.SequenceNo))
+                .First(x => x.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED));
+            if (step.StepType == StepType.MOVE && step.Status == JobStepStatus.EXECUTING)
+            {
+                var command = _fleet.Commands.Last(c => c.JobStepId == step.Id);
+                await ResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
+                    command.CommandId, command.RobotId, "RBT-SIM", "NAVIGATE_TO_POSE", "COMPLETED", null, step.Id, "SUCCEEDED", null,
+                    RobotCommandLifecycleChanged.Phases.Result));
+            }
+            else if (step.StepType == StepType.HUMAN_INTERACTION && step.Status == JobStepStatus.WAITING)
+            {
+                await Engine().ConfirmHumanStepAsync(step.Id, step.ResolvedInputs["containerId"].GetGuid(), HumanConfirmationSource.StaffApp(_staff));
+            }
+            else
+            {
+                throw new InvalidOperationException($"Job stuck at a {step.StepType} step in {step.Status}.");
+            }
+        }
+
+        throw new InvalidOperationException("Job did not finish.");
+    }
+
+    private async Task<Job> JobAsync(Guid id)
+    {
+        _db.ChangeTracker.Clear();
+        return await _db.Jobs.AsNoTracking().Include(j => j.JobContainers).SingleAsync(j => j.Id == id);
+    }
+
+    private static Guid? RobotOf(Job job) =>
+        job.ContextValues.TryGetValue(JobExecutionEngine.AssignedRobotKey, out var v) ? v.GetGuid() : null;
+
+    [Fact]
+    public async Task One_robot_carries_seven_containers_in_three_trips_one_after_the_other()
+    {
+        await ProvisionAsync();
+        var trips = await ProvisionTripsAsync(7);
+        Assert.Equal(3, trips.Count);
+        await Engine().EnqueueAsync(trips[0]);
+
+        Assert.Equal(1, await Queue().TickAsync());
+        Assert.Equal(JobStatus.RUNNING, (await JobAsync(trips[0])).Status);
+        foreach (var waiting in trips.Skip(1))
+        {
+            Assert.Equal(JobStatus.QUEUED, (await JobAsync(waiting)).Status); // the rest wait in the queue
+        }
+
+        for (var i = 0; i < trips.Count; i++)
+        {
+            Assert.Equal(JobStatus.RUNNING, (await JobAsync(trips[i])).Status);
+            await DriveToCompletionAsync(trips[i]);
+            Assert.Equal(JobStatus.COMPLETED, (await JobAsync(trips[i])).Status);
+            Assert.Equal(i < trips.Count - 1 ? 1 : 0, await Queue().TickAsync()); // the same robot takes the next trip
+        }
+
+        var done = new List<Job>();
+        foreach (var trip in trips)
+        {
+            done.Add(await JobAsync(trip));
+        }
+
+        Assert.All(done, j => Assert.Equal(_fleet.RobotId, RobotOf(j)));
+        Assert.Equal([3, 3, 1], done.Select(j => j.JobContainers.Count));
+        Assert.All(done.SelectMany(j => j.JobContainers), c => Assert.Equal(JobContainerStatus.DELIVERED, c.Status));
+    }
+
+    [Fact]
+    public async Task A_robot_that_becomes_free_takes_the_waiting_trip_while_the_first_robot_is_still_busy()
+    {
+        await ProvisionAsync();
+        var trips = await ProvisionTripsAsync(5);
+        await Engine().EnqueueAsync(trips[0]);
+        await Queue().TickAsync();
+        var waiting = await JobAsync(trips[1]);
+        Assert.Equal(JobStatus.QUEUED, waiting.Status);
+        Assert.Contains("robot_busy", waiting.BlockingReason);
+
+        var second = _fleet.AddRobot(_mapVersionId); // put in service, or done with other work
+
+        Assert.Equal(1, await Queue().TickAsync());
+        Assert.Equal(second, RobotOf(await JobAsync(trips[1])));
+        Assert.Equal(_fleet.RobotId, RobotOf(await JobAsync(trips[0])));
+        Assert.Equal(second, _fleet.Commands[^1].RobotId);
+        Assert.Equal(1.0, _fleet.Commands[^1].X); // to the pickup A
+    }
+
+    [Theory]
+    [InlineData(StepFailurePolicy.PAUSE_FOR_OPERATOR)] // the standard workflows
+    [InlineData(StepFailurePolicy.REQUEST_REASSIGN)]
+    public async Task A_trip_whose_robot_went_offline_on_the_way_with_nothing_on_board_is_taken_by_the_other_robot(StepFailurePolicy policy)
+    {
+        var jobId = await ProvisionAsync();
+        foreach (var step in await _db.WorkflowSteps.Where(s => s.StepType == StepType.MOVE).ToListAsync())
+        {
+            step.OnFailure = policy;
+        }
+
+        await _db.SaveChangesAsync();
+        var lost = _fleet.RobotId;
+        await Engine().StartAsync(jobId, null);
+        await RobotOfflineAsync();
+        SetRobot(r => r with { IsOnline = false });
+        var second = _fleet.AddRobot(_mapVersionId);
+
+        Assert.Equal(1, await Queue().TickAsync());
+
+        var job = await JobAsync(jobId);
+        Assert.Equal(JobStatus.RUNNING, job.Status);
+        Assert.Equal(second, RobotOf(job));
+        Assert.Null(job.FailureCode);
+        Assert.Equal(second, _fleet.Commands[^1].RobotId);
+        Assert.Equal(1.0, _fleet.Commands[^1].X);
+        var assignments = await _db.JobRobotAssignments.AsNoTracking().Where(a => a.JobId == jobId).OrderBy(a => a.StartedAt).ToListAsync();
+        Assert.Equal([lost, second], assignments.Select(a => a.RobotId));
+        Assert.NotNull(assignments[0].EndedAt);
+        Assert.Null(assignments[1].EndedAt);
+        Assert.Contains(_events.Of<JobStatusChanged>(), e => e.Status == "QUEUED" && e.FailureCode == JobExecutionEngine.RequeuedAfterRobotLost);
+    }
+
+    [Fact]
+    public async Task A_robot_lost_while_waiting_at_the_pickup_hands_the_trip_over_and_the_next_robot_drives_there_first()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotResultAsync(_fleet.Commands[^1].JobStepId); // at A, waiting for a person, no command in flight
+        SetRobot(r => r with { IsOnline = false, LastTelemetryAt = DateTimeOffset.UtcNow.AddMinutes(-5) });
+        Assert.Equal(1, await Engine().HandleOfflineRobotsAsync());
+        Assert.Equal(JobStatus.REASSIGNING, (await JobAsync(jobId)).Status);
+        var second = _fleet.AddRobot(_mapVersionId);
+
+        Assert.Equal(1, await Queue().TickAsync());
+
+        Assert.Equal(second, RobotOf(await JobAsync(jobId)));
+        Assert.Equal(second, _fleet.Commands[^1].RobotId);
+        Assert.Equal(1.0, _fleet.Commands[^1].X); // drives to A again before staff are asked
+        await DriveToCompletionAsync(jobId);
+        Assert.Equal(JobStatus.COMPLETED, (await JobAsync(jobId)).Status);
+    }
+
+    [Fact]
+    public async Task Cargo_on_a_lost_robot_is_never_handed_to_another_robot_by_the_queue()
+    {
+        var jobId = await JobOnTheWayWithCargoAsync();
+        await RobotOfflineAsync();
+        SetRobot(r => r with { IsOnline = false });
+        _fleet.AddRobot(_mapVersionId);
+
+        Assert.Equal(0, await Queue().TickAsync());
+
+        var job = await JobAsync(jobId);
+        Assert.Equal(JobStatus.RECOVERY_REQUIRED, job.Status);
+        Assert.Equal(_fleet.RobotId, RobotOf(job));
+    }
+
+    [Fact]
+    public async Task With_auto_requeue_off_a_lost_trip_waits_for_an_operator()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        await RobotOfflineAsync();
+        SetRobot(r => r with { IsOnline = false });
+        _fleet.AddRobot(_mapVersionId);
+        var engine = new JobExecutionEngine(_db, _fleet, _navigation, _requests, new StepInputResolver(), _events,
+            NullLogger<JobExecutionEngine>.Instance, warehouse: _warehouse,
+            recoveryOptions: Microsoft.Extensions.Options.Options.Create(new RecoveryOptions { AutoRequeueWithoutCargo = false }));
+
+        Assert.Equal(0, await engine.RequeueTripsOfLostRobotsAsync());
+        Assert.NotEqual(JobStatus.QUEUED, (await JobAsync(jobId)).Status);
+    }
+
     // ------------------------------------------------------------------ resume
 
     [Fact]
@@ -2079,6 +2276,19 @@ public sealed class JobExecutionEngineTests
 
         public Task<IReadOnlyList<RobotSnapshot>> GetDispatchCandidatesAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RobotSnapshot>>(Robots.Values.Where(r => r.CurrentMapVersionId == mapVersionId).ToList());
+
+        /// <summary>Like Fleet: a busy or offline robot is not eligible.</summary>
+        public Task<IReadOnlyList<DispatchCandidate>> EvaluateDispatchAsync(DispatchQuery query, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<DispatchCandidate>>(Robots.Values.Where(r => r.CurrentMapVersionId == query.MapVersionId)
+                .Select(r =>
+                {
+                    var reasons = new List<string>();
+                    if (query.BusyRobotIds.Contains(r.Id)) reasons.Add(DispatchReasons.Busy);
+                    if (!r.IsOnline) reasons.Add(DispatchReasons.Offline);
+                    return new DispatchCandidate(r.Id, r.Code, reasons.Count == 0, reasons, Battery, "OK", null, null, 0, r.Status.ToString(), r.IsOnline);
+                })
+                .OrderByDescending(c => c.Eligible)
+                .ToList());
 
         public Task<Guid> NavigateAsync(
             Guid robotId,

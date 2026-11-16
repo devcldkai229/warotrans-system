@@ -48,6 +48,16 @@ public static class DispatchEligibility
         if (robot.MotionHeld) reasons.Add(DispatchReasons.MotionHeld);
         if (robot.HasActiveManualLease(now)) reasons.Add(DispatchReasons.ManualMode);
         if (robot.CurrentMapVersionId != query.MapVersionId) reasons.Add(DispatchReasons.MapMismatch);
+        // What the robot itself reports only counts while it is connected; an older robot that sends no map code is not refused.
+        if (robot.IsOnline
+            && !string.IsNullOrWhiteSpace(query.MapVersionCode)
+            && !string.IsNullOrWhiteSpace(robot.MapVersionCode)
+            && !string.Equals(robot.MapVersionCode.Trim(), query.MapVersionCode.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            reasons.Add(DispatchReasons.ReportedMapMismatch);
+        }
+
+        if (robot.IsOnline && !string.IsNullOrWhiteSpace(robot.ErrorCode)) reasons.Add(DispatchReasons.Faulted);
         if (robot.LocalizationStatus != LocalizationStatus.LOCALIZED) reasons.Add(DispatchReasons.NotLocalized);
         if (query.BusyRobotIds.Contains(robot.Id)) reasons.Add(DispatchReasons.Busy);
 

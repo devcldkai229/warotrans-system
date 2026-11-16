@@ -89,6 +89,12 @@ public sealed class JobQueueProcessor(
     /// <returns>How many Jobs started.</returns>
     public async Task<int> TickAsync(CancellationToken cancellationToken = default)
     {
+        // Trips whose robot was lost with nothing on board come back first, so a free robot can take them this tick.
+        if (await engine.RequeueTripsOfLostRobotsAsync(cancellationToken) > 0)
+        {
+            db.ChangeTracker.Clear();
+        }
+
         foreach (var next in await FindWaitingTripsOfStartedRequestsAsync(db, cancellationToken))
         {
             await engine.EnqueueAsync(next, cancellationToken);

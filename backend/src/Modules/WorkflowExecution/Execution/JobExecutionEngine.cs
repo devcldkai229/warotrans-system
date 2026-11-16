@@ -147,6 +147,7 @@ public sealed class JobExecutionEngine(
                 EnsureRobotCanTakeJob(robot, job, busyRobots,
                     (await fleet.GetPositioningRobotIdsAsync(cancellationToken)).Contains(robot.Id));
                 EnsureCapacityAllows(candidates.FirstOrDefault(c => c.RobotId == requested), robot);
+                EnsureRobotReportsReady(candidates.FirstOrDefault(c => c.RobotId == requested), robot);
                 if (dispatchOverride?.RobotCare != true)
                 {
                     EnsureBatteryAllowsDispatch(candidates.FirstOrDefault(c => c.RobotId == requested), robot, dispatchOverride);
@@ -275,6 +276,7 @@ public sealed class JobExecutionEngine(
         }
 
         EnsureCapacityAllows(resumeCandidates.FirstOrDefault(c => c.RobotId == robot.Id), robot);
+        EnsureRobotReportsReady(resumeCandidates.FirstOrDefault(c => c.RobotId == robot.Id), robot);
 
         if (previousRobot is { } previous && previous != robot.Id
             && job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
@@ -755,6 +757,120 @@ public sealed class JobExecutionEngine(
         }
 
         return handled;
+    }
+
+    /// <summary>Codes a Job stops with when its robot dropped off the network while a command was out.</summary>
+    private static readonly string[] RobotLostCodes = ["ROBOT_OFFLINE", "robot_offline"];
+
+    public const string RequeuedAfterRobotLost = "requeued_after_robot_lost";
+
+    /// <summary>
+    /// Multi-robot dispatch: a trip whose robot was lost goes back to the queue, so any free robot (or the same one
+    /// once it is back) takes it. Only trips with nothing on board: cargo on a lost robot is a recovery for a person.
+    /// Candidates: REASSIGNING Jobs, and PAUSED Jobs stopped by ROBOT_OFFLINE. The steps of the current stop start
+    /// again (the next robot drives there first); confirmations already given stay done.
+    /// </summary>
+    /// <returns>How many Jobs went back to the queue.</returns>
+    public async Task<int> RequeueTripsOfLostRobotsAsync(CancellationToken cancellationToken = default)
+    {
+        if (recoveryOptions?.Value.AutoRequeueWithoutCargo == false)
+        {
+            return 0;
+        }
+
+        var ids = await db.Jobs.AsNoTracking()
+            .Where(j => j.Status == JobStatus.REASSIGNING
+                        || (j.Status == JobStatus.PAUSED && j.FailureCode != null && RobotLostCodes.Contains(j.FailureCode)))
+            .Where(j => !j.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
+            .Where(j => !db.JobRecoveryCases.Any(c => c.JobId == j.Id && c.ResolvedAt == null))
+            .OrderBy(j => j.JobNo)
+            .Select(j => j.Id)
+            .ToListAsync(cancellationToken);
+
+        var requeued = 0;
+        foreach (var id in ids)
+        {
+            var job = await LoadJobAsync(id, cancellationToken);
+            if (job.JobContainers.Any(c => c.Status == JobContainerStatus.ONBOARD))
+            {
+                continue;
+            }
+
+            var lostRobot = AssignedRobot(job);
+            var lostCode = lostRobot is { } rid ? (await fleet.GetRobotAsync(rid, cancellationToken))?.Code : null;
+            var why = job.FailureCode;
+            var now = DateTimeOffset.UtcNow;
+            var workflowSteps = await db.WorkflowSteps.AsNoTracking()
+                .Where(s => s.WorkflowTask.WorkflowId == job.WorkflowId)
+                .ToDictionaryAsync(s => s.Id, cancellationToken);
+
+            foreach (var (task, step) in OrderedSteps(job)
+                         .Where(x => x.Step.Status is JobStepStatus.FAILED or JobStepStatus.CANCELLED
+                                     or JobStepStatus.EXECUTING or JobStepStatus.WAITING or JobStepStatus.PAUSED))
+            {
+                ReopenStep(job, task, step, workflowSteps[step.WorkflowStepId].StepKey, now);
+            }
+
+            ReopenCurrentStopMove(job, workflowSteps, now);
+
+            foreach (var task in job.JobTasks.Where(t => t.Status == JobTaskStatus.FAILED
+                                                        || (t.Status == JobTaskStatus.RUNNING && t.JobSteps.All(s => s.Status == JobStepStatus.PENDING))))
+            {
+                task.Status = task.JobSteps.Any(s => s.Status == JobStepStatus.COMPLETED) ? JobTaskStatus.RUNNING : JobTaskStatus.PENDING;
+                task.CompletedAt = null;
+                task.FailureCode = null;
+            }
+
+            foreach (var container in job.JobContainers.Where(c => c.Status == JobContainerStatus.ASSIGNED))
+            {
+                SetContainerStatus(job, container, JobContainerStatus.PENDING, now);
+            }
+
+            var context = new Dictionary<string, JsonElement>(job.ContextValues);
+            context.Remove(AssignedRobotKey);
+            job.ContextValues = context;
+            job.Status = JobStatus.QUEUED;
+            job.QueuedAt ??= now;
+            job.FailureCode = null;
+            job.FailureMessage = null;
+            job.BlockingReason = $"{RequeuedAfterRobotLost}: robot {lostCode ?? "?"} was lost ({why ?? "reassign"}); waiting for a free robot.";
+            _pendingEvents.Add(new JobStatusChanged(job.Id, job.JobNo, job.Status.ToString(), lostRobot, RequeuedAfterRobotLost));
+            await SaveAndPublishAsync(cancellationToken);
+            logger.LogWarning(
+                "Job {JobNo}: robot {RobotCode} lost ({Reason}) with nothing on board; back in the queue for the next free robot",
+                job.JobNo, lostCode, why);
+            requeued++;
+        }
+
+        return requeued;
+    }
+
+    /// <summary>
+    /// The current stop was reached by the lost robot: the next robot is somewhere else, so its MOVE runs again.
+    /// Confirmations already given at that stop stay done.
+    /// </summary>
+    private void ReopenCurrentStopMove(Job job, IReadOnlyDictionary<Guid, WorkflowStep> workflowSteps, DateTimeOffset now)
+    {
+        var current = job.JobTasks.OrderBy(t => t.SequenceNo)
+            .FirstOrDefault(t => t.JobSteps.Any(s => s.Status is not (JobStepStatus.COMPLETED or JobStepStatus.SKIPPED)));
+        if (current is null || !current.ContextValues.TryGetValue("stopSequenceNo", out var stopNo))
+        {
+            return;
+        }
+
+        var stopTasks = job.JobTasks.OrderBy(t => t.SequenceNo)
+            .Where(t => t.ContextValues.TryGetValue("stopSequenceNo", out var n) && n.GetRawText() == stopNo.GetRawText())
+            .ToList();
+        var move = stopTasks.SelectMany(t => t.JobSteps.Select(s => (Task: t, Step: s)))
+            .LastOrDefault(x => x.Step.StepType == StepType.MOVE && x.Step.Status == JobStepStatus.COMPLETED);
+        if (move.Step is null)
+        {
+            return;
+        }
+
+        ReopenStep(job, move.Task, move.Step, workflowSteps[move.Step.WorkflowStepId].StepKey, now);
+        move.Task.Status = JobTaskStatus.RUNNING;
+        move.Task.CompletedAt = null;
     }
 
     private async Task<(Job Job, JobRecoveryCase Case)> LoadRecoveryAsync(Guid jobId, CancellationToken cancellationToken)
@@ -2550,8 +2666,14 @@ public sealed class JobExecutionEngine(
         var weights = warehouse is null || open.Count == 0 ? [] : await warehouse.GetContainersAsync(open, cancellationToken);
         var total = weights.Count == open.Count && weights.All(w => w.WeightKg is not null) ? weights.Sum(w => w.WeightKg) : null;
 
+        var mapCode = (await navigation.GetMapVersionAsync(job.MapVersionId, cancellationToken))?.Code;
         return await fleet.EvaluateDispatchAsync(
-            new DispatchQuery(job.MapVersionId, px, py, busyRobots) { ContainerCount = open.Count, TotalWeightKg = total },
+            new DispatchQuery(job.MapVersionId, px, py, busyRobots)
+            {
+                ContainerCount = open.Count,
+                TotalWeightKg = total,
+                MapVersionCode = string.IsNullOrWhiteSpace(mapCode) ? null : mapCode
+            },
             cancellationToken);
     }
 
@@ -2590,6 +2712,19 @@ public sealed class JobExecutionEngine(
     }
 
     /// <summary>FL-03: too much for this robot. Nobody can override it: an operator's reason does not make a robot stronger.</summary>
+    /// <summary>The robot says it runs another map, or reports a fault: never sent, even when named by an operator.</summary>
+    private static void EnsureRobotReportsReady(DispatchCandidate? candidate, RobotSnapshot robot)
+    {
+        if (candidate?.Reasons.FirstOrDefault(DispatchReasons.IsRobotReported) is { } reason)
+        {
+            throw new ConflictException(
+                reason == DispatchReasons.ReportedMapMismatch
+                    ? $"Robot {robot.Code} reports it runs another map than the Job's; restart it on the Job's map first."
+                    : $"Robot {robot.Code} reports a fault; clear it first.",
+                reason);
+        }
+    }
+
     private static void EnsureCapacityAllows(DispatchCandidate? candidate, RobotSnapshot robot)
     {
         if (candidate?.Reasons.FirstOrDefault(DispatchReasons.IsCapacity) is { } reason)

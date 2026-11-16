@@ -10,7 +10,7 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
         dbContext.MapVersions
             .AsNoTracking()
             .Where(m => m.Id == mapVersionId)
-            .Select(m => new MapVersionSnapshot(m.Id, m.WarehouseId, m.VersionNo, m.Status))
+            .Select(m => new MapVersionSnapshot(m.Id, m.WarehouseId, m.VersionNo, m.Status, m.Code))
             .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<EndpointSnapshot>> GetEndpointsAsync(
