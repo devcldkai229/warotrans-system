@@ -107,6 +107,10 @@ export interface ComposerData {
   endpoints: Endpoint[]
   requestedByName: string
   isLoading: boolean
+  /** A warehouse is chosen, so its containers can be listed. */
+  warehouseSelected: boolean
+  /** The container list of the chosen warehouse is still loading. */
+  containersLoading: boolean
   error: string | null
   containerSearch: string
   setContainerSearch: (value: string) => void
@@ -137,10 +141,9 @@ export function emptyDraft(): TransportRequestDraft {
 }
 
 export function draftIsDirty(draft: TransportRequestDraft): boolean {
+  // Warehouse and map are filled in on their own when there is only one: they are context, not something typed.
   return Boolean(
-    draft.warehouseId ||
-      draft.mapVersionId ||
-      draft.workflowId ||
+    draft.workflowId ||
       draft.note ||
       draft.movements.length > 0 ||
       Object.keys(draft.workflowInputs).length > 0,
