@@ -92,6 +92,19 @@ public sealed class RobotCommandLifecycleJobStepHandler(
                 finished = true;
                 break;
 
+            case RobotCommandLifecycleChanged.Phases.Result
+                when integrationEvent.Outcome == RobotCommandOutcomes.Succeeded
+                     && step.OutputValues.ContainsKey(JobExecutionEngine.AreaQueueLegKey):
+                // At the area's queue point: the MOVE is not done, it waits there for the area (woken every second).
+                step.OutputValues = JobExecutionEngine.AreaWaitOutputs(
+                    step.OutputValues,
+                    step.OutputValues[JobExecutionEngine.AreaWaitSinceKey].GetDateTimeOffset(),
+                    step.OutputValues[JobExecutionEngine.AreaQueueZoneKey].GetString() ?? "",
+                    "at the queue point",
+                    utcNow);
+                step.Status = JobStepStatus.WAITING;
+                finished = true;
+                break;
             case RobotCommandLifecycleChanged.Phases.Result:
                 step.Status = integrationEvent.Outcome switch
                 {

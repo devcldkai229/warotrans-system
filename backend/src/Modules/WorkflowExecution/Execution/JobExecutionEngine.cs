@@ -1600,6 +1600,18 @@ public sealed class JobExecutionEngine(
     public const string WaitUntilKey = "waitUntil";
     public const string PositioningWaitSinceKey = "positioningWaitSince";
 
+    /// <summary>One robot per area: when this MOVE started waiting for its area (also its place in the area's queue).</summary>
+    public const string AreaWaitSinceKey = "areaWaitSince";
+
+    /// <summary>The single-occupancy area this MOVE waits for.</summary>
+    public const string AreaQueueZoneKey = "areaQueueZone";
+
+    /// <summary>Set while the robot drives to the area's queue point: that RESULT means "arrived to wait", not "arrived".</summary>
+    public const string AreaQueueLegKey = "areaQueueLeg";
+
+    /// <summary>Who decides "who goes into an area" is one critical section, so two robots never both see it free.</summary>
+    private static readonly SemaphoreSlim AreaGate = new(1, 1);
+
     /// <summary>How long a MOVE waits for a robot to stop returning to parking before the step fails (then its OnFailure applies).</summary>
     public const int PositioningYieldTimeoutSeconds = 60;
     public const string CheckAttemptKey = "checkAttempt";
@@ -1635,7 +1647,8 @@ public sealed class JobExecutionEngine(
             var due = OrderedSteps(job)
                 .Where(x => x.Step.Status == JobStepStatus.WAITING
                             && (x.Step.StepType is StepType.WAIT or StepType.CHECK
-                                || (x.Step.StepType == StepType.MOVE && x.Step.OutputValues.ContainsKey(PositioningWaitSinceKey)))
+                                || (x.Step.StepType == StepType.MOVE
+                                    && (x.Step.OutputValues.ContainsKey(PositioningWaitSinceKey) || x.Step.OutputValues.ContainsKey(AreaWaitSinceKey))))
                             && x.Step.OutputValues.TryGetValue(WaitUntilKey, out var until)
                             && until.GetDateTimeOffset() <= now)
                 .ToList();
@@ -1676,6 +1689,83 @@ public sealed class JobExecutionEngine(
         }
 
         return woken;
+    }
+
+    /// <summary>Outputs of a MOVE that waits at its area's queue point (woken every second to look again).</summary>
+    public static Dictionary<string, JsonElement> AreaWaitOutputs(
+        IReadOnlyDictionary<string, JsonElement> current, DateTimeOffset since, string zone, string busy, DateTimeOffset now)
+    {
+        var outputs = new Dictionary<string, JsonElement>(current);
+        outputs.Remove(AreaQueueLegKey);
+        outputs.Remove(RobotCommandIdKey);
+        outputs[AreaWaitSinceKey] = JsonSerializer.SerializeToElement(since);
+        outputs[AreaQueueZoneKey] = JsonSerializer.SerializeToElement(zone);
+        outputs[WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1));
+        outputs["waitingFor"] = JsonSerializer.SerializeToElement($"area_queue:{zone} ({busy})");
+        return outputs;
+    }
+
+    /// <summary>
+    /// Why another robot has the area, or null when this MOVE may go in: an earlier waiter for the same area, a robot
+    /// holding the area in traffic, a robot standing in it, or another Job's MOVE already on its way to an endpoint in it.
+    /// </summary>
+    private async Task<string?> AreaBusyByAsync(
+        Job job, JobStep step, Guid robotId, SemanticZonePoly area, SemanticTrafficPolicy policy, CancellationToken cancellationToken)
+    {
+        DateTimeOffset? mySince = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var ms) ? ms.GetDateTimeOffset() : null;
+        var others = await db.JobSteps.AsNoTracking()
+            .Where(s => s.StepType == StepType.MOVE
+                        && (s.Status == JobStepStatus.EXECUTING || s.Status == JobStepStatus.WAITING)
+                        && s.JobTask.JobId != job.Id
+                        && s.JobTask.Job.Status == JobStatus.RUNNING)
+            .Select(s => new { s.JobTask.Job.JobNo, s.JobTask.Job.ContextValues, s.Status, s.TargetEndpointId, s.OutputValues })
+            .ToListAsync(cancellationToken);
+        foreach (var other in others)
+        {
+            var waitsHere = other.OutputValues.TryGetValue(AreaQueueZoneKey, out var z) && z.GetString() == area.Code
+                            && other.OutputValues.TryGetValue(AreaWaitSinceKey, out var since);
+            if (waitsHere)
+            {
+                var theirs = other.OutputValues[AreaWaitSinceKey].GetDateTimeOffset();
+                if (mySince is null || theirs < mySince)
+                {
+                    return $"{other.JobNo} waits for it first";
+                }
+
+                continue;
+            }
+
+            if (other.Status == JobStepStatus.EXECUTING && other.TargetEndpointId is { } target
+                && await navigation.GetEndpointPoseAsync(target, cancellationToken) is { } t
+                && SemanticReservation.PointInRing(t.X, t.Y, area.Ring))
+            {
+                return $"{other.JobNo} is on its way in";
+            }
+        }
+
+        if (segmentedTraffic is not null)
+        {
+            var snapshot = await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken);
+            var holder = snapshot.Resources
+                .Where(r => r.ResourceId == $"zone:{area.Code}")
+                .SelectMany(r => r.Holders)
+                .FirstOrDefault(h => h != robotId);
+            if (holder != Guid.Empty)
+            {
+                return $"{(await fleet.GetRobotAsync(holder, cancellationToken))?.Code ?? holder.ToString()} holds it";
+            }
+        }
+
+        foreach (var robot in await fleet.GetDispatchCandidatesAsync(job.MapVersionId, cancellationToken))
+        {
+            if (robot.Id != robotId && robot.LocalizationStatus == LocalizationStatus.LOCALIZED
+                && SemanticReservation.DiscHitsZone(robot.PoseX, robot.PoseY, policy.FootprintRadiusMeters, area.Ring))
+            {
+                return $"{robot.Code} is in it";
+            }
+        }
+
+        return null;
     }
 
     private async Task<bool> StartMoveAsync(Job job, JobTask task, JobStep step, string stepKey, CancellationToken cancellationToken)
@@ -1802,39 +1892,91 @@ public sealed class JobExecutionEngine(
                     return true;
                 }
 
-                // Goal only — robot Nav2 plans; grant arrives after traffic_plan uplink.
-                Guid semanticCommandId;
+                // One robot per area (INBOUND, OUTBOUND, ...): an endpoint inside a single-occupancy area with a queue
+                // point is entered only while no other robot is in, or on its way into, that area. Otherwise the robot
+                // drives to the queue point and waits there (MOVE stays open), first come first served.
+                var goal = pose;
+                string? queueZone = null;
+                DateTimeOffset? queueSince = null;
+                await AreaGate.WaitAsync(cancellationToken);
                 try
                 {
-                    semanticCommandId = await fleet.NavigateAsync(
-                        robotId, pose.X, pose.Y, pose.Yaw, job.Id, step.Id, cancellationToken, route: null,
-                        timeoutSeconds: CommandTimeoutSeconds(step), positionTolerance: pose.PositionTolerance);
+                    var area = policy.SingleOccupancyZones.FirstOrDefault(z =>
+                        z.QueueEndpointCode is not null && SemanticReservation.PointInRing(pose.X, pose.Y, z.Ring));
+                    var busy = area is null ? null : await AreaBusyByAsync(job, step, robotId, area, policy, cancellationToken);
+                    if (area is not null && busy is not null)
+                    {
+                        var queue = await navigation.GetEndpointPoseByCodeAsync(job.MapVersionId, area.QueueEndpointCode!, cancellationToken);
+                        queueSince = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var ws) ? ws.GetDateTimeOffset() : now;
+                        queueZone = area.Code;
+                        var atQueue = queue is null
+                                      || Math.Sqrt(Math.Pow(robot.PoseX - queue.X, 2) + Math.Pow(robot.PoseY - queue.Y, 2))
+                                      <= Math.Max(0.25, queue.PositionTolerance);
+                        if (atQueue)
+                        {
+                            if (queue is null)
+                            {
+                                logger.LogWarning("Area {Zone}: queue endpoint {Code} is not on the map; waiting where the robot is",
+                                    area.Code, area.QueueEndpointCode);
+                            }
+
+                            step.OutputValues = AreaWaitOutputs(step.OutputValues, queueSince.Value, area.Code, busy, now);
+                            SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
+                            await SaveAndPublishAsync(cancellationToken);
+                            return false;
+                        }
+
+                        goal = queue!;
+                        logger.LogInformation(
+                            "Job {JobNo} {StepKey}: area {Zone} is taken ({Busy}); robot goes to queue point {Queue} first",
+                            job.JobNo, stepKey, area.Code, busy, queue!.Code);
+                    }
+
+                    // Goal only — robot Nav2 plans; grant arrives after traffic_plan uplink.
+                    Guid semanticCommandId;
+                    try
+                    {
+                        semanticCommandId = await fleet.NavigateAsync(
+                            robotId, goal.X, goal.Y, goal.Yaw, job.Id, step.Id, cancellationToken, route: null,
+                            timeoutSeconds: CommandTimeoutSeconds(step), positionTolerance: goal.PositionTolerance);
+                    }
+                    catch (Exception ex)
+                    {
+                        Fail(job, task, step, stepKey, "navigate_rejected", ex.Message, DateTimeOffset.UtcNow);
+                        return true;
+                    }
+
+                    var issued = new Dictionary<string, JsonElement>
+                    {
+                        ["startedAt"] = JsonSerializer.SerializeToElement(now),
+                        [RobotCommandIdKey] = JsonSerializer.SerializeToElement(semanticCommandId),
+                        ["trafficMode"] = JsonSerializer.SerializeToElement("Semantic"),
+                        ["semanticMapFingerprint"] = JsonSerializer.SerializeToElement(policy.SemanticMapFingerprint)
+                    };
+                    if (queueZone is not null)
+                    {
+                        issued[AreaWaitSinceKey] = JsonSerializer.SerializeToElement(queueSince!.Value);
+                        issued[AreaQueueZoneKey] = JsonSerializer.SerializeToElement(queueZone);
+                        issued[AreaQueueLegKey] = JsonSerializer.SerializeToElement(goal.Code);
+                    }
+
+                    if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var supersededSemantic))
+                    {
+                        issued[SupersededCommandIdsKey] = supersededSemantic;
+                    }
+
+                    step.OutputValues = issued;
+                    await SaveAndPublishAsync(cancellationToken);
+                    logger.LogInformation(
+                        "Job {JobNo} {StepKey} Semantic MOVE issued navigate cmd={CommandId} goal={Code} fingerprint={Fp}",
+                        job.JobNo, stepKey, semanticCommandId, goal.Code, policy.SemanticMapFingerprint);
+                    return false;
                 }
-                catch (Exception ex)
+                finally
                 {
-                    Fail(job, task, step, stepKey, "navigate_rejected", ex.Message, DateTimeOffset.UtcNow);
-                    return true;
+                    AreaGate.Release();
                 }
 
-                // Same bookkeeping as the Shadow path: the robot RESULT finishes the step, and the command id
-                // lives in OutputValues so IsCurrentCommand can drop a superseded command's late RESULT.
-                var semanticOutputs = new Dictionary<string, JsonElement>
-                {
-                    ["startedAt"] = JsonSerializer.SerializeToElement(now),
-                    [RobotCommandIdKey] = JsonSerializer.SerializeToElement(semanticCommandId),
-                    ["trafficMode"] = JsonSerializer.SerializeToElement("Semantic"),
-                    ["semanticMapFingerprint"] = JsonSerializer.SerializeToElement(policy.SemanticMapFingerprint)
-                };
-                if (step.OutputValues.TryGetValue(SupersededCommandIdsKey, out var supersededSemantic))
-                {
-                    semanticOutputs[SupersededCommandIdsKey] = supersededSemantic;
-                }
-
-                step.OutputValues = semanticOutputs;
-                logger.LogInformation(
-                    "Job {JobNo} {StepKey} Semantic MOVE issued navigate cmd={CommandId} goal={Code} fingerprint={Fp}",
-                    job.JobNo, stepKey, semanticCommandId, pose.Code, policy.SemanticMapFingerprint);
-                return false;
             }
 
             // Active Mode: segmented coordinator is sole motion authority (publisher issues MQTT).

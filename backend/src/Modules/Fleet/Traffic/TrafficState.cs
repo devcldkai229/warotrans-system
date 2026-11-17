@@ -745,7 +745,19 @@ public sealed class TrafficState
             return [];
         }
 
-        var under = SemanticReservation.CollectResources(_semantic, [new SemanticPlanPose(x, y, 0)]);
+        // A robot that stands still only needs its body (any heading) plus the localization margin. The path tolerance
+        // and sample spacing of CollectResources are for a robot that drives; adding them made a parked robot hold
+        // ~0.45 m around itself, so two homes 0.85 m apart seeded into each other and a parked robot blocked the lane
+        // next to it.
+        var radius = _semantic.FootprintRadiusMeters + Math.Max(0, _options.LocalizationMarginMeters);
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        SemanticReservation.DiscCells(x, y, radius, _semantic.EffectiveCellSize, set);
+        foreach (var z in _semantic.SingleOccupancyZones.Where(z => SemanticReservation.DiscHitsZone(x, y, radius, z.Ring)))
+        {
+            set.Add($"zone:{z.Code}");
+        }
+
+        var under = set.OrderBy(r => r, StringComparer.Ordinal).ToImmutableArray();
         EnsureSemanticCapacities(under);
         return under;
     }

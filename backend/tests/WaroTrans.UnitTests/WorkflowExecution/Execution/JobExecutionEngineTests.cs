@@ -1917,13 +1917,120 @@ public sealed class JobExecutionEngineTests
         Assert.False(await _db.JobRobotAssignments.AnyAsync(a => a.JobId == jobId && a.EndedAt == null));
     }
 
+
+    // ------------------------------------------------------------------ one robot per area (queue point)
+
+    /// <summary>An area around pickup A (1, 2) with queue point EP-Q at (1, 5).</summary>
+    private Guid AreaAroundPickupWithQueuePoint()
+    {
+        _singleOccupancyJson = """
+            {"zones":[{"code":"AREA-A","rings":[[[0.4,1.4],[1.6,1.4],[1.6,2.6],[0.4,2.6],[0.4,1.4]]],"queueEndpointCode":"EP-Q"}]}
+            """;
+        var q = Guid.NewGuid();
+        _navigation.Poses[q] = new EndpointPoseSnapshot(q, _mapVersionId, "EP-Q", 1.0, 5.0, 0.0, true);
+        return q;
+    }
+
+    private void PlaceRobot(Guid robot, double x, double y) =>
+        _fleet.Robots[robot] = _fleet.Robots[robot] with { PoseX = x, PoseY = y, LastTelemetryAt = DateTimeOffset.UtcNow };
+
+    private async Task WakeAreaWaitsAsync(JobExecutionEngine engine)
+    {
+        foreach (var s in await _db.JobSteps.Where(s => s.Status == JobStepStatus.WAITING && s.StepType == StepType.MOVE).ToListAsync())
+        {
+            s.OutputValues = new Dictionary<string, JsonElement>(s.OutputValues)
+            {
+                [JobExecutionEngine.WaitUntilKey] = JsonSerializer.SerializeToElement(DateTimeOffset.UtcNow.AddSeconds(-1))
+            };
+        }
+
+        await _db.SaveChangesAsync();
+        await engine.WakeDueWaitStepsAsync();
+    }
+
+    [Fact]
+    public async Task A_second_robot_waits_at_the_queue_point_while_the_area_is_taken_and_goes_in_once_it_is_free()
+    {
+        var first = await ProvisionAsync();
+        AreaAroundPickupWithQueuePoint();
+        var second = await ProvisionAnotherAsync();
+        var r2 = _fleet.AddRobot(_mapVersionId);
+        PlaceRobot(_fleet.RobotId, 0, 0);
+        PlaceRobot(r2, 5, 5);
+
+        await SemanticEngine().StartAsync(first, _fleet.RobotId);
+        Assert.Equal((1.0, 2.0), (_fleet.Commands[^1].X, _fleet.Commands[^1].Y));     // R1 into area A
+
+        await SemanticEngine().StartAsync(second, r2);
+        var toQueue = _fleet.Commands[^1];
+        Assert.Equal(r2, toQueue.RobotId);
+        Assert.Equal((1.0, 5.0), (toQueue.X, toQueue.Y));                            // R2 to the queue point, not into A
+
+        // R2 arrives at the queue point: the MOVE is not done, it waits there.
+        PlaceRobot(r2, 1, 5);
+        await SemanticResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
+            toQueue.CommandId, r2, "RBT-SIM-02", "NAVIGATE_TO_POSE", "COMPLETED", null, toQueue.JobStepId, "SUCCEEDED", null,
+            RobotCommandLifecycleChanged.Phases.Result));
+        var waiting = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == toQueue.JobStepId);
+        Assert.Equal(JobStepStatus.WAITING, waiting.Status);
+        Assert.StartsWith("area_queue:AREA-A", waiting.OutputValues["waitingFor"].GetString());
+
+        // R1 is at A, people load it: still taken, R2 stays at the queue point.
+        PlaceRobot(_fleet.RobotId, 1, 2);
+        await SemanticRobotResultAsync(_fleet.Commands.Last(c => c.RobotId == _fleet.RobotId).JobStepId);
+        var commands = _fleet.Commands.Count;
+        await WakeAreaWaitsAsync(SemanticEngine());
+        Assert.Equal(commands, _fleet.Commands.Count);
+
+        // R1 loaded and on its way to D, out of the area: R2 goes in.
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(first), C1, HumanConfirmationSource.StaffApp(_staff));
+        await SemanticEngine().ConfirmHumanStepAsync(await CurrentStepIdAsync(first), C2, HumanConfirmationSource.StaffApp(_staff));
+        Assert.Equal(9.0, _fleet.Commands[^1].X);
+        PlaceRobot(_fleet.RobotId, 5, 2);
+        await WakeAreaWaitsAsync(SemanticEngine());
+
+        var inside = _fleet.Commands[^1];
+        Assert.Equal(r2, inside.RobotId);
+        Assert.Equal((1.0, 2.0), (inside.X, inside.Y));
+        var step = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == inside.JobStepId);
+        Assert.Equal(JobStepStatus.EXECUTING, step.Status);
+        Assert.False(step.OutputValues.ContainsKey(JobExecutionEngine.AreaQueueLegKey));
+    }
+
+    [Fact]
+    public async Task With_the_area_free_the_robot_drives_straight_in_and_a_waiter_keeps_its_turn()
+    {
+        var first = await ProvisionAsync();
+        AreaAroundPickupWithQueuePoint();
+        PlaceRobot(_fleet.RobotId, 0, 0);
+
+        await SemanticEngine().StartAsync(first, _fleet.RobotId);
+
+        Assert.Single(_fleet.Commands);
+        Assert.Equal((1.0, 2.0), (_fleet.Commands[0].X, _fleet.Commands[0].Y));
+    }
+
+    [Fact]
+    public async Task A_robot_standing_in_the_area_keeps_others_out_even_without_a_job()
+    {
+        var job = await ProvisionAsync();
+        AreaAroundPickupWithQueuePoint();
+        var parked = _fleet.AddRobot(_mapVersionId);
+        PlaceRobot(parked, 1.1, 2.1);           // idle in the area
+        PlaceRobot(_fleet.RobotId, 0, 0);
+
+        await SemanticEngine().StartAsync(job, _fleet.RobotId);
+
+        Assert.Equal((1.0, 5.0), (_fleet.Commands[^1].X, _fleet.Commands[^1].Y));
+    }
+
     // ------------------------------------------------------------------ Semantic traffic mode (Nav2 plans, backend grants)
 
     /// <summary>
     /// Engine wired like the Host with Traffic:Mode=Semantic. The bundle directory holds a manifest for
     /// <paramref name="bundleMapVersionId"/> (default: the Job's map).
     /// </summary>
-    private JobExecutionEngine SemanticEngine(Guid? bundleMapVersionId = null)
+    private JobExecutionEngine SemanticEngine(Guid? bundleMapVersionId = null, string? singleOccupancyJson = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "wt-semantic-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
@@ -1934,7 +2041,7 @@ public sealed class JobExecutionEngineTests
             mapVersionId = bundleMapVersionId ?? _mapVersionId,
             semanticMapFingerprint = "fp-test"
         }));
-        File.WriteAllText(Path.Combine(dir, "single_occupancy.json"), """{"zones":[]}""");
+        File.WriteAllText(Path.Combine(dir, "single_occupancy.json"), singleOccupancyJson ?? _singleOccupancyJson ?? """{"zones":[]}""");
 
         var options = Microsoft.Extensions.Options.Options.Create(new WaroTrans.Fleet.Traffic.TrafficOptions
         {
@@ -1953,6 +2060,7 @@ public sealed class JobExecutionEngineTests
     }
 
     private WaroTrans.Fleet.Traffic.SegmentedTrafficCoordinator? _semanticTraffic;
+    private string? _singleOccupancyJson;
     private string _lastBundleDir = "";
 
     private RobotCommandLifecycleJobStepHandler SemanticResultHandler() =>
