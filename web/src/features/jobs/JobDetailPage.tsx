@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import { ApiError } from '@/shared/api/client'
 import { getRobot, getRobotPoseHistory } from '@/shared/api/fleet'
 import { pathOnMap, trailSegments } from '@/features/robots/history/pathModel'
@@ -362,6 +363,8 @@ function allSteps(job: JobDetailDto) {
 export function JobDetailPage() {
   const { jobId = null } = useParams()
   const navigate = useNavigate()
+  // The Technician portal has no job list or request screen: there the way back is the screen the job was opened from.
+  const inTechPortal = usePaths().portal === 'tech'
   const queryClient = useQueryClient()
   const [livePose, setLivePose] = useState<{ robotId: string; x: number; y: number; yaw: number } | null>(null)
 
@@ -459,7 +462,11 @@ export function JobDetailPage() {
               : t('No job selected')}
         </h1>
         {error && !notFound ? <p className="-mt-2 text-sm text-muted">{errorText(error)}</p> : null}
-        <Link to="/monitor/jobs" className={buttonClass({ variant: 'primary' })}>{t('Back to jobs')}</Link>
+        {inTechPortal ? (
+          <Button variant="primary" onClick={() => navigate(-1)}>{t('Back')}</Button>
+        ) : (
+          <Link to="/monitor/jobs" className={buttonClass({ variant: 'primary' })}>{t('Back to jobs')}</Link>
+        )}
       </div>
     )
   }
@@ -515,12 +522,20 @@ export function JobDetailPage() {
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto flex min-h-full max-w-[1700px] flex-col px-10 pt-2 pb-10">
-        <Button variant="ghost" size="sm" className="-ml-3 self-start" onClick={() => navigate('/monitor/requests')}>
-          <Icon name="arrowLeft" size={14} />{' '}{t('Transport requests')}</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-3 self-start"
+          onClick={() => (inTechPortal ? navigate(-1) : navigate('/monitor/requests'))}
+        >
+          <Icon name="arrowLeft" size={14} />{' '}{inTechPortal ? t('Back') : t('Transport requests')}</Button>
 
         <header className="mt-5 flex items-end justify-between gap-6">
           <div>
             <p className="text-sm text-muted">{t('Job of request')}{' '}<span className="font-mono text-ink-2">{request?.requestCode ?? '—'}</span>
+              {job.tripNo && job.tripCount ? (
+                <span className="ml-2 text-ink-2">· {t('Trip {no} of {total}', { no: job.tripNo, total: job.tripCount })}</span>
+              ) : null}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-4xl font-book">{job.jobNo}</h1>

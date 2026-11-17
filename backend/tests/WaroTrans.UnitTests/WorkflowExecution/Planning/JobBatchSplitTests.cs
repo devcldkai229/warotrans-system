@@ -96,6 +96,55 @@ public sealed class JobBatchSplitTests
     }
 
     [Fact]
+    public void Internal_relocation_collects_at_every_shelf_before_it_delivers()
+    {
+        Guid s1 = Guid.NewGuid(), s2 = Guid.NewGuid(), s3 = Guid.NewGuid(), s4 = Guid.NewGuid();
+        var request = Request((s1, s3), (s2, s4), (s1, s4));
+
+        var plan = new CollectThenDeliverJobBatchPlanner().Plan(request);
+
+        var trip = Assert.Single(plan);
+        Assert.Equal(
+            [(s1, JobStopAction.PICKUP), (s2, JobStopAction.PICKUP), (s3, JobStopAction.DROPOFF), (s4, JobStopAction.DROPOFF)],
+            trip.Stops.Select(s => (s.EndpointId, s.Action)));
+        Assert.Equal(2, trip.Stops[0].ContainerIds.Count);
+        Assert.Equal(2, trip.Stops[3].ContainerIds.Count);
+    }
+
+    [Fact]
+    public void Every_planned_trip_passes_the_validator_and_none_carries_more_than_a_robot()
+    {
+        Guid inbound = Guid.NewGuid(), s1 = Guid.NewGuid(), s2 = Guid.NewGuid(), s3 = Guid.NewGuid();
+        var request = Request((inbound, s1), (inbound, s2), (inbound, s3), (inbound, s1), (inbound, s2), (inbound, s3), (inbound, s1));
+
+        var plan = new CollectThenDeliverJobBatchPlanner(3).Plan(request);
+
+        Assert.Equal([3, 3, 1], plan.Select(b => b.ContainerIds.Count));
+        Assert.Empty(WaroTrans.WorkflowExecution.Validation.JobBatchPlanValidator.Validate(request, plan));
+    }
+
+    [Fact]
+    public void The_validator_refuses_a_trip_over_the_robot_load()
+    {
+        var request = Request((A, D), (A, D), (A, D), (A, D));
+        // Planning without a limit is not possible any more: build the over-full trip by hand.
+        var single = new CollectThenDeliverJobBatchPlanner(3).Plan(Request((A, D)))[0];
+        var overfull = single with
+        {
+            ContainerIds = request.Details.Select(d => d.ContainerId).ToList(),
+            Stops =
+            [
+                single.Stops[0] with { ContainerIds = request.Details.Select(d => d.ContainerId).ToList() },
+                single.Stops[1] with { ContainerIds = request.Details.Select(d => d.ContainerId).ToList() }
+            ]
+        };
+
+        var errors = WaroTrans.WorkflowExecution.Validation.JobBatchPlanValidator.Validate(request, [overfull]);
+
+        Assert.Contains(errors, e => e.Code == "job_batch_over_robot_load");
+    }
+
+    [Fact]
     public void A_configured_limit_above_the_robot_hard_cap_is_capped()
     {
         var request = Request((A, D), (A, D), (A, D), (A, D));

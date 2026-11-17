@@ -175,6 +175,28 @@ public static class WorkflowDefinitionValidator
                 result.Add($"{taskPath}.name", "Task name is required.");
             }
 
+            if (task.RunCondition is { } cond)
+            {
+                if (string.IsNullOrWhiteSpace(cond.VariableKey))
+                {
+                    result.Add($"{taskPath}.runCondition.variableKey", "Run condition variableKey is required.");
+                }
+                else
+                {
+                    var condVar = model.Variables.FirstOrDefault(v => v.Key == cond.VariableKey);
+                    if (condVar is null)
+                    {
+                        result.Add($"{taskPath}.runCondition.variableKey",
+                            $"Run condition variable '{cond.VariableKey}' does not exist.");
+                    }
+                    else if (condVar.DataType != WorkflowDataType.BOOLEAN)
+                    {
+                        result.Add($"{taskPath}.runCondition.variableKey",
+                            $"Run condition variable '{cond.VariableKey}' must have dataType BOOLEAN.");
+                    }
+                }
+            }
+
             JobStopAction? taskAffinity = null;
             if (full)
             {

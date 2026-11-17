@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import { SectionHead } from '@/features/management/SectionHead'
 import type { AdminNotification } from '@/shared/api/contracts'
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '@/shared/api/notifications'
@@ -25,6 +26,7 @@ const TYPES: AdminNotification['type'][] = ['ALERT', 'WARNING', 'INFO', 'ASSIGNM
  * `['notifications']` query key, so reading here updates the bell and the other way round.
  */
 export function NotificationsPage() {
+  const paths = usePaths()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   // Filters and page live in the address, so a reload or a shared link shows the same view.
@@ -83,7 +85,7 @@ export function NotificationsPage() {
   const markAllRead = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: refresh })
 
   function open(notification: AdminNotification) {
-    const target = notificationTarget(notification)
+    const target = notificationTarget(notification, paths)
     if (!notification.isRead) markRead.mutate(notification.id)
     if (target) navigate(target)
   }
@@ -132,7 +134,7 @@ export function NotificationsPage() {
             </thead>
             <tbody>
               {items.map((notification) => {
-                const target = notificationTarget(notification)
+                const target = notificationTarget(notification, paths)
                 return (
                   <Tr key={notification.id} className={notification.isRead ? undefined : 'bg-container'}>
                     <Td className="align-top">

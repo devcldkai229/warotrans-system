@@ -80,6 +80,14 @@ public static class JobBatchPlanValidator
                     $"{batchPath}.containerIds",
                     $"Batch '{batch.BatchKey}' must include at least one ContainerId."));
             }
+            else if (batch.ContainerIds.Count > WaroTrans.BuildingBlocks.RobotLoad.MaxContainers)
+            {
+                // A batch is one trip of one robot: never more than a robot carries at once.
+                errors.Add(new(
+                    "job_batch_over_robot_load",
+                    $"{batchPath}.containerIds",
+                    $"Batch '{batch.BatchKey}' carries {batch.ContainerIds.Count} Containers; a robot carries at most {WaroTrans.BuildingBlocks.RobotLoad.MaxContainers}."));
+            }
 
             var batchSet = new HashSet<Guid>();
             for (var ci = 0; ci < batch.ContainerIds.Count; ci++)

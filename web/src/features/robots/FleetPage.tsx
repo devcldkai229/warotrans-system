@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import { Can } from '@/features/auth/RequirePermission'
+import { useAuth } from '@/features/auth/authContext'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import type { Robot, RobotStatus, RobotView } from '@/shared/api/contracts'
 import { listRobots } from '@/shared/api/fleet'
 import { cx } from '@/shared/lib/cx'
@@ -36,6 +38,9 @@ function toRobotView(robot: Robot): RobotView {
 }
 
 export function FleetPage() {
+  const paths = usePaths()
+  // A Technician sees only the robots assigned to them (the server filters the list): an empty list means none yet.
+  const scopedToAssigned = useAuth().capabilities?.robotScope.allRobots === false
   const { robotCode } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -125,11 +130,11 @@ export function FleetPage() {
   useEffect(() => {
     if (!linkedRobotId || !knownRobots) return
     const linked = knownRobots.find((robot) => robot.id === linkedRobotId)
-    navigate(linked ? `/monitor/fleet/${linked.code}` : '/monitor/fleet', {
+    navigate(linked ? paths.fleet(linked.code) : paths.fleet(), {
       replace: true,
       state: linked ? undefined : { robotNotFound: true },
     })
-  }, [linkedRobotId, knownRobots, navigate])
+  }, [linkedRobotId, knownRobots, navigate, paths])
   const totalForHeader = countsQuery.data?.total ?? robotsForCounts.length
 
   const counts = useMemo(() => {
@@ -177,9 +182,9 @@ export function FleetPage() {
         {selected ? (
           <RobotDetailPanel
             robot={selected}
-            onBack={() => navigate('/monitor/fleet')}
-            onManual={() => navigate(`/monitor/fleet/${selected.code}/manual`)}
-            onTechnical={() => navigate(`/monitor/fleet/${selected.code}/technical`)}
+            onBack={() => navigate(paths.fleet())}
+            onManual={() => navigate(paths.robotManual(selected.code))}
+            onTechnical={() => navigate(paths.robotTechnical(selected.code))}
           />
         ) : (
           <>
@@ -246,7 +251,7 @@ export function FleetPage() {
                           'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 rounded-md bg-surface px-4 py-3.5 text-left transition-shadow duration-200',
                           previewCode === robot.code ? 'ring-2 ring-blue' : 'hover:shadow-float',
                         )}
-                        onClick={() => navigate(`/monitor/fleet/${robot.code}`)}
+                        onClick={() => navigate(paths.fleet(robot.code))}
                       >
                         <span className="min-w-0">
                           <strong className="block font-medium">{robot.code}</strong>
@@ -279,11 +284,17 @@ export function FleetPage() {
                 <li className="flex flex-col items-center justify-center gap-4 px-4 py-12 text-center">
                   <Icon name="radio" size={28} className="text-muted" />
                   <div>
-                    <p className="text-sm font-medium text-ink">{t('There are currently no robots.')}</p>
+                    <p className="text-sm font-medium text-ink">
+                      {scopedToAssigned && !query && !statusFilter
+                        ? t('No robot is assigned to you yet.')
+                        : t('There are currently no robots.')}
+                    </p>
                     <p className="mt-1 text-xs text-muted">
                       {query || statusFilter
                         ? t('Try a different code or status filter.')
-                        : t('Add a robot to start monitoring the fleet.')}
+                        : scopedToAssigned
+                          ? t('Ask an administrator to assign the robots you maintain.')
+                          : t('Add a robot to start monitoring the fleet.')}
                     </p>
                   </div>
                   <Can permission={PERMISSIONS.robotManage}>
@@ -305,7 +316,7 @@ export function FleetPage() {
         <FleetMap
           robots={robotsOnMap}
           selectedCode={robotCode ?? null}
-          onSelect={(code) => navigate(`/monitor/fleet/${code}`)}
+          onSelect={(code) => navigate(paths.fleet(code))}
           variant={selected ? 'detail' : 'overview'}
           previewCode={previewCode}
           onPreview={setPreviewCode}
@@ -340,7 +351,7 @@ export function FleetPage() {
           onClose={() => setRegisterOpen(false)}
           onRegistered={(code) => {
             setRegisterOpen(false)
-            navigate(`/monitor/fleet/${code}`)
+            navigate(paths.fleet(code))
           }}
         />
       ) : null}

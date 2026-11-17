@@ -20,6 +20,7 @@ import { JOB_STATUS_TONE } from '@/shared/ui/statusTones'
 import { EmptyRow, Table, Td, Th, Tr } from '@/shared/ui/Table'
 
 import { t } from '@/shared/i18n'
+import { MAX_CONTAINERS_PER_TRIP } from '@/features/transport-requests/constants'
 import { explainJobProblem, type ProblemTone } from './failureCatalog'
 const PAGE_SIZE = 50
 /** The Jobs endpoint turns at most 100 request ids into codes at a time; smaller chunks also stay cached page by page. */
@@ -271,7 +272,15 @@ function JobRow({ job, robotCode, requestCodes, onOpen }: JobRowProps) {
           </span>
         )}
       </Td>
-      <Td align="right">{job.containerCount}</Td>
+      <Td align="right">
+        {job.tripCount ? (
+          <span title={t('{count}/{max} per trip', { count: job.containerCount, max: MAX_CONTAINERS_PER_TRIP })}>
+            {job.containerCount}/{MAX_CONTAINERS_PER_TRIP}
+          </span>
+        ) : (
+          job.containerCount
+        )}
+      </Td>
       <Td>
         <span className="flex items-center gap-2">
           <Meter percent={progress} tone={job.status === 'FAILED' ? 'red' : job.status === 'COMPLETED' ? 'green' : 'blue'} className="w-16" />

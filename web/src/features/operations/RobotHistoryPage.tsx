@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import { SectionHead } from '@/features/management/SectionHead'
 import { RobotHistoryCard } from '@/features/robots/history/RobotHistoryCard'
 import { RobotPathCard } from '@/features/robots/history/RobotPathCard'
@@ -18,6 +19,7 @@ import { ROBOT_STATUS_TONE } from '@/shared/ui/statusTones'
  * A Technician sees only the robots in their scope, because that is all the server lists.
  */
 export function RobotHistoryPage() {
+  const paths = usePaths()
   const [params, setParams] = useSearchParams()
   const robots = useQuery({ queryKey: ['fleet-robots', 'history-page'], queryFn: () => listRobots({ take: 100 }), staleTime: 30_000 })
   const items = useMemo(() => [...(robots.data?.items ?? [])].sort((a, b) => a.code.localeCompare(b.code)), [robots.data])
@@ -84,7 +86,7 @@ export function RobotHistoryPage() {
               <StatusBadge tone={ROBOT_STATUS_TONE[robot.status]} withDot>
                 {robot.status}
               </StatusBadge>
-              <Link to={`/monitor/fleet/${robot.code}`} className={`${buttonClass({ variant: 'ghost', size: 'sm' })} ml-auto`}>
+              <Link to={paths.fleet(robot.code)} className={`${buttonClass({ variant: 'ghost', size: 'sm' })} ml-auto`}>
                 {t('Open robot')}
               </Link>
             </div>

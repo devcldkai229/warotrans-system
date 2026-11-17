@@ -4,69 +4,34 @@ import { cx } from '@/shared/lib/cx'
 import { IconButton } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { initialsOf, roleLabel, useAuth } from '@/features/auth/authContext'
-import { PERMISSIONS, type Permission } from '@/shared/auth/permissions'
+import { PERMISSIONS } from '@/shared/auth/permissions'
+import { ADMIN_NAV, type NavGroup } from './nav'
 import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { useTheme } from '@/shared/theme/theme'
 import { Wordmark } from './Wordmark'
 import { t } from '@/shared/i18n'
 import { LanguageSwitcher } from '@/shared/i18n/LanguageSwitcher'
-
-interface NavItem {
-  label: string
-  to: string
-  /** Shown only when the session holds this permission (the API would refuse the screen's calls otherwise). */
-  requires: Permission
-}
-
-interface NavGroup {
-  label: string
-  /** Route prefix: the group is active on every screen under it. */
-  to: string
-  requires?: Permission
-  items?: NavItem[]
-}
-
-const NAV: NavGroup[] = [
-  {
-    label: t('Monitor'),
-    to: '/monitor',
-    items: [
-      { label: t('Fleet'), to: '/monitor/fleet', requires: PERMISSIONS.robotRead },
-      { label: t('Transport requests'), to: '/monitor/requests', requires: PERMISSIONS.transportRead },
-      { label: t('Jobs'), to: '/monitor/jobs', requires: PERMISSIONS.jobRead },
-    ],
-  },
-  {
-    label: t('Configure'),
-    to: '/configure',
-    items: [
-      { label: t('Facility'), to: '/configure/facility', requires: PERMISSIONS.mapRead },
-      { label: t('Workflows'), to: '/configure/workflows', requires: PERMISSIONS.workflowRead },
-    ],
-  },
-  {
-    label: t('Operations'),
-    to: '/operations',
-    items: [
-      { label: t('Issues'), to: '/operations/issues', requires: PERMISSIONS.issueRead },
-      { label: t('Notifications'), to: '/operations/notifications', requires: PERMISSIONS.notificationRead },
-      { label: t('Robot history'), to: '/operations/robot-history', requires: PERMISSIONS.robotRead },
-      { label: t('Audit log'), to: '/operations/audit', requires: PERMISSIONS.auditRead },
-    ],
-  },
-  { label: t('Statistics'), to: '/dashboard', requires: PERMISSIONS.statisticsRead },
-]
+import { StatusBadge } from '@/shared/ui/StatusBadge'
 
 const MENU_ITEM = 'flex h-9 w-full items-center rounded-sm px-3 text-left text-sm transition-colors duration-200 hover:bg-container-high'
 
-export function AppShell() {
+interface AppShellProps {
+  /** Menu of this portal; the admin console's by default. */
+  nav?: NavGroup[]
+  /** Where the wordmark leads. */
+  home?: string
+  /** Name of the portal shown next to the wordmark, for a portal other than the admin console. */
+  portalLabel?: string
+}
+
+export function AppShell({ nav: menu = ADMIN_NAV, home = '/monitor/fleet', portalLabel }: AppShellProps = {}) {
   const { pathname } = useLocation()
   const { account, signOut, can } = useAuth()
   const { theme, toggle: toggleTheme } = useTheme()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   if (!account) return null
 
-  const nav = NAV.flatMap((group) => {
+  const nav = menu.flatMap((group) => {
     if (group.requires && !can(group.requires)) return []
     const items = group.items?.filter((item) => can(item.requires))
     if (group.items && !items?.length) return []
@@ -77,9 +42,12 @@ export function AppShell() {
   return (
     <div className="flex h-svh min-w-[1100px] flex-col bg-surface">
       <header className="relative z-50 flex h-14 flex-none items-center gap-8 border-b border-outline-soft px-6">
-        <Link to="/monitor/fleet" aria-label={t('WaroTrans home')}>
-          <Wordmark />
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link to={home} aria-label={t('WaroTrans home')}>
+            <Wordmark />
+          </Link>
+          {portalLabel ? <StatusBadge tone="teal">{portalLabel}</StatusBadge> : null}
+        </div>
 
         <nav className="flex items-center gap-1" aria-label={t('Main')}>
           {nav.map((group) => {
