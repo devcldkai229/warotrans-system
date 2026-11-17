@@ -70,6 +70,8 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   );
   assert.equal(t('Increase Container Count'), 'Tăng số lượng thùng');
   assert.equal(t('Decrease Container Count'), 'Giảm số lượng thùng');
+  assert.equal(t('Allocate Container Barcodes'), 'Cấp mã vạch Container');
+  assert.equal(t('Stock posted {date}', { date: '17 Nov 2026' }), 'Đã ghi sổ tồn kho: 17 Nov 2026');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(
@@ -89,6 +91,18 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(
     localizeServerMessage('container_not_eligible', "Container 'CNT-104' is not eligible for transport."),
     "Container 'CNT-104' không đủ điều kiện để vận chuyển.",
+  );
+  assert.equal(
+    localizeServerMessage('inbound_location_not_configured', 'An inbound storage location has not been configured for this warehouse.'),
+    'Kho này chưa được cấu hình vị trí Nhập kho (Inbound).',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_stock_posting_not_supported', 'Outbound stock posting is not available yet.'),
+    'Chức năng xác nhận ghi tồn kho phiếu xuất hiện chưa được hỗ trợ.',
+  );
+  assert.equal(
+    localizeServerMessage('voucher_container_not_at_inbound', "Container 'CTN-001' must be at the configured Inbound."),
+    "Container 'CTN-001' phải đang nằm tại vị trí Nhập kho (Inbound) đã cấu hình.",
   );
 
   // Notification localization

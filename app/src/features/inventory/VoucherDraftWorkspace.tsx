@@ -14,10 +14,11 @@ import { useVoucherPreparation } from './useVoucherPreparation';
 import { contentProblem, inboundContentsProgress, inboundPreparationProblem, nextIncompleteContainer, type PreparedContent } from './voucherPreparation';
 import { createVoucherStyles } from './voucherStyles';
 
-interface Props { data: StockVoucherDetail; accountId: string; writable: boolean }
-export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
+interface Props { data: StockVoucherDetail; accountId: string; writable: boolean; preparation?: ReturnType<typeof useVoucherPreparation> }
+export function VoucherDraftWorkspace({ data, accountId, writable, preparation }: Props) {
   const { styles, colors } = useThemedStyles(createVoucherStyles);
-  const prep = useVoucherPreparation(accountId, data.warehouseId, data.id, data.type);
+  const fallbackPrep = useVoucherPreparation(preparation ? '' : accountId, preparation ? '' : data.warehouseId, data.id, data.type);
+  const prep = preparation || fallbackPrep;
   const [expanded, setExpanded] = useState<string | null>(null);
   const [productFor, setProductFor] = useState<string | null>(null);
   const [scanFor, setScanFor] = useState<string | null>(null);
@@ -27,6 +28,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
   const ids = data.lines.map(line => line.containerId);
   const progress = inboundContentsProgress(ids, prep.value);
   const inbound = data.type === 'INBOUND';
+  const hasServerBatchLines = inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
   const steps = inbound ? ['Barcodes', 'Contents', 'Review'] : ['Containers', 'Review', 'Confirm'];
   const currentStep = review ? inbound ? 2 : 1 : inbound && data.lines.length ? 1 : 0;
   useEffect(() => {
@@ -46,7 +48,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
   };
   if (!prep.ready) return <Card gap={12}><Text variant="body">{prep.error || 'Loading Preparation…'}</Text>{prep.error && <Button title="Retry" variant="outline" onPress={prep.retry} />}</Card>;
   return <>
-    {(!inbound || !prep.value.groups?.length || !!data.lines.length) && <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
+    {!hasServerBatchLines && (!inbound || !prep.value.groups?.length || !!data.lines.length) && <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
       {!!index && <View style={styles.stepLine} />}
       <View style={styles.step}><View style={[styles.stepNumber, index <= currentStep && styles.stepCurrent]}>
         {index < currentStep ? <Check size={15} color={colors.primaryText} /> : <Text variant="caption" color={index === currentStep ? 'primaryText' : 'textMuted'}>{index + 1}</Text>}
@@ -70,7 +72,15 @@ export function VoucherDraftWorkspace({ data, accountId, writable }: Props) {
         </View>
         <InboundBatchSummary groups={prep.value.groups} />
       </Card>}
-      {!!data.lines.length && <Card gap={8}>
+      {hasServerBatchLines && !!prep.value.groups?.length && <Card gap={12} style={styles.reviewCard}>
+        <View style={styles.between}><Text variant="headline">Inbound Batch</Text></View>
+        <View style={styles.batchStatBar}>
+          <View style={styles.stat}><Text variant="title" style={styles.tabular}>{data.containerCount}</Text><Text variant="bodyMedium" color="textSecondary">Containers</Text></View>
+          <Text variant="caption" color="textSecondary" style={[styles.tabular, { fontWeight: '600' }]}>{t('{count} product groups', { count: prep.value.groups.length })}</Text>
+        </View>
+        <InboundBatchSummary groups={prep.value.groups} />
+      </Card>}
+      {!!data.lines.length && !hasServerBatchLines && <Card gap={8}>
         <View style={styles.between}><Text variant="headline" style={{ flex: 1 }}>Container Contents</Text><Text variant="caption" color="textSecondary">{progress.complete}/{progress.total} complete</Text></View>
         <Text variant="caption" color="textSecondary">Product, quantity and unit edits below are saved on this device only.</Text>
         {data.lines.map((line, index) => {

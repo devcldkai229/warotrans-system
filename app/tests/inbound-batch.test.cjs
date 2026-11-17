@@ -1,10 +1,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
-const load = createLoader();
-const { applyBatchGroupProduct, batchCounts, inboundBatchProblem, newBatchGroup } = load('src/features/inventory/inboundBatch.ts');
+class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
+const load = createLoader({ 'src/shared/api/client.ts': { ApiError } });
+const { applyBatchGroupProduct, batchCounts, buildContainerBatchBody, createBatchRequestId, inboundBatchProblem, newBatchGroup } = load('src/features/inventory/inboundBatch.ts');
 const { emptyPreparation, validPreparation } = load('src/features/inventory/voucherPreparation.ts');
 const { createPreparationStorage } = load('src/features/inventory/preparationStorage.ts');
+const { canAllocateInboundBatch } = load('src/features/inventory/stockVoucherData.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const product = { id: 'p-1', sku: 'RICE', name: 'Rice', isActive: true };
 const group = (key = 'group-1', overrides = {}) => ({ key, product, containerCount: '6', quantity: '24', unit: 'pcs', ...overrides });
@@ -78,4 +80,39 @@ test('selecting a new product updates or clears only the target group', () => {
   assert.equal(inboundBatchProblem('12', cleared).groupKey, 'group-1');
   const replaced = applyBatchGroupProduct(cleared, 'group-1', { ...product, id: 'p-3', sku: 'CORN' });
   assert.equal(replaced[0].product.id, 'p-3');
+});
+
+test('batch request builder maps groups, decimal precision, unit limits and supplier barcode accurately', () => {
+  const reqId = createBatchRequestId();
+  assert.match(reqId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(reqId, createBatchRequestId());
+  const groups = [
+    group('group-1', { product: { ...product, supplierBarcode: ' 8930001 ' }, containerCount: '6', quantity: '12,5', unit: ' pcs ' }),
+    group('group-2', { product: { ...product, id: 'p-2', sku: 'BEANS' }, containerCount: '4', quantity: '10', unit: 'kg' }),
+  ];
+  const body = plain(buildContainerBatchBody('wh-1', reqId, '10', groups, 'voucher-1'));
+  assert.deepEqual(body, {
+    warehouseId: 'wh-1',
+    requestId: reqId,
+    stockVoucherId: 'voucher-1',
+    containerCount: 10,
+    groups: [
+      { groupKey: 'group-1', productId: 'p-1', containerCount: 6, quantityPerContainer: 12.5, unit: 'pcs', supplierPackageBarcode: '8930001' },
+      { groupKey: 'group-2', productId: 'p-2', containerCount: 4, quantityPerContainer: 10, unit: 'kg' },
+    ],
+  });
+  assert.throws(() => buildContainerBatchBody('', reqId, '10', groups), /WarehouseId/);
+  assert.throws(() => buildContainerBatchBody('wh-1', ' ', '10', groups), /RequestId/);
+  assert.throws(() => buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: '1.2345' })]), /greater than zero/);
+  assert.throws(() => buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { unit: 'u'.repeat(33) })]), /32 characters/);
+});
+
+test('preparation requestId validation and batch allocation permission gate work as expected', () => {
+  const base = emptyPreparation('INBOUND');
+  assert.equal(validPreparation({ ...base, requestId: 'req-123' }, 'INBOUND'), true);
+  assert.equal(validPreparation({ ...base, requestId: '  ' }, 'INBOUND'), false);
+  assert.equal(validPreparation({ ...base, requestId: 123 }, 'INBOUND'), false);
+  const staff = { role: 'STAFF', permissions: ['warehouse.read', 'voucher.write'] };
+  assert.equal(canAllocateInboundBatch(staff), false);
+  assert.equal(canAllocateInboundBatch({ ...staff, permissions: [...staff.permissions, 'container.create'] }), true);
 });

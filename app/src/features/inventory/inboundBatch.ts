@@ -1,5 +1,5 @@
-import type { ProductItem } from '../../shared/api/warehouseApi';
-import { contentProblem, preparationCount } from './voucherPreparation';
+import type { CreateContainerBatchBody, CreateContainerBatchGroupInput, ProductItem } from '../../shared/api/warehouseApi';
+import { contentProblem, contentsQuantity, preparationCount } from './voucherPreparation';
 
 /** Local planning groups; keys are never Container IDs or barcodes. */
 export interface InboundBatchGroup {
@@ -36,7 +36,62 @@ export function inboundBatchProblem(requested: string, groups: InboundBatchGroup
     if (count === null || count > 9999) return { groupKey: group.key, message: 'Enter a positive whole number of containers for this product.' };
     const problem = contentProblem(group);
     if (problem) return { groupKey: group.key, message: problem };
+    if (group.unit.trim().length > 32) return { groupKey: group.key, message: 'Unit must be 32 characters or fewer.' };
   }
   if (grouped !== total) return { message: 'Product group counts must equal the batch container count.' };
   return null;
+}
+
+export function createBatchRequestId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function buildContainerBatchBody(
+  warehouseId: string,
+  requestId: string,
+  requestedCount: string,
+  groups: InboundBatchGroup[],
+  stockVoucherId?: string | null,
+): CreateContainerBatchBody {
+  const cleanWarehouseId = warehouseId.trim();
+  const cleanRequestId = requestId.trim();
+  if (!cleanWarehouseId) throw new Error('WarehouseId is required for batch receiving.');
+  if (!cleanRequestId) throw new Error('RequestId is required for batch receiving.');
+  const problem = inboundBatchProblem(requestedCount, groups);
+  if (problem) throw new Error(problem.message);
+
+  const containerCount = preparationCount(requestedCount)!;
+  const mappedGroups: CreateContainerBatchGroupInput[] = groups.map(group => {
+    const supplierBarcode = group.product?.supplierBarcode?.trim();
+    return {
+      groupKey: group.key.trim(),
+      productId: group.product!.id,
+      containerCount: preparationCount(group.containerCount)!,
+      quantityPerContainer: contentsQuantity(group.quantity)!,
+      unit: group.unit.trim(),
+      ...(supplierBarcode ? { supplierPackageBarcode: supplierBarcode } : {}),
+    };
+  });
+
+  return {
+    warehouseId: cleanWarehouseId,
+    requestId: cleanRequestId,
+    ...(stockVoucherId?.trim() ? { stockVoucherId: stockVoucherId.trim() } : {}),
+    containerCount,
+    groups: mappedGroups,
+  };
 }

@@ -7,6 +7,7 @@ export interface PreparedContainer { id: string; barcode: string; productName: s
 /** Device preparation only. None of these fields asserts server allocation, stock posting or synchronization. */
 export interface VoucherPreparation {
   version: 1; type: StockVoucherType; requestedCount: string; referenceNo: string; note: string;
+  requestId?: string;
   groups?: InboundBatchGroup[];
   contents: Record<string, PreparedContent>; selected: Record<string, PreparedContainer>;
 }
@@ -18,6 +19,7 @@ export function validPreparation(value: unknown, type: StockVoucherType): value 
   const record = (value: unknown) => !!value && typeof value === 'object' && !Array.isArray(value);
   return !!item && item.version === 1 && item.type === type
     && [item.requestedCount, item.referenceNo, item.note].every(value => typeof value === 'string')
+    && (item.requestId === undefined || (typeof item.requestId === 'string' && !!item.requestId.trim()))
     && record(item.contents) && record(item.selected)
     && (item.groups === undefined || (Array.isArray(item.groups) && new Set(item.groups.map(group => group?.key)).size === item.groups.length
       && item.groups.every(group => group && typeof group.key === 'string' && !!group.key
@@ -35,9 +37,9 @@ export function preparationCount(value: string): number | null {
   return Number.isSafeInteger(count) ? count : null;
 }
 export function contentsQuantity(value: string): number | null {
-  if (!/^\d+(?:[.,]\d+)?$/.test(value.trim())) return null;
+  if (!/^\d+(?:[.,]\d{1,3})?$/.test(value.trim())) return null;
   const quantity = Number(value.trim().replace(',', '.'));
-  return Number.isFinite(quantity) && quantity > 0 ? quantity : null;
+  return Number.isFinite(quantity) && quantity > 0 && quantity <= 999999999999999.999 ? quantity : null;
 }
 export function contentProblem(value?: PreparedContent) {
   if (!value?.product?.isActive) return 'Choose an active product.';

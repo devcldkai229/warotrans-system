@@ -5,20 +5,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { getUserErrorMessage } from '../../shared/api/client';
-import { createStockVoucherDraft } from '../../shared/api/warehouseApi';
+import { mobileCapabilities } from '../../shared/api/capabilities';
+import { createContainerBatch, createStockVoucherDraft } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import type { StockVoucherType } from '../../shared/types/contracts';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, ScreenHeader, SegmentedControl, Text, TextField } from '../../shared/ui';
-import { canCreateVoucher, draftValidation, uncertainDraftWrite, voucherType } from './stockVoucherData';
+import { canAllocateInboundBatch, canCreateVoucher, draftValidation, uncertainDraftWrite, voucherType } from './stockVoucherData';
 import { useVoucherWarehouse } from './useVoucherWarehouse';
 import { createVoucherStyles } from './voucherStyles';
 import { useVoucherPreparation } from './useVoucherPreparation';
+import { emptyPreparation } from './voucherPreparation';
 import { preparationDeviceStore } from './preparationDeviceStore';
 import { ContainerCountField } from './ContainerCountField';
 import { InboundBatchEditor } from './InboundBatchEditor';
 import { InboundBatchSummary } from './InboundBatchSummary';
-import { inboundBatchProblem, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
+import { buildContainerBatchBody, createBatchRequestId, inboundBatchProblem, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
 import { OutboundVoucherSelection } from './OutboundVoucherSelection';
 
 export function CreateStockVoucherScreen() {
@@ -62,10 +64,10 @@ export function CreateStockVoucherScreen() {
   const editCount = (count: string) => {
     if (!editable) return;
     setError(null);
-    preparation.update(previous => ({ ...previous, requestedCount: count, groups: previous.groups?.map((group, index, all) =>
+    preparation.update(previous => ({ ...previous, requestId: undefined, requestedCount: count, groups: previous.groups?.map((group, index, all) =>
       all.length === 1 && index === 0 && (!group.containerCount || group.containerCount === previous.requestedCount) ? { ...group, containerCount: count } : group) }));
   };
-  const editGroups = (next: InboundBatchGroup[]) => { if (editable) { setError(null); preparation.update(previous => ({ ...previous, groups: next })); } };
+  const editGroups = (next: InboundBatchGroup[]) => { if (editable) { setError(null); preparation.update(previous => ({ ...previous, requestId: undefined, groups: next })); } };
   const showError = (message: string) => { setError(message); requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: false })); };
   const validate = () => {
     const metadata = draftValidation(referenceNo, note);
@@ -95,15 +97,42 @@ export function CreateStockVoucherScreen() {
     const snapshot = preparation.value;
     const controller = new AbortController(); request.current = controller;
     try {
-      // The current contract saves only document metadata. Batch plans remain explicitly local.
       const result = await createStockVoucherDraft({ warehouseId: warehouse.id, type, referenceNo, note }, controller.signal);
       if (!alive.current || controller.signal.aborted) return;
       client.setQueryData(['stock-voucher', session?.id, result.id], result);
       void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
+      const requestId = inbound ? (snapshot.requestId || createBatchRequestId()) : undefined;
+      const persistedSnapshot = requestId ? { ...snapshot, requestId } : snapshot;
       let preparationCopyFailed = false;
-      try { await preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: result.id }, snapshot); }
+      try { await preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: result.id }, persistedSnapshot); }
       catch { preparationCopyFailed = true; }
+      if (inbound && !preparationCopyFailed) {
+        preparation.reset(emptyPreparation('INBOUND'));
+        void preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: 'new-INBOUND' }, emptyPreparation('INBOUND')).catch(() => {});
+      }
       if (!alive.current || controller.signal.aborted) return;
+      if (inbound && mobileCapabilities.createContainer && canAllocateInboundBatch(session) && !preparationCopyFailed) {
+        try {
+          const batch = await createContainerBatch(
+            buildContainerBatchBody(warehouse.id, requestId!, snapshot.requestedCount, snapshot.groups || [], result.id),
+            controller.signal,
+          );
+          if (!alive.current || controller.signal.aborted) return;
+          client.setQueryData(['stock-voucher', session?.id, result.id], batch.stockVoucher || result);
+          void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
+          void client.invalidateQueries({ queryKey: ['inventory-containers'] });
+          replace('stock_voucher_detail', { voucherId: result.id, warehouseId: warehouse.id });
+          return;
+        } catch (batchFailure) {
+          if (!alive.current || controller.signal.aborted) return;
+          replace('stock_voucher_detail', {
+            voucherId: result.id,
+            warehouseId: warehouse.id,
+            batchError: getUserErrorMessage(batchFailure, 'Could not allocate container barcodes. Retry from this draft.'),
+          });
+          return;
+        }
+      }
       replace('stock_voucher_detail', { voucherId: result.id, warehouseId: warehouse.id, preparationCopyFailed });
     } catch (failure) {
       if (!alive.current || controller.signal.aborted) return;

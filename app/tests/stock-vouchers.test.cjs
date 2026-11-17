@@ -79,11 +79,73 @@ test('a create response that cannot confirm the submitted draft is treated as an
   }
 });
 
-test('confirmation cannot call the old document-only endpoint as if it posted stock', async () => {
+test('inbound confirmation posts stock with caller token and rejects unverified or outbound calls', async () => {
   let writes = 0;
-  const api = modules(async () => { writes++; })('src/shared/api/warehouseApi.ts');
-  await assert.rejects(async () => api.confirmStockVoucher('voucher-1'), error => error.code === 'backend_capability_unavailable');
+  let captured = null;
+  const line = { id: 'l1', containerId: 'c1', containerBarcode: 'CTN-001', containerStatus: 'CREATED', productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24, contentsUnit: 'pcs', currentStorageLocationId: 'loc-in', currentStorageLocationCode: 'INBOUND-01', currentEndpointId: 'ep-in', currentLevelNo: 1, done: false };
+  const confirmed = detail({ status: 'CONFIRMED', confirmedAt: '2026-11-17T10:00:00Z', stockPostedAt: '2026-11-17T10:00:00Z', containerCount: 1, lines: [line] });
+  const guardApi = modules(async () => { writes++; return confirmed; })('src/shared/api/warehouseApi.ts');
+  for (const args of [['voucher-1'], ['voucher-1', 'OUTBOUND']]) {
+    await assert.rejects(async () => guardApi.confirmStockVoucher(...args), error => error.status === 501 && error.code === 'backend_capability_unavailable');
+  }
   assert.equal(writes, 0);
+
+  const api = modules(async (url, init, token) => { captured = { url, init, token }; return confirmed; })('src/shared/api/warehouseApi.ts');
+  const result = await api.confirmStockVoucher('voucher-1', 'INBOUND');
+  assert.equal(captured.url, '/api/warehouse/stock-vouchers/voucher-1/confirm');
+  assert.equal(captured.init.method, 'POST');
+  assert.equal(captured.token, 'original-account-token');
+  assert.equal(result.status, 'CONFIRMED');
+  assert.equal(result.stockPostedAt, '2026-11-17T10:00:00Z');
+
+  for (const bad of [detail({ status: 'DRAFT' }), detail({ status: 'CONFIRMED', stockPostedAt: null }), detail({ id: 'other', status: 'CONFIRMED', stockPostedAt: '2026-11-17T10:00:00Z' })]) {
+    const badApi = modules(async () => bad)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(async () => badApi.confirmStockVoucher('voucher-1', 'INBOUND'), error => error.code === 'voucher_confirmation_unverified');
+  }
+});
+
+test('batch container creation links to draft voucher and verifies every allocated item and line', async () => {
+  const reqBody = {
+    warehouseId: 'warehouse-1',
+    requestId: 'req-1',
+    stockVoucherId: 'voucher-1',
+    containerCount: 2,
+    groups: [{ groupKey: 'group-1', productId: 'p1', containerCount: 2, quantityPerContainer: 24, unit: 'pcs' }],
+  };
+  const items = [
+    { id: 'c1', barcode: 'CTN-20261117-000001', productId: 'p1', groupKey: 'group-1', containerNo: 1, contentsQuantity: 24, contentsUnit: 'pcs', supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
+    { id: 'c2', barcode: 'CTN-20261117-000002', productId: 'p1', groupKey: 'group-1', containerNo: 2, contentsQuantity: 24, contentsUnit: 'pcs', supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
+  ];
+  const linkedVoucher = detail({
+    containerCount: 2,
+    lines: items.map((item, idx) => ({
+      id: `l-${idx + 1}`, lineNo: idx + 1, containerId: item.id, containerBarcode: item.barcode, containerStatus: 'CREATED',
+      productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24, contentsUnit: 'pcs',
+      currentStorageLocationId: 'loc-in', currentStorageLocationCode: 'INBOUND-01', currentEndpointId: 'ep-in', currentLevelNo: null, done: false,
+    })),
+  });
+  let request = null;
+  const api = modules(async (url, init, token) => {
+    request = { url, init, token };
+    return { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: linkedVoucher };
+  })('src/shared/api/warehouseApi.ts');
+
+  const res = await api.createContainerBatch(reqBody);
+  assert.equal(request.url, '/api/warehouse/containers');
+  assert.equal(request.token, 'original-account-token');
+  assert.deepEqual(JSON.parse(request.init.body), reqBody);
+  assert.equal(res.items.length, 2);
+  assert.equal(res.stockVoucher.lines.length, 2);
+
+  for (const invalid of [
+    { requestId: 'other', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: linkedVoucher },
+    { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: null },
+    { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items: [items[0], { ...items[0], id: 'c3' }], stockVoucher: linkedVoucher },
+    { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: detail({ containerCount: 1, lines: [linkedVoucher.lines[0]] }) },
+  ]) {
+    const badApi = modules(async () => invalid)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(async () => badApi.createContainerBatch(reqBody), error => error.code === 'container_batch_unverified');
+  }
 });
 
 test('paging deduplicates shifted rows while retaining the first, freshest snapshot and raw server offset', () => {

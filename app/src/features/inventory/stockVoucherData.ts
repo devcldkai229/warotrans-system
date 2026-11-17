@@ -10,6 +10,9 @@ export function canReadVouchers(session: UserSession | null) {
 export function canCreateVoucher(session: UserSession | null) {
   return canReadVouchers(session) && sessionCan(session, PERMISSIONS.voucherWrite);
 }
+export function canAllocateInboundBatch(session: UserSession | null) {
+  return canCreateVoucher(session) && sessionCan(session, PERMISSIONS.containerCreate);
+}
 export function voucherType(value: unknown): StockVoucherType {
   return value === 'OUTBOUND' ? 'OUTBOUND' : 'INBOUND';
 }

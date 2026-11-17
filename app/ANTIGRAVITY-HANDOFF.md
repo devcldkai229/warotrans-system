@@ -52,22 +52,19 @@ Nếu tài liệu cũ khác quyết định mới, ưu tiên người dùng rồ
 
 ### Phân biệt phần đã chạy với phần còn thiếu
 
-Đã có REST thật cho kho, map, catalog/resolve Product, list/detail phiếu và tạo nháp metadata. Resolve Product có kiểm tra exact/active/unknown/ambiguity; đang dùng lại trong chọn Product và nhập mã quét.
+Đã có REST thật cho kho, map, catalog/resolve Product, list/detail phiếu, tạo nháp metadata, **tạo lô Container gắn thẳng vào phiếu nháp Nhập (`POST /api/warehouse/containers` với `stockVoucherId`, `requestId`, `groups`, `containerCount`) và xác nhận ghi tồn phiếu Nhập (`POST /api/warehouse/stock-vouchers/{id}/confirm`, trả `stockPostedAt`)** sau khi Codex hoàn thiện `feature/stock-voucher-backend` (`e669aeb`..`35da520`).
 
-**BE chưa có đủ contract cho cấp N barcode trước Product, lưu nội dung kiện/lô, canonical staged-outbound eligibility, lưu lựa chọn và confirm ghi tồn.** Confirm handler cũ chỉ đổi trạng thái chứng từ; không mở nó như thể đã post stock.
-
-- Nhóm `group-*` là kế hoạch local, không phải Container UUID/barcode. `contents` theo ID thật trong detail khác với nhóm dự kiến.
-- Preparation lưu trên thiết bị theo account/kho/phiếu, native SecureStore/web localStorage. Đây không phải server draft đã lưu contents và không phải hàng đợi offline sync.
-- `Create Empty Draft` chỉ gửi metadata được API hiện có hỗ trợ; sau thành công copy kế hoạch sang cache theo ID phiếu thật. Detail nháp trống hiển thị Batch Plan/On This Device. Không gọi API thiếu, không báo đã tạo thùng/cấp mã/ghi tồn.
-- Thẻ `Barcodes` / `Generate Barcodes` thừa đã được bỏ khỏi màn Review khi tạo phiếu theo lô (cập nhật 14/11/2026); màn Review chỉ tập trung vào tóm tắt lô/kiện đã chọn và Thông tin bổ sung, còn nút `Create Empty Draft` giữ nguyên gate cho tới khi BE hoàn thiện gắn phiếu & ghi tồn. Khi BE sẵn sàng, cần mapping ổn định nhóm/ordinal ↔ Container ID/barcode, receipt, idempotency, version và phục hồi partial success. Không tự ghép theo vị trí mảng khi contract chưa cam kết.
-- Outbound hiện là preview vị trí: enabled WAYPOINT có code khớp từ OUTBOUND, Container STORED có endpoint/location khớp và `inActiveTransport === false`. Navigation chưa có role Inbound/Outbound canonical. Preview không chứng minh stock membership hoặc eligibility cuối; audit đã ghi gap này.
-- Capabilities tại thời điểm bàn giao: `createStockVoucherDraft`, `resolveProduct`, `reportIssue`, `resumeJob` true; `createContainer`, `confirmStockVoucher`, `claimHumanTask`, `pauseJob`, `payloadRecovery` false. Đọc source lại trước khi thay; chỉ bật sau khi kiểm chứng contract/quyền/response thật.
+- Nhóm `group-*` lúc soạn là kế hoạch local (chưa có Container UUID/barcode); `requestId` được sinh ổn định và lưu trong `preparationDeviceStore` theo `documentKey` của phiếu nháp để retry an toàn nếu cấp mã thất bại hoặc mất phản hồi.
+- Khi bấm **Create Inbound Voucher** trên màn Review: FE gọi `POST /api/warehouse/stock-vouchers` lấy `DRAFT` rồi tự động gọi `POST /api/warehouse/containers` với `stockVoucherId` để cấp N mã `CTN-...` và tạo `StockVoucherLine` trong cùng transaction trên server, đồng thời reset form `new-INBOUND` để tránh tạo trùng nháp. Nếu bước cấp mã lỗi, màn chi tiết phiếu nháp hiển thị lỗi và nút **Allocate Container Barcodes** để retry cùng `requestId`.
+- Khi phiếu Nhập đã có server `lines` (kèm `contentsQuantity`, `contentsUnit`), màn chi tiết ẩn stepper cũ và cho phép bấm **Confirm Inbound Voucher** (`INBOUND`-only guard) để ghi tồn một lần tại Inbound (`stockPostedAt`).
+- **Outbound chưa mở xác nhận ghi tồn**: FE giữ action guard `INBOUND`-only trong `confirmStockVoucher`; Outbound vẫn chỉ là preview vị trí (`OUTBOUND` WAYPOINT + `STORED` + `inActiveTransport === false`) và trả 501 `outbound_stock_posting_not_supported` nếu gọi confirm trên BE. Chưa có API chính thức lưu selection xuất kho và kiểm tra staged eligibility cuối trên BE.
+- Capabilities hiện tại (`app/src/shared/api/capabilities.ts`): `createContainer`, `createStockVoucherDraft`, `confirmStockVoucher` (có INBOUND-only guard), `resolveProduct`, `reportIssue`, `resumeJob` là `true`; `claimHumanTask`, `pauseJob`, `payloadRecovery` là `false`. Legacy single-box `createContainer` không có `groups`/số lượng vẫn bị khóa 501 trên mobile.
 
 ### File chính và kiểm chứng
 
 Đọc `CreateStockVoucherScreen.tsx`, `ContainerCountField.tsx`, `InboundBatchEditor.tsx`, `InboundBatchSummary.tsx`, `inboundBatch.ts`, `voucherPreparation.ts`, `useVoucherPreparation.ts`, `preparationStorage.ts`, `preparationDeviceStore.ts`, `StockVouchersScreen.tsx`, `StockVoucherDetailScreen.tsx`, `VoucherDraftWorkspace.tsx`, `OutboundVoucherSelection.tsx`, `outboundPreparation.ts`, `ReceivingProductPicker.tsx`, `productLookup.ts`, `stockVoucherData.ts`, `useVoucherWarehouse.ts` trong `app/src/features/inventory/`; API/capabilities trong `app/src/shared/api/`.
 
-Mốc vừa kiểm tra: cập nhật form Inbound Batch giản lược (chọn Product từ danh mục, bỏ scan barcode và bỏ chỉnh riêng từng thùng). Chưa nghiệm thu camera/iPhone/VoiceOver hoặc robot thật.
+Mốc hiện tại: đã mở `createContainer` (dạng lô `createContainerBatch`) và `confirmStockVoucher` (có INBOUND-only guard) khớp với BE `35da520` (`feature/stock-voucher-backend`), kèm typecheck/unit tests/web export. Vẫn cần nghiệm thu end-to-end trên server local cổng `5090` + iPhone 12/Expo và giữ Outbound confirm khóa tới khi BE có staged eligibility + outbound stock posting.
 
 ## 4. Plan lớn còn dang dở
 

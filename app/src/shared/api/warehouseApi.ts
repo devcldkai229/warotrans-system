@@ -114,35 +114,59 @@ export interface CreateContainerResponse {
 }
 export interface CreateContainerBatchGroupInput {
   groupKey: string; productId: string; containerCount: number; quantityPerContainer: number;
-  unit: string; supplierPackageBarcode?: string | null;
+  unit: string; quantityOverrides?: { containerNo: number; quantity: number }[] | null; supplierPackageBarcode?: string | null;
 }
 export interface CreateContainerBatchBody {
-  warehouseId: string; requestId: string; containerCount: number; groups: CreateContainerBatchGroupInput[];
+  warehouseId: string; requestId: string; stockVoucherId?: string | null; containerCount: number; groups: CreateContainerBatchGroupInput[];
 }
 export interface CreatedBatchContainerItem {
   id: string; barcode: string; productId: string; groupKey: string; containerNo: number;
   contentsQuantity: number; contentsUnit: string; supplierPackageBarcode: string | null;
-  status: ContainerStatus | string; currentStorageLocationId: string; currentEndpointId: string; createdAt: string;
+  status: ContainerStatus | string; currentStorageLocationId: string | null; currentEndpointId: string | null; createdAt: string;
 }
 export interface CreateContainerBatchResponse {
   requestId: string; warehouseId: string; containerCount: number; replayed: boolean; items: CreatedBatchContainerItem[];
+  stockVoucher?: StockVoucherDetail | null;
 }
 export async function createContainer(body: CreateContainerBody): Promise<CreateContainerResponse> {
-  requireMobileCapability('createContainer');
-  const response = await apiFetch<CreateContainerResponse>('/api/warehouse/containers', {
-    method: 'POST', body: JSON.stringify({
-      productId: body.productId, supplierPackageBarcode: body.supplierPackageBarcode ?? null,
-      initialStorageLocationId: body.initialStorageLocationId ?? null, initialLevelNo: body.initialLevelNo ?? null,
-      stockVoucherId: body.stockVoucherId ?? null,
-    }),
-  });
-  return response;
+  void body;
+  throw new ApiError(501, 'backend_capability_unavailable', 'This action is not supported by the current backend. Contact the supervisor.');
 }
-export function createContainerBatch(body: CreateContainerBatchBody, signal?: AbortSignal) {
+function validContainerBatchResponse(result: CreateContainerBatchResponse | null, body: CreateContainerBatchBody): result is CreateContainerBatchResponse {
+  if (!result || result.requestId !== body.requestId || result.warehouseId !== body.warehouseId || typeof result.replayed !== 'boolean'
+    || result.containerCount !== body.containerCount || !Array.isArray(result.items) || result.items.length !== body.containerCount) {
+    return false;
+  }
+  const itemValid = result.items.every(item => !!item && typeof item.id === 'string' && !!item.id.trim()
+    && typeof item.barcode === 'string' && !!item.barcode.trim() && typeof item.productId === 'string' && !!item.productId.trim()
+    && typeof item.groupKey === 'string' && !!item.groupKey.trim() && Number.isInteger(item.containerNo) && item.containerNo >= 1
+    && typeof item.contentsQuantity === 'number' && Number.isFinite(item.contentsQuantity) && item.contentsQuantity > 0
+    && typeof item.contentsUnit === 'string' && !!item.contentsUnit.trim());
+  if (!itemValid) return false;
+  if (new Set(result.items.map(item => item.id)).size !== result.items.length
+    || new Set(result.items.map(item => item.barcode)).size !== result.items.length) {
+    return false;
+  }
+  if (body.stockVoucherId) {
+    if (!result.stockVoucher || !validVoucherDetail(result.stockVoucher)
+      || result.stockVoucher.id !== body.stockVoucherId || result.stockVoucher.warehouseId !== body.warehouseId
+      || result.stockVoucher.type !== 'INBOUND' || result.stockVoucher.lines.length < body.containerCount) {
+      return false;
+    }
+    const lineIds = new Set(result.stockVoucher.lines.map(line => line.containerId));
+    if (result.items.some(item => !lineIds.has(item.id))) return false;
+  }
+  return true;
+}
+export async function createContainerBatch(body: CreateContainerBatchBody, signal?: AbortSignal): Promise<CreateContainerBatchResponse> {
   requireMobileCapability('createContainer');
-  return apiFetch<CreateContainerBatchResponse>('/api/warehouse/containers', {
+  const result = await apiFetch<CreateContainerBatchResponse>('/api/warehouse/containers', {
     method: 'POST', signal, body: JSON.stringify(body),
-  });
+  }, getAccessToken());
+  if (!validContainerBatchResponse(result, body)) {
+    throw new ApiError(502, 'container_batch_unverified', 'Could not verify the allocated containers. Check the voucher before trying again.');
+  }
+  return result;
 }
 /** `Warehouse/Features/ListStockVouchers/Response.cs`. Quantities are Containers; `doneCount` is robot progress. */
 export interface StockVoucherListItem {
@@ -165,7 +189,7 @@ export function addStockVoucherLines(voucherId: string, containerIds: string[], 
 }
 export interface StockVoucherDetail extends StockVoucherListItem {
   warehouseId: string; warehouseCode: string; warehouseName: string; createdBy: string; updatedAt: string;
-  confirmedBy: string | null; cancelledBy: string | null; cancelledAt: string | null;
+  confirmedBy: string | null; cancelledBy: string | null; cancelledAt: string | null; stockPostedAt?: string | null;
   products: { productId: string; productSku: string; productName: string; containerCount: number; doneCount: number }[];
   lines: StockVoucherLine[];
 }
@@ -209,8 +233,18 @@ export async function createStockVoucherDraft(body: CreateStockVoucherDraftBody,
 export function recoverContainer(id: string, body: { storageLocationId: string; levelNo: number; note?: string }) {
   return apiFetch<unknown>(`/api/warehouse/containers/${id}/recover`, { method: 'POST', body: JSON.stringify(body) });
 }
-/** Gated until confirming also posts stock according to the approved Inbound/Outbound rules. */
-export function confirmStockVoucher(id: string) {
+/** Atomically confirms INBOUND vouchers and posts stock once at Inbound; OUTBOUND remains unsupported. */
+export async function confirmStockVoucher(id: string, type?: StockVoucherType, signal?: AbortSignal): Promise<StockVoucherDetail> {
   requireMobileCapability('confirmStockVoucher');
-  return apiFetch<StockVoucherListItem>(`/api/warehouse/stock-vouchers/${id}/confirm`, { method: 'POST' });
+  if (type !== 'INBOUND') {
+    throw new ApiError(501, 'backend_capability_unavailable', 'This action is not supported by the current backend. Contact the supervisor.');
+  }
+  const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}/confirm`, {
+    method: 'POST', signal,
+  }, getAccessToken());
+  if (!validVoucherDetail(result) || result.id !== id || result.type !== 'INBOUND' || result.status !== 'CONFIRMED'
+    || typeof result.stockPostedAt !== 'string' || !result.stockPostedAt.trim()) {
+    throw new ApiError(502, 'voucher_confirmation_unverified', 'Could not verify the voucher confirmation. Refresh and try again.');
+  }
+  return result;
 }
