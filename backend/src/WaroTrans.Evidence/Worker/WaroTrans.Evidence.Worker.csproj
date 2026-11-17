@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.400" />
   </ItemGroup>
 
   <ItemGroup>

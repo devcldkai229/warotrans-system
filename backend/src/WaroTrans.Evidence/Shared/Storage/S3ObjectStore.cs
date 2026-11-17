@@ -38,20 +38,20 @@ public sealed class S3ObjectStore(IAmazonS3 s3, EvidenceStorageOptions options, 
         return Task.FromResult(new PresignedUpload(url, "PUT", headers, expires));
     }
 
-    public async Task<StoredObject?> HeadAsync(string key, CancellationToken cancellationToken)
+    public async Task<StoredObject?> HeadAsync(string key, CancellationToken cancellationToken, string? bucket = null)
     {
         try
         {
             var head = await s3.GetObjectMetadataAsync(new GetObjectMetadataRequest
             {
-                BucketName = Bucket,
+                BucketName = bucket ?? Bucket,
                 Key = key,
                 ChecksumMode = ChecksumMode.ENABLED
             }, cancellationToken);
             var sha = string.IsNullOrEmpty(head.ChecksumSHA256) || head.ChecksumSHA256.Contains('-')
                 ? null // a multipart checksum-of-checksums is not the file's SHA-256
                 : Checksums.Base64ToHex(head.ChecksumSHA256);
-            return new StoredObject(Bucket, key, head.ContentLength, sha, head.ETag, head.VersionId,
+            return new StoredObject(bucket ?? Bucket, key, head.ContentLength, sha, head.ETag, head.VersionId,
                 new DateTimeOffset(DateTime.SpecifyKind(head.LastModified, DateTimeKind.Utc)));
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -81,11 +81,11 @@ public sealed class S3ObjectStore(IAmazonS3 s3, EvidenceStorageOptions options, 
         return result;
     }
 
-    public async Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken)
+    public async Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken, string? bucket = null)
     {
         try
         {
-            var response = await s3.GetObjectAsync(Bucket, key, cancellationToken);
+            var response = await s3.GetObjectAsync(bucket ?? Bucket, key, cancellationToken);
             return response.ResponseStream;
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)

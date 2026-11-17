@@ -58,7 +58,7 @@ public sealed class LocalObjectStore(EvidenceStorageOptions options, TimeProvide
         return (await HeadAsync(key, cancellationToken))!;
     }
 
-    public async Task<StoredObject?> HeadAsync(string key, CancellationToken cancellationToken)
+    public async Task<StoredObject?> HeadAsync(string key, CancellationToken cancellationToken, string? bucket = null)
     {
         var path = PathOf(key);
         if (!File.Exists(path))
@@ -104,7 +104,7 @@ public sealed class LocalObjectStore(EvidenceStorageOptions options, TimeProvide
         return Task.CompletedTask;
     }
 
-    public Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken)
+    public Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken, string? bucket = null)
     {
         var path = PathOf(key);
         return Task.FromResult<Stream?>(File.Exists(path) ? File.OpenRead(path) : null);

@@ -12,6 +12,7 @@ using WaroTrans.Evidence.Persistence;
 using WaroTrans.Evidence.Recorder.Features.Edge.Recordings;
 using WaroTrans.Evidence.Recorder.Features.Edge.Telemetry;
 using WaroTrans.Evidence.Recorder.Features.LocalStore;
+using WaroTrans.Evidence.Recorder.Features.Playback;
 using WaroTrans.Evidence.Storage;
 using WaroTrans.Evidence.Recorder;
 using WaroTrans.Evidence.Recorder.Features.Admin.IssueRobotCredential;
@@ -75,6 +76,20 @@ builder.Services.AddScoped<JournalStatusService>();
 builder.Services.AddScoped<IngestTransportEventsHandler>();
 builder.Services.AddHostedService<JournalMaintenanceService>();
 
+// Playback grants: CloudFront signed URL/cookies (AWS) or the Recorder serving HLS from the local store (dev).
+builder.Services.Configure<PlaybackOptions>(builder.Configuration.GetSection(PlaybackOptions.SectionName));
+var playbackProvider = builder.Configuration.GetSection(PlaybackOptions.SectionName)["Provider"] ?? "Local";
+var localPlayback = !string.Equals(playbackProvider, "CloudFront", StringComparison.OrdinalIgnoreCase);
+if (localPlayback)
+{
+    builder.Services.AddSingleton<LocalPlaybackSigner>();
+    builder.Services.AddSingleton<IPlaybackSigner>(sp => sp.GetRequiredService<LocalPlaybackSigner>());
+}
+else
+{
+    builder.Services.AddSingleton<IPlaybackSigner, CloudFrontPlaybackSigner>();
+}
+
 // Users: the same access tokens the Host issues. Robots: their own recording credential.
 builder.Services.AddWaroTransJwtAuthentication(builder.Configuration);
 builder.Services.AddAuthentication()
@@ -124,6 +139,11 @@ var edge = api.MapGroup("/edge")
 WhoAmIEndpoint.Map(edge);
 RecordingEndpoints.Map(edge);
 TelemetryEndpoints.Map(edge);
+PlaybackEndpoints.Map(api);
+if (localPlayback)
+{
+    LocalPlaybackEndpoint.Map(app);
+}
 if (!storageOptions.IsS3)
 {
     LocalStoreEndpoint.Map(app);

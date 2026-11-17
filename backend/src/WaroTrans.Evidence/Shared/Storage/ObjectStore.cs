@@ -16,12 +16,13 @@ public interface IObjectStore
     Task<PresignedUpload> PresignPutAsync(string key, long contentLength, string sha256Hex, TimeSpan ttl, CancellationToken cancellationToken);
 
     /// <returns>Null when there is no such object.</returns>
-    Task<StoredObject?> HeadAsync(string key, CancellationToken cancellationToken);
+    /// <param name="bucket">Another bucket of the same store (the playback bucket); null: <see cref="Bucket"/>.</param>
+    Task<StoredObject?> HeadAsync(string key, CancellationToken cancellationToken, string? bucket = null);
 
     Task<IReadOnlyList<StoredObject>> ListAsync(string prefix, CancellationToken cancellationToken);
 
     /// <returns>Null when there is no such object.</returns>
-    Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken);
+    Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken, string? bucket = null);
 }
 
 public sealed record PresignedUpload(string Url, string Method, IReadOnlyDictionary<string, string> Headers, DateTimeOffset ExpiresAtUtc);

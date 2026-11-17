@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\WaroTrans.Evidence\Shared\WaroTrans.Evidence.Shared.csproj" />
     <ProjectReference Include="..\..\src\WaroTrans.Evidence\Recorder\WaroTrans.Evidence.Recorder.csproj" />
+    <ProjectReference Include="..\..\src\WaroTrans.Evidence\Worker\WaroTrans.Evidence.Worker.csproj" Aliases="worker" />
   </ItemGroup>
 
 </Project>

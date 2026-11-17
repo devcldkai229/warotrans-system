@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.Evidence;
 using WaroTrans.Evidence.Persistence;
+using WaroTrans.Evidence.Media;
+using WaroTrans.Evidence.Worker.Features.MediaConvertResult;
+using WaroTrans.Evidence.Worker.Features.MediaConvertSubmission;
 using WaroTrans.Evidence.Worker.Features.OutboxPublisher;
 using WaroTrans.Evidence.Worker.Features.Reconciliation;
 using WaroTrans.Evidence.Worker.Features.SegmentIngestion;
@@ -26,6 +29,27 @@ builder.Services.AddScoped<SegmentIngestionHandler>();
 builder.Services.AddHostedService<QueueConsumer<SegmentIngestionHandler>>();
 builder.Services.AddHostedService<EvidenceOutboxPublisher>();
 builder.Services.AddHostedService<IngestReconciliation>();
+
+// Transcoding: MediaConvert (AWS), ffmpeg (development) or None (jobs stay QUEUED until a provider is configured).
+builder.Services.Configure<EvidenceMediaOptions>(builder.Configuration.GetSection(EvidenceMediaOptions.SectionName));
+var mediaProvider = builder.Configuration.GetSection(EvidenceMediaOptions.SectionName)["Provider"] ?? "None";
+if (!string.Equals(mediaProvider, "None", StringComparison.OrdinalIgnoreCase))
+{
+    if (string.Equals(mediaProvider, "MediaConvert", StringComparison.OrdinalIgnoreCase))
+    {
+        builder.Services.AddSingleton<IMediaTranscoder, MediaConvertTranscoder>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<IMediaTranscoder, LocalFfmpegTranscoder>();
+    }
+
+    builder.Services.AddScoped<MediaSubmissionHandler>();
+    builder.Services.AddScoped<MediaResultHandler>();
+    builder.Services.AddHostedService<QueueConsumer<MediaSubmissionHandler>>();
+    builder.Services.AddHostedService<QueueConsumer<MediaResultHandler>>();
+    builder.Services.AddHostedService<MediaReconciliation>();
+}
 
 builder.Services.AddHealthChecks().AddNpgSql(connectionString, name: "evidence-postgresql");
 
