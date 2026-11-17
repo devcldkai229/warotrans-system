@@ -43,25 +43,51 @@ rpicam-hello --list-cameras          # the camera must be listed
 
 These steps need Internet on the Pi (apt and git). RBT-002 already has the stack.
 
-## 2. Clock (chrony)
+## 2. Network and clock (names, not addresses)
 
-Two robots' videos are lined up by UTC, so both clocks must follow the laptop. The Pi has no RTC battery.
+The laptop's and the robots' IPs change with every network (ICS DHCP, the boarding-house Wi-Fi, the lab Wi-Fi), so
+nothing uses a fixed IP:
 
-On the laptop (admin PowerShell, once), make Windows answer NTP:
+| Who | Reached as |
+|---|---|
+| Laptop (MQTT, Host, Recorder, NTP) | `LAPTOP-Q0QAV6GM.local` (mDNS), else `192.168.137.1` on the cable, else found by a scan of the robot's /24 |
+| RBT-001 / RBT-002 | `warotrans.local` / `warotrans-rbt002.local`; on the cable also the fixed `192.168.137.51` / `.50` |
 
-```powershell
-Set-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders\NtpServer -Name Enabled -Value 1
-Set-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config -Name AnnounceFlags -Value 5
-Restart-Service w32time
-New-NetFirewallRule -DisplayName "NTP" -Direction Inbound -Protocol UDP -LocalPort 123 -Action Allow
-```
+**Laptop, once per new network** (admin PowerShell): `warotrans	ools\laptop_lab_network.ps1`. It:
+- makes the Wi-Fi profile Private;
+- opens inbound 1883, 9001, 5090, 5095 and 123 to the local subnet, plus the WSL Hyper-V rule (Docker runs in mirrored mode);
+- turns on the W32Time NTP server.
 
-On each Pi:
+Start the Host and the Recorder with `--urls http://0.0.0.0:<port>`.
+
+**Each Pi, once per Wi-Fi** (the Pi on the cable first). The password goes through the environment only:
 
 ```bash
-sudo tools/install_chrony.sh 192.168.137.1      # needs apt (Internet) once
-chronyc tracking                                 # Leap status: Normal, small "System time" offset
+sudo WIFI_PSK='<password>' tools/pi_network_setup.sh --wifi "<SSID>" --eth-fallback 192.168.137.50/24   # .51 on RBT-001
+sudo tools/pi_network_setup.sh --confirm      # within 180 s, otherwise the old network config comes back
+sudo tools/pi_network_setup.sh --packages     # avahi + libnss-mdns + chrony (needs the Internet from the Wi-Fi)
+sudo tools/install_chrony.sh                  # the laptop by name, 192.168.137.1, Ubuntu pool
+chronyc tracking                              # Leap status: Normal
 ```
+
+Every saved Wi-Fi network stays; the Pi joins whichever is in range. Wi-Fi carries the default route, and the cable
+stays for SSH.
+
+**Finding the backend.** `BROKER=auto` is the default: `rbt2_mode.sh fleet auto` on RBT-002, or no `BROKER` for
+`pi_run_semantic.sh` on RBT-001. At every start, `tools/broker_discovery.py` finds the backend. A name is kept as a
+name, so MQTT and the agent follow a new laptop IP by themselves. A watcher restarts the stack when the backend moves
+to another address or appears after a start without one: `warotrans-rbt002-broker-watch.service` on RBT-002, and a
+loop started by `pi_run_semantic.sh` on RBT-001.
+
+Verified on RBT-002 (2026-11-17):
+
+| Check | Result |
+|---|---|
+| Wi-Fi "Tret 2" | 192.168.11.21, Internet OK |
+| eth0 fallback | `.50` |
+| chrony | synchronized |
+| MQTT | `LAPTOP-Q0QAV6GM.local` over Wi-Fi |
+| Reboot | Same state within 1 minute; the clock is right before the stack starts |
 
 The agent reads `chronyc -c tracking` every 60 s and records the offset and the error bound. Without chrony the error
 bound is unknown, and the replay marks the video "Sync uncertain".
@@ -96,7 +122,7 @@ Put the spool on the SSD when there is one (`spool_dir`). It holds up to `quota_
 ## 5. Check
 
 ```bash
-curl -s -H "Authorization: Robot RBT-002.$WARO_EVIDENCE_TOKEN" http://192.168.137.1:5095/api/evidence/edge/whoami
+curl -s -H "Authorization: Robot RBT-002.$WARO_EVIDENCE_TOKEN" http://LAPTOP-Q0QAV6GM.local:5095/api/evidence/edge/whoami
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8081/snapshot.jpg     # 200: the camera works
 ls ~/warotrans_evidence/recordings/*/                                           # .avi + timing.json during a trip
 sqlite3 ~/warotrans_evidence/evidence.db "select registered, uploaded, count(*) from segments group by 1, 2"
@@ -116,4 +142,5 @@ In the web app, open **Transport journals**, pick the request, and check two thi
 | Video shows "Sync uncertain" | chrony missing or not synchronized (`chronyc tracking`) |
 | `whoami` returns 401 | Token replaced or mistyped; issue a new one |
 | No recording although the robot drives | `/fleet/active_command` is not published (gateway too old), or `CAMERA=false` |
-| The Pi has no IPv4 on the ICS link | Windows ICS DHCP did not answer; reconnect, or give a temporary address (`sudo ip addr add 192.168.137.50/24 dev eth0`) |
+| The Pi has no IPv4 on the ICS link | Windows ICS DHCP did not answer: use the fixed `192.168.137.50` / `.51` (set by `pi_network_setup.sh`) or `<host>.local` |
+| `broker_discovery.py resolve` finds nothing | Backend or Docker not running, the laptop Wi-Fi is Public, or the firewall rules are missing: run `laptop_lab_network.ps1` |
