@@ -547,4 +547,27 @@ public class SemanticTrafficScenarioTests
         Assert.Contains(_r2, waiters);
         Assert.DoesNotContain(_r1, waiters);
     }
+
+    [Fact]
+    public void Giving_way_in_a_cycle_frees_what_was_granted_but_not_entered_and_holds_grants_for_a_while()
+    {
+        var s = NewState();
+        Assert.True(s.MarkOnline(_r1, 0.0, 0.0, true).Ok);
+        var grant = s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, Line(0, 0, 4, 0)));
+        Assert.True(grant.Granted);
+        var before = View(s, _r1).OccupiedResourceIds.Length;
+
+        Assert.True(s.ReleaseUnenteredReservation(_r1, 5, "test").Ok);
+
+        var view = View(s, _r1);
+        Assert.Null(view.Authority);
+        Assert.True(view.OccupiedResourceIds.Length < before);
+        Assert.Contains("cell:0:0", view.OccupiedResourceIds);                // it still holds where it stands
+        Assert.DoesNotContain(view.OccupiedResourceIds, r => r.StartsWith("cell:12:", StringComparison.Ordinal)); // 3 m ahead freed
+        var held = s.AcquireSemanticPlan(Plan(_r1, _cmd1, 2, Line(0, 0, 4, 0)));
+        Assert.False(held.Granted);
+
+        _clock.Advance(TimeSpan.FromSeconds(6));
+        Assert.True(s.AcquireSemanticPlan(Plan(_r1, _cmd1, 3, Line(0, 0, 4, 0))).Granted);
+    }
 }

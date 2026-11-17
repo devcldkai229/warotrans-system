@@ -1609,6 +1609,24 @@ public sealed class JobExecutionEngine(
     /// <summary>Set while the robot drives to the area's queue point: that RESULT means "arrived to wait", not "arrived".</summary>
     public const string AreaQueueLegKey = "areaQueueLeg";
 
+    /// <summary>Pseudo area of a MOVE that backed off from a wait-for cycle (it waits at the retreat point, then goes on).</summary>
+    public const string DeadlockRetreatZone = "DEADLOCK";
+
+    /// <summary>Endpoint a MOVE backs off to; set when its NAVIGATE was cancelled, the retreat leaves once that has ended.</summary>
+    public const string RetreatToKey = "retreatToEndpointId";
+
+    /// <summary>A wait-for cycle this old is broken: one of the two robots backs off.</summary>
+    public const double DeadlockAfterSeconds = 5;
+
+    /// <summary>How long a robot that backed off waits at the retreat point before it drives to its goal again.</summary>
+    public const double DeadlockHoldSeconds = 8;
+
+    /// <summary>A robot that backed off is not chosen again for this long.</summary>
+    public const double DeadlockCooldownSeconds = 30;
+
+    private static readonly Dictionary<Guid, DateTimeOffset> DeadlockSince = [];
+    private static readonly Dictionary<Guid, DateTimeOffset> LastRetreat = [];
+
     /// <summary>Who decides "who goes into an area" is one critical section, so two robots never both see it free.</summary>
     private static readonly SemaphoreSlim AreaGate = new(1, 1);
 
@@ -1691,6 +1709,211 @@ public sealed class JobExecutionEngine(
         return woken;
     }
 
+    /// <summary>
+    /// Two robots that both have work wait for each other (traffic refuses one with DEADLOCK_RISK, the other waits on it):
+    /// nothing ends that by itself. After <see cref="DeadlockAfterSeconds"/> one of them backs off to the free queue
+    /// point or parking place farthest from the other, waits there <see cref="DeadlockHoldSeconds"/>, then drives to its
+    /// goal again. The one that backs off: the one with nothing on board, else the one whose leg started later.
+    /// </summary>
+    /// <returns>How many robots backed off.</returns>
+    public async Task<int> ResolveDeadlocksAsync(CancellationToken cancellationToken = default)
+    {
+        if (segmentedTraffic is null)
+        {
+            return 0;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = await segmentedTraffic.GetTrafficSnapshotAsync(cancellationToken);
+        var stuck = snapshot.Robots
+            .Where(r => r.WaitingReason == WaroTrans.Fleet.Traffic.TrafficWaitingReason.DeadlockRisk)
+            .Select(r => r.RobotId)
+            .ToHashSet();
+        List<Guid> due;
+        lock (DeadlockSince)
+        {
+            foreach (var gone in DeadlockSince.Keys.Except(stuck).ToList())
+            {
+                DeadlockSince.Remove(gone);
+            }
+
+            foreach (var robot in stuck)
+            {
+                DeadlockSince.TryAdd(robot, now);
+            }
+
+            due = stuck.Where(r => (now - DeadlockSince[r]).TotalSeconds >= DeadlockAfterSeconds).ToList();
+        }
+
+        var retreats = 0;
+        foreach (var robotId in due)
+        {
+            var partner = snapshot.Robots.FirstOrDefault(o => o.RobotId != robotId && o.BlockingOwner == robotId)?.RobotId
+                          ?? snapshot.Robots.FirstOrDefault(o => o.RobotId != robotId
+                                                                 && o.WaitingReason != WaroTrans.Fleet.Traffic.TrafficWaitingReason.None)?.RobotId;
+            if (partner is not { } partnerId)
+            {
+                continue;
+            }
+
+            var mine = await OpenMoveAsync(robotId, cancellationToken);
+            var theirs = await OpenMoveAsync(partnerId, cancellationToken);
+            if (mine is null || theirs is null)
+            {
+                continue; // an idle robot in the way is moved by RobotCareService instead
+            }
+
+            var loser = mine.Value.Cargo != theirs.Value.Cargo
+                ? (mine.Value.Cargo ? theirs.Value : mine.Value)
+                : (mine.Value.StartedAt >= theirs.Value.StartedAt ? mine.Value : theirs.Value);
+            var winnerId = loser.RobotId == robotId ? partnerId : robotId;
+            lock (DeadlockSince)
+            {
+                if (LastRetreat.TryGetValue(loser.RobotId, out var last) && (now - last).TotalSeconds < DeadlockCooldownSeconds)
+                {
+                    continue;
+                }
+            }
+
+            var winnerGoal = (loser.RobotId == robotId ? theirs.Value : mine.Value).Target;
+            if (await RetreatAsync(loser.JobId, loser.StepId, loser.RobotId, winnerId, winnerGoal, cancellationToken))
+            {
+                // What the other robot was granted but never entered lies around the one that backs off: free it, and
+                // let the other robot wait a moment, so the retreat can get through.
+                var freed = await segmentedTraffic.ReleaseUnenteredReservationAsync(
+                    winnerId, DeadlockHoldSeconds, "DEADLOCK_RETREAT", cancellationToken);
+                if (!freed.Ok)
+                {
+                    logger.LogWarning("Deadlock: could not free what robot {Robot} was granted: {Reason}", winnerId, freed.Reason);
+                }
+
+                lock (DeadlockSince)
+                {
+                    LastRetreat[loser.RobotId] = now;
+                    DeadlockSince.Remove(robotId);
+                }
+
+                retreats++;
+            }
+        }
+
+        return retreats;
+    }
+
+    private string Key(JobStep step) =>
+        db.WorkflowSteps.AsNoTracking().Where(w => w.Id == step.WorkflowStepId).Select(w => w.StepKey).FirstOrDefault()
+        ?? step.Id.ToString("N");
+
+    private readonly record struct OpenMove(Guid RobotId, Guid JobId, Guid StepId, DateTimeOffset StartedAt, bool Cargo, Guid? Target);
+
+    /// <summary>The robot's MOVE that has a NAVIGATE out, if any.</summary>
+    private async Task<OpenMove?> OpenMoveAsync(Guid robotId, CancellationToken cancellationToken)
+    {
+        var steps = await db.JobSteps.AsNoTracking()
+            .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.EXECUTING
+                        && s.JobTask.Job.Status == JobStatus.RUNNING)
+            .Select(s => new { s.Id, s.JobTask.JobId, s.StartedAt, s.ResolvedInputs, s.OutputValues, s.TargetEndpointId })
+            .ToListAsync(cancellationToken);
+        var step = steps.FirstOrDefault(s =>
+            s.ResolvedInputs.TryGetValue("robotId", out var r) && r.ValueKind == JsonValueKind.String && r.GetGuid() == robotId
+            && s.OutputValues.ContainsKey(RobotCommandIdKey));
+        if (step is null)
+        {
+            return null;
+        }
+
+        var cargo = await db.JobContainers.AsNoTracking()
+            .AnyAsync(c => c.JobId == step.JobId && c.Status == JobContainerStatus.ONBOARD, cancellationToken);
+        return new OpenMove(robotId, step.JobId, step.Id, step.StartedAt ?? DateTimeOffset.MinValue, cargo, step.TargetEndpointId);
+    }
+
+    /// <summary>Cancels the robot's NAVIGATE and sends it to the free retreat point farthest from the other robot.</summary>
+    private async Task<bool> RetreatAsync(
+        Guid jobId, Guid stepId, Guid robotId, Guid winnerId, Guid? winnerGoalId, CancellationToken cancellationToken)
+    {
+        var robot = await fleet.GetRobotAsync(robotId, cancellationToken);
+        var winner = await fleet.GetRobotAsync(winnerId, cancellationToken);
+        if (robot is null || winner is null)
+        {
+            return false;
+        }
+
+        var endpoints = await navigation.GetEndpointsOnMapAsync(robot.CurrentMapVersionId, cancellationToken);
+        var others = (await fleet.GetDispatchCandidatesAsync(robot.CurrentMapVersionId, cancellationToken))
+            .Where(r => r.Id != robotId && r.LocalizationStatus == LocalizationStatus.LOCALIZED)
+            .ToList();
+        static double Dist(double ax, double ay, double bx, double by) => Math.Sqrt(Math.Pow(ax - bx, 2) + Math.Pow(ay - by, 2));
+        var winnerGoal = winnerGoalId is { } g ? await navigation.GetEndpointPoseAsync(g, cancellationToken) : null;
+        // Away from the other robot, its goal and the straight line between them: not into the way it is about to go.
+        double Away(double x, double y)
+        {
+            var d = Dist(x, y, winner.PoseX, winner.PoseY);
+            if (winnerGoal is null)
+            {
+                return d;
+            }
+
+            var vx = winnerGoal.X - winner.PoseX;
+            var vy = winnerGoal.Y - winner.PoseY;
+            var len = vx * vx + vy * vy;
+            var t = len <= 0 ? 0 : Math.Clamp(((x - winner.PoseX) * vx + (y - winner.PoseY) * vy) / len, 0, 1);
+            var line = Dist(x, y, winner.PoseX + t * vx, winner.PoseY + t * vy);
+            return Math.Min(d, Math.Min(Dist(x, y, winnerGoal.X, winnerGoal.Y), line));
+        }
+
+        var target = endpoints
+            .Where(e => e.IsEnabled
+                        && (e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.PARK || e.Code.StartsWith("EP-QUEUE", StringComparison.Ordinal))
+                        && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) > 0.3
+                        && others.All(o => Dist(e.X, e.Y, o.PoseX, o.PoseY) > Math.Max(0.30, e.PositionTolerance)))
+            .OrderByDescending(e => Away(e.X, e.Y))
+            .FirstOrDefault();
+        if (target is null || await navigation.GetEndpointPoseAsync(target.Id, cancellationToken) is not { } pose)
+        {
+            logger.LogWarning("Deadlock: robot {Robot} has no free place to back off to", robot.Code);
+            return false;
+        }
+
+        await AreaGate.WaitAsync(cancellationToken);
+        try
+        {
+            var job = await LoadJobAsync(jobId, cancellationToken);
+            var (task, step) = OrderedSteps(job).First(x => x.Step.Id == stepId);
+            if (job.Status != JobStatus.RUNNING || step.Status != JobStepStatus.EXECUTING
+                || !step.OutputValues.TryGetValue(RobotCommandIdKey, out var oldEl) || oldEl.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+
+            var old = oldEl.GetGuid();
+            var superseded = SupersededCommandIds(step.OutputValues);
+            superseded.Add(old);
+            var now = DateTimeOffset.UtcNow;
+            // First the old NAVIGATE stops counting (its CANCELED must not fail the MOVE), then it is cancelled. The
+            // retreat NAVIGATE leaves from StartMoveAsync once the robot has no command in flight any more.
+            step.OutputValues = new Dictionary<string, JsonElement>
+            {
+                [SupersededCommandIdsKey] = JsonSerializer.SerializeToElement(superseded),
+                [AreaWaitSinceKey] = JsonSerializer.SerializeToElement(now),
+                [AreaQueueZoneKey] = JsonSerializer.SerializeToElement(DeadlockRetreatZone),
+                [RetreatToKey] = JsonSerializer.SerializeToElement(pose.Id),
+                [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1)),
+                ["waitingFor"] = JsonSerializer.SerializeToElement($"area_queue:{DeadlockRetreatZone} (backing off to {pose.Code})")
+            };
+            SetStepStatus(job, task, step, Key(step), JobStepStatus.WAITING, now);
+            await SaveAndPublishAsync(cancellationToken);
+            await fleet.CancelNavigationAsync(robotId, old, cancellationToken);
+            logger.LogWarning(
+                "Deadlock: robot {Robot} (job {JobNo}) and robot {Winner} waited for each other; {Robot} backs off to {Endpoint}",
+                robot.Code, job.JobNo, winner.Code, robot.Code, pose.Code);
+            return true;
+        }
+        finally
+        {
+            AreaGate.Release();
+        }
+    }
+
     /// <summary>Outputs of a MOVE that waits at its area's queue point (woken every second to look again).</summary>
     public static Dictionary<string, JsonElement> AreaWaitOutputs(
         IReadOnlyDictionary<string, JsonElement> current, DateTimeOffset since, string zone, string busy, DateTimeOffset now)
@@ -1700,7 +1923,7 @@ public sealed class JobExecutionEngine(
         outputs.Remove(RobotCommandIdKey);
         outputs[AreaWaitSinceKey] = JsonSerializer.SerializeToElement(since);
         outputs[AreaQueueZoneKey] = JsonSerializer.SerializeToElement(zone);
-        outputs[WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1));
+        outputs[WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(zone == DeadlockRetreatZone ? DeadlockHoldSeconds : 1));
         outputs["waitingFor"] = JsonSerializer.SerializeToElement($"area_queue:{zone} ({busy})");
         return outputs;
     }
@@ -1901,7 +2124,16 @@ public sealed class JobExecutionEngine(
                 await AreaGate.WaitAsync(cancellationToken);
                 try
                 {
-                    var area = policy.SingleOccupancyZones.FirstOrDefault(z =>
+                    // Backing off from a wait-for cycle: the retreat leg first (once the cancelled NAVIGATE has ended).
+                    if (step.OutputValues.TryGetValue(RetreatToKey, out var retreatEl) && retreatEl.ValueKind == JsonValueKind.String
+                        && await navigation.GetEndpointPoseAsync(retreatEl.GetGuid(), cancellationToken) is { } retreat)
+                    {
+                        goal = retreat;
+                        queueZone = DeadlockRetreatZone;
+                        queueSince = step.OutputValues.TryGetValue(AreaWaitSinceKey, out var rs) ? rs.GetDateTimeOffset() : now;
+                    }
+
+                    var area = queueZone is not null ? null : policy.SingleOccupancyZones.FirstOrDefault(z =>
                         z.QueueEndpointCode is not null && SemanticReservation.PointInRing(pose.X, pose.Y, z.Ring));
                     var busy = area is null ? null : await AreaBusyByAsync(job, step, robotId, area, policy, cancellationToken);
                     if (area is not null && busy is not null)
@@ -1939,6 +2171,17 @@ public sealed class JobExecutionEngine(
                         semanticCommandId = await fleet.NavigateAsync(
                             robotId, goal.X, goal.Y, goal.Yaw, job.Id, step.Id, cancellationToken, route: null,
                             timeoutSeconds: CommandTimeoutSeconds(step), positionTolerance: goal.PositionTolerance);
+                    }
+                    catch (AppException busyRobot) when (busyRobot.Code == "robot_busy" && queueZone == DeadlockRetreatZone)
+                    {
+                        // The cancelled NAVIGATE has not ended yet: send the retreat a second later.
+                        step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+                        {
+                            [WaitUntilKey] = JsonSerializer.SerializeToElement(now.AddSeconds(1))
+                        };
+                        SetStepStatus(job, task, step, stepKey, JobStepStatus.WAITING, now);
+                        await SaveAndPublishAsync(cancellationToken);
+                        return false;
                     }
                     catch (Exception ex)
                     {

@@ -313,6 +313,10 @@ public sealed class SegmentedTrafficCoordinator : ISegmentedTrafficCoordinator, 
     public Task<TrafficOpResult> CancelRequestAsync(Guid robotId, Guid? requestId = null, CancellationToken ct = default) =>
         EnqueueAsync(s => s.CancelRequest(robotId, requestId), ct);
 
+    public Task<TrafficOpResult> ReleaseUnenteredReservationAsync(
+        Guid robotId, double holdSeconds, string reason, CancellationToken ct = default) =>
+        EnqueueAsync(s => s.ReleaseUnenteredReservation(robotId, holdSeconds, reason), ct);
+
     public Task<TrafficOpResult> MarkBlockedAsync(Guid robotId, string reason, CancellationToken ct = default) =>
         EnqueueAsync(s => s.MarkBlocked(robotId, reason), ct);
 

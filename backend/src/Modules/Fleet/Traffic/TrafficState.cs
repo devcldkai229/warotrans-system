@@ -271,6 +271,12 @@ public sealed class TrafficState
     private AcquireResult TryGrantSemantic(
         RobotRuntime robot, SemanticPlanProposeRequest request, ImmutableArray<string> resources)
     {
+        if (robot.HoldGrantsUntil is { } held && _clock.GetUtcNow() < held)
+        {
+            // Gave way in a wait-for cycle: the other robot moves first.
+            return AcquireResult.Reject("YIELDING", TrafficWaitingReason.Capacity);
+        }
+
         var candidate = new RouteSegmentCandidate(
             request.RequestId,
             request.RobotId,
@@ -430,6 +436,11 @@ public sealed class TrafficState
     /// </summary>
     private AcquireResult? TryExtendPartialGrant(RobotRuntime robot, SemanticPlanProposeRequest request)
     {
+        if (robot.HoldGrantsUntil is { } held && _clock.GetUtcNow() < held)
+        {
+            return null;
+        }
+
         if (robot.Authority is not { } current || robot.PartialAuthorityId != current.AuthorityId)
         {
             return null;
@@ -1523,6 +1534,34 @@ public sealed class TrafficState
         return TrafficOpResult.Success();
     }
 
+    /// <summary>
+    /// Wait-for cycle breaking: the robot keeps only what its verified body stands on. Its grant is revoked (the gate
+    /// closes) and what it was granted but never entered is released, so the other robot can back off through it. It
+    /// gets no new grant for <paramref name="holdSeconds"/>. Only for a robot that has stood still (it is in a cycle).
+    /// </summary>
+    public TrafficOpResult ReleaseUnenteredReservation(Guid robotId, double holdSeconds, string reason)
+    {
+        if (!_robots.TryGetValue(robotId, out var robot) || !robot.LocalizationOk
+            || robot.X is not double x || robot.Y is not double y)
+        {
+            return TrafficOpResult.Fail("POSE_UNKNOWN");
+        }
+
+        if (robot.Authority is { } previous)
+        {
+            RevokeAuthorityKeepOccupancy(robot, reason);
+            _pendingEvents.Add(new TrafficEvent(
+                TrafficEventKind.AuthorityRevoked, robot.RobotId, string.Empty, previous, previous.CommandId, null,
+                robot.JobStepId, null, null, null, null, IsFirstSegment: false));
+        }
+
+        robot.HoldGrantsUntil = _clock.GetUtcNow().AddSeconds(Math.Max(0, holdSeconds));
+        ReleaseSemanticOccupancyOutside(robot, ResourcesUnder(x, y));
+        StateVersion++;
+        Log($"release-unentered:{robotId}:{reason}");
+        return TrafficOpResult.Success();
+    }
+
     public TrafficOpResult CancelRequest(Guid robotId, Guid? requestId)
     {
         if (requestId is Guid rid)
@@ -2582,6 +2621,9 @@ public sealed class TrafficState
 
     private sealed class RobotRuntime(Guid robotId)
     {
+        /// <summary>Gave way in a wait-for cycle: no grant before this time.</summary>
+        public DateTimeOffset? HoldGrantsUntil { get; set; }
+
         public Guid RobotId { get; } = robotId;
         public TrafficRobotPhase Phase { get; set; } = TrafficRobotPhase.Idle;
         public int? NodeId { get; set; }
