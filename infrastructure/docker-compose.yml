@@ -51,8 +51,53 @@ services:
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
 
+  # Evidence Recorder + Worker (ADR 0012). Off by default: `docker compose --profile evidence up -d`.
+  # Local providers (folder + Postgres queue + ffmpeg) unless the Evidence__* AWS settings are given in .env.
+  evidence-recorder:
+    profiles: ["evidence"]
+    build:
+      context: ../backend
+      dockerfile: src/WaroTrans.Evidence/Recorder/Dockerfile
+    container_name: warotrans-evidence-recorder
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ConnectionStrings__Evidence: Host=postgres;Port=5432;Database=warotrans_evidence;Username=${POSTGRES_USER:-warotrans};Password=${POSTGRES_PASSWORD:-warotrans}
+      Evidence__MigrateOnStartup: "true"
+      Evidence__CoreBaseUrl: ${EVIDENCE_CORE_BASE_URL:-http://host.docker.internal:5090}
+      Evidence__Storage__LocalPublicBaseUrl: ${EVIDENCE_PUBLIC_BASE_URL:-http://localhost:5095}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${EVIDENCE_RECORDER_PORT:-5095}:5095"
+    volumes:
+      - evidence_data:/data/evidence
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  evidence-worker:
+    profiles: ["evidence"]
+    build:
+      context: ../backend
+      dockerfile: src/WaroTrans.Evidence/Worker/Dockerfile
+    container_name: warotrans-evidence-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ConnectionStrings__Evidence: Host=postgres;Port=5432;Database=warotrans_evidence;Username=${POSTGRES_USER:-warotrans};Password=${POSTGRES_PASSWORD:-warotrans}
+      Evidence__Media__Provider: ${EVIDENCE_MEDIA_PROVIDER:-Local}
+    volumes:
+      - evidence_data:/data/evidence
+    depends_on:
+      evidence-recorder:
+        condition: service_started
+
 volumes:
   postgres_data:
   mongodb_data:
   mosquitto_data:
   mosquitto_log:
+  evidence_data:

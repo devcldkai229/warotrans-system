@@ -29,5 +29,8 @@ public sealed class RecorderOptions
 
     public int MaxBatchEvents { get; set; } = 500;
 
+    /// <summary>Telemetry of a closed journal is kept this long (0: forever). Proposal, aligned with the raw S3 lifecycle.</summary>
+    public int RetentionDays { get; set; } = 90;
+
     public EvidencePolicy Policy => new(VideoRequired, TimeSpan.FromMinutes(Math.Max(0, FinalizeGraceMinutes)));
 }

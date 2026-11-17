@@ -21,6 +21,7 @@ using WaroTrans.Evidence.Recorder.Features.Integrations.IngestTransportEvents;
 using WaroTrans.Evidence.Recorder.Features.Journals;
 using WaroTrans.Evidence.Recorder.Features.Journals.GetJournal;
 using WaroTrans.Evidence.Recorder.Features.Journals.ReconcileWithTransport;
+using WaroTrans.Evidence.Recorder.Features.Journals.Retention;
 using WaroTrans.Evidence.Recorder.Features.Journals.Technician;
 using WaroTrans.Evidence.Recorder.Features.Runs;
 using WaroTrans.Evidence.Recorder.Services;
@@ -76,6 +77,7 @@ builder.Services.AddScoped<RunUpserter>();
 builder.Services.AddScoped<JournalStatusService>();
 builder.Services.AddScoped<IngestTransportEventsHandler>();
 builder.Services.AddHostedService<JournalMaintenanceService>();
+builder.Services.AddHostedService<EvidenceRetentionService>();
 
 // Playback grants: CloudFront signed URL/cookies (AWS) or the Recorder serving HLS from the local store (dev).
 builder.Services.Configure<PlaybackOptions>(builder.Configuration.GetSection(PlaybackOptions.SectionName));
@@ -121,6 +123,11 @@ app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi().AllowAnonymous();
+}
+
+// Development always migrates; elsewhere only when asked (compose profile), otherwise migrations are a deploy step.
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Evidence:MigrateOnStartup"))
+{
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<EvidenceDbContext>().Database.MigrateAsync();
 }
