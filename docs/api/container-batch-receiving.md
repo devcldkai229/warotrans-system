@@ -168,7 +168,8 @@ Verified on local PostgreSQL `warotrans` at port 5433 on 2026-11-17:
 - Kho ONE receiving location exists and is active on enabled `EP-INBOUND`, published `MAP-ONE-V006`.
 - Before and after: **22 existing Containers, 3 existing vouchers, 0 stock rows**. No existing goods/vouchers were changed or backfilled.
 - Full pre-migration backup: `/tmp/warotrans-before-inbound-20261117.dump` (local-only, permissions 0600).
-- Only the two Warehouse migrations and the configured Inbound location were written to the shared dev DB. Mutation/end-to-end tests used isolated databases; no robot was dispatched.
+- Migration/setup wrote only the two Warehouse migrations and the configured Inbound location to the shared dev DB. Mutation/end-to-end tests used isolated databases and sent no robot commands.
+- API port **5090** was restarted using the built BE artifact after synchronization with running base `ff57bba`; the existing content root, asset paths and environment were preserved, with the receiving mapping supplied explicitly. Runtime OpenAPI now exposes batch receipt/`stockPostedAt`. FE source/flags were not edited by this task.
 
 This BE branch has been synchronized with the exact running base `ff57bba` to preserve its Fleet/Workflow updates and existing Container voucher metadata. The Development configuration is in this BE worktree. The mobile checkout remains separate; run/restart the BE from this worktree or deploy this branch before opening FE gates. Database migration alone does not replace an already-running older BE process.
 
