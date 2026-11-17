@@ -20,6 +20,11 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
+        // Evidence Recorder (separate process, docs/adr/0012): must come before /api.
+        '/api/evidence': {
+          target: env.VITE_EVIDENCE_API_URL || 'http://localhost:5095',
+          changeOrigin: true,
+        },
         '/api': {
           target: apiTarget,
           changeOrigin: true,

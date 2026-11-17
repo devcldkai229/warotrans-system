@@ -229,9 +229,9 @@ export function fileNameFromDisposition(header: string | null): string | null {
  * Downloads a file the API sends (a report export) and saves it under the name the server gives. Goes through the
  * same sign-in and refresh as every other call, so an `<a href>` without the token is not needed.
  */
-export async function apiDownload(path: string, fallbackName: string): Promise<void> {
+export async function apiDownload(path: string, fallbackName: string, init: RequestInit = {}): Promise<void> {
   // Errors still come back as JSON ProblemDetails, so the default Accept header is right here too.
-  const response = await sendSignedIn(path, {})
+  const response = await sendSignedIn(path, init)
   const blob = await response.blob()
   const url = URL.createObjectURL(blob)
   try {

@@ -24,6 +24,7 @@ export const ADMIN_NAV: NavGroup[] = [
       { label: t('Fleet'), to: '/monitor/fleet', requires: PERMISSIONS.robotRead },
       { label: t('Transport requests'), to: '/monitor/requests', requires: PERMISSIONS.transportRead },
       { label: t('Jobs'), to: '/monitor/jobs', requires: PERMISSIONS.jobRead },
+      { label: t('Transport journals'), to: '/monitor/journals', requires: PERMISSIONS.evidenceRead },
     ],
   },
   {
@@ -53,6 +54,7 @@ export const TECH_NAV: NavGroup[] = [
   { label: t('Robots'), to: '/tech/fleet', requires: PERMISSIONS.robotRead },
   { label: t('Issues'), to: '/tech/issues', requires: PERMISSIONS.issueRead },
   { label: t('Robot history'), to: '/tech/robot-history', requires: PERMISSIONS.robotRead },
+  { label: t('Transport journals'), to: '/tech/journals', requires: PERMISSIONS.evidenceRead },
   { label: t('Audit log'), to: '/tech/audit', requires: PERMISSIONS.auditRead },
   { label: t('Notifications'), to: '/tech/notifications', requires: PERMISSIONS.notificationRead },
 ]

@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react'
 import type { TransportRequestTripView, TransportRequestView } from '@/shared/api/contracts'
+import { Link } from 'react-router-dom'
+import { Can } from '@/features/auth/RequirePermission'
+import { PERMISSIONS } from '@/shared/auth/permissions'
 import { cx } from '@/shared/lib/cx'
+import { usePaths } from '@/shared/routing/usePaths'
+import { buttonClass } from '@/shared/ui/buttonClass'
 import { formatDateTimeWithYear, formatDuration, secondsBetween } from '@/shared/lib/format'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
@@ -102,6 +107,7 @@ interface RequestDetailPanelProps {
 
 /** Second column: everything about one Request. Its Jobs open a third column. */
 export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClose, actions }: RequestDetailPanelProps) {
+  const paths = usePaths()
   const progress = detailProgress(request)
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
   // Which trip carries each container, for the movement plan.
@@ -136,6 +142,12 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
       </MetaList>
 
       {request.failureMessage ? <FailureNote>{request.failureMessage}</FailureNote> : null}
+
+      <Can permission={PERMISSIONS.evidenceRead}>
+        <Link to={paths.journalOfRequest(request.id)} className={buttonClass({ variant: 'outline', size: 'sm' }, 'mt-4 self-start')}>
+          {t('Open the transport journal')}
+        </Link>
+      </Can>
 
       {actions ? <div className="mt-4 flex flex-col gap-2">{actions}</div> : null}
 

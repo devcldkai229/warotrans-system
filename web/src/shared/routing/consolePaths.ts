@@ -21,6 +21,9 @@ export interface ConsolePaths {
   robotHistory: (robotCode?: string) => string
   notifications: string
   audit: string
+  /** Transport journals (Evidence replay): the list, one journal, or the journal of a transport request. */
+  journals: (journalId?: string) => string
+  journalOfRequest: (transportRequestId: string) => string
   /**
    * Rewrites an admin route (for example a notification's stored route) into this portal. Null when the portal has
    * no such screen, so the caller can leave the click inert instead of sending a Technician to a refused screen.
@@ -45,6 +48,8 @@ const ADMIN_PATHS: ConsolePaths = {
   robotHistory: (robotCode) => historyRoute('/operations/robot-history', robotCode),
   notifications: '/operations/notifications',
   audit: '/operations/audit',
+  journals: (journalId) => (journalId ? `/monitor/journals/${journalId}` : '/monitor/journals'),
+  journalOfRequest: (transportRequestId) => `/monitor/journals/by-request/${transportRequestId}`,
   translate: (route) => route,
 }
 
@@ -56,6 +61,7 @@ const TECH_PREFIXES: [string, string][] = [
   ['/operations/robot-history', '/tech/robot-history'],
   ['/operations/notifications', '/tech/notifications'],
   ['/operations/audit', '/tech/audit'],
+  ['/monitor/journals', '/tech/journals'],
 ]
 
 /** True when `route` is `prefix` itself or a sub-route / query of it (so /monitor/fleetX is not a match). */
@@ -93,6 +99,8 @@ const TECH_PATHS: ConsolePaths = {
   robotHistory: (robotCode) => historyRoute('/tech/robot-history', robotCode),
   notifications: '/tech/notifications',
   audit: '/tech/audit',
+  journals: (journalId) => (journalId ? `/tech/journals/${journalId}` : '/tech/journals'),
+  journalOfRequest: (transportRequestId) => `/tech/journals/by-request/${transportRequestId}`,
   translate: toTechRoute,
 }
 

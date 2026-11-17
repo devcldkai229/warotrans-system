@@ -21,6 +21,7 @@ using WaroTrans.Evidence.Recorder.Features.Integrations.IngestTransportEvents;
 using WaroTrans.Evidence.Recorder.Features.Journals;
 using WaroTrans.Evidence.Recorder.Features.Journals.GetJournal;
 using WaroTrans.Evidence.Recorder.Features.Journals.ReconcileWithTransport;
+using WaroTrans.Evidence.Recorder.Features.Journals.Technician;
 using WaroTrans.Evidence.Recorder.Features.Runs;
 using WaroTrans.Evidence.Recorder.Services;
 
@@ -140,6 +141,7 @@ WhoAmIEndpoint.Map(edge);
 RecordingEndpoints.Map(edge);
 TelemetryEndpoints.Map(edge);
 PlaybackEndpoints.Map(api);
+TechnicianEndpoints.Map(api);
 if (localPlayback)
 {
     LocalPlaybackEndpoint.Map(app);

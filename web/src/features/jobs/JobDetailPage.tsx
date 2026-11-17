@@ -6,6 +6,7 @@ import { ApiError } from '@/shared/api/client'
 import { getRobot, getRobotPoseHistory } from '@/shared/api/fleet'
 import { pathOnMap, trailSegments } from '@/features/robots/history/pathModel'
 import { useAuth } from '@/features/auth/authContext'
+import { Can } from '@/features/auth/RequirePermission'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import {
   claimJobStep,
@@ -382,7 +383,8 @@ export function JobDetailPage() {
   const { jobId = null } = useParams()
   const navigate = useNavigate()
   // The Technician portal has no job list or request screen: there the way back is the screen the job was opened from.
-  const inTechPortal = usePaths().portal === 'tech'
+  const paths = usePaths()
+  const inTechPortal = paths.portal === 'tech'
   const queryClient = useQueryClient()
   const [livePose, setLivePose] = useState<{ robotId: string; x: number; y: number; yaw: number } | null>(null)
 
@@ -561,6 +563,13 @@ export function JobDetailPage() {
                 {job.status}
               </StatusBadge>
               {waiting ? <StatusBadge tone="amber">{t('Step waiting')}</StatusBadge> : null}
+              {requestId ? (
+                <Can permission={PERMISSIONS.evidenceRead}>
+                  <Link to={paths.journalOfRequest(requestId)} className={buttonClass({ variant: 'outline', size: 'sm' })}>
+                    {t('Open the transport journal')}
+                  </Link>
+                </Can>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
