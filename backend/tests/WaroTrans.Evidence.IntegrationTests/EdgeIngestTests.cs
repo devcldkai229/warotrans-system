@@ -213,6 +213,28 @@ public sealed class EdgeIngestTests(RecorderFactory factory) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_real_size_segment_uploads_and_one_closed_after_finalize_is_still_processed()
+    {
+        var recording = await StartAsync(_robot, "rec-big", _t0);
+        // 30 s of 1280x720 MJPEG is tens of MB: above Kestrel's 8 MB default (RBT-002 trial, broken pipe).
+        var template = Segment(0, _t0);
+        var body = RandomNumberGenerator.GetBytes(12 * 1024 * 1024);
+        var big = new LocalSegment(template.Intent with { ByteSize = body.Length, Sha256 = Convert.ToHexStringLower(SHA256.HashData(body)) }, body);
+        await RegisterAsync(recording.RecordingId, big);
+        Assert.Equal(HttpStatusCode.OK, await UploadAsync(big));
+        Assert.Equal(1, await IngestAllAsync());
+        Assert.Equal(1, (await FinalizeAsync(recording.RecordingId, 1)).QueuedJobs);
+
+        // The camera closed one more segment just after the robot finalized.
+        var late = Segment(1, _t0.AddSeconds(30));
+        await RegisterAsync(recording.RecordingId, late);
+        Assert.Equal(HttpStatusCode.OK, await UploadAsync(late));
+        await IngestAllAsync();
+        Assert.Equal(2, await DbAsync(db => db.ProcessingJobs.CountAsync()));
+        Assert.Equal(2, (await DbAsync(db => db.Recordings.SingleAsync(r => r.Id == recording.RecordingId))).ExpectedSegmentCount);
+    }
+
+    [Fact]
     public async Task Forty_segments_whose_notifications_arrive_out_of_order_make_one_job_not_forty()
     {
         var recording = await StartAsync(_robot, "rec-40", _t0);

@@ -60,5 +60,7 @@ internal static class LocalStoreEndpoint
             })
             .AllowAnonymous() // the URL's signature is the authorization, as with an S3 presigned PUT
             .DisableAntiforgery()
+            // A real 30 s segment is tens of MB (Kestrel's default 8 MB cap reset the robot's upload: broken pipe).
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(2L * 1024 * 1024 * 1024))
             .WithName("EvidenceLocalStorePut");
 }

@@ -217,6 +217,19 @@ internal static partial class RecordingEndpoints
         }
 
         recording.LastHeartbeatAtUtc = now;
+        if (recording.FinalizedAtUtc is not null)
+        {
+            // A segment the camera closed just after the robot finalized: its group is complete as it is.
+            recording.ExpectedSegmentCount = Math.Max(recording.ExpectedSegmentCount ?? 0,
+                await db.Segments.CountAsync(s => s.RecordingId == recordingId, ct) + db.Segments.Local.Count(s => s.RecordingId == recordingId && db.Entry(s).State == EntityState.Added));
+            foreach (var open in groups.Where(g => g.Status == ContinuityGroupStatus.OPEN))
+            {
+                open.Status = ContinuityGroupStatus.SEALED;
+                open.ExpectedSegmentCount = (open.LastSequenceNumber ?? open.FirstSequenceNumber) - open.FirstSequenceNumber + 1;
+                sealedNow.Add(open.Id);
+            }
+        }
+
         await db.SaveChangesAsync(ct);
         // A group closed by a gap may already be fully uploaded: it can go to processing now.
         foreach (var groupId in sealedNow)
