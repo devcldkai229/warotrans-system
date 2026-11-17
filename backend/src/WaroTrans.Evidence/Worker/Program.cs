@@ -1,14 +1,32 @@
 using Microsoft.EntityFrameworkCore;
+using WaroTrans.Evidence;
 using WaroTrans.Evidence.Persistence;
+using WaroTrans.Evidence.Worker.Features.OutboxPublisher;
+using WaroTrans.Evidence.Worker.Features.Reconciliation;
+using WaroTrans.Evidence.Worker.Features.SegmentIngestion;
+using WaroTrans.Evidence.Worker.Services;
 
-// Evidence Worker (docs/adr/0012). Asynchronous work only: no public API, no migrations (the Recorder owns them).
+// Evidence Worker (docs/adr/0012). Asynchronous work only: no public API, no migrations (the Recorder owns them),
+// never references the Recorder. Scales on its own: several replicas share the queues and claim rows with SKIP LOCKED.
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("Evidence")
     ?? throw new InvalidOperationException("ConnectionStrings:Evidence is required.");
-builder.Services.AddDbContext<EvidenceDbContext>(o => o.UseNpgsql(connectionString, npgsql => npgsql
-    .MigrationsHistoryTable("__ef_migrations_history", EvidenceDbContext.Schema)));
+void EvidenceDb(DbContextOptionsBuilder o) =>
+    o.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", EvidenceDbContext.Schema));
+// One registration: the factory (singletons such as the Local queue need it) and a scoped context made by it.
+builder.Services.AddDbContextFactory<EvidenceDbContext>(EvidenceDb);
+builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<EvidenceDbContext>>().CreateDbContext());
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection(WorkerOptions.SectionName));
+builder.Services.AddEvidenceStorage(builder.Configuration);
+builder.Services.AddEvidenceQueues(builder.Configuration);
+
+builder.Services.AddScoped<SegmentIngestionHandler>();
+builder.Services.AddHostedService<QueueConsumer<SegmentIngestionHandler>>();
+builder.Services.AddHostedService<EvidenceOutboxPublisher>();
+builder.Services.AddHostedService<IngestReconciliation>();
+
 builder.Services.AddHealthChecks().AddNpgSql(connectionString, name: "evidence-postgresql");
 
 var app = builder.Build();

@@ -6,7 +6,13 @@ using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Exceptions;
+using System.Threading.RateLimiting;
+using WaroTrans.Evidence;
 using WaroTrans.Evidence.Persistence;
+using WaroTrans.Evidence.Recorder.Features.Edge.Recordings;
+using WaroTrans.Evidence.Recorder.Features.Edge.Telemetry;
+using WaroTrans.Evidence.Recorder.Features.LocalStore;
+using WaroTrans.Evidence.Storage;
 using WaroTrans.Evidence.Recorder;
 using WaroTrans.Evidence.Recorder.Features.Admin.IssueRobotCredential;
 using WaroTrans.Evidence.Recorder.Features.Edge.WhoAmI;
@@ -39,9 +45,15 @@ if (recorderOptions.ServiceToken.Length < RecorderOptions.MinimumServiceTokenLen
 
 var connectionString = builder.Configuration.GetConnectionString("Evidence")
     ?? throw new InvalidOperationException("ConnectionStrings:Evidence is required.");
-builder.Services.AddDbContext<EvidenceDbContext>(o => o.UseNpgsql(connectionString, npgsql => npgsql
+void EvidenceDb(DbContextOptionsBuilder o) => o.UseNpgsql(connectionString, npgsql => npgsql
     .MigrationsAssembly(RecorderOptions.MigrationsAssembly)
-    .MigrationsHistoryTable("__ef_migrations_history", EvidenceDbContext.Schema)));
+    .MigrationsHistoryTable("__ef_migrations_history", EvidenceDbContext.Schema));
+// One registration: the factory (singletons such as the Local queue need it) and a scoped context made by it.
+builder.Services.AddDbContextFactory<EvidenceDbContext>(EvidenceDb);
+builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<EvidenceDbContext>>().CreateDbContext());
+builder.Services.AddEvidenceStorage(builder.Configuration);
+builder.Services.AddEvidenceQueues(builder.Configuration);
+var storageOptions = builder.Configuration.GetSection(EvidenceStorageOptions.SectionName).Get<EvidenceStorageOptions>() ?? new EvidenceStorageOptions();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
@@ -76,6 +88,14 @@ builder.Services.AddAuthorization(options =>
     options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Per robot: telemetry batches, grants and heartbeats, far above what one robot needs in normal running.
+    options.AddPolicy(EdgeRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.RobotCode() ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 600, Window = TimeSpan.FromMinutes(1) }));
+});
 builder.Services.AddHealthChecks().AddNpgSql(connectionString, name: "evidence-postgresql");
 builder.Services.AddOpenApi();
 
@@ -91,14 +111,27 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 var api = app.MapGroup("/api/evidence").WithTags("Evidence");
 IngestTransportEventsEndpoint.Map(api);
 GetJournalEndpoints.Map(api);
 IssueRobotCredentialEndpoint.Map(api);
-WhoAmIEndpoint.Map(api);
+var edge = api.MapGroup("/edge")
+    .RequireAuthorization(RobotAuthenticationHandler.Policy)
+    .RequireRateLimiting(EdgeRateLimit);
+WhoAmIEndpoint.Map(edge);
+RecordingEndpoints.Map(edge);
+TelemetryEndpoints.Map(edge);
+if (!storageOptions.IsS3)
+{
+    LocalStoreEndpoint.Map(app);
+}
 
 app.Run();
 
-public partial class Program;
+public partial class Program
+{
+    private const string EdgeRateLimit = "evidence-edge";
+}

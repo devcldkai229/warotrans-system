@@ -27,6 +27,18 @@ public sealed class EvidenceOutbox
     public string? LastError { get; set; }
 }
 
+/// <summary>A message of the Local queue provider (tests, offline dev): SQS semantics on a table.</summary>
+public sealed class LocalQueueMessage
+{
+    public Guid Id { get; set; }
+    public string Queue { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public DateTimeOffset VisibleAtUtc { get; set; }
+    public int ReceiveCount { get; set; }
+    public string? ReceiptHandle { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; }
+}
+
 /// <summary>
 /// A robot's recording credential. Only the SHA-256 of the token is stored; the token is shown once when issued.
 /// A robot may upload and report only for its own runs.

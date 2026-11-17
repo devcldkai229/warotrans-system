@@ -631,6 +631,50 @@ namespace WaroTrans.Evidence.Recorder.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("WaroTrans.Evidence.Entities.LocalQueueMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Queue")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("queue");
+
+                    b.Property<string>("ReceiptHandle")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("receipt_handle");
+
+                    b.Property<int>("ReceiveCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("receive_count");
+
+                    b.Property<DateTimeOffset>("VisibleAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("visible_at_utc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_local_queue_messages");
+
+                    b.HasIndex("Queue", "VisibleAtUtc")
+                        .HasDatabaseName("ix_local_queue_messages_queue_visible_at_utc");
+
+                    b.ToTable("local_queue_messages", "evidence");
+                });
+
             modelBuilder.Entity("WaroTrans.Evidence.Entities.MediaAsset", b =>
                 {
                     b.Property<Guid>("Id")

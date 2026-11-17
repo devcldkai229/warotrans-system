@@ -123,6 +123,19 @@ internal sealed class EvidenceOutboxConfiguration : IEntityTypeConfiguration<Evi
     }
 }
 
+internal sealed class LocalQueueMessageConfiguration : IEntityTypeConfiguration<LocalQueueMessage>
+{
+    public void Configure(EntityTypeBuilder<LocalQueueMessage> builder)
+    {
+        builder.ToTable("local_queue_messages");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Queue).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.Body).IsRequired();
+        builder.Property(x => x.ReceiptHandle).HasMaxLength(64);
+        builder.HasIndex(x => new { x.Queue, x.VisibleAtUtc });
+    }
+}
+
 internal sealed class RobotCredentialConfiguration : IEntityTypeConfiguration<RobotCredential>
 {
     public void Configure(EntityTypeBuilder<RobotCredential> builder)

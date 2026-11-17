@@ -31,6 +31,9 @@ public sealed class RecorderFactory : WebApplicationFactory<Program>
 
     public FakeCore Core { get; } = new();
 
+    /// <summary>The Local object store of this test run (a fresh folder).</summary>
+    public static readonly string StoreRoot = Path.Combine(Path.GetTempPath(), "warotrans-evidence-it-" + Guid.NewGuid().ToString("N")[..8]);
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("environment", "Development");
@@ -39,6 +42,11 @@ public sealed class RecorderFactory : WebApplicationFactory<Program>
         builder.UseSetting("Evidence:CoreBaseUrl", "http://core.test");
         builder.UseSetting("Evidence:MaintenanceIntervalSeconds", "3600");
         builder.UseSetting("Authentication:Jwt:Key", JwtKey);
+        builder.UseSetting("Evidence:Storage:Provider", "Local");
+        builder.UseSetting("Evidence:Storage:LocalRoot", StoreRoot);
+        builder.UseSetting("Evidence:Storage:LocalSigningKey", "evidence-integration-test-local-store-key-0123");
+        builder.UseSetting("Evidence:Storage:LocalPublicBaseUrl", "http://localhost");
+        builder.UseSetting("Evidence:Queues:Provider", "Local");
         builder.ConfigureTestServices(services =>
             services.AddHttpClient<CoreApiClient>().ConfigurePrimaryHttpMessageHandler(() => Core));
     }

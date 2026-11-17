@@ -30,6 +30,7 @@ public sealed class EvidenceDbContext(DbContextOptions<EvidenceDbContext> option
     public DbSet<EvidenceOutbox> Outbox => Set<EvidenceOutbox>();
     public DbSet<ClockAnchor> ClockAnchors => Set<ClockAnchor>();
     public DbSet<RobotCredential> RobotCredentials => Set<RobotCredential>();
+    public DbSet<LocalQueueMessage> LocalQueueMessages => Set<LocalQueueMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

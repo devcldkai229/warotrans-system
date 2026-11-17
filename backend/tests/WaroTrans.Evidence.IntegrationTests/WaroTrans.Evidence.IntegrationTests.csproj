@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WaroTrans.Evidence\Recorder\WaroTrans.Evidence.Recorder.csproj" />
+    <!-- Both processes have a top-level Program: the Worker is referenced under an alias, its handlers run in-test. -->
+    <ProjectReference Include="..\..\src\WaroTrans.Evidence\Worker\WaroTrans.Evidence.Worker.csproj" Aliases="worker" />
   </ItemGroup>
 
 </Project>

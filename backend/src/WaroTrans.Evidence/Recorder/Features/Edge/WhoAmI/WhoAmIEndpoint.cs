@@ -9,8 +9,7 @@ public sealed record RobotWhoAmIResponse(string RobotCode, DateTimeOffset Server
 internal static class WhoAmIEndpoint
 {
     public static void Map(RouteGroupBuilder group) =>
-        group.MapGet("/edge/whoami", (ClaimsPrincipal user, TimeProvider clock) =>
+        group.MapGet("/whoami", (ClaimsPrincipal user, TimeProvider clock) =>
                 Results.Ok(new RobotWhoAmIResponse(user.RobotCode()!, clock.GetUtcNow())))
-            .RequireAuthorization(RobotAuthenticationHandler.Policy)
             .WithName("EvidenceRobotWhoAmI");
 }
