@@ -128,7 +128,7 @@ Apply both Warehouse migrations before running the changed API:
 
 Neither migration invents quantities or admissions for legacy Containers or backfills document-only confirmations as posted stock.
 
-For local Development, `appsettings.Development.json` explicitly maps Kho ONE (`55c88958-d994-48d3-ae5d-11991476673f`) to receiving StorageLocation `473896d8-f634-4807-9c89-e2c264a30eae`. Run `backend/scripts/configure-kho-one-inbound.sql` on the intended dev database after migration. It creates only that location on the existing enabled `EP-INBOUND` of Kho ONE's published map. It refuses absent/ambiguous endpoints or a conflicting existing location; it never creates/publishes a map or guesses another warehouse. Production defaults remain empty.
+For local Development, `appsettings.Development.json` explicitly maps Kho ONE (`55c88958-d994-48d3-ae5d-11991476673f`) to receiving StorageLocation `473896d8-f634-4807-9c89-e2c264a30eae`. Run `backend/scripts/configure-kho-one-inbound.sql` on the intended dev database after migration. It creates only that location on the existing enabled `EP-INBOUND` of Kho ONE's published map (stable warehouse ID; accepted dev codes WH-ONE/ONE). It refuses absent/ambiguous endpoints or a conflicting existing location; it never creates/publishes a map or guesses another warehouse. Production defaults remain empty.
 
 Start the BE from **feature/stock-voucher-backend** (or a branch containing it), with `ASPNETCORE_ENVIRONMENT=Development` to load this dev mapping. Starting an older checkout or another environment will not use these changes/configuration.
 
@@ -165,8 +165,8 @@ Additional confirm errors include 400 `container_contents_incomplete` / `voucher
 Verified on local PostgreSQL `warotrans` at port 5433 on 2026-11-17:
 
 - Both Warehouse migrations above are applied, confirmed from EF migration history.
-- Kho ONE receiving location exists and is active on enabled `EP-INBOUND`, published `MAP-ONE-V006`.
-- Before and after: **22 existing Containers, 3 existing vouchers, 0 stock rows**. No existing goods/vouchers were changed or backfilled.
+- Current receiving location exists and is active on enabled `EP-INBOUND` of published **`MAP-ONE-V013`**, warehouse ID unchanged, current code/name **ONE / ONE LOGISTICS**.
+- The initial migration check showed **22 Containers / 3 vouchers / 0 stock rows**, unchanged before/after the two Warehouse migrations. A later check found the dev DB replaced/changed independently to **8 Containers / 4 vouchers / 0 stock rows**, ONE / ONE LOGISTICS and MAP-ONE-V013. This task did not restore older data; runtime logs contain no Container insert/delete. Receiving setup was reconciled against that current published endpoint, preserving those current counts.
 - Full pre-migration backup: `/tmp/warotrans-before-inbound-20261117.dump` (local-only, permissions 0600).
 - Migration/setup wrote only the two Warehouse migrations and the configured Inbound location to the shared dev DB. Mutation/end-to-end tests used isolated databases and sent no robot commands.
 - API port **5090** was restarted using the built BE artifact after synchronization with running base `ff57bba`; the existing content root, asset paths and environment were preserved, with the receiving mapping supplied explicitly. Runtime OpenAPI now exposes batch receipt/`stockPostedAt`. FE source/flags were not edited by this task.

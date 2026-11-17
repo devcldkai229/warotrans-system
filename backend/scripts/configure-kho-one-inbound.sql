@@ -14,7 +14,7 @@ BEGIN
     FROM navigation.endpoints e
     JOIN navigation.map_versions m ON m.id = e.map_version_id
     JOIN warehouse.warehouses w ON w.id = m.warehouse_id
-    WHERE w.id = warehouse_uuid AND w.code = 'WH-ONE' AND w.is_active
+    WHERE w.id = warehouse_uuid AND w.code IN ('WH-ONE', 'ONE') AND w.is_active
       AND m.status = 'PUBLISHED' AND e.code = 'EP-INBOUND'
       AND e.endpoint_type = 'WAYPOINT' AND e.is_enabled;
     IF matches <> 1 THEN
