@@ -286,7 +286,8 @@ public sealed class RobotCareService(
                             && others.All(o => Math.Sqrt(Math.Pow(e.X - o.PoseX, 2) + Math.Pow(e.Y - o.PoseY, 2)) > OccupiedRadius(e)))
                 .OrderByDescending(Away)
                 .FirstOrDefault();
-            if (target is null || Away(target) <= Math.Sqrt(Math.Pow(blocker.PoseX - waiter.PoseX, 2) + Math.Pow(blocker.PoseY - waiter.PoseY, 2)) * 0.5)
+            // Any free place beats standing in the way of a robot with work (the cooldown stops ping-pong).
+            if (target is null || Away(target) <= 0.30)
             {
                 logger.LogInformation("Robot {Blocker} is in the way of {Waiter} but has nowhere better to go", blocker.Code, waiter.Code);
                 continue;

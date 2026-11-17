@@ -47,10 +47,15 @@ public sealed class RobotPositioningService(
             .Select(i => i.RobotId)
             .ToListAsync(cancellationToken)).ToHashSet();
 
+    /// <summary>
+    /// Places robots are driving to on their own. Only robots that exist and are online claim one: an intent left by a
+    /// deleted or lost robot must not make a parking place look taken forever (nothing else would ever park there).
+    /// </summary>
     public async Task<IReadOnlySet<Guid>> LiveTargetsAsync(Guid mapVersionId, CancellationToken cancellationToken) =>
         (await db.RobotPositioningIntents.AsNoTracking()
             .Where(i => i.MapVersionId == mapVersionId
-                        && (i.Status == PositioningIntentStatus.NAVIGATING || i.Status == PositioningIntentStatus.YIELDING))
+                        && (i.Status == PositioningIntentStatus.NAVIGATING || i.Status == PositioningIntentStatus.YIELDING)
+                        && db.Robots.Any(r => r.Id == i.RobotId && r.IsOnline))
             .Select(i => i.TargetEndpointId)
             .ToListAsync(cancellationToken)).ToHashSet();
 

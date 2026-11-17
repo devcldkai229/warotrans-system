@@ -1627,6 +1627,12 @@ public sealed class JobExecutionEngine(
     private static readonly Dictionary<Guid, DateTimeOffset> DeadlockSince = [];
     private static readonly Dictionary<Guid, DateTimeOffset> LastRetreat = [];
 
+    /// <summary>Who backed off last for a pair of robots: if they lock again soon after, the other one backs off.</summary>
+    private static readonly Dictionary<(Guid, Guid), (Guid Loser, DateTimeOffset At)> LastLoserOfPair = [];
+
+    /// <summary>A pair that locks again within this time swaps who backs off (the first retreat did not free them).</summary>
+    public const double DeadlockSwapWithinSeconds = 120;
+
     /// <summary>Who decides "who goes into an area" is one critical section, so two robots never both see it free.</summary>
     private static readonly SemaphoreSlim AreaGate = new(1, 1);
 
@@ -1766,6 +1772,17 @@ public sealed class JobExecutionEngine(
             var loser = mine.Value.Cargo != theirs.Value.Cargo
                 ? (mine.Value.Cargo ? theirs.Value : mine.Value)
                 : (mine.Value.StartedAt >= theirs.Value.StartedAt ? mine.Value : theirs.Value);
+            var pair = robotId.CompareTo(partnerId) < 0 ? (robotId, partnerId) : (partnerId, robotId);
+            lock (DeadlockSince)
+            {
+                // Locked again soon after one of them backed off: that retreat did not free them, so the other backs off.
+                if (LastLoserOfPair.TryGetValue(pair, out var previous) && previous.Loser == loser.RobotId
+                    && (now - previous.At).TotalSeconds < DeadlockSwapWithinSeconds)
+                {
+                    loser = loser.RobotId == robotId ? theirs.Value : mine.Value;
+                }
+            }
+
             var winnerId = loser.RobotId == robotId ? partnerId : robotId;
             lock (DeadlockSince)
             {
@@ -1790,6 +1807,7 @@ public sealed class JobExecutionEngine(
                 lock (DeadlockSince)
                 {
                     LastRetreat[loser.RobotId] = now;
+                    LastLoserOfPair[pair] = (loser.RobotId, now);
                     DeadlockSince.Remove(robotId);
                 }
 
@@ -1803,6 +1821,15 @@ public sealed class JobExecutionEngine(
     private string Key(JobStep step) =>
         db.WorkflowSteps.AsNoTracking().Where(w => w.Id == step.WorkflowStepId).Select(w => w.StepKey).FirstOrDefault()
         ?? step.Id.ToString("N");
+
+    private static double SegmentDistance(double px, double py, double ax, double ay, double bx, double by)
+    {
+        var vx = bx - ax;
+        var vy = by - ay;
+        var len = vx * vx + vy * vy;
+        var t = len <= 0 ? 0 : Math.Clamp(((px - ax) * vx + (py - ay) * vy) / len, 0, 1);
+        return Math.Sqrt(Math.Pow(px - (ax + t * vx), 2) + Math.Pow(py - (ay + t * vy), 2));
+    }
 
     private readonly record struct OpenMove(Guid RobotId, Guid JobId, Guid StepId, DateTimeOffset StartedAt, bool Cargo, Guid? Target);
 
@@ -1865,6 +1892,8 @@ public sealed class JobExecutionEngine(
             .Where(e => e.IsEnabled
                         && (e.EndpointType == WaroTrans.Navigation.Enums.EndpointType.PARK || e.Code.StartsWith("EP-QUEUE", StringComparison.Ordinal))
                         && Dist(e.X, e.Y, robot.PoseX, robot.PoseY) > 0.3
+                        // not through the other robot: the straight way there passes >= 0.6 m from its body
+                        && SegmentDistance(winner.PoseX, winner.PoseY, robot.PoseX, robot.PoseY, e.X, e.Y) >= 0.6
                         && others.All(o => Dist(e.X, e.Y, o.PoseX, o.PoseY) > Math.Max(0.30, e.PositionTolerance)))
             .OrderByDescending(e => Away(e.X, e.Y))
             .FirstOrDefault();
