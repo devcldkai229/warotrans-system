@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/shared/ui/Button'
 import { Icon } from '@/shared/ui/Icon'
 import { cx } from '@/shared/lib/cx'
@@ -66,6 +66,19 @@ export function MovementBuilderPanel({
   const validation = useMemo(() => validateDraft(draft, data), [draft, data])
   const shared = detectShared(draft.movements)
   const excludeIds = useMemo(() => new Set(draft.movements.map((item) => item.containerId)), [draft.movements])
+
+  // Choosing Internal relocation opens the list of stored containers straight away (grouped by shelf), once per choice:
+  // closing it with Cancel keeps it closed.
+  const openedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (data.workflowKind !== 'INTERNAL') {
+      openedFor.current = null
+      return
+    }
+    if (openedFor.current === 'INTERNAL' || draft.movements.length > 0 || !draft.warehouseId) return
+    openedFor.current = 'INTERNAL'
+    setMode('selectContainers')
+  }, [data.workflowKind, draft.movements.length, draft.warehouseId])
 
   function updateMovements(movements: MovementDraft[]) {
     onChange({

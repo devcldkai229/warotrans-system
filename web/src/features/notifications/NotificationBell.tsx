@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import type { AdminNotification } from '@/shared/api/contracts'
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '@/shared/api/notifications'
 import { cx } from '@/shared/lib/cx'
@@ -15,6 +16,7 @@ import { t } from '@/shared/i18n'
 /** The bell in the top bar: the signed-in person's unread count and inbox (failed jobs, offline robots, issues …). */
 
 export function NotificationBell() {
+  const paths = usePaths()
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -39,7 +41,7 @@ export function NotificationBell() {
 
   function openNotification(notification: AdminNotification) {
     if (!notification.isRead) markRead.mutate(notification.id)
-    const target = notificationTarget(notification)
+    const target = notificationTarget(notification, paths)
     if (target) {
       setOpen(false)
       navigate(target)
@@ -134,7 +136,7 @@ export function NotificationBell() {
 
             <footer className="border-t border-outline-soft px-4 py-2.5 text-center">
               <Link
-                to="/operations/notifications"
+                to={paths.notifications}
                 className="text-xs text-ink-2 transition-colors hover:text-ink"
                 onClick={() => setOpen(false)}
               >{t('See all notifications')}</Link>

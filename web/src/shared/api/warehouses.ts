@@ -31,6 +31,17 @@ export interface ContainerListItem {
   updatedAt: string
   /** On an open Transport Request, so it cannot go on a stock voucher right now. */
   inActiveTransport: boolean
+  /** The latest stock voucher (not cancelled) the container is on. */
+  voucher?: ContainerVoucherRef | null
+}
+
+export interface ContainerVoucherRef {
+  id: string
+  code: string
+  type: 'INBOUND' | 'OUTBOUND' | string
+  status: 'DRAFT' | 'CONFIRMED' | 'CANCELLED' | string
+  createdAt: string
+  confirmedAt: string | null
 }
 
 export interface ListContainersResponse {
@@ -117,6 +128,8 @@ export function listContainers(params: {
   eligibleOnly?: boolean
   /** One ContainerStatus name; omitted for every status. */
   status?: string
+  /** Only containers on a CONFIRMED voucher of this type, newest voucher first. */
+  voucherType?: 'INBOUND' | 'OUTBOUND'
   skip?: number
   take?: number
 }) {
@@ -125,6 +138,7 @@ export function listContainers(params: {
   if (params.search) query.set('search', params.search)
   if (params.eligibleOnly !== undefined) query.set('eligibleOnly', String(params.eligibleOnly))
   if (params.status) query.set('status', params.status)
+  if (params.voucherType) query.set('voucherType', params.voucherType)
   if (params.skip) query.set('skip', String(params.skip))
   if (params.take !== undefined) query.set('take', String(params.take))
   return apiFetch<ListContainersResponse>(`/api/warehouse/containers?${query}`)

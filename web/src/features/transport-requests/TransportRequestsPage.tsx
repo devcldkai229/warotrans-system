@@ -331,11 +331,18 @@ export function TransportRequestsPage() {
     const robotCodeById = new Map((robotsQuery.data?.items ?? []).map((robot) => [robot.id, robot.code]))
     return {
       ...selectedBase,
-      jobs: requestJobs.map((job) => ({
-        jobNo: job.jobNo,
-        status: job.status,
-        robotCode: job.robotCode ?? (job.assignedRobotId ? robotCodeById.get(job.assignedRobotId) ?? null : null),
-      })),
+      jobs: [...requestJobs]
+        .sort((a, b) => (a.tripNo ?? 0) - (b.tripNo ?? 0) || a.jobNo.localeCompare(b.jobNo))
+        .map((job) => ({
+          jobNo: job.jobNo,
+          status: job.status,
+          robotCode: job.robotCode ?? (job.assignedRobotId ? robotCodeById.get(job.assignedRobotId) ?? null : null),
+          tripNo: job.tripNo,
+          tripCount: job.tripCount,
+          blockingReason: job.blockingReason,
+          stops: job.stops,
+          containers: job.containers,
+        })),
     }
   }, [selectedBase, requestJobs, robotsQuery.data])
 

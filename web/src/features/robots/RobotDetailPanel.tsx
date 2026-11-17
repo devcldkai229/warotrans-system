@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
+import type { ConsolePaths } from '@/shared/routing/consolePaths'
 import type { RobotView } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import { disableRobot, enableRobot, getRobotHealth, localizeRobot } from '@/shared/api/fleet'
@@ -125,6 +127,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 /** The Health section: the counts from the robot's last snapshot, what needs attention, and the way to the full dashboard. */
 function HealthBody({ robot, diagnostics }: { robot: RobotView; diagnostics: Diagnostics }) {
+  const paths = usePaths()
   const { allowed, health } = diagnostics
   const groups = buildHealthGroups(health)
   const rows = groups.flatMap((group) => group.rows)
@@ -156,7 +159,7 @@ function HealthBody({ robot, diagnostics }: { robot: RobotView; diagnostics: Dia
       <Field label={t('Error code')}>{dash(robot.errorCode)}</Field>
       {allowed ? (
         <div className="pt-2">
-          <Link to={`/monitor/fleet/${robot.code}/technical`} className="text-sm font-medium text-blue-ink hover:underline">
+          <Link to={paths.robotTechnical(robot.code)} className="text-sm font-medium text-blue-ink hover:underline">
             {t('Open the technical dashboard')}
           </Link>
         </div>
@@ -184,7 +187,13 @@ function lastHeard(robot: RobotView) {
 
 // Every section is backed by persisted data: fleet.robots, the active JobAssignment and the robot's Job assignments.
 // Status, enabled and online are in the panel header, so no section repeats them.
-function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagnostics, warehouseName: string | undefined): Section[] {
+function buildSections(
+  robot: RobotView,
+  recent: RecentJobs,
+  diagnostics: Diagnostics,
+  warehouseName: string | undefined,
+  paths: ConsolePaths,
+): Section[] {
   const activity = robot.activity
   const recentJobs = recent.items
   const hasTelemetry = Boolean(robot.lastTelemetryAt)
@@ -317,7 +326,7 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
             return (
               <li key={item.id} className="py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  <Link to={`/monitor/jobs/${item.id}`} className="font-medium hover:underline">
+                  <Link to={paths.job(item.id)} className="font-medium hover:underline">
                     {item.jobNo}
                   </Link>
                   <StatusBadge tone={JOB_STATUS_TONE[item.status]}>{item.status}</StatusBadge>
@@ -345,7 +354,7 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
       body: (
         <>
           <RobotHistoryCard robot={robot} />
-          <Link to={`/operations/robot-history?robot=${encodeURIComponent(robot.code)}`} className="mb-2 inline-block text-xs text-ink-2 underline-offset-2 hover:text-ink hover:underline">
+          <Link to={paths.robotHistory(robot.code)} className="mb-2 inline-block text-xs text-ink-2 underline-offset-2 hover:text-ink hover:underline">
             {t('Open the full history')}
           </Link>
         </>
@@ -355,6 +364,7 @@ function buildSections(robot: RobotView, recent: RecentJobs, diagnostics: Diagno
 }
 
 export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: RobotDetailPanelProps) {
+  const paths = usePaths()
   const queryClient = useQueryClient()
   const { capabilities } = useAuth()
   const mayConfigure = canActOnRobot(capabilities, PERMISSIONS.robotConfigure, robot.id)
@@ -388,6 +398,7 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
     },
     { allowed: mayDiagnose, health: healthQuery.data },
     warehouseName,
+    paths,
   )
   const [openIds, setOpenIds] = useState<string[]>(['identity'])
   const status = shownRobotStatus(robot)

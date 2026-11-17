@@ -17,6 +17,7 @@ public static class ListContainersEndpoint
             int? take,
             int? skip,
             string? status,
+            string? voucherType,
             IValidator<ListContainersRequest> validator,
             ListContainersHandler handler,
             CancellationToken cancellationToken) =>
@@ -27,7 +28,8 @@ public static class ListContainersEndpoint
                 eligibleOnly ?? true,
                 take ?? 50,
                 skip ?? 0,
-                status);
+                status,
+                voucherType);
             await validator.ValidateAndThrowAsync(request, cancellationToken);
             var response = await handler.HandleAsync(request, cancellationToken);
             return Results.Ok(response);
@@ -38,7 +40,9 @@ public static class ListContainersEndpoint
         .WithDescription(
             "Returns containers scoped to a warehouse via their current storage location. " +
             "Containers without a location (inbound) are included. Defaults to eligible statuses only. " +
-            "`status` narrows the list to one container status; `skip` / `take` page it and `total` counts every match.");
+            "`status` narrows the list to one container status; `voucherType` (INBOUND / OUTBOUND) to Containers on a CONFIRMED " +
+            "voucher of that type, newest voucher first; `skip` / `take` page it and `total` counts every match. Each item tells " +
+            "its latest voucher (not cancelled).");
 
         return group;
     }

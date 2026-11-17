@@ -116,11 +116,13 @@ public static class DispatchEligibility
             return;
         }
 
-        if (robot.MaxContainers is { } limit)
+        // A robot without its own capacity still carries at most the hard cap (RobotLoad).
+        if (count > WaroTrans.BuildingBlocks.RobotLoad.EffectiveMaxContainers(robot.MaxContainers))
         {
-            if (count > limit) reasons.Add(DispatchReasons.ContainerLimitExceeded);
+            reasons.Add(DispatchReasons.ContainerLimitExceeded);
         }
-        else
+
+        if (robot.MaxContainers is null)
         {
             notes.Add(DispatchReasons.CapacityUnknown);
         }

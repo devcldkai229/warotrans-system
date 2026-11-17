@@ -330,8 +330,13 @@ public sealed class CreateTransportRequestHandler(
     }
 
     /// <summary>
-    /// A Container on a shelf is collected from that shelf: a request naming another source would send the robot where
-    /// the Container is not, and the stock would be booked off a shelf that never held it.
+    /// The Container must be where the robot is sent to collect it:
+    /// <list type="bullet">
+    /// <item>On a shelf (STORED) it is collected from that shelf, at its level: another source would send the robot where
+    /// the Container is not, and the stock would be booked off a shelf that never held it (OUTBOUND, INTERNAL_RELOCATION).</item>
+    /// <item>A source that is a shelf needs a Container STORED there: one not put away yet comes in through INBOUND.</item>
+    /// <item>Going onto a shelf from a point that is not one (INBOUND) needs a Container that is not on a shelf yet.</item>
+    /// </list>
     /// </summary>
     private static void EnsureContainersAtSource(
         IReadOnlyList<CreateTransportRequestDetailRequest> details,
@@ -340,12 +345,33 @@ public sealed class CreateTransportRequestHandler(
         foreach (var detail in details)
         {
             var container = containers[detail.ContainerId];
-            if (container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } shelf }
-                && detail.SourceStorageLocationId != shelf)
+            var stored = container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: not null };
+            if (stored && detail.SourceStorageLocationId is null)
+            {
+                throw new DomainValidationException(
+                    $"Container '{container.Barcode}' is already on a shelf; collect it from its shelf (OUTBOUND or INTERNAL_RELOCATION), not from a receiving point.",
+                    "container_already_stored");
+            }
+
+            if (stored && detail.SourceStorageLocationId != container.CurrentStorageLocationId)
             {
                 throw new DomainValidationException(
                     $"Container '{container.Barcode}' is stored on another storage location than the Detail's source.",
                     "container_not_at_source");
+            }
+
+            if (stored && detail.SourceLevelNo is { } level && container.CurrentLevelNo is { } at && level != at)
+            {
+                throw new DomainValidationException(
+                    $"Container '{container.Barcode}' is on level {at} of its shelf, not on level {level}.",
+                    "container_not_at_source");
+            }
+
+            if (container.Status != ContainerStatus.STORED && detail.SourceStorageLocationId is not null)
+            {
+                throw new DomainValidationException(
+                    $"Container '{container.Barcode}' is not on a shelf (status: {container.Status}); it cannot be collected from one. Put it away with an INBOUND request first.",
+                    "container_not_stored");
             }
         }
     }

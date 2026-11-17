@@ -10,7 +10,7 @@ import { MovementBuilderPanel } from './MovementBuilderPanel'
 import { RequestSetupPanel } from './RequestSetupPanel'
 import { buildComposerMapPreview } from './mapPreview'
 import { submitTransportRequest } from './submitTransportRequest'
-import { useTransportRequestComposerData } from './useTransportRequestComposerData'
+import { mapsForWarehouse, useTransportRequestComposerData } from './useTransportRequestComposerData'
 import type { ComposerPrefill } from './voucherPrefill'
 import {
   draftIsDirty,
@@ -65,6 +65,19 @@ export function TransportRequestComposer({
   const [submitting, setSubmitting] = useState(false)
 
   const showPanel2 = Boolean(draft.workflowId)
+
+  // One warehouse / one published map: choose it, so the containers can be listed without a manual pick first.
+  useEffect(() => {
+    if (draft.warehouseId || data.warehouses.length !== 1) return
+    const warehouseId = data.warehouses[0].id
+    setDraft((current) => (current.warehouseId ? current : { ...current, warehouseId }))
+  }, [data.warehouses, draft.warehouseId])
+  useEffect(() => {
+    if (!draft.warehouseId || draft.mapVersionId) return
+    const maps = mapsForWarehouse(data, draft.warehouseId)
+    if (maps.length !== 1) return
+    setDraft((current) => (current.mapVersionId || current.warehouseId !== draft.warehouseId ? current : { ...current, mapVersionId: maps[0].id }))
+  }, [data, draft.warehouseId, draft.mapVersionId])
 
   const mapMetaQuery = useQuery({
     queryKey: ['navigation', 'map-detail', draft.mapVersionId],

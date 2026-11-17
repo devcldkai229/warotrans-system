@@ -58,6 +58,8 @@ public interface IFleetModule
     /// Optional <paramref name="route"/> attaches a traffic route grant (graph hash + authorized edge ids).
     /// Optional <paramref name="timeoutSeconds"/> is sent as payload.timeoutSeconds: the robot cancels the
     /// Nav2 goal and reports FAILED once it is exceeded.
+    /// Optional <paramref name="positionTolerance"/> (m) is the target Endpoint's allowed distance, sent as
+    /// payload.positionTolerance: the robot accepts its arrival within it instead of re-driving to the goal.
     /// </summary>
     Task<Guid> NavigateAsync(
         Guid robotId,
@@ -68,7 +70,8 @@ public interface IFleetModule
         Guid jobStepId,
         CancellationToken cancellationToken = default,
         RouteGrantSnapshot? route = null,
-        double? timeoutSeconds = null);
+        double? timeoutSeconds = null,
+        double? positionTolerance = null);
 
     /// <summary>
     /// Sends CANCEL for an in-flight NAVIGATE. Best effort: returns false (and logs) when the robot is offline
@@ -148,7 +151,8 @@ public sealed record RobotSnapshot(
     double PoseYaw,
     bool MotionHeld = false,
     bool InManualMode = false,
-    DateTimeOffset? BatteryMeasuredAt = null);
+    DateTimeOffset? BatteryMeasuredAt = null,
+    int? MaxContainers = null);
 
 /// <summary>
 /// FL-06: whether a robot still holds a Job that is going on. Fleet owns this contract and WorkflowExecution implements it, because

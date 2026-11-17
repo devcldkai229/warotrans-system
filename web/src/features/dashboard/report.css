@@ -1,0 +1,65 @@
+/* FE-20 print view: an A4 document. The toolbar is for the screen only; colours print as they are shown. */
+.period-report {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.period-report table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.period-report th,
+.period-report td {
+  border-bottom: 1px solid var(--color-outline-soft);
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.period-report th {
+  font-weight: 500;
+  color: var(--color-ink-2);
+  background: var(--color-container);
+}
+
+.period-report .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .period-report .report-toolbar {
+    display: none !important;
+  }
+
+  .period-report .report-sheet {
+    max-width: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .period-report thead {
+    display: table-header-group;
+  }
+
+  .period-report tr,
+  .period-report .keep-together {
+    break-inside: avoid;
+  }
+
+  .period-report h2 {
+    break-after: avoid;
+  }
+}

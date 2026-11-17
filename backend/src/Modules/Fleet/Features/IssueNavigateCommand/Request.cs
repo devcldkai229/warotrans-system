@@ -12,4 +12,5 @@ public sealed record IssueNavigateCommandRequest(
     Guid? JobStepId,
     RouteGrantPayload? Route = null,
     AuthorityPayload? Authority = null,
-    double? TimeoutSeconds = null);
+    double? TimeoutSeconds = null,
+    double? PositionTolerance = null);

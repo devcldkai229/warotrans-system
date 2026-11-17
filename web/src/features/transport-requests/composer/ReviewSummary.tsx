@@ -1,3 +1,4 @@
+import { MAX_CONTAINERS_PER_TRIP } from '../constants'
 import { Button } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { containerById, shortPlace } from './labels'
@@ -49,6 +50,13 @@ export function ReviewSummary({ data, draft, submitting, onBack, onCreate }: Rev
 
         <section>
           <p className="mb-2 text-[10px] font-medium tracking-wide text-muted uppercase">{t('Movements')}</p>
+          <p className="mb-2 text-xs text-muted">
+            {t('{count} containers → {trips} trip(s), at most {max} per robot', {
+              count: draft.movements.length,
+              trips: Math.ceil(draft.movements.length / MAX_CONTAINERS_PER_TRIP),
+              max: MAX_CONTAINERS_PER_TRIP,
+            })}
+          </p>
           <ul className="space-y-2">
             {draft.movements.map((movement) => {
               const container = containerById(data, movement.containerId)

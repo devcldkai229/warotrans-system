@@ -17,5 +17,9 @@ public sealed class ListContainersRequestValidator : AbstractValidator<ListConta
             .IsEnumName(typeof(ContainerStatus), caseSensitive: true)
             .When(x => !string.IsNullOrEmpty(x.Status))
             .WithMessage("Status must be a container status such as STORED.");
+        RuleFor(x => x.VoucherType)
+            .IsEnumName(typeof(StockVoucherType), caseSensitive: true)
+            .When(x => !string.IsNullOrEmpty(x.VoucherType))
+            .WithMessage("VoucherType must be INBOUND or OUTBOUND.");
     }
 }

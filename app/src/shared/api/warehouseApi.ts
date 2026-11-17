@@ -7,7 +7,8 @@ export interface ContainerListItem {
   id: string; barcode: string; status: ContainerStatus | string; productId: string; productSku: string; productName: string;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentEndpointCode?: string | null; currentLevelNo: number | null;
-  supplierPackageBarcode?: string | null; updatedAt?: string; inActiveTransport?: boolean;
+  supplierPackageBarcode?: string | null; contentsQuantity?: number | null; contentsUnit?: string | null;
+  updatedAt?: string; inActiveTransport?: boolean;
   qty?: number; category?: string; zoneLabel?: string;
 }
 export interface ListContainersResponse { items: ContainerListItem[]; total: number }
@@ -111,6 +112,21 @@ export interface CreateContainerResponse {
   productName?: string; productSku?: string; currentEndpointId?: string; currentStorageLocationId?: string | null;
   currentLevelNo?: number | null; createdAt: string;
 }
+export interface CreateContainerBatchGroupInput {
+  groupKey: string; productId: string; containerCount: number; quantityPerContainer: number;
+  unit: string; supplierPackageBarcode?: string | null;
+}
+export interface CreateContainerBatchBody {
+  warehouseId: string; requestId: string; containerCount: number; groups: CreateContainerBatchGroupInput[];
+}
+export interface CreatedBatchContainerItem {
+  id: string; barcode: string; productId: string; groupKey: string; containerNo: number;
+  contentsQuantity: number; contentsUnit: string; supplierPackageBarcode: string | null;
+  status: ContainerStatus | string; currentStorageLocationId: string; currentEndpointId: string; createdAt: string;
+}
+export interface CreateContainerBatchResponse {
+  requestId: string; warehouseId: string; containerCount: number; replayed: boolean; items: CreatedBatchContainerItem[];
+}
 export async function createContainer(body: CreateContainerBody): Promise<CreateContainerResponse> {
   requireMobileCapability('createContainer');
   const response = await apiFetch<CreateContainerResponse>('/api/warehouse/containers', {
@@ -122,6 +138,12 @@ export async function createContainer(body: CreateContainerBody): Promise<Create
   });
   return response;
 }
+export function createContainerBatch(body: CreateContainerBatchBody, signal?: AbortSignal) {
+  requireMobileCapability('createContainer');
+  return apiFetch<CreateContainerBatchResponse>('/api/warehouse/containers', {
+    method: 'POST', signal, body: JSON.stringify(body),
+  });
+}
 /** `Warehouse/Features/ListStockVouchers/Response.cs`. Quantities are Containers; `doneCount` is robot progress. */
 export interface StockVoucherListItem {
   id: string; code: string; type: StockVoucherType; status: StockVoucherStatus; referenceNo: string | null; note: string | null;
@@ -131,8 +153,15 @@ export interface StockVoucherPage { items: StockVoucherListItem[]; total: number
 export interface StockVoucherLine {
   id: string; lineNo: number; containerId: string; containerBarcode: string; containerStatus: string;
   productId: string; productSku: string; productName: string;
+  contentsQuantity?: number | null; contentsUnit?: string | null;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentLevelNo: number | null; done: boolean;
+}
+export function addStockVoucherLines(voucherId: string, containerIds: string[], signal?: AbortSignal) {
+  requireMobileCapability('createContainer');
+  return apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(voucherId)}/lines`, {
+    method: 'POST', signal, body: JSON.stringify({ containerIds }),
+  });
 }
 export interface StockVoucherDetail extends StockVoucherListItem {
   warehouseId: string; warehouseCode: string; warehouseName: string; createdBy: string; updatedAt: string;

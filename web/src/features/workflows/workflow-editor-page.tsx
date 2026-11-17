@@ -57,6 +57,7 @@ function toUpsert(detail: {
     taskKey: string
     name: string
     sequenceNo: number
+    runCondition?: { variableKey: string; equals: boolean } | null
     steps: WorkflowStepDraft[]
   }>
 }): WorkflowUpsert {
@@ -69,6 +70,7 @@ function toUpsert(detail: {
       taskKey: t.taskKey,
       name: t.name,
       sequenceNo: t.sequenceNo,
+      runCondition: t.runCondition ?? null,
       steps: t.steps.map((s) => ({
         stepKey: s.stepKey,
         name: s.name,
@@ -314,6 +316,8 @@ export function WorkflowEditor({
   const [serverErrors, setServerErrors] = useState<string[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [showPublishWarnings, setShowPublishWarnings] = useState(false)
+  const [dragTask, setDragTask] = useState<number | null>(null)
+  const [dropTask, setDropTask] = useState<number | null>(null)
   const [dragStep, setDragStep] = useState<{ taskIndex: number; stepIndex: number } | null>(null)
   const [dropStep, setDropStep] = useState<{ taskIndex: number; stepIndex: number } | null>(null)
 
@@ -891,12 +895,65 @@ export function WorkflowEditor({
         <div className="wf-tree__list">
           {draft.tasks.map((taskBlock, taskIndex) => {
             const taskOpen = selectedTask === taskIndex
+            const isTaskDropTarget =
+              dropTask === taskIndex && dragTask !== null && dragTask !== taskIndex
+            const boolVariables = draft.variables.filter(
+              (v) => v.dataType === 'BOOLEAN' && v.key.trim().length > 0,
+            )
+            const condValue = taskBlock.runCondition?.variableKey
+              ? `${taskBlock.runCondition.variableKey}:${taskBlock.runCondition.equals ? 'true' : 'false'}`
+              : ''
             return (
               <div
                 key={taskIndex}
-                className={`wf-task-block${taskOpen ? ' wf-task-block--open' : ''}`}
+                className={[
+                  'wf-task-block',
+                  taskOpen ? 'wf-task-block--open' : '',
+                  isTaskDropTarget ? 'wf-task-block--drop' : '',
+                  dragTask === taskIndex ? 'wf-task-block--dragging' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onDragOver={(e: DragEvent) => {
+                  if (dragTask === null) return
+                  e.preventDefault()
+                  setDropTask(taskIndex)
+                }}
+                onDrop={(e: DragEvent) => {
+                  if (dragTask === null) return
+                  e.preventDefault()
+                  const from = dragTask
+                  const to = taskIndex
+                  setDragTask(null)
+                  setDropTask(null)
+                  if (from === to) return
+                  setDraft({
+                    ...draft,
+                    tasks: reorderItem(draft.tasks, from, to),
+                  })
+                  setSelectedTask(to)
+                  setSelectedStep(0)
+                }}
               >
                 <div className="wf-task-block__head">
+                  <button
+                    type="button"
+                    className="wf-step-card__handle"
+                    title={t('Drag to reorder')}
+                    draggable={!readOnly}
+                    aria-label={t('Drag task {value}', { value: taskIndex + 1 })}
+                    onDragStart={(e: DragEvent) => {
+                      e.dataTransfer.effectAllowed = 'move'
+                      e.dataTransfer.setData('text/plain', `task:${taskIndex}`)
+                      setDragTask(taskIndex)
+                    }}
+                    onDragEnd={() => {
+                      setDragTask(null)
+                      setDropTask(null)
+                    }}
+                  >
+                    ⠿
+                  </button>
                   <button
                     type="button"
                     className="wf-task-block__toggle"
@@ -915,6 +972,14 @@ export function WorkflowEditor({
                         </>
                       ) : null}
                     </span>
+                    {taskBlock.runCondition?.variableKey ? (
+                      <span className="wf-task-block__cond">
+                        {t('When {key} = {value}', {
+                          key: taskBlock.runCondition.variableKey,
+                          value: taskBlock.runCondition.equals ? 'true' : 'false',
+                        })}
+                      </span>
+                    ) : null}
                     <span className="wf-task-block__count">
                       {taskBlock.steps.length} {taskBlock.steps.length === 1 ? t('step') : t('steps')}
                     </span>
@@ -941,6 +1006,36 @@ export function WorkflowEditor({
                           value={taskBlock.name}
                           onChange={(e) => updateTask(taskIndex, { name: e.target.value })}
                         />
+                      </label>
+                      <label>{t('Run condition')}<select
+                          value={condValue}
+                          disabled={readOnly}
+                          onChange={(e) => {
+                            const raw = e.target.value
+                            if (!raw) {
+                              updateTask(taskIndex, { runCondition: null })
+                              return
+                            }
+                            const idx = raw.lastIndexOf(':')
+                            const variableKey = raw.slice(0, idx)
+                            const equals = raw.slice(idx + 1) === 'true'
+                            updateTask(taskIndex, {
+                              runCondition: { variableKey, equals },
+                            })
+                          }}
+                        >
+                          <option value="">{t('Always run')}</option>
+                          {boolVariables.map((v) => (
+                            <optgroup key={v.key} label={v.name || v.key}>
+                              <option value={`${v.key}:true`}>
+                                {t('When {key} = {value}', { key: v.key, value: 'true' })}
+                              </option>
+                              <option value={`${v.key}:false`}>
+                                {t('When {key} = {value}', { key: v.key, value: 'false' })}
+                              </option>
+                            </optgroup>
+                          ))}
+                        </select>
                       </label>
                     </div>
 

@@ -49,6 +49,7 @@ export function emptyTask(sequenceNo: number): WorkflowTaskDraft {
     taskKey: '',
     name: '',
     sequenceNo,
+    runCondition: null,
     steps: [],
   }
 }

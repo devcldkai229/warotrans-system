@@ -30,6 +30,7 @@ export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
   showClearButton?: boolean;
   onClear?: () => void;
   containerStyle?: StyleProp<ViewStyle>;
+  fieldStyle?: StyleProp<ViewStyle>;
   inputStyle?: TextInputProps['style'];
 }
 
@@ -49,6 +50,7 @@ export function TextField({
   showClearButton = false,
   onClear,
   containerStyle,
+  fieldStyle,
   inputStyle,
   value,
   onChangeText,
@@ -77,6 +79,7 @@ export function TextField({
       <View
         style={[
           styles.field,
+          fieldStyle,
           isFocused && styles.fieldFocused,
           !!error && styles.fieldError,
           !editable && styles.fieldDisabled,

@@ -1,3 +1,4 @@
+using WaroTrans.Navigation.Services;
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
@@ -90,10 +91,10 @@ public class EndpointTests
     }
 
     private static CreateEndpointHandler CreateHandler(NavigationDbContext dbContext, IBusinessCodeGenerator? codeGenerator = null) =>
-        new(dbContext, codeGenerator ?? new FakeCodeGenerator(), new CreateEndpointValidator());
+        new(dbContext, new EndpointStorage(dbContext, new NoStorageLocations()), codeGenerator ?? new FakeCodeGenerator(), new CreateEndpointValidator());
 
     private static UpdateEndpointHandler UpdateHandler(NavigationDbContext dbContext) =>
-        new(dbContext, new UpdateEndpointValidator());
+        new(dbContext, new EndpointStorage(dbContext, new NoStorageLocations()), new UpdateEndpointValidator());
 
     private static CreateEndpointRequest ValidCreateRequest(string type = "WAYPOINT", bool? isEnabled = null) =>
         new("Receiving dock 1", type, 12.5, 3.25, 1.57, 0.1, 0.2, isEnabled);

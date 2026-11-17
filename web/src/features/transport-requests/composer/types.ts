@@ -1,3 +1,4 @@
+import type { ContainerVoucherRef } from '@/shared/api/warehouses'
 import type { ContainerStatus, Endpoint, MapVersion } from '@/shared/api/contracts'
 import type { WorkflowRequestInputField } from '@/shared/api/types'
 
@@ -60,6 +61,19 @@ export interface ComposerContainer {
   currentEndpointId: string | null
   currentEndpointCode: string | null
   currentEndpointName: string | null
+  /** The latest stock voucher (not cancelled) the container is on. */
+  voucher?: ContainerVoucherRef | null
+}
+
+/** What the chosen workflow does with containers; decides which ones the selector offers first. */
+export type WorkflowKind = 'INBOUND' | 'OUTBOUND' | 'INTERNAL' | null
+
+export function workflowKindOf(code: string | null | undefined): WorkflowKind {
+  const value = (code ?? '').toUpperCase()
+  if (value === 'INBOUND' || value.startsWith('INBOUND_')) return 'INBOUND'
+  if (value === 'OUTBOUND' || value.startsWith('OUTBOUND_')) return 'OUTBOUND'
+  if (value === 'INTERNAL_RELOCATION' || value.startsWith('INTERNAL')) return 'INTERNAL'
+  return null
 }
 
 export interface ComposerWorkflow {
@@ -87,10 +101,16 @@ export interface ComposerData {
   workflows: ComposerWorkflow[]
   staffInputFields: WorkflowRequestInputField[]
   containers: ComposerContainer[]
+  /** Kind of the chosen workflow (null before one is chosen or for a custom one). */
+  workflowKind: WorkflowKind
   storageLocations: ComposerStorageLocation[]
   endpoints: Endpoint[]
   requestedByName: string
   isLoading: boolean
+  /** A warehouse is chosen, so its containers can be listed. */
+  warehouseSelected: boolean
+  /** The container list of the chosen warehouse is still loading. */
+  containersLoading: boolean
   error: string | null
   containerSearch: string
   setContainerSearch: (value: string) => void
@@ -121,10 +141,9 @@ export function emptyDraft(): TransportRequestDraft {
 }
 
 export function draftIsDirty(draft: TransportRequestDraft): boolean {
+  // Warehouse and map are filled in on their own when there is only one: they are context, not something typed.
   return Boolean(
-    draft.warehouseId ||
-      draft.mapVersionId ||
-      draft.workflowId ||
+    draft.workflowId ||
       draft.note ||
       draft.movements.length > 0 ||
       Object.keys(draft.workflowInputs).length > 0,

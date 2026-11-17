@@ -708,6 +708,10 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
 
+                    b.Property<string>("RunCondition")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("run_condition");
+
                     b.Property<int>("SequenceNo")
                         .HasColumnType("integer")
                         .HasColumnName("sequence_no");

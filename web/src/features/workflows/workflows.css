@@ -522,6 +522,26 @@
   padding: 0.1rem 0.45rem;
 }
 
+.wf-task-block--drop {
+  border-color: var(--color-blue);
+  border-style: dashed;
+  background: var(--color-blue-soft);
+}
+
+.wf-task-block--dragging {
+  opacity: 0.55;
+}
+
+.wf-task-block__cond {
+  flex: none;
+  font-size: 0.72rem;
+  color: var(--color-blue);
+  background: var(--color-blue-soft);
+  border: 1px solid rgb(59 130 246 / 0.25);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+}
+
 .wf-task-block__body {
   display: flex;
   flex-direction: column;

@@ -64,6 +64,12 @@ public sealed class NavigateToPosePayload
 
     /// <summary>Robot cancels the Nav2 goal and reports FAILED after this long. Null = no deadline.</summary>
     public double? TimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// The target Endpoint's allowed distance (m): an arrival within it needs no re-drive or docking correction.
+    /// Null = the robot's own default.
+    /// </summary>
+    public double? PositionTolerance { get; set; }
 }
 
 /// <summary>Authorized edge set for a NAVIGATE_TO_POSE under traffic coordination.</summary>

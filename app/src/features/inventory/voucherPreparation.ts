@@ -22,7 +22,6 @@ export function validPreparation(value: unknown, type: StockVoucherType): value 
     && (item.groups === undefined || (Array.isArray(item.groups) && new Set(item.groups.map(group => group?.key)).size === item.groups.length
       && item.groups.every(group => group && typeof group.key === 'string' && !!group.key
         && [group.containerCount, group.quantity, group.unit].every(value => typeof value === 'string')
-        && record(group.quantities) && Object.entries(group.quantities).every(([key, quantity]) => /^[1-9]\d*$/.test(key) && typeof quantity === 'string')
         && (group.product === null || (group.product && typeof group.product.id === 'string' && typeof group.product.name === 'string'
           && typeof group.product.sku === 'string' && typeof group.product.isActive === 'boolean')))))
     && Object.values(item.contents).every(value => value && typeof value.quantity === 'string' && typeof value.unit === 'string'

@@ -170,11 +170,11 @@ Verified on local PostgreSQL `warotrans` at port 5433 on 2026-11-17:
 - Full pre-migration backup: `/tmp/warotrans-before-inbound-20261117.dump` (local-only, permissions 0600).
 - Only the two Warehouse migrations and the configured Inbound location were written to the shared dev DB. Mutation/end-to-end tests used isolated databases; no robot was dispatched.
 
-The Development configuration is in this BE worktree. The mobile checkout remains separate; run/restart the BE from this worktree or deploy this branch before opening FE gates. Database migration alone does not replace an already-running older BE process.
+This BE branch has been synchronized with the exact running base `ff57bba` to preserve its Fleet/Workflow updates and existing Container voucher metadata. The Development configuration is in this BE worktree. The mobile checkout remains separate; run/restart the BE from this worktree or deploy this branch before opening FE gates. Database migration alone does not replace an already-running older BE process.
 
 ## Verification
 
-- Unit suite: 847 passed, 3 existing skips, 0 failed.
+- Unit suite after synchronization with running base `ff57bba`: **897 passed**, 3 existing skips, 0 failed.
 - Architecture suite: 11 passed, 0 failed.
 - Isolated PostgreSQL suite: **19 passed, 0 failed**, including actual linked creation and posting of 9,999 boxes. `ContainerBatchPostgresTests` covers migration/legacy compatibility, real endpoint/auth/validation, atomic voucher-linked batches, concurrent creation and confirmation, posting rollback, maximum-batch boundary, putaway/recovery preserving total stock, code-sequence concurrency and published-map checks.
 

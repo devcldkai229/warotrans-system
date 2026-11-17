@@ -119,7 +119,8 @@ public sealed class FleetModuleApi(
         Guid jobStepId,
         CancellationToken cancellationToken = default,
         RouteGrantSnapshot? route = null,
-        double? timeoutSeconds = null)
+        double? timeoutSeconds = null,
+        double? positionTolerance = null)
     {
         // JobId without JobAssignmentId: Fleet records one assignment per navigate command
         // (ended by its RESULT). The Job keeps its robot in WorkflowExecution (assignedRobotId).
@@ -133,7 +134,8 @@ public sealed class FleetModuleApi(
             };
         var response = await issueNavigateCommandHandler.HandleAsync(
             robotId,
-            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload, TimeoutSeconds: timeoutSeconds),
+            new IssueNavigateCommandRequest(x, y, yaw, "map", jobId, null, jobStepId, routePayload, TimeoutSeconds: timeoutSeconds,
+                PositionTolerance: positionTolerance),
             cancellationToken);
         return response.CommandId;
     }
@@ -262,5 +264,6 @@ public sealed class FleetModuleApi(
         r.PoseYaw,
         r.MotionHeld,
         r.HasActiveManualLease(DateTimeOffset.UtcNow),
-        r.BatteryMeasuredAt);
+        r.BatteryMeasuredAt,
+        r.MaxContainers);
 }

@@ -6,8 +6,10 @@ namespace WaroTrans.WorkflowExecution.Planning;
 /// <summary>
 /// V1 deterministic "collect first, deliver after" planner.
 /// <list type="bullet">
-/// <item>One batch per request while its Containers fit the limit (<see cref="JobPlanningOptions.MaxContainersPerJob"/>).
-/// Above it (WH-08) Containers with the same source and destination stay together, in Detail order, up to the limit.
+/// <item>A batch is one trip of one robot. One batch per request while its Containers fit the limit
+/// (<see cref="JobPlanningOptions.MaxContainersPerJob"/>, at most <see cref="JobPlanningOptions.HardMaxContainersPerRobot"/>).
+/// Above it (WH-08) trips are filled in pickup-stop order, then dropoff-stop order, then Detail order, mixing routes:
+/// INBOUND takes up to the limit at the pickup point and delivers them to several shelves.
 /// Keys and contents depend only on the Details, so planning again gives the same batches.</item>
 /// <item>PICKUP stops: Details grouped by SourceEndpointId, groups ordered by their minimum Detail SequenceNo.</item>
 /// <item>DROPOFF stops: Details grouped by DestinationEndpointId, ordered the same way.</item>
@@ -38,51 +40,76 @@ public sealed class CollectThenDeliverJobBatchPlanner(int? maxContainersPerJob =
         IReadOnlyList<TransportRequestDetailSnapshot> details,
         JobPlanLimits? limits)
     {
-        // The smaller of the configured limit and what the largest robot carries (FL-03).
-        int? count = (maxContainersPerJob, limits?.MaxContainers) switch
-        {
-            ({ } configured, { } robots) => Math.Min(configured, robots),
-            ({ } configured, null) => configured,
-            (null, { } robots) => robots,
-            _ => null
-        };
+        // The smallest of the configured limit, what the largest robot carries (FL-03) and the hard cap of a robot load.
+        int count = Math.Min(
+            JobPlanningOptions.HardMaxContainersPerRobot,
+            (maxContainersPerJob, limits?.MaxContainers) switch
+            {
+                ({ } configured, { } robots) => Math.Min(configured, robots),
+                ({ } configured, null) => configured,
+                (null, { } robots) => robots,
+                _ => JobPlanningOptions.HardMaxContainersPerRobot
+            });
         var payload = limits?.MaxPayloadKg;
         decimal WeightOf(TransportRequestDetailSnapshot d) => limits?.WeightsKg.GetValueOrDefault(d.ContainerId) ?? 0;
 
-        var fitsOne = (count is null || details.Count <= Math.Max(count.Value, 1))
+        var fitsOne = details.Count <= Math.Max(count, 1)
                       && (payload is null || details.Sum(WeightOf) <= payload);
         if (fitsOne)
         {
             return [details];
         }
 
+        // A trip is one robot load: up to the limit, from one or more pickup stops, to one or more dropoff stops.
+        // Containers are taken in pickup-stop order, then dropoff-stop order (first appearance), then Detail order, so
+        // INBOUND fills a trip at the one pickup point and keeps Containers bound for the same shelf together, and
+        // OUTBOUND collects from as few shelves per trip as the order allows.
+        var sourceRank = FirstAppearance(details, d => d.SourceEndpointId);
+        var destinationRank = FirstAppearance(details, d => d.DestinationEndpointId);
+        var ordered = details
+            .OrderBy(d => sourceRank[d.SourceEndpointId])
+            .ThenBy(d => destinationRank[d.DestinationEndpointId])
+            .ThenBy(d => d.SequenceNo)
+            .ToList();
+
         var batches = new List<IReadOnlyList<TransportRequestDetailSnapshot>>();
-        foreach (var route in details.GroupBy(d => (d.SourceEndpointId, d.DestinationEndpointId)))
+        var current = new List<TransportRequestDetailSnapshot>();
+        decimal weight = 0;
+        foreach (var detail in ordered)
         {
-            var current = new List<TransportRequestDetailSnapshot>();
-            decimal weight = 0;
-            foreach (var detail in route)
-            {
-                var full = count is { } most && current.Count >= Math.Max(most, 1);
-                var heavy = payload is { } limit && current.Count > 0 && weight + WeightOf(detail) > limit;
-                if (full || heavy)
-                {
-                    batches.Add(current);
-                    current = [];
-                    weight = 0;
-                }
-
-                current.Add(detail);
-                weight += WeightOf(detail);
-            }
-
-            if (current.Count > 0)
+            var full = count is { } most && current.Count >= Math.Max(most, 1);
+            var heavy = payload is { } limit && current.Count > 0 && weight + WeightOf(detail) > limit;
+            if (full || heavy)
             {
                 batches.Add(current);
+                current = [];
+                weight = 0;
             }
+
+            current.Add(detail);
+            weight += WeightOf(detail);
         }
 
+        if (current.Count > 0)
+        {
+            batches.Add(current);
+        }
+
+        // Inside a trip the stops follow the same order (ToBatch groups by endpoint in first-appearance order).
         return batches;
+    }
+
+    private static Dictionary<Guid, int> FirstAppearance(
+        IReadOnlyList<TransportRequestDetailSnapshot> details,
+        Func<TransportRequestDetailSnapshot, Guid> endpointOf)
+    {
+        var rank = new Dictionary<Guid, int>();
+        foreach (var detail in details)
+        {
+            rank.TryAdd(endpointOf(detail), rank.Count);
+        }
+
+        return rank;
     }
 
     private static JobBatchPlan ToBatch(IReadOnlyList<TransportRequestDetailSnapshot> details, int sequenceNo)

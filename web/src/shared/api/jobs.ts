@@ -22,6 +22,30 @@ export interface JobSummaryDto {
   startedAt: string | null
   completedAt: string | null
   failureCode: string | null
+  /** Which trip (robot load) of its request this Job is, 1-based. */
+  tripNo?: number | null
+  /** How many trips the request has. */
+  tripCount?: number | null
+  /** Why a queued trip waits (no free robot, ...). */
+  blockingReason?: string | null
+  /** Where the robot collects, then delivers, in order. */
+  stops?: JobTripStopDto[] | null
+  containers?: JobTripContainerDto[] | null
+}
+
+export interface JobTripStopDto {
+  sequenceNo: number
+  action: 'PICKUP' | 'DROPOFF' | string
+  endpointId: string
+  endpointCode?: string | null
+  containerCount: number
+}
+
+export interface JobTripContainerDto {
+  containerId: string
+  sequenceNo: number
+  status: JobContainerStatus | string
+  barcode?: string | null
 }
 
 export interface JobStepDto {

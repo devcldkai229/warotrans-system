@@ -54,6 +54,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<WaroTrans.WorkflowExecution.Seeding.StandardWorkflowSeeder>();
         services.AddScoped<DeleteWorkflowHandler>();
         services.AddScoped<GetJobStatisticsHandler>();
+        services.AddScoped<Features.JobReport.JobReportReader>();
 
         // Work waiting on a person (an un-started job, an unconfirmed step) is noticed by a timer.
         services.Configure<StalledWorkOptions>(configuration.GetSection(StalledWorkOptions.SectionName));

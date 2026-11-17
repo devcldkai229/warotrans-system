@@ -38,6 +38,12 @@ public sealed class StandardWorkflowSeeder(
     public static IReadOnlyList<UpsertWorkflowRequest> Definitions() =>
     [
         Define(
+            WorkflowMovementRules.Inbound,
+            "INBOUND",
+            "Put Containers of a confirmed phiếu nhập away: collect them at the receiving point, deliver each to its shelf.",
+            "Put the Container on the robot at the receiving point.",
+            "Take the Container off the robot and place it on its shelf."),
+        Define(
             WorkflowMovementRules.OutboundRetrieval,
             "Outbound Retrieval",
             "Retrieve an identified Container from its storage source and deliver it to an outbound/shipping point.",

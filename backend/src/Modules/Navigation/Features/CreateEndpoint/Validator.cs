@@ -36,5 +36,8 @@ public sealed class CreateEndpointValidator : AbstractValidator<CreateEndpointRe
         RuleFor(x => x.YawTolerance)
             .GreaterThan(0).WithMessage("YawTolerance must be greater than 0.")
             .LessThanOrEqualTo(Math.PI).WithMessage("YawTolerance must not exceed PI radians.");
+
+        RuleFor(x => x.StorageLocationCode)
+            .MaximumLength(100).WithMessage("StorageLocationCode must not exceed 100 characters.");
     }
 }

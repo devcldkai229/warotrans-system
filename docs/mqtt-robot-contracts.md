@@ -98,6 +98,10 @@ If a command is `RUNNING` when heartbeat times out, backend aborts that command 
 }
 ```
 
+`payload.positionTolerance` (m, optional) is the target Endpoint's `position_tolerance`. The gateway accepts an arrival
+within it: no arrival re-drive, no docking run in / align when already that close. Nav2's goal checker keeps its own
+fixed tolerance. Absent: the gateway's configured defaults.
+
 `payload.route` is **optional** for backward compatibility (legacy free NavigateToPose).
 When the robot gateway is launched with `route_graph:=…` (route mode):
 

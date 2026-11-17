@@ -96,7 +96,8 @@ public sealed class CloneMapVersionHandler(
                 PositionTolerance = endpoint.PositionTolerance,
                 YawTolerance = endpoint.YawTolerance,
                 IsEnabled = endpoint.IsEnabled,
-                SourceEndpointId = endpoint.Id
+                SourceEndpointId = endpoint.Id,
+                StorageLocationCode = endpoint.StorageLocationCode
             };
             endpointIds[endpoint.Id] = copy.Id;
             dbContext.Endpoints.Add(copy);

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.Fleet.Contracts;
+using WaroTrans.Navigation.Contracts;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Persistence;
@@ -16,7 +17,8 @@ public sealed class JobSummaryEnricher(
     IFleetModule fleet,
     IWarehouseModule warehouse,
     ITransportRequestCodeLookup requests,
-    IRobotAccessScope robotScope)
+    IRobotAccessScope robotScope,
+    INavigationModule navigation)
 {
     public async Task<IReadOnlyList<JobSummaryDto>> EnrichAsync(
         IReadOnlyList<JobSummaryDto> items,
@@ -38,7 +40,21 @@ public sealed class JobSummaryEnricher(
             .ToListAsync(cancellationToken);
         var barcodes = (await warehouse.GetContainersAsync(containers.Select(c => c.ContainerId).Distinct().ToList(), cancellationToken))
             .ToDictionary(c => c.Id, c => c.Barcode);
-        var codes = await requests.GetCodesAsync(items.SelectMany(j => j.TransportRequestIds).Distinct().ToList(), cancellationToken);
+        var requestIds = items.SelectMany(j => j.TransportRequestIds).Distinct().ToList();
+        var codes = await requests.GetCodesAsync(requestIds, cancellationToken);
+        // How many trips each request has (a request split over several robot loads).
+        var tripCounts = (await db.JobContainers.AsNoTracking()
+                .Where(c => requestIds.Contains(c.TransportRequestId))
+                .Select(c => new { c.TransportRequestId, c.JobId })
+                .Distinct()
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.TransportRequestId)
+            .ToDictionary(g => g.Key, g => g.Count());
+        var endpointCodes = new Dictionary<Guid, string?>();
+        foreach (var endpointId in items.SelectMany(j => j.Stops ?? []).Select(s => s.EndpointId).Distinct())
+        {
+            endpointCodes[endpointId] = (await navigation.GetEndpointPoseAsync(endpointId, cancellationToken))?.Code;
+        }
 
         var scope = await robotScope.GetCurrentAsync(cancellationToken);
         var robotCodes = new Dictionary<Guid, string?>();
@@ -57,7 +73,10 @@ public sealed class JobSummaryEnricher(
                 .OrderBy(c => c.SequenceNo)
                 .Select(c => barcodes.GetValueOrDefault(c.ContainerId))
                 .OfType<string>()
-                .ToList()
+                .ToList(),
+            TripCount = job.TransportRequestIds.Count == 1 ? tripCounts.GetValueOrDefault(job.TransportRequestIds[0]) : null,
+            Stops = job.Stops?.Select(s => s with { EndpointCode = endpointCodes.GetValueOrDefault(s.EndpointId) }).ToList(),
+            Containers = job.Containers?.Select(c => c with { Barcode = barcodes.GetValueOrDefault(c.ContainerId) }).ToList()
         }).ToList();
     }
 }

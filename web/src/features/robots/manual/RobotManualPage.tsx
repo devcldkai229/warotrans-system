@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
+import { usePaths } from '@/shared/routing/usePaths'
 import type { Endpoint } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/client'
 import { cancelRobotCommand, listRobots, navigateRobot } from '@/shared/api/fleet'
@@ -51,6 +52,7 @@ const errorText = (err: unknown) => (err instanceof ApiError || err instanceof E
  * The control bar (Manual, Drive Assist, speed, Stop) opens from the control-panel button beside the joystick.
  */
 export function RobotManualPage() {
+  const paths = usePaths()
   const { robotCode = '' } = useParams()
   const navigate = useNavigate()
 
@@ -219,7 +221,7 @@ export function RobotManualPage() {
           className="grid size-9 place-items-center rounded-full bg-container hover:bg-container-high"
           onClick={() => {
             driveStop()
-            navigate(`/monitor/fleet/${robotCode}`)
+            navigate(paths.fleet(robotCode))
           }}
         >
           <Icon name="arrowLeft" size={16} />

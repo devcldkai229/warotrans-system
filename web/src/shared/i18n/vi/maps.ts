@@ -209,4 +209,11 @@ export const vi_maps: Record<string, string> = {
   'Paths': 'Tuyến đường',
   'Endpoints': 'Endpoint',
   'The wedge shows the arrival heading.': 'Hình nêm cho biết hướng khi đến nơi.',
+  'Containers dropped here are stored at this location.': 'Container thả ở đây được lưu vào vị trí này.',
+  'Kept from the source map: it moves to this endpoint when this map is published.': 'Giữ từ bản đồ gốc: chuyển sang endpoint này khi bản đồ này được xuất bản.',
+  'Only a waypoint can be a storage location.': 'Chỉ endpoint loại waypoint mới làm vị trí lưu trữ được.',
+  'Use as a storage location': 'Dùng làm vị trí lưu trữ',
+  'Location code': 'Mã vị trí',
+  'The location is created when this map is published; containers dropped here are then stored on it.': 'Vị trí được tạo khi bản đồ này được xuất bản; từ đó container thả ở đây sẽ được lưu vào vị trí này.',
+  'Enter a location code, or untick "Use as a storage location".': 'Nhập mã vị trí, hoặc bỏ chọn "Dùng làm vị trí lưu trữ".',
 }

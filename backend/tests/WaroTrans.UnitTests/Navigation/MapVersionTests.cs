@@ -24,7 +24,7 @@ public class MapVersionTests
     }
 
     private static PublishMapVersionHandler Publisher(NavigationDbContext dbContext) =>
-        new(dbContext, new NoOpRebinder(), NullLogger<PublishMapVersionHandler>.Instance);
+        new(dbContext, new NoOpRebinder(), new EndpointStorage(dbContext, new NoStorageLocations()), NullLogger<PublishMapVersionHandler>.Instance);
 
     private sealed class FakeWarehouseModule(WarehouseSnapshot? warehouse = null) : IWarehouseModule
     {

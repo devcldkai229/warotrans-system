@@ -1,12 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { AppShell } from '@/app/AppShell'
+import { TECH_NAV } from '@/app/nav'
+import { RequirePortal } from '@/features/auth/RequirePortal'
+import { PortalScope } from '@/shared/routing/portal'
+import { t } from '@/shared/i18n'
 import { ChangePasswordPage } from '@/features/auth/ChangePasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { RequirePermission as Guard } from '@/features/auth/RequirePermission'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { PeriodReportPage } from '@/features/dashboard/PeriodReportPage'
 import { JobDetailPage } from '@/features/jobs/JobDetailPage'
 import { JobsPage } from '@/features/jobs/JobsPage'
 import { ManagementPage } from '@/features/management/ManagementPage'
@@ -40,31 +45,56 @@ function App() {
         <Route path="/change-password" element={<ChangePasswordPage />} />
 
         <Route element={<RequireAuth />}>
-          <Route element={<AppShell />}>
-            <Route path="/monitor/fleet" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
-            <Route path="/monitor/fleet/:robotCode" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
-            <Route path="/monitor/fleet/:robotCode/technical" element={<Guard permission={PERMISSIONS.robotRead}><RobotTechnicalPage /></Guard>} />
-            <Route path="/monitor/requests" element={<Guard permission={PERMISSIONS.transportRead}><TransportRequestsPage /></Guard>} />
-            <Route path="/monitor/jobs" element={<Guard permission={PERMISSIONS.jobRead}><JobsPage /></Guard>} />
-            <Route path="/monitor/jobs/:jobId" element={<Guard permission={PERMISSIONS.jobRead}><JobDetailPage /></Guard>} />
-            <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />
-            <Route path="/dashboard" element={<Guard permission={PERMISSIONS.statisticsRead}><DashboardPage /></Guard>} />
-            <Route path="/configure/facility" element={<Guard permission={PERMISSIONS.mapRead}><FacilityPage /></Guard>} />
-            <Route path="/configure/workflows" element={<Guard permission={PERMISSIONS.workflowRead}><WorkflowsListPage /></Guard>} />
-            <Route path="/configure/workflows/new" element={<Guard permission={PERMISSIONS.workflowWrite}><WorkflowEditorPage /></Guard>} />
-            <Route path="/configure/workflows/:id" element={<Guard permission={PERMISSIONS.workflowRead}><WorkflowEditorPage /></Guard>} />
-            <Route path="/management" element={<Guard permission={[PERMISSIONS.userManage, PERMISSIONS.warehouseRead]}><ManagementPage /></Guard>} />
-            <Route path="/operations/issues" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
-            <Route path="/operations/issues/:issueId" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
-            <Route path="/operations/robot-history" element={<Guard permission={PERMISSIONS.robotRead}><RobotHistoryPage /></Guard>} />
-            <Route path="/operations/audit" element={<Guard permission={PERMISSIONS.auditRead}><AuditLogPage /></Guard>} />
-            <Route path="/operations/notifications" element={<Guard permission={PERMISSIONS.notificationRead}><NotificationsPage /></Guard>} />
+          {/* Technician portal: robot screens only, same look as the admin console. TECHNICIAN only: one portal per role. */}
+          <Route path="/tech" element={<RequirePortal portal="tech" />}>
+            <Route element={<PortalScope portal="tech" />}>
+              <Route element={<AppShell nav={TECH_NAV} home="/tech/fleet" portalLabel={t('Technician')} />}>
+                <Route index element={<Navigate to="/tech/fleet" replace />} />
+                <Route path="fleet" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
+                <Route path="fleet/:robotCode" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
+                <Route path="fleet/:robotCode/technical" element={<Guard permission={PERMISSIONS.robotRead}><RobotTechnicalPage /></Guard>} />
+                <Route path="jobs/:jobId" element={<Guard permission={PERMISSIONS.jobRead}><JobDetailPage /></Guard>} />
+                <Route path="issues" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
+                <Route path="issues/:issueId" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
+                <Route path="robot-history" element={<Guard permission={PERMISSIONS.robotRead}><RobotHistoryPage /></Guard>} />
+                <Route path="audit" element={<Guard permission={PERMISSIONS.auditRead}><AuditLogPage /></Guard>} />
+                <Route path="notifications" element={<Guard permission={PERMISSIONS.notificationRead}><NotificationsPage /></Guard>} />
+                <Route path="*" element={<Navigate to="/tech/fleet" replace />} />
+              </Route>
+              {/* Full-screen manual control of one robot (map + joystick console). */}
+              <Route path="fleet/:robotCode/manual" element={<Guard permission={PERMISSIONS.robotManualDrive}><RobotManualPage /></Guard>} />
+            </Route>
           </Route>
 
-          {/* Full-screen editor: has its own header instead of the app shell. */}
-          <Route path="/configure/facility/maps/:mapId/edit" element={<Guard permission={PERMISSIONS.mapRead}><MapEditorPage /></Guard>} />
-          {/* Full-screen manual control of one robot (map + joystick console). */}
-          <Route path="/monitor/fleet/:robotCode/manual" element={<Guard permission={PERMISSIONS.robotManualDrive}><RobotManualPage /></Guard>} />
+          <Route element={<RequirePortal portal="admin" />}>
+            <Route element={<AppShell />}>
+              <Route path="/monitor/fleet" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
+              <Route path="/monitor/fleet/:robotCode" element={<Guard permission={PERMISSIONS.robotRead}><FleetPage /></Guard>} />
+              <Route path="/monitor/fleet/:robotCode/technical" element={<Guard permission={PERMISSIONS.robotRead}><RobotTechnicalPage /></Guard>} />
+              <Route path="/monitor/requests" element={<Guard permission={PERMISSIONS.transportRead}><TransportRequestsPage /></Guard>} />
+              <Route path="/monitor/jobs" element={<Guard permission={PERMISSIONS.jobRead}><JobsPage /></Guard>} />
+              <Route path="/monitor/jobs/:jobId" element={<Guard permission={PERMISSIONS.jobRead}><JobDetailPage /></Guard>} />
+              <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />
+              <Route path="/dashboard" element={<Guard permission={PERMISSIONS.statisticsRead}><DashboardPage /></Guard>} />
+              <Route path="/configure/facility" element={<Guard permission={PERMISSIONS.mapRead}><FacilityPage /></Guard>} />
+              <Route path="/configure/workflows" element={<Guard permission={PERMISSIONS.workflowRead}><WorkflowsListPage /></Guard>} />
+              <Route path="/configure/workflows/new" element={<Guard permission={PERMISSIONS.workflowWrite}><WorkflowEditorPage /></Guard>} />
+              <Route path="/configure/workflows/:id" element={<Guard permission={PERMISSIONS.workflowRead}><WorkflowEditorPage /></Guard>} />
+              <Route path="/management" element={<Guard permission={[PERMISSIONS.userManage, PERMISSIONS.warehouseRead]}><ManagementPage /></Guard>} />
+              <Route path="/operations/issues" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
+              <Route path="/operations/issues/:issueId" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
+              <Route path="/operations/robot-history" element={<Guard permission={PERMISSIONS.robotRead}><RobotHistoryPage /></Guard>} />
+              <Route path="/operations/audit" element={<Guard permission={PERMISSIONS.auditRead}><AuditLogPage /></Guard>} />
+              <Route path="/operations/notifications" element={<Guard permission={PERMISSIONS.notificationRead}><NotificationsPage /></Guard>} />
+            </Route>
+
+            {/* The period report to print or save as PDF (FE-20): a plain page, no app shell. */}
+            <Route path="/dashboard/report" element={<Guard permission={PERMISSIONS.statisticsRead}><PeriodReportPage /></Guard>} />
+            {/* Full-screen editor: has its own header instead of the app shell. */}
+            <Route path="/configure/facility/maps/:mapId/edit" element={<Guard permission={PERMISSIONS.mapRead}><MapEditorPage /></Guard>} />
+            {/* Full-screen manual control of one robot (map + joystick console). */}
+            <Route path="/monitor/fleet/:robotCode/manual" element={<Guard permission={PERMISSIONS.robotManualDrive}><RobotManualPage /></Guard>} />
+          </Route>
         </Route>
 
         <Route path="/notifications" element={<Navigate to="/operations/notifications" replace />} />

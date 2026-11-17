@@ -6,11 +6,13 @@ using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
 using WaroTrans.Navigation.Entities;
 using WaroTrans.Navigation.Enums;
 using WaroTrans.Navigation.Persistence;
+using WaroTrans.Navigation.Services;
 
 namespace WaroTrans.Navigation.Features.CreateEndpoint;
 
 public sealed class CreateEndpointHandler(
     NavigationDbContext dbContext,
+    EndpointStorage endpointStorage,
     IBusinessCodeGenerator codeGenerator,
     IValidator<CreateEndpointRequest> validator)
 {
@@ -67,8 +69,14 @@ public sealed class CreateEndpointHandler(
             Yaw = request.Yaw,
             PositionTolerance = request.PositionTolerance,
             YawTolerance = request.YawTolerance,
-            IsEnabled = request.IsEnabled ?? true
+            IsEnabled = request.IsEnabled ?? true,
+            StorageLocationCode = EndpointStorage.Normalize(request.StorageLocationCode)
         };
+
+        if (endpoint.StorageLocationCode is { } storageCode)
+        {
+            await endpointStorage.EnsureCanMarkAsync(mapVersion, endpoint, storageCode, cancellationToken);
+        }
 
         dbContext.Endpoints.Add(endpoint);
 
@@ -95,6 +103,7 @@ public sealed class CreateEndpointHandler(
             endpoint.Yaw,
             endpoint.PositionTolerance,
             endpoint.YawTolerance,
-            endpoint.IsEnabled);
+            endpoint.IsEnabled,
+            endpoint.StorageLocationCode);
     }
 }

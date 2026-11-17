@@ -5,7 +5,8 @@ import { listMapVersionsForWarehouse, getMapVersionDetail } from '@/shared/api/n
 import { listWarehouses, listContainers, listStorageLocations } from '@/shared/api/warehouses'
 import { getWorkflowRequestInputSchema, listWorkflows } from '@/shared/api/workflows'
 import type { ContainerStatus, Endpoint, MapStatus, MapVersion } from '@/shared/api/contracts'
-import type { ComposerContainer, ComposerData, ComposerStorageLocation, ComposerWorkflow } from './types'
+import type { ContainerListItem } from '@/shared/api/warehouses'
+import { workflowKindOf, type ComposerContainer, type ComposerData, type ComposerStorageLocation, type ComposerWorkflow } from './types'
 
 const DEFAULT_LEVELS = [1, 2, 3, 4]
 
@@ -59,16 +60,36 @@ export function useTransportRequestComposerData(options: {
     enabled: Boolean(options.warehouseId),
   })
 
+  // INBOUND offers the containers of confirmed phiếu nhập first, OUTBOUND those of confirmed phiếu xuất (newest first).
+  const workflowKind = workflowKindOf(workflowsQuery.data?.items.find((item) => item.id === options.workflowId)?.code)
+  // INTERNAL_RELOCATION moves containers that are on a shelf: ask for exactly those (STORED), so none is cut off by
+  // the page size behind containers that are still at receiving.
+  const shelfOnly = workflowKind === 'INTERNAL'
+
   const containersQuery = useQuery({
-    queryKey: ['warehouse', 'containers', options.warehouseId, debouncedSearch],
+    queryKey: ['warehouse', 'containers', options.warehouseId, debouncedSearch, shelfOnly ? 'STORED' : 'eligible'],
     queryFn: () =>
       listContainers({
         warehouseId: options.warehouseId,
         search: debouncedSearch || undefined,
         eligibleOnly: true,
-        take: 50,
+        status: shelfOnly ? 'STORED' : undefined,
+        take: shelfOnly ? 200 : 50,
       }),
     enabled: Boolean(options.warehouseId),
+  })
+  const voucherType = workflowKind === 'INBOUND' || workflowKind === 'OUTBOUND' ? workflowKind : undefined
+  const voucherContainersQuery = useQuery({
+    queryKey: ['warehouse', 'containers', 'by-voucher', options.warehouseId, voucherType, debouncedSearch],
+    queryFn: () =>
+      listContainers({
+        warehouseId: options.warehouseId,
+        search: debouncedSearch || undefined,
+        eligibleOnly: true,
+        voucherType,
+        take: 100,
+      }),
+    enabled: Boolean(options.warehouseId) && Boolean(voucherType),
   })
 
   const endpoints: Endpoint[] = useMemo(() => {
@@ -125,7 +146,14 @@ export function useTransportRequestComposerData(options: {
 
   const { extraContainers } = options
   const containers: ComposerContainer[] = useMemo(() => {
-    const fetched = (containersQuery.data?.items ?? []).map((item) => {
+    const seen = new Set<string>()
+    const listed: ContainerListItem[] = []
+    for (const item of [...(voucherType ? voucherContainersQuery.data?.items ?? [] : []), ...(containersQuery.data?.items ?? [])]) {
+      if (seen.has(item.id)) continue
+      seen.add(item.id)
+      listed.push(item)
+    }
+    const fetched = listed.map((item) => {
       const endpoint = item.currentEndpointId ? endpointById.get(item.currentEndpointId) : undefined
       return {
         id: item.id,
@@ -140,6 +168,7 @@ export function useTransportRequestComposerData(options: {
         currentEndpointId: item.currentEndpointId,
         currentEndpointCode: endpoint?.code ?? null,
         currentEndpointName: endpoint?.name ?? null,
+        voucher: item.voucher ?? null,
       }
     })
     const fetchedIds = new Set(fetched.map((item) => item.id))
@@ -150,7 +179,7 @@ export function useTransportRequestComposerData(options: {
         return { ...item, currentEndpointCode: endpoint?.code ?? null, currentEndpointName: endpoint?.name ?? null }
       })
     return [...extras, ...fetched]
-  }, [containersQuery.data, endpointById, extraContainers])
+  }, [containersQuery.data, voucherContainersQuery.data, voucherType, endpointById, extraContainers])
 
   const workflows: ComposerWorkflow[] = useMemo(
     () =>
@@ -198,10 +227,13 @@ export function useTransportRequestComposerData(options: {
     workflows,
     staffInputFields,
     containers,
+    workflowKind,
     storageLocations,
     endpoints,
     requestedByName: account?.fullName ?? account?.username ?? '—',
     isLoading,
+    warehouseSelected: Boolean(options.warehouseId),
+    containersLoading: Boolean(options.warehouseId) && (containersQuery.isLoading || voucherContainersQuery.isLoading),
     error,
     containerSearch,
     setContainerSearch,

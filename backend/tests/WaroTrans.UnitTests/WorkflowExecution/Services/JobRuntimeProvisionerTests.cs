@@ -341,6 +341,59 @@ public class JobRuntimeProvisionerTests
             new WorkflowRequestValidator(db).ValidateAsync(workflow.Id, snapshot));
     }
 
+    [Theory]
+    [InlineData(false, JobTaskStatus.SKIPPED, JobStepStatus.SKIPPED)]
+    [InlineData(true, JobTaskStatus.PENDING, JobStepStatus.PENDING)]
+    public async Task Provision_respects_task_run_condition_from_staff_input(
+        bool checkQuality,
+        JobTaskStatus expectedTaskStatus,
+        JobStepStatus expectedStepStatus)
+    {
+        await using var db = CreateDb();
+        var workflow = await SeedPublishedInternalRelocationAsync(db);
+        workflow.VariablesSchema.Add(new WorkflowVariableDefinition
+        {
+            Key = "checkQuality",
+            Name = "Check quality",
+            DataType = WorkflowDataType.BOOLEAN,
+            Source = WorkflowVariableSource.STAFF_INPUT,
+            IsRequired = true,
+            SequenceNo = 10
+        });
+        var conditionalTask = workflow.Tasks.OrderBy(t => t.SequenceNo).Last();
+        conditionalTask.RunCondition = new TaskRunCondition
+        {
+            VariableKey = "checkQuality",
+            EqualsValue = true
+        };
+        await db.SaveChangesAsync();
+
+        var (baseSnapshot, batch) = BuildSingleContainerPlan(workflow.Id);
+        var snapshot = baseSnapshot with
+        {
+            WorkflowInputs = new Dictionary<string, JsonElement>
+            {
+                ["checkQuality"] = JsonSerializer.SerializeToElement(checkQuality)
+            }
+        };
+
+        var provisioner = new JobRuntimeProvisioner(db, new FakeJobCodeGenerator());
+        var provisioned = await provisioner.ProvisionAsync(snapshot, [batch]);
+        var job = await LoadJobAsync(db, Assert.Single(provisioned.Jobs).JobId);
+
+        var matchingTasks = job.JobTasks.Where(t => t.WorkflowTaskId == conditionalTask.Id).ToList();
+        Assert.NotEmpty(matchingTasks);
+        Assert.All(matchingTasks, t =>
+        {
+            Assert.Equal(expectedTaskStatus, t.Status);
+            Assert.All(t.JobSteps, s => Assert.Equal(expectedStepStatus, s.Status));
+        });
+
+        var otherTasks = job.JobTasks.Where(t => t.WorkflowTaskId != conditionalTask.Id).ToList();
+        Assert.NotEmpty(otherTasks);
+        Assert.All(otherTasks, t => Assert.Equal(JobTaskStatus.PENDING, t.Status));
+    }
+
     private static int CountSteps(
         WorkflowExecutionDbContext db,
         Job job,

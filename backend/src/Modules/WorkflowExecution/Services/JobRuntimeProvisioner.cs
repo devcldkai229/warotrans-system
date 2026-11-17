@@ -274,6 +274,7 @@ public sealed class JobRuntimeProvisioner(
         var jobTaskSequence = 0;
         foreach (var workflowTask in orderedTasks)
         {
+            var skipped = !ShouldRunTask(workflowTask, job.ContextValues);
             var orderedSteps = workflowTask.Steps.OrderBy(s => s.SequenceNo).ToList();
             var affinity = OperationExecutionScopeCatalog.ResolveTaskAffinity(
                 orderedSteps.Select(s => (s.StepType, s.Config.OperationCode)));
@@ -285,12 +286,12 @@ public sealed class JobRuntimeProvisioner(
 
             if (oncePerJobSteps.Count > 0)
             {
-                var jobTask = NewJobTask(jobId, workflowTask.Id, ++jobTaskSequence, JobTaskContextBuilder.BuildJobScope());
+                var jobTask = NewJobTask(jobId, workflowTask.Id, ++jobTaskSequence, JobTaskContextBuilder.BuildJobScope(), skipped);
                 job.JobTasks.Add(jobTask);
                 var stepSeq = 0;
                 foreach (var step in oncePerJobSteps)
                 {
-                    jobTask.JobSteps.Add(NewJobStep(jobTask.Id, step, ++stepSeq));
+                    jobTask.JobSteps.Add(NewJobStep(jobTask.Id, step, ++stepSeq, skipped));
                 }
             }
 
@@ -340,12 +341,12 @@ public sealed class JobRuntimeProvisioner(
                         .Select(id => jobContainersByContainerId[id].Id)
                         .ToList();
                     var ctx = JobTaskContextBuilder.BuildStopScope(stop, jobContainerIds);
-                    var jobTask = NewJobTask(jobId, workflowTask.Id, ++jobTaskSequence, ctx);
+                    var jobTask = NewJobTask(jobId, workflowTask.Id, ++jobTaskSequence, ctx, skipped);
                     job.JobTasks.Add(jobTask);
                     var stepSeq = 0;
                     foreach (var step in oncePerStop)
                     {
-                        jobTask.JobSteps.Add(NewJobStep(jobTask.Id, step, ++stepSeq));
+                        jobTask.JobSteps.Add(NewJobStep(jobTask.Id, step, ++stepSeq, skipped));
                     }
                 }
 
@@ -373,12 +374,12 @@ public sealed class JobRuntimeProvisioner(
                     var detail = detailsByContainer[containerId];
                     var jc = jobContainersByContainerId[containerId];
                     var ctx = JobTaskContextBuilder.BuildContainerAtStopScope(stop, detail, jc);
-                    var jobTask = NewJobTask(jobId, workflowTask.Id, ++jobTaskSequence, ctx);
+                    var jobTask = NewJobTask(jobId, workflowTask.Id, ++jobTaskSequence, ctx, skipped);
                     job.JobTasks.Add(jobTask);
                     var stepSeq = 0;
                     foreach (var step in perContainer)
                     {
-                        jobTask.JobSteps.Add(NewJobStep(jobTask.Id, step, ++stepSeq));
+                        jobTask.JobSteps.Add(NewJobStep(jobTask.Id, step, ++stepSeq, skipped));
                     }
                 }
             }
@@ -425,11 +426,46 @@ public sealed class JobRuntimeProvisioner(
         return ctx;
     }
 
+    private static bool ShouldRunTask(WorkflowTask workflowTask, IReadOnlyDictionary<string, JsonElement> jobContext)
+    {
+        if (workflowTask.RunCondition is not { } cond || string.IsNullOrWhiteSpace(cond.VariableKey))
+        {
+            return true;
+        }
+
+        if (!jobContext.TryGetValue(cond.VariableKey, out var value))
+        {
+            return false;
+        }
+
+        bool actual;
+        if (value.ValueKind == JsonValueKind.True)
+        {
+            actual = true;
+        }
+        else if (value.ValueKind == JsonValueKind.False)
+        {
+            actual = false;
+        }
+        else if (value.ValueKind == JsonValueKind.String
+                 && bool.TryParse(value.GetString(), out var parsed))
+        {
+            actual = parsed;
+        }
+        else
+        {
+            return false;
+        }
+
+        return actual == cond.EqualsValue;
+    }
+
     private static JobTask NewJobTask(
         Guid jobId,
         Guid workflowTaskId,
         int sequenceNo,
-        Dictionary<string, JsonElement> contextValues) =>
+        Dictionary<string, JsonElement> contextValues,
+        bool skipped = false) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -437,13 +473,13 @@ public sealed class JobRuntimeProvisioner(
             WorkflowTaskId = workflowTaskId,
             SequenceNo = sequenceNo,
             ContextValues = contextValues,
-            Status = JobTaskStatus.PENDING,
+            Status = skipped ? JobTaskStatus.SKIPPED : JobTaskStatus.PENDING,
             StartedAt = null,
             CompletedAt = null,
             FailureCode = null
         };
 
-    private static JobStep NewJobStep(Guid jobTaskId, WorkflowStep step, int sequenceNo) =>
+    private static JobStep NewJobStep(Guid jobTaskId, WorkflowStep step, int sequenceNo, bool skipped = false) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -451,7 +487,7 @@ public sealed class JobRuntimeProvisioner(
             WorkflowStepId = step.Id,
             SequenceNo = sequenceNo,
             StepType = step.StepType,
-            Status = JobStepStatus.PENDING,
+            Status = skipped ? JobStepStatus.SKIPPED : JobStepStatus.PENDING,
             ResolvedInputs = new Dictionary<string, JsonElement>(),
             OutputValues = new Dictionary<string, JsonElement>(),
             TargetEndpointId = null,

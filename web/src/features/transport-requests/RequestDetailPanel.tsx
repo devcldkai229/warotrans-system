@@ -1,14 +1,95 @@
 import type { ReactNode } from 'react'
-import type { TransportRequestView } from '@/shared/api/contracts'
+import type { TransportRequestTripView, TransportRequestView } from '@/shared/api/contracts'
 import { cx } from '@/shared/lib/cx'
 import { formatDateTimeWithYear, formatDuration, secondsBetween } from '@/shared/lib/format'
 import { Icon } from '@/shared/ui/Icon'
 import { Meter } from '@/shared/ui/Meter'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { JOB_STATUS_TONE, REQUEST_DETAIL_STATUS_TONE, REQUEST_STATUS_TONE } from '@/shared/ui/statusTones'
+import { MAX_CONTAINERS_PER_TRIP } from './constants'
 import { detailProgress } from './derive'
 import { Drawer, DrawerHeading, FailureNote, LineItem, MetaList, MetaRow } from './panelParts'
 import { t } from '@/shared/i18n'
+import { humanize } from '@/shared/lib/format'
+
+const CONTAINER_IN_TRIP: Record<string, { label: string; tone: 'grey' | 'blue' | 'green' | 'red' }> = {
+  PENDING: { label: 'Waiting for pickup', tone: 'grey' },
+  ASSIGNED: { label: 'Waiting for pickup', tone: 'grey' },
+  ONBOARD: { label: 'On the robot', tone: 'blue' },
+  DELIVERED: { label: 'Delivered', tone: 'green' },
+  FAILED: { label: 'Failed', tone: 'red' },
+  CANCELLED: { label: 'Cancelled', tone: 'grey' },
+}
+
+/** "Collect at INBOUND (3) → Deliver at SHELF-A-01 (2) · SHELF-B-01 (1)" */
+function stopsLine(trip: TransportRequestTripView): string | null {
+  const stops = [...(trip.stops ?? [])].sort((a, b) => a.sequenceNo - b.sequenceNo)
+  if (stops.length === 0) return null
+  const part = (action: string) =>
+    stops
+      .filter((stop) => stop.action === action)
+      .map((stop) => `${stop.endpointCode ?? '—'} (${stop.containerCount})`)
+      .join(' · ')
+  const collect = part('PICKUP')
+  const deliver = part('DROPOFF')
+  return [collect ? t('Collect at {stops}', { stops: collect }) : null, deliver ? t('Deliver at {stops}', { stops: deliver }) : null]
+    .filter(Boolean)
+    .join(' → ')
+}
+
+function TripCard({
+  trip,
+  fallbackNo,
+  total,
+  selected,
+  onSelect,
+}: {
+  trip: TransportRequestTripView
+  fallbackNo: number
+  total: number
+  selected: boolean
+  onSelect: () => void
+}) {
+  const waiting = trip.status === 'CREATED' || trip.status === 'QUEUED'
+  const robot = trip.robotCode ?? (waiting ? t('Waiting for a free robot') : t('Unassigned'))
+  const line = stopsLine(trip)
+  return (
+    <button
+      type="button"
+      className={cx(
+        'flex w-full flex-col gap-2 rounded-md px-3.5 py-3 text-left transition-colors duration-200',
+        selected ? 'bg-container-high ring-2 ring-blue' : 'bg-container hover:bg-container-high',
+      )}
+      aria-pressed={selected}
+      onClick={onSelect}
+    >
+      <span className="flex items-center gap-2 text-xs">
+        <strong className="font-medium">{t('Trip {no} of {total}', { no: trip.tripNo ?? fallbackNo, total })}</strong>
+        <span className="font-mono text-muted">{trip.jobNo}</span>
+        <span className="flex-1" />
+        <StatusBadge tone={JOB_STATUS_TONE[trip.status]}>{trip.status}</StatusBadge>
+        <Icon name="chevronRight" size={14} className="text-muted" />
+      </span>
+      <span className="flex items-center gap-1.5 text-xs text-muted">
+        <Icon name="navigate" size={13} /> {robot}
+        {waiting && trip.blockingReason ? <span>· {humanize(trip.blockingReason)}</span> : null}
+      </span>
+      {line ? <span className="text-xs">{line}</span> : null}
+      {trip.containers && trip.containers.length > 0 ? (
+        <span className="flex flex-wrap gap-1.5">
+          {trip.containers.map((container) => {
+            const state = CONTAINER_IN_TRIP[container.status] ?? { label: container.status, tone: 'grey' as const }
+            return (
+              <StatusBadge key={container.containerId} tone={state.tone}>
+                {`${container.barcode ?? container.containerId.slice(0, 8)} · ${t(state.label)}`}
+              </StatusBadge>
+            )
+          })}
+        </span>
+      ) : null}
+    </button>
+  )
+}
 interface RequestDetailPanelProps {
 
   request: TransportRequestView
@@ -23,6 +104,11 @@ interface RequestDetailPanelProps {
 export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClose, actions }: RequestDetailPanelProps) {
   const progress = detailProgress(request)
   const elapsed = secondsBetween(request.submittedAt, request.completedAt)
+  // Which trip carries each container, for the movement plan.
+  const tripOf = new Map<string, number>()
+  request.jobs.forEach((job, index) => {
+    for (const container of job.containers ?? []) tripOf.set(container.containerId, job.tripNo ?? index + 1)
+  })
 
   return (
     <Drawer
@@ -53,48 +139,51 @@ export function RequestDetailPanel({ request, selectedJobNo, onSelectJob, onClos
 
       {actions ? <div className="mt-4 flex flex-col gap-2">{actions}</div> : null}
 
+      <DrawerHeading>{t('Trips ({length})', { length: request.jobs.length })}</DrawerHeading>
+      {request.jobs.length === 0 ? (
+        <p className="text-xs text-muted">{t('No trip has been planned for this request yet.')}</p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-muted">
+            {t('A robot carries at most {max} containers per trip: it collects them all, then delivers them.', { max: MAX_CONTAINERS_PER_TRIP })}
+          </p>
+          <ul className="flex flex-col gap-2">
+            {request.jobs.map((job, index) => (
+              <li key={job.jobNo}>
+                <TripCard
+                  trip={job}
+                  fallbackNo={index + 1}
+                  total={job.tripCount ?? request.jobs.length}
+                  selected={selectedJobNo === job.jobNo}
+                  onSelect={() => onSelectJob(job.jobNo)}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <DrawerHeading>{t('Movement plan')}</DrawerHeading>
       <ol>
-        {request.details.map((detail) => (
-          <LineItem
-            key={detail.id}
-            sequence={detail.sequenceNo}
-            title={detail.containerBarcode}
-            code
-            note={`${detail.sourceLabel} → ${detail.destinationLabel}`}
-            status={detail.status}
-            tone={REQUEST_DETAIL_STATUS_TONE[detail.status]}
-          />
-        ))}
+        {request.details.map((detail) => {
+          const trip = tripOf.get(detail.containerId)
+          return (
+            <LineItem
+              key={detail.id}
+              sequence={detail.sequenceNo}
+              title={detail.containerBarcode}
+              code
+              note={
+                trip
+                  ? `${detail.sourceLabel} → ${detail.destinationLabel} · ${t('Trip {no}', { no: trip })}`
+                  : `${detail.sourceLabel} → ${detail.destinationLabel}`
+              }
+              status={detail.status}
+              tone={REQUEST_DETAIL_STATUS_TONE[detail.status]}
+            />
+          )
+        })}
       </ol>
-
-      <DrawerHeading>{t('Jobs ({length})', { length: request.jobs.length })}</DrawerHeading>
-      {request.jobs.length === 0 ? (
-        <p className="text-xs text-muted">{t('No job has been planned for this request yet.')}</p>
-      ) : (
-        <ul className="mt-2 flex flex-col gap-1.5">
-          {request.jobs.map((job) => (
-            <li key={job.jobNo}>
-              <button
-                type="button"
-                className={cx(
-                  'flex w-full items-center gap-2 rounded-md px-3.5 py-2.5 text-left transition-colors duration-200',
-                  selectedJobNo === job.jobNo ? 'bg-container-high ring-2 ring-blue' : 'bg-container hover:bg-container-high',
-                )}
-                aria-pressed={selectedJobNo === job.jobNo}
-                onClick={() => onSelectJob(job.jobNo)}
-              >
-                <span className="flex min-w-0 flex-1 flex-col text-xs">
-                  <strong className="font-mono font-medium">{job.jobNo}</strong>
-                  <span className="text-muted">{job.robotCode ?? t('Unassigned')}</span>
-                </span>
-                <StatusBadge tone={JOB_STATUS_TONE[job.status]}>{job.status}</StatusBadge>
-                <Icon name="chevronRight" size={14} className="text-muted" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </Drawer>
   )
 }

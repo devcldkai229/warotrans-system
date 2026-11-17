@@ -389,4 +389,53 @@ public class WorkflowDefinitionValidatorTests
         Assert.Equal("priorityNote", staff.Key);
         Assert.False(staff.Required);
     }
+
+    [Fact]
+    public void Publish_validates_task_run_condition_variable()
+    {
+        var model = InboundPutawayWorkflowFactory.CreateValid();
+        model.Variables.Add(new WorkflowVariableDefinition
+        {
+            Key = "checkQuality",
+            Name = "Check quality",
+            DataType = WorkflowDataType.BOOLEAN,
+            Source = WorkflowVariableSource.STAFF_INPUT,
+            IsRequired = true,
+            SequenceNo = 10
+        });
+        model.Tasks[0].RunCondition = new TaskRunCondition
+        {
+            VariableKey = "checkQuality",
+            EqualsValue = true
+        };
+
+        Assert.True(WorkflowDefinitionValidator.ValidateForPublish(model).IsValid);
+
+        model.Tasks[0].RunCondition = new TaskRunCondition
+        {
+            VariableKey = "missingVar",
+            EqualsValue = true
+        };
+        var missingResult = WorkflowDefinitionValidator.ValidateForPublish(model);
+        Assert.False(missingResult.IsValid);
+        Assert.Contains(missingResult.Errors, e => e.Path == "tasks[0].runCondition.variableKey");
+
+        model.Variables.Add(new WorkflowVariableDefinition
+        {
+            Key = "noteText",
+            Name = "Note",
+            DataType = WorkflowDataType.STRING,
+            Source = WorkflowVariableSource.STAFF_INPUT,
+            IsRequired = false,
+            SequenceNo = 11
+        });
+        model.Tasks[0].RunCondition = new TaskRunCondition
+        {
+            VariableKey = "noteText",
+            EqualsValue = true
+        };
+        var typeResult = WorkflowDefinitionValidator.ValidateForPublish(model);
+        Assert.False(typeResult.IsValid);
+        Assert.Contains(typeResult.Errors, e => e.Message.Contains("BOOLEAN", StringComparison.Ordinal));
+    }
 }

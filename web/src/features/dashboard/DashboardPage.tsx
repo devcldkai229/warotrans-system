@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import type { JobStatistics, RequestStatistics, RobotStatistics } from '@/shared/api/contracts'
-import { getJobStatistics, getRequestStatistics, getRobotStatistics } from '@/shared/api/statistics'
+import type { JobStatistics, RequestStatistics, RobotAvailability, RobotStatistics } from '@/shared/api/contracts'
+import { getJobStatistics, getRequestStatistics, getRobotAvailability, getRobotStatistics } from '@/shared/api/statistics'
 import { cx } from '@/shared/lib/cx'
 import { rangeWindow, readRange, writeRange, type RangeChoice } from '@/shared/lib/dateRange'
 import { appToday, formatRelativeTime, humanize } from '@/shared/lib/format'
@@ -16,16 +16,9 @@ import { JOB_STATUS_TONE, REQUEST_STATUS_TONE, ROBOT_STATUS_TONE, TONE_SOLID, ty
 
 import { getLocale, t } from '@/shared/i18n'
 import { explainFailureCode, failureTitle } from '@/features/jobs/failureCatalog'
+import { ExportMenu } from './ExportMenu'
+import { compactDuration, percent } from './format'
 const count = (value: number) => value.toLocaleString(getLocale())
-
-/** `45s`, `12m 05s`, `2h 10m`: a Job takes minutes, a Request can take hours. */
-function compactDuration(seconds: number | null) {
-  if (seconds === null) return '—'
-  const total = Math.round(seconds)
-  if (total < 60) return `${total}s`
-  if (total < 3600) return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`
-  return `${Math.floor(total / 3600)}h ${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}m`
-}
 
 function shortDate(isoDate: string) {
   const [year, month, day] = isoDate.split('-').map(Number)
@@ -358,7 +351,9 @@ function JobsSection({ stats }: { stats: JobStatistics }) {
   )
 }
 
-function RobotsSection({ stats }: { stats: RobotStatistics }) {
+function RobotsSection({ stats, availability }: { stats: RobotStatistics; availability: RobotAvailability | undefined }) {
+  const availabilityOf = new Map(availability?.robots.map((row) => [row.id, row.figures]))
+  const fleet = availability?.fleet
   const outcomes: { label: string; value: number; tone: Tone }[] = [
     { label: t('Completed'), value: stats.assignments.completed, tone: 'green' },
     { label: t('Reassigned'), value: stats.assignments.reassigned, tone: 'amber' },
@@ -368,7 +363,17 @@ function RobotsSection({ stats }: { stats: RobotStatistics }) {
   ]
   return (
     <>
-      <div className="grid grid-cols-4 gap-px overflow-hidden rounded-lg bg-outline-soft">
+      <div className="grid grid-cols-5 gap-px overflow-hidden rounded-lg bg-outline-soft">
+        <Card
+          label={t('Available in this period')}
+          value={percent(fleet?.availablePercent ?? null)}
+          tone="green"
+          hint={
+            fleet && fleet.coveragePercent !== null && fleet.coveragePercent < 99.95
+              ? t('History covers {value} of the period', { value: percent(fleet.coveragePercent, 0) })
+              : t('Online, not in maintenance or error')
+          }
+        />
         <Card label={t('Robots online')} value={`${stats.online} / ${stats.total}`} tone={stats.online === stats.total ? 'green' : 'amber'} />
         <Card label={t('Enabled')} value={`${stats.enabled} / ${stats.total}`} />
         <Card
@@ -404,6 +409,8 @@ function RobotsSection({ stats }: { stats: RobotStatistics }) {
               <Th>{t('Robot')}</Th>
               <Th>{t('Status')}</Th>
               <Th>{t('Battery')}</Th>
+              <Th align="right">{t('Online in period')}</Th>
+              <Th align="right">{t('Available in period')}</Th>
               <Th align="right">{t('Jobs completed')}</Th>
               <Th align="right">{t('Interrupted')}</Th>
             </tr>
@@ -411,7 +418,7 @@ function RobotsSection({ stats }: { stats: RobotStatistics }) {
           <tbody>
             {stats.robots.length === 0 ? (
               <Tr>
-                <Td colSpan={5} tone="faint">{t('No robots registered yet.')}</Td>
+                <Td colSpan={7} tone="faint">{t('No robots registered yet.')}</Td>
               </Tr>
             ) : (
               stats.robots.map((robot) => (
@@ -436,6 +443,8 @@ function RobotsSection({ stats }: { stats: RobotStatistics }) {
                       />
                     </span>
                   </Td>
+                  <Td align="right">{percent(availabilityOf.get(robot.id)?.onlinePercent ?? null)}</Td>
+                  <Td align="right">{percent(availabilityOf.get(robot.id)?.availablePercent ?? null)}</Td>
                   <Td align="right">{robot.jobsCompleted}</Td>
                   <Td align="right">{robot.interrupted}</Td>
                 </Tr>
@@ -505,7 +514,18 @@ export function DashboardPage() {
     refetchInterval: 60_000,
   })
 
-  const refreshing = jobs.isFetching || robots.isFetching || requests.isFetching
+  const availability = useQuery({
+    queryKey: ['statistics', 'availability', ...key],
+    queryFn: () => getRobotAvailability(rangeWindow(range)),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+  })
+
+  const refreshing = jobs.isFetching || robots.isFetching || requests.isFetching || availability.isFetching
+  // The print view takes the same range from its address; `print=1` opens the print dialog once it has loaded.
+  const reportParams = writeRange(new URLSearchParams(), preset ? { preset } : { range })
+  reportParams.set('print', '1')
+  const reportHref = `/dashboard/report?${reportParams.toString()}`
   const updatedAt = Math.min(
     ...[jobs, robots, requests].map((query) => query.dataUpdatedAt).filter((time) => time > 0),
   )
@@ -523,10 +543,11 @@ export function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <DateRangePicker preset={preset} range={range} today={today} onChange={choose} />
+            <ExportMenu range={range} reportHref={reportHref} />
             <IconButton
               aria-label={t('Refresh')}
               disabled={refreshing}
-              onClick={() => void Promise.all([jobs.refetch(), robots.refetch(), requests.refetch()])}
+              onClick={() => void Promise.all([jobs.refetch(), robots.refetch(), requests.refetch(), availability.refetch()])}
             >
               <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : undefined} />
             </IconButton>
@@ -539,7 +560,7 @@ export function DashboardPage() {
 
         <Section title={t('Robot fleet')}>
           <QueryState isLoading={robots.isLoading} error={robots.error}>
-            {robots.data ? <RobotsSection stats={robots.data} /> : null}
+            {robots.data ? <RobotsSection stats={robots.data} availability={availability.data} /> : null}
           </QueryState>
         </Section>
 

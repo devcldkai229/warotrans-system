@@ -28,6 +28,7 @@ public static class TransportationModule
         services.AddScoped<GetTransportRequestHandler>();
         services.AddScoped<QueueTransportRequestHandler>();
         services.AddScoped<GetRequestStatisticsHandler>();
+        services.AddScoped<Features.RequestReport.RequestReportReader>();
         services.AddScoped<Features.CloseTransportRequest.CloseTransportRequestHandler>();
 
         // WH-01: handovers Warehouse still has to post, retried until they land.
