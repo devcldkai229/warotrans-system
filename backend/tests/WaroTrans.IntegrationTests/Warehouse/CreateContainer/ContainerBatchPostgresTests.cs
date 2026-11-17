@@ -33,7 +33,7 @@ using WaroTrans.Warehouse.Persistence;
 namespace WaroTrans.IntegrationTests.Warehouse.CreateContainer;
 
 /// <summary>No shared fixture/reset/Host services: each test creates and drops its own database on an opt-in server.</summary>
-public sealed class ContainerBatchPostgresTests : IAsyncLifetime
+public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
 {
     public const string ConnectionEnvironment = "WAROTRANS_CONTAINER_TEST_POSTGRES";
     private const string Route = "/api/warehouse/containers";
@@ -207,7 +207,7 @@ public sealed class ContainerBatchPostgresTests : IAsyncLifetime
     {
         await using var db = Warehouse();
         var migrations = db.Database.GetMigrations().ToArray();
-        Assert.EndsWith("AddContainerBatchContents", migrations[^1]);
+        Assert.EndsWith("AddAtomicInboundVoucherPosting", migrations[^1]);
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(migrations[^2]);
         var id = Guid.NewGuid();
@@ -221,6 +221,7 @@ public sealed class ContainerBatchPostgresTests : IAsyncLifetime
         Assert.Null(old.ContentsQuantity);
         Assert.Null(old.ContentsUnit);
         Assert.Null(old.CreationRequestId);
+        Assert.Null(old.InboundStockVoucherId);
     }
 
     [IsolatedPostgresFact]
@@ -266,19 +267,29 @@ public sealed class ContainerBatchPostgresTests : IAsyncLifetime
         builder.Services.AddScoped<IValidator<CreateContainerRequest>, CreateContainerValidator>();
         builder.Services.AddScoped<CreateContainerHandler>();
         builder.Services.AddScoped<CreateContainerBatchHandler>();
+        builder.Services.AddScoped<WaroTrans.Warehouse.Features.Shared.ReceivingLocationResolver>();
+        builder.Services.AddScoped<WaroTrans.Warehouse.Features.ConfirmStockVoucher.ConfirmStockVoucherHandler>();
+        builder.Services.AddScoped<WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherHandler>();
+        builder.Services.AddScoped<IValidator<WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherRequest>, WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherValidator>();
+        builder.Services.AddSingleton<IContainerTransportLookup>(_transportLookup);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<ICurrentUser, CurrentUser>();
         builder.Services.AddSingleton<IAuditTrail, TestAudit>();
         builder.Services.AddAuthentication("BatchTest").AddScheme<AuthenticationSchemeOptions, BatchAuthentication>("BatchTest", _ => { });
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options => options.AddPolicy(AuthorizationPolicies.StaffOrAdmin, policy => policy.RequireAuthenticatedUser().RequireRole("STAFF", "ADMIN")));
         builder.Services.AddPermissionAuthorization();
+        builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
         builder.Services.AddProblemDetails();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         var app = builder.Build();
         app.UseExceptionHandler();
         app.UseAuthentication();
         app.UseAuthorization();
-        CreateContainerEndpoint.Map(app.MapGroup("/api/warehouse"));
+        var warehouse = app.MapGroup("/api/warehouse");
+        CreateContainerEndpoint.Map(warehouse);
+        WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherEndpoint.MapCreateStockVoucher(warehouse);
+        WaroTrans.Warehouse.Features.ConfirmStockVoucher.ConfirmStockVoucherEndpoint.MapConfirmStockVoucher(warehouse);
+        WaroTrans.Warehouse.Features.GetStockVoucher.GetStockVoucherEndpoint.MapGetStockVoucher(warehouse);
         await app.StartAsync();
         return app;
     }

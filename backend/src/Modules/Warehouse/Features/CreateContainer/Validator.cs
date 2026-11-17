@@ -24,14 +24,16 @@ public sealed class CreateContainerValidator : AbstractValidator<CreateContainer
                 return;
             }
 
-            if (request.ProductId.HasValue || request.SupplierPackageBarcode is not null || request.InitialLevelNo.HasValue || request.StockVoucherId.HasValue)
-                context.AddFailure(nameof(request.Groups), "Do not mix batch groups with legacy single-Container fields. Create the voucher after receiving the batch.");
+            if (request.ProductId.HasValue || request.SupplierPackageBarcode is not null || request.InitialLevelNo.HasValue)
+                context.AddFailure(nameof(request.Groups), "Do not mix batch groups with legacy single-Container fields.");
             if (!request.WarehouseId.HasValue || request.WarehouseId == Guid.Empty)
                 context.AddFailure(nameof(request.WarehouseId), "WarehouseId is required for batch receiving.");
             if (!request.RequestId.HasValue || request.RequestId == Guid.Empty)
                 context.AddFailure(nameof(request.RequestId), "RequestId is required and must be reused when retrying this batch.");
             if (request.ContainerCount is null or < 1 or > MaxContainers)
                 context.AddFailure(nameof(request.ContainerCount), $"ContainerCount must be between 1 and {MaxContainers}.");
+            if (request.StockVoucherId == Guid.Empty)
+                context.AddFailure(nameof(request.StockVoucherId), "StockVoucherId must be a non-empty UUID.");
             if (request.InitialStorageLocationId == Guid.Empty)
                 context.AddFailure(nameof(request.InitialStorageLocationId), "InitialStorageLocationId must be a non-empty UUID.");
             if (request.Groups.Count is < 1 or > MaxContainers)

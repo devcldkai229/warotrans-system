@@ -29,7 +29,8 @@ public sealed class AddStockVoucherLinesHandler(
             throw new ValidationException(validationResult.Errors);
         }
 
-        var voucher = await StockVoucherStore.LoadAsync(dbContext, voucherId, cancellationToken);
+        await using var transaction = dbContext.Database.IsRelational() ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+        var voucher = await WarehouseWriteLocks.VoucherAsync(dbContext, voucherId, cancellationToken);
         var containers = request.ContainerIds is { Count: > 0 } ids
             ? await LoadNamedAsync(ids, cancellationToken)
             : await PickOldestStoredAsync(voucher, request.ProductId!.Value, request.Count!.Value, cancellationToken);
@@ -50,6 +51,7 @@ public sealed class AddStockVoucherLinesHandler(
         }
 
         await StockVoucherStore.SaveAsync(dbContext, voucher, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         logger.LogInformation(
             "{Count} Containers added to stock voucher {Code} by {AccountId}",

@@ -175,7 +175,7 @@ public class CreateContainerBatchTests
         {
             f.Request with { ProductId = f.A.Id }, f.Request with { RequestId = null }, f.Request with { WarehouseId = null },
             f.Request with { ContainerCount = 11 }, f.Request with { ContainerCount = 0 }, f.Request with { Groups = [] },
-            f.Request with { StockVoucherId = Guid.NewGuid() }, f.Request with { InitialLevelNo = 1 },
+            f.Request with { StockVoucherId = Guid.Empty }, f.Request with { InitialLevelNo = 1 },
             f.Request with { Groups = [null] }, f.Request with { Groups = [new("x", f.A.Id, 10, 0, "pcs")] },
             f.Request with { Groups = [new("x", f.A.Id, 10, 1.0001m, "pcs")] },
             f.Request with { Groups = [new("x", f.A.Id, 10, 1, " ")] },

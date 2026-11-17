@@ -1,3 +1,5 @@
+using WaroTrans.Warehouse.Features.Shared;
+
 namespace WaroTrans.Warehouse.Features.CreateContainer;
 
 public sealed record CreateContainerResponse(
@@ -19,7 +21,8 @@ public sealed record CreateContainerBatchResponse(
     Guid WarehouseId,
     int ContainerCount,
     bool Replayed,
-    IReadOnlyList<CreatedContainerBatchItem> Items);
+    IReadOnlyList<CreatedContainerBatchItem> Items,
+    StockVoucherDetailResponse? StockVoucher = null);
 
 public sealed record CreatedContainerBatchItem(
     Guid Id,

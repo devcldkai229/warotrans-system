@@ -18,7 +18,7 @@ using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.Warehouse.Features.CreateContainer;
 
-/// <summary>Creates a complete batch at configured Inbound, atomically, without stock posting or a voucher side effect.</summary>
+/// <summary>Creates a complete batch at configured Inbound, atomically, optionally attaching every new box to one DRAFT inbound voucher. No stock posting.</summary>
 public sealed class CreateContainerBatchHandler(
     WarehouseDbContext db,
     IBusinessCodeGenerator codes,
@@ -37,6 +37,9 @@ public sealed class CreateContainerBatchHandler(
             throw new AppException("An authenticated account is required.", 401, "unauthenticated");
         if (!user.Can(Permissions.ContainerCreate)) throw new AppException("Container creation is not allowed.", 403, "forbidden");
 
+        if (request.StockVoucherId.HasValue && !user.Can(Permissions.VoucherWrite))
+            throw new AppException("Voucher writing is not allowed.", 403, "forbidden");
+
         var rows = Expand(request);
         var fingerprint = Fingerprint(request, rows);
         // Replay precedes changing Product/configuration/readiness checks: the operation already happened.
@@ -46,6 +49,20 @@ public sealed class CreateContainerBatchHandler(
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         try
         {
+            StockVoucher? voucher = null;
+            if (request.StockVoucherId is { } voucherId)
+            {
+                voucher = await WarehouseWriteLocks.VoucherAsync(db, voucherId, cancellationToken);
+                // A simultaneous creator may have committed while this request waited for the voucher lock.
+                replay = await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken);
+                if (replay is not null) return replay;
+                if (voucher.Type != StockVoucherType.INBOUND)
+                    throw new DomainValidationException("The batch requires an INBOUND voucher.", "voucher_not_inbound");
+                if (voucher.Status != StockVoucherStatus.DRAFT)
+                    throw new ConflictException("The receiving voucher must be DRAFT.", "voucher_not_draft");
+                if (voucher.WarehouseId != request.WarehouseId)
+                    throw new DomainValidationException("The voucher belongs to another warehouse.", "voucher_container_wrong_warehouse");
+            }
             var warehouseId = request.WarehouseId!.Value;
             if (!await db.Warehouses.AsNoTracking().AnyAsync(w => w.Id == warehouseId && w.IsActive, cancellationToken))
                 throw new NotFoundException("The warehouse was not found or is inactive.", "warehouse_not_found");
@@ -72,14 +89,17 @@ public sealed class CreateContainerBatchHandler(
                 CurrentStorageLocationId = location.Id, CurrentLevelNo = null,
                 Status = ContainerStatus.CREATED, CreatedBy = actor, CreatedAt = now, UpdatedAt = now,
                 CreationRequestId = request.RequestId, CreationRequestHash = fingerprint, CreationOrdinal = index + 1,
-                CreationGroupKey = row.GroupKey, CreationGroupOrdinal = row.ContainerNo
+                CreationGroupKey = row.GroupKey, CreationGroupOrdinal = row.ContainerNo, CreationStockVoucherId = request.StockVoucherId
             }).ToList();
             db.Containers.AddRange(containers);
-            // One SaveChanges/transaction owns the complete batch. No InventoryStock, TR, Job or voucher write.
+            if (voucher is not null)
+                db.StockVoucherLines.AddRange(voucher.AddLines(containers, now));
+            // Containers, lines and voucher version are committed together. No inventory, TR or Job write.
             await db.SaveChangesAsync(cancellationToken);
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             logger.LogInformation("Created receiving request {RequestId}, {Count} containers in warehouse {WarehouseId} by {AccountId}", request.RequestId, rows.Count, warehouseId, actor);
-            return Response(request, containers, new Dictionary<Guid, Guid> { [location.Id] = location.EndpointId }, false);
+            var detail = voucher is null ? null : await StockVoucherQueries.LoadDetailAsync(db, voucher.Id, cancellationToken);
+            return Response(request, containers, new Dictionary<Guid, Guid> { [location.Id] = location.EndpointId }, false, detail);
         }
         catch (DbUpdateException exception) when (UniqueViolation.ConstraintOf(exception) == "ux_containers_creation_request")
         {
@@ -93,17 +113,9 @@ public sealed class CreateContainerBatchHandler(
 
     private async Task<StorageLocation> ReceivingLocationAsync(CreateContainerRequest request, CancellationToken cancellationToken)
     {
-        if (!options.Value.InboundStorageLocations.TryGetValue(request.WarehouseId!.Value.ToString(), out var locationId) || locationId == Guid.Empty)
-            throw new ConflictException("An inbound storage location has not been configured for this warehouse.", "inbound_location_not_configured");
-        if (request.InitialStorageLocationId.HasValue && request.InitialStorageLocationId != locationId)
+        var location = await new ReceivingLocationResolver(db, navigation, options).ResolveAsync(request.WarehouseId!.Value, cancellationToken);
+        if (request.InitialStorageLocationId.HasValue && request.InitialStorageLocationId != location.Id)
             throw new DomainValidationException("Use the warehouse's configured inbound location.", "container_receiving_location_mismatch");
-        var location = await db.StorageLocations.AsNoTracking().SingleOrDefaultAsync(l => l.Id == locationId, cancellationToken);
-        if (location is null || !location.IsActive || location.WarehouseId != request.WarehouseId)
-            throw new ConflictException("The configured inbound storage location is unavailable or belongs to another warehouse.", "inbound_location_invalid");
-        var endpoints = await navigation.GetPublishedEndpointsAsync(request.WarehouseId.Value, cancellationToken);
-        var endpoint = endpoints.SingleOrDefault(e => e.Id == location.EndpointId);
-        if (endpoint is null || !endpoint.IsEnabled || endpoint.EndpointType != "WAYPOINT")
-            throw new ConflictException("The inbound endpoint must be enabled on the warehouse's active published map.", "inbound_endpoint_unavailable");
         return location;
     }
 
@@ -112,20 +124,21 @@ public sealed class CreateContainerBatchHandler(
         var existing = await db.Containers.AsNoTracking().Where(c => c.CreationRequestId == request.RequestId)
             .OrderBy(c => c.CreationOrdinal).ToListAsync(cancellationToken);
         if (existing.Count == 0) return null;
-        if (existing.Any(c => c.CreatedBy != actor || c.CreationRequestHash != hash))
+        if (existing.Any(c => c.CreatedBy != actor || c.CreationRequestHash != hash || c.CreationStockVoucherId != request.StockVoucherId))
             throw new ConflictException("RequestId has already been used by a different receiving request.", "container_creation_request_conflict");
         if (existing.Count != count || !existing.Select(c => c.CreationOrdinal).SequenceEqual(Enumerable.Range(1, count).Select(i => (int?)i)))
             throw new ConflictException("The receiving receipt is incomplete; reconcile it before creating another batch.", "container_creation_receipt_incomplete");
         var locationIds = existing.Where(c => c.CurrentStorageLocationId.HasValue).Select(c => c.CurrentStorageLocationId!.Value).Distinct().ToArray();
         var endpoints = await db.StorageLocations.AsNoTracking().Where(l => locationIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.EndpointId, cancellationToken);
-        return Response(request, existing, endpoints, true);
+        var detail = request.StockVoucherId is { } voucherId ? await StockVoucherQueries.LoadDetailAsync(db, voucherId, cancellationToken) : null;
+        return Response(request, existing, endpoints, true, detail);
     }
 
-    private static CreateContainerBatchResponse Response(CreateContainerRequest request, IReadOnlyList<Container> containers, IReadOnlyDictionary<Guid, Guid> endpoints, bool replayed) =>
+    private static CreateContainerBatchResponse Response(CreateContainerRequest request, IReadOnlyList<Container> containers, IReadOnlyDictionary<Guid, Guid> endpoints, bool replayed, StockVoucherDetailResponse? voucher = null) =>
         new(request.RequestId!.Value, request.WarehouseId!.Value, containers.Count, replayed,
             containers.Select(c => new CreatedContainerBatchItem(c.Id, c.Barcode, c.ProductId, c.CreationGroupKey!, c.CreationGroupOrdinal!.Value,
                 c.ContentsQuantity!.Value, c.ContentsUnit!, c.SupplierPackageBarcode, c.Status.ToString(), c.CurrentStorageLocationId,
-                c.CurrentStorageLocationId is { } id && endpoints.TryGetValue(id, out var endpoint) ? endpoint : null, c.CreatedAt)).ToList());
+                c.CurrentStorageLocationId is { } id && endpoints.TryGetValue(id, out var endpoint) ? endpoint : null, c.CreatedAt)).ToList(), voucher);
 
     private static List<PlannedContainer> Expand(CreateContainerRequest request)
     {
@@ -144,8 +157,11 @@ public sealed class CreateContainerBatchHandler(
     private static string Fingerprint(CreateContainerRequest request, IEnumerable<PlannedContainer> rows)
     {
         // Hash effective quantities, not JSON decimal scale or override ordering. Scope/location are part of intent.
-        var normalized = JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId,
-            Rows = rows.Select(row => new { row.GroupKey, row.ContainerNo, row.ProductId, Quantity = row.Quantity.ToString("G29", CultureInfo.InvariantCulture), row.Unit, row.SupplierBarcode }) });
+        var effectiveRows = rows.Select(row => new { row.GroupKey, row.ContainerNo, row.ProductId, Quantity = row.Quantity.ToString("G29", CultureInfo.InvariantCulture), row.Unit, row.SupplierBarcode });
+        // Preserve hashes of pre-existing unlinked receipts. Only linked requests add the voucher to intent.
+        var normalized = request.StockVoucherId is null
+            ? JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, Rows = effectiveRows })
+            : JsonSerializer.Serialize(new { request.WarehouseId, request.InitialStorageLocationId, request.StockVoucherId, Rows = effectiveRows });
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
     }
 

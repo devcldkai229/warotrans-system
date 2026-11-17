@@ -4,7 +4,7 @@ namespace WaroTrans.Warehouse.Features.CreateContainer;
 
 /// <summary>
 /// With Groups absent, preserves the original single-Container request. Groups selects full batch receiving;
-/// ProductId and the other legacy-only fields must then be absent. No stock is posted by either shape.
+/// ProductId and the other legacy-only fields must then be absent. StockVoucherId optionally links the full batch to a DRAFT inbound voucher. No stock is posted by either shape.
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CreateContainerRequest(

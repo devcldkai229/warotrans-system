@@ -20,6 +20,11 @@ public sealed class Container
     public int? CreationOrdinal { get; set; }
     public string? CreationGroupKey { get; set; }
     public int? CreationGroupOrdinal { get; set; }
+    public Guid? CreationStockVoucherId { get; set; }
+    // Admission is separate from physical custody. The accounting slot is retained while a robot carries the box.
+    public Guid? InboundStockVoucherId { get; set; }
+    public Guid? InventoryStorageLocationId { get; set; }
+    public short? InventoryLevelNo { get; set; }
     public ContainerStatus Status { get; set; }
     public Guid? CurrentStorageLocationId { get; set; }
     public short? CurrentLevelNo { get; set; }

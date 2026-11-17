@@ -78,3 +78,12 @@ public sealed class FakeBusinessCodeGenerator(string containerCode = "CTN-202610
     public Task<string> NextOutboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         Task.FromResult("PX-20261006-000001");
 }
+
+public sealed class FakeReceivingEndpointCatalog : IMapEndpointCatalog
+{
+    public List<MapEndpointSnapshot> Published { get; } = [];
+    public Task<IReadOnlyList<MapEndpointSnapshot>> GetPublishedEndpointsAsync(Guid warehouseId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<MapEndpointSnapshot>>(Published);
+    public Task<IReadOnlyList<MapEndpointSnapshot>> GetEndpointsAsync(IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<MapEndpointSnapshot>>(Published.Where(e => endpointIds.Contains(e.Id)).ToList());
+}

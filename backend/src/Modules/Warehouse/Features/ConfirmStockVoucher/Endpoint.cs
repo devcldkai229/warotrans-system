@@ -17,9 +17,7 @@ public static class ConfirmStockVoucherEndpoint
         .RequirePermission(Permissions.VoucherWrite)
         .WithName("ConfirmStockVoucher")
         .WithSummary("Confirm a DRAFT stock voucher")
-        .WithDescription(
-            "Finalises the document; it does not wait for robots. Only Containers on a CONFIRMED voucher may be put " +
-            "away (inbound) or taken off-shelf (outbound) by a Transport Request.");
+        .WithDescription("Atomically confirms and posts INBOUND stock once at configured Inbound. A retry returns the existing posting receipt. OUTBOUND confirmation is unavailable until staged eligibility and outbound posting are implemented.");
 
         return group;
     }

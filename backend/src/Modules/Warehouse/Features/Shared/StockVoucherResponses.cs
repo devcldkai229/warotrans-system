@@ -52,7 +52,8 @@ public sealed record StockVoucherDetailResponse(
     int ContainerCount,
     int DoneCount,
     IReadOnlyList<StockVoucherProductSummary> Products,
-    IReadOnlyList<StockVoucherLineResponse> Lines);
+    IReadOnlyList<StockVoucherLineResponse> Lines,
+    DateTimeOffset? StockPostedAt = null);
 
 internal static class StockVoucherProgress
 {
@@ -87,7 +88,8 @@ internal static class StockVoucherQueries
                 v.ConfirmedAt,
                 v.CancelledBy,
                 v.CancelledAt,
-                v.UpdatedAt
+                v.UpdatedAt,
+                v.StockPostedAt
             })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException($"Stock voucher '{id}' was not found.", "stock_voucher_not_found");
@@ -164,6 +166,6 @@ internal static class StockVoucherQueries
             lines.Count,
             lines.Count(l => l.Done),
             products,
-            lines);
+            lines, voucher.StockPostedAt);
     }
 }

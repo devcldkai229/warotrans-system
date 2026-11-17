@@ -49,10 +49,12 @@ public sealed class CreateContainerHandler(
                 ?? throw new NotFoundException($"Storage location with ID '{request.InitialStorageLocationId.Value}' was not found or is inactive.", "storage_location_not_found");
         }
 
+        await using var transaction = request.StockVoucherId.HasValue && dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
         StockVoucher? voucher = null;
         if (request.StockVoucherId.HasValue)
         {
-            voucher = await StockVoucherStore.LoadAsync(dbContext, request.StockVoucherId.Value, cancellationToken);
+            voucher = await WarehouseWriteLocks.VoucherAsync(dbContext, request.StockVoucherId.Value, cancellationToken);
             if (voucher.Type != StockVoucherType.INBOUND)
             {
                 throw new DomainValidationException(
@@ -93,6 +95,8 @@ public sealed class CreateContainerHandler(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         logger.LogInformation(
             "Container {ContainerId} with barcode {Barcode} created for product {ProductId} by {AccountId}",

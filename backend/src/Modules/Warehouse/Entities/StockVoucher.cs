@@ -20,6 +20,7 @@ public sealed class StockVoucher
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? ConfirmedBy { get; set; }
     public DateTimeOffset? ConfirmedAt { get; set; }
+    public DateTimeOffset? StockPostedAt { get; set; }
     public Guid? CancelledBy { get; set; }
     public DateTimeOffset? CancelledAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -56,34 +57,30 @@ public sealed class StockVoucher
 
     public StockVoucherLine AddLine(Container container, DateTimeOffset now)
     {
+        return AddLines([container], now)[0];
+    }
+
+    public IReadOnlyList<StockVoucherLine> AddLines(IReadOnlyList<Container> containers, DateTimeOffset now)
+    {
         EnsureDraft();
-
-        if (!EligibleContainerStatuses(Type).Contains(container.Status))
+        var seen = Lines.Select(l => l.ContainerId).ToHashSet();
+        var eligible = EligibleContainerStatuses(Type);
+        foreach (var container in containers)
         {
-            throw new DomainValidationException(
-                $"Container '{container.Barcode}' cannot go on a {Type} voucher (status: {container.Status}).",
-                "voucher_container_not_eligible");
+            if (!eligible.Contains(container.Status))
+                throw new DomainValidationException($"Container '{container.Barcode}' cannot go on a {Type} voucher (status: {container.Status}).", "voucher_container_not_eligible");
+            if (!seen.Add(container.Id))
+                throw new ConflictException($"Container '{container.Barcode}' is already on voucher {Code}.", "voucher_container_duplicate");
         }
-
-        if (Lines.Any(l => l.ContainerId == container.Id))
+        var number = Lines.Count == 0 ? 0 : Lines.Max(l => l.LineNo);
+        var added = containers.Select(container => new StockVoucherLine
         {
-            throw new ConflictException(
-                $"Container '{container.Barcode}' is already on voucher {Code}.",
-                "voucher_container_duplicate");
-        }
-
-        var line = new StockVoucherLine
-        {
-            Id = Guid.NewGuid(),
-            StockVoucherId = Id,
-            LineNo = Lines.Count == 0 ? 1 : Lines.Max(l => l.LineNo) + 1,
-            ContainerId = container.Id,
-            ProductId = container.ProductId,
-            CreatedAt = now
-        };
-        Lines.Add(line);
+            Id = Guid.NewGuid(), StockVoucherId = Id, LineNo = ++number,
+            ContainerId = container.Id, ProductId = container.ProductId, CreatedAt = now
+        }).ToList();
+        foreach (var line in added) Lines.Add(line);
         UpdatedAt = now;
-        return line;
+        return added;
     }
 
     public void RemoveLine(Guid lineId, DateTimeOffset now)

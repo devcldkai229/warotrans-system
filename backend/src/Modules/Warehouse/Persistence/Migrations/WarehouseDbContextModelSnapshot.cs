@@ -76,6 +76,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("creation_request_id");
 
+                    b.Property<Guid?>("CreationStockVoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creation_stock_voucher_id");
+
                     b.Property<short?>("CurrentLevelNo")
                         .HasColumnType("smallint")
                         .HasColumnName("current_level_no");
@@ -83,6 +87,18 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.Property<Guid?>("CurrentStorageLocationId")
                         .HasColumnType("uuid")
                         .HasColumnName("current_storage_location_id");
+
+                    b.Property<Guid?>("InboundStockVoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("inbound_stock_voucher_id");
+
+                    b.Property<short?>("InventoryLevelNo")
+                        .HasColumnType("smallint")
+                        .HasColumnName("inventory_level_no");
+
+                    b.Property<Guid?>("InventoryStorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("inventory_storage_location_id");
 
                     b.Property<double?>("LengthM")
                         .HasColumnType("double precision")
@@ -123,8 +139,17 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_containers_barcode");
 
+                    b.HasIndex("CreationStockVoucherId")
+                        .HasDatabaseName("i_x_containers_creation_stock_voucher_id");
+
                     b.HasIndex("CurrentStorageLocationId")
                         .HasDatabaseName("i_x_containers_current_storage_location_id");
+
+                    b.HasIndex("InboundStockVoucherId")
+                        .HasDatabaseName("i_x_containers_inbound_stock_voucher_id");
+
+                    b.HasIndex("InventoryStorageLocationId")
+                        .HasDatabaseName("i_x_containers_inventory_storage_location_id");
 
                     b.HasIndex("ProductId")
                         .HasDatabaseName("i_x_containers_product_id");
@@ -139,6 +164,8 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                             t.HasCheckConstraint("ck_containers_contents", "(contents_quantity IS NULL AND contents_unit IS NULL) OR (contents_quantity IS NOT NULL AND contents_quantity > 0 AND contents_unit IS NOT NULL AND length(btrim(contents_unit)) > 0)");
 
                             t.HasCheckConstraint("ck_containers_creation_receipt", "(creation_request_id IS NULL AND creation_request_hash IS NULL AND creation_ordinal IS NULL AND creation_group_key IS NULL AND creation_group_ordinal IS NULL) OR (creation_request_id IS NOT NULL AND creation_request_hash IS NOT NULL AND length(creation_request_hash) = 64 AND creation_ordinal IS NOT NULL AND creation_ordinal > 0 AND creation_group_key IS NOT NULL AND length(btrim(creation_group_key)) > 0 AND creation_group_ordinal IS NOT NULL AND creation_group_ordinal > 0 AND contents_quantity IS NOT NULL AND contents_unit IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_containers_stock_receipt", "(inbound_stock_voucher_id IS NULL AND inventory_storage_location_id IS NULL AND inventory_level_no IS NULL) OR (inbound_stock_voucher_id IS NOT NULL AND inventory_storage_location_id IS NOT NULL AND inventory_level_no IS NOT NULL AND inventory_level_no > 0)");
                         });
                 });
 
@@ -415,6 +442,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("status");
 
+                    b.Property<DateTimeOffset?>("StockPostedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("stock_posted_at");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -440,7 +471,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.HasIndex("WarehouseId", "Type", "Status")
                         .HasDatabaseName("i_x_stock_vouchers_warehouse_id_type_status");
 
-                    b.ToTable("stock_vouchers", "warehouse");
+                    b.ToTable("stock_vouchers", "warehouse", t =>
+                        {
+                            t.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR (type = 'INBOUND' AND status = 'CONFIRMED')");
+                        });
                 });
 
             modelBuilder.Entity("WaroTrans.Warehouse.Entities.StockVoucherLine", b =>
@@ -585,10 +619,28 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
 
             modelBuilder.Entity("WaroTrans.Warehouse.Entities.Container", b =>
                 {
+                    b.HasOne("WaroTrans.Warehouse.Entities.StockVoucher", null)
+                        .WithMany()
+                        .HasForeignKey("CreationStockVoucherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("f_k_containers_stock_vouchers_creation_stock_voucher_id");
+
                     b.HasOne("WaroTrans.Warehouse.Entities.StorageLocation", "CurrentStorageLocation")
                         .WithMany()
                         .HasForeignKey("CurrentStorageLocationId")
                         .HasConstraintName("f_k_containers_storage_locations_current_storage_location_id");
+
+                    b.HasOne("WaroTrans.Warehouse.Entities.StockVoucher", null)
+                        .WithMany()
+                        .HasForeignKey("InboundStockVoucherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("f_k_containers_stock_vouchers_inbound_stock_voucher_id");
+
+                    b.HasOne("WaroTrans.Warehouse.Entities.StorageLocation", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryStorageLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("f_k_containers_storage_locations_inventory_storage_location_id");
 
                     b.HasOne("WaroTrans.Warehouse.Entities.Product", "Product")
                         .WithMany()

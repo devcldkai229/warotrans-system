@@ -1,6 +1,8 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using WaroTrans.Warehouse.Features.Shared;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.UnitTests.Warehouse.Infrastructure;
 using WaroTrans.Warehouse.Entities;
@@ -51,7 +53,7 @@ public sealed class StockVoucherHandlerTests
         new(Db(), _transports, _user, new AddStockVoucherLinesValidator(), NullLogger<AddStockVoucherLinesHandler>.Instance);
 
     private ConfirmStockVoucherHandler Confirm() =>
-        new(Db(), _transports, _user, NullLogger<ConfirmStockVoucherHandler>.Instance);
+        new(Db(), _transports, _user, NullLogger<ConfirmStockVoucherHandler>.Instance, new ReceivingLocationResolver(Db(), new FakeReceivingEndpointCatalog(), Options.Create(new ReceivingOptions())));
 
     private async Task<Guid> SeedContainerAsync(ContainerStatus status, Guid? shelf, DateTimeOffset createdAt)
     {
@@ -188,7 +190,7 @@ public sealed class StockVoucherHandlerTests
     }
 
     [Fact]
-    public async Task Confirm_rejects_a_container_that_moved_since_it_was_added()
+    public async Task Outbound_confirm_remains_unavailable_even_for_a_stale_draft()
     {
         var container = await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow);
         var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
@@ -201,22 +203,21 @@ public sealed class StockVoucherHandlerTests
             await db.SaveChangesAsync();
         }
 
-        var ex = await Assert.ThrowsAsync<DomainValidationException>(() => Confirm().HandleAsync(voucherId));
+        var ex = await Assert.ThrowsAsync<AppException>(() => Confirm().HandleAsync(voucherId));
 
-        Assert.Equal("voucher_container_not_eligible", ex.Code);
+        Assert.Equal("outbound_stock_posting_not_supported", ex.Code);
     }
 
     [Fact]
-    public async Task Confirm_locks_the_voucher()
+    public async Task Outbound_confirm_does_not_claim_document_only_confirmation_as_stock_posting()
     {
         var container = await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow);
         var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
         await AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest([container]));
 
-        var response = await Confirm().HandleAsync(voucherId);
-
-        Assert.Equal("CONFIRMED", response.Status);
-        Assert.Equal(_user.AccountId, response.ConfirmedBy);
+        var error = await Assert.ThrowsAsync<AppException>(() => Confirm().HandleAsync(voucherId));
+        Assert.Equal(501, error.StatusCode);
+        Assert.Equal(StockVoucherStatus.DRAFT, (await Db().StockVouchers.FindAsync(voucherId))!.Status);
     }
 
     [Fact]
@@ -248,7 +249,7 @@ public sealed class StockVoucherHandlerTests
         _transports.Moving.Clear();
         await AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest([container]));
         _transports.Moving.Add(container);
-        var confirm = await Assert.ThrowsAsync<ConflictException>(() => Confirm().HandleAsync(voucherId));
-        Assert.Equal("voucher_container_in_transport", confirm.Code);
+        var confirm = await Assert.ThrowsAsync<AppException>(() => Confirm().HandleAsync(voucherId));
+        Assert.Equal("outbound_stock_posting_not_supported", confirm.Code);
     }
 }

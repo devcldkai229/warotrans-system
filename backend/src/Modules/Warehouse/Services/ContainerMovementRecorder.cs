@@ -10,11 +10,9 @@ using WaroTrans.Warehouse.Persistence;
 namespace WaroTrans.Warehouse.Services;
 
 /// <summary>
-/// WH-01: Container location and InventoryStock follow custody (counts are Containers, rules/00).
-/// Picked up: 1 off the shelf level (the row goes when it reaches 0), the Container is IN_TRANSIT with no location.
-/// Delivered to a shelf: 1 on that level, STORED. Delivered off-shelf on a CONFIRMED outbound voucher: ISSUED.
-/// Any other off-shelf drop: back to its status before the pickup if it never was on a shelf, otherwise HOLD.
-/// Each move writes one <see cref="ContainerMovement"/> in the same transaction; its unique key makes a retry a no-op.
+/// Confirmed inbound boxes retain their accounting slot while carried; delivery/recovery transfers that balance.
+/// Physical custody (CurrentStorageLocationId) is cleared at pickup. Legacy unposted boxes retain their previous
+/// shelf-counter behavior. A movement's unique key and its balance changes commit together.
 /// </summary>
 public sealed class ContainerMovementRecorder(
     WarehouseDbContext dbContext,
@@ -30,13 +28,16 @@ public sealed class ContainerMovementRecorder(
     public static string DeliveryKey(Guid jobId, Guid containerId) => $"{jobId:N}:{containerId:N}:DELIVERY";
 
     public Task RecordPickedUpAsync(ContainerPickup pickup, CancellationToken cancellationToken = default) =>
-        WithRetryAsync(() => ApplyPickupAsync(pickup, cancellationToken));
+        WithRetryAsync(() => ApplyPickupAsync(pickup, cancellationToken), cancellationToken);
 
     public Task RecordDeliveredAsync(ContainerDelivery delivery, CancellationToken cancellationToken = default) =>
-        WithRetryAsync(() => ApplyDeliveryAsync(delivery, cancellationToken));
+        WithRetryAsync(() => ApplyDeliveryAsync(delivery, cancellationToken), cancellationToken);
 
     /// <summary>A person says where a Container that lost its place (IN_TRANSIT, HOLD) really is.</summary>
-    public async Task RecoverAsync(
+    public Task RecoverAsync(Guid containerId, Guid storageLocationId, short levelNo, string? note, Guid? actorAccountId, CancellationToken cancellationToken = default) =>
+        WithRetryAsync(() => RecoverCoreAsync(containerId, storageLocationId, levelNo, note, actorAccountId, cancellationToken), cancellationToken);
+
+    private async Task RecoverCoreAsync(
         Guid containerId,
         Guid storageLocationId,
         short levelNo,
@@ -44,7 +45,7 @@ public sealed class ContainerMovementRecorder(
         Guid? actorAccountId,
         CancellationToken cancellationToken = default)
     {
-        var container = await dbContext.Containers.FirstOrDefaultAsync(c => c.Id == containerId, cancellationToken)
+        var container = await LoadForMovementAsync(containerId, cancellationToken)
             ?? throw new NotFoundException($"Container '{containerId}' was not found.", "container_not_found");
         if (container.Status is not (ContainerStatus.IN_TRANSIT or ContainerStatus.HOLD))
         {
@@ -55,7 +56,10 @@ public sealed class ContainerMovementRecorder(
 
         var now = DateTimeOffset.UtcNow;
         var fromStatus = container.Status;
-        await AdjustStockAsync(container, storageLocationId, levelNo, +1, now, cancellationToken);
+        if (container.InboundStockVoucherId is not null)
+            await InventoryAccounting.TransferAsync(dbContext, container, storageLocationId, levelNo, now, cancellationToken);
+        else
+            await AdjustStockAsync(container, storageLocationId, levelNo, +1, now, cancellationToken);
         container.Status = ContainerStatus.STORED;
         container.CurrentStorageLocationId = storageLocationId;
         container.CurrentLevelNo = levelNo;
@@ -86,13 +90,15 @@ public sealed class ContainerMovementRecorder(
         }
     }
 
-    private async Task WithRetryAsync(Func<Task> apply)
+    private async Task WithRetryAsync(Func<Task> apply, CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
+                await using var transaction = dbContext.Database.IsRelational() ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
                 await apply();
+                if (transaction is not null) await transaction.CommitAsync(cancellationToken);
                 return;
             }
             catch (DbUpdateException exception) when (attempt < MaxAttempts && IsRetryable(exception))
@@ -115,7 +121,8 @@ public sealed class ContainerMovementRecorder(
             return;
         }
 
-        var container = await dbContext.Containers.FirstOrDefaultAsync(c => c.Id == pickup.ContainerId, cancellationToken);
+        var container = await LoadForMovementAsync(pickup.ContainerId, cancellationToken);
+        if (await AlreadyRecordedAsync(key, cancellationToken)) return;
         if (container is null)
         {
             logger.LogWarning("Picked-up Container {ContainerId} does not exist in Warehouse", pickup.ContainerId);
@@ -133,7 +140,7 @@ public sealed class ContainerMovementRecorder(
 
         var now = DateTimeOffset.UtcNow;
         var movement = NewMovement(ContainerMovementType.PICKED_UP, container, key, pickup.JobId, pickup.TransportRequestId, now);
-        if (container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
+        if (container is { InboundStockVoucherId: null, Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
         {
             await AdjustStockAsync(container, source, container.CurrentLevelNo ?? 1, -1, now, cancellationToken);
         }
@@ -157,7 +164,8 @@ public sealed class ContainerMovementRecorder(
             return;
         }
 
-        var container = await dbContext.Containers.FirstOrDefaultAsync(c => c.Id == delivery.ContainerId, cancellationToken);
+        var container = await LoadForMovementAsync(delivery.ContainerId, cancellationToken);
+        if (await AlreadyRecordedAsync(key, cancellationToken)) return;
         if (container is null)
         {
             logger.LogWarning("Delivered Container {ContainerId} does not exist in Warehouse", delivery.ContainerId);
@@ -174,21 +182,29 @@ public sealed class ContainerMovementRecorder(
             && container.CurrentLevelNo == level;
 
         // Picked up before this ledger existed, or the pickup post was lost: the Container still counts on its shelf.
-        if (!alreadyThere && container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
+        if (!alreadyThere && container is { InboundStockVoucherId: null, Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
         {
             await AdjustStockAsync(container, source, container.CurrentLevelNo ?? 1, -1, now, cancellationToken);
         }
 
         if (destination is { } target)
         {
-            if (!alreadyThere)
-            {
+            if (container.InboundStockVoucherId is not null)
+                await InventoryAccounting.TransferAsync(dbContext, container, target, level, now, cancellationToken);
+            else if (!alreadyThere)
                 await AdjustStockAsync(container, target, level, +1, now, cancellationToken);
-            }
 
             container.Status = ContainerStatus.STORED;
             container.CurrentStorageLocationId = target;
             container.CurrentLevelNo = level;
+        }
+        else if (container.InboundStockVoucherId is not null)
+        {
+            // No accounting location at an endpoint-only drop. Retain ownership and its last accounting slot.
+            // Outbound stock posting is deliberately not performed by robot delivery.
+            container.Status = ContainerStatus.HOLD;
+            container.CurrentStorageLocationId = null;
+            container.CurrentLevelNo = null;
         }
         else if (await IsOnConfirmedOutboundVoucherAsync(container.Id, cancellationToken))
         {
@@ -226,6 +242,16 @@ public sealed class ContainerMovementRecorder(
             container.Status,
             container.CurrentStorageLocationId,
             container.CurrentLevelNo);
+    }
+
+    private async Task<Container?> LoadForMovementAsync(Guid containerId, CancellationToken ct)
+    {
+        var container = (await WarehouseWriteLocks.ContainersAsync(dbContext, [containerId], ct)).SingleOrDefault();
+        if (container is null) return null;
+        if (container.CreationRequestId is not null && container.InboundStockVoucherId is null)
+            throw new ConflictException("Confirm the inbound stock voucher before moving this receiving batch.", "inbound_voucher_required");
+        await WarehouseWriteLocks.StockAsync(dbContext, [container.ProductId], ct);
+        return container;
     }
 
     private Task<bool> IsOnConfirmedOutboundVoucherAsync(Guid containerId, CancellationToken cancellationToken) =>
