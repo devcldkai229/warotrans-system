@@ -62,6 +62,7 @@ export const vi_dashboard_jobs: Record<string, string> = {
   'Stopped (holding motion)': 'Đã dừng (giữ yên)',
   'Driven by hand': 'Đang điều khiển bằng tay',
   'On another map': 'Ở bản đồ khác',
+  'Waiting at the queue point: only one robot at a time in {area}.': 'Đang chờ ở Queue Point: mỗi lần chỉ một robot được vào khu {area}.',
   'Runs another map bundle': 'Đang chạy gói bản đồ khác',
   'Reports a fault': 'Đang báo lỗi',
   'Not localized': 'Chưa định vị',

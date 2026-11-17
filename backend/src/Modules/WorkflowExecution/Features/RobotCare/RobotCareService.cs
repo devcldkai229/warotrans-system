@@ -61,8 +61,19 @@ public sealed class RobotCareService(
     INavigationModule navigation,
     IOptions<FleetIdleOptions> idle,
     TimeProvider clock,
-    ILogger<RobotCareService> logger)
+    ILogger<RobotCareService> logger,
+    WaroTrans.Fleet.Traffic.ISegmentedTrafficCoordinator? traffic = null)
 {
+    /// <summary>A robot waits this long behind an idle robot before that robot is asked to make way.</summary>
+    public const double YieldAfterSeconds = 5;
+
+    /// <summary>A robot that made way is not moved again for this long (no ping-pong between two waiting robots).</summary>
+    public const double YieldCooldownSeconds = 60;
+
+    private static readonly Dictionary<(Guid Waiter, Guid Blocker), DateTimeOffset> BlockedSince = [];
+    private static readonly Dictionary<Guid, DateTimeOffset> LastYield = [];
+    private static readonly object YieldLock = new();
+
     public const string ParkWorkflow = "ROBOT_RETURN_TO_PARK";
     public const string ChargeWorkflow = "ROBOT_CHARGING";
     public const string MaintenanceWorkflow = "MAINTENANCE_ALL_ROBOTS";
@@ -175,6 +186,148 @@ public sealed class RobotCareService(
     /// reconciled. The ROBOT_RETURN_TO_PARK Job stays for an operator who asks for it (<see cref="ReturnToParkAsync"/>).
     /// </para>
     /// </summary>
+    /// <summary>
+    /// A robot with work waits in traffic behind a robot that has none (parked or left at a shelf): the idle robot makes
+    /// way. It drives to a free parking place or queue point, the one farthest from the waiting robot and its goal; its
+    /// positioning NAVIGATE yields to any Job it is given meanwhile. On a small map no parking place is off every route,
+    /// so an idle robot must never be able to hold up the work.
+    /// </summary>
+    /// <returns>How many idle robots were sent out of the way.</returns>
+    public async Task<int> YieldIdleBlockersAsync(CancellationToken cancellationToken)
+    {
+        if (traffic is null)
+        {
+            return 0;
+        }
+
+        var now = clock.GetUtcNow();
+        var snapshot = await traffic.GetTrafficSnapshotAsync(cancellationToken);
+        var pairs = snapshot.Robots
+            .Where(r => r.BlockingOwner is not null && r.WaitingReason != WaroTrans.Fleet.Traffic.TrafficWaitingReason.None)
+            .Select(r => (Waiter: r.RobotId, Blocker: r.BlockingOwner!.Value))
+            .Concat(snapshot.Waits.Where(w => w.BlockingOwner is not null).Select(w => (Waiter: w.RobotId, Blocker: w.BlockingOwner!.Value)))
+            .Where(p => p.Waiter != p.Blocker)
+            .Distinct()
+            .ToList();
+
+        List<(Guid Waiter, Guid Blocker)> due;
+        lock (YieldLock)
+        {
+            foreach (var stale in BlockedSince.Keys.Except(pairs).ToList())
+            {
+                BlockedSince.Remove(stale);
+            }
+
+            foreach (var pair in pairs)
+            {
+                BlockedSince.TryAdd(pair, now);
+            }
+
+            due = pairs.Where(p => (now - BlockedSince[p]).TotalSeconds >= YieldAfterSeconds
+                                   && (!LastYield.TryGetValue(p.Blocker, out var last) || (now - last).TotalSeconds >= YieldCooldownSeconds))
+                .ToList();
+        }
+
+        var positioning = await fleet.GetPositioningRobotIdsAsync(cancellationToken);
+        var sent = 0;
+        foreach (var (waiterId, blockerId) in due)
+        {
+            var blocker = await fleet.GetRobotAsync(blockerId, cancellationToken);
+            var waiter = await fleet.GetRobotAsync(waiterId, cancellationToken);
+            if (blocker is null || waiter is null || positioning.Contains(blockerId)
+                || !blocker.IsOnline || !blocker.IsEnabled || blocker.MotionHeld || blocker.InManualMode
+                || blocker.LocalizationStatus != LocalizationStatus.LOCALIZED
+                || blocker.LastTelemetryAt is not { } seen || (now - seen).TotalSeconds > FreshPoseSeconds
+                || await db.JobRobotAssignments.AsNoTracking().AnyAsync(a => a.RobotId == blockerId && a.EndedAt == null, cancellationToken))
+            {
+                continue; // busy, lost or held: not an idle robot that can simply move
+            }
+
+            // Where the waiting robot is going: the endpoint of its open MOVE, if any.
+            var goal = await db.JobSteps.AsNoTracking()
+                .Where(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.EXECUTING
+                            && s.JobTask.Job.Status == JobStatus.RUNNING && s.TargetEndpointId != null)
+                .Select(s => new { s.TargetEndpointId, s.ResolvedInputs })
+                .ToListAsync(cancellationToken);
+            EndpointPoseSnapshot? goalPose = null;
+            foreach (var g in goal)
+            {
+                if (g.ResolvedInputs.TryGetValue("robotId", out var r) && r.ValueKind == JsonValueKind.String && r.GetGuid() == waiterId)
+                {
+                    goalPose = await navigation.GetEndpointPoseAsync(g.TargetEndpointId!.Value, cancellationToken);
+                    break;
+                }
+            }
+
+            var fallbackCodes = idle.Value.FallbackCodes();
+            var endpoints = await navigation.GetEndpointsOnMapAsync(blocker.CurrentMapVersionId, cancellationToken);
+            var others = (await fleet.GetDispatchCandidatesAsync(blocker.CurrentMapVersionId, cancellationToken))
+                .Where(r => r.Id != blockerId && r.LocalizationStatus == LocalizationStatus.LOCALIZED)
+                .ToList();
+            var targets = await fleet.GetPositioningTargetsAsync(blocker.CurrentMapVersionId, cancellationToken);
+            double Away(EndpointPoseWithType e)
+            {
+                var d = Math.Sqrt(Math.Pow(e.X - waiter.PoseX, 2) + Math.Pow(e.Y - waiter.PoseY, 2));
+                if (goalPose is not null)
+                {
+                    d = Math.Min(d, Math.Sqrt(Math.Pow(e.X - goalPose.X, 2) + Math.Pow(e.Y - goalPose.Y, 2)));
+                    d = Math.Min(d, DistanceToSegment(e.X, e.Y, waiter.PoseX, waiter.PoseY, goalPose.X, goalPose.Y));
+                }
+
+                return d;
+            }
+
+            var target = endpoints
+                .Where(e => e.IsEnabled
+                            && (e.EndpointType == EndpointType.PARK || fallbackCodes.Contains(e.Code, StringComparer.Ordinal)
+                                || e.Code.StartsWith("EP-QUEUE", StringComparison.Ordinal))
+                            && Math.Sqrt(Math.Pow(e.X - blocker.PoseX, 2) + Math.Pow(e.Y - blocker.PoseY, 2)) > 0.5
+                            && !targets.Contains(e.Id)
+                            && others.All(o => Math.Sqrt(Math.Pow(e.X - o.PoseX, 2) + Math.Pow(e.Y - o.PoseY, 2)) > OccupiedRadius(e)))
+                .OrderByDescending(Away)
+                .FirstOrDefault();
+            if (target is null || Away(target) <= Math.Sqrt(Math.Pow(blocker.PoseX - waiter.PoseX, 2) + Math.Pow(blocker.PoseY - waiter.PoseY, 2)) * 0.5)
+            {
+                logger.LogInformation("Robot {Blocker} is in the way of {Waiter} but has nowhere better to go", blocker.Code, waiter.Code);
+                continue;
+            }
+
+            var pose = await navigation.GetEndpointPoseAsync(target.Id, cancellationToken);
+            if (pose is not { IsEnabled: true })
+            {
+                continue;
+            }
+
+            try
+            {
+                await fleet.StartReturnToParkAsync(blockerId, pose.Id, pose.X, pose.Y, pose.Yaw, cancellationToken);
+                lock (YieldLock)
+                {
+                    LastYield[blockerId] = now;
+                }
+
+                sent++;
+                logger.LogInformation(
+                    "Robot {Blocker} (idle) makes way for {Waiter}: going to {Endpoint}", blocker.Code, waiter.Code, pose.Code);
+            }
+            catch (AppException refused)
+            {
+                logger.LogInformation("Robot {Blocker} cannot make way for {Waiter}: {Code}", blocker.Code, waiter.Code, refused.Code);
+            }
+        }
+
+        return sent;
+    }
+
+    private static double DistanceToSegment(double px, double py, double ax, double ay, double bx, double by)
+    {
+        var vx = bx - ax;
+        var vy = by - ay;
+        var len = vx * vx + vy * vy;
+        var t = len <= 0 ? 0 : Math.Clamp(((px - ax) * vx + (py - ay) * vy) / len, 0, 1);
+        return Math.Sqrt(Math.Pow(px - (ax + t * vx), 2) + Math.Pow(py - (ay + t * vy), 2));
+    }
+
     public async Task<int> ReturnIdleRobotsAsync(CancellationToken cancellationToken)
     {
         // Intents end with their NAVIGATE; close them whether auto-return is on or not.

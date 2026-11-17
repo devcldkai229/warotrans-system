@@ -339,6 +339,13 @@ function StepRow({
             </>
           ) : null}
 
+          {areaQueue(step) ? (
+            <p className="mt-3 rounded-sm bg-surface px-3 py-2 text-xs text-ink-2">
+              {t('Waiting at the queue point: only one robot at a time in {area}.', { area: areaQueue(step)!.area })}
+              {areaQueue(step)!.detail ? <span className="text-muted">{' '}({areaQueue(step)!.detail})</span> : null}
+            </p>
+          ) : null}
+
           {step.errorMessage ? (
             <p className="mt-3 rounded-sm bg-surface px-3 py-2 text-xs text-red-ink">
               {step.errorCode ? <b className="font-medium">{failureTitle(step.errorCode)}{': '}</b> : null}
@@ -349,6 +356,17 @@ function StepRow({
       ) : null}
     </div>
   )
+}
+
+/** A MOVE that waits for its one-robot area (backend output waitingFor = "area_queue:<zone> (<why>)"). */
+function areaQueue(step: { status: string; outputValues: Record<string, unknown> }) {
+  const waiting = step.outputValues.waitingFor
+  if (step.status !== 'WAITING' || typeof waiting !== 'string' || !waiting.startsWith('area_queue:')) return null
+  const rest = waiting.slice('area_queue:'.length)
+  const open = rest.indexOf(' (')
+  const area = (open >= 0 ? rest.slice(0, open) : rest).replace(/^ZONE-AREA-/, '').replace(/^ZONE-/, '')
+  const detail = open >= 0 ? rest.slice(open + 2).replace(/\)$/, '') : ''
+  return { area, detail }
 }
 
 function allSteps(job: JobDetailDto) {

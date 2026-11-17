@@ -1455,6 +1455,7 @@ public sealed class JobExecutionEngineTests
     [Theory]
     [InlineData(StepFailurePolicy.PAUSE_FOR_OPERATOR)] // the standard workflows
     [InlineData(StepFailurePolicy.REQUEST_REASSIGN)]
+    [InlineData(StepFailurePolicy.FAIL_JOB)]           // the INBOUND workflow in the dev database
     public async Task A_trip_whose_robot_went_offline_on_the_way_with_nothing_on_board_is_taken_by_the_other_robot(StepFailurePolicy policy)
     {
         var jobId = await ProvisionAsync();
@@ -1503,6 +1504,29 @@ public sealed class JobExecutionEngineTests
         Assert.Equal(1.0, _fleet.Commands[^1].X); // drives to A again before staff are asked
         await DriveToCompletionAsync(jobId);
         Assert.Equal(JobStatus.COMPLETED, (await JobAsync(jobId)).Status);
+    }
+
+    [Fact]
+    public async Task A_late_cancel_or_navigate_result_never_completes_a_trip_that_went_back_to_the_queue()
+    {
+        var jobId = await ProvisionAsync();
+        await Engine().StartAsync(jobId, null);
+        var move = _fleet.Commands[^1];
+        await RobotOfflineAsync();
+        SetRobot(r => r with { IsOnline = false });
+        Assert.Equal(1, await Engine().RequeueTripsOfLostRobotsAsync());
+
+        // The robot comes back still driving its old goal: the backend CANCELs it, and the old NAVIGATE ends too.
+        foreach (var (type, id) in new[] { ("CANCEL", Guid.NewGuid()), ("NAVIGATE_TO_POSE", move.CommandId) })
+        {
+            await ResultHandler().HandleAsync(new RobotCommandLifecycleChanged(
+                id, _fleet.RobotId, "RBT-SIM-01", type, "COMPLETED", null, move.JobStepId, "SUCCEEDED", null,
+                RobotCommandLifecycleChanged.Phases.Result));
+        }
+
+        var step = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == move.JobStepId);
+        Assert.Equal(JobStepStatus.PENDING, step.Status);
+        Assert.Equal(JobStatus.QUEUED, (await JobAsync(jobId)).Status);
     }
 
     [Fact]

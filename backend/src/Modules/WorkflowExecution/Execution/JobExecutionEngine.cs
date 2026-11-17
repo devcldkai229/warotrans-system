@@ -2525,12 +2525,18 @@ public sealed class JobExecutionEngine(
         // step's OnFailure says; containers stay as they are. POST /jobs/{id}/resume continues after a reconcile.
         // Safety waits (traffic quarantine, obstacle blocked ≥60s): PAUSE for resume — not a permanent failure.
         var pauseForSafety = step.ErrorCode is TrafficRobotUnavailable or NavigationBlocked;
-        job.Status = pauseForSafety ? JobStatus.PAUSED : workflowStep.OnFailure switch
-        {
-            StepFailurePolicy.PAUSE_FOR_OPERATOR => JobStatus.PAUSED,
-            StepFailurePolicy.REQUEST_REASSIGN => JobStatus.REASSIGNING,
-            _ => JobStatus.FAILED
-        };
+        // The robot dropped off the network: the work has not failed. With nothing on board the trip goes to another
+        // robot (RequeueTripsOfLostRobotsAsync) whatever the step's OnFailure says; with cargo, recovery below.
+        var robotLost = step.ErrorCode is { } lostCode && RobotLostCodes.Contains(lostCode)
+                        && recoveryOptions?.Value.AutoRequeueWithoutCargo != false;
+        job.Status = robotLost ? JobStatus.REASSIGNING
+            : pauseForSafety ? JobStatus.PAUSED
+            : workflowStep.OnFailure switch
+            {
+                StepFailurePolicy.PAUSE_FOR_OPERATOR => JobStatus.PAUSED,
+                StepFailurePolicy.REQUEST_REASSIGN => JobStatus.REASSIGNING,
+                _ => JobStatus.FAILED
+            };
         job.FailureCode = step.ErrorCode;
         job.FailureMessage = $"{workflowStep.StepKey}: {step.ErrorMessage}";
 

@@ -40,6 +40,14 @@ public sealed class RobotCommandLifecycleJobStepHandler(
             return;
         }
 
+        // Only the NAVIGATE decides a MOVE. A CANCEL sent for a robot that still drove an old goal carries the same
+        // JobStep; its SUCCEEDED once completed a reopened MOVE that had not even been sent (2026-11-17 harness:
+        // the trip skipped its pickup after the robot came back).
+        if (!string.Equals(integrationEvent.Type, RobotCommandTypes.NavigateToPose, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         var step = await db.JobSteps
             .Include(s => s.JobTask)
             .FirstOrDefaultAsync(s => s.Id == stepId, cancellationToken);
@@ -55,6 +63,16 @@ public sealed class RobotCommandLifecycleJobStepHandler(
         if (step.Status is JobStepStatus.COMPLETED or JobStepStatus.FAILED or JobStepStatus.CANCELLED)
         {
             return; // late / duplicate lifecycle event
+        }
+
+        // A MOVE waiting for its area, or reopened and not sent again, has no command of its own: nothing is for it.
+        var noCommand = !step.OutputValues.ContainsKey("robotCommandId");
+        if (noCommand && step.Status is JobStepStatus.PENDING or JobStepStatus.WAITING or JobStepStatus.READY)
+        {
+            logger.LogInformation(
+                "Ignoring {Phase} of command {CommandId}: JobStep {JobStepId} has no command out", integrationEvent.Phase,
+                integrationEvent.CommandId, stepId);
+            return;
         }
 
         if (!JobExecutionEngine.IsCurrentCommand(step, integrationEvent.CommandId))
