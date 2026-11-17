@@ -42,7 +42,10 @@ public static class RolePermissionMatrix
                 Permissions.TrafficRead, Permissions.TrafficManage,
                 Permissions.IssueRead, Permissions.IssueCreate, Permissions.IssueManage,
                 Permissions.AuditRead,
-                Permissions.NotificationRead
+                Permissions.NotificationRead,
+                // Incident investigation: replay what the robots did. Not the access audit or robot credentials.
+                Permissions.EvidenceRead, Permissions.EvidencePlayback, Permissions.EvidenceAnnotate,
+                Permissions.EvidenceExport
             }.ToFrozenSet(StringComparer.Ordinal)
         }.ToFrozenDictionary(StringComparer.Ordinal);
 

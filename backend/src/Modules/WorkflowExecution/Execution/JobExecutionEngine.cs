@@ -2944,6 +2944,7 @@ public sealed class JobExecutionEngine(
                 case JobStepStatusChanged e: await events.PublishAsync(e, cancellationToken); break;
                 case HumanTaskOffered e: await events.PublishAsync(e, cancellationToken); break;
                 case HumanStepOverdue e: await events.PublishAsync(e, cancellationToken); break;
+                case JobRobotAssignmentChanged e: await events.PublishAsync(e, cancellationToken); break;
             }
         }
     }
@@ -2999,6 +3000,7 @@ public sealed class JobExecutionEngine(
     {
         var now = DateTimeOffset.UtcNow;
         var toAdd = new List<JobRobotAssignment>();
+        var changes = new List<JobRobotAssignmentChanged>();
         var closedOne = false;
         foreach (var job in db.ChangeTracker.Entries<Job>()
                      .Where(e => e.State is EntityState.Added or EntityState.Modified)
@@ -3027,18 +3029,25 @@ public sealed class JobExecutionEngine(
                 current.EndedAt = now;
                 current.EndReason = wanted is null ? job.Status.ToString() : JobRobotAssignmentReasons.Reassigned;
                 closedOne = true;
+                changes.Add(new JobRobotAssignmentChanged(
+                    current.Id, job.Id, job.JobNo, current.RobotId, JobRobotAssignmentChanged.Closed,
+                    current.StartReason, current.StartedAt, now, current.EndReason));
             }
 
             if (wanted is { } robotId)
             {
-                toAdd.Add(new JobRobotAssignment
+                var opened = new JobRobotAssignment
                 {
                     Id = Guid.NewGuid(),
                     JobId = job.Id,
                     RobotId = robotId,
                     StartReason = current is null ? JobRobotAssignmentReasons.Start : JobRobotAssignmentReasons.Reassign,
                     StartedAt = now
-                });
+                };
+                toAdd.Add(opened);
+                changes.Add(new JobRobotAssignmentChanged(
+                    opened.Id, job.Id, job.JobNo, robotId, JobRobotAssignmentChanged.Opened,
+                    opened.StartReason, now, null, null));
             }
         }
 
@@ -3046,6 +3055,7 @@ public sealed class JobExecutionEngine(
         {
             db.JobRobotAssignments.AddRange(toAdd);
             await db.SaveChangesAsync(cancellationToken);
+            _pendingEvents.AddRange(changes);
             return;
         }
 
@@ -3059,6 +3069,8 @@ public sealed class JobExecutionEngine(
         {
             await transaction.CommitAsync(cancellationToken);
         }
+
+        _pendingEvents.AddRange(changes);
     }
 
     /// <summary>An operator who dispatches a robot the policy would not pick automatically (FL-02).</summary>

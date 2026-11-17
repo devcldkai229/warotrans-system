@@ -11,7 +11,8 @@ public static class DatabaseReset
         "transportation",
         "execution",
         "fleet",
-        "navigation"
+        "navigation",
+        "evidence_bridge"
     ];
 
     public static async Task TruncatePostgreSqlAsync(

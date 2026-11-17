@@ -3,6 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using WaroTrans.EvidenceBridge.Contracts;
+using WaroTrans.EvidenceBridge.Persistence;
+using WaroTrans.EvidenceBridge.Services;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Persistence;
@@ -135,6 +139,45 @@ public sealed class MultiRobotTripsTests(WaroTransWebApplicationFactory factory)
         Assert.NotNull(rows[0].EndedAt);
         Assert.Null(rows[1].EndedAt);
         Assert.NotEqual(JobStatus.REASSIGNING, (await executions.Jobs.AsNoTracking().SingleAsync(j => j.Id == trip)).Status);
+    }
+
+    [Fact]
+    public async Task Five_containers_on_two_robots_reach_evidence_as_two_runs_of_one_request()
+    {
+        var bridge = Services.GetRequiredService<IOptions<EvidenceBridgeOptions>>().Value;
+        bridge.Enabled = true;
+        try
+        {
+            var (seed, requestId, trips) = await QueuedRequestAsync(containers: 5);
+            await SeedRobotAsync(seed);
+            await SeedRobotAsync(seed);
+
+            await TickAsync();
+
+            await using var scope = Services.CreateAsyncScope();
+            var outbox = scope.ServiceProvider.GetRequiredService<EvidenceBridgeDbContext>();
+            var opened = (await outbox.OutboxMessages.AsNoTracking()
+                    .Where(m => m.EventType == EvidenceEventTypes.JobRobotAssignmentChanged)
+                    .ToListAsync())
+                .Select(m => JsonDocument.Parse(m.Payload).RootElement)
+                .Where(e => e.GetProperty("transportRequestId").GetGuid() == requestId)
+                .ToList();
+            Assert.Equal(2, opened.Count);
+            Assert.All(opened, e =>
+            {
+                Assert.Equal("OPENED", e.GetProperty("sourceStatusCode").GetString());
+                Assert.StartsWith("REQ-", e.GetProperty("requestCode").GetString());
+                Assert.StartsWith("RBT-MR-", e.GetProperty("robotCode").GetString());
+                Assert.Equal(5, e.GetProperty("payload").GetProperty("requestContainerCount").GetInt32());
+            });
+            Assert.Equal(trips.ToHashSet(), opened.Select(e => e.GetProperty("jobId").GetGuid()).ToHashSet());
+            Assert.Equal([2, 3], opened.Select(e => e.GetProperty("payload").GetProperty("containerIds").GetArrayLength()).Order());
+            Assert.Equal(2, opened.Select(e => e.GetProperty("assignmentId").GetGuid()).Distinct().Count());
+        }
+        finally
+        {
+            bridge.Enabled = false;
+        }
     }
 
     // ------------------------------------------------------------------ helpers

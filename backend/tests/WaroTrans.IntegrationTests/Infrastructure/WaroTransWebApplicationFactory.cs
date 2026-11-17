@@ -28,6 +28,8 @@ public sealed class WaroTransWebApplicationFactory : WebApplicationFactory<Progr
         builder.UseSetting("Mqtt:CommandAckTimeoutSeconds", "60");
         // Host Development may use S3; integration import/preview asserts local /map-assets/ static files.
         builder.UseSetting("MapAssetStorage:Provider", "Local");
+        // Evidence is a separate process; the existing suites run without it (EvidenceBridge tests opt in).
+        builder.UseSetting("EvidenceBridge:Enabled", "false");
 
         builder.ConfigureTestServices(services =>
         {

@@ -1,16 +1,13 @@
-using System.Text;
 using System.Text.Json.Serialization;
 using FluentValidation;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using WaroTrans.BuildingBlocks;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
-using WaroTrans.BuildingBlocks.Options;
+using WaroTrans.EvidenceBridge;
 using WaroTrans.Fleet;
 using WaroTrans.BuildingBlocks.IntegrationEvents;
 using WaroTrans.Fleet.Abstractions;
@@ -46,55 +43,20 @@ builder.Services.AddWorkflowExecutionModule(builder.Configuration);
 builder.Services.AddFleetModule(builder.Configuration);
 builder.Services.AddNavigationModule(builder.Configuration);
 builder.Services.AddOperationsModule(builder.Configuration);
+builder.Services.AddEvidenceBridgeModule(builder.Configuration);
 
 builder.Services.AddValidatorsFromAssemblyContaining<WaroTrans.BuildingBlocks.Abstractions.ICurrentUser>();
 
-var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
-if (Encoding.UTF8.GetByteCount(jwtOptions.Key) < JwtOptions.MinimumKeyBytes)
+// Browsers cannot set the Authorization header on WebSocket requests (SignalR) or on an <img> (robot camera MJPEG
+// stream, map occupancy images), so those send the token as ?access_token=.
+builder.Services.AddWaroTransJwtAuthentication(builder.Configuration, context =>
 {
-    throw new InvalidOperationException(
-        $"{JwtOptions.SectionName}:Key is required and must be at least {JwtOptions.MinimumKeyBytes} bytes.");
-}
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        // Keep the token's own claim names (sub/name/role) instead of the legacy XML-namespace mapping.
-        options.MapInboundClaims = false;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = jwtOptions.Issuer,
-            ValidateAudience = true,
-            ValidAudience = jwtOptions.Audience,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(1),
-            NameClaimType = AppClaimTypes.Name,
-            RoleClaimType = AppClaimTypes.Role
-        };
-        options.Events = new JwtBearerEvents
-        {
-            // Browsers cannot set the Authorization header on WebSocket requests (SignalR) or on an <img> (robot
-            // camera MJPEG stream, map occupancy images), so those send the token here.
-            OnMessageReceived = context =>
-            {
-                var accessToken = context.Request.Query["access_token"];
-                var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken)
-                    && (path.StartsWithSegments("/hubs")
-                        || path.StartsWithSegments(MapAssetsPath)
-                        || (path.StartsWithSegments("/api/fleet/robots")
-                            && path.Value!.EndsWith(StreamRobotCameraEndpoint.PathSuffix, StringComparison.Ordinal))))
-                {
-                    context.Token = accessToken;
-                }
-
-                return Task.CompletedTask;
-            }
-        };
-    });
+    var path = context.Request.Path;
+    return path.StartsWithSegments("/hubs")
+           || path.StartsWithSegments(MapAssetsPath)
+           || (path.StartsWithSegments("/api/fleet/robots")
+               && path.Value!.EndsWith(StreamRobotCameraEndpoint.PathSuffix, StringComparison.Ordinal));
+});
 
 builder.Services.AddPermissionAuthorization();
 builder.Services.AddAuthorization(options =>
@@ -221,6 +183,7 @@ app.MapWorkflowExecutionEndpoints();
 app.MapFleetEndpoints();
 app.MapNavigationEndpoints();
 app.MapOperationsEndpoints();
+app.MapEvidenceBridgeEndpoints();
 app.MapReportEndpoints();
 
 app.Run();

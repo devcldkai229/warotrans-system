@@ -102,6 +102,17 @@ const GROUPS: GroupDefinition[] = [
     title: msg('Statistics'),
     items: [{ code: 'statistics.read', label: msg('View statistics') }],
   },
+  {
+    id: 'evidence',
+    title: msg('Transport evidence'),
+    items: [
+      { code: 'evidence.read', label: msg('Open transport journals') },
+      { code: 'evidence.playback', label: msg('Watch recorded robot video') },
+      { code: 'evidence.annotate', label: msg('Add notes and root causes to a journal') },
+      { code: 'evidence.export', label: msg('Export an evidence packet') },
+      { code: 'evidence.admin', label: msg('Issue robot recording credentials, read the evidence access log') },
+    ],
+  },
 ]
 
 export interface PermissionGroup {

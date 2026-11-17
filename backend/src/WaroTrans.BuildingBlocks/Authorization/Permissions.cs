@@ -79,6 +79,23 @@ public static class Permissions
     // Dashboards
     public const string StatisticsRead = "statistics.read";
 
+    // Evidence (Transport Journal, separate Recorder process: docs/adr/0012)
+
+    /// <summary>Open Transport Journals: runs, paths, events, recording health.</summary>
+    public const string EvidenceRead = "evidence.read";
+
+    /// <summary>Watch recorded camera video (a short-lived playback grant is audited).</summary>
+    public const string EvidencePlayback = "evidence.playback";
+
+    /// <summary>Add notes, bookmarks and root causes to a Journal.</summary>
+    public const string EvidenceAnnotate = "evidence.annotate";
+
+    /// <summary>Export an evidence packet (original clips, hashes, events, path).</summary>
+    public const string EvidenceExport = "evidence.export";
+
+    /// <summary>Issue robot recording credentials, read the access audit.</summary>
+    public const string EvidenceAdmin = "evidence.admin";
+
     public static IReadOnlyList<string> All { get; } =
     [
         UserManage, ConsoleAccess,
@@ -89,6 +106,7 @@ public static class Permissions
         RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotStop, RobotManualDrive,
         RobotMaintenance, RobotPower, RobotDiagnostics, TrafficRead, TrafficManage, DispatchOverride,
         NotificationRead, IssueRead, IssueCreate, IssueManage, AuditRead,
-        StatisticsRead
+        StatisticsRead,
+        EvidenceRead, EvidencePlayback, EvidenceAnnotate, EvidenceExport, EvidenceAdmin
     ];
 }

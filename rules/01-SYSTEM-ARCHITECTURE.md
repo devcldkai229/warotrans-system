@@ -19,7 +19,12 @@ backend/
 ├── src/
 │   ├── WaroTrans.Host/
 │   ├── WaroTrans.BuildingBlocks/
+│   ├── WaroTrans.Evidence/        # separate processes, docs/adr/0012
+│   │   ├── Shared/
+│   │   ├── Recorder/
+│   │   └── Worker/
 │   └── Modules/
+│       ├── EvidenceBridge/
 │       ├── Identity/
 │       ├── Warehouse/
 │       ├── Transportation/
@@ -33,7 +38,10 @@ backend/
     └── WaroTrans.ArchitectureTests/
 ```
 
-`WaroTrans.Host` is the only executable backend project.
+`WaroTrans.Host` is the only executable of the modular monolith. The only exception is the Evidence bounded context
+(`WaroTrans.Evidence/Recorder` and `/Worker`, docs/adr/0012). These are deployed on their own, own the database
+`warotrans_evidence`, and never reference a module. The monolith reaches them only through the `EvidenceBridge`
+outbox (HTTP). No other executable may be added without an ADR.
 
 ## Backend style
 ```text
@@ -65,6 +73,8 @@ Do not create global `Controllers/`, generic business `Services/`, or generic re
 | Fleet | PostgreSQL schema `fleet` |
 | Navigation | PostgreSQL schema `navigation` |
 | Operations | MongoDB `warotrans_operations` |
+| EvidenceBridge | PostgreSQL schema `evidence_bridge` (outbox only) |
+| Evidence (Recorder/Worker) | PostgreSQL database `warotrans_evidence`, schema `evidence` |
 
 V1 uses one physical PostgreSQL database `warotrans`.
 

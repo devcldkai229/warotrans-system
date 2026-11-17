@@ -85,6 +85,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<JobExecutionEngine>();
         services.AddScoped<JobQueries>();
         services.AddScoped<ITransportRequestJobControl, Services.TransportRequestJobControl>();
+        services.AddScoped<IJobEvidenceQuery, Services.JobEvidenceQuery>();
         services.AddScoped<StartJobHandler>();
         services.AddScoped<ResumeJobHandler>();
         services.AddScoped<CancelJobHandler>();

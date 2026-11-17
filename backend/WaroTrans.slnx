@@ -3,7 +3,15 @@
     <Project Path="src/WaroTrans.BuildingBlocks/WaroTrans.BuildingBlocks.csproj" />
     <Project Path="src/WaroTrans.Host/WaroTrans.Host.csproj" />
   </Folder>
+  <Folder Name="/src/Evidence/">
+    <Project Path="src/WaroTrans.Evidence/Shared/WaroTrans.Evidence.Shared.csproj" />
+    <Project Path="src/WaroTrans.Evidence/Recorder/WaroTrans.Evidence.Recorder.csproj" />
+    <Project Path="src/WaroTrans.Evidence/Worker/WaroTrans.Evidence.Worker.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/EvidenceBridge/">
+    <Project Path="src/Modules/EvidenceBridge/WaroTrans.EvidenceBridge.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Fleet/">
     <Project Path="src/Modules/Fleet/WaroTrans.Fleet.csproj" />
   </Folder>
@@ -29,5 +37,7 @@
     <Project Path="tests/WaroTrans.ArchitectureTests/WaroTrans.ArchitectureTests.csproj" />
     <Project Path="tests/WaroTrans.IntegrationTests/WaroTrans.IntegrationTests.csproj" />
     <Project Path="tests/WaroTrans.UnitTests/WaroTrans.UnitTests.csproj" />
+    <Project Path="tests/WaroTrans.Evidence.UnitTests/WaroTrans.Evidence.UnitTests.csproj" />
+    <Project Path="tests/WaroTrans.Evidence.IntegrationTests/WaroTrans.Evidence.IntegrationTests.csproj" />
   </Folder>
 </Solution>
