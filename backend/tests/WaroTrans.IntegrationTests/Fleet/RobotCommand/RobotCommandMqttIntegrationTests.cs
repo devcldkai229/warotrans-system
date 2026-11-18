@@ -173,6 +173,62 @@ public sealed class RobotCommandMqttIntegrationTests(WaroTransWebApplicationFact
         Assert.Equal(0.0, sent.Linear);
     }
 
+    [Fact]
+    public async Task A_gateway_restart_aborts_the_navigate_the_robot_forgot_and_frees_the_robot()
+    {
+        // 2026-11-18: RBT-001's stack restarted while the Host was down; the NAVIGATE stayed RUNNING, the robot EXECUTING,
+        // and LOCALIZE answered robot_busy. A heartbeat with a new bootId now ends it like an offline robot's command.
+        var robot = await RegisterAsync("Restart Bot");
+        long seq = 0;
+        await ForceOnlineAsync(robot.Code, Guid.NewGuid(), () => ++seq);
+        var issued = await NavigateAsync(robot.Id);
+        await ApplyAckAsync(robot.Code, issued.CommandId, accepted: true);
+        Assert.Equal(RobotStatus.EXECUTING, (await GetRobotAsync(robot.Id)).Status);
+
+        await ForceOnlineAsync(robot.Code, Guid.NewGuid(), () => ++seq);
+
+        var after = await GetRobotAsync(robot.Id);
+        Assert.Equal(RobotStatus.AVAILABLE, after.Status);
+        Assert.Null(after.CurrentCommandId);
+        var (status, error) = await CommandStateAsync(issued.CommandId);
+        Assert.Equal(RobotCommandStatus.ABORTED, status);
+        Assert.Equal(InFlightCommandAborter.RobotRestarted, error);
+    }
+
+    [Fact]
+    public async Task A_cancel_the_robot_refuses_with_unknown_target_aborts_the_target()
+    {
+        var robot = await RegisterAsync("Unknown Target Bot");
+        var boot = Guid.NewGuid();
+        long seq = 0;
+        await ForceOnlineAsync(robot.Code, boot, () => ++seq);
+        var issued = await NavigateAsync(robot.Id);
+        await ApplyAckAsync(robot.Code, issued.CommandId, accepted: true);
+
+        var cancel = await Client.PostAsJsonAsync($"/api/fleet/robots/{robot.Id}/commands/cancel", new { targetCommandId = issued.CommandId, reason = "stop" });
+        Assert.Equal(HttpStatusCode.Accepted, cancel.StatusCode);
+        var cancelId = (await cancel.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("commandId").GetGuid();
+        await ApplyAckAsync(robot.Code, cancelId, accepted: false, reason: ProcessRobotCommandAckHandler.UnknownTarget);
+
+        var after = await GetRobotAsync(robot.Id);
+        Assert.Equal(RobotStatus.AVAILABLE, after.Status);
+        Assert.Equal(RobotCommandStatus.ABORTED, (await CommandStateAsync(issued.CommandId)).Status);
+    }
+
+    private async Task<IssueDto> NavigateAsync(Guid robotId)
+    {
+        var issue = await Client.PostAsJsonAsync($"/api/fleet/robots/{robotId}/commands/navigate", new { x = 1.0, y = 1.0, yaw = 0.0, frameId = "map" });
+        issue.EnsureSuccessStatusCode();
+        return (await issue.Content.ReadFromJsonAsync<IssueDto>(JsonOptions))!;
+    }
+
+    private async Task<(RobotCommandStatus Status, string? Error)> CommandStateAsync(Guid commandId)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var command = await scope.ServiceProvider.GetRequiredService<FleetDbContext>().RobotCommands.AsNoTracking().SingleAsync(c => c.Id == commandId);
+        return (command.Status, command.ErrorCode);
+    }
+
     private async Task ForceOnlineAsync(string robotCode, Guid bootId, Func<long> nextSeq)
     {
         await using var scope = Factory.Services.CreateAsyncScope();

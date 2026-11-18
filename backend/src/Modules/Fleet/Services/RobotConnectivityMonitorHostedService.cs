@@ -107,65 +107,9 @@ public sealed class RobotConnectivityMonitorHostedService(
                 "Robot {RobotCode} connectivity OFFLINE (heartbeat timeout)",
                 robot.Code);
 
-            var inFlight = await db.RobotCommands
-                .Where(c => c.RobotId == robot.Id
-                            && (c.Status == RobotCommandStatus.SENT
-                                || c.Status == RobotCommandStatus.ACKED
-                                || c.Status == RobotCommandStatus.RUNNING))
-                .ToListAsync(cancellationToken);
-
-            var abortedNavigate = false;
+            await scope.ServiceProvider.GetRequiredService<InFlightCommandAborter>()
+                .AbortAsync(robot, InFlightCommandAborter.RobotOffline, utcNow, cancellationToken);
             var segmented = scope.ServiceProvider.GetService<ISegmentedTrafficCoordinator>();
-            foreach (var command in inFlight)
-            {
-                if (!command.TryAbortOffline(utcNow))
-                {
-                    continue;
-                }
-
-                if (command.Type == RobotCommandType.NAVIGATE_TO_POSE)
-                {
-                    abortedNavigate = true;
-                    // The NAVIGATE no longer exists for the backend: its traffic authority must not outlive it (the
-                    // robot would resume and keep renewing it after reconnecting). Revoked here, occupancy kept.
-                    if (segmented is not null)
-                    {
-                        await segmented.CompleteRouteAsync(
-                            robot.Id, false, "ROBOT_OFFLINE", null, cancellationToken, command.Id);
-                    }
-                }
-
-                if (command.JobAssignmentId is { } assignmentId)
-                {
-                    var assignment = await db.JobAssignments.FirstOrDefaultAsync(
-                        a => a.Id == assignmentId,
-                        cancellationToken);
-                    assignment?.TryEnd(AssignmentEndReason.ROBOT_OFFLINE, utcNow);
-                }
-
-                await events.PublishAsync(
-                    new RobotCommandLifecycleChanged(
-                        command.Id,
-                        robot.Id,
-                        robot.Code,
-                        command.Type.ToString(),
-                        command.Status.ToString(),
-                        command.JobAssignmentId,
-                        command.JobStepId,
-                        null,
-                        command.ErrorCode,
-                        RobotCommandLifecycleChanged.Phases.OfflineAbort),
-                    cancellationToken);
-            }
-
-            if (abortedNavigate)
-            {
-                robot.MarkAvailable(utcNow);
-            }
-            else
-            {
-                robot.ClearCurrentCommand(utcNow);
-            }
 
             // V1 active dispatcher still releases so queued navigates can proceed.
             // Segmented coordinator quarantines (no auto-release on heartbeat loss).

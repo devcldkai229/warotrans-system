@@ -760,7 +760,7 @@ public sealed class JobExecutionEngine(
     }
 
     /// <summary>Codes a Job stops with when its robot dropped off the network while a command was out.</summary>
-    private static readonly string[] RobotLostCodes = ["ROBOT_OFFLINE", "robot_offline"];
+    private static readonly string[] RobotLostCodes = ["ROBOT_OFFLINE", "robot_offline", "ROBOT_RESTARTED"];
 
     public const string RequeuedAfterRobotLost = "requeued_after_robot_lost";
 

@@ -205,7 +205,8 @@ public sealed class RobotCommand
         return true;
     }
 
-    public bool TryAbortOffline(DateTimeOffset utcNow)
+    /// <param name="errorCode">ROBOT_OFFLINE, or ROBOT_RESTARTED when the gateway came back with a new bootId.</param>
+    public bool TryAbortOffline(DateTimeOffset utcNow, string errorCode = "ROBOT_OFFLINE")
     {
         if (!IsInFlight)
         {
@@ -214,7 +215,7 @@ public sealed class RobotCommand
 
         Status = RobotCommandStatus.ABORTED;
         CompletedAt = utcNow;
-        ErrorCode = "ROBOT_OFFLINE";
+        ErrorCode = errorCode;
         return true;
     }
 }
