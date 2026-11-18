@@ -8,7 +8,6 @@ import {
   View,
 } from 'react-native';
 import {
-  AlertOctagon,
   ArrowRight,
   ChevronDown,
   ChevronRight,
@@ -16,7 +15,6 @@ import {
   History,
   LifeBuoy,
   FileText,
-  PauseCircle,
   Plus,
   Search,
   ShieldAlert,
@@ -26,7 +24,6 @@ import { useAuth } from '../auth/authContext';
 import { canReadVouchers } from '../inventory/stockVoucherData';
 import { JOB_STATUS_PRESENTATION } from '../jobs/jobData';
 import { requestStatusLabel } from './dispatchData';
-import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { ThemeColors } from '../../shared/theme/colors';
 import { dockReservedSpace, useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
@@ -66,7 +63,6 @@ export function TransportScreen() {
   const { navigate, dockHeight } = useNavigation();
   const { session } = useAuth();
   const { lastJobUpdate } = useRealtime();
-  const { isHolding } = useSafetyHold();
   const recent = useQuery({ queryKey: ['recent-dispatches'], queryFn: () => listTransportRequests({ take: 3 }), refetchInterval: 15_000 });
   const { refetch } = recent;
   useEffect(() => { if (lastJobUpdate) void refetch(); }, [lastJobUpdate, refetch]);
@@ -129,6 +125,30 @@ export function TransportScreen() {
           </Text>
         </View>
 
+        {/* Stock lookup first: where a container, product or shelf is right now. */}
+        <Pressable
+          onPress={() => {
+            triggerHaptic('tap');
+            navigate('inventory_lookup');
+          }}
+          style={({ pressed }) => [styles.lookupCard, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Find containers and stock"
+        >
+          <View style={styles.lookupIconWell}>
+            <Search size={20} color={colors.primaryText} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
+              Find Containers & Stock
+            </Text>
+            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              Search a container, product or shelf to see where it is
+            </Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </Pressable>
+
         {/* 1. Primary Hero Actions (Machined Dual Action Console) */}
         <View style={styles.section}>
           <Text variant="label" color={colors.textSecondary} style={styles.sectionLabel}>
@@ -188,63 +208,6 @@ export function TransportScreen() {
               <View style={styles.heroBtnContent}>
                 <Text variant="bodyMedium" color={colors.textPrimary} style={styles.heroBtnTitle}>
                   Stock Vouchers
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* 3. Quiet Operational Safety Bar (Integrated, non-intrusive) */}
-        <View style={styles.section}>
-          <Text variant="label" color={colors.textSecondary} style={styles.sectionLabel}>
-            Floor Safety & Controls
-          </Text>
-
-          <View style={styles.safetyStrip}>
-            {/* Soft Hold Toggle */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.safetyStripBtn,
-                isHolding && styles.safetyStripBtnHolding,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Pause unavailable"
-              disabled
-              accessibilityState={{ disabled: true }}
-            >
-              <PauseCircle
-                size={18}
-                color={isHolding ? colors.warningText : colors.textSecondary}
-                strokeWidth={2}
-              />
-              <View style={styles.safetyStripTextCol}>
-                <Text
-                  variant="bodyMedium"
-                  color={isHolding ? colors.warningText : colors.textPrimary}
-                  style={styles.safetyBtnTitle}
-                >
-                  Pause Unavailable
-                </Text>
-              </View>
-            </Pressable>
-
-            <View style={styles.safetyDivider} />
-
-            {/* Corridor Hazard Report */}
-            <Pressable
-              onPress={() => {
-                triggerHaptic('tap');
-                navigate('block_path');
-              }}
-              style={({ pressed }) => [styles.safetyStripBtn, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Report corridor hazard"
-            >
-              <AlertOctagon size={18} color={colors.dangerText} strokeWidth={2} />
-              <View style={styles.safetyStripTextCol}>
-                <Text variant="bodyMedium" color={colors.textPrimary} style={styles.safetyBtnTitle}>
-                  Report Hazard
                 </Text>
               </View>
             </Pressable>
@@ -347,35 +310,17 @@ export function TransportScreen() {
           </View>
         </View>
 
-        {/* 5. Inventory & SKU Catalog Lookup Card */}
-        <Pressable
-          onPress={() => {
-            triggerHaptic('tap');
-            navigate('inventory_lookup');
-          }}
-          style={({ pressed }) => [
-            styles.historyEntryCard,
-            pressed && styles.pressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Inventory catalog and SKU lookup"
-        >
-          <View style={styles.historyLeft}>
-            <View style={styles.historyIconWell}>
-              <Search size={18} color={colors.primaryText} />
-            </View>
-            <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
-              Inventory & SKU Catalog
-            </Text>
-          </View>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </Pressable>
       </ScrollView>
     </View>
   );
 }
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
+  lookupCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primaryBorder, ...shadows.sm,
+  },
+  lookupIconWell: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
   container: {
     flex: 1,
     backgroundColor: colors.background,

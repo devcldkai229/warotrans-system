@@ -14,7 +14,8 @@ test('lightColors and darkColors have exact key parity and valid syncActiveColor
   // Default is light
   assert.equal(colors.background, lightColors.background);
   assert.equal(colors.surface, '#ffffff');
-  assert.equal(zoneColor('JUNCTION'), lightColors.success);
+  // Zone colours are the web console's fixed palette (mapStyle.ts), the same in both themes.
+  assert.equal(zoneColor('JUNCTION'), '#5c6bc0');
 
   // Switch to dark
   syncActiveColors('dark');
@@ -23,14 +24,15 @@ test('lightColors and darkColors have exact key parity and valid syncActiveColor
   assert.equal(colors.surface, darkColors.surface);
   assert.equal(colors.textPrimary, darkColors.textPrimary);
   assert.equal(shadows.sm.shadowOpacity, darkShadows.sm.shadowOpacity);
-  assert.equal(zoneColor('JUNCTION'), darkColors.success);
+  assert.equal(zoneColor('JUNCTION'), '#5c6bc0');
 
   // Switch back to light
   syncActiveColors('light');
   syncActiveShadows('light');
   assert.equal(colors.background, lightColors.background);
   assert.equal(colors.surface, '#ffffff');
-  assert.equal(zoneColor('JUNCTION'), lightColors.success);
+  // Zone colours are the web console's fixed palette (mapStyle.ts), the same in both themes.
+  assert.equal(zoneColor('JUNCTION'), '#5c6bc0');
 
   // Verify LIGHT_HEX_TO_TOKEN maps to existing ThemeColors keys
   for (const token of Object.values(LIGHT_HEX_TO_TOKEN)) {

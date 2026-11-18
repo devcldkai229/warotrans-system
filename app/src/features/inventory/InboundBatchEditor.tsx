@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
-import { Box, Check, ChevronRight, Plus, Trash2 } from 'lucide-react-native';
+import { LayoutAnimation, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Box, Check, ChevronRight, Minus, Plus, Trash2 } from 'lucide-react-native';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import type { ThemeColors } from '../../shared/theme/colors';
 import type { ThemeShadows } from '../../shared/theme/shadows';
 import { radii } from '../../shared/theme/radii';
-import { Button, Text, TextField } from '../../shared/ui';
+import { Button, Text } from '../../shared/ui';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
 import { applyBatchGroupProduct, batchCounts, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
 
@@ -14,19 +14,18 @@ interface Props { requestedCount: string; groups: InboundBatchGroup[]; editable:
 export function InboundBatchEditor({ requestedCount, groups, editable, onChange }: Props) {
   const { styles, colors } = useThemedStyles(createStyles);
   const [picker, setPicker] = useState<string | null>(null);
-  const { total, grouped, assigned, remaining } = batchCounts(requestedCount, groups);
-  const over = total !== null && grouped > total;
-  const matched = total !== null && total > 0 && assigned === total && grouped === total;
+  const { total, assigned } = batchCounts(requestedCount, groups);
+  const matched = total !== null && total > 0 && assigned === total;
   const edit = (key: string, apply: (group: InboundBatchGroup) => InboundBatchGroup) => {
     if (editable) onChange(groups.map(group => group.key === key ? apply(group) : group));
   };
   return <View style={styles.section}>
     <View style={styles.between}>
       <Text variant="headline">Products</Text>
-      <View style={[styles.progressPill, matched && styles.progressMatched, over && styles.progressOver]}>
+      <View style={[styles.progressPill, matched && styles.progressMatched]}>
         {matched && <Check size={13} strokeWidth={2.4} color={colors.successText} />}
-        <Text variant="caption" color={over ? 'dangerText' : matched ? 'successText' : 'textSecondary'} style={styles.progressText}>
-          {t('{assigned}/{total} assigned', { assigned, total: total ?? '—' })}
+        <Text variant="caption" color={matched ? 'successText' : 'textSecondary'} style={styles.progressText}>
+          {t('{count} containers in total', { count: total ?? 0 })}
         </Text>
       </View>
     </View>
@@ -46,19 +45,40 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
           {groups.length > 1 && <Pressable style={({ pressed }) => [styles.action, pressed && editable && styles.actionPressed]} disabled={!editable} accessibilityRole="button" accessibilityState={{ disabled: !editable }} accessibilityLabel={t('Remove Product Group {group}', { group: index + 1 })} onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); onChange(groups.filter(item => item.key !== group.key)); }}><Trash2 size={18} color={colors.textMuted} /></Pressable>}
         </View>
         <View style={styles.groupDivider} />
-        <View style={styles.fields}>
-          <TextField containerStyle={styles.fieldWide} label="Containers" accessibilityLabel={t('Containers In Group {group}', { group: index + 1 })} value={group.containerCount} onChangeText={containerCount => edit(group.key, previous => ({ ...previous, containerCount }))} keyboardType="number-pad" maxLength={4} editable={editable} placeholder="0" />
-          <TextField containerStyle={styles.fieldWide} label="Qty / Box" accessibilityLabel={t('Quantity Per Container In Group {group}', { group: index + 1 })} value={group.quantity} onChangeText={quantity => edit(group.key, previous => ({ ...previous, quantity }))} keyboardType="decimal-pad" maxLength={16} editable={editable} placeholder="24" />
-          <TextField containerStyle={styles.fieldNarrow} label="Unit" accessibilityLabel={t('Unit In Group {group}', { group: index + 1 })} value={group.unit} onChangeText={unit => edit(group.key, previous => ({ ...previous, unit }))} maxLength={32} editable={editable} placeholder="pcs" />
+        <View style={styles.countRow}>
+          <Text variant="bodyMedium" color="textSecondary" style={styles.flex}>Containers</Text>
+          <Stepper value={group.containerCount} editable={editable} label={t('Containers In Group {group}', { group: index + 1 })}
+            onChange={containerCount => edit(group.key, previous => ({ ...previous, containerCount }))} />
         </View>
       </View>
     ))}
-    <Button title="Add Product" icon={Plus} variant="outline" disabled={!editable || !total || groups.length >= total} onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); onChange([...groups, newBatchGroup(groups, remaining && remaining > 0 ? String(remaining) : '')]); }} />
+    <Button title="Add Product" icon={Plus} variant="outline" disabled={!editable || groups.length >= 20} onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); onChange([...groups, newBatchGroup(groups, '1')]); }} />
     {picker && editable && groups.some(group => group.key === picker) && <ReceivingProductPicker selectedProduct={groups.find(group => group.key === picker)?.product || null} initialBarcode={null} onClose={() => setPicker(null)} onSelect={product => { onChange(applyBatchGroupProduct(groups, picker, product)); setPicker(null); }} />}
   </View>;
 }
 
+/** A whole-number stepper (1 to 9,999) with the typed value in the middle. */
+function Stepper({ value, onChange, editable, label }: { value: string; onChange: (value: string) => void; editable: boolean; label: string }) {
+  const { styles, colors } = useThemedStyles(createStyles);
+  const count = Number.parseInt(value, 10) || 0;
+  const set = (next: number) => onChange(String(Math.max(1, Math.min(9999, next))));
+  return <View style={styles.stepper}>
+    <Pressable style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]} disabled={!editable || count <= 1} accessibilityRole="button" accessibilityLabel="Fewer" onPress={() => set(count - 1)}>
+      <Minus size={18} color={count <= 1 ? colors.textMuted : colors.textPrimary} />
+    </Pressable>
+    <TextInput style={styles.stepValue} value={value} editable={editable} keyboardType="number-pad" maxLength={4} selectTextOnFocus
+      onChangeText={text => onChange(text.replace(/[^0-9]/g, ''))} accessibilityLabel={label} />
+    <Pressable style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]} disabled={!editable || count >= 9999} accessibilityRole="button" accessibilityLabel="More" onPress={() => set(count + 1)}>
+      <Plus size={18} color={colors.textPrimary} />
+    </Pressable>
+  </View>;
+}
+
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
+  countRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  stepButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  stepValue: { minWidth: 56, height: 44, textAlign: 'center', fontSize: 18, fontWeight: '700', color: colors.textPrimary },
   section: { gap: 12 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   progressPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },

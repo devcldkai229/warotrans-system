@@ -169,7 +169,7 @@ export function InventoryLookupScreen() {
     <View style={styles.container}>
       <SubScreenHeader
         label={activeWarehouseId ? `${containers.length} Containers Loaded · ${uniqueLocationsCount} Locations` : 'Loading Inventory…'}
-        title="Inventory Catalog"
+        title="Find Containers & Stock"
         onBack={goBack}
       />
 

@@ -20,7 +20,7 @@ import { preparationDeviceStore } from './preparationDeviceStore';
 import { ContainerCountField } from './ContainerCountField';
 import { InboundBatchEditor } from './InboundBatchEditor';
 import { InboundBatchSummary } from './InboundBatchSummary';
-import { buildContainerBatchBody, createBatchRequestId, inboundBatchProblem, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
+import { batchTotal, buildContainerBatchBody, createBatchRequestId, inboundBatchProblem, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
 import { OutboundVoucherSelection } from './OutboundVoucherSelection';
 
 export function CreateStockVoucherScreen() {
@@ -49,7 +49,7 @@ export function CreateStockVoucherScreen() {
   useEffect(() => { setReview(false); setError(null); setOutboundReady(false); setUncertain(false); }, [session?.id, warehouse?.id, type]);
   useEffect(() => {
     if (preparation.ready && inbound && !preparation.value.groups?.length) {
-      preparation.update(previous => ({ ...previous, groups: [newBatchGroup([], previous.requestedCount)] }));
+      preparation.update(previous => ({ ...previous, groups: [newBatchGroup([], previous.requestedCount || '1')], requestedCount: previous.requestedCount || '1' }));
     }
   }, [preparation.ready, inbound, preparation.value.groups?.length]);
   useEffect(() => {
@@ -67,7 +67,7 @@ export function CreateStockVoucherScreen() {
     preparation.update(previous => ({ ...previous, requestId: undefined, requestedCount: count, groups: previous.groups?.map((group, index, all) =>
       all.length === 1 && index === 0 && (!group.containerCount || group.containerCount === previous.requestedCount) ? { ...group, containerCount: count } : group) }));
   };
-  const editGroups = (next: InboundBatchGroup[]) => { if (editable) { setError(null); preparation.update(previous => ({ ...previous, requestId: undefined, groups: next })); } };
+  const editGroups = (next: InboundBatchGroup[]) => { if (editable) { setError(null); preparation.update(previous => ({ ...previous, requestId: undefined, groups: next, requestedCount: batchTotal(next) })); } };
   const showError = (message: string) => { setError(message); requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: false })); };
   const validate = () => {
     const metadata = draftValidation(referenceNo, note);
@@ -173,7 +173,6 @@ export function CreateStockVoucherScreen() {
           {!review && !saving && !uncertain && <SegmentedControl value={type} onChange={setType} accessibilityLabel="New voucher type" options={[{ label: 'Inbound', value: 'INBOUND' }, { label: 'Outbound', value: 'OUTBOUND' }]} />}
           {preparation.ready ? <>
             {!review && inbound && <>
-              <View style={styles.typeCard}><ContainerCountField value={requestedCount} onChange={editCount} editable={editable} /></View>
               <InboundBatchEditor requestedCount={requestedCount} groups={groups} editable={editable} onChange={editGroups} />
             </>}
             {!review && !inbound && <OutboundVoucherSelection key={`${session?.id}:${warehouse.id}`} accountId={session?.id || ''} warehouseId={warehouse.id} value={preparation.value} update={preparation.update} onReview={openReview} onReadinessChange={setOutboundReady} showReviewAction={false} editable={editable} />}
@@ -196,16 +195,6 @@ export function CreateStockVoucherScreen() {
                 </View>
               ))}
             </Card>}
-            <View style={styles.detailsCard}>
-              <Pressable onPress={() => { animateLayout(); setDetailsOpen(value => !value); }} accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} style={({ pressed }) => [styles.detailsHeader, pressed && styles.pressed]}>
-                <View style={styles.row}><Text variant="bodyMedium">Additional Details</Text>{!detailsOpen && (!!referenceNo.trim() || !!note.trim()) && <View style={styles.detailsDot} />}</View>
-                {detailsOpen ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
-              </Pressable>
-              {detailsOpen && <View style={styles.detailsBody}>
-                <TextField label="Reference (Optional)" value={referenceNo} onChangeText={value => edit('referenceNo', value)} maxLength={100} editable={editable} autoCorrect={false} placeholder="Document number" />
-                <TextField label="Note (Optional)" value={note} onChangeText={value => edit('note', value)} maxLength={500} editable={editable} placeholder="Add a note" multiline inputStyle={{ minHeight: 88, textAlignVertical: 'top', paddingTop: 12 }} />
-              </View>}
-            </View>
           </> : !preparation.error && <Text variant="body">Loading Preparation…</Text>}
           {preparation.error && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{preparation.error}</Text><Button title="Retry" variant="outline" onPress={() => { if (preparation.ready) void preparation.persist().catch(() => {}); else preparation.retry(); }} /></View>}
         </>}

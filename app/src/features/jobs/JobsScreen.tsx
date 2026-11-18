@@ -1,4 +1,4 @@
-import { Filter, Inbox, MapPin, Search, SearchX, X } from 'lucide-react-native';
+import { Check, ChevronDown, Filter, Inbox, MapPin, Search, SearchX, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
@@ -18,6 +18,9 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 import { listJobs } from '../../shared/api';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { JobCard } from './JobCard';
+import { BottomSheet } from '../../shared/ui/BottomSheet';
+import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
+import type { PlaceDirectory } from '../../shared/places/placeDirectory';
 import { AppJobItem, isTerminalJobStatus, mapJobDetailToAppJobItem } from './jobData';
 
 type JobScope = 'mine' | 'fleet' | 'history';
@@ -83,75 +86,11 @@ function matchesQuery(job: AppJobItem, rawQuery: string): boolean {
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/* Zone matching                                                               */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Words that describe the *building*, not the place. `Inbound Dock 01` and
- * `Outbound Dock 04` are different places that share the word "dock", so these
- * cannot be what makes a job belong to a zone — only the place codes below can.
- */
-const ZONE_NOISE_WORDS: ReadonlySet<string> = new Set([
-  'area',
-  'bay',
-  'dock',
-  'docks',
-  'inbound',
-  'outbound',
-  'receiving',
-  'shipping',
-  'staging',
-  'warehouse',
-  'zone',
-  'zones',
-]);
-
-/** "Dock 01 ➔ Rack A-02" -> ['dock', '01', 'rack', 'a', '02']. */
-function tokenize(value: string): string[] {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-}
-
-/**
- * The place codes that make a zone name specific: a numbered dock (`01`), a
- * lettered zone (`a`), a rack range (`a01`). The generic warehouse words never
- * qualify — see `ZONE_NOISE_WORDS`.
- */
-function matchesZone(job: AppJobItem, zone: string): boolean {
-  const zLower = zone.toLowerCase();
-  const text = [
-    job.route,
-    job.routeText,
-    job.target,
-    job.sourceEndpointCode,
-    job.destinationEndpointCode,
-    job.currentStop,
-    ...job.stopsList.map((stop) => `${stop.name} ${stop.description}`),
-  ]
-    .join(' ')
-    .toLowerCase();
-
-  if (zLower.includes('inbound') || zLower.includes('dock 01') || zLower.includes('dock 1')) {
-    return ['dock 01', 'dock-01', 'dock-in', 'inbound', 'ep-a', 'ep-b'].some((code) => text.includes(code));
-  }
-  if (zLower.includes('zone a')) {
-    return ['rack a', 'rack-a', 'zone a', 'ep-a', 'ep-b', 'ep-c'].some((code) => text.includes(code));
-  }
-  if (zLower.includes('zone b')) {
-    return ['rack b', 'rack-b', 'zone b', 'ep-d', 'ep-e', 'ep-f'].some((code) => text.includes(code));
-  }
-  if (zLower.includes('outbound') || zLower.includes('dock 04') || zLower.includes('shipping')) {
-    return ['dock 04', 'dock out', 'dock-out', 'outbound', 'shipping', 'ep-d', 'ep-e', 'ep-f'].some((code) => text.includes(code));
-  }
-  return true;
-}
-
-/** No zone selected -> everything is visible. This is the only place that says so. */
-function matchesZoneFilter(job: AppJobItem, zone: string | null): boolean {
-  return zone === null ? true : matchesZone(job, zone);
+/** No area selected -> everything is visible. Otherwise the job's source or destination lies in that map area. */
+function matchesArea(job: AppJobItem, areaId: string | null, places: PlaceDirectory): boolean {
+  if (!areaId) return true;
+  return [job.sourceEndpointCode, job.destinationEndpointCode, ...job.tasks.map(task => task.endpointCode ?? '')]
+    .some(code => places.areasOf(code).some(area => area.id === areaId));
 }
 
 /** `mine` is my open work; `fleet` is everything not finished; `history` is the finished work. */
@@ -194,7 +133,9 @@ export function JobsScreen() {
   const deepLinkedScope = scopeFromParams(params?.view);
   const [scope, setScope] = useState<JobScope>(deepLinkedScope ?? 'fleet');
   const [query, setQuery] = useState('');
-  const [isZoneOnly, setIsZoneOnly] = useState(false);
+  const [areaId, setAreaId] = useState<string | null>(null);
+  const [areaPickerOpen, setAreaPickerOpen] = useState(false);
+  const places = usePlaceDirectory();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const jobsQuery = useQuery({
     queryKey: ['jobs-list', session?.id],
@@ -202,7 +143,12 @@ export function JobsScreen() {
     enabled: !!session?.id,
     refetchInterval: 5_000,
   });
-  const jobsList = useMemo(() => (jobsQuery.data ?? []).map(detail => mapJobDetailToAppJobItem(detail, session?.id)), [jobsQuery.data, session?.id]);
+  const jobsList = useMemo(() => (jobsQuery.data ?? []).map(detail => {
+    const job = mapJobDetailToAppJobItem(detail, session?.id);
+    // Places read by name (a shelf's storage location name, else the endpoint's own name), never by endpoint code.
+    const route = `${places.name(job.sourceEndpointCode, 'Pickup')} ➔ ${places.name(job.destinationEndpointCode, 'Drop-off')}`;
+    return { ...job, route, routeText: route, target: places.name(job.destinationEndpointCode, job.target) };
+  }), [jobsQuery.data, session?.id, places]);
   const { refetch } = jobsQuery;
   useEffect(() => { if (lastJobUpdate) void refetch(); }, [lastJobUpdate, refetch]);
 
@@ -217,18 +163,18 @@ export function JobsScreen() {
   }, [deepLinkedScope]);
 
   const bottomInset = dockReservedSpace(dockHeight);
-  const zoneScope = isZoneOnly && session?.zone ? session.zone : null;
+  const area = places.areas.find(item => item.id === areaId) ?? null;
 
   const counts = useMemo(() => {
     const filtered = jobsList.filter(
-      (job) => matchesQuery(job, query) && matchesZoneFilter(job, zoneScope)
+      (job) => matchesQuery(job, query) && matchesArea(job, areaId, places)
     );
     return {
       mine: filtered.filter((job) => inScope(job, 'mine')).length,
       fleet: filtered.filter((job) => inScope(job, 'fleet')).length,
       history: filtered.filter((job) => inScope(job, 'history')).length,
     } as Record<JobScope, number>;
-  }, [jobsList, query, zoneScope]);
+  }, [jobsList, query, areaId, places]);
 
   useEffect(() => {
     const myActive = jobsList.filter((j) => j.isMine && !isTerminalJobStatus(j.status)).length;
@@ -238,9 +184,9 @@ export function JobsScreen() {
   const visible = useMemo(
     () =>
       jobsList.filter(
-        (job) => inScope(job, scope) && matchesQuery(job, query) && matchesZoneFilter(job, zoneScope)
+        (job) => inScope(job, scope) && matchesQuery(job, query) && matchesArea(job, areaId, places)
       ),
-    [jobsList, scope, query, zoneScope]
+    [jobsList, scope, query, areaId, places]
   );
 
   const options = useMemo(
@@ -258,10 +204,6 @@ export function JobsScreen() {
     setScope(next);
   };
 
-  const toggleZoneFilter = () => {
-    triggerHaptic('tap');
-    setIsZoneOnly((previous) => !previous);
-  };
 
   const openJob = (job: AppJobItem) => {
     triggerHaptic('tap');
@@ -300,63 +242,19 @@ export function JobsScreen() {
           accessibilityLabel="Search jobs"
         />
 
-        {session?.zone ? (
-          <View style={styles.zoneFilterRow}>
-            <Pressable
-              onPress={() => {
-                if (isZoneOnly) {
-                  triggerHaptic('tap');
-                  setIsZoneOnly(false);
-                }
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Show jobs across all zones"
-              style={[
-                styles.zoneChip,
-                !isZoneOnly && styles.zoneChipActive,
-              ]}
-            >
-              <Text
-                variant="caption"
-                style={[
-                  styles.zoneChipText,
-                  !isZoneOnly && styles.zoneChipTextActive,
-                ]}
-              >
-                All Zones
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => {
-                if (!isZoneOnly) {
-                  triggerHaptic('tap');
-                  setIsZoneOnly(true);
-                }
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Filter jobs to my zone ${session.zone}`}
-              style={[
-                styles.zoneChip,
-                isZoneOnly && styles.zoneChipActive,
-              ]}
-            >
-              <MapPin
-                size={13}
-                color={isZoneOnly ? '#ffffff' : colors.textSecondary}
-                style={{ marginRight: 5 }}
-              />
-              <Text
-                variant="caption"
-                style={[
-                  styles.zoneChipText,
-                  isZoneOnly && styles.zoneChipTextActive,
-                ]}
-              >
-                My Zone: {session.zone}
-              </Text>
-            </Pressable>
-          </View>
+        {places.areas.length ? (
+          <Pressable
+            onPress={() => { triggerHaptic('tap'); setAreaPickerOpen(true); }}
+            accessibilityRole="button"
+            accessibilityLabel={`Area filter: ${area?.name ?? 'All areas'}. Tap to change.`}
+            style={({ pressed }) => [styles.areaSelect, area && styles.areaSelectActive, pressed && { opacity: 0.85 }]}
+          >
+            <MapPin size={15} color={area ? colors.primaryText : colors.textSecondary} />
+            <Text variant="label" numberOfLines={1} style={{ flex: 1 }} color={area ? colors.primaryText : colors.textPrimary}>
+              {area?.name ?? 'All areas'}
+            </Text>
+            <ChevronDown size={16} color={colors.textMuted} />
+          </Pressable>
         ) : null}
       </View>
 
@@ -390,13 +288,27 @@ export function JobsScreen() {
           <ListEmpty
             scope={scope}
             hasQuery={query.trim().length > 0}
-            zone={zoneScope ?? undefined}
+            zone={area?.name}
             onClear={() => setQuery('')}
-            onClearZone={toggleZoneFilter}
+            onClearZone={() => setAreaId(null)}
             onShowFleet={() => handleScopeChange('fleet')}
           />
         }
       />
+      {areaPickerOpen ? <BottomSheet onClose={() => setAreaPickerOpen(false)} accessibilityLabel="Choose an area">
+        <View style={styles.areaSheet}>
+          <Text variant="title">Filter by area</Text>
+          {[{ id: null as string | null, name: 'All areas' }, ...places.areas].map(item => {
+            const chosen = item.id === areaId;
+            return <Pressable key={item.id ?? 'all'} accessibilityRole="radio" accessibilityState={{ checked: chosen }}
+              onPress={() => { triggerHaptic('tap'); setAreaId(item.id); setAreaPickerOpen(false); }}
+              style={[styles.areaOption, chosen && styles.areaOptionActive]}>
+              <Text variant="bodyMedium" style={{ flex: 1 }} color={chosen ? colors.primaryText : colors.textPrimary}>{item.name}</Text>
+              {chosen ? <Check size={18} color={colors.primaryText} /> : null}
+            </Pressable>;
+          })}
+        </View>
+      </BottomSheet> : null}
     </View>
   );
 }
@@ -498,6 +410,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: 8,
     marginTop: 2,
   },
+  areaSelect: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 14, borderRadius: radii.pill,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  areaSelectActive: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  areaSheet: { paddingHorizontal: 20, paddingBottom: 24, gap: 8 },
+  areaOption: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: 14, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  areaOptionActive: { backgroundColor: colors.primaryLight },
   zoneChip: {
     flexDirection: 'row',
     alignItems: 'center',
