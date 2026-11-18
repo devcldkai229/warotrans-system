@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using WaroTrans.Transportation.Enums;
 using WaroTrans.Transportation.Persistence;
 using WaroTrans.Warehouse.Contracts;
 
@@ -8,14 +7,6 @@ namespace WaroTrans.Transportation.Services;
 /// <summary>Lets Warehouse keep Containers that robots are already moving off its stock vouchers.</summary>
 public sealed class ContainerTransportLookup(TransportationDbContext db) : IContainerTransportLookup
 {
-    private static readonly TransportRequestDetailStatus[] ActiveStatuses =
-    [
-        TransportRequestDetailStatus.PENDING,
-        TransportRequestDetailStatus.QUEUED,
-        TransportRequestDetailStatus.IN_PROGRESS,
-        TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY
-    ];
-
     public async Task<IReadOnlySet<Guid>> GetContainersInActiveTransportAsync(
         IReadOnlyCollection<Guid> containerIds,
         CancellationToken cancellationToken = default)
@@ -25,9 +16,8 @@ public sealed class ContainerTransportLookup(TransportationDbContext db) : ICont
             return new HashSet<Guid>();
         }
 
-        var busy = await db.TransportRequestDetails
-            .AsNoTracking()
-            .Where(d => containerIds.Contains(d.ContainerId) && ActiveStatuses.Contains(d.Status))
+        var busy = await TransportReservations.ActiveDetails(db)
+            .Where(d => containerIds.Contains(d.ContainerId))
             .Select(d => d.ContainerId)
             .Distinct()
             .ToListAsync(cancellationToken);

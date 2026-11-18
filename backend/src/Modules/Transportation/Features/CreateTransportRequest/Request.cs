@@ -14,7 +14,8 @@ public sealed record CreateTransportRequestRequest(
     string? Note,
     List<CreateTransportRequestDetailRequest>? Details,
     int Priority = 0,
-    DateTimeOffset? DeadlineAt = null);
+    DateTimeOffset? DeadlineAt = null,
+    OutboundFifoSelection? OutboundFifo = null);
 
 public sealed record CreateTransportRequestDetailRequest(
     int SequenceNo,
@@ -25,3 +26,5 @@ public sealed record CreateTransportRequestDetailRequest(
     Guid? DestinationStorageLocationId,
     Guid DestinationEndpointId,
     short? DestinationLevelNo);
+
+public sealed record OutboundFifoSelection(Guid ProductId, int ContainerCount);
