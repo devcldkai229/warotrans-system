@@ -10,11 +10,16 @@ using WaroTrans.Fleet.Persistence;
 
 namespace WaroTrans.Fleet.Features.ProcessRobotCommandAck;
 
+/// <summary>Applies a robot's command_ack (accepted / rejected with a reason code) to the backend command.</summary>
 public sealed class ProcessRobotCommandAckHandler(
     FleetDbContext db,
     IIntegrationEventPublisher events,
-    ILogger<ProcessRobotCommandAckHandler> logger)
+    ILogger<ProcessRobotCommandAckHandler> logger,
+    Services.InFlightCommandAborter? inFlightAborter = null)
 {
+    /// <summary>CANCEL refused because the robot runs no such command (warotrans_fleet gateway reason code).</summary>
+    public const string UnknownTarget = "UNKNOWN_TARGET";
+
     public async Task HandleAsync(RobotCommandAckMessage message, CancellationToken cancellationToken)
     {
         var command = await db.RobotCommands
@@ -75,6 +80,15 @@ public sealed class ProcessRobotCommandAckHandler(
             {
                 robot?.MarkAvailable(utcNow);
                 assignment?.TryEnd(AssignmentEndReason.ROBOT_REJECTED, utcNow);
+            }
+            else if (command.Type == RobotCommandType.CANCEL && command.TargetCommandId is { } target && robot is not null
+                     && inFlightAborter is not null && string.Equals(message.ReasonCode, UnknownTarget, StringComparison.Ordinal))
+            {
+                // The robot says it is not running the target (its gateway restarted and forgot it): the backend must not
+                // keep it RUNNING, or the robot stays EXECUTING and every LOCALIZE / dispatch answers robot_busy.
+                var aborted = await inFlightAborter.AbortAsync(robot, Services.InFlightCommandAborter.RobotRestarted, utcNow,
+                    cancellationToken, resetStaleExecuting: true, onlyCommandId: target);
+                logger.LogWarning("Robot {RobotCode} does not know command {Target}: {Count} aborted", robot.Code, target, aborted);
             }
         }
 

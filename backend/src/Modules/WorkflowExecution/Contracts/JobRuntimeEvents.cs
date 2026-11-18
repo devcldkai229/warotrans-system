@@ -40,3 +40,26 @@ public sealed record JobStepStatusChanged(
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>
+/// A robot got (OPENED) or lost (CLOSED) a Job: a row of execution.job_robot_assignments was written. One row is one
+/// robot running one trip, so its <see cref="AssignmentId"/> keys that run for listeners outside the module
+/// (Evidence). <see cref="EndReason"/> is the Job status that ended it, or REASSIGNED; values as stored, never mapped.
+/// </summary>
+public sealed record JobRobotAssignmentChanged(
+    Guid AssignmentId,
+    Guid JobId,
+    string JobNo,
+    Guid RobotId,
+    string Phase,
+    string StartReason,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt,
+    string? EndReason) : IIntegrationEvent
+{
+    public const string Opened = "OPENED";
+    public const string Closed = "CLOSED";
+
+    public Guid EventId { get; } = Guid.NewGuid();
+    public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
+}

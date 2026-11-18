@@ -2,6 +2,7 @@
 import { vi_dashboard_jobs } from './vi/dashboard-jobs'
 import { vi_enums } from './vi/enums'
 import { vi_failures } from './vi/failures'
+import { vi_journals } from './vi/journals'
 import { vi_management } from './vi/management'
 import { vi_maps } from './vi/maps'
 import { vi_notifications } from './vi/notifications'
@@ -16,6 +17,7 @@ export const vi: Record<string, string> = {
   ...vi_dashboard_jobs,
   ...vi_enums,
   ...vi_failures,
+  ...vi_journals,
   ...vi_management,
   ...vi_maps,
   ...vi_notifications,

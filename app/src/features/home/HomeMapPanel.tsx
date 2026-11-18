@@ -20,6 +20,7 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   bottomInset: number;
   onOpenJobs: () => void;
+  onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
 }
 
 export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props) {
@@ -36,7 +37,7 @@ export function HomeMapPanel({ bottomInset, onOpenJobs, style, ...props }: Props
 
   return <View style={style}>
     {map && !error ? <OperationalMap map={map} fleet={props.fleet || []} updateMode={props.updateMode} selectedRobotId={props.selectedRobotId}
-      onSelectRobot={props.onSelectRobot} bottomInset={bottomInset} /> : <View style={[styles.state, { bottom: bottomInset }]}>
+      onSelectRobot={props.onSelectRobot} bottomInset={bottomInset} onLocalizeRobot={props.onLocalizeRobot} /> : <View style={[styles.state, { bottom: bottomInset }]}>
       {loading ? <><ActivityIndicator color={colors.primary} /><Text variant="body">Loading Warehouse Map…</Text></> : <>
         <View style={styles.icon}><MapPin size={24} color={colors.primaryText} /></View>
         <Text variant="headline" textAlign="center">{error ? 'Map Could Not Be Loaded' : warehouseId ? 'No Published Map' : 'Your Warehouse Map'}</Text>

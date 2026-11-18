@@ -41,7 +41,13 @@ public sealed record SemanticTrafficPolicy(
 
 public sealed record SemanticZonePoly(
     string Code,
-    ImmutableArray<(double X, double Y)> Ring);
+    ImmutableArray<(double X, double Y)> Ring,
+    /// <summary>
+    /// Single-occupancy area with a queue point (zone policy <c>queueEndpointCode</c>): while another robot is in the
+    /// area, a robot sent to an endpoint inside it waits at this endpoint first. Null: it waits on the lane before the
+    /// area (the prefix grant never ends inside a single-occupancy zone).
+    /// </summary>
+    string? QueueEndpointCode = null);
 
 public sealed record SemanticPlanPose(double X, double Y, double Yaw);
 
@@ -495,6 +501,11 @@ public static class SemanticReservation
                 continue;
             }
 
+            var queue = z.TryGetProperty("queueEndpointCode", out var q) && q.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrWhiteSpace(q.GetString())
+                ? q.GetString()!.Trim()
+                : null;
+
             foreach (var ringEl in rings.EnumerateArray())
             {
                 var pts = new List<(double X, double Y)>();
@@ -510,7 +521,7 @@ public static class SemanticReservation
 
                 if (pts.Count >= 3)
                 {
-                    list.Add(new SemanticZonePoly(code, pts.ToImmutableArray()));
+                    list.Add(new SemanticZonePoly(code, pts.ToImmutableArray(), queue));
                 }
             }
         }

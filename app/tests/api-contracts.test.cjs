@@ -29,8 +29,8 @@ test('empty fleet and warehouse results remain empty and preserve BE totals', as
 test('unsupported BE commands cannot send a request or report success', async () => {
   let requests = 0;
   const load = modules(async () => { requests++; throw new Error('Unexpected network call'); });
-  for (const action of [() => load('src/shared/api/warehouseApi.ts').createContainer({ productId: 'product' }),
-    () => load('src/shared/api/executionApi.ts').acceptHumanTask('task')]) {
+  // acceptHumanTask is gone: /tasks/{id}/accept never existed; claiming is job-steps/{id}/claim (staff-parity tests).
+  for (const action of [() => load('src/shared/api/warehouseApi.ts').createContainer({ productId: 'product' })]) {
     await assert.rejects(async () => action(), error => error.status === 501 && error.code === 'backend_capability_unavailable');
   }
   assert.equal(requests, 0);

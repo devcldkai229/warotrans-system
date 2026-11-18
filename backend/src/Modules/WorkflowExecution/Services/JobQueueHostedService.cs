@@ -23,6 +23,9 @@ public sealed class JobQueueHostedService(
                     var care = scope.ServiceProvider.GetRequiredService<Features.RobotCare.RobotCareService>();
                     await care.RunNextMaintenanceAsync(stoppingToken).ConfigureAwait(false);
                     await care.ReturnIdleRobotsAsync(stoppingToken).ConfigureAwait(false);
+                    await care.YieldIdleBlockersAsync(stoppingToken).ConfigureAwait(false);
+                    await scope.ServiceProvider.GetRequiredService<Execution.JobExecutionEngine>()
+                        .ResolveDeadlocksAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

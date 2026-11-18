@@ -33,7 +33,8 @@ import { triggerHaptic } from '../../shared/utils/haptics';
 import { useRealtime } from '../../shared/realtime';
 import { getOperatingContext } from '../../shared/api/operatingContextApi';
 import { homeFleetOnMap } from './homeFleet';
-import { listJobs } from '../../shared/api';
+import { listJobs, localizeRobot } from '../../shared/api';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from '../jobs/jobData';
 import { HomeMapPanel } from './HomeMapPanel';
 import { dockReservedSpace } from '../../shared/theme/layout';
@@ -60,6 +61,10 @@ export function HomeScreen() {
   const styles = useThemedStyles(createStyles);
   const [peekSheetHeight, setPeekSheetHeight] = useState(0);
   const fleetQuery = useMapFleet(session?.id || '');
+  // robot.localize: tell a robot where it stands after power-on; the snapshot refresh shows LOCALIZED when it converged.
+  const onLocalizeRobot = sessionCan(session, PERMISSIONS.robotLocalize)
+    ? async (robotId: string, endpointId: string) => { await localizeRobot(robotId, endpointId); toast.success('Localize command accepted.'); void fleetQuery.refetch(); }
+    : undefined;
   const rawFleet = fleetQuery.robots;
   const [selectedRobotId, setSelectedRobotId] = useState<string>('');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
@@ -125,6 +130,7 @@ export function HomeScreen() {
         onOpenJobs={() => navigate('jobs')}
         fleet={rawFleet}
         updateMode={fleetQuery.updateMode}
+        onLocalizeRobot={onLocalizeRobot}
         selectedRobotId={selectedRobotId}
         onSelectRobot={(id) => {
           setSelectedRobotId(id);

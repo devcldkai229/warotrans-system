@@ -91,6 +91,11 @@ public interface ISegmentedTrafficCoordinator
 
     Task<TrafficOpResult> CancelRequestAsync(Guid robotId, Guid? requestId = null, CancellationToken ct = default);
 
+    /// <summary>Wait-for cycle: the robot keeps only what it stands on and gets no grant for a while (it gives way).</summary>
+    Task<TrafficOpResult> ReleaseUnenteredReservationAsync(
+        Guid robotId, double holdSeconds, string reason, CancellationToken ct = default) =>
+        Task.FromResult(TrafficOpResult.Fail("NOT_SUPPORTED"));
+
     Task<TrafficOpResult> MarkBlockedAsync(Guid robotId, string reason, CancellationToken ct = default);
 
     Task<TrafficOpResult> MarkOfflineAsync(Guid robotId, CancellationToken ct = default);

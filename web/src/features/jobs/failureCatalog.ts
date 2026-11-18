@@ -129,6 +129,20 @@ const CATALOG: Record<string, Entry> = {
     msg('Put the robot on the job\'s map in Fleet, or use another robot.'),
     'AFTER_FIX',
   ),
+  robot_reported_map_mismatch: entry(
+    msg('The robot runs another map'),
+    msg('The robot itself reports a different map bundle than the job\'s, so its coordinates would not match.'),
+    ['TECHNICIAN'],
+    msg('Restart the robot with the job\'s map bundle, or use another robot.'),
+    'AFTER_FIX',
+  ),
+  robot_faulted: entry(
+    msg('The robot reports a fault'),
+    msg('The robot sent an error code in its telemetry, so it takes no new work.'),
+    ['TECHNICIAN'],
+    msg('Check the robot and clear the fault, then run the job again.'),
+    'AFTER_FIX',
+  ),
   robot_not_available: entry(
     msg('The robot is not available'),
     msg('The robot is offline, disabled or busy.'),

@@ -76,7 +76,8 @@ public sealed class RobotControlService(
     IHttpContextAccessor httpContextAccessor,
     IAuditTrail audit,
     TimeProvider clock,
-    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null)
+    WaroTrans.Navigation.Contracts.INavigationModule? navigation = null,
+    WaroTrans.Fleet.Contracts.IRobotWorkQuery? work = null)
 {
     /// <summary>A lease is renewed by the client while the operator keeps driving; it lapses on its own otherwise.</summary>
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
@@ -287,6 +288,12 @@ public sealed class RobotControlService(
         if (robot.Status is RobotStatus.RESERVED or RobotStatus.EXECUTING || robot.CurrentCommandId is not null)
         {
             throw new ConflictException($"Robot {robot.Code} is working on a job; finish or cancel it first.", "robot_busy");
+        }
+
+        // Waiting at a stop for a person holds a job without a command.
+        if (work is not null && await work.HasActiveJobAsync(robotId, cancellationToken))
+        {
+            throw new ConflictException($"Robot {robot.Code} still holds a job; finish, cancel or move that job first.", "robot_has_active_job");
         }
 
         var now = clock.GetUtcNow();

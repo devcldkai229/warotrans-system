@@ -59,6 +59,7 @@ public static class FleetModule
         services.AddScoped<PutRobotInServiceHandler>();
         services.AddScoped<ChangeRobotMapHandler>();
         services.AddScoped<ProcessRobotHeartbeatHandler>();
+        services.AddScoped<Services.InFlightCommandAborter>();
         services.AddScoped<ProcessRobotTelemetryHandler>();
         services.Configure<Features.PoseHistory.RobotHistoryOptions>(configuration.GetSection(Features.PoseHistory.RobotHistoryOptions.SectionName));
         services.AddSingleton<Features.PoseHistory.RobotPoseTrail>();

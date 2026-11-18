@@ -1,4 +1,5 @@
 using NetArchTest.Rules;
+using WaroTrans.EvidenceBridge;
 using WaroTrans.Fleet;
 using WaroTrans.Identity;
 using WaroTrans.Navigation;
@@ -19,7 +20,8 @@ public class ModuleDependencyTests
         typeof(WorkflowExecutionModule).Assembly,
         typeof(FleetModule).Assembly,
         typeof(NavigationModule).Assembly,
-        typeof(OperationsModule).Assembly
+        typeof(OperationsModule).Assembly,
+        typeof(EvidenceBridgeModule).Assembly
     ];
 
     [Fact]
@@ -33,7 +35,8 @@ public class ModuleDependencyTests
             "WaroTrans.WorkflowExecution.Persistence",
             "WaroTrans.Fleet.Persistence",
             "WaroTrans.Navigation.Persistence",
-            "WaroTrans.Operations.Persistence"
+            "WaroTrans.Operations.Persistence",
+            "WaroTrans.EvidenceBridge.Persistence"
         };
 
         foreach (var assembly in ModuleAssemblies)

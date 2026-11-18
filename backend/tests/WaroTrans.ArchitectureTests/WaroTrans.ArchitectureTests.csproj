@@ -28,6 +28,10 @@
     <ProjectReference Include="..\..\src\Modules\Fleet\WaroTrans.Fleet.csproj" />
     <ProjectReference Include="..\..\src\Modules\Navigation\WaroTrans.Navigation.csproj" />
     <ProjectReference Include="..\..\src\Modules\Operations\WaroTrans.Operations.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EvidenceBridge\WaroTrans.EvidenceBridge.csproj" />
+    <ProjectReference Include="..\..\src\WaroTrans.Evidence\Shared\WaroTrans.Evidence.Shared.csproj" />
+    <ProjectReference Include="..\..\src\WaroTrans.Evidence\Recorder\WaroTrans.Evidence.Recorder.csproj" />
+    <ProjectReference Include="..\..\src\WaroTrans.Evidence\Worker\WaroTrans.Evidence.Worker.csproj" />
   </ItemGroup>
 
 </Project>

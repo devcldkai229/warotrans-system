@@ -24,6 +24,13 @@ export async function listRobots(params: { warehouseId?: string; isOnline?: bool
   return { items, total: items.length };
 }
 export function getRobot(id: string) { return apiFetch<RobotDto>(`/api/fleet/robots/${id}`); }
+/**
+ * Tells the robot it stands at `endpointId` of its map (an operator placed it there). 202 means the command was
+ * accepted; the robot reports LOCALIZED in localizationStatus once its pose estimate converged. Refused while it runs a command.
+ */
+export function localizeRobot(id: string, endpointId: string) {
+  return apiFetch<{ commandId: string }>(`/api/fleet/robots/${id}/commands/localize`, { method: 'POST', body: JSON.stringify({ endpointId }) });
+}
 export function cancelRobotCommand(id: string, reason?: string, targetCommandId?: string | null) {
   return apiFetch<{ commandId: string; targetCommandId: string; robotId: string; status: string }>(
     `/api/fleet/robots/${id}/commands/cancel`, { method: 'POST', body: JSON.stringify({ targetCommandId: targetCommandId ?? null, reason }) });

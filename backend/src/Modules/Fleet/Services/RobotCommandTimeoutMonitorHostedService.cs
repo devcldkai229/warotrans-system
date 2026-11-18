@@ -25,6 +25,14 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
     /// <summary>Time for the robot to cancel its goal at timeoutSeconds and get the RESULT back.</summary>
     private const double ResultGraceSeconds = 30;
 
+    /// <summary>
+    /// Seconds each in-flight NAVIGATE spent waiting for traffic behind a healthy robot. That wait is not the robot's
+    /// fault and does not count against its RESULT deadline (the gateway pauses its own timeoutSeconds the same way).
+    /// </summary>
+    private readonly Dictionary<Guid, double> _trafficWaitSeconds = [];
+
+    private DateTimeOffset? _lastTick;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -51,6 +59,51 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
                 break;
             }
         }
+    }
+
+    /// <summary>Adds this tick's time to every open NAVIGATE whose robot waits in traffic behind a healthy robot.</summary>
+    private async Task CountTrafficWaitsAsync(IServiceScope scope, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var elapsed = _lastTick is { } last ? Math.Clamp((utcNow - last).TotalSeconds, 0, 10) : 0;
+        _lastTick = utcNow;
+        var db = scope.ServiceProvider.GetRequiredService<FleetDbContext>();
+        var open = await db.RobotCommands.AsNoTracking()
+            .Where(c => c.Type == RobotCommandType.NAVIGATE_TO_POSE
+                        && (c.Status == RobotCommandStatus.ACKED || c.Status == RobotCommandStatus.RUNNING))
+            .Select(c => new { c.Id, c.RobotId })
+            .ToListAsync(cancellationToken);
+        foreach (var gone in _trafficWaitSeconds.Keys.Except(open.Select(c => c.Id)).ToList())
+        {
+            _trafficWaitSeconds.Remove(gone);
+        }
+
+        if (elapsed <= 0 || open.Count == 0
+            || scope.ServiceProvider.GetService<WaroTrans.Fleet.Traffic.ISegmentedTrafficCoordinator>() is not { } traffic)
+        {
+            return;
+        }
+
+        var waiting = TrafficWaiters(await traffic.GetTrafficSnapshotAsync(cancellationToken));
+        foreach (var command in open.Where(c => waiting.Contains(c.RobotId)))
+        {
+            _trafficWaitSeconds[command.Id] = _trafficWaitSeconds.GetValueOrDefault(command.Id) + elapsed;
+        }
+    }
+
+    /// <summary>
+    /// Robots waiting for space another robot holds (queued, or stopped at the end of a partial grant). A wait-for cycle
+    /// (DeadlockRisk) is not a healthy wait: it never ends by itself, so it keeps counting.
+    /// </summary>
+    public static HashSet<Guid> TrafficWaiters(WaroTrans.Fleet.Traffic.TrafficSnapshot snapshot)
+    {
+        var deadlock = WaroTrans.Fleet.Traffic.TrafficWaitingReason.DeadlockRisk;
+        var none = WaroTrans.Fleet.Traffic.TrafficWaitingReason.None;
+        var set = snapshot.Waits.Where(w => w.Reason != deadlock).Select(w => w.RobotId).ToHashSet();
+        set.UnionWith(snapshot.Robots
+            .Where(r => r.WaitingReason != none && r.WaitingReason != deadlock)
+            .Select(r => r.RobotId));
+        set.ExceptWith(snapshot.Robots.Where(r => r.WaitingReason == deadlock).Select(r => r.RobotId));
+        return set;
     }
 
     private async Task TickAsync(CancellationToken cancellationToken)
@@ -133,6 +186,7 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
         var resultTimeoutSec = options.CommandResultTimeoutSeconds;
         if (resultTimeoutSec > 0)
         {
+            await CountTrafficWaitsAsync(scope, utcNow, cancellationToken);
             var resultCutoff = utcNow - TimeSpan.FromSeconds(Math.Max(30, resultTimeoutSec));
             var overdue = await db.RobotCommands
                 .Where(c => c.Type == RobotCommandType.NAVIGATE_TO_POSE
@@ -141,7 +195,8 @@ public sealed class RobotCommandTimeoutMonitorHostedService(
                 .ToListAsync(cancellationToken);
             // The robot enforces a command's own timeoutSeconds: give it the time to do that and report.
             var missingResult = overdue.Where(c =>
-                    utcNow - c.AckedAt!.Value >= TimeSpan.FromSeconds(ResultDeadlineSeconds(c.PayloadJson, resultTimeoutSec)))
+                    utcNow - c.AckedAt!.Value >= TimeSpan.FromSeconds(
+                        ResultDeadlineSeconds(c.PayloadJson, resultTimeoutSec) + _trafficWaitSeconds.GetValueOrDefault(c.Id)))
                 .ToList();
 
             foreach (var command in missingResult)

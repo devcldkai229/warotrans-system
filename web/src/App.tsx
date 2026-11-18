@@ -24,6 +24,8 @@ import { MapEditorPage } from '@/features/maps/MapEditorPage'
 import { FleetPage } from '@/features/robots/FleetPage'
 import { RobotManualPage } from '@/features/robots/manual/RobotManualPage'
 import { RobotTechnicalPage } from '@/features/robots/technical/RobotTechnicalPage'
+import { JournalListPage } from '@/features/journals/JournalListPage'
+import { JournalByRequestRedirect, JournalReplayPage } from '@/features/journals/JournalReplayPage'
 import { TransportRequestsPage } from '@/features/transport-requests/TransportRequestsPage'
 import { WorkflowEditorPage } from '@/features/workflows/workflow-editor-page'
 import { WorkflowsListPage } from '@/features/workflows/workflows-list-page'
@@ -57,6 +59,9 @@ function App() {
                 <Route path="issues" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
                 <Route path="issues/:issueId" element={<Guard permission={PERMISSIONS.issueRead}><IssuesPage /></Guard>} />
                 <Route path="robot-history" element={<Guard permission={PERMISSIONS.robotRead}><RobotHistoryPage /></Guard>} />
+                <Route path="journals" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalListPage /></Guard>} />
+                <Route path="journals/by-request/:transportRequestId" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalByRequestRedirect /></Guard>} />
+                <Route path="journals/:journalId" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalReplayPage /></Guard>} />
                 <Route path="audit" element={<Guard permission={PERMISSIONS.auditRead}><AuditLogPage /></Guard>} />
                 <Route path="notifications" element={<Guard permission={PERMISSIONS.notificationRead}><NotificationsPage /></Guard>} />
                 <Route path="*" element={<Navigate to="/tech/fleet" replace />} />
@@ -74,6 +79,9 @@ function App() {
               <Route path="/monitor/requests" element={<Guard permission={PERMISSIONS.transportRead}><TransportRequestsPage /></Guard>} />
               <Route path="/monitor/jobs" element={<Guard permission={PERMISSIONS.jobRead}><JobsPage /></Guard>} />
               <Route path="/monitor/jobs/:jobId" element={<Guard permission={PERMISSIONS.jobRead}><JobDetailPage /></Guard>} />
+              <Route path="/monitor/journals" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalListPage /></Guard>} />
+              <Route path="/monitor/journals/by-request/:transportRequestId" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalByRequestRedirect /></Guard>} />
+              <Route path="/monitor/journals/:journalId" element={<Guard permission={PERMISSIONS.evidenceRead}><JournalReplayPage /></Guard>} />
               <Route path="/monitor/live" element={<Navigate to="/monitor/requests" replace />} />
               <Route path="/dashboard" element={<Guard permission={PERMISSIONS.statisticsRead}><DashboardPage /></Guard>} />
               <Route path="/configure/facility" element={<Guard permission={PERMISSIONS.mapRead}><FacilityPage /></Guard>} />

@@ -1,4 +1,5 @@
 using NetArchTest.Rules;
+using WaroTrans.EvidenceBridge;
 using WaroTrans.Fleet;
 using WaroTrans.Identity;
 using WaroTrans.Navigation;
@@ -19,7 +20,8 @@ public class HostDependencyTests
         typeof(WorkflowExecutionModule).Assembly,
         typeof(FleetModule).Assembly,
         typeof(NavigationModule).Assembly,
-        typeof(OperationsModule).Assembly
+        typeof(OperationsModule).Assembly,
+        typeof(EvidenceBridgeModule).Assembly
     ];
 
     [Fact]

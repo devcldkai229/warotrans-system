@@ -49,6 +49,7 @@ import { zoneColor, zoneLabel } from './mapPresentation';
 import { useMapCamera } from './hooks/useMapCamera';
 import { useMapEnvironment } from './hooks/useMapEnvironment';
 import { formatBattery } from '../formatBattery';
+import { RobotLocalizePanel } from './RobotLocalizePanel';
 
 interface Props {
   map:MapVersionDetailDto; robots:RobotResponse[]; selectedRobot:string; onSelectRobot:(code:string)=>void;
@@ -56,6 +57,8 @@ interface Props {
   updateMode?:MapUpdateMode;
   showHeader?:boolean;
   fullBleed?:boolean;
+  /** Given when the user may localize robots (robot.localize): adds "Localize Robot Here" to the robot panel. */
+  onLocalizeRobot?:(robotId:string,endpointId:string)=>Promise<void>;
 }
 type LayerKey='stations'|'labels'|'zones'|'lanes'|'grid'|'scan';
 
@@ -188,7 +191,7 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
   </View>;
 }
 
-function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
+function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
   const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const layerItems = useMemo(() => getLayerItems(colors, isDark), [colors, isDark]);
@@ -722,6 +725,10 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                   </Text>
                 </View>
               </View>
+
+              {onLocalizeRobot ? <RobotLocalizePanel key={robot.id} robotCode={robot.code} isOnline={robot.isOnline}
+                localizationStatus={robot.localizationStatus} mapVersionId={map.id} endpoints={map.endpoints}
+                onLocalize={endpointId => onLocalizeRobot(robot.id, endpointId)} /> : null}
 
               <View style={styles.detailActions}>
                 <Button

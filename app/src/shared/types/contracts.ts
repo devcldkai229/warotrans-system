@@ -492,6 +492,11 @@ export interface JobStepResponse {
   errorCode?: string | null;
   errorMessage?: string | null;
   handoverConfirmation?: HandoverConfirmationResponse | null;
+  /** WH-03 claim: who handles this waiting human step, and until when. */
+  claimedBy?: string | null;
+  claimedByName?: string | null;
+  claimExpiresAt?: UtcDateTime | null;
+  deadlineAt?: UtcDateTime | null;
 }
 
 export interface JobTaskContextValues {

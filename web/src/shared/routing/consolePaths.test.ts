@@ -42,3 +42,12 @@ describe('pathsFor', () => {
     expect(tech.translate('/monitor/requests')).toBeNull()
   })
 })
+
+describe('transport journals', () => {
+  it('exist in both portals and translate between them', () => {
+    expect(pathsFor('admin').journals('j1')).toBe('/monitor/journals/j1')
+    expect(pathsFor('tech').journals()).toBe('/tech/journals')
+    expect(pathsFor('tech').journalOfRequest('r1')).toBe('/tech/journals/by-request/r1')
+    expect(toTechRoute('/monitor/journals/j1?t=5')).toBe('/tech/journals/j1?t=5')
+  })
+})

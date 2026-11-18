@@ -19,10 +19,19 @@ public static class DispatchReasons
     public const string ContainerLimitExceeded = "robot_container_limit_exceeded";
     public const string LargerThanTrafficFootprint = "robot_larger_than_traffic_footprint";
 
+    /// <summary>The robot's own telemetry names another map than the Job's: it would drive on the wrong coordinates.</summary>
+    public const string ReportedMapMismatch = "robot_reported_map_mismatch";
+
+    /// <summary>The robot reports an error code in its telemetry.</summary>
+    public const string Faulted = "robot_faulted";
+
     /// <summary>Not a reason to refuse: the figures were missing, so the load could not be checked.</summary>
     public const string CapacityUnknown = "capacity_unknown";
 
     public static bool IsCapacity(string reason) => reason is PayloadExceeded or ContainerLimitExceeded or LargerThanTrafficFootprint;
+
+    /// <summary>What the robot itself reports makes it unsafe to send, whoever asks: never skipped, not even when a robot is named.</summary>
+    public static bool IsRobotReported(string reason) => reason is ReportedMapMismatch or Faulted;
 
     /// <summary>
     /// The only reasons an operator override (dispatch.override + a reason) may skip: the battery is not known to be
@@ -37,6 +46,9 @@ public sealed record DispatchQuery(Guid MapVersionId, double? PickupX, double? P
     /// <summary>FL-03: what the Job carries. Null weight = at least one Container has none on record.</summary>
     public int? ContainerCount { get; init; }
     public decimal? TotalWeightKg { get; init; }
+
+    /// <summary>Code of <see cref="MapVersionId"/> (MAP-ONE-V013), compared with the map the robot says it runs. Null = not compared.</summary>
+    public string? MapVersionCode { get; init; }
 }
 
 /// <summary>FL-03: the most any robot in service on a map can carry. Null when a robot has not declared it: nothing can be concluded then.</summary>

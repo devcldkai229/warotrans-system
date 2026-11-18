@@ -88,7 +88,7 @@ public static class RobotControlEndpoints
 
         group.MapPost("/robots/{id:guid}/commands/localize", async (Guid id, LocalizeRobotRequest request, RobotControlService control, CancellationToken ct) =>
                 Results.Accepted(null, new { commandId = await control.LocalizeAsync(id, request.EndpointId, ct) }))
-            .RequirePermission(Permissions.RobotCommand)
+            .RequirePermission(Permissions.RobotLocalize)
             .RequireRobotScope()
             .Audited("robot.localize_requested", "ROBOT", "id")
             .WithName("LocalizeRobot")

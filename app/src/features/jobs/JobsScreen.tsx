@@ -382,7 +382,7 @@ export function JobsScreen() {
         }
         ListHeaderComponent={jobsQuery.error && jobsQuery.data !== undefined ? <EmptyState compact tone="warning"
           title="Could Not Refresh Jobs" message="Showing the last loaded jobs. Refresh before acting on an old status."
-          actionTitle="Retry" onAction={() => { void refetch(); }} /> : null}
+          actionTitle="Retry" onAction={() => { void refetch(); }} /> : undefined}
         ListEmptyComponent={jobsQuery.data === undefined ? <EmptyState compact
           title={jobsQuery.error ? 'Jobs Unavailable' : jobsQuery.fetchStatus === 'paused' ? 'Waiting For Connection' : 'Loading Jobs…'}
           message={jobsQuery.error ? jobsQuery.error.message : 'The queue has not loaded yet.'}

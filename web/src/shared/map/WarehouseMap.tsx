@@ -51,6 +51,12 @@ export interface MapRobot {
  */
 export interface MapTrail {
   segments: Point[][]
+  /** Per-robot colour (replay); default: the movement-history colour. */
+  color?: string
+  /** A planned path (drawn dashed, thinner, no start/end marks). */
+  dashed?: boolean
+  /** Draw a faint link across the holes between segments (history). Off for evidence: a gap stays a gap. */
+  joinGaps?: boolean
 }
 
 export interface MapCallout {
@@ -577,9 +583,10 @@ export function WarehouseMap({
                 const first = segments[0][0]
                 const lastSegment = segments[segments.length - 1]
                 const last = lastSegment[lastSegment.length - 1]
+                const stroke = trail.color ?? MAP_TRAIL
                 return (
                   <g key={index}>
-                    {segments.slice(1).map((segment, gap) => {
+                    {(trail.joinGaps ?? true) && !trail.dashed && segments.slice(1).map((segment, gap) => {
                       const before = segments[gap][segments[gap].length - 1]
                       return (
                         <line
@@ -588,7 +595,7 @@ export function WarehouseMap({
                           y1={Y(before.y)}
                           x2={X(segment[0].x)}
                           y2={Y(segment[0].y)}
-                          stroke={MAP_TRAIL}
+                          stroke={stroke}
                           strokeWidth={0.14 * mark}
                           strokeDasharray={`${0.35 * mark} ${0.35 * mark}`}
                           opacity={0.45}
@@ -600,15 +607,20 @@ export function WarehouseMap({
                         key={part}
                         points={segment.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ')}
                         fill="none"
-                        stroke={MAP_TRAIL}
-                        strokeWidth={0.28 * mark}
+                        stroke={stroke}
+                        strokeWidth={(trail.dashed ? 0.16 : 0.28) * mark}
+                        strokeDasharray={trail.dashed ? `${0.5 * mark} ${0.4 * mark}` : undefined}
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        opacity={0.9}
+                        opacity={trail.dashed ? 0.75 : 0.9}
                       />
                     ))}
-                    <circle cx={X(first.x)} cy={Y(first.y)} r={0.45 * mark} fill={MAP_PAPER} stroke={MAP_TRAIL} strokeWidth={0.22 * mark} />
-                    <circle cx={X(last.x)} cy={Y(last.y)} r={0.45 * mark} fill={MAP_TRAIL} stroke={MAP_PAPER} strokeWidth={0.15 * mark} />
+                    {trail.dashed ? null : (
+                      <>
+                        <circle cx={X(first.x)} cy={Y(first.y)} r={0.45 * mark} fill={MAP_PAPER} stroke={stroke} strokeWidth={0.22 * mark} />
+                        <circle cx={X(last.x)} cy={Y(last.y)} r={0.45 * mark} fill={stroke} stroke={MAP_PAPER} strokeWidth={0.15 * mark} />
+                      </>
+                    )}
                   </g>
                 )
               })}

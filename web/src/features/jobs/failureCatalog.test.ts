@@ -19,7 +19,7 @@ const BACKEND_CODES = [
   'traffic_robot_unavailable', 'navigate_rejected', 'traffic_graph_unavailable', 'traffic_graph_in_use',
   'traffic_path_unavailable', 'traffic_grant_rejected', 'shadow_single_mover', 'traffic_nodes_unresolved', 'station_bay_unavailable',
   'robot_offline', 'robot_busy', 'robot_disabled', 'robot_in_maintenance', 'robot_in_manual_mode', 'robot_motion_held',
-  'robot_map_mismatch', 'robot_not_available', 'robot_not_localized', 'robot_telemetry_stale', 'robot_assigned_to_other_job',
+  'robot_map_mismatch', 'robot_reported_map_mismatch', 'robot_faulted', 'robot_not_available', 'robot_not_localized', 'robot_telemetry_stale', 'robot_assigned_to_other_job',
   'robot_not_at_home', 'robot_home_not_on_map', 'robot_required', 'job_plan_invalid', 'job_not_startable',
 ]
 

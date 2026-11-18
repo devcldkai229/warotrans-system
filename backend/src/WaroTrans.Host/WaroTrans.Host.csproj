@@ -9,6 +9,7 @@
     <ProjectReference Include="..\Modules\Fleet\WaroTrans.Fleet.csproj" />
     <ProjectReference Include="..\Modules\Warehouse\WaroTrans.Warehouse.csproj" />
     <ProjectReference Include="..\Modules\WorkflowExecution\WaroTrans.WorkflowExecution.csproj" />
+    <ProjectReference Include="..\Modules\EvidenceBridge\WaroTrans.EvidenceBridge.csproj" />
   </ItemGroup>
 
   <ItemGroup>

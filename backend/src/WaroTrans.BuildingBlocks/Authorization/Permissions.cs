@@ -59,6 +59,12 @@ public static class Permissions
     /// <summary>Send a navigation goal by hand.</summary>
     public const string RobotCommand = "robot.command";
 
+    /// <summary>
+    /// Tell a robot where it stands (LOCALIZE at a known endpoint) after it was switched on or moved by hand. Never makes
+    /// it move; floor staff need it to bring a robot into service without the right to send it anywhere.
+    /// </summary>
+    public const string RobotLocalize = "robot.localize";
+
     /// <summary>Stop / cancel what a robot is doing. Never implies the right to make it move.</summary>
     public const string RobotStop = "robot.stop";
     public const string RobotManualDrive = "robot.manual.drive";
@@ -79,6 +85,23 @@ public static class Permissions
     // Dashboards
     public const string StatisticsRead = "statistics.read";
 
+    // Evidence (Transport Journal, separate Recorder process: docs/adr/0012)
+
+    /// <summary>Open Transport Journals: runs, paths, events, recording health.</summary>
+    public const string EvidenceRead = "evidence.read";
+
+    /// <summary>Watch recorded camera video (a short-lived playback grant is audited).</summary>
+    public const string EvidencePlayback = "evidence.playback";
+
+    /// <summary>Add notes, bookmarks and root causes to a Journal.</summary>
+    public const string EvidenceAnnotate = "evidence.annotate";
+
+    /// <summary>Export an evidence packet (original clips, hashes, events, path).</summary>
+    public const string EvidenceExport = "evidence.export";
+
+    /// <summary>Issue robot recording credentials, read the access audit.</summary>
+    public const string EvidenceAdmin = "evidence.admin";
+
     public static IReadOnlyList<string> All { get; } =
     [
         UserManage, ConsoleAccess,
@@ -86,9 +109,10 @@ public static class Permissions
         WarehouseRead, WarehouseWrite, ContainerCreate, ContainerRecover, VoucherWrite,
         TransportRead, TransportCreate, TransportCancel, TransportReject,
         WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel, HumanTaskTakeover,
-        RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotStop, RobotManualDrive,
+        RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotLocalize, RobotStop, RobotManualDrive,
         RobotMaintenance, RobotPower, RobotDiagnostics, TrafficRead, TrafficManage, DispatchOverride,
         NotificationRead, IssueRead, IssueCreate, IssueManage, AuditRead,
-        StatisticsRead
+        StatisticsRead,
+        EvidenceRead, EvidencePlayback, EvidenceAnnotate, EvidenceExport, EvidenceAdmin
     ];
 }

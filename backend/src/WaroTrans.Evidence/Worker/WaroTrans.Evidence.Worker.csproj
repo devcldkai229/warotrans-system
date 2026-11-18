@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Evidence Worker (docs/adr/0012): queue consumers (segment ingest, MediaConvert submission and results),
+    reconciliation and the outbox publisher. Deployed and scaled on its own; never migrates the database and never
+    references the Recorder. Exposes only /health on an internal port.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WaroTrans.Evidence.Worker</RootNamespace>
+    <UserSecretsId>warotrans-evidence-worker</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\WaroTrans.Evidence.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.400" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WaroTrans.Evidence.UnitTests" />
+    <InternalsVisibleTo Include="WaroTrans.Evidence.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

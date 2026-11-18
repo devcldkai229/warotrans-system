@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   transportRead: 'tr.read',
   transportCreate: 'tr.create',
   transportCancel: 'tr.cancel',
+  transportReject: 'tr.reject',
   workflowRead: 'workflow.read',
   jobRead: 'job.read',
   jobOperate: 'job.operate',
@@ -20,6 +21,8 @@ export const PERMISSIONS = {
   jobPause: 'job.pause',
   robotRead: 'robot.read',
   robotStop: 'robot.stop',
+  /** LOCALIZE at a known endpoint; never makes the robot move. */
+  robotLocalize: 'robot.localize',
   robotManualDrive: 'robot.manual.drive',
   notificationRead: 'notification.read',
   issueCreate: 'issue.create',

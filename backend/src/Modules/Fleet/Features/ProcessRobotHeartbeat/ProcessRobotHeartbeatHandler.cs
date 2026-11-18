@@ -13,7 +13,8 @@ public sealed class ProcessRobotHeartbeatHandler(
     IRobotRealtimeNotifier realtimeNotifier,
     IIntegrationEventPublisher eventPublisher,
     Traffic.TrafficShadowObserver? trafficShadow,
-    ILogger<ProcessRobotHeartbeatHandler> logger)
+    ILogger<ProcessRobotHeartbeatHandler> logger,
+    Services.InFlightCommandAborter? inFlightAborter = null)
 {
     public async Task HandleAsync(RobotHeartbeatMessage message, CancellationToken cancellationToken)
     {
@@ -105,8 +106,21 @@ public sealed class ProcessRobotHeartbeatHandler(
         }
         else if (previousBootId is not null && previousBootId != bootId)
         {
-            // A restart quicker than the heartbeat timeout never went offline, but the gateway forgot its armed button.
+            // A restart quicker than the heartbeat timeout (or while the Host was down) never went offline, but the
+            // gateway forgot its armed button and every command it was running: end those like an offline robot's.
             logger.LogInformation("Robot {RobotCode} gateway restarted (new bootId)", robot.Code);
+            if (inFlightAborter is not null)
+            {
+                var tracked = await db.Robots.FirstAsync(r => r.Id == robot.Id, cancellationToken);
+                var aborted = await inFlightAborter.AbortAsync(
+                    tracked, Services.InFlightCommandAborter.RobotRestarted, utcNow, cancellationToken, resetStaleExecuting: true);
+                await db.SaveChangesAsync(cancellationToken);
+                if (aborted > 0)
+                {
+                    logger.LogWarning("Robot {RobotCode} restarted: {Count} in-flight command(s) aborted", robot.Code, aborted);
+                }
+            }
+
             await eventPublisher.PublishAsync(new RobotGatewayRestarted(robot.Id, robot.Code), cancellationToken);
         }
         else

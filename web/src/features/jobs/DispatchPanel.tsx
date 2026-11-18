@@ -19,6 +19,8 @@ const REASON_TEXT: Record<string, string> = {
   robot_motion_held: t('Stopped (holding motion)'),
   robot_in_manual_mode: t('Driven by hand'),
   robot_map_mismatch: t('On another map'),
+  robot_reported_map_mismatch: t('Runs another map bundle'),
+  robot_faulted: t('Reports a fault'),
   robot_not_localized: t('Not localized'),
   robot_busy: t('Running another job'),
   battery_low: t('Battery below dispatch minimum'),

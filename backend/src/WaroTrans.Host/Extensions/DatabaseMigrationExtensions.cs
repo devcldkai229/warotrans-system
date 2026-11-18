@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
+using WaroTrans.EvidenceBridge.Persistence;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Identity;
 using WaroTrans.Identity.Persistence;
@@ -35,6 +36,7 @@ public static class DatabaseMigrationExtensions
         await MigrateAsync<WorkflowExecutionDbContext>(sp, logger);
         await MigrateAsync<FleetDbContext>(sp, logger);
         await MigrateAsync<NavigationDbContext>(sp, logger);
+        await MigrateAsync<EvidenceBridgeDbContext>(sp, logger);
 
         logger.LogInformation("Seeding Development accounts...");
         await sp.SeedIdentityDevelopmentDataAsync();

@@ -107,6 +107,25 @@ export interface TransportStatusEvent {
   occurredAt: string;
 }
 
+/** "robotHealthUpdated" (SignalRRobotRealtimeNotifier): the robot's overall health changed (OK / WARNING / CRITICAL …). */
+export interface RobotHealthEvent {
+  robotId: string;
+  robotCode: string;
+  overall: string;
+}
+
+/** "trafficUpdated" (SignalRTrafficRealtimeNotifier): a grant, wait or release for a robot / job (the reason says why it waits). */
+export interface TrafficUpdatedEvent {
+  eventType: string;
+  robotId?: string | null;
+  jobId?: string | null;
+  jobStepId?: string | null;
+  resourceId?: string | null;
+  segmentEdgeIds?: string[] | null;
+  reason?: string | null;
+  occurredAt: string;
+}
+
 export type RealtimeEventHandler<T> = (data: T) => void;
 
 class RealtimeClient {
@@ -118,6 +137,8 @@ class RealtimeClient {
   private notificationListeners = new Set<RealtimeEventHandler<LiveNotificationEvent>>();
   private transportStatusListeners = new Set<RealtimeEventHandler<TransportStatusEvent>>();
   private jobUpdatedListeners = new Set<RealtimeEventHandler<JobUpdatedRealtimeEvent>>();
+  private healthListeners = new Set<RealtimeEventHandler<RobotHealthEvent>>();
+  private trafficListeners = new Set<RealtimeEventHandler<TrafficUpdatedEvent>>();
   private connectionStateListeners = new Set<(connected: boolean) => void>();
 
   public get isConnected(): boolean {
@@ -180,6 +201,14 @@ class RealtimeClient {
 
       conn.on('jobUpdated', (data: JobUpdatedRealtimeEvent) => {
         this.jobUpdatedListeners.forEach((fn) => fn(data));
+      });
+
+      conn.on('robotHealthUpdated', (data: RobotHealthEvent) => {
+        this.healthListeners.forEach((fn) => fn(data));
+      });
+
+      conn.on('trafficUpdated', (data: TrafficUpdatedEvent) => {
+        this.trafficListeners.forEach((fn) => fn(data));
       });
 
       conn.onreconnecting(() => {
@@ -252,6 +281,16 @@ class RealtimeClient {
   public onJobUpdated(fn: RealtimeEventHandler<JobUpdatedRealtimeEvent>): () => void {
     this.jobUpdatedListeners.add(fn);
     return () => this.jobUpdatedListeners.delete(fn);
+  }
+
+  public onHealthUpdated(fn: RealtimeEventHandler<RobotHealthEvent>): () => void {
+    this.healthListeners.add(fn);
+    return () => this.healthListeners.delete(fn);
+  }
+
+  public onTrafficUpdated(fn: RealtimeEventHandler<TrafficUpdatedEvent>): () => void {
+    this.trafficListeners.add(fn);
+    return () => this.trafficListeners.delete(fn);
   }
 
   public onConnectionStateChange(fn: (connected: boolean) => void): () => void {

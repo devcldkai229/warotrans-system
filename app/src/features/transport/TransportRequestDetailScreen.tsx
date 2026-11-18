@@ -1,15 +1,22 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowDown, Box, ChevronRight, MapPin, Truck } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
-import { getTransportRequest, getWorkflow, listJobSummaries, listRobots } from '../../shared/api';
+import {
+  cancelTransportRequest, getTransportRequest, getUserErrorMessage, getWorkflow, isActionAllowed, listJobSummaries, listRobots,
+  queueTransportRequest, rejectTransportRequest,
+} from '../../shared/api';
+import { useAuth } from '../auth/authContext';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
+import { toast } from '../../shared/context/ToastContext';
+import { startQueuedJobs } from './startQueuedJobs';
 import { useRealtime } from '../../shared/realtime';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { radii } from '../../shared/theme/radii';
-import { Button, Card, ProgressMeter, ScreenHeader, StatusPill, Text } from '../../shared/ui';
+import { Button, Card, ProgressMeter, ReasonSheet, ScreenHeader, StatusPill, Text } from '../../shared/ui';
 import { transportDate, transportRequestProgress } from './transportRequestData';
 
 export function TransportRequestDetailScreen() {
@@ -54,6 +61,36 @@ export function TransportRequestDetailScreen() {
 
   const refresh = () => { void request.refetch(); void jobs.refetch(); };
   const data = request.data;
+  const { session } = useAuth();
+  const [sheet, setSheet] = useState<'cancel' | 'reject' | null>(null);
+  const [busy, setBusy] = useState<'queue' | 'start' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const canStartJobs = sessionCan(session, PERMISSIONS.jobOperate);
+  // Jobs planned but not started yet (queued without "start right away", or a start that found no free robot).
+  const unstarted = (jobs.data?.items || []).filter(job => job.status === 'CREATED' || job.status === 'QUEUED');
+  const afterAction = () => {
+    void queryClient.invalidateQueries({ queryKey: requestKey });
+    void queryClient.invalidateQueries({ queryKey: jobsKey });
+    void queryClient.invalidateQueries({ queryKey: ['transport-requests'] });
+  };
+  const queue = async () => {
+    if (busy || !data) return;
+    setBusy('queue'); setActionError(null);
+    try { await queueTransportRequest(data.id); toast.success(`${data.requestCode} queued.`); afterAction(); }
+    catch (failure) { setActionError(getUserErrorMessage(failure, 'The request could not be queued.')); }
+    finally { setBusy(null); }
+  };
+  const startOnRobot = async () => {
+    if (busy || !unstarted.length) return;
+    setBusy('start'); setActionError(null);
+    try {
+      const results = await startQueuedJobs(unstarted.map(job => ({ jobId: job.id, jobNo: job.jobNo })));
+      const failed = results.filter(item => item.error);
+      results.filter(item => !item.error).forEach(item => toast.success(`${item.jobNo} started${item.robot ? ` on ${item.robot}` : ''}.`));
+      if (failed.length) setActionError(failed.map(item => `${item.jobNo}: ${item.error}`).join(' · '));
+      afterAction();
+    } finally { setBusy(null); }
+  };
   const progress = transportRequestProgress(data?.details || []);
 
   return (
@@ -74,6 +111,18 @@ export function TransportRequestDetailScreen() {
           refreshControl={<RefreshControl refreshing={request.isRefetching || jobs.isRefetching} onRefresh={refresh} tintColor={colors.primary} />}
         >
           {request.isError ? <Card><Text variant="body" color={colors.dangerText}>Request could not be refreshed. Showing the last loaded data.</Text><Button title="Retry" variant="outline" onPress={refresh} /></Card> : null}
+
+          {/* BOTH-04: the buttons follow the server's availableActions for this user, as on the web console. */}
+          {isActionAllowed(data, 'QUEUE') || (canStartJobs && unstarted.length > 0) || isActionAllowed(data, 'CANCEL') || isActionAllowed(data, 'REJECT') ? (
+            <Card gap={10}>
+              {isActionAllowed(data, 'QUEUE') ? <Button title="Queue Request" onPress={queue} loading={busy === 'queue'} disabled={!!busy} fullWidth /> : null}
+              {canStartJobs && unstarted.length > 0 ? <Button title={unstarted.length > 1 ? `Start ${unstarted.length} Jobs On Robots` : 'Start On Robot'}
+                onPress={startOnRobot} loading={busy === 'start'} disabled={!!busy} fullWidth /> : null}
+              {isActionAllowed(data, 'CANCEL') ? <Button title="Cancel Request" variant="outline" onPress={() => setSheet('cancel')} disabled={!!busy} fullWidth /> : null}
+              {isActionAllowed(data, 'REJECT') ? <Button title="Reject Request" variant="outline" onPress={() => setSheet('reject')} disabled={!!busy} fullWidth /> : null}
+              {actionError ? <Text variant="body" color={colors.dangerText}>{actionError}</Text> : null}
+            </Card>
+          ) : null}
 
           <Card gap={12}>
             <StatusPill status={data.status} dot />
@@ -141,6 +190,14 @@ export function TransportRequestDetailScreen() {
           ) : null}
         </ScrollView>
       )}
+      {sheet === 'cancel' && data ? <ReasonSheet title="Cancel Request" danger required confirmTitle="Cancel Request"
+        message="Its Jobs stop. Containers not picked up stay where they are; cargo already on a robot keeps the request Cancelling until it is unloaded."
+        onClose={() => setSheet(null)}
+        onSubmit={async reason => { await cancelTransportRequest(data.id, reason); setSheet(null); toast.success(`${data.requestCode} cancelled.`); afterAction(); }} /> : null}
+      {sheet === 'reject' && data ? <ReasonSheet title="Reject Request" danger required confirmTitle="Reject Request"
+        message="Only before any of its Jobs ran. The requester is notified with your reason."
+        onClose={() => setSheet(null)}
+        onSubmit={async reason => { await rejectTransportRequest(data.id, reason); setSheet(null); toast.success(`${data.requestCode} rejected.`); afterAction(); }} /> : null}
     </View>
   );
 }

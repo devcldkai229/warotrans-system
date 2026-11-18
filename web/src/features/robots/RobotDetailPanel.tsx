@@ -404,7 +404,7 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
   const status = shownRobotStatus(robot)
   const [actionError, setActionError] = useState<string | null>(null)
   const [localizing, setLocalizing] = useState(false)
-  const mayCommand = canActOnRobot(capabilities, PERMISSIONS.robotCommand, robot.id)
+  const mayLocalize = canActOnRobot(capabilities, PERMISSIONS.robotLocalize, robot.id)
   const navigationState = robot.telemetry?.navigationState
 
   const enableMutation = useMutation({
@@ -484,7 +484,7 @@ export function RobotDetailPanel({ robot, onBack, onManual, onTechnical }: Robot
               disabled={
                 Boolean(action.unavailable) ||
                 (action.id === 'manual' && (!onManual || !mayDrive)) ||
-                (action.id === 'localize' && (!mayCommand || !robot.isOnline)) ||
+                (action.id === 'localize' && (!mayLocalize || !robot.isOnline)) ||
                 (action.id === 'technical' && (!onTechnical || !mayDiagnose))
               }
               title={

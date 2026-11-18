@@ -518,4 +518,56 @@ public class SemanticTrafficScenarioTests
         Assert.Null(View(s, _r3).Authority);
         AssertNoSharedResource(s);
     }
+
+    // ------------------------------------------------------------------ parked robots
+
+    [Fact]
+    public void Two_robots_parked_0_85_m_apart_both_seed_and_hold_only_their_body()
+    {
+        var s = NewState();
+        // RBT-001 / RBT-002 homes on MAP-ONE-V013 are 0.85 m apart. A parked robot holds its body + localization
+        // margin (~0.29 m), not the ~0.45 m a driving robot reserves around its path.
+        Assert.True(s.MarkOnline(_r1, 0.0, 0.0, true).Ok);
+        Assert.True(s.MarkOnline(_r2, 0.85, 0.0, true).Ok);
+        Assert.NotEmpty(View(s, _r1).OccupiedResourceIds);
+        Assert.NotEmpty(View(s, _r2).OccupiedResourceIds);
+        Assert.Empty(View(s, _r1).OccupiedResourceIds.Intersect(View(s, _r2).OccupiedResourceIds));
+    }
+
+    [Fact]
+    public void Waiting_behind_a_robot_counts_as_a_traffic_wait_and_a_wait_for_cycle_does_not()
+    {
+        var s = NewState();
+        Assert.True(s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, Line(2.5, 0, 6.5, 0))).Granted);
+        var queued = s.AcquireSemanticPlan(Plan(_r2, _cmd2, 1, Line(8.5, 0, 4.5, 0)));
+        Assert.True(queued.Queued);
+
+        var waiters = WaroTrans.Fleet.Services.RobotCommandTimeoutMonitorHostedService.TrafficWaiters(s.Snapshot());
+
+        Assert.Contains(_r2, waiters);
+        Assert.DoesNotContain(_r1, waiters);
+    }
+
+    [Fact]
+    public void Giving_way_in_a_cycle_frees_what_was_granted_but_not_entered_and_holds_grants_for_a_while()
+    {
+        var s = NewState();
+        Assert.True(s.MarkOnline(_r1, 0.0, 0.0, true).Ok);
+        var grant = s.AcquireSemanticPlan(Plan(_r1, _cmd1, 1, Line(0, 0, 4, 0)));
+        Assert.True(grant.Granted);
+        var before = View(s, _r1).OccupiedResourceIds.Length;
+
+        Assert.True(s.ReleaseUnenteredReservation(_r1, 5, "test").Ok);
+
+        var view = View(s, _r1);
+        Assert.Null(view.Authority);
+        Assert.True(view.OccupiedResourceIds.Length < before);
+        Assert.Contains("cell:0:0", view.OccupiedResourceIds);                // it still holds where it stands
+        Assert.DoesNotContain(view.OccupiedResourceIds, r => r.StartsWith("cell:12:", StringComparison.Ordinal)); // 3 m ahead freed
+        var held = s.AcquireSemanticPlan(Plan(_r1, _cmd1, 2, Line(0, 0, 4, 0)));
+        Assert.False(held.Granted);
+
+        _clock.Advance(TimeSpan.FromSeconds(6));
+        Assert.True(s.AcquireSemanticPlan(Plan(_r1, _cmd1, 3, Line(0, 0, 4, 0))).Granted);
+    }
 }

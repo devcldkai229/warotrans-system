@@ -70,7 +70,11 @@ export interface TransportRequestDetailItem extends TransportRequestDetailRespon
   destinationEndpointCode: string | null;
   destinationEndpointName: string | null;
 }
+/** BOTH-04: what the server allows on this request now, for this user (the same list the web console reads). */
+export type TransportRequestAction = 'QUEUE' | 'CANCEL' | 'REJECT';
+export interface ActionAvailability<A extends string = string> { action: A; allowed: boolean; reason?: string | null }
 export interface TransportRequestResponse extends CreateTransportRequestResponse {
+  availableActions?: ActionAvailability<TransportRequestAction>[];
   queuedAt: string | null;
   completedAt: string | null;
   failureCode: string | null;
@@ -149,6 +153,20 @@ export function createTransportRequest(body: CreateTransportRequestBody) {
 }
 export function queueTransportRequest(id: string) {
   return apiFetch<QueueTransportRequestResponse>(`/api/transportation/transport-requests/${id}/queue`, { method: 'POST' });
+}
+/**
+ * Cancels the request and its Jobs (idempotent; a reason is required: 400 reason_required). Cargo already on a robot keeps
+ * the request CANCELLING until it is unloaded.
+ */
+export function cancelTransportRequest(id: string, reason: string) {
+  return apiFetch<TransportRequestResponse>(`/api/transportation/transport-requests/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+/** Refuses a request before any of its Jobs ran (supervisor right); the requester is notified. */
+export function rejectTransportRequest(id: string, reason: string) {
+  return apiFetch<TransportRequestResponse>(`/api/transportation/transport-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+export function isActionAllowed(request: Pick<TransportRequestResponse, 'availableActions'> | null | undefined, action: TransportRequestAction) {
+  return Boolean(request?.availableActions?.some(item => item.action === action && item.allowed));
 }
 export async function getTransportRequest(id: string) {
   const response = await apiFetch<TransportRequestResponse>(`/api/transportation/transport-requests/${id}`);

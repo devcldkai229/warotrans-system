@@ -22,6 +22,7 @@ env:
   ConnectionStrings__MongoDB: mongodb://warotrans:warotrans@localhost:27017/?authSource=admin
   Mongo__ConnectionString: mongodb://warotrans:warotrans@localhost:27017/?authSource=admin
   Mongo__DatabaseName: warotrans_operations_test
+  ConnectionStrings__EvidenceTest: Host=localhost;Port=5432;Database=warotrans_evidence_test;Username=warotrans;Password=warotrans
 
 jobs:
   integration:
@@ -94,6 +95,10 @@ jobs:
           update src/Modules/WorkflowExecution/WaroTrans.WorkflowExecution.csproj WorkflowExecutionDbContext
           update src/Modules/Fleet/WaroTrans.Fleet.csproj FleetDbContext
           update src/Modules/Navigation/WaroTrans.Navigation.csproj NavigationDbContext
+          update src/Modules/EvidenceBridge/WaroTrans.EvidenceBridge.csproj EvidenceBridgeDbContext
+          # Evidence has its own database and is migrated by the Recorder only (docs/adr/0012).
+          echo "=== Migrating EvidenceDbContext ==="
+          ConnectionStrings__Evidence="$ConnectionStrings__EvidenceTest" dotnet ef database update             --project src/WaroTrans.Evidence/Recorder/WaroTrans.Evidence.Recorder.csproj             --startup-project src/WaroTrans.Evidence/Recorder/WaroTrans.Evidence.Recorder.csproj             --context EvidenceDbContext
 
       - name: Build backend
         working-directory: backend
@@ -110,6 +115,12 @@ jobs:
       - name: Integration tests
         working-directory: backend
         run: dotnet test tests/WaroTrans.IntegrationTests/WaroTrans.IntegrationTests.csproj -c Release --no-build --verbosity normal
+
+      - name: Evidence tests
+        working-directory: backend
+        run: |
+          dotnet test tests/WaroTrans.Evidence.UnitTests/WaroTrans.Evidence.UnitTests.csproj -c Release --no-build --verbosity normal
+          dotnet test tests/WaroTrans.Evidence.IntegrationTests/WaroTrans.Evidence.IntegrationTests.csproj -c Release --no-build --verbosity normal
 
       - name: Web lint/typecheck/build
         working-directory: web

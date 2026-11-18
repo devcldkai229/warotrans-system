@@ -37,9 +37,21 @@ public static class ZonePolicyValidator
 
         switch (zoneType)
         {
+            case ZoneType.SINGLE_OCCUPANCY:
+                // Optional queue point: a robot sent into the area while another robot is in it waits there first.
+                if (policy?.RootElement is { ValueKind: JsonValueKind.Object } root
+                    && root.TryGetProperty("queueEndpointCode", out var queue)
+                    && (queue.ValueKind != JsonValueKind.String
+                        || !(queue.GetString() ?? "").StartsWith("EP-", StringComparison.Ordinal)))
+                {
+                    throw new DomainValidationException(
+                        "queueEndpointCode must be the code of an endpoint (EP-...).", "zone_policy_invalid");
+                }
+
+                break;
+
             case ZoneType.KEEP_OUT:
             case ZoneType.NO_STOP:
-            case ZoneType.SINGLE_OCCUPANCY:
             case ZoneType.JUNCTION:
                 // No extra policy required. SINGLE_OCCUPANCY is the occupancy lock itself.
                 break;

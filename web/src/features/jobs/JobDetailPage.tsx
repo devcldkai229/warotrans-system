@@ -6,6 +6,7 @@ import { ApiError } from '@/shared/api/client'
 import { getRobot, getRobotPoseHistory } from '@/shared/api/fleet'
 import { pathOnMap, trailSegments } from '@/features/robots/history/pathModel'
 import { useAuth } from '@/features/auth/authContext'
+import { Can } from '@/features/auth/RequirePermission'
 import { PERMISSIONS } from '@/shared/auth/permissions'
 import {
   claimJobStep,
@@ -339,6 +340,13 @@ function StepRow({
             </>
           ) : null}
 
+          {areaQueue(step) ? (
+            <p className="mt-3 rounded-sm bg-surface px-3 py-2 text-xs text-ink-2">
+              {t('Waiting at the queue point: only one robot at a time in {area}.', { area: areaQueue(step)!.area })}
+              {areaQueue(step)!.detail ? <span className="text-muted">{' '}({areaQueue(step)!.detail})</span> : null}
+            </p>
+          ) : null}
+
           {step.errorMessage ? (
             <p className="mt-3 rounded-sm bg-surface px-3 py-2 text-xs text-red-ink">
               {step.errorCode ? <b className="font-medium">{failureTitle(step.errorCode)}{': '}</b> : null}
@@ -349,6 +357,17 @@ function StepRow({
       ) : null}
     </div>
   )
+}
+
+/** A MOVE that waits for its one-robot area (backend output waitingFor = "area_queue:<zone> (<why>)"). */
+function areaQueue(step: { status: string; outputValues: Record<string, unknown> }) {
+  const waiting = step.outputValues.waitingFor
+  if (step.status !== 'WAITING' || typeof waiting !== 'string' || !waiting.startsWith('area_queue:')) return null
+  const rest = waiting.slice('area_queue:'.length)
+  const open = rest.indexOf(' (')
+  const area = (open >= 0 ? rest.slice(0, open) : rest).replace(/^ZONE-AREA-/, '').replace(/^ZONE-/, '')
+  const detail = open >= 0 ? rest.slice(open + 2).replace(/\)$/, '') : ''
+  return { area, detail }
 }
 
 function allSteps(job: JobDetailDto) {
@@ -364,7 +383,8 @@ export function JobDetailPage() {
   const { jobId = null } = useParams()
   const navigate = useNavigate()
   // The Technician portal has no job list or request screen: there the way back is the screen the job was opened from.
-  const inTechPortal = usePaths().portal === 'tech'
+  const paths = usePaths()
+  const inTechPortal = paths.portal === 'tech'
   const queryClient = useQueryClient()
   const [livePose, setLivePose] = useState<{ robotId: string; x: number; y: number; yaw: number } | null>(null)
 
@@ -543,6 +563,13 @@ export function JobDetailPage() {
                 {job.status}
               </StatusBadge>
               {waiting ? <StatusBadge tone="amber">{t('Step waiting')}</StatusBadge> : null}
+              {requestId ? (
+                <Can permission={PERMISSIONS.evidenceRead}>
+                  <Link to={paths.journalOfRequest(requestId)} className={buttonClass({ variant: 'outline', size: 'sm' })}>
+                    {t('Open the transport journal')}
+                  </Link>
+                </Can>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">

@@ -29,6 +29,7 @@ export const PERMISSIONS = {
   robotManage: 'robot.manage',
   robotConfigure: 'robot.configure',
   robotCommand: 'robot.command',
+  robotLocalize: 'robot.localize',
   robotStop: 'robot.stop',
   robotManualDrive: 'robot.manual.drive',
   robotMaintenance: 'robot.maintenance',
@@ -43,6 +44,11 @@ export const PERMISSIONS = {
   issueManage: 'issue.manage',
   auditRead: 'audit.read',
   statisticsRead: 'statistics.read',
+  evidenceRead: 'evidence.read',
+  evidencePlayback: 'evidence.playback',
+  evidenceAnnotate: 'evidence.annotate',
+  evidenceExport: 'evidence.export',
+  evidenceAdmin: 'evidence.admin',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]

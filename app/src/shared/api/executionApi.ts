@@ -24,7 +24,6 @@ export interface HandoverConfirmRequest {
 }
 export type ConfirmHandoverBody = HandoverConfirmationBody;
 export type ConfirmHandoverResponse = HandoverConfirmationResponse;
-export interface AcceptTaskResponse { taskId: string; status: string; assignedStaffId: string; acceptedAt: string }
 const text = (value: unknown) => typeof value === 'string' ? value : '';
 const optional = async <T>(operation: Promise<T>): Promise<T | null> => operation.catch(() => null);
 
@@ -152,12 +151,47 @@ export async function confirmHandover(stepId: string, body?: HandoverConfirmatio
 export async function confirmHandover(requestOrId: HandoverConfirmRequest | string, body?: HandoverConfirmationBody): Promise<JobDetailResponse> {
   const request = typeof requestOrId === 'string'
     ? { jobStepId: requestOrId, containerId: body?.containerId, note: body?.note } : requestOrId;
+  const confirmBody = handoverConfirmBody(request);
   const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${request.jobStepId}/confirm`, {
-    method: 'POST', body: JSON.stringify({
-      containerId: request.containerId || request.scannedContainerBarcode || null, note: request.note || request.notes || null,
-    }),
+    method: 'POST', body: JSON.stringify(confirmBody),
   });
   return (await hydrateJobs([response]))[0];
+}
+const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+/**
+ * ConfirmJobStepRequest(Guid? ContainerId, string? Note, string? ScannedBarcode): only a UUID goes into containerId (a
+ * raw barcode there fails JSON binding with 400); what was scanned travels as scannedBarcode and the server compares it.
+ */
+export function handoverConfirmBody(request: HandoverConfirmRequest) {
+  const id = [request.containerId, request.scannedContainerBarcode].find(value => typeof value === 'string' && UUID.test(value)) || null;
+  const scanned = typeof request.scannedContainerBarcode === 'string' && request.scannedContainerBarcode.trim()
+    && !UUID.test(request.scannedContainerBarcode) ? request.scannedContainerBarcode.trim() : null;
+  return { containerId: id, note: request.note || request.notes || null, scannedBarcode: scanned };
+}
+/** WH-03: take a waiting human step (or extend your claim). 409 human_task_claimed when someone else holds it. */
+export async function claimJobStep(stepId: string): Promise<JobDetailResponse> {
+  requireMobileCapability('claimHumanTask');
+  return (await hydrateJobs([await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${stepId}/claim`, { method: 'POST' })]))[0];
+}
+export async function releaseJobStep(stepId: string): Promise<JobDetailResponse> {
+  requireMobileCapability('claimHumanTask');
+  return (await hydrateJobs([await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${stepId}/release`, { method: 'POST' })]))[0];
+}
+/** job.takeover: take a step someone else holds; the reason is recorded. */
+export async function takeOverJobStep(stepId: string, reason: string): Promise<JobDetailResponse> {
+  requireMobileCapability('claimHumanTask');
+  return (await hydrateJobs([await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${stepId}/takeover`, {
+    method: 'POST', body: JSON.stringify({ reason }),
+  })]))[0];
+}
+export type HandoverBatchOutcome = 'confirmed' | 'already_confirmed' | 'mismatch' | 'not_reached' | 'refused';
+export interface HandoverBatchResult { containerId: string; jobStepId: string | null; outcome: HandoverBatchOutcome; code: string | null }
+/** APP-OPS-02: confirms every handover of this stop at once; partial by design, each container has its own result. */
+export async function confirmHandoverBatch(jobId: string, type: 'PICKUP' | 'DROPOFF', containerIds: string[], note?: string | null) {
+  const response = await apiFetch<{ results: HandoverBatchResult[]; job: RuntimeJob }>(`/api/workflow-execution/jobs/${jobId}/handover/confirm-batch`, {
+    method: 'POST', body: JSON.stringify({ type, containerIds, note: note ?? null }),
+  });
+  return { results: response.results, job: (await hydrateJobs([response.job]))[0] };
 }
 /** WH-10: the container of this waiting handover cannot go on; the Job continues with the others. */
 export async function failJobContainer(stepId: string, containerId: string, reason: string) {
@@ -168,10 +202,6 @@ export async function failJobContainer(stepId: string, containerId: string, reas
 }
 export function confirmJobStep(stepId: string, containerId: string | null, note?: string | null) {
   return confirmHandover({ jobStepId: stepId, containerId, note });
-}
-export function acceptHumanTask(taskId: string, _staffId?: string): Promise<AcceptTaskResponse> {
-  requireMobileCapability('claimHumanTask');
-  return apiFetch<AcceptTaskResponse>(`/api/workflow-execution/tasks/${taskId}/accept`, { method: 'POST' });
 }
 /** Staff incident categories → backend IssueReport type and severity (OPS-01). */
 const ISSUE_MAPPING: Record<string, { issueType: string; severity: string }> = {

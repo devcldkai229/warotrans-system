@@ -23,7 +23,8 @@ import { typography } from '../../shared/theme/typography';
 import { triggerHaptic } from '../../shared/utils/haptics';
 
 import { useRealtime } from '../../shared/realtime';
-import { getJobDetail } from '../../shared/api';
+import { getJobDetail, localizeRobot } from '../../shared/api';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { mapJobDetailToAppJobItem } from '../jobs/jobData';
 import { useAuth } from '../auth/authContext';
 import { useMapFleet } from '../../shared/maps/hooks/useMapFleet';
@@ -117,6 +118,9 @@ export function JobLiveMapScreen() {
         )}
 
         <WarehouseMapLayer map={activeMap} robots={fleetRobots}
+          onLocalizeRobot={sessionCan(session, PERMISSIONS.robotLocalize)
+            ? async (robotId, endpointId) => { await localizeRobot(robotId, endpointId); setToastFeedback('Localize command accepted.'); void fleet.refetch(); }
+            : undefined}
           selectedRobot={selectedRobot} onSelectRobot={setSelectedRobot} updateMode={fleet.updateMode} loading={!!jobId && (job.isPending || mapQuery.isEnabled && mapQuery.isPending)} contentInsets={{ top: 12, bottom: dockZoneBottom }} />
         {mapError && <View style={styles.toast}><Text style={styles.toastText}>{mapError}</Text></View>}
 

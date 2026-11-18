@@ -46,7 +46,7 @@ public static class RobotCommandCatalog
             SystemAction(robot, "RESTART_STACK", ackTimeoutSeconds),
             SystemAction(robot, "REBOOT", ackTimeoutSeconds),
             SystemAction(robot, "SHUTDOWN", ackTimeoutSeconds),
-            new("LOCALIZE", false, NotImplementedOnRobot, Permissions.RobotCommand, null, null, "NONE"),
+            new("LOCALIZE", false, NotImplementedOnRobot, Permissions.RobotLocalize, null, null, "NONE"),
             new("DOCK", false, NoHardware, Permissions.RobotCommand, null, null, "NONE"),
             new("CHARGE", false, NoHardware, Permissions.RobotCommand, null, null, "NONE")
         ];
