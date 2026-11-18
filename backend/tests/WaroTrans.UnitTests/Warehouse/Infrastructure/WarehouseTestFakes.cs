@@ -57,6 +57,15 @@ public sealed class FakeBusinessCodeGenerator(string containerCode = "CTN-202610
     public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         Task.FromResult(ContainerCodeToReturn);
 
+    public int ContainerBatchCalls { get; private set; }
+    private int _containerSequence;
+    public Task<IReadOnlyList<string>> NextContainerCodesAsync(int count, DateOnly? day = null, CancellationToken cancellationToken = default)
+    {
+        ContainerBatchCalls++;
+        var start = Interlocked.Add(ref _containerSequence, count) - count + 1;
+        return Task.FromResult<IReadOnlyList<string>>(Enumerable.Range(start, count).Select(i => $"CTN-20261006-{i:D6}").ToArray());
+    }
+
     public Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         Task.FromResult("REQ-20261006-000001");
 
@@ -68,4 +77,13 @@ public sealed class FakeBusinessCodeGenerator(string containerCode = "CTN-202610
 
     public Task<string> NextOutboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         Task.FromResult("PX-20261006-000001");
+}
+
+public sealed class FakeReceivingEndpointCatalog : IMapEndpointCatalog
+{
+    public List<MapEndpointSnapshot> Published { get; } = [];
+    public Task<IReadOnlyList<MapEndpointSnapshot>> GetPublishedEndpointsAsync(Guid warehouseId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<MapEndpointSnapshot>>(Published);
+    public Task<IReadOnlyList<MapEndpointSnapshot>> GetEndpointsAsync(IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<MapEndpointSnapshot>>(Published.Where(e => endpointIds.Contains(e.Id)).ToList());
 }

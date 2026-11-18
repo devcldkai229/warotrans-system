@@ -32,7 +32,7 @@ public sealed class WarehouseModuleApi(WarehouseDbContext dbContext) : IWarehous
                 c.Status,
                 c.CurrentStorageLocationId,
                 c.CurrentLevelNo,
-                c.WeightKg))
+                c.WeightKg, c.WarehouseId, c.CreationRequestId.HasValue, c.InboundStockVoucherId))
             .ToListAsync(cancellationToken);
     }
 

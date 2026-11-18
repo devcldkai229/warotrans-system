@@ -8,7 +8,7 @@ public sealed class StockVoucherConfiguration : IEntityTypeConfiguration<StockVo
 {
     public void Configure(EntityTypeBuilder<StockVoucher> builder)
     {
-        builder.ToTable("stock_vouchers");
+        builder.ToTable("stock_vouchers", table => table.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR status = 'CONFIRMED'"));
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();

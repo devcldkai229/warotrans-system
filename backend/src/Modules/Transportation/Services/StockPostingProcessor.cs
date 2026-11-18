@@ -15,7 +15,8 @@ public sealed class StockPostingProcessor(
     TransportationDbContext db,
     IContainerMovementRecorder movements,
     ILogger<StockPostingProcessor> logger,
-    IIssueReporter? issues = null)
+    IIssueReporter? issues = null,
+    IMapEndpointCatalog? endpoints = null)
 {
     public const int AttemptsBeforeIssue = 5;
     private const int BatchSize = 200;
@@ -67,10 +68,23 @@ public sealed class StockPostingProcessor(
     {
         try
         {
+            // The TR detail is the durable source of the actual gate, including on an outbox retry.
+            var destination = await db.TransportRequestDetails.AsNoTracking()
+                .Where(d => d.TransportRequestId == posting.TransportRequestId && d.ContainerId == posting.ContainerId)
+                .Select(d => new { d.DestinationEndpointId, d.TransportRequest.WarehouseId })
+                .SingleOrDefaultAsync(cancellationToken);
+            Guid? outboundGate = null;
+            if (endpoints is not null && destination is not null && posting.DestinationStorageLocationId is null)
+            {
+                var gate = (await endpoints.GetEndpointsAsync([destination.DestinationEndpointId], cancellationToken)).SingleOrDefault();
+                if (gate is not null && WarehouseGate.IsOutbound(gate.Code, gate.EndpointType))
+                    outboundGate = gate.Id;
+            }
+
             if (posting.Type == StockPostingType.PICKUP)
             {
                 await movements.RecordPickedUpAsync(
-                    new ContainerPickup(posting.ContainerId, posting.JobId, posting.TransportRequestId),
+                    new ContainerPickup(posting.ContainerId, posting.JobId, posting.TransportRequestId, outboundGate, destination?.WarehouseId),
                     cancellationToken);
             }
             else
@@ -81,7 +95,9 @@ public sealed class StockPostingProcessor(
                         posting.DestinationStorageLocationId,
                         posting.DestinationLevelNo,
                         posting.JobId,
-                        posting.TransportRequestId),
+                        posting.TransportRequestId,
+                        outboundGate,
+                        destination?.WarehouseId),
                     cancellationToken);
             }
 

@@ -8,10 +8,19 @@ public sealed class ListInventoryHandler(WarehouseDbContext db)
     public async Task<ListInventoryResponse> HandleAsync(ListInventoryRequest request, CancellationToken cancellationToken)
     {
         // A stock row belongs to a Warehouse through its storage location.
-        var query = db.InventoryStocks
+        var warehouseStocks = db.InventoryStocks
             .AsNoTracking()
             .Where(s => s.StorageLocation!.WarehouseId == request.WarehouseId);
 
+        // Read both accounting buckets in one statement so putaway cannot be counted by both (or neither).
+        var totals = await warehouseStocks.Select(s => new { Allocated = s.ContainerCount, Unallocated = 0 })
+            .Concat(db.Containers.Where(c => c.WarehouseId == request.WarehouseId && c.InboundStockVoucherId != null
+                    && c.InventoryStorageLocationId == null && c.Status != Enums.ContainerStatus.ISSUED)
+                .Select(c => new { Allocated = 0, Unallocated = 1 }))
+            .GroupBy(_ => 1)
+            .Select(g => new { Allocated = g.Sum(s => s.Allocated), Unallocated = g.Sum(s => s.Unallocated) })
+            .SingleOrDefaultAsync(cancellationToken);
+        var query = warehouseStocks;
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();
@@ -42,6 +51,6 @@ public sealed class ListInventoryHandler(WarehouseDbContext db)
                 s.UpdatedAt))
             .ToListAsync(cancellationToken);
 
-        return new ListInventoryResponse(items, total);
+        return new ListInventoryResponse(items, total, (totals?.Allocated ?? 0) + (totals?.Unallocated ?? 0), totals?.Unallocated ?? 0);
     }
 }

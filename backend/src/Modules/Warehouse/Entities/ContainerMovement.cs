@@ -18,6 +18,8 @@ public sealed class ContainerMovement
     public short? FromLevelNo { get; set; }
     public Guid? ToStorageLocationId { get; set; }
     public short? ToLevelNo { get; set; }
+    public Guid? FromEndpointId { get; set; }
+    public Guid? ToEndpointId { get; set; }
     public Guid? JobId { get; set; }
     public Guid? TransportRequestId { get; set; }
     public string IdempotencyKey { get; set; } = string.Empty;

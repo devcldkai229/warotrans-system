@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.Warehouse.Features.Shared;
@@ -15,9 +16,11 @@ public sealed class RemoveStockVoucherLineHandler(
         Guid lineId,
         CancellationToken cancellationToken = default)
     {
-        var voucher = await StockVoucherStore.LoadAsync(dbContext, voucherId, cancellationToken);
+        await using var transaction = dbContext.Database.IsRelational() ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+        var voucher = await WarehouseWriteLocks.VoucherAsync(dbContext, voucherId, cancellationToken);
         voucher.RemoveLine(lineId, DateTimeOffset.UtcNow);
         await StockVoucherStore.SaveAsync(dbContext, voucher, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         logger.LogInformation(
             "Line {LineId} removed from stock voucher {Code} by {AccountId}",

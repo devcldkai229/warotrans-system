@@ -19,7 +19,9 @@ public sealed record StockVoucherLineResponse(
     string? CurrentStorageLocationCode,
     Guid? CurrentEndpointId,
     short? CurrentLevelNo,
-    bool Done);
+    bool Done,
+    decimal? ContentsQuantity = null,
+    string? ContentsUnit = null);
 
 public sealed record StockVoucherProductSummary(
     Guid ProductId,
@@ -50,13 +52,14 @@ public sealed record StockVoucherDetailResponse(
     int ContainerCount,
     int DoneCount,
     IReadOnlyList<StockVoucherProductSummary> Products,
-    IReadOnlyList<StockVoucherLineResponse> Lines);
+    IReadOnlyList<StockVoucherLineResponse> Lines,
+    DateTimeOffset? StockPostedAt = null);
 
 internal static class StockVoucherProgress
 {
     public static bool IsDone(StockVoucherType type, ContainerStatus status) =>
         type == StockVoucherType.INBOUND
-            ? status is ContainerStatus.STORED or ContainerStatus.ISSUED
+            ? status is ContainerStatus.STORED or ContainerStatus.STAGED_OUTBOUND or ContainerStatus.ISSUED
             : status == ContainerStatus.ISSUED;
 }
 
@@ -85,7 +88,8 @@ internal static class StockVoucherQueries
                 v.ConfirmedAt,
                 v.CancelledBy,
                 v.CancelledAt,
-                v.UpdatedAt
+                v.UpdatedAt,
+                v.StockPostedAt
             })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException($"Stock voucher '{id}' was not found.", "stock_voucher_not_found");
@@ -112,8 +116,10 @@ internal static class StockVoucherQueries
                 ProductName = l.Product.Name,
                 l.Container.CurrentStorageLocationId,
                 LocationCode = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.Code : null,
-                EndpointId = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.EndpointId : (Guid?)null,
-                l.Container.CurrentLevelNo
+                EndpointId = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.EndpointId : l.Container.CurrentEndpointId,
+                l.Container.CurrentLevelNo,
+                l.Container.ContentsQuantity,
+                l.Container.ContentsUnit
             })
             .ToListAsync(cancellationToken);
 
@@ -131,7 +137,7 @@ internal static class StockVoucherQueries
                 r.LocationCode,
                 r.EndpointId,
                 r.CurrentLevelNo,
-                StockVoucherProgress.IsDone(voucher.Type, r.ContainerStatus)))
+                StockVoucherProgress.IsDone(voucher.Type, r.ContainerStatus), r.ContentsQuantity, r.ContentsUnit))
             .ToList();
 
         var products = lines
@@ -160,6 +166,6 @@ internal static class StockVoucherQueries
             lines.Count,
             lines.Count(l => l.Done),
             products,
-            lines);
+            lines, voucher.StockPostedAt);
     }
 }

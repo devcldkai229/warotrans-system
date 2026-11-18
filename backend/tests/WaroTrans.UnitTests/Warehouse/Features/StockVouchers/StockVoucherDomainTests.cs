@@ -33,7 +33,7 @@ public sealed class StockVoucherDomainTests
     [Theory]
     [InlineData(StockVoucherType.INBOUND, ContainerStatus.CREATED)]
     [InlineData(StockVoucherType.INBOUND, ContainerStatus.PACKED)]
-    [InlineData(StockVoucherType.OUTBOUND, ContainerStatus.STORED)]
+    [InlineData(StockVoucherType.OUTBOUND, ContainerStatus.STAGED_OUTBOUND)]
     public void AddLine_accepts_eligible_containers_and_numbers_lines(StockVoucherType type, ContainerStatus status)
     {
         var voucher = Voucher(type);
