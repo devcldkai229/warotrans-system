@@ -14,7 +14,7 @@ import { colors, ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
 import { useTheme, useThemedStyles } from '../../shared/theme/ThemeContext';
-import { CHEVRON_PATH, laneGlyphs } from '../../shared/maps/laneGlyphs';
+import { LANE_ARROW_PATH, laneGlyphs } from '../../shared/maps/laneGlyphs';
 import { LANE_BAND_OPACITY, LANE_BLUE, LANE_CHEVRON_OPACITY, ZONE_FILL_OPACITY } from '../../shared/maps/mapStyle';
 import { EndpointIcon, EndpointTile } from '../../shared/maps/EndpointGlyph';
 import { MapViewport } from '../../shared/maps/MapViewport';
@@ -124,8 +124,8 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
             <Polyline points={line(stage)} fill="none" stroke={LANE_BLUE} strokeOpacity={LANE_BAND_OPACITY} strokeWidth={width} strokeLinejoin="miter" />
             {glyphs.sides.map((side, i) => <Polyline key={i} points={line(side)} fill="none" stroke={LANE_BLUE} strokeOpacity={0.45} strokeWidth={0.8} />)}
             {glyphs.divider ? <Polyline points={line(glyphs.divider)} fill="none" stroke={LANE_BLUE} strokeOpacity={0.6} strokeWidth={0.8} strokeDasharray="5 4" /> : null}
-            {glyphs.chevrons.map((c, i) => <Path key={i} d={CHEVRON_PATH} fill="none" stroke={LANE_BLUE} strokeOpacity={LANE_CHEVRON_OPACITY} strokeWidth={1.4 / glyphs.chevronSize}
-              strokeLinecap="round" strokeLinejoin="round" transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`} />)}
+            {glyphs.chevrons.map((c, i) => <Path key={i} d={LANE_ARROW_PATH} fill={LANE_BLUE} fillOpacity={LANE_CHEVRON_OPACITY}
+              transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`} />)}
           </G>;
         })}
       </Svg>

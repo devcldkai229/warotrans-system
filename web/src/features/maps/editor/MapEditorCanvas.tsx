@@ -12,7 +12,7 @@ import { cx } from '@/shared/lib/cx'
 import { MAP_CARD, MAP_HALO, MAP_IMAGE_FILTER, MAP_PAPER, MAP_STORAGE } from '@/shared/map/mapStyle'
 import { Icon } from '@/shared/ui/Icon'
 import { lineStringToPoints, polygonToPoints } from '@/shared/map/geoJson'
-import { CHEVRON_PATH, laneGlyphs } from '@/shared/map/laneGlyphs'
+import { LANE_ARROW_PATH, laneGlyphs } from '@/shared/map/laneGlyphs'
 import {
   EDGE_COLOR,
   LANE_BAND_OPACITY,
@@ -572,13 +572,10 @@ export function MapEditorCanvas({
                 {glyphs.chevrons.map((c, i) => (
                   <path
                     key={i}
-                    d={CHEVRON_PATH}
-                    fill="none"
-                    stroke={laneColor}
-                    strokeOpacity={LANE_CHEVRON_OPACITY}
-                    strokeWidth={0.16}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    d={LANE_ARROW_PATH}
+                    fill={laneColor}
+                    fillOpacity={LANE_CHEVRON_OPACITY}
+                    stroke="none"
                     pointerEvents="none"
                     transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`}
                   />

@@ -1,3 +1,4 @@
+import { ROTATE_MIN_ASPECT } from './mapTransform';
 import type { MapVersionDetailDto } from '../api/navigationApi';
 import { hasMapCalibration, worldToMapPercent, type MapGeometry } from '../utils/mapCoordinates';
 import models from './rosMapModels.json';
@@ -22,7 +23,7 @@ export function findMapModel(map: MapVersionDetailDto): MapModel | null {
 /** Rotate the entire scene clockwise for a portrait screen, without changing world coordinates. */
 export function mapViewport(map: MapGeometry, width: number, height: number, portrait = height > width) {
   if (!hasMapCalibration(map) || !Number.isFinite(width) || !Number.isFinite(height)) return { rotated: false, scale: 0, width: 0, height: 0 };
-  const rotated = map.imageWidthPixels > map.imageHeightPixels && portrait;
+  const rotated = portrait && map.imageWidthPixels >= map.imageHeightPixels * ROTATE_MIN_ASPECT;
   const pixelWidth = rotated ? map.imageHeightPixels : map.imageWidthPixels;
   const pixelHeight = rotated ? map.imageWidthPixels : map.imageHeightPixels;
   const scale = hasMapCalibration(map) ? Math.max(0, Math.min(width / pixelWidth, height / pixelHeight)) : 0;

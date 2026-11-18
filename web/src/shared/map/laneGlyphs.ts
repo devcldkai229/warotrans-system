@@ -71,13 +71,18 @@ export function chevronsAlong(points: DrawPoint[], spacing: number, offset = 0, 
   return out
 }
 
-/** Chevron outline in a unit box (points right), drawn with `scale(size)`: an open, wide "›". */
-export const CHEVRON_PATH = 'M-0.32 -0.5 L0.18 0 L-0.32 0.5'
+/**
+ * Road-marking arrow in a unit box (length 1, pointing right, centred), filled: a shaft and a wide head, like the
+ * arrows painted on a road. Drawn with `scale(size)`; `size` is the arrow length.
+ */
+export const LANE_ARROW_PATH = 'M-0.5 -0.08 L0.06 -0.08 L0.06 -0.26 L0.5 0 L0.06 0.26 L0.06 0.08 L-0.5 0.08 Z'
+/** @deprecated the open chevron; lanes draw LANE_ARROW_PATH now. */
+export const CHEVRON_PATH = LANE_ARROW_PATH
 
 export interface LaneGlyphs {
   /** Rows of chevrons: one for a one-way lane, two (opposite) for a two-way lane. */
   chevrons: Chevron[]
-  /** Size of one chevron (drawing units), for `scale(size)` on CHEVRON_PATH. */
+  /** Length of one arrow (drawing units), for `scale(size)` on LANE_ARROW_PATH. */
   chevronSize: number
   /** Dashed centre divider of a two-way lane. */
   divider: DrawPoint[] | null
@@ -89,15 +94,16 @@ export function laneGlyphs(points: DrawPoint[], width: number, direction: 'ONE_W
   const half = width / 2
   const sides: [DrawPoint[], DrawPoint[]] = [offsetPolyline(points, -half), offsetPolyline(points, half)]
   if (direction === 'ONE_WAY') {
-    return { chevrons: chevronsAlong(points, width * 1.6), chevronSize: width * 0.55, divider: null, sides }
+    return { chevrons: chevronsAlong(points, width * 2.2), chevronSize: width * 0.9, divider: null, sides }
   }
-  const spacing = width * 1.1
+  // Two-way: one arrow per half lane, the head (0.52 of the length) fits inside the half.
+  const spacing = width * 1.9
   return {
     chevrons: [
       ...chevronsAlong(points, spacing, width / 4), // right half: drawing direction
       ...chevronsAlong(points, spacing, -width / 4, true), // left half: back
     ],
-    chevronSize: width * 0.3,
+    chevronSize: width * 0.75,
     divider: points,
     sides,
   }

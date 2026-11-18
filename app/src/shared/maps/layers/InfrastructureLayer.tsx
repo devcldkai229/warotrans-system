@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import Svg, { Circle, ClipPath, Defs, G, Line, Path, Pattern, Polyline, Rect } from 'react-native-svg';
 import type { MapVersionDetailDto } from '../../api/navigationApi';
-import { CHEVRON_PATH, laneGlyphs, type DrawPoint } from '../laneGlyphs';
+import { LANE_ARROW_PATH, laneGlyphs, type DrawPoint } from '../laneGlyphs';
 import { LANE_BAND_OPACITY, LANE_BLUE, LANE_CHEVRON_OPACITY, ZONE_COLOR, ZONE_FILL_OPACITY, zoneColorOf } from '../mapStyle';
 import { worldToBase, type MapFrame, type MapPoint } from '../mapTransform';
 
@@ -59,8 +59,7 @@ export const InfrastructureLayer = memo(function InfrastructureLayer({ map, fram
           <Polyline points={toPoints(stage)} fill="none" stroke={LANE_BLUE} strokeOpacity={LANE_BAND_OPACITY} strokeWidth={width} strokeLinejoin="miter" strokeLinecap="butt" />
           {glyphs.sides.map((side, index) => <Polyline key={index} points={toPoints(side)} fill="none" stroke={LANE_BLUE} strokeOpacity={0.45} strokeWidth={hair} />)}
           {glyphs.divider ? <Polyline points={toPoints(glyphs.divider)} fill="none" stroke={LANE_BLUE} strokeOpacity={0.6} strokeWidth={hair} strokeDasharray={`${5 * hair} ${4 * hair}`} /> : null}
-          {glyphs.chevrons.map((c, index) => <Path key={index} d={CHEVRON_PATH} fill="none" stroke={LANE_BLUE} strokeOpacity={LANE_CHEVRON_OPACITY}
-            strokeWidth={1.6 * hair / glyphs.chevronSize} strokeLinecap="round" strokeLinejoin="round"
+          {glyphs.chevrons.map((c, index) => <Path key={index} d={LANE_ARROW_PATH} fill={LANE_BLUE} fillOpacity={LANE_CHEVRON_OPACITY}
             transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`} />)}
         </G>;
       }) : null}

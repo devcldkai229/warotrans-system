@@ -11,6 +11,15 @@ export interface MapFrame {
 }
 export const FIT_CAMERA: MapCamera = { zoom: 1, x: 0, y: 0 };
 
+/**
+ * The map keeps the web console's orientation (north up, same left/right) so a place is where staff saw it on the
+ * web. Only a clearly wide map (1.4:1 or wider) is turned for a portrait screen, where it would otherwise be a strip.
+ */
+export const ROTATE_MIN_ASPECT = 1.4;
+export function shouldRotateMap(imageWidth: number, imageHeight: number, screenWidth: number, screenHeight: number): boolean {
+  return screenHeight > screenWidth && imageWidth >= imageHeight * ROTATE_MIN_ASPECT;
+}
+
 export function createMapFrame(map: MapGeometry, width: number, height: number, insets?: MapInsets): MapFrame | null {
   if (!hasMapCalibration(map) || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
   const padL = Math.max(0, insets?.left ?? 0);
@@ -20,7 +29,7 @@ export function createMapFrame(map: MapGeometry, width: number, height: number, 
   const safeW = Math.max(10, width - padL - padR);
   const safeH = Math.max(10, height - padT - padB);
 
-  const rotated = map.imageWidthPixels > map.imageHeightPixels && height > width;
+  const rotated = shouldRotateMap(map.imageWidthPixels, map.imageHeightPixels, width, height);
   const pixelWidth = rotated ? map.imageHeightPixels : map.imageWidthPixels;
   const pixelHeight = rotated ? map.imageWidthPixels : map.imageHeightPixels;
   const scale = Math.min(safeW / pixelWidth, safeH / pixelHeight);

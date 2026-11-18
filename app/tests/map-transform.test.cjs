@@ -67,3 +67,9 @@ test('metric grid retains crossing segments, negative coordinates and rotated ca
     for(const line of grid)for(const p of [line.a,line.b])assert.ok(p.x>=fit.left-1e-6&&p.x<=fit.left+fit.mapWidth+1e-6&&p.y>=fit.top-1e-6&&p.y<=fit.top+fit.mapHeight+1e-6);
   }
 });
+
+test('a near-square map (MAP-ONE-V014, 86 x 72) keeps the web orientation on a portrait phone', () => {
+  const v14={imageWidthPixels:86,imageHeightPixels:72,resolution:0.05,originX:-1.642,originY:-1.966,originYaw:0};
+  assert.equal(createMapFrame(v14,340,535).rotated,false);
+  assert.equal(createMapFrame({...map},340,535).rotated,true);
+});
