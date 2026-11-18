@@ -49,7 +49,21 @@ aws iam create-access-key --user-name warotrans-evidence-recorder-dev
 aws iam create-access-key --user-name warotrans-evidence-worker-dev
 ```
 
-The plan of 2026-11-17 against the real account showed: 5 to import, 35 to add, 3 to change, 0 to destroy.
+Without `envs/<env>/cloudfront_public_key.pem` the plan still runs but leaves CloudFront out: it warns with the check
+`cloudfront_signing_key`, the CDN module gets `count = 0`, the bucket policy has no CloudFront statement and
+`evidence_settings` keeps the Recorder on its Local playback provider. A distribution without its trusted key group
+would serve the videos to anyone, so it is never created without the key. Run `scripts/gen-cloudfront-key.sh <env>`
+and plan again to add it (6 resources).
+
+Plans against the real account:
+
+| Date | Signing key | Import | Add | Change | Destroy |
+|---|---|---|---|---|---|
+| 2026-11-17 | yes | 5 | 35 | 3 | 0 |
+| 2026-11-18 | not generated yet | 5 | 29 | 3 | 0 |
+
+The 3 changes are the existing bucket: tags only, the public-access block (block public ACLs), and the policy narrowed to
+`maps/*` (the only prefix in the bucket on 2026-11-18) plus a TLS-only deny.
 
 ## Checks
 
