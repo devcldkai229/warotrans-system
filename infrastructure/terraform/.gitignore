@@ -1,9 +1,0 @@
-# State and plans may hold resource details; never commit them.
-*.tfstate
-*.tfstate.*
-*.tfplan
-.terraform/
-crash.log
-# Per-environment values and keys (the CloudFront private key goes to SSM, never to disk long-term).
-terraform.tfvars
-*.pem

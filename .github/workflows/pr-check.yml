@@ -1,4 +1,4 @@
-# Required checks (early stage): backend, frontend-web, frontend-app, infrastructure, terraform
+# Required checks (early stage): backend, frontend-web, frontend-app, infrastructure (Terraform is kept out of the repo)
 # Trigger: PR feature/* → develop (fast feedback; no DB/tests yet)
 
 name: PR Check
@@ -72,22 +72,3 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose config
       - run: docker compose --profile evidence config --quiet
-
-  terraform:
-    name: Terraform fmt/validate
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infrastructure/terraform
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.13.5"
-      - run: terraform fmt -check -recursive
-      # No AWS credentials here: init without a backend, validate only (plan/apply stay manual, see README).
-      - run: |
-          for env in envs/dev envs/prod; do
-            terraform -chdir="$env" init -backend=false -input=false
-            terraform -chdir="$env" validate
-          done
