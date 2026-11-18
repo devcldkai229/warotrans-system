@@ -38,6 +38,7 @@ public class RolePermissionMatrixTests
     [InlineData(Permissions.WarehouseWrite)]
     [InlineData(Permissions.ConsoleAccess)]
     [InlineData(Permissions.TrafficManage)]
+    [InlineData(Permissions.TransportReject)]
     public void Staff_cannot_drive_reconfigure_or_administer(string permission)
     {
         Assert.False(RolePermissionMatrix.RoleHas(AppRoles.Staff, permission));
@@ -45,7 +46,9 @@ public class RolePermissionMatrixTests
 
     [Theory]
     [InlineData(Permissions.RobotStop)]
+    [InlineData(Permissions.RobotLocalize)]
     [InlineData(Permissions.TransportCreate)]
+    [InlineData(Permissions.TransportCancel)]
     [InlineData(Permissions.JobOperate)]
     [InlineData(Permissions.ContainerCreate)]
     [InlineData(Permissions.MapRead)]

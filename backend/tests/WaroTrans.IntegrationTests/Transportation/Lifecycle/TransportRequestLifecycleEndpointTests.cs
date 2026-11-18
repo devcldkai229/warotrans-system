@@ -60,7 +60,7 @@ public sealed class TransportRequestLifecycleEndpointTests(WaroTransWebApplicati
     }
 
     [Fact]
-    public async Task Cancel_needs_a_reason_and_the_permission()
+    public async Task Cancel_needs_a_reason_and_staff_may_cancel_but_not_reject()
     {
         var (id, _) = await SubmitAsync();
 
@@ -71,13 +71,17 @@ public sealed class TransportRequestLifecycleEndpointTests(WaroTransWebApplicati
         await Factory.CreateAccountAsync("stan", AccountRole.STAFF);
         var staffClient = CreateAnonymousClient();
         var staff = await staffClient.LoginAsync("stan");
-        var forbidden = await staffClient.SendWithTokenAsync(HttpMethod.Post, $"{Route}/{id}/cancel", staff.AccessToken, new { reason = "x" });
-        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
-        // Staff are told the same thing before they click.
+        // Staff are told before they click: cancel allowed (2026-11-18, mobile parity), reject forbidden.
         var seen = await (await staffClient.SendWithTokenAsync(HttpMethod.Get, $"{Route}/{id}", staff.AccessToken)).Content.ReadFromJsonAsync<JsonElement>();
-        var cancelAction = seen.GetProperty("availableActions").EnumerateArray().Single(a => a.GetProperty("action").GetString() == "CANCEL");
-        Assert.Equal("forbidden", cancelAction.GetProperty("reason").GetString());
+        var actions = seen.GetProperty("availableActions").EnumerateArray().ToList();
+        Assert.True(actions.Single(a => a.GetProperty("action").GetString() == "CANCEL").GetProperty("allowed").GetBoolean());
+        Assert.Equal("forbidden", actions.Single(a => a.GetProperty("action").GetString() == "REJECT").GetProperty("reason").GetString());
+
+        var reject = await staffClient.SendWithTokenAsync(HttpMethod.Post, $"{Route}/{id}/reject", staff.AccessToken, new { reason = "x" });
+        Assert.Equal(HttpStatusCode.Forbidden, reject.StatusCode);
+        var cancel = await staffClient.SendWithTokenAsync(HttpMethod.Post, $"{Route}/{id}/cancel", staff.AccessToken, new { reason = "entered by mistake" });
+        Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
     }
 
     [Fact]

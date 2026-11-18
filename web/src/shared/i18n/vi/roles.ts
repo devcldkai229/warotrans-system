@@ -27,6 +27,7 @@ export const vi_roles: Record<string, string> = {
   'Register robots and change their map': 'Đăng ký robot và đổi bản đồ của robot',
   'Enable, disable and return robots to service': 'Bật, tắt và đưa robot trở lại hoạt động',
   'Send a robot to a point': 'Điều robot đến một điểm',
+  'Tell a robot where it stands': 'Báo cho robot vị trí nó đang đứng (định vị)',
   'Stop a robot': 'Dừng robot',
   'Drive a robot by hand': 'Lái robot bằng tay',
   'Start and finish maintenance': 'Bắt đầu và kết thúc bảo trì',

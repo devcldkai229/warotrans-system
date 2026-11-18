@@ -15,14 +15,15 @@ public static class RolePermissionMatrix
             [AppRoles.Admin] = Permissions.All.ToFrozenSet(StringComparer.Ordinal),
 
             // Warehouse floor: receives goods, raises and follows transport requests, confirms handovers.
-            // May stop a robot (safety), never drive or reconfigure one.
+            // May stop a robot (safety) and tell it where it stands (localize), never drive or reconfigure one.
+            // May cancel a request raised by mistake; rejecting one stays a supervisor decision.
             [AppRoles.Staff] = new[]
             {
                 Permissions.MapRead,
                 Permissions.WarehouseRead, Permissions.ContainerCreate, Permissions.ContainerRecover, Permissions.VoucherWrite,
-                Permissions.TransportRead, Permissions.TransportCreate,
+                Permissions.TransportRead, Permissions.TransportCreate, Permissions.TransportCancel,
                 Permissions.WorkflowRead, Permissions.JobRead, Permissions.JobOperate, Permissions.JobPause,
-                Permissions.RobotRead, Permissions.RobotStop,
+                Permissions.RobotRead, Permissions.RobotStop, Permissions.RobotLocalize,
                 Permissions.IssueRead, Permissions.IssueCreate,
                 Permissions.NotificationRead
             }.ToFrozenSet(StringComparer.Ordinal),
@@ -36,7 +37,7 @@ public static class RolePermissionMatrix
                 Permissions.WarehouseRead,
                 Permissions.TransportRead,
                 Permissions.WorkflowRead, Permissions.JobRead, Permissions.JobPause,
-                Permissions.RobotRead, Permissions.RobotConfigure, Permissions.RobotCommand, Permissions.RobotStop,
+                Permissions.RobotRead, Permissions.RobotConfigure, Permissions.RobotCommand, Permissions.RobotLocalize, Permissions.RobotStop,
                 Permissions.RobotManualDrive, Permissions.RobotMaintenance, Permissions.RobotPower,
                 Permissions.RobotDiagnostics,
                 Permissions.TrafficRead, Permissions.TrafficManage,

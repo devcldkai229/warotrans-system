@@ -39,12 +39,13 @@ public sealed class ActionPolicyTests
     }
 
     [Fact]
-    public void Staff_see_cancel_and_reject_as_forbidden_not_hidden()
+    public void Staff_may_cancel_but_see_reject_as_forbidden_not_hidden()
     {
         var actions = TransportRequestActionPolicy.Evaluate(Request(TransportRequestStatus.SUBMITTED), [], Staff);
 
+        // 2026-11-18: floor staff cancel a request raised by mistake (mobile parity); rejecting stays a supervisor decision.
         Assert.True(Find(actions, TransportRequestActionPolicy.Queue).Allowed);
-        Assert.Equal(ActionAvailability.Forbidden, Find(actions, TransportRequestActionPolicy.Cancel).Reason);
+        Assert.True(Find(actions, TransportRequestActionPolicy.Cancel).Allowed);
         Assert.Equal(ActionAvailability.Forbidden, Find(actions, TransportRequestActionPolicy.Reject).Reason);
     }
 

@@ -59,6 +59,12 @@ public static class Permissions
     /// <summary>Send a navigation goal by hand.</summary>
     public const string RobotCommand = "robot.command";
 
+    /// <summary>
+    /// Tell a robot where it stands (LOCALIZE at a known endpoint) after it was switched on or moved by hand. Never makes
+    /// it move; floor staff need it to bring a robot into service without the right to send it anywhere.
+    /// </summary>
+    public const string RobotLocalize = "robot.localize";
+
     /// <summary>Stop / cancel what a robot is doing. Never implies the right to make it move.</summary>
     public const string RobotStop = "robot.stop";
     public const string RobotManualDrive = "robot.manual.drive";
@@ -103,7 +109,7 @@ public static class Permissions
         WarehouseRead, WarehouseWrite, ContainerCreate, ContainerRecover, VoucherWrite,
         TransportRead, TransportCreate, TransportCancel, TransportReject,
         WorkflowRead, WorkflowWrite, JobRead, JobOperate, JobPause, JobCancel, HumanTaskTakeover,
-        RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotStop, RobotManualDrive,
+        RobotRead, RobotManage, RobotConfigure, RobotCommand, RobotLocalize, RobotStop, RobotManualDrive,
         RobotMaintenance, RobotPower, RobotDiagnostics, TrafficRead, TrafficManage, DispatchOverride,
         NotificationRead, IssueRead, IssueCreate, IssueManage, AuditRead,
         StatisticsRead,

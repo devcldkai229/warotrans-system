@@ -64,8 +64,9 @@ public sealed class LocalizeRobotEndpointTests(WaroTransWebApplicationFactory fa
     }
 
     [Fact]
-    public async Task Staff_may_not_localize()
+    public async Task Staff_may_localize_a_robot_they_put_on_the_floor()
     {
+        // robot.localize (2026-11-18): staff bring a robot into service from the mobile app; it never makes it move.
         var (robot, seed) = await SeedAsync();
         await Factory.CreateAccountAsync("loc_staff", AccountRole.STAFF);
         var client = CreateAnonymousClient();
@@ -73,6 +74,6 @@ public sealed class LocalizeRobotEndpointTests(WaroTransWebApplicationFactory fa
 
         var response = await client.SendWithTokenAsync(HttpMethod.Post, $"/api/fleet/robots/{robot}/commands/localize", token, new { endpointId = seed.SourceEndpointId });
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
 }

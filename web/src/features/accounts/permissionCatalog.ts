@@ -70,6 +70,7 @@ const GROUPS: GroupDefinition[] = [
       { code: 'robot.manage', label: msg('Register robots and change their map') },
       { code: 'robot.configure', label: msg('Enable, disable and return robots to service') },
       { code: 'robot.command', label: msg('Send a robot to a point') },
+      { code: 'robot.localize', label: msg('Tell a robot where it stands') },
       { code: 'robot.stop', label: msg('Stop a robot') },
       { code: 'robot.manual.drive', label: msg('Drive a robot by hand') },
       { code: 'robot.maintenance', label: msg('Start and finish maintenance') },

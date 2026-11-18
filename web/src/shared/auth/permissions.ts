@@ -29,6 +29,7 @@ export const PERMISSIONS = {
   robotManage: 'robot.manage',
   robotConfigure: 'robot.configure',
   robotCommand: 'robot.command',
+  robotLocalize: 'robot.localize',
   robotStop: 'robot.stop',
   robotManualDrive: 'robot.manual.drive',
   robotMaintenance: 'robot.maintenance',
