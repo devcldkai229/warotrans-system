@@ -43,7 +43,7 @@ export function ScanScreen() {
   };
 
   return <View style={styles.screen}>
-    {!target ? <Scanner key={round} visible title="Scan any code" manualLabel="Code" placeholder="Container, voucher, request, job, shelf or product code"
+    {!target ? <Scanner key={round} visible title="Scan QR Code" manualLabel="Code" placeholder="Or type a code"
       onClose={goBack} onScanResult={(raw, scanned) => { void onScan(raw, scanned); }} /> : null}
     {resolving ? <View style={styles.resolving}><ActivityIndicator color="#fff" /><Text color="#ffffff">Looking up…</Text></View> : null}
     {target ? <ContainerCard container={target.container} tasks={target.tasks}
