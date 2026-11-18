@@ -5,7 +5,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  UIManager,
   View,
 } from 'react-native';
 import {
@@ -40,9 +39,6 @@ import { HomeMapPanel } from './HomeMapPanel';
 import { dockReservedSpace } from '../../shared/theme/layout';
 import { useMapFleet } from '../../shared/maps/hooks/useMapFleet';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const INITIAL_JOB = EMPTY_JOB;
 
