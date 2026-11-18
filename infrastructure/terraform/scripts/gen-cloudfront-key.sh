@@ -15,6 +15,9 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 openssl genrsa -out "$TMP/private.pem" 2048 2>/dev/null
 openssl rsa -pubout -in "$TMP/private.pem" -out "$HERE/envs/${ENV}/cloudfront_public_key.pem" 2>/dev/null
+# Git Bash on Windows: aws.exe cannot open an MSYS path (/tmp/...) inside file://, so give it the Windows form.
+KEYFILE="$TMP/private.pem"
+if command -v cygpath >/dev/null 2>&1; then KEYFILE="$(cygpath -m "$KEYFILE")"; fi
 aws ssm put-parameter --region "$REGION" --name "$PARAM" --type SecureString --overwrite \
-  --value "file://$TMP/private.pem" --description "WaroTrans Evidence CloudFront signing key ${VERSION}" >/dev/null
+  --value "file://$KEYFILE" --description "WaroTrans Evidence CloudFront signing key ${VERSION}" >/dev/null
 echo "private key -> SSM ${PARAM} (${REGION}); public key -> envs/${ENV}/cloudfront_public_key.pem"

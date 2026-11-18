@@ -68,4 +68,6 @@ samples/**/*.token
 
 # Local MCP config (personal)
 .mcp.json
+/infrastructure/terraform/**
+
 
