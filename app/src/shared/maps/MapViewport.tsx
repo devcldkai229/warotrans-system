@@ -61,6 +61,8 @@ interface Props {
   fullBleed?:boolean;
   /** Given when the user may localize robots (robot.localize): adds "Localize Robot Here" to the robot panel. */
   onLocalizeRobot?:(robotId:string,endpointId:string)=>Promise<void>;
+  /** Pick mode: tapping a station hands it to the caller instead of opening its detail panel. */
+  onPickEndpoint?:(endpoint:EndpointDto)=>void;
 }
 type LayerKey='stations'|'labels'|'zones'|'lanes'|'grid'|'scan';
 
@@ -194,7 +196,7 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
   </View>;
 }
 
-function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
+function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot,onPickEndpoint}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
   const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const layerItems = useMemo(() => getLayerItems(colors, isDark), [colors, isDark]);
@@ -244,6 +246,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
   const selectEndpoint = (item: EndpointDto) => {
     if (Date.now() - camera.lastGestureAt > 200) {
       triggerHaptic('tap');
+      if (onPickEndpoint) { onPickEndpoint(item); return; }
       setEndpointId(item.id);
       setSheet('endpoint');
     }

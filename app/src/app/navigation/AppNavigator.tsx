@@ -17,7 +17,7 @@ import { OfflineBannerHUD } from '../../features/monitoring/OfflineBannerHUD';
 import { BlockPathHazardScreen } from '../../features/safety/BlockPathHazardScreen';
 import { FleetRecallScreen } from '../../features/safety/FleetRecallScreen';
 import { PayloadRecoveryScreen } from '../../features/safety/PayloadRecoveryScreen';
-import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
+import { TransportComposerScreen } from '../../features/transport/TransportComposerScreen';
 import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
 import { TransportRequestDetailScreen } from '../../features/transport/TransportRequestDetailScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
@@ -68,7 +68,7 @@ export function AppNavigator() {
       case 'transport_create':
       case 'replenishment':
       case 'point_to_point':
-        return <TransportCreationScreen />;
+        return <TransportComposerScreen />;
       case 'create_container':
         return <CreateContainerScreen />;
       case 'inventory_lookup':
