@@ -273,6 +273,11 @@ export function confirmStockVoucher(id: string) {
   return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/confirm`, { method: 'POST' })
 }
 
+/** Codes for pre-printed container labels; no container exists until a label is scanned with a product. */
+export function issueContainerLabels(count: number) {
+  return apiRequest<{ codes: string[]; issuedAt: string }>('/api/warehouse/container-labels', { method: 'POST', body: JSON.stringify({ count }) })
+}
+
 /** Only a DRAFT can be cancelled. */
 export function cancelStockVoucher(id: string) {
   return apiRequest<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${id}/cancel`, { method: 'POST' })

@@ -1,3 +1,4 @@
+import { printLabelSheet, qrPayload } from '@/features/labels/printLabels'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Can } from '@/features/auth/RequirePermission'
 import { PERMISSIONS } from '@/shared/auth/permissions'
@@ -446,6 +447,11 @@ function VoucherDetailModal({
 
       <footer className="flex flex-wrap items-center justify-end gap-2 px-6 pb-6">
         <Button variant="ghost" onClick={() => printVoucher(voucher)}>{t('Print')}</Button>
+        {voucher.lines.length > 0 ? (
+          <Button variant="ghost" onClick={() => printLabelSheet(voucher.lines.map((line) => ({ code: line.containerBarcode, qr: qrPayload('CONTAINER', line.containerBarcode), title: line.productName, subtitle: voucher.code })), voucher.code)}>
+            {t('Print container labels')}
+          </Button>
+        ) : null}
         {draft ? (
           <Can permission={PERMISSIONS.voucherWrite}>
             <Button variant="ghost" disabled={busy} onClick={() => void run(() => cancelStockVoucher(voucher.id), t('The voucher could not be cancelled.'))}>{t('Cancel voucher')}</Button>
