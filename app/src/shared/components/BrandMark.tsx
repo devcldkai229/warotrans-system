@@ -1,6 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
-import { Route } from 'lucide-react-native';
+import { Image, StyleSheet, View, ViewStyle } from 'react-native';
 import { ThemeColors } from '../theme/colors';
 import { useThemedStyles } from '../theme/ThemeContext';
 
@@ -10,13 +9,13 @@ interface BrandMarkProps {
 }
 
 /**
- * WaroTrans BrandMark (Flat Monochrome Edition).
- * Minimalist black-and-white icon mark with zero 3D bevels or extruded shelves.
+ * WaroTrans BrandMark.
+ * Displays the cropped WaroTrans warehouse + AMR symbol mark on a crisp surface badge.
  */
 export function BrandMark({ size = 36, style }: BrandMarkProps) {
   const styles = useThemedStyles(createStyles);
-  const iconSize = Math.round(size * 0.58);
-  const borderRadius = Math.round(size * 0.28);
+  const imageSize = Math.round(size * 0.84);
+  const borderRadius = Math.round(size * 0.26);
 
   return (
     <View
@@ -30,7 +29,12 @@ export function BrandMark({ size = 36, style }: BrandMarkProps) {
         style,
       ]}
     >
-      <Route size={iconSize} color="#ffffff" strokeWidth={2.4} />
+      <Image
+        source={require('../../../assets/logo_wrt.png')}
+        style={{ width: imageSize, height: imageSize }}
+        resizeMode="contain"
+        accessibilityIgnoresInvertColors
+      />
     </View>
   );
 }
@@ -38,9 +42,10 @@ export function BrandMark({ size = 36, style }: BrandMarkProps) {
 const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) =>
   StyleSheet.create({
     badge: {
-      backgroundColor: isDark ? colors.darkAction : '#121317',
-      borderWidth: isDark ? 1 : 0,
-      borderColor: colors.darkActionBorder,
+      backgroundColor: '#FFFFFF',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : colors.border,
+      borderCurve: 'continuous',
       alignItems: 'center',
       justifyContent: 'center',
     },

@@ -179,7 +179,7 @@ export function LoginScreen() {
             {/* Centered Brand Hero */}
             <View style={styles.brandHero}>
               <View style={styles.logoBadgeWrap}>
-                <BrandMark size={56} />
+                <BrandMark size={68} />
               </View>
               <Text style={styles.brandTitle}>WAROTRANS</Text>
               <Text style={styles.brandSubtitle}>{t('Autonomous Fleet Operator Console')}</Text>
