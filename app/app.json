@@ -29,7 +29,8 @@
           "cameraPermission": "Allow WaroTrans to scan container barcodes.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "scheme": "warotrans"
   }
