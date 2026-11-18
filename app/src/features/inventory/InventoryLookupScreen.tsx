@@ -11,6 +11,9 @@ import {
 } from 'react-native';
 import {
   ArrowUpRight,
+  Check,
+  ChevronDown,
+  Layers,
   Barcode,
   Box,
   CheckCircle2,
@@ -28,6 +31,9 @@ import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { SegmentedControl } from '../../shared/ui/SegmentedControl';
 import { RawText as Text, Text as StatusText } from '../../shared/ui/Text';
 import { containerLocationFilters, getContainerLocation, groupInventoryByProduct } from './inventoryData';
+import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
+import { BottomSheet } from '../../shared/ui/BottomSheet';
+import { t } from '../../shared/i18n';
 import { ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
@@ -57,6 +63,9 @@ export function InventoryLookupScreen() {
   const [inventoryTab, setInventoryTab] = useState<'containers' | 'skus'>('containers');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
   const [selectedLevel, setSelectedLevel] = useState<LevelFilterKey>('ALL');
+  const [filterSheet, setFilterSheet] = useState<'location' | 'level' | null>(null);
+  const places = usePlaceDirectory();
+  const shelfName = (code: string) => places.locations.find(location => location.code === code)?.name ?? code;
   const [verifiedContainer, setVerifiedContainer] = useState<ContainerListItem | null>(null);
   const [isVerifyingBarcode, setIsVerifyingBarcode] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
@@ -150,6 +159,8 @@ export function InventoryLookupScreen() {
   };
 
   const locationOptions = useMemo(() => containerLocationFilters(containers), [containers]);
+  const locationLabel = (key: string) => key === 'ALL' ? t('All locations') : key === 'UNLOCATED' ? t('Not on a shelf')
+    : shelfName(locationOptions.find(option => option.key === key)?.label ?? key);
   const uniqueLocationsCount = locationOptions.filter(location => location.key !== 'ALL' && location.key !== 'UNLOCATED').length;
   const activeLocationFilter = locationOptions.some(location => location.key === selectedLocation) ? selectedLocation : 'ALL';
 
@@ -304,21 +315,17 @@ export function InventoryLookupScreen() {
             </View>
           ) : null}
 
-          <Button
-            label="↗ Relocate Container (INTERNAL_RELOCATION)"
+          {verifiedContainer.status === 'STORED' && verifiedContainer.currentStorageLocationId ? <Button
+            label="↗ Move To Another Shelf"
             icon={<ArrowUpRight size={14} color="#ffffff" />}
             variant="primary"
             size="sm"
             onPress={() => {
               triggerHaptic('tap');
-              navigate('transport_create', {
-                workflow: 'INTERNAL_RELOCATION',
-                container: verifiedContainer.barcode,
-                warehouseId: activeWarehouseId || undefined,
-              });
+              navigate('transport_create', { workflow: 'INTERNAL_RELOCATION', containers: [verifiedContainer.barcode] });
             }}
             style={{ marginTop: 8 }}
-          />
+          /> : null}
         </View>
       )}
 
@@ -341,77 +348,53 @@ export function InventoryLookupScreen() {
       {/* Tab 1: Containers List */}
       {inventoryTab === 'containers' && Boolean(activeWarehouseId) && (
         <>
-          {/* Storage Location & Level Filters */}
-          <View style={styles.spatialFilterSection}>
-            {/* Actual locations from the container response */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterRowScroll}
-            >
-              {locationOptions.map((opt) => {
-                const isSelected = activeLocationFilter === opt.key;
-                return (
-                  <Pressable
-                    key={opt.key}
-                    onPress={() => {
-                      triggerHaptic('tap');
-                      setSelectedLocation(opt.key);
-                    }}
-                    style={[styles.filterChip, isSelected && styles.filterChipActive]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Filter by location ${opt.label}`}
-                    accessibilityState={{ selected: isSelected }}
-                  >
-                    <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
-                      {opt.label}
-                    </Text>
-                    <Text style={[styles.filterChipCount, isSelected && styles.filterChipCountActive]}>
-                      ({opt.count})
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* Rack Level Filter Row */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterRowScroll}
-              style={styles.levelFilterRow}
-            >
-              {levelOptions.map((lvl) => {
-                const isSelected = selectedLevel === lvl.value;
-                return (
-                  <Pressable
-                    key={String(lvl.value)}
-                    onPress={() => {
-                      triggerHaptic('tap');
-                      setSelectedLevel(lvl.value);
-                    }}
-                    style={[
-                      styles.filterChip,
-                      styles.levelChip,
-                      isSelected && styles.filterChipActive,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Filter by level ${lvl.label}`}
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        styles.levelChipText,
-                        isSelected && styles.filterChipTextActive,
-                      ]}
-                    >
-                      {lvl.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+          {/* One quiet filter bar: where (shelf) and which level, each a pill that opens its options. */}
+          <View style={styles.filterBar}>
+            <Pressable onPress={() => { triggerHaptic('tap'); setFilterSheet('location'); }}
+              style={({ pressed }) => [styles.filterPill, activeLocationFilter !== 'ALL' && styles.filterPillActive, pressed && styles.btnPressed]}
+              accessibilityRole="button" accessibilityLabel="Filter by location">
+              <MapPin size={14} color={activeLocationFilter !== 'ALL' ? colors.primaryText : colors.textSecondary} />
+              <Text style={[styles.filterPillText, activeLocationFilter !== 'ALL' && styles.filterPillTextActive]} numberOfLines={1}>
+                {locationLabel(activeLocationFilter)}
+              </Text>
+              <ChevronDown size={14} color={colors.textMuted} />
+            </Pressable>
+            {levelOptions.length > 1 ? <Pressable onPress={() => { triggerHaptic('tap'); setFilterSheet('level'); }}
+              style={({ pressed }) => [styles.filterPill, selectedLevel !== 'ALL' && styles.filterPillActive, pressed && styles.btnPressed]}
+              accessibilityRole="button" accessibilityLabel="Filter by level">
+              <Layers size={14} color={selectedLevel !== 'ALL' ? colors.primaryText : colors.textSecondary} />
+              <Text style={[styles.filterPillText, selectedLevel !== 'ALL' && styles.filterPillTextActive]} numberOfLines={1}>
+                {selectedLevel === 'ALL' ? t('All levels') : t('Level {level}', { level: selectedLevel })}
+              </Text>
+              <ChevronDown size={14} color={colors.textMuted} />
+            </Pressable> : null}
+            {activeLocationFilter !== 'ALL' || selectedLevel !== 'ALL' ? <Pressable onPress={() => { setSelectedLocation('ALL'); setSelectedLevel('ALL'); }}
+              accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.clearFilters}>
+              <Text style={styles.clearFiltersText}>Clear</Text>
+            </Pressable> : null}
           </View>
+          {filterSheet ? <BottomSheet onClose={() => setFilterSheet(null)} accessibilityLabel={filterSheet === 'location' ? 'Choose a location' : 'Choose a level'}>
+            <ScrollView contentContainerStyle={styles.filterSheet}>
+              <StatusText variant="title">{filterSheet === 'location' ? 'Where' : 'Level'}</StatusText>
+              {(filterSheet === 'location'
+                ? locationOptions.map(opt => ({ key: opt.key, label: locationLabel(opt.key), count: opt.count }))
+                : levelOptions.map(opt => ({ key: String(opt.value), label: opt.value === 'ALL' ? t('All levels') : t('Level {level}', { level: opt.value }), count: null as number | null }))
+              ).map(option => {
+                const chosen = filterSheet === 'location' ? activeLocationFilter === option.key : String(selectedLevel) === option.key;
+                return <Pressable key={option.key} style={[styles.filterOption, chosen && styles.filterOptionActive]} accessibilityRole="radio" accessibilityState={{ checked: chosen }}
+                  onPress={() => {
+                    triggerHaptic('tap');
+                    if (filterSheet === 'location') setSelectedLocation(option.key);
+                    else setSelectedLevel(option.key === 'ALL' ? 'ALL' : Number(option.key) as LevelFilterKey);
+                    setFilterSheet(null);
+                  }}>
+                  <Text style={[styles.filterOptionText, chosen && styles.filterPillTextActive]} numberOfLines={1}>{option.label}</Text>
+                  {option.count !== null ? <Text style={styles.filterOptionCount}>{option.count}</Text> : null}
+                  {chosen ? <Check size={16} color={colors.primaryText} /> : null}
+                </Pressable>;
+              })}
+            </ScrollView>
+          </BottomSheet> : null}
 
           <ScrollView
             style={styles.scrollArea}
@@ -452,31 +435,26 @@ export function InventoryLookupScreen() {
                     </View>
                   </View>
 
-                  <Pressable
+                  {isStored && c.currentStorageLocationId && !c.inActiveTransport ? <Pressable
                     onPress={() => {
                       triggerHaptic('tap');
-                      navigate('transport_create', {
-                        workflow: 'INTERNAL_RELOCATION',
-                        container: c.barcode,
-                        warehouseId: activeWarehouseId,
-                      });
+                      navigate('transport_create', { workflow: 'INTERNAL_RELOCATION', containers: [c.barcode] });
                     }}
                     style={({ pressed }) => [styles.relocateBtn, pressed && styles.btnPressed]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Relocate container ${c.barcode}`}
+                    accessibilityLabel={`Move container ${c.barcode} to another shelf`}
                   >
                     <ArrowUpRight size={13} color={colors.primary} strokeWidth={2.4} />
                     <Text style={styles.relocateBtnText}>Move</Text>
-                  </Pressable>
+                  </Pressable> : null}
                 </View>
 
                 {/* Location Row */}
                 <View style={styles.locationRow}>
                   <MapPin size={13} color={colors.primaryText} style={{ marginRight: 6 }} />
                   <Text style={styles.locationText} numberOfLines={1}>
-                    {c.currentStorageLocationCode || c.currentEndpointCode || 'Location Unavailable'}
-                    {c.currentLevelNo ? ' · Level ' + c.currentLevelNo : ''}
-                    {c.zoneLabel ? ' (' + c.zoneLabel + ')' : ''}
+                    {c.currentStorageLocationCode ? shelfName(c.currentStorageLocationCode) : c.currentEndpointId ? places.name(c.currentEndpointId) : t('Not on a shelf')}
+                    {c.currentStorageLocationCode && c.currentLevelNo ? ` · ${t('Level {level}', { level: c.currentLevelNo })}` : ''}
                   </Text>
                 </View>
 
@@ -636,6 +614,19 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   levelFilterRow: {
     marginTop: 2,
   },
+  filterBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  filterPill: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingHorizontal: 12, borderRadius: 17, maxWidth: 200,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  filterPillActive: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  filterPillText: { fontSize: 13, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },
+  filterPillTextActive: { color: colors.primaryText },
+  clearFilters: { paddingHorizontal: 6, height: 34, justifyContent: 'center' },
+  clearFiltersText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  filterSheet: { paddingHorizontal: 20, paddingBottom: 28, gap: 6 },
+  filterOption: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46, paddingHorizontal: 14, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  filterOptionActive: { backgroundColor: colors.primaryLight },
+  filterOptionText: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  filterOptionCount: { fontSize: 13, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
   filterChip: {
     paddingHorizontal: 12,
     minHeight: 30,

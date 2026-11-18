@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  PackagePlus,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -144,6 +145,29 @@ export function TransportScreen() {
             </Text>
             <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
               Search a container, product or shelf to see where it is
+            </Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            triggerHaptic('tap');
+            navigate('create_container');
+          }}
+          style={({ pressed }) => [styles.lookupCard, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Create containers"
+        >
+          <View style={styles.lookupIconWell}>
+            <PackagePlus size={20} color={colors.primaryText} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text variant="bodyMedium" color={colors.textPrimary} style={styles.historyTitle}>
+              Create Containers
+            </Text>
+            <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
+              Scan a product and get container codes to stick on
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />

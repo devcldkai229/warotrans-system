@@ -15,8 +15,9 @@ import {
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { t } from '../../shared/i18n';
 import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
-import { BatteryIndicator } from '../../shared/ui/RobotBadges';
-import { navigationLabel } from '../../shared/maps/robotLabels';
+import { BatteryIndicator, OnlineBadge } from '../../shared/ui/RobotBadges';
+import { robotStatusLabel } from '../../shared/maps/robotLabels';
+import { ROBOT_COLOR } from '../../shared/maps/mapStyle';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { ThemeColors } from '../../shared/theme/colors';
 import { dockReservedSpace } from '../../shared/theme/layout';
@@ -141,9 +142,7 @@ export function JobLiveMapScreen() {
                 {liveJob ? `${places.name(liveJob.sourceEndpointCode)} ➔ ${places.name(liveJob.destinationEndpointCode)}` : route}
               </Text>
             </View>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>{telemetryState?.label || 'Telemetry Unavailable'}</Text>
-            </View>
+            {telemetry ? <OnlineBadge online={!!telemetry.isOnline} /> : <OnlineBadge online={false} label="No robot" />}
           </View>
 
           {/* Metric Columns */}
@@ -159,10 +158,10 @@ export function JobLiveMapScreen() {
               <Text style={styles.metricLabel}>Speed</Text>
             </View>
             <View style={[styles.metricCol, { borderRightWidth: 0 }]}>
-              <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
-                {navigationLabel(telemetry?.navigationStatus)}
+              <Text style={[styles.metricVal, { color: ROBOT_COLOR[telemetry?.status ?? ''] ?? colors.textPrimary }]} numberOfLines={1}>
+                {t(robotStatusLabel(telemetry?.status))}
               </Text>
-              <Text style={styles.metricLabel}>Navigation</Text>
+              <Text style={styles.metricLabel}>Status</Text>
             </View>
           </View>
 

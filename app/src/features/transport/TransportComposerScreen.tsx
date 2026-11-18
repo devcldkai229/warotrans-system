@@ -44,7 +44,7 @@ const KIND_HINT: Record<WorkflowKind, string> = {
   OTHER: 'Containers ready for transport.',
 };
 
-async function loadComposer(repeatId: string) {
+async function loadComposer(repeatId: string, barcodes: string[]) {
   const [workflows, previous] = await Promise.all([listPublishedWorkflows(), repeatId ? getTransportRequest(repeatId) : Promise.resolve(null)]);
   const operating = await getOperatingContext(previous?.warehouseId);
   const [containers, locations, map, requests] = await Promise.all([
@@ -53,7 +53,9 @@ async function loadComposer(repeatId: string) {
     getMapVersionDetail(operating.map.id),
     listTransportRequests({ take: 200 }),
   ]);
-  return { ...operating, map, previous, workflows: workflows.items, containers: containers.items, locations: locations.items, held: activeContainerIds(requests.items) };
+  const missing = barcodes.filter(code => !containers.items.some(item => item.barcode === code));
+  const extra = (await Promise.allSettled(missing.map(code => getContainerByBarcode(code)))).flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+  return { ...operating, map, previous, workflows: workflows.items, containers: [...containers.items, ...extra], locations: locations.items, held: activeContainerIds(requests.items) };
 }
 
 export function TransportComposerScreen() {
@@ -62,7 +64,12 @@ export function TransportComposerScreen() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
   const repeatId = typeof params?.repeatRequestId === 'string' ? params.repeatRequestId : '';
-  const context = useQuery({ queryKey: ['composer-context', session?.id, repeatId], queryFn: () => loadComposer(repeatId), retry: false, staleTime: 0 });
+  // "Move" on a shelved container or "Dispatch" on a voucher: the containers come with the route and are preselected.
+  const routeBarcodes = useMemo(() => (Array.isArray(params?.containers) ? params.containers : typeof params?.container === 'string' ? [params.container] : [])
+    .filter((code: unknown): code is string => typeof code === 'string' && !!code.trim()), [params?.containers, params?.container]);
+  const routeKey = routeBarcodes.join('|');
+  const context = useQuery({ queryKey: ['composer-context', session?.id, repeatId, routeKey], queryFn: () => loadComposer(repeatId, routeBarcodes), retry: false, staleTime: 0 });
+  const prefilled = useRef('');
   const data = context.data;
   const [workflowId, setWorkflowId] = useState('');
   const [workflowSheet, setWorkflowSheet] = useState(false);
@@ -117,6 +124,23 @@ export function TransportComposerScreen() {
       }])));
     }
   }, [data, workflowId, params?.workflow]);
+
+  useEffect(() => {
+    if (!data || !workflow || !routeBarcodes.length || prefilled.current === `${routeKey}:${workflow.id}`) return;
+    prefilled.current = `${routeKey}:${workflow.id}`;
+    const wanted = routeBarcodes.map(code => allContainers.find(item => item.barcode === code)).filter((item): item is ContainerListItem => !!item);
+    const usable = wanted.filter(item => !ineligibleReason(item, kind, held));
+    const refused = wanted.filter(item => ineligibleReason(item, kind, held));
+    const unknown = routeBarcodes.length - wanted.length;
+    if (refused.length || unknown) {
+      setNotice([...refused.map(item => t('{code}: {reason}.', { code: item.barcode, reason: t(ineligibleReason(item, kind, held) ?? '') })),
+        ...(unknown ? [t('{count} containers were not found.', { count: unknown })] : [])].join(' '));
+    }
+    if (!usable.length) return;
+    setSelected(usable.map(item => item.id));
+    setMovements(Object.fromEntries(usable.map(item => [item.id, { source: defaultSource(item, kind, places), destination: defaultDestination(kind, places) }])));
+    setStep('places');
+  }, [data, workflow, routeKey, kind, allContainers, places]);
 
   const chooseWorkflow = (id: string) => {
     triggerHaptic('tap');

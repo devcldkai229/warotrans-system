@@ -40,7 +40,7 @@ import { EndpointIcon, EndpointTile } from './EndpointGlyph';
 import { ROBOT_COLOR } from './mapStyle';
 import { t } from '../i18n';
 import { BatteryIndicator, OnlineBadge } from '../ui/RobotBadges';
-import { navigationLabel, robotStatusLabel } from './robotLabels';
+import { robotStatusLabel } from './robotLabels';
 import { RobotLayer } from './layers/RobotLayer';
 import { GridLabels } from './layers/GridLabels';
 import { MapAnchor } from './MapAnchor';
@@ -697,13 +697,13 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                     <Bot size={24} color={robot.isOnline ? ROBOT_COLOR[robot.status] ?? colors.primaryText : colors.textMuted} />
                   </View>
                   <View style={styles.detailHeroText}>
-                    <Text variant="title" style={{ fontFamily: typography.fontMono }}>{robot.code}</Text>
-                    <Text variant="caption" color="textSecondary">{robot.name || robot.code}</Text>
+                    <Text variant="title" numberOfLines={1} style={{ fontFamily: typography.fontMono }}>{robot.code}</Text>
+                    <Text variant="caption" color="textSecondary" numberOfLines={1}>{robot.name || robot.code}</Text>
                   </View>
                   <OnlineBadge online={robot.isOnline} />
                 </View>
                 <View style={styles.robotStats}>
-                  <View style={[styles.robotStat, { flex: 1.3 }]}>
+                  <View style={styles.robotStat}>
                     <Text variant="caption" color="textSecondary">Battery</Text>
                     <BatteryIndicator percent={robot.batteryPercent} charging={robot.status === 'CHARGING'} size="lg" bar />
                   </View>
@@ -711,12 +711,8 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                     <Text variant="caption" color="textSecondary">Status</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted }} />
-                      <Text variant="bodyMedium" fontWeight="700">{robotStatusLabel(robot.status)}</Text>
+                      <Text variant="bodyMedium" fontWeight="700" numberOfLines={1}>{robotStatusLabel(robot.status)}</Text>
                     </View>
-                  </View>
-                  <View style={styles.robotStat}>
-                    <Text variant="caption" color="textSecondary">Navigation</Text>
-                    <Text variant="bodyMedium" fontWeight="700">{navigationLabel(robot.navigationStatus)}</Text>
                   </View>
                 </View>
               </View>

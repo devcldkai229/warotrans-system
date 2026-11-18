@@ -46,7 +46,7 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
         </View>
         <View style={styles.groupDivider} />
         <View style={styles.countRow}>
-          <Text variant="bodyMedium" color="textSecondary" style={styles.flex}>Containers</Text>
+          <Text variant="bodyMedium" color="textSecondary" numberOfLines={1} style={styles.countLabel}>Containers</Text>
           <Stepper value={group.containerCount} editable={editable} label={t('Containers In Group {group}', { group: index + 1 })}
             onChange={containerCount => edit(group.key, previous => ({ ...previous, containerCount }))} />
         </View>
@@ -76,9 +76,11 @@ function Stepper({ value, onChange, editable, label }: { value: string; onChange
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.create({
   countRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  countLabel: { flex: 1, minWidth: 80 },
+  stepper: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
   stepButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  stepValue: { minWidth: 56, height: 44, textAlign: 'center', fontSize: 18, fontWeight: '700', color: colors.textPrimary },
+  // A fixed width: a web text input otherwise stretches and squeezes the label into one letter per line.
+  stepValue: { width: 64, height: 44, padding: 0, textAlign: 'center', fontSize: 18, fontWeight: '700', color: colors.textPrimary },
   section: { gap: 12 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   progressPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },

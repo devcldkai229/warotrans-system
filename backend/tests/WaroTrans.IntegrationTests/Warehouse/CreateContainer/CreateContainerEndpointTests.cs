@@ -53,7 +53,7 @@ public sealed class CreateContainerEndpointTests(WaroTransWebApplicationFactory 
         var created = (await response.Content.ReadFromJsonAsync<CreatedContainerDto>())!;
         Assert.Equal(productId, created.ProductId);
         Assert.Equal("CREATED", created.Status);
-        Assert.StartsWith("CTN-", created.Barcode);
+        Assert.Matches(@"^C\d{9}$", created.Barcode);
         Assert.Equal(account.Id, created.CreatedBy);
 
         await using var scope = Factory.Services.CreateAsyncScope();

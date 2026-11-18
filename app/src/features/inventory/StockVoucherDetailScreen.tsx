@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Box, FileText, MapPin } from 'lucide-react-native';
+import { Box, FileText, MapPin, Truck } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
@@ -22,7 +22,7 @@ import { VoucherDraftWorkspace } from './VoucherDraftWorkspace';
 export function StockVoucherDetailScreen() {
   const { styles, colors } = useThemedStyles(createVoucherStyles);
   const { session } = useAuth();
-  const { params, goBack } = useNavigation();
+  const { params, goBack, navigate } = useNavigation();
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
   const voucherId = typeof params?.voucherId === 'string' ? params.voucherId : '';
@@ -188,6 +188,11 @@ export function StockVoucherDetailScreen() {
               {!!data.confirmedAt && <Text variant="caption" color="textSecondary">{t('Confirmed {date}', { date: voucherDate(data.confirmedAt) })}</Text>}
               {data.status === 'CONFIRMED' && <Text variant="caption" color="textSecondary">{data.stockPostedAt ? t('Stock posted {date}', { date: voucherDate(data.stockPostedAt) }) : 'Stock posting status is unavailable.'}</Text>}
               {!!data.cancelledAt && <Text variant="caption" color="textSecondary">{t('Cancelled {date}', { date: voucherDate(data.cancelledAt) })}</Text>}
+              {/* A confirmed voucher with containers still to move: dispatch robots with every open container filled in
+                  (inbound picks up at the receiving point, outbound delivers to the shipping point). */}
+              {data.status === 'CONFIRMED' && data.lines.some(line => !line.done) ? <Button
+                title={inbound ? 'Dispatch Robots To Put Away' : 'Dispatch Robots To Ship'} icon={Truck} fullWidth
+                onPress={() => navigate('transport_create', { workflow: inbound ? 'inbound' : 'outbound', containers: data.lines.filter(line => !line.done).map(line => line.containerBarcode) })} /> : null}
               {data.status === 'DRAFT' && canCreateVoucher(session) && (confirmingCancel ? (
                 <View style={styles.error}>
                   <Text variant="caption" color="dangerText">Cancel this draft voucher? Attached containers will be released.</Text>

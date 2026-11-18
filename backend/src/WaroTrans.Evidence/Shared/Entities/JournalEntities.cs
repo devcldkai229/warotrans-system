@@ -12,7 +12,7 @@ public sealed class EvidenceJournal
     public Guid Id { get; set; }
     public Guid TransportRequestId { get; set; }
 
-    /// <summary>REQ-yyyyMMdd-NNNNNN as Transportation shows it.</summary>
+    /// <summary>The request code as Transportation shows it (RddMMyyNNN, older ones REQ-yyyyMMdd-NNNNNN).</summary>
     public string RequestCode { get; set; } = string.Empty;
 
     public EvidenceJournalStatus Status { get; set; } = EvidenceJournalStatus.OPEN;

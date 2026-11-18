@@ -75,7 +75,7 @@ public sealed class LocalPlaybackSigner(IOptions<PlaybackOptions> options, Evide
 /// CloudFront private content (spec §9.5): a custom policy on the asset's folder (wildcard), signed with the Evidence
 /// key group's private key, read from SSM SecureString (never from configuration files).
 /// </summary>
-public sealed class CloudFrontPlaybackSigner(IOptions<PlaybackOptions> options) : IPlaybackSigner
+public sealed class CloudFrontPlaybackSigner(IOptions<PlaybackOptions> options, IOptions<EvidenceAwsOptions> aws) : IPlaybackSigner
 {
     private string? _privateKey;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -124,7 +124,11 @@ public sealed class CloudFrontPlaybackSigner(IOptions<PlaybackOptions> options) 
             }
             else
             {
-                using var ssm = new AmazonSimpleSystemsManagementClient(RegionEndpoint.GetBySystemName(o.Region));
+                var region = RegionEndpoint.GetBySystemName(o.Region);
+                var credentials = aws.Value.Credentials();
+                using var ssm = credentials is null
+                    ? new AmazonSimpleSystemsManagementClient(region)
+                    : new AmazonSimpleSystemsManagementClient(credentials, region);
                 var parameter = await ssm.GetParameterAsync(new GetParameterRequest
                 {
                     Name = o.PrivateKeyParameterName ?? throw new InvalidOperationException($"{PlaybackOptions.SectionName}:PrivateKeyParameterName is required."),
