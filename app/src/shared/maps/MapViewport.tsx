@@ -164,7 +164,8 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
   const [bounds,setBounds]=useState({width:0,height:0});
   const [headerHeight,setHeaderHeight]=useState(showHeader ? 68 : 0);
   const {map,robots,selectedRobot,updateMode='polling'}=props;
-  const robot=robots.find(r=>r.currentMapVersionId===map.id&&r.code===selectedRobot);
+  const onlineRobots=useMemo(()=>robots.filter(r=>r.isOnline),[robots]);
+  const robot=onlineRobots.find(r=>r.currentMapVersionId===map.id&&r.code===selectedRobot);
   const effectiveHeaderHeight = showHeader ? headerHeight : 0;
   const topOffset = contentInsets.top + (showHeader ? effectiveHeaderHeight + 8 : 12);
   const available=Math.max(0,bounds.height-topOffset-contentInsets.bottom-36);
@@ -181,9 +182,9 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
   return <View style={styles.root} onLayout={event=>setBounds(event.nativeEvent.layout)}>
     {showHeader ? <View style={[styles.heading,{top:contentInsets.top}]} onLayout={event=>setHeaderHeight(event.nativeEvent.layout.height)}>
       <Text variant="headline">{title}</Text><Text variant="caption">{map.code} · V{map.versionNo}</Text>
-      <Text variant="caption">{robot?`${robot.code} · ${robot.isOnline?'Online':'Offline'} · ${mapUpdateLabel(updateMode)}`:robots.some(r=>r.currentMapVersionId===map.id)?`${mapUpdateLabel(updateMode)} · Select A Robot`:'No Robot Linked To This Map'}</Text>
+      <Text variant="caption">{robot?`${robot.code} · ${robot.isOnline?'Online':'Offline'} · ${mapUpdateLabel(updateMode)}`:onlineRobots.some(r=>r.currentMapVersionId===map.id)?`${mapUpdateLabel(updateMode)} · Select A Robot`:'No Robot Linked To This Map'}</Text>
     </View> : null}
-    {frame&&(fullBleed||stageHeight>=96)?<MapCanvas {...props} key={map.id} frame={frame} horizontal={horizontal} top={topOffset} fullBleed={fullBleed} bottomInset={contentInsets.bottom}/>
+    {frame&&(fullBleed||stageHeight>=96)?<MapCanvas {...props} robots={onlineRobots} key={map.id} frame={frame} horizontal={horizontal} top={topOffset} fullBleed={fullBleed} bottomInset={contentInsets.bottom}/>
       :<View style={[styles.smallState,{top:topOffset,bottom:contentInsets.bottom}]}><Text variant="caption" textAlign="center">{frame?'Collapse the panel to explore the map.':'Map Calibration Unavailable'}</Text></View>}
   </View>;
 }

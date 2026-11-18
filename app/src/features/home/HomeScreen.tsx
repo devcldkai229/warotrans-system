@@ -61,6 +61,7 @@ export function HomeScreen() {
   const [peekSheetHeight, setPeekSheetHeight] = useState(0);
   const fleetQuery = useMapFleet(session?.id || '');
   const rawFleet = fleetQuery.robots;
+  const onlineFleet = useMemo(() => rawFleet.filter(robot => robot.isOnline), [rawFleet]);
   const [selectedRobotId, setSelectedRobotId] = useState<string>('');
   const [isFleetExpanded, setIsFleetExpanded] = useState<boolean>(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState<boolean>(false);
@@ -84,9 +85,15 @@ export function HomeScreen() {
 
   const fleetUpdateMode = fleetQuery.isError || fleetQuery.isPaused ? 'unavailable' : fleetQuery.updateMode;
   const fleetStatusCurrent = fleetUpdateMode !== 'unavailable' && fleetUpdateMode !== 'paused';
-  const robots = useMemo(() => homeFleetOnMap(rawFleet, operating.data, fleetUpdateMode), [rawFleet, operating.data, fleetUpdateMode]);
+  const robots = useMemo(() => homeFleetOnMap(onlineFleet, operating.data, fleetUpdateMode), [onlineFleet, operating.data, fleetUpdateMode]);
   const activeRobotCount = robots.filter(robot => robot.active).length;
   const fleetCountLabel = operating.data ? `${fleetStatusCurrent ? activeRobotCount : '—'}/${robots.length}` : '…';
+
+  useEffect(() => {
+    if (selectedRobotId && !onlineFleet.some(robot => robot.code === selectedRobotId)) {
+      setSelectedRobotId('');
+    }
+  }, [onlineFleet, selectedRobotId]);
 
   const isWaitingHandover = Boolean(activeJob.hasWaitingHandover);
   const isQueuedOrCreated = activeJob.status === 'CREATED' || activeJob.status === 'QUEUED';
@@ -123,7 +130,7 @@ export function HomeScreen() {
       <HomeMapPanel
         bottomInset={dockReservedSpace(dockHeight) + peekSheetHeight + 10}
         onOpenJobs={() => navigate('jobs')}
-        fleet={rawFleet}
+        fleet={onlineFleet}
         updateMode={fleetQuery.updateMode}
         selectedRobotId={selectedRobotId}
         onSelectRobot={(id) => {

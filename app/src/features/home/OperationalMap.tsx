@@ -52,7 +52,7 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
   const raster = !model || showScan;
   const endpoints = map.endpoints.filter(e => e.mapVersionId === map.id && e.isEnabled);
   const zones = (map.zones || []).filter(z => z.mapVersionId === map.id && z.isActive);
-  const robots = fleet.filter(robot => robot.currentMapVersionId === map.id);
+  const robots = fleet.filter(robot => robot.currentMapVersionId === map.id && robot.isOnline);
   const selectedRobot = robots.find(robot => robot.code === selectedRobotId) || robots[0];
   const selectedPose = selectedRobot;
   const endpoint = endpoints.find(e => e.id === endpointId);
