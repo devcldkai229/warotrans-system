@@ -7,7 +7,7 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { mobileCapabilities } from '../../shared/api/capabilities';
-import { addStockVoucherLines, confirmStockVoucher, createContainerBatch, getStockVoucher } from '../../shared/api/warehouseApi';
+import { addStockVoucherLines, cancelStockVoucher, confirmStockVoucher, createContainerBatch, getStockVoucher } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text } from '../../shared/ui';
@@ -15,6 +15,7 @@ import { buildContainerBatchBody, createBatchRequestId, inboundBatchProblem } fr
 import { preparationDeviceStore } from './preparationDeviceStore';
 import { canAllocateInboundBatch, canCreateVoucher, canReadVouchers, uncertainDraftWrite, voucherDate } from './stockVoucherData';
 import { useVoucherPreparation } from './useVoucherPreparation';
+import { emptyPreparation } from './voucherPreparation';
 import { createVoucherStyles } from './voucherStyles';
 import { VoucherDraftWorkspace } from './VoucherDraftWorkspace';
 
@@ -35,12 +36,14 @@ export function StockVoucherDetailScreen() {
   const inbound = data?.type === 'INBOUND';
   const prep = useVoucherPreparation(session?.id || '', data?.warehouseId || '', voucherId, data?.type || 'INBOUND');
   const [acting, setActing] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [actionError, setActionError] = useState<string | null>(() => typeof params?.batchError === 'string' ? params.batchError : null);
   const alive = useRef(true);
   const pending = useRef(false);
   const request = useRef<AbortController | null>(null);
   useEffect(() => { alive.current = true; return () => { alive.current = false; request.current?.abort(); }; }, [session?.id, voucherId]);
-  useEffect(() => { setActionError(typeof params?.batchError === 'string' ? params.batchError : null); }, [voucherId, params?.batchError]);
+  useEffect(() => { setActionError(typeof params?.batchError === 'string' ? params.batchError : null); setConfirmingCancel(false); }, [voucherId, params?.batchError]);
+  useEffect(() => { if (data && data.status !== 'DRAFT') setConfirmingCancel(false); }, [data?.status]);
 
   const hasServerBatchLines = !!data && inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
   const selectedIds = Object.keys(prep.value.selected);
@@ -131,6 +134,34 @@ export function StockVoucherDetailScreen() {
     }
   };
 
+  const cancelDraft = async () => {
+    if (pending.current || acting || !data || data.status !== 'DRAFT' || !canCreateVoucher(session)) {
+      return;
+    }
+    pending.current = true; setActing(true); setActionError(null);
+    const controller = new AbortController(); request.current = controller;
+    try {
+      const cancelled = await cancelStockVoucher(data.id, controller.signal);
+      if (!alive.current || controller.signal.aborted) return;
+      if (prep.ready) {
+        prep.reset(emptyPreparation(data.type));
+        void prep.persist().catch(() => {});
+      }
+      setConfirmingCancel(false);
+      client.setQueryData(['stock-voucher', session?.id, data.id], cancelled);
+      void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
+      void client.invalidateQueries({ queryKey: ['inventory-containers'] });
+      void client.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
+    } catch (failure) {
+      if (!alive.current || controller.signal.aborted) return;
+      if (uncertainDraftWrite(failure)) void query.refetch();
+      setActionError(getUserErrorMessage(failure, 'The draft voucher could not be cancelled. Try again.'));
+    } finally {
+      pending.current = false;
+      if (alive.current) setActing(false);
+    }
+  };
+
   return <View style={styles.screen}>
     <ScreenHeader title={data ? inbound ? 'Inbound Voucher' : 'Outbound Voucher' : 'Voucher Details'} subtitle={data?.code} canGoBack onBack={goBack}
       rightAction={data ? <StatusPill status={data.status} /> : undefined} />
@@ -157,6 +188,17 @@ export function StockVoucherDetailScreen() {
               {!!data.confirmedAt && <Text variant="caption" color="textSecondary">{t('Confirmed {date}', { date: voucherDate(data.confirmedAt) })}</Text>}
               {data.status === 'CONFIRMED' && <Text variant="caption" color="textSecondary">{data.stockPostedAt ? t('Stock posted {date}', { date: voucherDate(data.stockPostedAt) }) : 'Stock posting status is unavailable.'}</Text>}
               {!!data.cancelledAt && <Text variant="caption" color="textSecondary">{t('Cancelled {date}', { date: voucherDate(data.cancelledAt) })}</Text>}
+              {data.status === 'DRAFT' && canCreateVoucher(session) && (confirmingCancel ? (
+                <View style={styles.error}>
+                  <Text variant="caption" color="dangerText">Cancel this draft voucher? Attached containers will be released.</Text>
+                  <View style={styles.row}>
+                    <Button title="Keep Draft" variant="outline" size="sm" style={styles.flex} disabled={acting} onPress={() => setConfirmingCancel(false)} />
+                    <Button title="Cancel Draft" variant="danger" size="sm" style={styles.flex} loading={acting} disabled={acting || query.isError} onPress={() => { void cancelDraft(); }} />
+                  </View>
+                </View>
+              ) : (
+                <Button title="Cancel Draft Voucher" variant="outline" size="sm" disabled={acting || query.isError} onPress={() => { setActionError(null); setConfirmingCancel(true); }} />
+              ))}
             </Card>
 
             {params?.preparationCopyFailed && <View style={styles.error}><Text variant="body" color="dangerText">The server draft was created, but preparation could not be copied. Enter the container count again; do not create another draft.</Text></View>}

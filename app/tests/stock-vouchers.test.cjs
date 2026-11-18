@@ -108,6 +108,31 @@ test('inbound and outbound confirmation posts stock with caller token and reject
   }
 });
 
+test('cancelStockVoucher cancels a draft voucher with caller token and rejects unverified responses', async () => {
+  let captured = null;
+  const cancelled = detail({ status: 'CANCELLED', cancelledAt: '2026-11-18T11:00:00Z', cancelledBy: 'staff-1' });
+  const api = modules(async (url, init, token) => { captured = { url, init, token }; return cancelled; })('src/shared/api/warehouseApi.ts');
+  const controller = new AbortController();
+  const result = await api.cancelStockVoucher('voucher-1', controller.signal);
+  assert.equal(captured.url, '/api/warehouse/stock-vouchers/voucher-1/cancel');
+  assert.equal(captured.init.method, 'POST');
+  assert.equal(captured.init.signal, controller.signal);
+  assert.equal(captured.token, 'original-account-token');
+  assert.equal(result.status, 'CANCELLED');
+  assert.equal(result.cancelledAt, '2026-11-18T11:00:00Z');
+
+  for (const bad of [
+    null,
+    detail({ id: 'other-id', status: 'CANCELLED', cancelledAt: '2026-11-18T11:00:00Z' }),
+    detail({ status: 'DRAFT', cancelledAt: '2026-11-18T11:00:00Z' }),
+    detail({ status: 'CANCELLED', cancelledAt: null }),
+    detail({ status: 'CANCELLED', cancelledAt: ' ' }),
+  ]) {
+    const badApi = modules(async () => bad)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(async () => badApi.cancelStockVoucher('voucher-1'), error => error.status === 502 && error.code === 'voucher_cancellation_unverified');
+  }
+});
+
 test('addStockVoucherLines chunks batches over 200 containers and verifies every saved line', async () => {
   const requests = [];
   const allIds = Array.from({ length: 205 }, (_, i) => `c-${i + 1}`);

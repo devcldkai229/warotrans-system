@@ -1592,4 +1592,10 @@ export const vi: Record<string, string> = {
   "Save the selected outbound containers to the server before confirming.": "Hãy lưu danh sách container xuất kho lên máy chủ trước khi xác nhận.",
   "Save Selected Containers": "Lưu container đã chọn",
   "Select staged containers at Outbound before confirming outbound stock.": "Hãy chọn các container đang tập kết ở cổng Xuất kho trước khi xác nhận xuất kho.",
+  "Cancel Draft Voucher": "Hủy phiếu nháp",
+  "Cancel this draft voucher? Attached containers will be released.": "Hủy phiếu nháp này? Các container đang gắn trên phiếu sẽ được giải phóng.",
+  "Keep Draft": "Giữ lại phiếu",
+  "Cancel Draft": "Xác nhận hủy",
+  "The draft voucher could not be cancelled. Try again.": "Không thể hủy phiếu nháp. Hãy thử lại.",
+  "Could not verify the voucher cancellation. Refresh and try again.": "Không xác minh được kết quả hủy phiếu. Hãy làm mới và thử lại.",
 };

@@ -174,4 +174,5 @@ export const viServerErrors: Record<string, string> = {
   inbound_source_not_gate: 'Điểm lấy hàng cất kệ (Putaway) phải là một cổng Nhập kho (Inbound) đang bật trên bản đồ.',
   inbound_voucher_required: 'Cần xác nhận phiếu nhập kho cho lô container này trước khi vận chuyển lên kệ.',
   outbound_voucher_required: 'Container \'{q1}\' phải thuộc một phiếu xuất kho đã xác nhận.',
+  voucher_cancellation_unverified: 'Không xác minh được kết quả hủy phiếu. Hãy làm mới và thử lại.',
 };

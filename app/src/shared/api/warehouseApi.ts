@@ -264,3 +264,14 @@ export async function confirmStockVoucher(id: string, type?: StockVoucherType, s
   }
   return result;
 }
+/** Cancels a DRAFT voucher and frees any attached Containers for reuse. */
+export async function cancelStockVoucher(id: string, signal?: AbortSignal): Promise<StockVoucherDetail> {
+  const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST', signal,
+  }, getAccessToken());
+  if (!validVoucherDetail(result) || result.id !== id || result.status !== 'CANCELLED'
+    || typeof result.cancelledAt !== 'string' || !result.cancelledAt.trim()) {
+    throw new ApiError(502, 'voucher_cancellation_unverified', 'Could not verify the voucher cancellation. Refresh and try again.');
+  }
+  return result;
+}
