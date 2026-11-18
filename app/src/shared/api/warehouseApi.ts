@@ -3,12 +3,15 @@ import { requireMobileCapability } from './capabilities';
 import type { ContainerStatus, ShelfSlotOccupancy, StockVoucherStatus, StockVoucherType } from '../types/contracts';
 export interface WarehouseListItem { id: string; code: string; name: string; isActive: boolean; createdAt: string }
 export interface ListWarehousesResponse { items: WarehouseListItem[]; total: number }
+export interface ContainerVoucherSummary {
+  id: string; code: string; type: StockVoucherType; status: StockVoucherStatus; createdAt: string; confirmedAt: string | null;
+}
 export interface ContainerListItem {
   id: string; barcode: string; status: ContainerStatus | string; productId: string; productSku: string; productName: string;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentEndpointCode?: string | null; currentLevelNo: number | null;
   supplierPackageBarcode?: string | null; contentsQuantity?: number | null; contentsUnit?: string | null;
-  updatedAt?: string; inActiveTransport?: boolean;
+  updatedAt?: string; inActiveTransport?: boolean; voucher?: ContainerVoucherSummary | null;
   qty?: number; category?: string; zoneLabel?: string;
 }
 export interface ListContainersResponse { items: ContainerListItem[]; total: number }

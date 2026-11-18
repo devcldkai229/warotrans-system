@@ -145,7 +145,8 @@ export function TransportCreationScreen() {
   const sourceOf = (container: ContainerListItem) => {
     const origin = containerOrigin(container, locations, endpoints, mapId);
     if (!origin && flow === 'inbound' && ['CREATED', 'PACKED'].includes(container.status)
-      && !container.currentStorageLocationId && !container.currentEndpointId) {
+      && !container.currentStorageLocationId && !container.currentEndpointId
+      && container.voucher?.type === 'INBOUND' && container.voucher?.status === 'CONFIRMED') {
       return receivingPoint ?? null;
     }
     return origin;
@@ -215,8 +216,11 @@ export function TransportCreationScreen() {
     if (viewFilter === 'ready' && reason) return false;
     if (viewFilter === 'location' && sourceOf(item)) return false;
     if (originFilter && sourceOf(item)?.id !== originFilter) return false;
-    return `${item.barcode} ${item.productSku} ${item.productName} ${sourceOf(item)?.code || ''}`.toLowerCase().includes(query.trim().toLowerCase());
-  }).sort((a, b) => Number(selected.includes(b.id)) - Number(selected.includes(a.id)) || Number(!!reasonFor(a)) - Number(!!reasonFor(b)) || a.barcode.localeCompare(b.barcode));
+    return `${item.barcode} ${item.productSku} ${item.productName} ${item.voucher?.code || ''} ${sourceOf(item)?.code || ''}`.toLowerCase().includes(query.trim().toLowerCase());
+  }).sort((a, b) => Number(selected.includes(b.id)) - Number(selected.includes(a.id))
+    || Number(!!reasonFor(a)) - Number(!!reasonFor(b))
+    || (flow === 'inbound' ? (b.voucher?.confirmedAt || '').localeCompare(a.voucher?.confirmedAt || '') : 0)
+    || a.barcode.localeCompare(b.barcode));
 
   const chooseWorkflow = (id: string) => {
     setWorkflowId(id); setPickingWorkflow(false); setSelected([]); setDestinations({}); setStaffInputs({});
@@ -235,8 +239,17 @@ export function TransportCreationScreen() {
     const scope = liveScope.current;
     setScannerOpen(false); setScanning(true); setError(null);
     try {
-      const container = await getContainerByBarcode(barcode);
+      let container = await getContainerByBarcode(barcode);
       if (liveScope.current !== scope) return;
+      const existingVoucher = containers.find(item => item.id === container.id)?.voucher;
+      if (existingVoucher && !container.voucher) {
+        container = { ...container, voucher: existingVoucher };
+      } else if (flow === 'inbound' && !container.voucher && data) {
+        const list = await listContainers({ warehouseId: data.warehouse.id, search: container.barcode, eligibleOnly: false, take: 20 });
+        if (liveScope.current !== scope) return;
+        const matched = list.items.find(item => item.id === container.id);
+        if (matched) container = matched;
+      }
       setExtraContainers(previous => [...previous.filter(item => item.id !== container.id), container]);
       const reason = reasonFor(container);
       if (reason) { setViewFilter('all'); setQuery(container.barcode); throw new DraftInputError(`${container.barcode}: ${reason}. Check its location and request status before dispatch.`); }
@@ -604,7 +617,7 @@ export function TransportCreationScreen() {
               style={({ pressed }) => [styles.containerRow, pressed && styles.pressed]}>
               <View style={[styles.checkbox, isSelected && styles.checked, !!reason && { backgroundColor: colors.surfaceMuted }]}>{isSelected && <Check size={14} color={colors.textInverse} />}</View>
               <View style={styles.flex}><Text variant="bodyMedium" style={styles.barcode} selectable>{item.barcode}</Text>
-                <Text variant="caption" numberOfLines={1}>{item.productName || item.productSku || 'Product Unavailable'}</Text>
+                <Text variant="caption" numberOfLines={1}>{item.productName || item.productSku || 'Product Unavailable'}{flow === 'inbound' && item.voucher?.code ? ` · ${item.voucher.code}` : ''}</Text>
               </View>
               {!!reason && <Text variant="caption" color={colors.warningText} style={styles.reason}>{reason === 'Already In A Request' ? 'In Request' : reason.includes('Location') ? 'Needs Location' : reason}</Text>}
             </Pressable>
