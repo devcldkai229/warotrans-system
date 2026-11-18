@@ -87,7 +87,7 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
             <Text variant="bodyMedium">{multiple ? 'Multiple Products Match This Code' : 'Confirm The Product'}</Text>
             <Text variant="caption">{multiple ? 'Select the correct product.' : 'Choose a product or refine your search.'}</Text>
             <Button title="Browse Catalog" variant="outline" size="sm" onPress={browse} />
-          </View> : busy && choices.length ? <ActivityIndicator color={colors.primary} accessibilityLabel="Refreshing products" /> : null}
+          </View> : busy && choices.length ? <ActivityIndicator color={colors.primary} accessibilityLabel="Refreshing products" /> : undefined}
         renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: selectedProduct?.id === item.id, disabled: busy || !!error || !item.isActive }}
           accessibilityLabel={`${item.name}, ${item.sku}`} disabled={busy || !!error || !item.isActive}
           onPress={() => onSelect(item)} style={[styles.catalogRow, selectedProduct?.id === item.id && styles.catalogSelected, (busy || !!error || !item.isActive) && styles.disabled]}>
@@ -99,7 +99,7 @@ export function ReceivingProductPicker({ selectedProduct, initialBarcode, onSele
             message={notFound ? 'Check the barcode or choose from the catalog.' : error ? getUserErrorMessage(error, 'Products could not be loaded.') : undefined}
             actionTitle={notFound || lookup && !error ? 'Browse Catalog' : error ? 'Retry' : undefined}
             onAction={notFound || lookup && !error ? browse : retry} />}
-        ListFooterComponent={!lookup && products.data && products.data.total > products.data.items.length ? <Text variant="caption" color="textSecondary">Refine your search to see more products.</Text> : null} />}
+        ListFooterComponent={!lookup && products.data && products.data.total > products.data.items.length ? <Text variant="caption" color="textSecondary">Refine your search to see more products.</Text> : undefined} />}
   </BottomSheet>;
 }
 
