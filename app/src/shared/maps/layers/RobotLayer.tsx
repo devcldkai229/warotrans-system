@@ -17,7 +17,7 @@ interface Props {map:MapVersionDetailDto;frame:MapFrame;robots:RobotResponse[];c
 export function RobotLayer({map,frame,robots,camera,selected,now,updateMode='polling',onSelect}:Props) {
   const colors = useThemeColors();
   const styles = useThemedStyles(createStyles);
-  return <View style={StyleSheet.absoluteFill} pointerEvents="box-none">{robots.filter(robot=>robot.currentMapVersionId===map.id).map(robot=>{
+  return <View style={StyleSheet.absoluteFill} pointerEvents="box-none">{robots.filter(robot=>robot.currentMapVersionId===map.id&&robot.isOnline).map(robot=>{
     const state=mapRobotState(robot,map,now,updateMode),point=worldToBase({x:robot.poseX,y:robot.poseY},map,frame);
     if(!state.showPose||!point)return null;
     const tone=state.lastReported?colors.textMuted:robot.status==='ERROR'?colors.danger:robot.status==='CHARGING'?colors.info:colors.primaryText;

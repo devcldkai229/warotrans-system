@@ -90,7 +90,7 @@ function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, lo
             <Text variant="caption" style={styles.endpoint}>{endpoint.code}</Text>
           </View>;
         })}
-        {mapRobotSnapshots(robots, runtimeMap?.id || '').map(robot => {
+        {mapRobotSnapshots(robots.filter(robot => robot.isOnline), runtimeMap?.id || '').map(robot => {
           const pose = robot;
           const state = mapRobotState(robot,runtimeMap!,Date.now(),updateMode);
           if (!state.showPose) return null;
