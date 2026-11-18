@@ -7,7 +7,7 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { mobileCapabilities } from '../../shared/api/capabilities';
-import { confirmStockVoucher, createContainerBatch, getStockVoucher } from '../../shared/api/warehouseApi';
+import { addStockVoucherLines, confirmStockVoucher, createContainerBatch, getStockVoucher } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text } from '../../shared/ui';
@@ -43,6 +43,7 @@ export function StockVoucherDetailScreen() {
   useEffect(() => { setActionError(typeof params?.batchError === 'string' ? params.batchError : null); }, [voucherId, params?.batchError]);
 
   const hasServerBatchLines = !!data && inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
+  const selectedIds = Object.keys(prep.value.selected);
 
   const allocateBatch = async () => {
     if (pending.current || acting || !data || !inbound || data.status !== 'DRAFT' || data.lines.length > 0
@@ -82,8 +83,31 @@ export function StockVoucherDetailScreen() {
     }
   };
 
-  const confirmInbound = async () => {
-    if (pending.current || acting || !data || !inbound || data.status !== 'DRAFT' || !data.lines.length
+  const attachOutboundLines = async () => {
+    if (pending.current || acting || !data || inbound || data.status !== 'DRAFT' || data.lines.length > 0
+      || !prep.ready || !selectedIds.length || !canCreateVoucher(session)) {
+      return;
+    }
+    pending.current = true; setActing(true); setActionError(null);
+    const controller = new AbortController(); request.current = controller;
+    try {
+      const updated = await addStockVoucherLines(data.id, selectedIds, controller.signal);
+      if (!alive.current || controller.signal.aborted) return;
+      client.setQueryData(['stock-voucher', session?.id, data.id], updated);
+      void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
+      void client.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
+    } catch (failure) {
+      if (!alive.current || controller.signal.aborted) return;
+      if (uncertainDraftWrite(failure)) void query.refetch();
+      setActionError(getUserErrorMessage(failure, 'Could not save selected containers to this draft. Try again.'));
+    } finally {
+      pending.current = false;
+      if (alive.current) setActing(false);
+    }
+  };
+
+  const confirmVoucher = async () => {
+    if (pending.current || acting || !data || data.status !== 'DRAFT' || !data.lines.length
       || !canCreateVoucher(session) || !mobileCapabilities.confirmStockVoucher) {
       return;
     }
@@ -96,6 +120,7 @@ export function StockVoucherDetailScreen() {
       void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
       void client.invalidateQueries({ queryKey: ['inventory-stock'] });
       void client.invalidateQueries({ queryKey: ['inventory-containers'] });
+      void client.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
     } catch (failure) {
       if (!alive.current || controller.signal.aborted) return;
       if (uncertainDraftWrite(failure)) void query.refetch();
@@ -137,7 +162,7 @@ export function StockVoucherDetailScreen() {
             {params?.preparationCopyFailed && <View style={styles.error}><Text variant="body" color="dangerText">The server draft was created, but preparation could not be copied. Enter the container count again; do not create another draft.</Text></View>}
             {data.status === 'DRAFT' && <VoucherDraftWorkspace key={`${session?.id}:${data.id}:${data.type}`} data={data} accountId={session?.id || ''} writable={canCreateVoucher(session) && !query.isError && !acting} preparation={prep} />}
 
-            {(data.status !== 'DRAFT' || hasServerBatchLines) && !!data.lines.length && <Card gap={8} style={styles.reviewCard}>
+            {(data.status !== 'DRAFT' || hasServerBatchLines || !inbound) && !!data.lines.length && <Card gap={8} style={styles.reviewCard}>
               <Text variant="headline">Containers</Text>
               {data.lines.map((line, index) => <View key={line.id} style={[styles.summaryRow, index === 0 && { paddingTop: 4 }, index === data.lines.length - 1 && { borderBottomWidth: 0, paddingBottom: 2 }]}>
                 <View style={styles.summaryIcon}><Box size={18} strokeWidth={1.8} color={colors.primaryText} /></View>
@@ -147,7 +172,7 @@ export function StockVoucherDetailScreen() {
                   <Text variant="caption" color="textSecondary" numberOfLines={1}>
                     {line.productSku}
                     {line.contentsQuantity != null && line.contentsUnit ? ` · ${line.contentsQuantity} ${line.contentsUnit}` : ''}
-                    {` · ${line.currentStorageLocationCode || t('Location not reported')}`}
+                    {` · ${line.currentStorageLocationCode || t('None')}`}
                     {line.currentLevelNo != null ? ` ${t('· Level {level}', { level: line.currentLevelNo })}` : ''}
                   </Text>
                 </View>
@@ -156,7 +181,8 @@ export function StockVoucherDetailScreen() {
           </ScrollView>
           {data.status === 'DRAFT' && (() => {
             const canAllocateFromPlan = inbound && !data.lines.length && prep.ready && !!prep.value.groups?.length;
-            const canConfirmInbound = inbound && !!data.lines.length;
+            const canAttachOutbound = !inbound && !data.lines.length && prep.ready && selectedIds.length > 0;
+            const canConfirmVoucher = !!data.lines.length;
             const allocateProblem = canAllocateFromPlan ? inboundBatchProblem(prep.value.requestedCount, prep.value.groups!) : null;
             return <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
               {actionError && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{actionError}</Text></View>}
@@ -165,13 +191,18 @@ export function StockVoucherDetailScreen() {
                 <Button title="Allocate Container Barcodes" fullWidth loading={acting}
                   disabled={!canAllocateInboundBatch(session) || !mobileCapabilities.createContainer || acting || query.isError || !!allocateProblem}
                   onPress={() => { void allocateBatch(); }} />
-              </> : canConfirmInbound ? <>
-                {!mobileCapabilities.confirmStockVoucher && <Text variant="caption" color="textSecondary">Awaiting server barcode allocation and inbound confirmation.</Text>}
-                <Button title="Confirm Inbound Voucher" fullWidth loading={acting}
+              </> : canAttachOutbound ? <>
+                <Text variant="caption" color="textSecondary">Save the selected outbound containers to the server before confirming.</Text>
+                <Button title="Save Selected Containers" fullWidth loading={acting}
+                  disabled={!canCreateVoucher(session) || acting || query.isError}
+                  onPress={() => { void attachOutboundLines(); }} />
+              </> : canConfirmVoucher ? <>
+                {!mobileCapabilities.confirmStockVoucher && <Text variant="caption" color="textSecondary">{inbound ? 'Awaiting server barcode allocation and inbound confirmation.' : 'Awaiting server container lines and outbound confirmation.'}</Text>}
+                <Button title={inbound ? 'Confirm Inbound Voucher' : 'Confirm Outbound Voucher'} fullWidth loading={acting}
                   disabled={!canCreateVoucher(session) || !mobileCapabilities.confirmStockVoucher || acting || query.isError}
-                  onPress={() => { void confirmInbound(); }} />
+                  onPress={() => { void confirmVoucher(); }} />
               </> : <>
-                <Text variant="caption" color="textSecondary">{inbound ? 'Allocate container barcodes on the server before confirming inbound stock.' : 'Awaiting server container lines and outbound confirmation.'}</Text>
+                <Text variant="caption" color="textSecondary">{inbound ? 'Allocate container barcodes on the server before confirming inbound stock.' : 'Select staged containers at Outbound before confirming outbound stock.'}</Text>
                 <Button title={inbound ? 'Confirm Inbound Voucher' : 'Confirm Outbound Voucher'} fullWidth disabled onPress={() => {}} />
               </>}
             </View>;

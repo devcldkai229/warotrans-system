@@ -5,7 +5,7 @@ import { ApiError } from './client';
 export const mobileCapabilities = {
   createContainer: true,
   createStockVoucherDraft: true,
-  // Inbound confirmation atomically posts InventoryStock once at configured Inbound; Outbound remains guarded by voucher type.
+  // Inbound and Outbound voucher confirmations post stock atomically via ConfirmStockVoucher (stockPostedAt).
   confirmStockVoucher: true,
   // Warehouse maps ResolveProduct with warehouse.read + StaffOrAdmin; wire contract is exactMatch/items.
   resolveProduct: true,

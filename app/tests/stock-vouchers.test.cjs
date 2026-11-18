@@ -79,29 +79,67 @@ test('a create response that cannot confirm the submitted draft is treated as an
   }
 });
 
-test('inbound confirmation posts stock with caller token and rejects unverified or outbound calls', async () => {
+test('inbound and outbound confirmation posts stock with caller token and rejects unverified or untyped calls', async () => {
   let writes = 0;
   let captured = null;
-  const line = { id: 'l1', containerId: 'c1', containerBarcode: 'CTN-001', containerStatus: 'CREATED', productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24, contentsUnit: 'pcs', currentStorageLocationId: 'loc-in', currentStorageLocationCode: 'INBOUND-01', currentEndpointId: 'ep-in', currentLevelNo: 1, done: false };
-  const confirmed = detail({ status: 'CONFIRMED', confirmedAt: '2026-11-17T10:00:00Z', stockPostedAt: '2026-11-17T10:00:00Z', containerCount: 1, lines: [line] });
+  const line = { id: 'l1', containerId: 'c1', containerBarcode: 'CTN-001', containerStatus: 'CREATED', productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24, contentsUnit: 'pcs', currentStorageLocationId: null, currentStorageLocationCode: null, currentEndpointId: null, currentLevelNo: null, done: false };
+  const confirmed = detail({ status: 'CONFIRMED', confirmedAt: '2026-11-18T10:00:00Z', stockPostedAt: '2026-11-18T10:00:00Z', containerCount: 1, lines: [line] });
   const guardApi = modules(async () => { writes++; return confirmed; })('src/shared/api/warehouseApi.ts');
-  for (const args of [['voucher-1'], ['voucher-1', 'OUTBOUND']]) {
+  for (const args of [['voucher-1'], ['voucher-1', 'OTHER']]) {
     await assert.rejects(async () => guardApi.confirmStockVoucher(...args), error => error.status === 501 && error.code === 'backend_capability_unavailable');
   }
   assert.equal(writes, 0);
 
-  const api = modules(async (url, init, token) => { captured = { url, init, token }; return confirmed; })('src/shared/api/warehouseApi.ts');
-  const result = await api.confirmStockVoucher('voucher-1', 'INBOUND');
-  assert.equal(captured.url, '/api/warehouse/stock-vouchers/voucher-1/confirm');
-  assert.equal(captured.init.method, 'POST');
-  assert.equal(captured.token, 'original-account-token');
-  assert.equal(result.status, 'CONFIRMED');
-  assert.equal(result.stockPostedAt, '2026-11-17T10:00:00Z');
-
-  for (const bad of [detail({ status: 'DRAFT' }), detail({ status: 'CONFIRMED', stockPostedAt: null }), detail({ id: 'other', status: 'CONFIRMED', stockPostedAt: '2026-11-17T10:00:00Z' })]) {
-    const badApi = modules(async () => bad)('src/shared/api/warehouseApi.ts');
-    await assert.rejects(async () => badApi.confirmStockVoucher('voucher-1', 'INBOUND'), error => error.code === 'voucher_confirmation_unverified');
+  for (const voucherType of ['INBOUND', 'OUTBOUND']) {
+    const typedResponse = detail({ type: voucherType, status: 'CONFIRMED', confirmedAt: '2026-11-18T10:00:00Z', stockPostedAt: '2026-11-18T10:00:00Z', containerCount: 1, lines: [line] });
+    const api = modules(async (url, init, token) => { captured = { url, init, token }; return typedResponse; })('src/shared/api/warehouseApi.ts');
+    const result = await api.confirmStockVoucher('voucher-1', voucherType);
+    assert.equal(captured.url, '/api/warehouse/stock-vouchers/voucher-1/confirm');
+    assert.equal(captured.init.method, 'POST');
+    assert.equal(captured.token, 'original-account-token');
+    assert.equal(result.type, voucherType);
+    assert.equal(result.status, 'CONFIRMED');
+    assert.equal(result.stockPostedAt, '2026-11-18T10:00:00Z');
   }
+
+  for (const bad of [detail({ status: 'DRAFT' }), detail({ type: 'INBOUND', status: 'CONFIRMED', stockPostedAt: null }), detail({ type: 'INBOUND', status: 'CONFIRMED', stockPostedAt: '2026-11-18T10:00:00Z' })]) {
+    const badApi = modules(async () => bad)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(async () => badApi.confirmStockVoucher('voucher-1', 'OUTBOUND'), error => error.code === 'voucher_confirmation_unverified');
+  }
+});
+
+test('addStockVoucherLines chunks batches over 200 containers and verifies every saved line', async () => {
+  const requests = [];
+  const allIds = Array.from({ length: 205 }, (_, i) => `c-${i + 1}`);
+  let accumulated = [];
+  const api = modules(async (url, init, token) => {
+    const body = JSON.parse(init.body);
+    requests.push({ url, body, token });
+    accumulated = [...accumulated, ...body.containerIds];
+    return detail({
+      type: 'OUTBOUND',
+      containerCount: accumulated.length,
+      lines: accumulated.map((containerId, index) => ({
+        id: `l-${index + 1}`, lineNo: index + 1, containerId, containerBarcode: `CTN-${index + 1}`,
+        containerStatus: 'STAGED_OUTBOUND', productId: 'p1', productSku: 'SKU1', productName: 'Rice',
+        currentStorageLocationId: null, currentStorageLocationCode: null, currentEndpointId: 'ep-out', currentLevelNo: null, done: false,
+      })),
+    });
+  })('src/shared/api/warehouseApi.ts');
+
+  const res = await api.addStockVoucherLines('voucher-1', allIds);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url, '/api/warehouse/stock-vouchers/voucher-1/lines');
+  assert.equal(requests[0].token, 'original-account-token');
+  assert.equal(requests[0].body.containerIds.length, 200);
+  assert.equal(requests[1].body.containerIds.length, 5);
+  assert.equal(res.lines.length, 205);
+
+  await assert.rejects(() => api.addStockVoucherLines('voucher-1', []), error => error.code === 'validation_failed');
+  await assert.rejects(() => api.addStockVoucherLines('voucher-1', ['c-1', 'c-1']), error => error.code === 'validation_failed');
+
+  const incompleteApi = modules(async () => detail({ type: 'OUTBOUND', containerCount: 0, lines: [] }))('src/shared/api/warehouseApi.ts');
+  await assert.rejects(() => incompleteApi.addStockVoucherLines('voucher-1', ['c-1']), error => error.code === 'voucher_lines_unverified');
 });
 
 test('batch container creation links to draft voucher and verifies every allocated item and line', async () => {

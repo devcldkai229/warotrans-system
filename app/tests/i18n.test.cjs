@@ -72,6 +72,9 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(t('Decrease Container Count'), 'Giảm số lượng thùng');
   assert.equal(t('Allocate Container Barcodes'), 'Cấp mã vạch Container');
   assert.equal(t('Stock posted {date}', { date: '17 Nov 2026' }), 'Đã ghi sổ tồn kho: 17 Nov 2026');
+  assert.equal(t('Signed in as {name}', { name: 'Alex Tran' }), 'Đã đăng nhập: Alex Tran');
+  assert.equal(t('Save Selected Containers'), 'Lưu container đã chọn');
+  assert.equal(translateText('STAGED_OUTBOUND'), 'Chờ xuất tại cổng');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(
@@ -103,6 +106,18 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(
     localizeServerMessage('voucher_container_not_at_inbound', "Container 'CTN-001' must be at the configured Inbound."),
     "Container 'CTN-001' phải đang nằm tại vị trí Nhập kho (Inbound) đã cấu hình.",
+  );
+  assert.equal(
+    localizeServerMessage('voucher_container_not_at_outbound', "Container 'CTN-002' must be staged at an enabled Outbound gate of this warehouse."),
+    "Container 'CTN-002' phải đang tập kết tại một cổng Xuất kho (Outbound) đang bật của kho này.",
+  );
+  assert.equal(
+    localizeServerMessage('inbound_source_not_gate', 'Putaway source must be an enabled Inbound gate.'),
+    'Điểm lấy hàng cất kệ (Putaway) phải là một cổng Nhập kho (Inbound) đang bật trên bản đồ.',
+  );
+  assert.equal(
+    localizeServerMessage('batch_initial_location_not_supported', 'Omit initialStorageLocationId for new batches.'),
+    'Không hỗ trợ chọn sẵn vị trí khi tạo lô container mới.',
   );
 
   // Notification localization

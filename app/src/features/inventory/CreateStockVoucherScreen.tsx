@@ -6,7 +6,7 @@ import { Box, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { getUserErrorMessage } from '../../shared/api/client';
 import { mobileCapabilities } from '../../shared/api/capabilities';
-import { createContainerBatch, createStockVoucherDraft } from '../../shared/api/warehouseApi';
+import { addStockVoucherLines, createContainerBatch, createStockVoucherDraft } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import type { StockVoucherType } from '../../shared/types/contracts';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
@@ -111,6 +111,27 @@ export function CreateStockVoucherScreen() {
         void preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: 'new-INBOUND' }, emptyPreparation('INBOUND')).catch(() => {});
       }
       if (!alive.current || controller.signal.aborted) return;
+      if (!inbound && !preparationCopyFailed) {
+        preparation.reset(emptyPreparation('OUTBOUND'));
+        void preparationDeviceStore.write({ accountId: session!.id, warehouseId: warehouse.id, documentKey: 'new-OUTBOUND' }, emptyPreparation('OUTBOUND')).catch(() => {});
+        try {
+          const attached = await addStockVoucherLines(result.id, Object.keys(snapshot.selected), controller.signal);
+          if (!alive.current || controller.signal.aborted) return;
+          client.setQueryData(['stock-voucher', session?.id, result.id], attached);
+          void client.invalidateQueries({ queryKey: ['stock-vouchers', session?.id] });
+          void client.invalidateQueries({ queryKey: ['outbound-voucher-preview'] });
+          replace('stock_voucher_detail', { voucherId: result.id, warehouseId: warehouse.id });
+          return;
+        } catch (attachFailure) {
+          if (!alive.current || controller.signal.aborted) return;
+          replace('stock_voucher_detail', {
+            voucherId: result.id,
+            warehouseId: warehouse.id,
+            batchError: getUserErrorMessage(attachFailure, 'Could not save selected containers to this draft. Retry from this voucher.'),
+          });
+          return;
+        }
+      }
       if (inbound && mobileCapabilities.createContainer && canAllocateInboundBatch(session) && !preparationCopyFailed) {
         try {
           const batch = await createContainerBatch(

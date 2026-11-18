@@ -48,7 +48,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
   };
   if (!prep.ready) return <Card gap={12}><Text variant="body">{prep.error || 'Loading Preparation…'}</Text>{prep.error && <Button title="Retry" variant="outline" onPress={prep.retry} />}</Card>;
   return <>
-    {!hasServerBatchLines && (!inbound || !prep.value.groups?.length || !!data.lines.length) && <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
+    {!hasServerBatchLines && (inbound ? (!prep.value.groups?.length || !!data.lines.length) : !data.lines.length) && <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
       {!!index && <View style={styles.stepLine} />}
       <View style={styles.step}><View style={[styles.stepNumber, index <= currentStep && styles.stepCurrent]}>
         {index < currentStep ? <Check size={15} color={colors.primaryText} /> : <Text variant="caption" color={index === currentStep ? 'primaryText' : 'textMuted'}>{index + 1}</Text>}
@@ -116,8 +116,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
         <Button title="Review Preparation" variant="outline" disabled={!writable} onPress={localReview} />
       </Card>}
     </>}
-    {!inbound && !review && writable && <OutboundVoucherSelection accountId={accountId} warehouseId={data.warehouseId} value={prep.value} update={prep.update} onReview={localReview} />}
-    {!inbound && !!data.lines.length && <Card gap={8}><Text variant="headline">Server Voucher Containers</Text><Text variant="caption" color="textSecondary">These saved lines are separate from the device selection.</Text>{data.lines.map(line => <View key={line.id} style={styles.containerRow}><Text variant="code" selectable>{line.containerBarcode}</Text><Text variant="bodyMedium">{line.productName}</Text><Text variant="caption">{line.currentStorageLocationCode || 'Location not reported'}</Text></View>)}</Card>}
+    {!inbound && !data.lines.length && !review && writable && <OutboundVoucherSelection accountId={accountId} warehouseId={data.warehouseId} value={prep.value} update={prep.update} onReview={localReview} showReviewAction={false} />}
     {reviewError && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{reviewError}</Text></View>}
     {review && <Card gap={14}>
       <View style={styles.between}><Text variant="headline">Review Preparation</Text><Button title="Edit" variant="ghost" size="sm" onPress={() => setReview(false)} /></View>

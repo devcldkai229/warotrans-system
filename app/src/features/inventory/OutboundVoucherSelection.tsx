@@ -63,7 +63,11 @@ export function OutboundVoucherSelection({ accountId, warehouseId, value, update
           <View style={styles.summaryInfo}>
             <Text variant="code">{item.barcode}</Text>
             <Text variant="bodyMedium" numberOfLines={1}>{item.productName}</Text>
-            <Text variant="caption" color="textSecondary" numberOfLines={1}>{item.productSku} · {item.currentStorageLocationCode || 'Location reported'}</Text>
+            <Text variant="caption" color="textSecondary" numberOfLines={1}>
+              {item.productSku}
+              {item.contentsQuantity != null && item.contentsUnit ? ` · ${item.contentsQuantity} ${item.contentsUnit}` : ''}
+              {` · ${item.currentEndpointCode || item.currentStorageLocationCode || 'None'}`}
+            </Text>
           </View>
           <View style={[styles.checkCircle, checked && styles.checkCircleActive]}>
             {checked && <Check size={14} strokeWidth={2.6} color={colors.textInverse} />}

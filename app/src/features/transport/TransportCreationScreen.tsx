@@ -112,7 +112,14 @@ export function TransportCreationScreen() {
   }, [data]);
   useEffect(() => { if (error) listRef.current?.scrollToOffset({ offset: 0, animated: false }); }, [error]);
   const held = useMemo(() => activeContainerIds(data?.requests ?? []), [data]);
-  const sourceOf = (container: ContainerListItem) => containerOrigin(container, locations, endpoints, mapId);
+  const sourceOf = (container: ContainerListItem) => {
+    const origin = containerOrigin(container, locations, endpoints, mapId);
+    if (!origin && flow === 'inbound' && ['CREATED', 'PACKED'].includes(container.status)
+      && !container.currentStorageLocationId && !container.currentEndpointId) {
+      return receivingPoint ?? null;
+    }
+    return origin;
+  };
   const reasonFor = (container: ContainerListItem) => containerReadiness(container, flow, sourceOf(container), held,
     receivingPoint ? [receivingPoint.endpointId] : []);
   const schema = useQuery({ queryKey: ['dispatch-schema', workflowId], queryFn: () => getWorkflowRequestInputSchema(workflowId), enabled: !!workflowId, retry: false });

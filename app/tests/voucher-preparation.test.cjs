@@ -90,21 +90,21 @@ const { outboundPreviewItems, loadOutboundPreview } = createLoader({
 })('src/features/inventory/outboundPreparation.ts');
 const point = { id: 'out', code: 'OUTBOUND-01', mapVersionId: 'map', endpointType: 'WAYPOINT', isEnabled: true };
 const map = { id: 'map', warehouseId: 'warehouse-1', endpoints: [point] };
-const container = { id: 'c1', barcode: 'CT-1', status: 'STORED', inActiveTransport: false, currentStorageLocationId: 'loc', currentEndpointId: 'out' };
+const container = { id: 'c1', barcode: 'CT-1', status: 'STAGED_OUTBOUND', inActiveTransport: false, currentStorageLocationId: null, currentEndpointId: 'out' };
 
-test('outbound preview only uses explicit current locations on enabled outbound point-code hints', () => {
+test('outbound preview only returns STAGED_OUTBOUND containers at enabled outbound gates', () => {
   const result = outboundPreviewItems(map, scope.warehouseId, [container,
     { ...container, id: 'moving', inActiveTransport: true }, { ...container, id: 'unknown', inActiveTransport: undefined },
-    { ...container, id: 'issued', status: 'ISSUED' }, { ...container, id: 'elsewhere', currentEndpointId: 'shelf' },
-    { ...container, id: 'unlocated', currentStorageLocationId: null }, container]);
-  assert.deepEqual(plain(result.items).map(value => value.id), ['c1']);
+    { ...container, id: 'stored', status: 'STORED' }, { ...container, id: 'elsewhere', currentEndpointId: 'shelf' },
+    { ...container, id: 'shelved', currentStorageLocationId: 'loc' }, { ...container, id: 'no-gate', currentEndpointId: null }, container]);
+  assert.deepEqual(plain(result.items).map(value => [value.id, value.currentEndpointCode]), [['c1', 'OUTBOUND-01']]);
   assert.throws(() => outboundPreviewItems(map, 'another-warehouse', [container]), /another warehouse/);
   for (const change of [{ isEnabled: false }, { mapVersionId: 'old-map' }, { code: 'NOTOUTBOUND' }, { endpointType: 'PARK' }]) {
     assert.equal(outboundPreviewItems({ ...map, endpoints: [{ ...point, ...change }] }, scope.warehouseId, [container]).items.length, 0);
   }
 });
 
-test('outbound preview paginates fully, forwards cancellation and never turns a truncated list into empty success', async () => {
+test('outbound preview paginates staged containers, forwards cancellation and never turns a truncated list into empty success', async () => {
   let calls = [];
   const signal = new AbortController().signal;
   let truncate = false;
@@ -114,7 +114,10 @@ test('outbound preview paginates fully, forwards cancellation and never turns a 
     'src/shared/api/warehouseApi.ts': { listContainers: async (params, actualSignal) => { calls.push(params); assert.equal(actualSignal, signal); return params.skip === 0 ? { items: [container], total: 2 } : { items: truncate ? [] : [{ ...container, id: 'c2' }], total: 2 }; } },
   })('src/features/inventory/outboundPreparation.ts');
   assert.equal((await api.loadOutboundPreview(scope.warehouseId, signal)).items.length, 2);
-  assert.deepEqual(calls.map(value => value.skip), [0, 1]);
+  assert.deepEqual(calls.map(value => ({ skip: value.skip, status: value.status, eligibleOnly: value.eligibleOnly })), [
+    { skip: 0, status: 'STAGED_OUTBOUND', eligibleOnly: false },
+    { skip: 1, status: 'STAGED_OUTBOUND', eligibleOnly: false },
+  ]);
   truncate = true;
   await assert.rejects(api.loadOutboundPreview(scope.warehouseId, signal), error => error.code === 'incomplete_container_list');
 });

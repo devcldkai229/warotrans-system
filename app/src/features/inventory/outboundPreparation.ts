@@ -8,18 +8,21 @@ export function staleOutboundSelections(selected: PreparedContainer[], candidate
     && candidate.currentEndpointId === item.endpointId && candidate.productName === item.productName && candidate.productSku === item.productSku));
 }
 
-/** Preview convention matches transport's point-code hints. It is NOT canonical voucher eligibility. */
+/** Canonical staged outbound candidates at enabled OUTBOUND gates (not shelves or in transit). */
 export function outboundPreviewItems(map: MapVersionDetailDto, warehouseId: string, containers: ContainerListItem[]) {
   if (map.warehouseId !== warehouseId) throw new ApiError(502, 'warehouse_mismatch', 'The map belongs to another warehouse.');
   const points = map.endpoints.filter(point => point.mapVersionId === map.id && point.isEnabled && point.endpointType === 'WAYPOINT'
     && /(^|[-_ ])OUTBOUND($|[-_ ])/i.test(point.code));
-  const ids = new Set(points.map(point => point.id));
+  const pointById = new Map(points.map(point => [point.id, point]));
   const seen = new Set<string>();
-  const items = containers.filter(item => {
-    if (!item.id || !item.barcode?.trim() || seen.has(item.id)) return false;
+  const items = containers.flatMap(item => {
+    if (!item.id || !item.barcode?.trim() || seen.has(item.id)) return [];
     seen.add(item.id);
-    return item.status === 'STORED' && item.inActiveTransport === false && !!item.currentStorageLocationId
-      && !!item.currentEndpointId && ids.has(item.currentEndpointId);
+    if (item.status !== 'STAGED_OUTBOUND' || item.inActiveTransport !== false || item.currentStorageLocationId !== null
+      || !item.currentEndpointId) return [];
+    const gate = pointById.get(item.currentEndpointId);
+    if (!gate) return [];
+    return [{ ...item, currentEndpointCode: item.currentEndpointCode ?? gate.code }];
   });
   return { points, items };
 }
@@ -32,7 +35,7 @@ export async function loadOutboundPreview(warehouseId: string, signal?: AbortSig
   const containers: ContainerListItem[] = [];
   let skip = 0;
   while (true) {
-    const page = await listContainers({ warehouseId, skip, take: 200 }, signal);
+    const page = await listContainers({ warehouseId, eligibleOnly: false, status: 'STAGED_OUTBOUND', skip, take: 200 }, signal);
     if (!Array.isArray(page.items) || !Number.isInteger(page.total) || page.total < 0) throw new ApiError(502, 'invalid_container_page', 'Container data could not be verified.');
     containers.push(...page.items); skip += page.items.length;
     if (skip >= page.total) break;
