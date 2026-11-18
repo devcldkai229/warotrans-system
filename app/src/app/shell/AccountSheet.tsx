@@ -20,7 +20,6 @@ export interface AccountSheetProps {
   operatorRole: string;
   /** Avatar initials, computed by the caller from the operator name. */
   initials: string;
-  zone: string;
   /** Omitted when the shell is embedded somewhere that owns sign-out itself. */
   onLogout?: () => void;
 }
@@ -48,7 +47,6 @@ export function AccountSheet({
   operatorUsername,
   operatorRole,
   initials,
-  zone,
   onLogout,
 }: AccountSheetProps) {
   const topInset = useTopInset();
@@ -74,7 +72,6 @@ export function AccountSheet({
   };
 
   const roleText = t(operatorRole.toUpperCase());
-  const zoneText = t(zone);
 
   return (
     <Modal
@@ -106,21 +103,12 @@ export function AccountSheet({
               </Text>
               <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
                 {operatorUsername
-                  ? `@${operatorUsername} · ${roleText} · ${zoneText}`
-                  : `${roleText} · ${zoneText}`}
+                  ? `@${operatorUsername} · ${roleText}`
+                  : roleText}
               </Text>
             </View>
           </View>
 
-          {/* Shift Details */}
-          <View style={styles.shiftBox}>
-            <Text variant="caption" color={colors.textSecondary}>
-              Current shift
-            </Text>
-            <Text variant="label" color={colors.textPrimary}>
-              Morning (06:00 – 14:00)
-            </Text>
-          </View>
 
           {/* Appearance Theme Switcher */}
           <View style={styles.appearanceSection}>
@@ -270,14 +258,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
     },
     operatorName: {
       fontWeight: '700',
-    },
-    shiftBox: {
-      padding: 8,
-      borderRadius: radii.md,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: colors.border,
-      gap: 2,
     },
     appearanceSection: {
       gap: 6,

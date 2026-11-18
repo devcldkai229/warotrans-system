@@ -12,6 +12,7 @@ import { mapRobotState, type MapUpdateMode } from '../mapTelemetry';
 import { worldToBase, type MapFrame } from '../mapTransform';
 import type { MapCameraController } from '../hooks/useMapCamera';
 import { MapControl } from '../MapHud';
+import { ROBOT_COLOR } from '../mapStyle';
 
 interface Props {map:MapVersionDetailDto;frame:MapFrame;robots:RobotResponse[];camera:MapCameraController;selected:string;now:number;updateMode?:MapUpdateMode;onSelect:(code:string)=>void}
 export function RobotLayer({map,frame,robots,camera,selected,now,updateMode='polling',onSelect}:Props) {
@@ -20,7 +21,7 @@ export function RobotLayer({map,frame,robots,camera,selected,now,updateMode='pol
   return <View style={StyleSheet.absoluteFill} pointerEvents="box-none">{robots.filter(robot=>robot.currentMapVersionId===map.id&&robot.isOnline).map(robot=>{
     const state=mapRobotState(robot,map,now,updateMode),point=worldToBase({x:robot.poseX,y:robot.poseY},map,frame);
     if(!state.showPose||!point)return null;
-    const tone=state.lastReported?colors.textMuted:robot.status==='ERROR'?colors.danger:robot.status==='CHARGING'?colors.info:colors.primaryText;
+    const tone=state.lastReported?colors.textMuted:ROBOT_COLOR[robot.status]??colors.primaryText;
     return <MapAnchor key={robot.id} point={point} camera={camera} width={72} height={64}>
       <MapControl label={`Robot ${robot.code}, ${robot.status}, ${state.label}`} selected={selected===robot.code} width={72} height={64}
         onPress={()=>{if(Date.now()-camera.lastGestureAt>200)onSelect(robot.code);}}

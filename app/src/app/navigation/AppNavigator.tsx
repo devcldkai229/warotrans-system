@@ -28,7 +28,7 @@ import { BottomTabBar } from './BottomTabBar';
 import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
-  const { session, isAuthenticated, logout, updateZone } = useAuth();
+  const { session, isAuthenticated, logout } = useAuth();
   const { currentScreen, goBack, params, navigate } = useNavigation();
   const styles = useThemedStyles(createStyles);
 
@@ -108,13 +108,9 @@ export function AppNavigator() {
           operatorName={session.fullName}
           operatorRole={session.role === 'ADMIN' ? 'Admin' : session.role === 'TECHNICIAN' ? 'Technician' : 'Staff'}
           initials={session.avatarInitials}
-          zone={session.zone}
           onLogout={logout}
-          onZoneChange={updateZone}
           initialOpen={
-            params?.modal === 'zone'
-              ? 'zone'
-              : params?.modal === 'account'
+            params?.modal === 'account'
                 ? 'account'
                 : params?.modal === 'notifications'
                   ? 'notifications'
