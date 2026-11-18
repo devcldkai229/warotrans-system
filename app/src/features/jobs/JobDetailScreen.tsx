@@ -44,6 +44,8 @@ import { JobTaskPlan } from './JobTaskPlan';
 import { JobTaskDetailSheet } from './JobTaskDetailSheet';
 import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from './jobData';
 import { VerifyModal } from './VerifyModal';
+import { HandoverActionsCard } from './HandoverActionsCard';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
 import { cancelRobotCommand, getJobDetail, reportTaskProblem, resumeJob, startJob } from '../../shared/api';
 import type { JobDetailResponse } from '../../shared/types/contracts';
@@ -58,7 +60,7 @@ export function JobDetailScreen() {
   const [isLoadingJob, setIsLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
   const [jobRefreshError, setJobRefreshError] = useState<string | null>(null);
-  const { lastJobUpdate } = useRealtime();
+  const { lastJobUpdate, lastTrafficUpdate } = useRealtime();
 
   const initialModal = params?.modal;
   const isInitialVerify =
@@ -129,6 +131,13 @@ export function JobDetailScreen() {
     }
   }, [lastJobUpdate, jobId, job.id, job.jobNo, refreshJob]);
 
+  // A traffic grant / wait / release for this job (trafficUpdated): its waiting reason and progress changed.
+  useEffect(() => {
+    if (lastTrafficUpdate?.jobId && (lastTrafficUpdate.jobId === jobId || lastTrafficUpdate.jobId === job.id)) {
+      refreshJob().catch(() => {});
+    }
+  }, [lastTrafficUpdate, jobId, job.id, refreshJob]);
+
   useEffect(() => {
     if (isVerifyOpen && !verificationStepId && job.activeStepId) setVerificationStepId(job.activeStepId);
   }, [isVerifyOpen, verificationStepId, job.activeStepId]);
@@ -153,6 +162,11 @@ export function JobDetailScreen() {
   const verificationStep = verificationTask?.steps.find(step => step.id === verificationStepId);
   const verificationContainerId = verificationStep?.resolvedInputs?.containerId || verificationTask?.contextValues?.containerId;
   const verificationContainer = job.containers.find(container => container.containerId === verificationContainerId);
+  const activeTask = job.tasks.find(task => task.steps.some(step => step.id === job.activeStepId));
+  const activeStep = activeTask?.steps.find(step => step.id === job.activeStepId);
+  const activeContainerRaw = activeStep?.resolvedInputs?.containerId || activeTask?.contextValues?.containerId;
+  const activeContainerId = typeof activeContainerRaw === 'string' ? activeContainerRaw : undefined;
+  const activeContainer = job.containers.find(container => container.containerId === activeContainerId);
 
   useEffect(() => {
     setTargetContainer(primaryTarget?.code || '');
@@ -557,6 +571,28 @@ export function JobDetailScreen() {
             )}
           </Card>
         )}
+
+        {/* Web parity: claim / give back / take over, confirm without scanning, confirm the whole stop at once. */}
+        {isWaiting && activeStep ? (
+          <HandoverActionsCard
+            key={activeStep.id}
+            jobId={job.id}
+            step={activeStep}
+            tasks={job.tasks}
+            containerId={activeContainerId}
+            containerCode={activeContainer?.code || primaryTarget?.code || activeContainerId || 'Container'}
+            containerLabel={id => job.containers.find(container => container.containerId === id)?.code || id}
+            accountId={session?.id}
+            canOperate={sessionCan(session, PERMISSIONS.jobOperate)}
+            canTakeOver={sessionCan(session, PERMISSIONS.jobTakeover)}
+            onUpdated={detail => {
+              if (activeJobId.current !== job.id) return;
+              jobReader.invalidate();
+              setJob(mapJobDetailToAppJobItem(detail, session?.id));
+              void refreshJob().catch(() => {});
+            }}
+          />
+        ) : null}
 
         {/* Dynamic AMR Cargo Bay Visualizer */}
         <AmrCargoBayVisualizer

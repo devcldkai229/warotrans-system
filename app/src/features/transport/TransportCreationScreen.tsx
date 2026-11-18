@@ -20,6 +20,8 @@ import {
 } from '../../shared/api';
 import { parseStaffInputs, staffInputDefaults } from './dispatchData';
 import { submitDispatch } from './dispatchSubmission';
+import { startQueuedJobs, type JobStartResult } from './startQueuedJobs';
+import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { TransportPlaceSheet } from './TransportPlaceSheet';
 import { activeContainerIds, containerOrigin, containerReadiness, mappedLocations, movementDetail,
   stationPoints, transportDestinations, transportFlow, type TransportPlace } from './transportDraft';
@@ -79,7 +81,10 @@ export function TransportCreationScreen() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [receipt, setReceipt] = useState<{ created: CreateTransportRequestResponse; queued: QueueTransportRequestResponse | null; queueError: string | null } | null>(null);
+  const [receipt, setReceipt] = useState<{ created: CreateTransportRequestResponse; queued: QueueTransportRequestResponse | null; queueError: string | null; started?: JobStartResult[] } | null>(null);
+  // Web parity ("Run on robot"): queue and start in one go. Off for an account that may not start Jobs.
+  const canStartJobs = sessionCan(session, PERMISSIONS.jobOperate);
+  const [startNow, setStartNow] = useState(true);
   const commandLock = useRef(false);
   const listRef = useRef<FlatList<ContainerListItem>>(null);
   const routeKey = `${repeatId}:${barcodesKey}:${params?.workflow || ''}`;
@@ -210,9 +215,22 @@ export function TransportCreationScreen() {
       const details = selectedItems.map((item, index) => movementDetail(item, sourceOf(item), destinationFor(item), index + 1));
       validateMovementFields(schema.data.movementInputs, details);
       const result = await submitDispatch({ warehouseId: data.warehouse.id, mapVersionId: mapId, workflowId: workflow.id, workflowInputs, details }, true);
-      if (liveScope.current === scope) setReceipt(result);
+      const started = canStartJobs && startNow && result.queued ? await startQueuedJobs(result.queued.jobs) : undefined;
+      if (liveScope.current === scope) setReceipt({ ...result, started });
     } catch (failure) { if (liveScope.current === scope) setError(failure instanceof DraftInputError ? failure.message : getUserErrorMessage(failure, 'Request could not be created. Your selections are kept.')); }
     finally { commandLock.current = false; setPending(false); }
+  };
+  /** Starts the Jobs not started yet (none started, or the ones whose start failed). */
+  const startPending = async () => {
+    if (!receipt?.queued || commandLock.current) return;
+    commandLock.current = true; setPending(true);
+    const id = receipt.created.id;
+    const done = new Set((receipt.started || []).filter(item => !item.error).map(item => item.jobId));
+    try {
+      const results = await startQueuedJobs(receipt.queued.jobs.filter(job => !done.has(job.jobId)));
+      setReceipt(previous => previous?.created.id === id
+        ? { ...previous, started: [...(previous.started || []).filter(item => !item.error), ...results] } : previous);
+    } finally { commandLock.current = false; setPending(false); }
   };
   const retryQueue = async () => {
     if (!receipt || commandLock.current) return;
@@ -233,7 +251,8 @@ export function TransportCreationScreen() {
   </View>;
 
   if (receipt) return <View style={styles.root}>
-    <SubScreenHeader title={receipt.queued ? 'Request Queued' : 'Queueing Incomplete'} onBack={goBack} />
+    <SubScreenHeader title={receipt.started?.length && receipt.started.every(item => !item.error) ? 'Request Started'
+      : receipt.queued ? 'Request Queued' : 'Queueing Incomplete'} onBack={goBack} />
     <ScrollView contentContainerStyle={[styles.receipt, { paddingBottom: Math.max(insets.bottom, 20) }]}>
       <View style={styles.receiptIcon}><CheckCircle2 size={28} color={receipt.queued ? colors.successText : colors.warningText} /></View>
       <Text variant="title" selectable>{receipt.created.requestCode}</Text>
@@ -242,6 +261,13 @@ export function TransportCreationScreen() {
         <Text variant="caption">Your request is saved. Retry queueing this request to avoid creating a duplicate.</Text>
         <Button title="Retry Queue" onPress={retryQueue} loading={pending} /></View>}
       {receipt.queued && <Text variant="body" color={colors.textSecondary}>{receipt.queued.jobs.length} {receipt.queued.jobs.length === 1 ? 'Job' : 'Jobs'} created. The server assigns a robot when a Job is started.</Text>}
+      {receipt.started?.map(item => <View key={item.jobId} style={styles.notice}>
+        <Text variant="bodyMedium">{item.jobNo}</Text>
+        {item.error ? <Text variant="body" color={colors.dangerText}>Not started: {item.error}</Text>
+          : <Text variant="body" color={colors.successText}>Started{item.robot ? ` on ${item.robot}` : ''}.</Text>}
+      </View>)}
+      {receipt.queued && canStartJobs && (!receipt.started || receipt.started.some(item => item.error))
+        ? <Button title={receipt.started ? 'Retry Start On Robot' : 'Start On Robot'} onPress={startPending} loading={pending} fullWidth /> : null}
       <Button title="View Request" onPress={() => navigate('transport_detail', { requestId: receipt.created.id })} disabled={pending} fullWidth />
       <Button title="Back To Transport" variant="outline" onPress={() => navigate('transport')} disabled={pending} fullWidth />
     </ScrollView>
@@ -355,7 +381,12 @@ export function TransportCreationScreen() {
         <View style={styles.sectionRow}><Text variant="bodyMedium">{selected.length} Selected</Text>
           {selectedItems.some(item => !destinationFor(item)) && <Text variant="caption" color={colors.warningText}>{selectedItems.filter(item => !destinationFor(item)).length} Need Destination</Text>}
         </View>
-        <Button title="Create Request" onPress={submit} fullWidth loading={pending}
+        {canStartJobs && <Pressable onPress={() => setStartNow(value => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: startNow }}
+          accessibilityLabel="Start on a robot right away" style={styles.startNowRow}>
+          <View style={[styles.startNowBox, startNow && styles.startNowBoxOn]}>{startNow ? <Check size={14} color={colors.textInverse} /> : null}</View>
+          <Text variant="body" style={styles.flexText}>Start On A Robot Right Away</Text>
+        </Pressable>}
+        <Button title={canStartJobs && startNow ? 'Create And Start' : 'Create Request'} onPress={submit} fullWidth loading={pending}
           disabled={!workflow || !schema.data || schema.data.workflowId !== workflowId || !!schema.error || !selected.length || !places.length || flow === 'unsupported' || scanning || context.isFetching || context.isError || selectedItems.some(item => !!reasonFor(item))} />
       </View>
     </>}
@@ -377,6 +408,9 @@ export function TransportCreationScreen() {
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background }, flex: { flex: 1, minWidth: 0 },
+  startNowRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }, flexText: { flex: 1 },
+  startNowBox: { width: 22, height: 22, borderRadius: radii.sm, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  startNowBoxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   content: { padding: 20, gap: 16 }, list: { paddingHorizontal: 16, paddingBottom: 20 }, listHeader: { gap: 14, paddingBottom: 10 },
   contextRow: { paddingHorizontal: 18, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6 },
   contextControl: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, flexShrink: 1 },

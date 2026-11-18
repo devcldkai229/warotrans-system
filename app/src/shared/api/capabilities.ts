@@ -9,7 +9,8 @@ export const mobileCapabilities = {
   confirmStockVoucher: false,
   // Warehouse maps ResolveProduct with warehouse.read + StaffOrAdmin; wire contract is exactMatch/items.
   resolveProduct: true,
-  claimHumanTask: false,
+  // WH-03 claim / release / takeover on job-steps (verified against HumanTasks endpoints, 18/11/2026).
+  claimHumanTask: true,
   reportIssue: true,
   pauseJob: false,
   resumeJob: true,

@@ -25,12 +25,14 @@ interface Props {
   onSelectRobot: (code: string) => void;
   bottomInset: number;
   updateMode?: MapUpdateMode;
+  onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
 }
 
 /** A read-only operational view. All business geometry and robot identity come from this map version. */
 export function OperationalMap(props: Props) {
   return interactiveMapEnabled ? <MapViewport map={props.map} robots={props.fleet} selectedRobot={props.selectedRobotId}
-    onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={{top:0,bottom:props.bottomInset}} showHeader={false} fullBleed={true}/> : <LegacyOperationalMap {...props}/>;
+    onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={{top:0,bottom:props.bottomInset}} showHeader={false} fullBleed={true}
+    onLocalizeRobot={props.onLocalizeRobot}/> : <LegacyOperationalMap {...props}/>;
 }
 
 function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bottomInset, updateMode = 'polling' }: Props) {

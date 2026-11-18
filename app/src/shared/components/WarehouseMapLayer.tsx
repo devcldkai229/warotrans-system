@@ -22,12 +22,14 @@ interface Props {
   loading?: boolean;
   contentInsets?: { top: number; bottom: number };
   updateMode?: MapUpdateMode;
+  onLocalizeRobot?: (robotId: string, endpointId: string) => Promise<void>;
 }
 
 /** Actual map raster and surveyed geometry. Robot poses use the map's origin, rotation and resolution. */
 export function WarehouseMapLayer(props: Props) {
   return interactiveMapEnabled && props.map && hasMapCalibration(props.map) ? <MapViewport map={props.map} robots={props.robots}
-    selectedRobot={props.selectedRobot} onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={props.contentInsets} title="Job Map"/> : <LegacyWarehouseMapLayer {...props}/>;
+    selectedRobot={props.selectedRobot} onSelectRobot={props.onSelectRobot} updateMode={props.updateMode} contentInsets={props.contentInsets} title="Job Map"
+    onLocalizeRobot={props.onLocalizeRobot}/> : <LegacyWarehouseMapLayer {...props}/>;
 }
 
 function LegacyWarehouseMapLayer({ map, robots, selectedRobot, onSelectRobot, loading = false, contentInsets = { top: 0, bottom: 0 }, updateMode = 'polling' }: Props) {

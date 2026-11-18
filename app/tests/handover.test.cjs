@@ -52,10 +52,11 @@ const rawJob = () => ({ id: 'job', workflowId: 'workflow', mapVersionId: 'map', 
 test('confirmation posts only container and note; authenticated actor and source belong to BE', async () => {
   let request;
   const api = loadApi(async (url, init) => { request = { url, body: JSON.parse(init.body) }; return rawJob(); });
-  const result = await api.confirmHandover({ jobStepId: 'step', containerId: 'container', note: 'Loaded',
+  const container = '6b468ed8-7080-4faa-addd-c9daf3efe2b2';
+  const result = await api.confirmHandover({ jobStepId: 'step', containerId: container, note: 'Loaded',
     confirmedBy: 'fake-staff', confirmationSource: 'ROBOT_BUTTON', confirmedByRobotId: 'fake-robot' });
   assert.equal(request.url, '/api/workflow-execution/job-steps/step/confirm');
-  assert.deepEqual(request.body, { containerId: 'container', note: 'Loaded' });
+  assert.deepEqual(request.body, { containerId: container, note: 'Loaded', scannedBarcode: null });
   assert.equal(result.tasks[0].steps[0].outputValues.confirmationSource, 'ROBOT_BUTTON');
 });
 

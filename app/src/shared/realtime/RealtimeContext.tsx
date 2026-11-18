@@ -5,6 +5,8 @@ import {
   RobotTelemetryEvent,
   TransportStatusEvent,
   JobUpdatedRealtimeEvent,
+  RobotHealthEvent,
+  TrafficUpdatedEvent,
 } from './realtimeClient';
 import { triggerHaptic } from '../utils/haptics';
 import { getAccessToken, onAccessTokenChange } from '../api/client';
@@ -19,6 +21,9 @@ interface RealtimeContextValue extends NotificationInboxState {
   robotConnectivity: Record<string, RobotConnectivityEvent>;
   lastTransportStatus: TransportStatusEvent | null;
   lastJobUpdate: JobUpdatedRealtimeEvent | null;
+  /** Latest overall health per robot id (robotHealthUpdated). */
+  robotHealth: Record<string, RobotHealthEvent>;
+  lastTrafficUpdate: TrafficUpdatedEvent | null;
 }
 
 const RealtimeContext = createContext<RealtimeContextValue | undefined>(undefined);
@@ -27,6 +32,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [robotTelemetry, setRobotTelemetry] = useState<Record<string, RobotTelemetryEvent>>({});
   const [robotConnectivity, setRobotConnectivity] = useState<Record<string, RobotConnectivityEvent>>({});
+  const [robotHealth, setRobotHealth] = useState<Record<string, RobotHealthEvent>>({});
+  const [lastTrafficUpdate, setLastTrafficUpdate] = useState<TrafficUpdatedEvent | null>(null);
 
   const inbox = useNotificationInbox();
   const [lastTransportStatus, setLastTransportStatus] = useState<TransportStatusEvent | null>(null);
@@ -101,6 +108,14 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setLastJobUpdate(event);
     });
 
+    const unsubHealth = realtimeClient.onHealthUpdated((event) => {
+      if (typeof event?.robotId === 'string') setRobotHealth(prev => ({ ...prev, [event.robotId]: event }));
+    });
+
+    const unsubTraffic = realtimeClient.onTrafficUpdated((event) => {
+      setLastTrafficUpdate(event);
+    });
+
     const unsubToken = onAccessTokenChange((token) => {
       setAuthToken(token);
       // When token becomes available or changes on login/logout, reconnect with Bearer token
@@ -114,6 +129,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       unsubNotification();
       unsubTransport();
       unsubJobUpdate();
+      unsubHealth();
+      unsubTraffic();
       unsubToken();
       realtimeClient.stop();
     };
@@ -134,6 +151,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         ...inbox,
         lastTransportStatus,
         lastJobUpdate,
+        robotHealth,
+        lastTrafficUpdate,
       }}
     >
       {children}

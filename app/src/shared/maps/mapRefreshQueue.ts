@@ -62,6 +62,8 @@ interface MapUpdateSource {
   readonly isConnected: boolean;
   onTelemetryUpdated: (callback: (event: RobotTelemetryEvent) => void) => () => void;
   onConnectivityChanged: (callback: (event: RobotConnectivityEvent) => void) => () => void;
+  /** Optional: a health change (robotHealthUpdated) also refreshes the snapshot. */
+  onHealthUpdated?: (callback: (event: { robotId?: string }) => void) => () => void;
 }
 
 export function subscribeMapFleetUpdates(source: MapUpdateSource, refresh: () => Promise<unknown>, clock: RefreshClock = DEFAULT_CLOCK) {
@@ -78,6 +80,9 @@ export function subscribeMapFleetUpdates(source: MapUpdateSource, refresh: () =>
     if (source.isConnected && typeof event?.robotId === 'string' && event.robotId
       && typeof event.isOnline === 'boolean') queue.request();
   });
+  const health = source.onHealthUpdated?.(event => {
+    if (source.isConnected && typeof event?.robotId === 'string' && event.robotId) queue.request();
+  });
   queue.request();
-  return () => { telemetry(); connectivity(); queue.dispose(); };
+  return () => { telemetry(); connectivity(); health?.(); queue.dispose(); };
 }

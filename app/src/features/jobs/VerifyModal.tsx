@@ -124,9 +124,10 @@ export function VerifyModal({
         const resolved = targetIsUuid ? null : await getContainerByBarcode(code);
         if (attempt !== submissionVersion.current) return;
         const resolvedContainerId = targetIsUuid ? targetContainerId! : resolved?.id || targetContainerId || code;
+        // containerId carries only the UUID; what was scanned goes as scannedBarcode and the server compares it too.
         const res = await confirmHandover({
           jobStepId,
-          scannedContainerBarcode: resolvedContainerId,
+          scannedContainerBarcode: code,
           containerId: resolvedContainerId,
           note: `Handover confirmed for ${code} on ${robotCode}`,
         });
