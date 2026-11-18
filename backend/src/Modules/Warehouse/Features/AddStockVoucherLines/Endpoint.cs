@@ -18,9 +18,7 @@ public static class AddStockVoucherLinesEndpoint
         .RequirePermission(Permissions.VoucherWrite)
         .WithName("AddStockVoucherLines")
         .WithSummary("Add Containers to a DRAFT stock voucher")
-        .WithDescription(
-            "Inbound takes CREATED/PACKED Containers; outbound takes STORED Containers of the voucher's warehouse, " +
-            "either by id or as Count of a product picked oldest first.");
+        .WithDescription("Add selected Container IDs to a draft. OUTBOUND requires staging at a currently published Outbound gate. Replaying IDs already on the draft is a no-op.");
 
         return group;
     }

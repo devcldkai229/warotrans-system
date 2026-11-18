@@ -59,6 +59,24 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
     translateText('3 selected · 12 matching containers'),
     'Đã chọn 3 · 12 container khớp',
   );
+  assert.equal(translateText('1 container'), '1 container');
+  assert.equal(translateText('Reference (Optional)'), 'Số tham chiếu (Tùy chọn)');
+  assert.equal(translateText('Note (Optional)'), 'Ghi chú (Tùy chọn)');
+  assert.equal(translateText('Back To Vouchers'), 'Quay lại danh sách phiếu');
+  assert.equal(translateText('No Published Warehouse'), 'Chưa có kho phát hành bản đồ');
+  assert.equal(
+    translateText('The published warehouse has changed. Return to Stock Vouchers before creating a new draft.'),
+    'Kho có bản đồ phát hành đã thay đổi. Quay lại danh sách phiếu kho trước khi tạo phiếu nháp mới.',
+  );
+  assert.equal(t('Increase Container Count'), 'Tăng số lượng thùng');
+  assert.equal(t('Decrease Container Count'), 'Giảm số lượng thùng');
+  assert.equal(t('Allocate Container Barcodes'), 'Cấp mã vạch Container');
+  assert.equal(t('Stock posted {date}', { date: '17 Nov 2026' }), 'Đã ghi sổ tồn kho: 17 Nov 2026');
+  assert.equal(t('Signed in as {name}', { name: 'Alex Tran' }), 'Đã đăng nhập: Alex Tran');
+  assert.equal(t('Save Selected Containers'), 'Lưu container đã chọn');
+  assert.equal(translateText('STAGED_OUTBOUND'), 'Chờ xuất tại cổng');
+  assert.equal(translateText('By Product (FIFO)'), 'Theo sản phẩm (FIFO)');
+  assert.equal(t('{count} FIFO Selected', { count: 4 }), 'Đã chọn 4 thùng FIFO');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(
@@ -78,6 +96,42 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(
     localizeServerMessage('container_not_eligible', "Container 'CNT-104' is not eligible for transport."),
     "Container 'CNT-104' không đủ điều kiện để vận chuyển.",
+  );
+  assert.equal(
+    localizeServerMessage('inbound_location_not_configured', 'An inbound storage location has not been configured for this warehouse.'),
+    'Kho này chưa được cấu hình vị trí Nhập kho (Inbound).',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_stock_posting_not_supported', 'Outbound stock posting is not available yet.'),
+    'Chức năng xác nhận ghi tồn kho phiếu xuất hiện chưa được hỗ trợ.',
+  );
+  assert.equal(
+    localizeServerMessage('voucher_container_not_at_inbound', "Container 'CTN-001' must be at the configured Inbound."),
+    "Container 'CTN-001' phải đang nằm tại vị trí Nhập kho (Inbound) đã cấu hình.",
+  );
+  assert.equal(
+    localizeServerMessage('voucher_container_not_at_outbound', "Container 'CTN-002' must be staged at an enabled Outbound gate of this warehouse."),
+    "Container 'CTN-002' phải đang tập kết tại một cổng Xuất kho (Outbound) đang bật của kho này.",
+  );
+  assert.equal(
+    localizeServerMessage('inbound_source_not_gate', 'Putaway source must be an enabled Inbound gate.'),
+    'Điểm lấy hàng cất kệ (Putaway) phải là một cổng Nhập kho (Inbound) đang bật trên bản đồ.',
+  );
+  assert.equal(
+    localizeServerMessage('batch_initial_location_not_supported', 'Omit initialStorageLocationId for new batches.'),
+    'Không hỗ trợ chọn sẵn vị trí khi tạo lô container mới.',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_fifo_selection_changed', 'The FIFO selection has changed.'),
+    'Danh sách FIFO đã thay đổi. Hãy xem trước lại các container khả dụng trước khi gửi.',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_pick_invalid_map', "Select the warehouse's published map."),
+    'Hãy chọn bản đồ đã xuất bản của kho.',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_pick_invalid_destination', 'Select an enabled Outbound gate.'),
+    'Hãy chọn một cổng Xuất kho (Outbound) đang bật trên bản đồ đã xuất bản.',
   );
 
   // Notification localization

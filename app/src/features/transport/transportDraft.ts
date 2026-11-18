@@ -9,8 +9,8 @@ export type TransportFlow = 'inbound' | 'outbound' | 'storage' | 'direct' | 'uns
 export interface TransportPlace { id: string; endpointId: string; label: string; code: string; locationId: string | null }
 
 export function transportFlow(code: string): TransportFlow {
-  if (code === 'INBOUND_PUTAWAY') return 'inbound';
-  if (code === 'OUTBOUND_RETRIEVAL') return 'outbound';
+  if (code === 'INBOUND' || code === 'INBOUND_PUTAWAY') return 'inbound';
+  if (code === 'OUTBOUND' || code === 'OUTBOUND_RETRIEVAL') return 'outbound';
   if (code === 'INTERNAL_RELOCATION') return 'storage';
   if (code === 'POINT_TO_POINT_TRANSPORT') return 'direct';
   return 'unsupported';
@@ -95,4 +95,27 @@ export function movementDetail(container: ContainerListItem, source: TransportPl
     sourceEndpointId: source.endpointId, sourceLevelNo: source.locationId ? container.currentLevelNo : null,
     destinationStorageLocationId: destination.locationId, destinationEndpointId: destination.endpointId,
     destinationLevelNo: null };
+}
+
+export function parseOutboundFifoCount(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^[1-9]\d*$/.test(trimmed)) return null;
+  const count = Number(trimmed);
+  return Number.isSafeInteger(count) && count >= 1 && count <= 200 ? count : null;
+}
+
+export function outboundFifoScopeKey(params: {
+  warehouseId: string;
+  mapId: string;
+  productId: string;
+  containerCount: number | null;
+  destinationEndpointId: string;
+}): string {
+  return JSON.stringify([
+    params.warehouseId,
+    params.mapId,
+    params.productId,
+    params.containerCount,
+    params.destinationEndpointId,
+  ]);
 }

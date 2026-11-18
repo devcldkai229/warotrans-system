@@ -38,8 +38,8 @@ public static class ListContainersEndpoint
         .WithName("ListContainers")
         .WithSummary("List containers for a warehouse")
         .WithDescription(
-            "Returns containers scoped to a warehouse via their current storage location. " +
-            "Containers without a location (inbound) are included. Defaults to eligible statuses only. " +
+            "Returns Containers owned by the warehouse, including Containers without a shelf. " +
+            "Defaults to transport-eligible statuses. For staged outbound use eligibleOnly=false&status=STAGED_OUTBOUND. " +
             "`status` narrows the list to one container status; `voucherType` (INBOUND / OUTBOUND) to Containers on a CONFIRMED " +
             "voucher of that type, newest voucher first; `skip` / `take` page it and `total` counts every match. Each item tells " +
             "its latest voucher (not cancelled).");

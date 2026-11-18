@@ -49,11 +49,17 @@ export function useVoucherPreparation(accountId: string, warehouseId: string, do
     if (loadedIdentity !== identity) return;
     setSaved(false); setValue(apply);
   }, [identity, loadedIdentity]);
+  const reset = useCallback((next?: VoucherPreparation) => {
+    if (loadedIdentity !== identity) return;
+    const item = next || emptyPreparation(type);
+    if (slot.current?.identity === identity) slot.current.value = item;
+    setSaved(false); setValue(item);
+  }, [identity, loadedIdentity, type]);
   const persist = async () => {
     if (!ready || slot.current?.identity !== identity) throw new Error('Preparation is not ready.');
     const snapshot = slot.current.value;
     await preparationDeviceStore.write(scope, snapshot);
     if (latestIdentity.current === identity && slot.current?.value === snapshot) { setSaved(true); setError(null); }
   };
-  return { value, update, ready, saved, error, persist, scope, retry: () => setAttempt(value => value + 1) };
+  return { value, update, reset, ready, saved, error, persist, scope, retry: () => setAttempt(value => value + 1) };
 }

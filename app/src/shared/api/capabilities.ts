@@ -3,10 +3,10 @@ import { ApiError } from './client';
 // Operations verified for the approved mobile workflow; permissions are checked separately.
 // 08/11/2026: issue reports are served by POST /api/operations/issues (OPS-01).
 export const mobileCapabilities = {
-  createContainer: false,
+  createContainer: true,
   createStockVoucherDraft: true,
-  // The current confirm handler changes the document only; it does not post stock at Inbound/Outbound.
-  confirmStockVoucher: false,
+  // Inbound and Outbound voucher confirmations post stock atomically via ConfirmStockVoucher (stockPostedAt).
+  confirmStockVoucher: true,
   // Warehouse maps ResolveProduct with warehouse.read + StaffOrAdmin; wire contract is exactMatch/items.
   resolveProduct: true,
   // WH-03 claim / release / takeover on job-steps (verified against HumanTasks endpoints, 18/11/2026).

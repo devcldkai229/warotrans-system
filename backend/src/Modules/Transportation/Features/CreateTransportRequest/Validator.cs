@@ -1,4 +1,5 @@
 using FluentValidation;
+using WaroTrans.Transportation.Features.PreviewOutboundPick;
 
 namespace WaroTrans.Transportation.Features.CreateTransportRequest;
 
@@ -35,6 +36,17 @@ public sealed class CreateTransportRequestValidator : AbstractValidator<CreateTr
             .Must(details => details.Select(d => d.ContainerId).Distinct().Count() == details.Count)
             .WithMessage("A Container may appear in only one Detail of the request.")
             .When(x => x.Details is { Count: > 0 });
+
+        When(x => x.OutboundFifo is not null, () =>
+        {
+            RuleFor(x => x.OutboundFifo!.ProductId).NotEmpty();
+            RuleFor(x => x.OutboundFifo!.ContainerCount).InclusiveBetween(1, OutboundPickValidator.MaxContainers);
+            RuleFor(x => x)
+                .Must(x => x.Details is { Count: > 0 } details && details.Count == x.OutboundFifo!.ContainerCount
+                    && details.All(d => d.DestinationStorageLocationId == null && d.DestinationLevelNo == null
+                        && d.DestinationEndpointId == details[0].DestinationEndpointId))
+                .WithMessage("Review the full FIFO selection for one Outbound gate before submitting the request.");
+        });
 
         RuleForEach(x => x.Details).ChildRules(detail =>
         {

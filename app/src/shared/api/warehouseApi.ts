@@ -3,11 +3,15 @@ import { requireMobileCapability } from './capabilities';
 import type { ContainerStatus, ShelfSlotOccupancy, StockVoucherStatus, StockVoucherType } from '../types/contracts';
 export interface WarehouseListItem { id: string; code: string; name: string; isActive: boolean; createdAt: string }
 export interface ListWarehousesResponse { items: WarehouseListItem[]; total: number }
+export interface ContainerVoucherSummary {
+  id: string; code: string; type: StockVoucherType; status: StockVoucherStatus; createdAt: string; confirmedAt: string | null;
+}
 export interface ContainerListItem {
   id: string; barcode: string; status: ContainerStatus | string; productId: string; productSku: string; productName: string;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentEndpointCode?: string | null; currentLevelNo: number | null;
-  supplierPackageBarcode?: string | null; updatedAt?: string; inActiveTransport?: boolean;
+  supplierPackageBarcode?: string | null; contentsQuantity?: number | null; contentsUnit?: string | null;
+  updatedAt?: string; inActiveTransport?: boolean; voucher?: ContainerVoucherSummary | null;
   qty?: number; category?: string; zoneLabel?: string;
 }
 export interface ListContainersResponse { items: ContainerListItem[]; total: number }
@@ -48,7 +52,7 @@ function queryString(params: Record<string, string | number | boolean | undefine
 export function listWarehouses(params: { isActive?: boolean; skip?: number; take?: number } = {}, signal?: AbortSignal) {
   return apiFetch<ListWarehousesResponse>(`/api/warehouse/warehouses${queryString(params)}`, { signal });
 }
-export async function listContainers(params: { warehouseId: string; search?: string; eligibleOnly?: boolean; take?: number; skip?: number }, signal?: AbortSignal): Promise<ListContainersResponse> {
+export async function listContainers(params: { warehouseId: string; status?: string; search?: string; eligibleOnly?: boolean; take?: number; skip?: number }, signal?: AbortSignal): Promise<ListContainersResponse> {
   const response = await apiFetch<ListContainersResponse>(`/api/warehouse/containers${queryString(params)}`, { signal });
   containersSnapshot = response.items;
   return response;
@@ -67,7 +71,7 @@ export function getContainerByBarcode(barcode: string) {
   return getContainerDetails(`/api/warehouse/containers/by-barcode/${encodeURIComponent(barcode.trim())}`);
 }
 export function listInventory(params: { warehouseId: string; search?: string; skip?: number; take?: number }) {
-  return apiFetch<{ items: InventoryStockItem[]; total: number }>(`/api/warehouse/inventory${queryString(params)}`);
+  return apiFetch<{ items: InventoryStockItem[]; total: number; warehouseContainerCount?: number; unallocatedContainerCount?: number }>(`/api/warehouse/inventory${queryString(params)}`);
 }
 export function listProducts(params: { search?: string; categoryId?: string; isActive?: boolean; skip?: number; take?: number } = {}, signal?: AbortSignal) {
   return apiFetch<{ items: ProductItem[]; total: number }>(`/api/warehouse/products${queryString(params)}`, { signal });
@@ -111,16 +115,61 @@ export interface CreateContainerResponse {
   productName?: string; productSku?: string; currentEndpointId?: string; currentStorageLocationId?: string | null;
   currentLevelNo?: number | null; createdAt: string;
 }
+export interface CreateContainerBatchGroupInput {
+  groupKey: string; productId: string; containerCount: number; quantityPerContainer: number;
+  unit: string; quantityOverrides?: { containerNo: number; quantity: number }[] | null; supplierPackageBarcode?: string | null;
+}
+export interface CreateContainerBatchBody {
+  warehouseId: string; requestId: string; stockVoucherId?: string | null; containerCount: number; groups: CreateContainerBatchGroupInput[];
+}
+export interface CreatedBatchContainerItem {
+  id: string; barcode: string; productId: string; groupKey: string; containerNo: number;
+  contentsQuantity: number; contentsUnit: string; supplierPackageBarcode: string | null;
+  status: ContainerStatus | string; currentStorageLocationId: string | null; currentEndpointId: string | null; createdAt: string;
+}
+export interface CreateContainerBatchResponse {
+  requestId: string; warehouseId: string; containerCount: number; replayed: boolean; items: CreatedBatchContainerItem[];
+  stockVoucher?: StockVoucherDetail | null;
+}
 export async function createContainer(body: CreateContainerBody): Promise<CreateContainerResponse> {
+  void body;
+  throw new ApiError(501, 'backend_capability_unavailable', 'This action is not supported by the current backend. Contact the supervisor.');
+}
+function validContainerBatchResponse(result: CreateContainerBatchResponse | null, body: CreateContainerBatchBody): result is CreateContainerBatchResponse {
+  if (!result || result.requestId !== body.requestId || result.warehouseId !== body.warehouseId || typeof result.replayed !== 'boolean'
+    || result.containerCount !== body.containerCount || !Array.isArray(result.items) || result.items.length !== body.containerCount) {
+    return false;
+  }
+  const itemValid = result.items.every(item => !!item && typeof item.id === 'string' && !!item.id.trim()
+    && typeof item.barcode === 'string' && !!item.barcode.trim() && typeof item.productId === 'string' && !!item.productId.trim()
+    && typeof item.groupKey === 'string' && !!item.groupKey.trim() && Number.isInteger(item.containerNo) && item.containerNo >= 1
+    && typeof item.contentsQuantity === 'number' && Number.isFinite(item.contentsQuantity) && item.contentsQuantity > 0
+    && typeof item.contentsUnit === 'string' && !!item.contentsUnit.trim());
+  if (!itemValid) return false;
+  if (new Set(result.items.map(item => item.id)).size !== result.items.length
+    || new Set(result.items.map(item => item.barcode)).size !== result.items.length) {
+    return false;
+  }
+  if (body.stockVoucherId) {
+    if (!result.stockVoucher || !validVoucherDetail(result.stockVoucher)
+      || result.stockVoucher.id !== body.stockVoucherId || result.stockVoucher.warehouseId !== body.warehouseId
+      || result.stockVoucher.type !== 'INBOUND' || result.stockVoucher.lines.length < body.containerCount) {
+      return false;
+    }
+    const lineIds = new Set(result.stockVoucher.lines.map(line => line.containerId));
+    if (result.items.some(item => !lineIds.has(item.id))) return false;
+  }
+  return true;
+}
+export async function createContainerBatch(body: CreateContainerBatchBody, signal?: AbortSignal): Promise<CreateContainerBatchResponse> {
   requireMobileCapability('createContainer');
-  const response = await apiFetch<CreateContainerResponse>('/api/warehouse/containers', {
-    method: 'POST', body: JSON.stringify({
-      productId: body.productId, supplierPackageBarcode: body.supplierPackageBarcode ?? null,
-      initialStorageLocationId: body.initialStorageLocationId ?? null, initialLevelNo: body.initialLevelNo ?? null,
-      stockVoucherId: body.stockVoucherId ?? null,
-    }),
-  });
-  return response;
+  const result = await apiFetch<CreateContainerBatchResponse>('/api/warehouse/containers', {
+    method: 'POST', signal, body: JSON.stringify(body),
+  }, getAccessToken());
+  if (!validContainerBatchResponse(result, body)) {
+    throw new ApiError(502, 'container_batch_unverified', 'Could not verify the allocated containers. Check the voucher before trying again.');
+  }
+  return result;
 }
 /** `Warehouse/Features/ListStockVouchers/Response.cs`. Quantities are Containers; `doneCount` is robot progress. */
 export interface StockVoucherListItem {
@@ -131,12 +180,35 @@ export interface StockVoucherPage { items: StockVoucherListItem[]; total: number
 export interface StockVoucherLine {
   id: string; lineNo: number; containerId: string; containerBarcode: string; containerStatus: string;
   productId: string; productSku: string; productName: string;
+  contentsQuantity?: number | null; contentsUnit?: string | null;
   currentStorageLocationId: string | null; currentStorageLocationCode: string | null;
   currentEndpointId: string | null; currentLevelNo: number | null; done: boolean;
 }
+export async function addStockVoucherLines(voucherId: string, containerIds: string[], signal?: AbortSignal): Promise<StockVoucherDetail> {
+  requireMobileCapability('createStockVoucherDraft');
+  const cleanIds = containerIds.map(id => id.trim()).filter(Boolean);
+  if (!cleanIds.length || new Set(cleanIds).size !== cleanIds.length) {
+    throw new ApiError(400, 'validation_failed', 'Select unique containers for this voucher.');
+  }
+  let latest: StockVoucherDetail | null = null;
+  for (let index = 0; index < cleanIds.length; index += 200) {
+    const chunk = cleanIds.slice(index, index + 200);
+    latest = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(voucherId)}/lines`, {
+      method: 'POST', signal, body: JSON.stringify({ containerIds: chunk }),
+    }, getAccessToken());
+  }
+  if (!latest || !validVoucherDetail(latest) || latest.id !== voucherId) {
+    throw new ApiError(502, 'voucher_lines_unverified', 'Could not verify the saved voucher containers. Refresh and try again.');
+  }
+  const savedIds = new Set(latest.lines.map(line => line.containerId));
+  if (cleanIds.some(id => !savedIds.has(id))) {
+    throw new ApiError(502, 'voucher_lines_unverified', 'Could not verify the saved voucher containers. Refresh and try again.');
+  }
+  return latest;
+}
 export interface StockVoucherDetail extends StockVoucherListItem {
   warehouseId: string; warehouseCode: string; warehouseName: string; createdBy: string; updatedAt: string;
-  confirmedBy: string | null; cancelledBy: string | null; cancelledAt: string | null;
+  confirmedBy: string | null; cancelledBy: string | null; cancelledAt: string | null; stockPostedAt?: string | null;
   products: { productId: string; productSku: string; productName: string; containerCount: number; doneCount: number }[];
   lines: StockVoucherLine[];
 }
@@ -180,8 +252,29 @@ export async function createStockVoucherDraft(body: CreateStockVoucherDraftBody,
 export function recoverContainer(id: string, body: { storageLocationId: string; levelNo: number; note?: string }) {
   return apiFetch<unknown>(`/api/warehouse/containers/${id}/recover`, { method: 'POST', body: JSON.stringify(body) });
 }
-/** Gated until confirming also posts stock according to the approved Inbound/Outbound rules. */
-export function confirmStockVoucher(id: string) {
+/** Atomically confirms INBOUND and OUTBOUND vouchers and posts stock once with stockPostedAt. */
+export async function confirmStockVoucher(id: string, type?: StockVoucherType, signal?: AbortSignal): Promise<StockVoucherDetail> {
   requireMobileCapability('confirmStockVoucher');
-  return apiFetch<StockVoucherListItem>(`/api/warehouse/stock-vouchers/${id}/confirm`, { method: 'POST' });
+  if (type !== 'INBOUND' && type !== 'OUTBOUND') {
+    throw new ApiError(501, 'backend_capability_unavailable', 'This action is not supported by the current backend. Contact the supervisor.');
+  }
+  const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}/confirm`, {
+    method: 'POST', signal,
+  }, getAccessToken());
+  if (!validVoucherDetail(result) || result.id !== id || result.type !== type || result.status !== 'CONFIRMED'
+    || typeof result.stockPostedAt !== 'string' || !result.stockPostedAt.trim()) {
+    throw new ApiError(502, 'voucher_confirmation_unverified', 'Could not verify the voucher confirmation. Refresh and try again.');
+  }
+  return result;
+}
+/** Cancels a DRAFT voucher and frees any attached Containers for reuse. */
+export async function cancelStockVoucher(id: string, signal?: AbortSignal): Promise<StockVoucherDetail> {
+  const result = await apiFetch<StockVoucherDetail>(`/api/warehouse/stock-vouchers/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST', signal,
+  }, getAccessToken());
+  if (!validVoucherDetail(result) || result.id !== id || result.status !== 'CANCELLED'
+    || typeof result.cancelledAt !== 'string' || !result.cancelledAt.trim()) {
+    throw new ApiError(502, 'voucher_cancellation_unverified', 'Could not verify the voucher cancellation. Refresh and try again.');
+  }
+  return result;
 }

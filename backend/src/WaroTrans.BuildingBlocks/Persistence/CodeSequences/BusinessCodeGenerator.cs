@@ -52,6 +52,14 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
     public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         NextDailyAsync("container", "CTN-", day, cancellationToken);
 
+    public async Task<IReadOnlyList<string>> NextContainerCodesAsync(int count, DateOnly? day = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+        var bucket = day ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var first = await NextValuesAsync($"container:{bucket:yyyyMMdd}", bucket, count, cancellationToken);
+        return Enumerable.Range(0, count).Select(i => $"CTN-{bucket:yyyyMMdd}-{(first + i).ToString().PadLeft(6, '0')}").ToArray();
+    }
+
     public Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         NextDailyAsync("request", "REQ-", day, cancellationToken);
 
@@ -93,7 +101,10 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
         return $"{codePrefix}{bucket:yyyyMMdd}-{value.ToString().PadLeft(6, '0')}";
     }
 
-    private async Task<long> NextValueAsync(string key, DateOnly? day, CancellationToken cancellationToken)
+    private Task<long> NextValueAsync(string key, DateOnly? day, CancellationToken cancellationToken) =>
+        NextValuesAsync(key, day, 1, cancellationToken);
+
+    private async Task<long> NextValuesAsync(string key, DateOnly? day, int count, CancellationToken cancellationToken)
     {
         var dayBucket = day.HasValue
             ? new DateTimeOffset(day.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
@@ -112,8 +123,11 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
             .AsTracking()
             .SingleAsync(cancellationToken);
 
+        // A scoped generator may already track this key. Reload while holding its lock so another request's
+        // committed increment is not replaced by the stale tracked value on a subsequent call.
+        await db.Entry(sequence).ReloadAsync(cancellationToken);
         var current = sequence.NextValue;
-        sequence.NextValue = current + 1;
+        sequence.NextValue = checked(current + count);
         sequence.DayBucket = dayBucket;
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);

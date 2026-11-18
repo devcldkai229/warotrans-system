@@ -79,11 +79,136 @@ test('a create response that cannot confirm the submitted draft is treated as an
   }
 });
 
-test('confirmation cannot call the old document-only endpoint as if it posted stock', async () => {
+test('inbound and outbound confirmation posts stock with caller token and rejects unverified or untyped calls', async () => {
   let writes = 0;
-  const api = modules(async () => { writes++; })('src/shared/api/warehouseApi.ts');
-  await assert.rejects(async () => api.confirmStockVoucher('voucher-1'), error => error.code === 'backend_capability_unavailable');
+  let captured = null;
+  const line = { id: 'l1', containerId: 'c1', containerBarcode: 'CTN-001', containerStatus: 'CREATED', productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24, contentsUnit: 'pcs', currentStorageLocationId: null, currentStorageLocationCode: null, currentEndpointId: null, currentLevelNo: null, done: false };
+  const confirmed = detail({ status: 'CONFIRMED', confirmedAt: '2026-11-18T10:00:00Z', stockPostedAt: '2026-11-18T10:00:00Z', containerCount: 1, lines: [line] });
+  const guardApi = modules(async () => { writes++; return confirmed; })('src/shared/api/warehouseApi.ts');
+  for (const args of [['voucher-1'], ['voucher-1', 'OTHER']]) {
+    await assert.rejects(async () => guardApi.confirmStockVoucher(...args), error => error.status === 501 && error.code === 'backend_capability_unavailable');
+  }
   assert.equal(writes, 0);
+
+  for (const voucherType of ['INBOUND', 'OUTBOUND']) {
+    const typedResponse = detail({ type: voucherType, status: 'CONFIRMED', confirmedAt: '2026-11-18T10:00:00Z', stockPostedAt: '2026-11-18T10:00:00Z', containerCount: 1, lines: [line] });
+    const api = modules(async (url, init, token) => { captured = { url, init, token }; return typedResponse; })('src/shared/api/warehouseApi.ts');
+    const result = await api.confirmStockVoucher('voucher-1', voucherType);
+    assert.equal(captured.url, '/api/warehouse/stock-vouchers/voucher-1/confirm');
+    assert.equal(captured.init.method, 'POST');
+    assert.equal(captured.token, 'original-account-token');
+    assert.equal(result.type, voucherType);
+    assert.equal(result.status, 'CONFIRMED');
+    assert.equal(result.stockPostedAt, '2026-11-18T10:00:00Z');
+  }
+
+  for (const bad of [detail({ status: 'DRAFT' }), detail({ type: 'INBOUND', status: 'CONFIRMED', stockPostedAt: null }), detail({ type: 'INBOUND', status: 'CONFIRMED', stockPostedAt: '2026-11-18T10:00:00Z' })]) {
+    const badApi = modules(async () => bad)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(async () => badApi.confirmStockVoucher('voucher-1', 'OUTBOUND'), error => error.code === 'voucher_confirmation_unverified');
+  }
+});
+
+test('cancelStockVoucher cancels a draft voucher with caller token and rejects unverified responses', async () => {
+  let captured = null;
+  const cancelled = detail({ status: 'CANCELLED', cancelledAt: '2026-11-18T11:00:00Z', cancelledBy: 'staff-1' });
+  const api = modules(async (url, init, token) => { captured = { url, init, token }; return cancelled; })('src/shared/api/warehouseApi.ts');
+  const controller = new AbortController();
+  const result = await api.cancelStockVoucher('voucher-1', controller.signal);
+  assert.equal(captured.url, '/api/warehouse/stock-vouchers/voucher-1/cancel');
+  assert.equal(captured.init.method, 'POST');
+  assert.equal(captured.init.signal, controller.signal);
+  assert.equal(captured.token, 'original-account-token');
+  assert.equal(result.status, 'CANCELLED');
+  assert.equal(result.cancelledAt, '2026-11-18T11:00:00Z');
+
+  for (const bad of [
+    null,
+    detail({ id: 'other-id', status: 'CANCELLED', cancelledAt: '2026-11-18T11:00:00Z' }),
+    detail({ status: 'DRAFT', cancelledAt: '2026-11-18T11:00:00Z' }),
+    detail({ status: 'CANCELLED', cancelledAt: null }),
+    detail({ status: 'CANCELLED', cancelledAt: ' ' }),
+  ]) {
+    const badApi = modules(async () => bad)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(async () => badApi.cancelStockVoucher('voucher-1'), error => error.status === 502 && error.code === 'voucher_cancellation_unverified');
+  }
+});
+
+test('addStockVoucherLines chunks batches over 200 containers and verifies every saved line', async () => {
+  const requests = [];
+  const allIds = Array.from({ length: 205 }, (_, i) => `c-${i + 1}`);
+  let accumulated = [];
+  const api = modules(async (url, init, token) => {
+    const body = JSON.parse(init.body);
+    requests.push({ url, body, token });
+    accumulated = [...accumulated, ...body.containerIds];
+    return detail({
+      type: 'OUTBOUND',
+      containerCount: accumulated.length,
+      lines: accumulated.map((containerId, index) => ({
+        id: `l-${index + 1}`, lineNo: index + 1, containerId, containerBarcode: `CTN-${index + 1}`,
+        containerStatus: 'STAGED_OUTBOUND', productId: 'p1', productSku: 'SKU1', productName: 'Rice',
+        currentStorageLocationId: null, currentStorageLocationCode: null, currentEndpointId: 'ep-out', currentLevelNo: null, done: false,
+      })),
+    });
+  })('src/shared/api/warehouseApi.ts');
+
+  const res = await api.addStockVoucherLines('voucher-1', allIds);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url, '/api/warehouse/stock-vouchers/voucher-1/lines');
+  assert.equal(requests[0].token, 'original-account-token');
+  assert.equal(requests[0].body.containerIds.length, 200);
+  assert.equal(requests[1].body.containerIds.length, 5);
+  assert.equal(res.lines.length, 205);
+
+  await assert.rejects(() => api.addStockVoucherLines('voucher-1', []), error => error.code === 'validation_failed');
+  await assert.rejects(() => api.addStockVoucherLines('voucher-1', ['c-1', 'c-1']), error => error.code === 'validation_failed');
+
+  const incompleteApi = modules(async () => detail({ type: 'OUTBOUND', containerCount: 0, lines: [] }))('src/shared/api/warehouseApi.ts');
+  await assert.rejects(() => incompleteApi.addStockVoucherLines('voucher-1', ['c-1']), error => error.code === 'voucher_lines_unverified');
+});
+
+test('batch container creation links to draft voucher and verifies every allocated item and line', async () => {
+  const reqBody = {
+    warehouseId: 'warehouse-1',
+    requestId: 'req-1',
+    stockVoucherId: 'voucher-1',
+    containerCount: 2,
+    groups: [{ groupKey: 'group-1', productId: 'p1', containerCount: 2, quantityPerContainer: 24, unit: 'pcs' }],
+  };
+  const items = [
+    { id: 'c1', barcode: 'CTN-20261117-000001', productId: 'p1', groupKey: 'group-1', containerNo: 1, contentsQuantity: 24, contentsUnit: 'pcs', supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
+    { id: 'c2', barcode: 'CTN-20261117-000002', productId: 'p1', groupKey: 'group-1', containerNo: 2, contentsQuantity: 24, contentsUnit: 'pcs', supplierPackageBarcode: null, status: 'CREATED', currentStorageLocationId: 'loc-in', currentEndpointId: 'ep-in', createdAt: '2026-11-17T10:00:00Z' },
+  ];
+  const linkedVoucher = detail({
+    containerCount: 2,
+    lines: items.map((item, idx) => ({
+      id: `l-${idx + 1}`, lineNo: idx + 1, containerId: item.id, containerBarcode: item.barcode, containerStatus: 'CREATED',
+      productId: 'p1', productSku: 'SKU1', productName: 'Rice', contentsQuantity: 24, contentsUnit: 'pcs',
+      currentStorageLocationId: 'loc-in', currentStorageLocationCode: 'INBOUND-01', currentEndpointId: 'ep-in', currentLevelNo: null, done: false,
+    })),
+  });
+  let request = null;
+  const api = modules(async (url, init, token) => {
+    request = { url, init, token };
+    return { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: linkedVoucher };
+  })('src/shared/api/warehouseApi.ts');
+
+  const res = await api.createContainerBatch(reqBody);
+  assert.equal(request.url, '/api/warehouse/containers');
+  assert.equal(request.token, 'original-account-token');
+  assert.deepEqual(JSON.parse(request.init.body), reqBody);
+  assert.equal(res.items.length, 2);
+  assert.equal(res.stockVoucher.lines.length, 2);
+
+  for (const invalid of [
+    { requestId: 'other', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: linkedVoucher },
+    { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: null },
+    { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items: [items[0], { ...items[0], id: 'c3' }], stockVoucher: linkedVoucher },
+    { requestId: 'req-1', warehouseId: 'warehouse-1', containerCount: 2, replayed: false, items, stockVoucher: detail({ containerCount: 1, lines: [linkedVoucher.lines[0]] }) },
+  ]) {
+    const badApi = modules(async () => invalid)('src/shared/api/warehouseApi.ts');
+    await assert.rejects(async () => badApi.createContainerBatch(reqBody), error => error.code === 'container_batch_unverified');
+  }
 });
 
 test('paging deduplicates shifted rows while retaining the first, freshest snapshot and raw server offset', () => {
@@ -96,32 +221,17 @@ test('paging deduplicates shifted rows while retaining the first, freshest snaps
   assert.equal(incompleteVoucherPages([{ items: [], total: 0 }]), false);
 });
 
-test('voucher warehouses are loaded completely without requesting a robot map', async () => {
-  const calls = [], controller = new AbortController();
-  const load = modules(async (url, init) => {
-    const parsed = new URL(url, 'https://unit.test'); calls.push(parsed.pathname);
-    assert.equal(init.signal, controller.signal);
-    assert.equal(parsed.searchParams.get('isActive'), 'true');
-    return { items: [{ id: parsed.searchParams.get('skip') === '0' ? 'a' : 'b', isActive: true }], total: 2 };
-  });
-  const { loadVoucherWarehouses } = load('src/features/inventory/stockVoucherData.ts');
-  assert.deepEqual(plain(await loadVoucherWarehouses(controller.signal)).map(item => item.id), ['a', 'b']);
-  assert.deepEqual(calls, ['/api/warehouse/warehouses', '/api/warehouse/warehouses']);
-});
-
-test('an incomplete warehouse list is not silently accepted', async () => {
-  const { loadVoucherWarehouses } = modules(async () => ({ items: [], total: 2 }))('src/features/inventory/stockVoucherData.ts');
-  await assert.rejects(() => loadVoucherWarehouses(new AbortController().signal), error => error.code === 'warehouse_list_incomplete');
-});
-
-test('warehouse choice does not fall back to another warehouse or depend on map publication', () => {
-  const { selectVoucherWarehouse } = modules(async () => {})('src/features/inventory/stockVoucherData.ts');
-  const a = { id: 'a', isActive: true }, b = { id: 'b', isActive: true };
-  assert.equal(selectVoucherWarehouse([a], ''), a);
-  assert.equal(selectVoucherWarehouse([a, b], ''), undefined);
-  assert.equal(selectVoucherWarehouse([a, b], 'b'), b);
-  assert.equal(selectVoucherWarehouse([a, b], 'missing'), undefined);
-  assert.equal(selectVoucherWarehouse([{ ...a, isActive: false }], 'a'), undefined);
+test('voucher warehouse follows the published context and refuses to silently move an open draft', () => {
+  const { selectPublishedVoucherWarehouse } = modules(async () => {})('src/features/inventory/stockVoucherData.ts');
+  const warehouse = { id: 'published-warehouse', isActive: true };
+  const context = { warehouse, map: { warehouseId: warehouse.id, status: 'PUBLISHED' } };
+  assert.equal(selectPublishedVoucherWarehouse(context), warehouse);
+  assert.equal(selectPublishedVoucherWarehouse(context, warehouse.id), warehouse);
+  assert.equal(selectPublishedVoucherWarehouse(context, 'previous-warehouse'), undefined);
+  assert.equal(selectPublishedVoucherWarehouse(undefined), undefined);
+  assert.equal(selectPublishedVoucherWarehouse({ ...context, warehouse: { ...warehouse, isActive: false } }), undefined);
+  assert.equal(selectPublishedVoucherWarehouse({ ...context, map: { ...context.map, status: 'DRAFT' } }), undefined);
+  assert.equal(selectPublishedVoucherWarehouse({ ...context, map: { ...context.map, warehouseId: 'other' } }), undefined);
 });
 
 test('draft creation requires the actual voucher permission and the read routes remain Staff/Admin only', () => {

@@ -5,6 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Navigation.Entities;
+using WaroTrans.Navigation.Enums;
+using WaroTrans.Navigation.Persistence;
+using WaroTrans.Warehouse.Features.CreateContainer;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
@@ -25,8 +29,6 @@ public sealed record VoucherDto(
     IReadOnlyList<VoucherLineDto> Lines);
 
 public sealed record VoucherListDto(IReadOnlyList<VoucherDto> Items, int Total);
-
-public sealed record CreatedContainerDto(Guid Id, string Barcode);
 
 [Collection(IntegrationCollection.Name)]
 public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory factory)
@@ -52,6 +54,18 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
         await using var scope = Factory.Services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<IContainerMovementRecorder>()
             .RecordDeliveredAsync(new ContainerDelivery(containerId, shelfId, level, _jobId, Guid.NewGuid()));
+    }
+
+    private async Task StageAsync(Guid containerId, Guid warehouseId)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var navigation = scope.ServiceProvider.GetRequiredService<NavigationDbContext>();
+        var map = new MapVersion { Id = Guid.NewGuid(), WarehouseId = warehouseId, Code = "MAP-WH-A", Name = "Main", VersionNo = 1, Status = MapStatus.PUBLISHED };
+        var gate = new Endpoint { Id = Guid.NewGuid(), MapVersionId = map.Id, Code = "EP-OUTBOUND-1", Name = "Outbound 1", EndpointType = EndpointType.WAYPOINT, IsEnabled = true };
+        navigation.AddRange(map, gate);
+        await navigation.SaveChangesAsync();
+        await scope.ServiceProvider.GetRequiredService<IContainerMovementRecorder>()
+            .RecordDeliveredAsync(new ContainerDelivery(containerId, null, null, _jobId, Guid.NewGuid(), gate.Id, warehouseId));
     }
 
     private Task<(WarehouseEntity Warehouse, Product Product, StorageLocation Shelf)> SeedAsync() => WithDbAsync(async db =>
@@ -100,7 +114,7 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
     }
 
     [Fact]
-    public async Task Outbound_voucher_issues_its_containers_on_delivery_and_takes_them_off_stock()
+    public async Task Outbound_voucher_issues_its_staged_containers_only_on_confirmation()
     {
         var (client, token) = await SignInAsync();
         var (warehouse, product, shelf) = await SeedAsync();
@@ -112,18 +126,17 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
                 new { warehouseId = warehouse.Id, type = "OUTBOUND", referenceNo = "SO-9" }),
             HttpStatusCode.Created);
         Assert.StartsWith("PX-", voucher.Code);
+        await StageAsync(older, warehouse.Id);
+        Assert.Equal(2, await StockAsync(product.Id, shelf.Id));
 
         var picked = await ReadAsync<VoucherDto>(await client.SendWithTokenAsync(
-            HttpMethod.Post, $"/api/warehouse/stock-vouchers/{voucher.Id}/lines", token, new { productId = product.Id, count = 1 }));
+            HttpMethod.Post, $"/api/warehouse/stock-vouchers/{voucher.Id}/lines", token, new { containerIds = new[] { older } }));
         Assert.Equal(older, Assert.Single(picked.Lines).ContainerId);
 
         var confirmed = await ReadAsync<VoucherDto>(await client.SendWithTokenAsync(
             HttpMethod.Post, $"/api/warehouse/stock-vouchers/{voucher.Id}/confirm", token));
         Assert.Equal("CONFIRMED", confirmed.Status);
-        Assert.Equal(0, confirmed.DoneCount);
-
-        await DeliverAsync(older, null, null);
-        await DeliverAsync(older, null, null);
+        Assert.Equal(1, confirmed.DoneCount);
 
         var after = await ReadAsync<VoucherDto>(await client.GetWithTokenAsync($"/api/warehouse/stock-vouchers/{voucher.Id}", token));
         Assert.Equal("CONFIRMED", after.Status);
@@ -146,10 +159,11 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
                 new { warehouseId = warehouse.Id, type = "INBOUND" }),
             HttpStatusCode.Created);
 
-        var container = await ReadAsync<CreatedContainerDto>(
+        var batch = await ReadAsync<CreateContainerBatchResponse>(
             await client.SendWithTokenAsync(HttpMethod.Post, "/api/warehouse/containers", token,
-                new { productId = product.Id, stockVoucherId = voucher.Id }),
-            HttpStatusCode.Created);
+                new CreateContainerRequest(WarehouseId: warehouse.Id, StockVoucherId: voucher.Id, RequestId: Guid.NewGuid(),
+                    ContainerCount: 1, Groups: [new("boxes", product.Id, 1, 12, "pcs")])));
+        var container = Assert.Single(batch.Items);
         await ReadAsync<VoucherDto>(await client.SendWithTokenAsync(
             HttpMethod.Post, $"/api/warehouse/stock-vouchers/{voucher.Id}/confirm", token));
 
@@ -168,6 +182,7 @@ public sealed class StockVoucherEndpointTests(WaroTransWebApplicationFactory fac
         var (client, token) = await SignInAsync();
         var (warehouse, product, shelf) = await SeedAsync();
         var containerId = await SeedStoredContainerAsync(product, shelf);
+        await StageAsync(containerId, warehouse.Id);
         var voucher = await ReadAsync<VoucherDto>(
             await client.SendWithTokenAsync(HttpMethod.Post, "/api/warehouse/stock-vouchers", token,
                 new { warehouseId = warehouse.Id, type = "OUTBOUND" }),

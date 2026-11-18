@@ -47,6 +47,7 @@ public static class WarehouseModule
 
         services.AddScoped<ResolveProductHandler>();
         services.AddScoped<CreateContainerHandler>();
+        services.AddScoped<CreateContainerBatchHandler>();
         services.AddScoped<CreateWarehouseHandler>();
         services.AddScoped<GetContainerHandler>();
         services.AddScoped<GetProductInventoryContextHandler>();

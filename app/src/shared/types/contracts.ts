@@ -78,6 +78,7 @@ export type ContainerStatus =
   | 'RESERVED'
   | 'IN_TRANSIT'
   | 'STORED'
+  | 'STAGED_OUTBOUND'
   | 'HOLD'
   | 'EMPTY'
   | 'OUT_OF_SERVICE'

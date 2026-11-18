@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Warehouse.Contracts;
-using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Features.Shared;
 using WaroTrans.Warehouse.Persistence;
@@ -16,7 +15,8 @@ public sealed class AddStockVoucherLinesHandler(
     IContainerTransportLookup transports,
     ICurrentUser currentUser,
     IValidator<AddStockVoucherLinesRequest> validator,
-    ILogger<AddStockVoucherLinesHandler> logger)
+    ILogger<AddStockVoucherLinesHandler> logger,
+    IMapEndpointCatalog map)
 {
     public async Task<StockVoucherDetailResponse> HandleAsync(
         Guid voucherId,
@@ -29,27 +29,49 @@ public sealed class AddStockVoucherLinesHandler(
             throw new ValidationException(validationResult.Errors);
         }
 
-        var voucher = await StockVoucherStore.LoadAsync(dbContext, voucherId, cancellationToken);
-        var containers = request.ContainerIds is { Count: > 0 } ids
-            ? await LoadNamedAsync(ids, cancellationToken)
-            : await PickOldestStoredAsync(voucher, request.ProductId!.Value, request.Count!.Value, cancellationToken);
+        await using var transaction = dbContext.Database.IsRelational() ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+        var voucher = await WarehouseWriteLocks.VoucherAsync(dbContext, voucherId, cancellationToken);
+        if (voucher.Status != StockVoucherStatus.DRAFT)
+            throw new ConflictException("Only a DRAFT voucher can be changed.", "voucher_not_draft");
+        if (request.ContainerIds is not { Count: > 0 } ids)
+            throw new DomainValidationException("Select the exact Containers for this voucher.", "voucher_container_ids_required");
 
-        await StockVoucherStore.EnsureNotOnOtherVoucherAsync(
-            dbContext,
-            voucher,
-            containers.Select(c => c.Id).ToList(),
-            cancellationToken);
+        // Replaying a completed add on the same draft does not duplicate lines or select replacement stock.
+        var existing = voucher.Lines.Select(l => l.ContainerId).ToHashSet();
+        var toAdd = ids.Where(id => !existing.Contains(id)).ToArray();
+        if (toAdd.Length == 0)
+            return await StockVoucherQueries.LoadDetailAsync(dbContext, voucherId, cancellationToken);
+
+        var locked = await WarehouseWriteLocks.ContainersAsync(dbContext, toAdd, cancellationToken);
+        var byId = locked.ToDictionary(c => c.Id);
+        var missing = toAdd.FirstOrDefault(id => !byId.ContainsKey(id));
+        if (missing != Guid.Empty)
+            throw new NotFoundException($"Container '{missing}' was not found.", "container_not_found");
+        var containers = toAdd.Select(id => byId[id]).ToList();
+
+        await StockVoucherStore.EnsureNotOnOtherVoucherAsync(dbContext, voucher, toAdd, cancellationToken);
         await StockVoucherStore.EnsureNotInTransportAsync(transports, containers, cancellationToken);
-
-        var now = DateTimeOffset.UtcNow;
-        foreach (var container in containers)
+        if (voucher.Type == StockVoucherType.OUTBOUND)
         {
-            StockVoucherStore.EnsureSameWarehouse(voucher, container.Barcode, container.CurrentStorageLocation?.WarehouseId);
-            // Added explicitly: a new line with a preset key would otherwise be tracked as an existing row.
-            dbContext.StockVoucherLines.Add(voucher.AddLine(container, now));
+            await OutboundStaging.EnsureEligibleAsync(map, voucher.WarehouseId, containers, cancellationToken);
         }
-
+        else
+        {
+            var locationIds = containers.Select(c => c.CurrentStorageLocationId).OfType<Guid>().Distinct().ToArray();
+            var locations = await dbContext.StorageLocations.AsNoTracking()
+                .Where(l => locationIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.WarehouseId, cancellationToken);
+            foreach (var container in containers)
+            {
+                var owner = container.WarehouseId;
+                if (owner is null && container.CurrentStorageLocationId is { } locationId
+                    && locations.TryGetValue(locationId, out var locationOwner))
+                    owner = locationOwner;
+                StockVoucherStore.EnsureSameWarehouse(voucher, container.Barcode, owner);
+            }
+        }
+        dbContext.StockVoucherLines.AddRange(voucher.AddLines(containers, DateTimeOffset.UtcNow));
         await StockVoucherStore.SaveAsync(dbContext, voucher, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         logger.LogInformation(
             "{Count} Containers added to stock voucher {Code} by {AccountId}",
@@ -60,63 +82,4 @@ public sealed class AddStockVoucherLinesHandler(
         return await StockVoucherQueries.LoadDetailAsync(dbContext, voucher.Id, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<Container>> LoadNamedAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
-    {
-        var found = await dbContext.Containers
-            .AsNoTracking()
-            .Include(c => c.CurrentStorageLocation)
-            .Where(c => ids.Contains(c.Id))
-            .ToDictionaryAsync(c => c.Id, cancellationToken);
-
-        var missing = ids.FirstOrDefault(id => !found.ContainsKey(id));
-        if (missing != Guid.Empty)
-        {
-            throw new NotFoundException($"Container '{missing}' was not found.", "container_not_found");
-        }
-
-        return ids.Select(id => found[id]).ToList();
-    }
-
-    private async Task<IReadOnlyList<Container>> PickOldestStoredAsync(
-        StockVoucher voucher,
-        Guid productId,
-        int count,
-        CancellationToken cancellationToken)
-    {
-        if (voucher.Type != StockVoucherType.OUTBOUND)
-        {
-            throw new DomainValidationException(
-                "Picking by product is only for an outbound voucher; scan the Containers of an inbound voucher.",
-                "voucher_pick_outbound_only");
-        }
-
-        var onThisVoucher = voucher.Lines.Select(l => l.ContainerId).ToList();
-        var free = await dbContext.Containers
-            .AsNoTracking()
-            .Include(c => c.CurrentStorageLocation)
-            .Where(c => c.ProductId == productId
-                && c.Status == ContainerStatus.STORED
-                && c.CurrentStorageLocation != null
-                && c.CurrentStorageLocation.WarehouseId == voucher.WarehouseId
-                && !onThisVoucher.Contains(c.Id)
-                && !dbContext.StockVoucherLines.Any(l => l.ContainerId == c.Id
-                    && l.StockVoucher.Type == StockVoucherType.OUTBOUND
-                    && l.StockVoucher.Status != StockVoucherStatus.CANCELLED))
-            .OrderBy(c => c.CreatedAt)
-            .ThenBy(c => c.Barcode)
-            .ToListAsync(cancellationToken);
-
-        // Containers robots are already moving live in Transportation's tables, so they are skipped after the query.
-        var moving = await transports.GetContainersInActiveTransportAsync(free.Select(c => c.Id).ToList(), cancellationToken);
-        var picked = free.Where(c => !moving.Contains(c.Id)).Take(count).ToList();
-
-        if (picked.Count < count)
-        {
-            throw new DomainValidationException(
-                $"Only {picked.Count} stored Container(s) of this product are free in the warehouse; {count} requested.",
-                "not_enough_stored_containers");
-        }
-
-        return picked;
-    }
 }

@@ -18,14 +18,13 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
         ListContainersRequest request,
         CancellationToken cancellationToken)
     {
-        // Warehouse ownership is via current storage location. Containers without a location
-        // (e.g. inbound CREATED) are included when they are not yet bound to another warehouse.
+        // Batch and staged Containers retain warehouse ownership even without a shelf. Legacy unbound rows stay visible.
         var query = db.Containers
             .AsNoTracking()
             .Where(c =>
-                c.CurrentStorageLocationId == null
-                || (c.CurrentStorageLocation != null
-                    && c.CurrentStorageLocation.WarehouseId == request.WarehouseId));
+                c.WarehouseId == request.WarehouseId
+                || (c.WarehouseId == null && (c.CurrentStorageLocationId == null
+                    || c.CurrentStorageLocation!.WarehouseId == request.WarehouseId)));
 
         if (request.EligibleOnly)
         {
@@ -81,11 +80,11 @@ public sealed class ListContainersHandler(WarehouseDbContext db, IContainerTrans
                 c.Product != null ? c.Product.Name : string.Empty,
                 c.CurrentStorageLocationId,
                 c.CurrentStorageLocation != null ? c.CurrentStorageLocation.Code : null,
-                c.CurrentStorageLocation != null ? c.CurrentStorageLocation.EndpointId : (Guid?)null,
+                c.CurrentStorageLocation != null ? c.CurrentStorageLocation.EndpointId : c.CurrentEndpointId,
                 c.CurrentLevelNo,
                 c.SupplierPackageBarcode,
                 c.UpdatedAt,
-                false))
+                false, null, c.ContentsQuantity, c.ContentsUnit))
             .ToListAsync(cancellationToken);
 
         // The latest voucher each Container is on (cancelled ones do not count).

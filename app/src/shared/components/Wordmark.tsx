@@ -8,8 +8,8 @@ interface WordmarkProps {
 }
 
 /**
- * Authentic WaroTrans Brand Wordmark & Logo.
- * Displays the official WaroTrans logo asset matching the Admin Web console.
+ * Authentic WaroTrans Brand Symbol Mark.
+ * Displays the cropped WaroTrans warehouse + AMR symbol asset.
  */
 export function Wordmark({ size = 'md', style }: WordmarkProps) {
   const { isDark } = useTheme();
@@ -19,8 +19,9 @@ export function Wordmark({ size = 'md', style }: WordmarkProps) {
     <View style={[styles.container, isDark && styles.containerDark, style]}>
       <Image
         source={require('../../../assets/logo_wrt.png')}
-        style={{ height, width: height * 4.2 }}
+        style={{ height, width: height }}
         resizeMode="contain"
+        accessibilityIgnoresInvertColors
       />
     </View>
   );

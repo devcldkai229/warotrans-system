@@ -223,7 +223,6 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
         db.StorageLocations.AddRange(slA, slB);
 
         var stored = new[] { slA.Id, slA.Id, slB.Id };
-        var outboundVoucher = StockVoucher.Create("PX-WF-000001", StockVoucherType.OUTBOUND, warehouseId, null, null, TestAccountId, now);
         for (var i = 0; i < stored.Length; i++)
         {
             var container = new Container
@@ -232,7 +231,6 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
                 CurrentStorageLocationId = stored[i], CreatedBy = TestAccountId, CreatedAt = now, UpdatedAt = now
             };
             db.Containers.Add(container);
-            outboundVoucher.AddLine(container, now);
             containers.Add(container.Id);
         }
 
@@ -254,8 +252,6 @@ public sealed class StandardWorkflowRequestRulesTests(WaroTransWebApplicationFac
             }
         }
 
-        outboundVoucher.Confirm(TestAccountId, now);
-        db.StockVouchers.Add(outboundVoucher);
         await db.SaveChangesAsync();
 
         return new Floor(warehouseId, mapId, shelfA, shelfB, outbound, dock, [.. containers]);

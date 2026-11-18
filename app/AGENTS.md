@@ -2,6 +2,7 @@
 
 ## Phạm vi và cách bắt đầu
 
+- Phân vai AI ngày 13/11/2026: Antigravity phụ trách FE app; Codex phụ trách BE và tư vấn/chốt nghiệp vụ với chủ dự án. Prompt tiếp nhận và trạng thái bàn giao ở [ANTIGRAVITY-HANDOFF.md](ANTIGRAVITY-HANDOFF.md). Dùng chung nhánh `feature/mobile-stock-voucher-batches` trong repo chính để tích hợp và chạy cả FE lẫn BE. Trước khi sửa hoặc commit, kiểm tra trạng thái Git và phối hợp nếu có thay đổi đồng thời. Mỗi bên chỉ stage phần mình phụ trách.
 - Chỉ sửa `app/`. Đọc BE/Web/rules để đối chiếu; không sửa endpoint, DTO BE, quyền, migration, DB, robot, infrastructure hoặc source của role khác.
 - Đọc [README](README.md), [rules/README](../rules/README.md), rồi rules 00–06, 09, 99 và rule liên quan trước khi code. Đọc source feature/API đang dùng, không quét mọi tài liệu cho mỗi task.
 - Quyết định mới của người dùng ưu tiên theo rules/README. README ghi nghiệp vụ đích; route/DTO/handler đang chạy là bằng chứng triển khai. Nếu khác nhau, nêu gap và phối hợp BE, không tự đổi nghiệp vụ.
@@ -34,6 +35,6 @@
 - Sau sửa code: chạy `npm run typecheck` trong app và test liên quan (`npm test`); build web khi ảnh hưởng bundle. Không coi web pass là native/robot E2E pass.
 - Sửa docs/comment: kiểm tra link, tham chiếu và diff; không cần tạo test cho văn bản. Chỉ ghi kết quả đã chạy và giới hạn còn lại.
 - Git theo [rules/11](../rules/11-GIT-CICD-RULES.md): dùng `feature/*`, không push trực tiếp main/develop; chỉ stage phạm vi app và commit theo mẫu đang có trong repo.
-- Theo yêu cầu chủ dự án: triển khai từng task/nhóm nhỏ, chạy kiểm tra rồi đưa bước nghiệm thu để người dùng tự xác minh. Chờ người dùng xác nhận đạt mới commit và push nhóm đó; hoàn tất mốc này mới bắt đầu nhóm tiếp theo. Phản hồi chưa đạt thì sửa và kiểm tra lại trong cùng nhóm.
+- Theo quyết định chủ dự án ngày 13/11/2026: sau mỗi task/nhóm chỉnh sửa, chạy kiểm tra phù hợp rồi tự commit các thay đổi thuộc task, không chờ xác nhận hoặc hỏi lại. Tiếp tục chỉnh sửa bằng commit mới và vẫn đưa bước nghiệm thu để người dùng tự xác minh. Giữ quy trình push lên feature branch; không gom thay đổi của công việc khác vào commit.
 - Chỉ duy trì hai file: AGENTS cho instruction ổn định; README cho context, cách chạy và gap BE. Cập nhật đúng mục bị ảnh hưởng.
 - Không tạo thêm plan/progress/findings/audit/history/backup Markdown trừ khi người dùng yêu cầu. Không copy transcript/artifact vào repo, không nhân bản rules hoặc bảng token từ source.

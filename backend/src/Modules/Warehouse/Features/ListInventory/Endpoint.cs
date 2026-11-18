@@ -28,7 +28,7 @@ public static class ListInventoryEndpoint
         .WithSummary("List inventory stock for a warehouse")
         .WithDescription(
             "Stock rows (product, storage location, shelf level) with the number of Containers. " +
-            "Read-only: the numbers change only through the Container lifecycle.");
+            "WarehouseContainerCount includes posted inbound stock that has no accounting location yet, reported separately as UnallocatedContainerCount.");
 
         return group;
     }

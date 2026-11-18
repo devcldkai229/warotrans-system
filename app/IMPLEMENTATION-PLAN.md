@@ -2,6 +2,8 @@
 
 Ngày lập: 10/11/2026. Owner app: Nguyễn Thành Đạt.
 
+Cập nhật bàn giao 13/11/2026: Antigravity tiếp nhận FE app; Codex phụ trách BE và làm rõ nghiệp vụ. Xem [prompt bàn giao](ANTIGRAVITY-HANDOFF.md) để biết mốc M1 hiện tại, các quyết định UI/lô hàng mới, Git/worktree và SDK đang dirty. Plan này giữ các gate đích; các checkbox chưa được coi là chứng nhận code/runtime đã hoặc chưa hoàn tất.
+
 Đây là plan triển khai 11 task sau khi làm rõ nghiệp vụ. Các quyết định đích nằm trong [README](README.md#nghiệp-vụ-staff-đã-chốt); bảng thời gian demo cũng nằm tại đó. Plan không chứng nhận feature/API/robot đã nghiệm thu. Chưa cập nhật % Complete tại MasterPlan.
 
 Đã đối chiếu với [checklist ownership ba thành viên ngày 08/11/2026](../../academic-docs/references/WaroTrans_Team_Domain_Checklist_Nguyen_Thang_Dat_Technician_Reassigned_2026-11-08.md). Dùng checklist để truy ownership/phụ thuộc và DoD; trạng thái audit cũ phải đối chiếu source hiện tại. Quyết định người dùng ngày 10/11/2026 ưu tiên khi nghiệp vụ khác checklist; không tự sửa checklist gốc hoặc coi các đầu việc của thành viên khác là scope code của Đạt.
@@ -10,7 +12,7 @@ Ngày lập: 10/11/2026. Owner app: Nguyễn Thành Đạt.
 
 - App Staff và chức năng Technician được cấp quyền; joystick mobile bắt buộc có trong V1 theo quyết định mới, dù task gốc ghi P2.
 - Thiết bị chính: iPhone 12 chạy app qua Expo. Tạm lấy Expo Go/quét QR làm cách chạy; ghi lại phiên bản iOS, Expo Go và cách mở app khi kiểm thử thực tế.
-- Project hiện là Expo SDK 57, custom navigator; giữ cấu trúc và UI hiện có. Không chuyển sang Expo Router, đổi framework map hoặc nâng SDK trong slice này.
+- Baseline lúc lập plan là Expo SDK 57, custom navigator. Ngày 13/11 working tree có nâng SDK 58 chưa commit; kiểm tra package/lockfile và prompt bàn giao trước install/build, không rollback hoặc nâng tiếp ngoài ý định chủ dự án. Giữ custom navigator, renderer và UI hiện có.
 - Hộp thư lưu trên server và realtime khi app đang mở. Native push khi chạy nền/màn hình khóa làm sau.
 - Cần evidence trên iPhone 12 và robot thật cho các luồng liên quan chuyển động/custody. Web/unit/Gazebo pass không thay physical pass.
 - Mọi thay đổi thực hiện từ vai trò mobile chỉ nằm trong `app/`. Các mục BE/robot dưới đây là yêu cầu phối hợp với owner module tương ứng; chưa được coi là API hoặc schema đã tồn tại.
@@ -222,7 +224,7 @@ Dùng [Map UI Implementation Plan](MAP-UI-IMPLEMENTATION-PLAN.md) cho chi tiết
 
 - Thực hiện theo nhóm nhỏ: thống nhất phạm vi → triển khai → kiểm tra tự động → chủ dự án kiểm chứng trực tiếp → sửa/kiểm lại đến khi được chấp thuận → commit và push → nhóm tiếp theo. Không tự commit/push hoặc chuyển nhóm khi người dùng chưa nghiệm thu.
 - Nhóm triển khai đầu tiên: phần độc lập của APP-OPS-04, nối GET inbox và POST read/read-all đang có, số chưa đọc theo server, tải bù foreground/reconnect, điều hướng Job/Request đã có màn chi tiết. Còn chờ nghiệm thu trên iPhone 12; chưa đóng toàn bộ APP-OPS-04, các link Issue/Recovery/Container và audience theo kho vẫn phụ thuộc contract/màn tương ứng.
-- Nhóm hiện tại: Stock Vouchers thay form Receive Goods, có ledger/chi tiết và tạo nháp metadata qua API thật. Trang tạo nháp không ghi tồn; thứ tự đích vẫn cấp barcode → nội dung từng Container → xác nhận nhập, hoặc chọn các Container đã ở Outbound → review → xác nhận xuất. Allocation, số lượng trong kiện, staged-outbound và stock posting chưa đủ contract; giữ thao tác tương ứng unavailable và không dùng FIFO của phiếu cũ để thay lựa chọn nguyên kiện. Chờ chủ dự án kiểm chứng trước commit/push.
+- Nhóm hiện tại: Stock Vouchers thay form Receive Goods, có ledger/chi tiết và tạo nháp metadata qua API thật. Trang tạo nháp không ghi tồn; thứ tự đích vẫn cấp barcode → nội dung từng Container → xác nhận nhập, hoặc chọn các Container đã ở Outbound → review → xác nhận xuất. Allocation, số lượng trong kiện, staged-outbound và stock posting chưa đủ contract; giữ thao tác tương ứng unavailable và không dùng FIFO của phiếu cũ để thay lựa chọn nguyên kiện. Quyết định 13/11: kiểm tra rồi tự commit sau mỗi nhóm sửa, không chờ duyệt commit; vẫn cung cấp bước nghiệm thu và chỉ đóng gate khi có evidence.
 - Mỗi slice có danh sách file app đổi, contract BE/robot được dùng, kết quả kiểm thử và phần chưa có evidence.
 - Capability chỉ mở sau khi route/DTO/quyền/response tương ứng được kiểm chứng. Chưa có API thì giữ unavailable rõ; không thêm thành công giả để đi tiếp demo.
 - Mọi code/model mới giữ boundary module; không tự thêm entity/table/status/Step Type/broker hoặc sửa schema ngoài owner chỉ để làm DTO app khớp.

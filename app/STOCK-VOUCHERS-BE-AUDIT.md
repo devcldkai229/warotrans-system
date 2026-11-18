@@ -1,6 +1,6 @@
 # Stock Vouchers — bàn giao bổ sung BE
 
-Đối chiếu source ngày 11/11/2026. Phạm vi: app mobile và nghiệp vụ chủ dự án đã chốt trong [README](README.md#nghiệp-vụ-staff-đã-chốt). Đây là yêu cầu tích hợp và các gap quan sát từ source, không phải bằng chứng API đã được nghiệm thu trên môi trường chạy. Không sửa BE/DB trong đợt app này.
+Đối chiếu source ngày 11/11/2026. Cập nhật quyết định UI: Stock Vouchers tự dùng kho có map PUBLISHED mới nhất cùng resolver Home/Inventory; không còn chọn kho thủ công. Chưa có map publish thì hiện lỗi/Retry, không lấy kho đầu tiên làm fallback. Phạm vi: app mobile và nghiệp vụ chủ dự án đã chốt trong [README](README.md#nghiệp-vụ-staff-đã-chốt). Đây là yêu cầu tích hợp và các gap quan sát từ source, không phải bằng chứng API đã được nghiệm thu trên môi trường chạy. Không sửa BE/DB trong đợt app này.
 
 ## 1. Trạng thái app để BE tiếp nối
 
@@ -11,13 +11,22 @@
 | Số thùng dự kiến | Form nhập trước khi tạo nháp và trên chi tiết | Chỉ thiết bị; chưa được cấp barcode |
 | Nội dung từng thùng có mã thật | Chọn/quét Product, quantity, unit; review từng thùng | Chỉ thiết bị, gắn `containerId` thật từ chi tiết phiếu; không tạo Container giả để đi tiếp |
 | Product | Catalog + resolve SKU/supplier barcode hiện có | Đọc server; kiểm tra active và trùng khớp; chưa có quick-create cho Staff |
-| Chọn Container xuất | Đọc toàn bộ các trang Container + active map của kho; tìm/quét, chọn/bỏ chọn, review | Chỉ thiết bị; không gọi FIFO hoặc lưu lines vào phiếu server |
-| Cấp barcode, lưu contents/selection, xác nhận ghi tồn | Chưa mở | Không gửi mutation thiếu contract; `confirmStockVoucher`/`createContainer` vẫn khóa |
-| In/xuất tem | Chưa triển khai | Cần contract cấp mã và định dạng tem trước khi nghiệm thu |
+| Chọn Container xuất | Đọc toàn bộ các trang Container `status=STAGED_OUTBOUND` + active map của kho; tìm/quét, chọn/bỏ chọn, review | Gắn `containerIds` qua `POST /api/warehouse/stock-vouchers/{id}/lines` (idempotent, chunk 200) |
+| Cấp barcode lô Nhập & Xác nhận Nhập/Xuất kho | `POST /api/warehouse/containers` (atomic batch `groups` + `stockVoucherId`, location `null`) & `POST /api/warehouse/stock-vouchers/{id}/confirm` (`INBOUND` & `OUTBOUND`) | Cấp 1..9999 Container (`None` location) gắn phiếu nháp; xác nhận `INBOUND` ghi nhận `unallocatedContainerCount`; xác nhận `OUTBOUND` trừ tồn, đổi `ISSUED` (`stockPostedAt`) |
+| In/xuất tem | Chưa triển khai | Cần contract định dạng tem (ZPL/PDF/print) nếu in trực tiếp; hiện trả đủ `CTN-...` từ server |
 
 Chuẩn bị trên thiết bị được tách theo account, warehouse và voucher (form mới còn tách theo loại phiếu). Native dùng SecureStore, web dùng localStorage; có báo đang lưu/lưu lỗi và Retry. Đây không phải server draft hoặc hàng đợi đồng bộ offline. Không dùng dữ liệu local để suy ra tồn, trạng thái phiếu hay hàng đã được cấp mã. Sau khi tạo server draft, app copy phần chuẩn bị sang ID phiếu thật; lỗi copy không làm app tạo lại phiếu.
 
 **Giới hạn quan trọng của preview xuất:** `EndpointType` hiện chỉ có WAYPOINT/CHARGER/PARK. App nhận diện các WAYPOINT bật có mã khớp từ OUTBOUND theo quy ước hiện có của màn Transport. Chỉ hiển thị Container STORED có location/endpoint tương ứng và `inActiveTransport === false`. Không suy từ tên hiển thị, không coi thiếu flag là false. Đây là đối chiếu vị trí sơ bộ, không chứng minh quyền xuất, stock membership hoặc không thuộc phiếu khác. Khi refresh thấy barcode/Product/endpoint đổi hoặc kiện biến mất, app chặn review tới khi chọn lại. Thiếu map/điểm hoặc danh sách bị cắt là lỗi rõ ràng. BE phải cung cấp eligibility chính thức, app sẽ thay preview này bằng contract đó.
+
+### Cập nhật luồng lô hàng 13/11/2026
+
+- Form nhập chia thành chuẩn bị lô và kiểm tra phiếu: tổng N thùng, nhóm Product thật (chọn từ catalog `Choose Product`, bỏ scan ở bước tạo phiếu vì Container chưa có mã WaroTrans), số thùng mỗi nhóm, quantity/unit mỗi thùng cho từng nhóm (bỏ chỉnh riêng từng thùng). Tổng nhóm phải bằng N; mỗi thùng thuộc một Product. Đây là kế hoạch local, chưa có Container/stock được tạo.
+- Nhóm dùng key local `group-*`. Giá trị này **không phải Container ID/barcode**, không được dùng thay UUID BE khi lưu lines. BE cần trả mapping allocation/Container ID/barcode ↔ nhóm ổn định, kể cả retry hoặc cấp một phần.
+- Contract lưu lô chỉ cần nhận danh sách nhóm (`productId`, `containerCount`, `contentsQuantity`, `contentsUnit`) hoặc mapping tương ứng và bảo đảm N mã riêng tương ứng. Frontend không tự gán mã thật có sẵn vào nhóm theo thứ tự mảng response chưa được cam kết.
+- Đã bỏ thẻ `Barcodes` / `Generate Barcodes` khỏi màn Review khi tạo phiếu (14/11/2026) để khớp nghiệp vụ nhập theo lô (không cấp mã riêng trước khi tạo phiếu). Nút Create Empty Draft hiện chỉ gọi API metadata đã có; app copy kế hoạch sang cache theo ID phiếu thật và thể hiện Batch Plan/On This Device trên nháp trống. Không coi điều này là lô đã lưu server.
+- Form xuất đã đưa danh sách preview chọn/quét trước bước tạo nháp, thay vì tạo chứng từ rỗng rồi mới chọn. Vẫn cần canonical eligibility và lưu tập Container IDs thật trên BE.
+- **Cập nhật phía BE (`4f3df69` & `cae03e0` trên `feature/stock-voucher-backend`) & Tích hợp FE**: BE đã gỡ bỏ `ReceivingLocationResolver` / cấu hình cứng 1 vị trí Inbound, giữ `currentStorageLocationId = null` / `currentEndpointId = null` (`None`) cho hàng vừa nhập để hỗ trợ nhiều cổng Inbound; chuyển `OUTBOUND_RETRIEVAL` sang trạng thái `STAGED_OUTBOUND` tại bất kỳ cổng Outbound đang bật nào trước khi lập phiếu xuất; bổ sung `POST /api/transportation/transport-requests/outbound-pick-preview` và kiểm tra `outboundFifo` khi tạo TR `OUTBOUND_RETRIEVAL` (`409 outbound_fifo_selection_changed`); cho phép `AddStockVoucherLines` nhận danh sách `containerIds` `STAGED_OUTBOUND` một cách idempotent và mở `ConfirmStockVoucher` cho **cả `INBOUND` lẫn `OUTBOUND`** (`stockPostedAt`), kèm hủy phiếu nháp (`POST /api/warehouse/stock-vouchers/{id}/cancel`). FE đã merge `cae03e0`, mở `createContainerBatch`, `addStockVoucherLines`, `cancelStockVoucher`, `confirmStockVoucher`, tích hợp xem trước & đặt chỗ FIFO theo sản phẩm trên `TransportCreationScreen`, và cập nhật lọc `STAGED_OUTBOUND` / fallback chọn cổng Inbound khi Putaway.
 
 ## 2. Bằng chứng và mức ưu tiên
 

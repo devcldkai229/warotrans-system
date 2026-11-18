@@ -14,5 +14,11 @@ public sealed record ContainerDetailsResponse(
     short? CurrentLevelNo,
     Guid CreatedBy,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    decimal? ContentsQuantity = null,
+    string? ContentsUnit = null,
+    Guid? CreationRequestId = null,
+    string? CreationGroupKey = null,
+    int? CreationGroupOrdinal = null,
+    Guid? CurrentEndpointId = null
 );

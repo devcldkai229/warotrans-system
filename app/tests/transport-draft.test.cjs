@@ -1,8 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const load = require('./load-module.cjs')();
-const { mappedLocations, stationPoints, containerOrigin, transportDestinations, containerReadiness,
-  activeContainerIds, movementDetail, validateMovementFields } = load('src/features/transport/transportDraft.ts');
+const { transportFlow, mappedLocations, stationPoints, containerOrigin, transportDestinations, containerReadiness,
+  activeContainerIds, movementDetail, validateMovementFields, parseOutboundFifoCount, outboundFifoScopeKey } = load('src/features/transport/transportDraft.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const ep = (id, code, type = 'WAYPOINT', map = 'map') => ({ id, code, name: code, endpointType: type, mapVersionId: map, isEnabled: true });
 const endpoints = [ep('in', 'EP-INBOUND'), ep('out', 'EP-OUTBOUND'), ep('rack', 'EP-SHELF-1'), ep('rack2', 'EP-SHELF-2'), ep('charge', 'EP-CHARGER', 'CHARGER'), ep('park', 'EP-PARK', 'PARK'), ep('old', 'EP-OLD-SHELF', 'WAYPOINT', 'old-map')];
@@ -51,4 +51,29 @@ test('movement uses actual storage/endpoint identities, never an invented level 
   assert.throws(() => movementDetail(container, source, { ...target, endpointId: source.endpointId }, 1), /different destination/);
   assert.throws(() => validateMovementFields([{ key: 'destination.levelNo', label: 'Destination Level', required: true }], [detail]), /location data is not available/);
   assert.doesNotThrow(() => validateMovementFields([{ key: 'destination.levelNo', required: false }], [detail]));
+});
+
+test('outbound FIFO count validation enforces 1..200 and scope key tracks every preview input', () => {
+  assert.equal(parseOutboundFifoCount('1'), 1);
+  assert.equal(parseOutboundFifoCount('200'), 200);
+  for (const invalid of ['', '0', '-1', '201', '1.5', 'abc', '01']) {
+    assert.equal(parseOutboundFifoCount(invalid), null);
+  }
+  const base = { warehouseId: 'wh-1', mapId: 'map-1', productId: 'prod-1', containerCount: 3, destinationEndpointId: 'gate-1' };
+  assert.equal(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base }));
+  assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, productId: 'prod-2' }));
+  assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, containerCount: 4 }));
+  assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, destinationEndpointId: 'gate-2' }));
+  assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, mapId: 'map-2' }));
+  assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, warehouseId: 'wh-2' }));
+});
+
+test('transportFlow maps both seeded and verbose workflow codes to their supported flow', () => {
+  assert.equal(transportFlow('INBOUND'), 'inbound');
+  assert.equal(transportFlow('INBOUND_PUTAWAY'), 'inbound');
+  assert.equal(transportFlow('OUTBOUND'), 'outbound');
+  assert.equal(transportFlow('OUTBOUND_RETRIEVAL'), 'outbound');
+  assert.equal(transportFlow('INTERNAL_RELOCATION'), 'storage');
+  assert.equal(transportFlow('POINT_TO_POINT_TRANSPORT'), 'direct');
+  assert.equal(transportFlow('CUSTOM_UNKNOWN'), 'unsupported');
 });

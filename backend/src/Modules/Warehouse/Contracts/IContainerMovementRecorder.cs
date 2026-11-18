@@ -14,7 +14,9 @@ public interface IContainerMovementRecorder
 public sealed record ContainerPickup(
     Guid ContainerId,
     Guid JobId,
-    Guid TransportRequestId);
+    Guid TransportRequestId,
+    Guid? OutboundEndpointId = null,
+    Guid? WarehouseId = null);
 
 /// <param name="DestinationStorageLocationId">Null when the Container was dropped at an Endpoint with no shelf (dock, issue point).</param>
 /// <param name="DestinationLevelNo">Shelf level; level 1 when the Detail left it empty.</param>
@@ -23,4 +25,6 @@ public sealed record ContainerDelivery(
     Guid? DestinationStorageLocationId,
     short? DestinationLevelNo,
     Guid JobId,
-    Guid TransportRequestId);
+    Guid TransportRequestId,
+    Guid? OutboundEndpointId = null,
+    Guid? WarehouseId = null);

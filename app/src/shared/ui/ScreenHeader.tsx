@@ -1,7 +1,7 @@
-import { ArrowLeft } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors, ThemeColors } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
 import { translateText } from '../i18n';
 import { useTopInset } from '../theme/layout';
 import { radii } from '../theme/radii';
@@ -59,7 +59,7 @@ export function ScreenHeader({
   style,
 }: ScreenHeaderProps) {
   const topInset = useTopInset();
-  const styles = useThemedStyles(createStyles);
+  const { styles, colors } = useThemedStyles(createStyles);
   const showBack = canGoBack && !!onBack;
 
   return (
@@ -81,7 +81,7 @@ export function ScreenHeader({
             hitSlop={6}
             style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
           >
-            <ArrowLeft size={22} color={colors.textPrimary} strokeWidth={2} />
+            <ChevronLeft size={24} color={colors.textPrimary} strokeWidth={2.2} />
           </Pressable>
         ) : null}
 

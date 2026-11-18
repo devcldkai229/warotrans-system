@@ -9,6 +9,24 @@ public sealed class Container
     public Guid ProductId { get; set; }
     public string Barcode { get; set; } = string.Empty;
     public string? SupplierPackageBarcode { get; set; }
+
+    // Descriptive goods inside a box, not InventoryStock.ContainerCount. Null means unknown on legacy rows.
+    public decimal? ContentsQuantity { get; set; }
+    public string? ContentsUnit { get; set; }
+
+    // Durable creation receipt on the created rows, avoiding a separate receiving-batch domain/table.
+    public Guid? CreationRequestId { get; set; }
+    public string? CreationRequestHash { get; set; }
+    public int? CreationOrdinal { get; set; }
+    public string? CreationGroupKey { get; set; }
+    public int? CreationGroupOrdinal { get; set; }
+    public Guid? CreationStockVoucherId { get; set; }
+    // Admission is separate from physical custody. The accounting slot is retained while a robot carries the box.
+    public Guid? InboundStockVoucherId { get; set; }
+    public Guid? InventoryStorageLocationId { get; set; }
+    public short? InventoryLevelNo { get; set; }
+    public Guid? WarehouseId { get; set; }
+    public Guid? CurrentEndpointId { get; set; }
     public ContainerStatus Status { get; set; }
     public Guid? CurrentStorageLocationId { get; set; }
     public short? CurrentLevelNo { get; set; }
