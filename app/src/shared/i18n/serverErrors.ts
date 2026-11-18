@@ -175,4 +175,8 @@ export const viServerErrors: Record<string, string> = {
   inbound_voucher_required: 'Cần xác nhận phiếu nhập kho cho lô container này trước khi vận chuyển lên kệ.',
   outbound_voucher_required: 'Container \'{q1}\' phải thuộc một phiếu xuất kho đã xác nhận.',
   voucher_cancellation_unverified: 'Không xác minh được kết quả hủy phiếu. Hãy làm mới và thử lại.',
+  outbound_fifo_selection_changed: 'Danh sách FIFO đã thay đổi. Hãy xem trước lại các container khả dụng trước khi gửi.',
+  outbound_pick_invalid_map: 'Hãy chọn bản đồ đã xuất bản của kho.',
+  outbound_pick_invalid_destination: 'Hãy chọn một cổng Xuất kho (Outbound) đang bật trên bản đồ đã xuất bản.',
+  outbound_pick_preview_invalid: 'Không xác minh được danh sách xem trước FIFO. Hãy thử lại.',
 };

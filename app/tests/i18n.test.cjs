@@ -75,6 +75,8 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(t('Signed in as {name}', { name: 'Alex Tran' }), 'Đã đăng nhập: Alex Tran');
   assert.equal(t('Save Selected Containers'), 'Lưu container đã chọn');
   assert.equal(translateText('STAGED_OUTBOUND'), 'Chờ xuất tại cổng');
+  assert.equal(translateText('By Product (FIFO)'), 'Theo sản phẩm (FIFO)');
+  assert.equal(t('{count} FIFO Selected', { count: 4 }), 'Đã chọn 4 thùng FIFO');
 
   // Mixed JSX primitive array children via translateNode()
   assert.equal(
@@ -118,6 +120,18 @@ test('i18n translates exact strings, parameterized templates, and mixed JSX prim
   assert.equal(
     localizeServerMessage('batch_initial_location_not_supported', 'Omit initialStorageLocationId for new batches.'),
     'Không hỗ trợ chọn sẵn vị trí khi tạo lô container mới.',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_fifo_selection_changed', 'The FIFO selection has changed.'),
+    'Danh sách FIFO đã thay đổi. Hãy xem trước lại các container khả dụng trước khi gửi.',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_pick_invalid_map', "Select the warehouse's published map."),
+    'Hãy chọn bản đồ đã xuất bản của kho.',
+  );
+  assert.equal(
+    localizeServerMessage('outbound_pick_invalid_destination', 'Select an enabled Outbound gate.'),
+    'Hãy chọn một cổng Xuất kho (Outbound) đang bật trên bản đồ đã xuất bản.',
   );
 
   // Notification localization

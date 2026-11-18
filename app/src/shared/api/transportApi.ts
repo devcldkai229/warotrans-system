@@ -22,6 +22,32 @@ export interface CreateTransportRequestDetailBody {
   destinationStorageLocationCode?: string | null;
 }
 
+export interface OutboundFifoSelection {
+  productId: string;
+  containerCount: number;
+}
+
+export interface OutboundPickPreviewRequest {
+  warehouseId: string;
+  mapVersionId: string;
+  productId: string;
+  containerCount: number;
+  destinationEndpointId: string;
+}
+
+export interface OutboundPickItem {
+  barcode: string;
+  sourceStorageLocationCode: string;
+  admittedAt: string;
+  detail: CreateTransportRequestDetailBody;
+}
+
+export interface OutboundPickResponse {
+  requestedCount: number;
+  isComplete: boolean;
+  items: OutboundPickItem[];
+}
+
 export interface CreateTransportRequestBody {
   warehouseId: string;
   mapVersionId: string;
@@ -31,6 +57,7 @@ export interface CreateTransportRequestBody {
   workflowInputs?: Record<string, unknown>;
   note?: string | null;
   details: CreateTransportRequestDetailBody[];
+  outboundFifo?: OutboundFifoSelection | null;
 }
 
 export interface TransportRequestDetailResponse {
@@ -134,11 +161,45 @@ export interface QueueTransportRequestResponse {
   jobs: QueuedJobResponse[];
 }
 
+function validOutboundPickItem(item: OutboundPickItem | null | undefined, destinationEndpointId: string): item is OutboundPickItem {
+  const detail = item?.detail;
+  return !!item && typeof item.barcode === 'string' && !!item.barcode.trim()
+    && typeof item.sourceStorageLocationCode === 'string' && !!item.sourceStorageLocationCode.trim()
+    && typeof item.admittedAt === 'string' && !!item.admittedAt.trim()
+    && !!detail && Number.isInteger(detail.sequenceNo) && detail.sequenceNo > 0
+    && typeof detail.containerId === 'string' && !!detail.containerId.trim()
+    && typeof detail.sourceStorageLocationId === 'string' && !!detail.sourceStorageLocationId.trim()
+    && typeof detail.sourceEndpointId === 'string' && !!detail.sourceEndpointId.trim()
+    && typeof detail.destinationEndpointId === 'string' && detail.destinationEndpointId === destinationEndpointId;
+}
+
+export async function previewOutboundPick(body: OutboundPickPreviewRequest, signal?: AbortSignal): Promise<OutboundPickResponse> {
+  const result = await apiFetch<OutboundPickResponse>('/api/transportation/transport-requests/outbound-pick-preview', {
+    method: 'POST',
+    signal,
+    body: JSON.stringify({
+      warehouseId: body.warehouseId,
+      mapVersionId: body.mapVersionId,
+      productId: body.productId,
+      containerCount: body.containerCount,
+      destinationEndpointId: body.destinationEndpointId,
+    }),
+  });
+  if (!result || result.requestedCount !== body.containerCount || typeof result.isComplete !== 'boolean'
+    || !Array.isArray(result.items) || result.items.length > body.containerCount
+    || (result.isComplete && result.items.length !== body.containerCount)
+    || !result.items.every(item => validOutboundPickItem(item, body.destinationEndpointId))) {
+    throw new ApiError(502, 'outbound_pick_preview_invalid', 'Could not verify the outbound FIFO preview. Try again.');
+  }
+  return result;
+}
+
 export function createTransportRequest(body: CreateTransportRequestBody) {
   return apiFetch<CreateTransportRequestResponse>('/api/transportation/transport-requests', {
     method: 'POST', body: JSON.stringify({
       warehouseId: body.warehouseId, mapVersionId: body.mapVersionId, workflowId: body.workflowId,
       workflowInputs: body.workflowInputs || {}, note: body.note || null,
+      ...(body.outboundFifo ? { outboundFifo: { productId: body.outboundFifo.productId, containerCount: body.outboundFifo.containerCount } } : {}),
       details: body.details.map(({ sequenceNo, containerId, sourceStorageLocationId, sourceEndpointId, sourceLevelNo,
         destinationStorageLocationId, destinationEndpointId, destinationLevelNo }) => ({
         sequenceNo, containerId, sourceStorageLocationId, sourceEndpointId, sourceLevelNo,

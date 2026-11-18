@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, CheckCircle2, ChevronRight, MapPin, Package, ScanLine, Search, SlidersHorizontal, X } from 'lucide-react-native';
+import { Box, Check, CheckCircle2, ChevronRight, MapPin, Minus, Package, Plus, ScanLine, Search, SlidersHorizontal, X } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
+import { ReceivingProductPicker } from '../inventory/ReceivingProductPicker';
+import { voucherDate } from '../inventory/stockVoucherData';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { Button, EmptyState, SegmentedControl, Text, TextField } from '../../shared/ui';
@@ -15,23 +17,24 @@ import { radii } from '../../shared/theme/radii';
 import {
   getContainer, getContainerByBarcode, getMapVersionDetail, getOperatingContext, getTransportRequest,
   getWorkflowRequestInputSchema, listContainers, listPublishedWorkflows, listStorageLocations,
-  listTransportRequests, queueTransportRequest,
-  type ContainerListItem, type QueueTransportRequestResponse, type CreateTransportRequestResponse,
+  listTransportRequests, previewOutboundPick, queueTransportRequest,
+  type ContainerListItem, type OutboundPickResponse, type ProductItem, type QueueTransportRequestResponse, type CreateTransportRequestResponse,
 } from '../../shared/api';
 import { parseStaffInputs, staffInputDefaults } from './dispatchData';
 import { submitDispatch } from './dispatchSubmission';
 import { TransportPlaceSheet } from './TransportPlaceSheet';
 import { activeContainerIds, containerOrigin, containerReadiness, mappedLocations, movementDetail,
-  stationPoints, transportDestinations, transportFlow, type TransportPlace } from './transportDraft';
+  outboundFifoScopeKey, parseOutboundFifoCount, stationPoints, transportDestinations, transportFlow, type TransportPlace } from './transportDraft';
 import { DraftInputError, validateMovementFields } from './transportDraft';
-import { getUserErrorMessage } from '../../shared/api/client';
+import { ApiError, getUserErrorMessage } from '../../shared/api/client';
+import { t } from '../../shared/i18n';
 
 const workflowNames: Record<string, string> = {
   INBOUND_PUTAWAY: 'Inbound Putaway', OUTBOUND_RETRIEVAL: 'Outbound Retrieval', INTERNAL_RELOCATION: 'Internal Relocation',
   POINT_TO_POINT_TRANSPORT: 'Point To Point', REPLENISHMENT: 'Replenishment',
 };
 type ViewFilter = 'ready' | 'all' | 'location';
-type Picker = { kind: 'receiving' | 'origin' | 'destination' | 'bulk'; containerId?: string } | null;
+type Picker = { kind: 'receiving' | 'origin' | 'destination' | 'bulk' | 'fifo-gate'; containerId?: string } | null;
 
 async function loadContext(repeatId: string, barcodes: string[]) {
   const [workflows, previous] = await Promise.all([listPublishedWorkflows(), repeatId ? getTransportRequest(repeatId) : Promise.resolve(null)]);
@@ -58,12 +61,22 @@ export function TransportCreationScreen() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
   const repeatId = typeof params?.repeatRequestId === 'string' ? params.repeatRequestId : '';
-  const barcodesKey = JSON.stringify(Array.isArray(params?.containers) ? params.containers.filter((code: unknown) => typeof code === 'string') : typeof params?.container === 'string' ? [params.container] : []);
+  const initialBarcodes = useMemo(() => (Array.isArray(params?.containers) ? params.containers.filter((code: unknown): code is string => typeof code === 'string') : typeof params?.container === 'string' ? [params.container] : []), [params?.containers, params?.container]);
+  const barcodesKey = JSON.stringify(initialBarcodes);
+  const hasExplicitContainerParams = !!repeatId || initialBarcodes.length > 0;
   const context = useQuery({ queryKey: ['dispatch-context', session?.id, repeatId, barcodesKey],
     queryFn: () => loadContext(repeatId, JSON.parse(barcodesKey) as string[]), retry: false, staleTime: 0 });
   const data = context.data;
   const [workflowId, setWorkflowId] = useState('');
   const [pickingWorkflow, setPickingWorkflow] = useState(!params?.workflow && !repeatId);
+  const [outboundMode, setOutboundMode] = useState<'fifo' | 'manual'>(() => (hasExplicitContainerParams ? 'manual' : 'fifo'));
+  const [fifoProduct, setFifoProduct] = useState<ProductItem | null>(null);
+  const [fifoCountText, setFifoCountText] = useState('1');
+  const [fifoGateId, setFifoGateId] = useState('');
+  const [fifoProductPicker, setFifoProductPicker] = useState<{ open: boolean; barcode: string | null } | null>(null);
+  const [fifoPreview, setFifoPreview] = useState<{ scopeKey: string; response: OutboundPickResponse } | null>(null);
+  const [fifoLoading, setFifoLoading] = useState(false);
+  const [fifoScannerOpen, setFifoScannerOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [destinations, setDestinations] = useState<Record<string, string>>({});
   const [staffInputs, setStaffInputs] = useState<Record<string, string>>({});
@@ -81,12 +94,15 @@ export function TransportCreationScreen() {
   const [scanning, setScanning] = useState(false);
   const [receipt, setReceipt] = useState<{ created: CreateTransportRequestResponse; queued: QueueTransportRequestResponse | null; queueError: string | null } | null>(null);
   const commandLock = useRef(false);
+  const alive = useRef(true);
+  const fifoAbortRef = useRef<AbortController | null>(null);
   const listRef = useRef<FlatList<ContainerListItem>>(null);
   const routeKey = `${repeatId}:${barcodesKey}:${params?.workflow || ''}`;
   const liveScope = useRef('');
-  liveScope.current = `${routeKey}:${workflowId}:${data?.map.id || ''}:${receivingId}`;
+  liveScope.current = `${routeKey}:${workflowId}:${data?.map.id || ''}:${receivingId}:${outboundMode}`;
   const initialized = useRef('');
   const restoredInputs = useRef('');
+  useEffect(() => { alive.current = true; return () => { alive.current = false; fifoAbortRef.current?.abort(); }; }, []);
   const workflows = data?.workflows ?? [];
   const workflow = workflows.find(item => item.id === workflowId);
   const flow = transportFlow(workflow?.code || '');
@@ -95,11 +111,24 @@ export function TransportCreationScreen() {
   const locations = useMemo(() => mappedLocations(data?.locations ?? [], endpoints, data?.warehouse.id || '', mapId), [data, endpoints, mapId]);
   const receivingPoints = useMemo(() => stationPoints(endpoints, mapId, 'INBOUND'), [endpoints, mapId]);
   const receivingPoint = receivingPoints.find(item => item.endpointId === receivingId) ?? (receivingPoints.length === 1 ? receivingPoints[0] : undefined);
+  const outboundGates = useMemo(() => stationPoints(endpoints, mapId, 'OUTBOUND'), [endpoints, mapId]);
+  const fifoGate = outboundGates.find(item => item.endpointId === fifoGateId) ?? outboundGates[0];
+  const fifoCount = parseOutboundFifoCount(fifoCountText);
+  const currentFifoScope = data && mapId && fifoProduct && fifoCount && fifoGate
+    ? outboundFifoScopeKey({
+        warehouseId: data.warehouse.id,
+        mapId,
+        productId: fifoProduct.id,
+        containerCount: fifoCount,
+        destinationEndpointId: fifoGate.endpointId,
+      })
+    : '';
+  const activeFifoPreview = fifoPreview && currentFifoScope && fifoPreview.scopeKey === currentFifoScope ? fifoPreview.response : null;
   const places = useMemo(() => transportDestinations(flow, locations, endpoints, mapId), [flow, locations, endpoints, mapId]);
   useEffect(() => { const timer = setTimeout(() => setServerSearch(query.trim()), 250); return () => clearTimeout(timer); }, [query]);
   const searchResults = useQuery({ queryKey: ['dispatch-container-search', session?.id, data?.warehouse.id, mapId, serverSearch],
     queryFn: () => listContainers({ warehouseId: data!.warehouse.id, search: serverSearch, eligibleOnly: false, take: 100 }),
-    enabled: !!data && serverSearch.length >= 2 && !pickingWorkflow, retry: false });
+    enabled: !!data && serverSearch.length >= 2 && !pickingWorkflow && !(flow === 'outbound' && outboundMode === 'fifo'), retry: false });
   const containers = useMemo(() => {
     const base = data?.containers ?? [];
     const found = serverSearch === query.trim() ? searchResults.data?.items ?? [] : [];
@@ -124,11 +153,24 @@ export function TransportCreationScreen() {
     receivingPoint ? [receivingPoint.endpointId] : []);
   const schema = useQuery({ queryKey: ['dispatch-schema', workflowId], queryFn: () => getWorkflowRequestInputSchema(workflowId), enabled: !!workflowId, retry: false });
 
+  const resetFifoState = (mode: 'fifo' | 'manual') => {
+    fifoAbortRef.current?.abort();
+    setOutboundMode(mode);
+    setFifoProduct(null);
+    setFifoCountText('1');
+    setFifoGateId('');
+    setFifoProductPicker(null);
+    setFifoPreview(null);
+    setFifoLoading(false);
+    setFifoScannerOpen(false);
+  };
+
   useEffect(() => {
     setReceipt(null); setError(null); setSelected([]); setDestinations({}); setStaffInputs({});
     setReceivingId(''); setOriginFilter(''); setViewFilter('ready'); setQuery(''); setExtraContainers([]);
     setPicker(null); setFiltersOpen(false); setScannerOpen(false); restoredInputs.current = '';
-  }, [routeKey]);
+    resetFifoState(hasExplicitContainerParams ? 'manual' : 'fifo');
+  }, [routeKey, hasExplicitContainerParams]);
 
   useEffect(() => {
     if (!data || initialized.current === routeKey) return;
@@ -178,6 +220,7 @@ export function TransportCreationScreen() {
   const chooseWorkflow = (id: string) => {
     setWorkflowId(id); setPickingWorkflow(false); setSelected([]); setDestinations({}); setStaffInputs({});
     setReceivingId(''); setOriginFilter(''); setViewFilter('ready'); setQuery(''); setError(null);
+    resetFifoState('fifo');
   };
   const toggle = (container: ContainerListItem) => {
     if (pending || scanning) return;
@@ -200,16 +243,111 @@ export function TransportCreationScreen() {
     } catch (failure) { if (liveScope.current === scope) setError(failure instanceof DraftInputError ? failure.message : getUserErrorMessage(failure, 'Container could not be loaded. Try again.')); }
     finally { setScanning(false); }
   };
+  const readValidatedWorkflowInputs = () => {
+    if (!workflow || !schema.data || schema.data.workflowId !== workflow.id) {
+      throw new DraftInputError('Wait for the workflow inputs to load.');
+    }
+    try { return parseStaffInputs(schema.data.workflowInputs, staffInputs); }
+    catch (failure) { throw new DraftInputError(failure instanceof Error ? failure.message : 'Review the workflow fields.'); }
+  };
+  const runFifoPreview = async (countOverride?: number) => {
+    const targetCount = countOverride ?? fifoCount;
+    if (!data || !mapId || !fifoProduct || !targetCount || !fifoGate || pending || fifoLoading) return;
+    const scope = liveScope.current;
+    const targetScope = outboundFifoScopeKey({
+      warehouseId: data.warehouse.id,
+      mapId,
+      productId: fifoProduct.id,
+      containerCount: targetCount,
+      destinationEndpointId: fifoGate.endpointId,
+    });
+    fifoAbortRef.current?.abort();
+    const controller = new AbortController();
+    fifoAbortRef.current = controller;
+    setFifoLoading(true);
+    setError(null);
+    try {
+      const response = await previewOutboundPick({
+        warehouseId: data.warehouse.id,
+        mapVersionId: mapId,
+        productId: fifoProduct.id,
+        containerCount: targetCount,
+        destinationEndpointId: fifoGate.endpointId,
+      }, controller.signal);
+      if (!alive.current || controller.signal.aborted || liveScope.current !== scope) return;
+      setFifoPreview({ scopeKey: targetScope, response });
+    } catch (failure) {
+      if (!alive.current || controller.signal.aborted || liveScope.current !== scope) return;
+      setError(getUserErrorMessage(failure, 'Could not load FIFO outbound preview. Try again.'));
+    } finally {
+      if (alive.current && !controller.signal.aborted) setFifoLoading(false);
+    }
+  };
+  const submitFifo = async () => {
+    if (commandLock.current || !data || !workflow || !schema.data || !fifoProduct || !fifoGate || !activeFifoPreview || !activeFifoPreview.isComplete) return;
+    commandLock.current = true; setPending(true); setError(null);
+    const scope = liveScope.current;
+    const previewCount = activeFifoPreview.requestedCount;
+    const product = fifoProduct;
+    const gate = fifoGate;
+    try {
+      const workflowInputs = readValidatedWorkflowInputs();
+      const details = activeFifoPreview.items.map(item => item.detail);
+      validateMovementFields(schema.data.movementInputs, details);
+      const result = await submitDispatch({
+        warehouseId: data.warehouse.id,
+        mapVersionId: mapId,
+        workflowId: workflow.id,
+        workflowInputs,
+        details,
+        outboundFifo: { productId: product.id, containerCount: previewCount },
+      }, true);
+      if (alive.current && liveScope.current === scope) setReceipt(result);
+    } catch (failure) {
+      if (!alive.current || liveScope.current !== scope) return;
+      if (failure instanceof ApiError && failure.code === 'outbound_fifo_selection_changed') {
+        setError(getUserErrorMessage(failure, 'The FIFO selection changed. Review the updated containers before submitting.'));
+        fifoAbortRef.current?.abort();
+        const controller = new AbortController();
+        fifoAbortRef.current = controller;
+        setFifoLoading(true);
+        try {
+          const refreshed = await previewOutboundPick({
+            warehouseId: data.warehouse.id,
+            mapVersionId: mapId,
+            productId: product.id,
+            containerCount: previewCount,
+            destinationEndpointId: gate.endpointId,
+          }, controller.signal);
+          if (alive.current && !controller.signal.aborted && liveScope.current === scope) {
+            setFifoPreview({
+              scopeKey: outboundFifoScopeKey({
+                warehouseId: data.warehouse.id,
+                mapId,
+                productId: product.id,
+                containerCount: previewCount,
+                destinationEndpointId: gate.endpointId,
+              }),
+              response: refreshed,
+            });
+          }
+        } catch {
+          if (alive.current && !controller.signal.aborted && liveScope.current === scope) setFifoPreview(null);
+        } finally {
+          if (alive.current && !controller.signal.aborted) setFifoLoading(false);
+        }
+        return;
+      }
+      setError(failure instanceof DraftInputError ? failure.message : getUserErrorMessage(failure, 'Request could not be created. Your selections are kept.'));
+    } finally { commandLock.current = false; if (alive.current) setPending(false); }
+  };
   const submit = async () => {
     if (commandLock.current || !data || !workflow || !schema.data) return;
     commandLock.current = true; setPending(true); setError(null);
     const scope = liveScope.current;
     try {
       if (!selectedItems.length || selectedItems.length !== selected.length) throw new DraftInputError('Select at least one current container.');
-      if (schema.data.workflowId !== workflow.id) throw new DraftInputError('Wait for the workflow inputs to load.');
-      let workflowInputs: Record<string, unknown>;
-      try { workflowInputs = parseStaffInputs(schema.data.workflowInputs, staffInputs); }
-      catch (failure) { throw new DraftInputError(failure instanceof Error ? failure.message : 'Review the workflow fields.'); }
+      const workflowInputs = readValidatedWorkflowInputs();
       for (const item of selectedItems) {
         const reason = reasonFor(item);
         if (reason) throw new DraftInputError(`${item.barcode}: ${reason}. Review this container before creating a request.`);
@@ -256,15 +394,29 @@ export function TransportCreationScreen() {
 
   const pickerContainer = containers.find(item => item.id === picker?.containerId);
   const pickerSource = pickerContainer ? sourceOf(pickerContainer) : null;
-  const pickerOptions = picker?.kind === 'receiving' ? receivingPoints : picker?.kind === 'origin' ? origins
+  const pickerOptions = picker?.kind === 'receiving' ? receivingPoints
+    : picker?.kind === 'fifo-gate' ? outboundGates
+    : picker?.kind === 'origin' ? origins
     : places.filter(place => picker?.kind === 'bulk' ? selectedItems.every(item => sourceOf(item)?.endpointId !== place.endpointId) : place.endpointId !== pickerSource?.endpointId);
   const onPick = (place: TransportPlace) => {
     if (picker?.kind === 'receiving') { setReceivingId(place.endpointId); setSelected([]); setDestinations({}); }
+    else if (picker?.kind === 'fifo-gate') { setFifoGateId(place.endpointId); }
     else if (picker?.kind === 'origin') setOriginFilter(place.id);
     else if (picker?.kind === 'bulk') setDestinations(previous => ({ ...previous, ...Object.fromEntries(selected.map(id => [id, place.id])) }));
     else if (picker?.containerId) setDestinations(previous => ({ ...previous, [picker.containerId!]: place.id }));
     setPicker(null); setError(null);
   };
+  const showOutboundFifo = flow === 'outbound' && outboundMode === 'fifo';
+  const workflowInputFields = schema.data?.workflowInputs.map(field => field.dataType === 'BOOLEAN' ? <View key={field.key} style={{ gap: 6 }}>
+    <Text variant="label">{field.label}{field.required ? ' *' : ''}</Text><SegmentedControl options={[{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }]}
+      value={staffInputs[field.key] || ''} onChange={value => { if (!pending) setStaffInputs(previous => ({ ...previous, [field.key]: value })); }} accessibilityLabel={field.label} />
+  </View> : <TextField key={field.key} label={`${field.label || field.key}${field.required ? ' *' : ''}`} hint={field.description || undefined}
+    value={staffInputs[field.key] || ''} onChangeText={value => setStaffInputs(previous => ({ ...previous, [field.key]: value }))} editable={!pending}
+    keyboardType={field.dataType === 'INTEGER' || field.dataType === 'DECIMAL' ? 'numeric' : 'default'} />);
+  const errorNotice = (context.error || schema.error || error) ? <View style={styles.notice} accessibilityRole="alert">
+    <Text variant="body" color={colors.dangerText}>{error || schema.error?.message || context.error?.message}</Text>
+    {(context.error || schema.error) && <Button title="Retry" variant="outline" size="sm" onPress={() => { void context.refetch(); void schema.refetch(); }} />}
+  </View> : null;
   const title = pickingWorkflow ? 'New Request' : workflowNames[workflow?.code || ''] || workflow?.name || 'Choose Workflow';
   return <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <SubScreenHeader title={title} label={pickingWorkflow ? 'Transport' : 'Select Containers'} onBack={() => {
@@ -291,6 +443,128 @@ export function TransportCreationScreen() {
           <Text variant="caption" color={colors.primaryText}>{receivingPoint?.label || 'Choose Receiving Point'}</Text><ChevronRight size={14} color={colors.primaryText} />
         </Pressable>}
       </View>
+      {flow === 'outbound' && <View style={styles.modeBar}>
+        <SegmentedControl
+          size="sm"
+          accessibilityLabel="Outbound selection mode"
+          options={[
+            { label: 'By Product (FIFO)', value: 'fifo' },
+            { label: 'Manual Containers', value: 'manual' },
+          ]}
+          value={outboundMode}
+          onChange={mode => {
+            if (pending || fifoLoading) return;
+            setOutboundMode(mode);
+            setError(null);
+          }}
+        />
+      </View>}
+      {showOutboundFifo ? <>
+        <ScrollView style={styles.flex} contentContainerStyle={styles.fifoContent} keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={context.isRefetching} onRefresh={() => { void context.refetch(); }} tintColor={colors.primary} />}>
+          {errorNotice}
+          {schema.isLoading && <Text variant="caption">Loading Workflow Fields…</Text>}
+          {workflowInputFields}
+          {!outboundGates.length && <View style={styles.setupNote}><Text variant="caption" color={colors.warningText}>No outbound point is configured on this map.</Text></View>}
+          <View style={styles.fifoCard}>
+            <Text variant="label" color="textSecondary">Product</Text>
+            <View style={styles.searchRow}>
+              <Pressable accessibilityRole="button" accessibilityLabel={fifoProduct ? `${fifoProduct.name}, ${fifoProduct.sku}` : 'Choose Product'}
+                disabled={pending || fifoLoading} onPress={() => setFifoProductPicker({ open: true, barcode: null })}
+                style={({ pressed }) => [styles.fifoSelector, styles.flex, pressed && styles.pressed]}>
+                <View style={styles.fifoSelectorIcon}><Box size={18} color={colors.primaryText} /></View>
+                <View style={styles.flex}>
+                  <Text variant="bodyMedium" color={fifoProduct ? colors.textPrimary : colors.primaryText} numberOfLines={1}>
+                    {fifoProduct?.name || 'Choose Product'}
+                  </Text>
+                  <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                    {fifoProduct?.sku || 'Tap to choose or scan a product'}
+                  </Text>
+                </View>
+                <ChevronRight size={18} color={colors.textMuted} />
+              </Pressable>
+              <Pressable style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Scan product barcode"
+                disabled={pending || fifoLoading} onPress={() => setFifoScannerOpen(true)}>
+                <ScanLine size={20} color={colors.textPrimary} />
+              </Pressable>
+            </View>
+            <View style={{ gap: 6 }}>
+              <Text variant="label" color="textSecondary">Container Count (1–200)</Text>
+              <View style={styles.searchRow}>
+                <Pressable style={[styles.iconButton, styles.stepperBtn, (!fifoCount || fifoCount <= 1 || pending || fifoLoading) && styles.disabledControl]}
+                  accessibilityRole="button" accessibilityLabel="Decrease Container Count"
+                  disabled={!fifoCount || fifoCount <= 1 || pending || fifoLoading}
+                  onPress={() => { setFifoCountText(String(fifoCount ? Math.max(1, fifoCount - 1) : 1)); }}>
+                  <Minus size={18} color={colors.textPrimary} />
+                </Pressable>
+                <TextField containerStyle={styles.flex} accessibilityLabel="FIFO Container Count" value={fifoCountText}
+                  onChangeText={setFifoCountText} keyboardType="number-pad" maxLength={3} editable={!pending && !fifoLoading}
+                  placeholder="1" inputStyle={{ textAlign: 'center', fontVariant: ['tabular-nums'] }}
+                  error={fifoCountText.trim().length > 0 && fifoCount === null ? 'Enter between 1 and 200 containers.' : undefined} />
+                <Pressable style={[styles.iconButton, styles.stepperBtn, ((fifoCount !== null && fifoCount >= 200) || pending || fifoLoading) && styles.disabledControl]}
+                  accessibilityRole="button" accessibilityLabel="Increase Container Count"
+                  disabled={(fifoCount !== null && fifoCount >= 200) || pending || fifoLoading}
+                  onPress={() => { setFifoCountText(String(fifoCount ? Math.min(200, fifoCount + 1) : 1)); }}>
+                  <Plus size={18} color={colors.textPrimary} />
+                </Pressable>
+              </View>
+            </View>
+            <Pressable style={styles.destinationRow} disabled={pending || fifoLoading || !outboundGates.length}
+              accessibilityRole="button" accessibilityLabel="Outbound Gate"
+              onPress={() => setPicker({ kind: 'fifo-gate' })}>
+              <MapPin size={16} color={colors.primaryText} />
+              <View style={styles.flex}>
+                <Text variant="caption" color="textSecondary">Deliver To</Text>
+                <Text variant="bodyMedium" color={fifoGate ? colors.textPrimary : colors.primaryText} numberOfLines={1}>
+                  {fifoGate?.label || 'Choose Location'}
+                </Text>
+              </View>
+              <ChevronRight size={17} color={colors.textMuted} />
+            </Pressable>
+            <Button title={activeFifoPreview ? 'Refresh FIFO Preview' : 'Preview FIFO Containers'} variant="outline" loading={fifoLoading}
+              disabled={!data || !mapId || !fifoProduct || !fifoCount || !fifoGate || fifoLoading || pending || context.isFetching}
+              onPress={() => { void runFifoPreview(); }} />
+          </View>
+          {activeFifoPreview && <>
+            {!activeFifoPreview.isComplete && <View style={styles.setupNote}>
+              <Text variant="caption" color={colors.warningText}>
+                {t('Only {available} of {requested} containers are available for FIFO pickup. Adjust the count or product and preview again.', {
+                  available: activeFifoPreview.items.length,
+                  requested: activeFifoPreview.requestedCount,
+                })}
+              </Text>
+              {activeFifoPreview.items.length > 0 && <Button title={t('Use Available ({count})', { count: activeFifoPreview.items.length })}
+                variant="outline" size="sm" disabled={fifoLoading || pending}
+                onPress={() => {
+                  const available = activeFifoPreview.items.length;
+                  setFifoCountText(String(available));
+                  void runFifoPreview(available);
+                }} />}
+            </View>}
+            <View style={styles.sectionRow}>
+              <Text variant="label">{t('Reviewed FIFO Selection · {count}', { count: activeFifoPreview.items.length })}</Text>
+              {!!fifoGate && <Text variant="caption" color="textSecondary">{fifoGate.code}</Text>}
+            </View>
+            {activeFifoPreview.items.map(item => <View key={item.detail.containerId} style={[styles.containerCard, styles.fifoItemCard]}>
+              <View style={styles.sectionRow}>
+                <Text variant="bodyMedium" style={styles.barcode} selectable>#{item.detail.sequenceNo} · {item.barcode}</Text>
+                <Text variant="caption" color="textSecondary">{item.sourceStorageLocationCode}{item.detail.sourceLevelNo != null ? ` · L${item.detail.sourceLevelNo}` : ''}</Text>
+              </View>
+              <Text variant="caption" color="textSecondary">{t('Admitted {date}', { date: voucherDate(item.admittedAt) })}</Text>
+            </View>)}
+          </>}
+        </ScrollView>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={styles.sectionRow}>
+            <Text variant="bodyMedium">{t('{count} FIFO Selected', { count: activeFifoPreview?.isComplete ? activeFifoPreview.items.length : 0 })}</Text>
+            {!activeFifoPreview ? <Text variant="caption" color="textSecondary">Preview FIFO Containers</Text>
+              : !activeFifoPreview.isComplete ? <Text variant="caption" color={colors.warningText}>Shortfall</Text>
+              : fifoGate ? <Text variant="caption" color="textSecondary">{fifoGate.code}</Text> : null}
+          </View>
+          <Button title="Create Request" onPress={() => { void submitFifo(); }} fullWidth loading={pending}
+            disabled={!workflow || !schema.data || schema.data.workflowId !== workflowId || !!schema.error || !activeFifoPreview?.isComplete || fifoLoading || pending || context.isFetching || context.isError} />
+        </View>
+      </> : <>
       <FlatList ref={listRef} data={flow === 'unsupported' ? [] : visible} keyExtractor={item => item.id} style={styles.flex} keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={context.isRefetching} onRefresh={() => { void context.refetch(); }} tintColor={colors.primary} />}
         ListHeaderComponent={<View style={styles.listHeader}>
@@ -300,10 +574,7 @@ export function TransportCreationScreen() {
             <Pressable style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Scan container barcode" onPress={() => setScannerOpen(true)} disabled={pending || scanning}><ScanLine size={20} color={colors.textPrimary} /></Pressable>
             <Pressable style={[styles.iconButton, (viewFilter !== 'ready' || !!originFilter) && styles.activeFilter]} accessibilityRole="button" accessibilityLabel="Filter containers" onPress={() => setFiltersOpen(true)}><SlidersHorizontal size={19} color={colors.textPrimary} /></Pressable>
           </View>
-          {(context.error || schema.error || error) && <View style={styles.notice} accessibilityRole="alert">
-            <Text variant="body" color={colors.dangerText}>{error || schema.error?.message || context.error?.message}</Text>
-            {(context.error || schema.error) && <Button title="Retry" variant="outline" size="sm" onPress={() => { void context.refetch(); void schema.refetch(); }} />}
-          </View>}
+          {errorNotice}
           {serverSearch.length >= 2 && searchResults.isFetching && <Text variant="caption">Searching Catalog…</Text>}
           {searchResults.error && serverSearch === query.trim() && <View style={styles.notice}><Text variant="caption">Search could not be refreshed. Showing loaded containers.</Text><Button title="Retry Search" size="sm" variant="outline" onPress={() => { void searchResults.refetch(); }} /></View>}
           {schema.isLoading && <Text variant="caption">Loading Workflow Fields…</Text>}
@@ -312,12 +583,7 @@ export function TransportCreationScreen() {
           {flow === 'inbound' && !receivingPoint && <Text variant="caption" color={colors.warningText}>A receiving point must be configured or selected before choosing containers.</Text>}
           {data.requestsIncomplete && <Text variant="caption" color={colors.warningText}>Some request allocations were not returned. The server will check availability when you create.</Text>}
           {data.containerTotal > data.containers.length && <Text variant="caption">Showing {data.containers.length} of {data.containerTotal} containers. Scan an exact barcode to look up another.</Text>}
-          {schema.data?.workflowInputs.map(field => field.dataType === 'BOOLEAN' ? <View key={field.key} style={{ gap: 6 }}>
-            <Text variant="label">{field.label}{field.required ? ' *' : ''}</Text><SegmentedControl options={[{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }]}
-              value={staffInputs[field.key] || ''} onChange={value => { if (!pending) setStaffInputs(previous => ({ ...previous, [field.key]: value })); }} accessibilityLabel={field.label} />
-          </View> : <TextField key={field.key} label={`${field.label || field.key}${field.required ? ' *' : ''}`} hint={field.description || undefined}
-            value={staffInputs[field.key] || ''} onChangeText={value => setStaffInputs(previous => ({ ...previous, [field.key]: value }))} editable={!pending}
-            keyboardType={field.dataType === 'INTEGER' || field.dataType === 'DECIMAL' ? 'numeric' : 'default'} />)}
+          {workflowInputFields}
           {!places.length && flow !== 'unsupported' && <View style={styles.setupNote}><Text variant="caption" color={colors.warningText}>
             {flow === 'outbound' ? 'No outbound point is configured on this map.' : 'No valid storage destinations are configured on this map.'}
           </Text></View>}
@@ -365,11 +631,18 @@ export function TransportCreationScreen() {
         <Button title="Create Request" onPress={submit} fullWidth loading={pending}
           disabled={!workflow || !schema.data || schema.data.workflowId !== workflowId || !!schema.error || !selected.length || !places.length || flow === 'unsupported' || scanning || context.isFetching || context.isError || selectedItems.some(item => !!reasonFor(item))} />
       </View>
+      </>}
     </>}
     {picker && <TransportPlaceSheet title={picker.kind === 'receiving' ? 'Receiving Point' : picker.kind === 'origin' ? 'Pickup Location' : 'Deliver To'}
       options={pickerOptions} onSelect={onPick} onClose={() => setPicker(null)}
-      selectedId={pickerContainer ? destinationFor(pickerContainer)?.id : picker.kind === 'receiving' ? receivingPoint?.id : originFilter}
+      selectedId={pickerContainer ? destinationFor(pickerContainer)?.id : picker.kind === 'receiving' ? receivingPoint?.id : picker.kind === 'fifo-gate' ? fifoGate?.endpointId : originFilter}
       emptyMessage="No matching locations are configured on this map. Ask the supervisor to check the location mapping." />}
+    {fifoProductPicker?.open && <ReceivingProductPicker selectedProduct={fifoProduct} initialBarcode={fifoProductPicker.barcode}
+      onSelect={product => { setFifoProduct(product); setFifoProductPicker(null); setError(null); }}
+      onClose={() => setFifoProductPicker(null)} />}
+    {fifoScannerOpen && <BarcodeScannerHUD visible title="Scan product barcode" manualLabel="Product or supplier barcode"
+      placeholder="Enter Or Scan Product Barcode" onClose={() => setFifoScannerOpen(false)}
+      onScanResult={barcode => { setFifoScannerOpen(false); setFifoProductPicker({ open: true, barcode }); }} />}
     {filtersOpen && <BottomSheet onClose={() => setFiltersOpen(false)} accessibilityLabel="Container Filters" autoHeight>
       <View style={styles.content}><View style={styles.sectionRow}><Text variant="headline">Filters</Text><Pressable onPress={() => setFiltersOpen(false)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Close filters"><X size={20} color={colors.textPrimary} /></Pressable></View>
         {([['ready', 'At Valid Sources'], ['location', `Needs Receiving (${needsLocationCount})`], ['all', 'All Containers']] as const).map(([value, label]) => <Pressable key={value} style={styles.filterRow} accessibilityRole="radio" accessibilityState={{ checked: viewFilter === value }} onPress={() => setViewFilter(value)}>
@@ -387,6 +660,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   content: { padding: 20, gap: 16 }, list: { paddingHorizontal: 16, paddingBottom: 20 }, listHeader: { gap: 14, paddingBottom: 10 },
   contextRow: { paddingHorizontal: 18, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6 },
   contextControl: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, flexShrink: 1 },
+  modeBar: { paddingHorizontal: 16, paddingBottom: 10 },
+  fifoContent: { padding: 16, gap: 14, paddingBottom: 24 },
+  fifoCard: { padding: 14, gap: 12, borderRadius: radii.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  fifoSelector: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
+  fifoSelectorIcon: { width: 34, height: 34, borderRadius: radii.sm, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  stepperBtn: { borderWidth: 1, borderColor: colors.border },
+  disabledControl: { opacity: 0.4 },
+  fifoItemCard: { padding: 14, gap: 4, marginBottom: 0 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, iconButton: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surface },
   activeFilter: { backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.primaryBorder },
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },

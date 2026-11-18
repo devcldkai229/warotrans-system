@@ -62,7 +62,7 @@ Nếu tài liệu cũ khác quyết định mới, ưu tiên người dùng rồ
 
 Đọc `CreateStockVoucherScreen.tsx`, `ContainerCountField.tsx`, `InboundBatchEditor.tsx`, `InboundBatchSummary.tsx`, `inboundBatch.ts`, `voucherPreparation.ts`, `useVoucherPreparation.ts`, `preparationStorage.ts`, `preparationDeviceStore.ts`, `StockVouchersScreen.tsx`, `StockVoucherDetailScreen.tsx`, `VoucherDraftWorkspace.tsx`, `OutboundVoucherSelection.tsx`, `outboundPreparation.ts`, `ReceivingProductPicker.tsx`, `productLookup.ts`, `stockVoucherData.ts`, `useVoucherWarehouse.ts` trong `app/src/features/inventory/` và `TransportCreationScreen.tsx` trong `app/src/features/transport/`; API/capabilities trong `app/src/shared/api/`.
 
-Mốc hiện tại: đã merge BE `4f3df69` (`feature/stock-voucher-backend`) và tích hợp đầy đủ cả Nhập (`None` location + multi-gate putaway) và Xuất (`STAGED_OUTBOUND` -> `addStockVoucherLines` -> `confirmStockVoucher`) kèm typecheck/unit tests/web export. Vẫn cần nghiệm thu end-to-end trên server thực tế + iPhone 12/Expo.
+Mốc hiện tại: đã merge BE `cae03e0` (`feature/stock-voucher-backend`) và tích hợp đầy đủ Nhập đa cổng (`None` location + multi-gate putaway), Hủy phiếu nháp (`POST /api/warehouse/stock-vouchers/{id}/cancel`), **Xuất kho theo FIFO trên `OUTBOUND_RETRIEVAL`** (`POST /api/transportation/transport-requests/outbound-pick-preview` + `outboundFifo` khi tạo TR với kiểm tra `409 outbound_fifo_selection_changed`), và Phiếu xuất (`STAGED_OUTBOUND` -> `addStockVoucherLines` -> `confirmStockVoucher`) kèm typecheck/unit tests/web export. Vẫn cần nghiệm thu end-to-end trên server thực tế + iPhone 12/Expo.
 
 ## 4. Plan lớn còn dang dở
 

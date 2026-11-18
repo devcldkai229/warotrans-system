@@ -56,7 +56,57 @@ test('transport submits the chosen workflow and preserves storage locations and 
   assert.equal(request.body.details[0].destinationStorageLocationId, 'destination-location');
   assert.equal(request.body.details[0].destinationLevelNo, 3);
   assert.equal('productName' in request.body.details[0], false);
+  assert.equal('outboundFifo' in request.body, false);
   assert.deepEqual(request.body.workflowInputs, { fragile: false });
+
+  await load('src/shared/api/transportApi.ts').createTransportRequest({
+    warehouseId: 'warehouse',
+    mapVersionId: 'map',
+    workflowId: 'outbound-retrieval',
+    outboundFifo: { productId: 'product-1', containerCount: 1 },
+    details: [detail],
+  });
+  assert.deepEqual(request.body.outboundFifo, { productId: 'product-1', containerCount: 1 });
+});
+
+test('previewOutboundPick verifies FIFO preview items and rejects malformed responses', async () => {
+  let captured = null;
+  const validItem = {
+    barcode: 'CTN-001',
+    sourceStorageLocationCode: 'A1-01',
+    admittedAt: '2026-11-18T08:00:00Z',
+    detail: {
+      sequenceNo: 1,
+      containerId: 'c1',
+      sourceStorageLocationId: 'loc-1',
+      sourceEndpointId: 'ep-rack',
+      sourceLevelNo: 1,
+      destinationStorageLocationId: null,
+      destinationEndpointId: 'ep-outbound',
+      destinationLevelNo: null,
+    },
+  };
+  const validResponse = { requestedCount: 1, isComplete: true, items: [validItem] };
+  const api = modules(async (url, init) => { captured = { url, init }; return validResponse; })('src/shared/api/transportApi.ts');
+  const controller = new AbortController();
+  const reqBody = { warehouseId: 'wh-1', mapVersionId: 'map-1', productId: 'prod-1', containerCount: 1, destinationEndpointId: 'ep-outbound' };
+  const result = await api.previewOutboundPick(reqBody, controller.signal);
+  assert.equal(captured.url, '/api/transportation/transport-requests/outbound-pick-preview');
+  assert.equal(captured.init.method, 'POST');
+  assert.equal(captured.init.signal, controller.signal);
+  assert.deepEqual(JSON.parse(captured.init.body), reqBody);
+  assert.deepEqual(plain(result), validResponse);
+
+  for (const bad of [
+    null,
+    { requestedCount: 2, isComplete: false, items: [] },
+    { requestedCount: 1, isComplete: true, items: [] },
+    { requestedCount: 1, isComplete: true, items: [{ ...validItem, detail: { ...validItem.detail, destinationEndpointId: 'other-gate' } }] },
+    { requestedCount: 1, isComplete: true, items: [{ ...validItem, barcode: ' ' }] },
+  ]) {
+    const badApi = modules(async () => bad)('src/shared/api/transportApi.ts');
+    await assert.rejects(() => badApi.previewOutboundPick(reqBody), error => error.status === 502 && error.code === 'outbound_pick_preview_invalid');
+  }
 });
 test('job details cannot silently substitute another ID', async () => {
   const load = modules(async () => ({ id: 'another-job' }));
