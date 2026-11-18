@@ -16,7 +16,10 @@ public sealed record CreateContainerRequest(
     Guid? WarehouseId = null,
     Guid? RequestId = null,
     int? ContainerCount = null,
-    IReadOnlyList<CreateContainerGroupRequest?>? Groups = null);
+    IReadOnlyList<CreateContainerGroupRequest?>? Groups = null,
+    string? LabelBarcode = null);
+// LabelBarcode: a pre-printed label (POST /container-labels) scanned for this one container. Batch shape, ContainerCount 1.
+// The code must have been issued and be unused; it replaces the generated code.
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CreateContainerGroupRequest(

@@ -1,4 +1,5 @@
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
+import { Scanner } from '../../shared/scan/Scanner';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
@@ -19,6 +20,7 @@ import {
   CheckCircle2,
   MapPin,
   PackagePlus,
+  ScanLine,
   Search,
   X,
 } from 'lucide-react-native';
@@ -56,10 +58,12 @@ export type LevelFilterKey = 'ALL' | number;
 
 export function InventoryLookupScreen() {
   const { styles, colors } = useThemedStyles(createStyles);
-  const { goBack, navigate } = useNavigation();
+  const { goBack, navigate, params } = useNavigation();
   const { session } = useAuth();
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => (typeof params?.search === 'string' ? params.search : ''));
+  const [shelfScan, setShelfScan] = useState(false);
+  const [shelfCheck, setShelfCheck] = useState<{ scanned: string; ok: boolean } | null>(null);
   const [inventoryTab, setInventoryTab] = useState<'containers' | 'skus'>('containers');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
   const [selectedLevel, setSelectedLevel] = useState<LevelFilterKey>('ALL');
@@ -119,7 +123,7 @@ export function InventoryLookupScreen() {
     verificationRequest.current++;
     setVerifiedContainer(null);
     setVerificationError(null);
-    setSelectedLocation('ALL');
+    setSelectedLocation(typeof params?.locationId === 'string' ? `storage:${params.locationId}` : 'ALL');
     setSelectedLevel('ALL');
     setIsVerifyingBarcode(false);
     return () => { verificationRequest.current++; };
@@ -238,6 +242,17 @@ export function InventoryLookupScreen() {
       {/* Prominent Verified Container Details Card (if verified) */}
       {verifiedContainer && (
         <View style={styles.verifiedCard}>
+          <View style={styles.shelfCheckRow}>
+            <Pressable onPress={() => { triggerHaptic('tap'); setShelfCheck(null); setShelfScan(true); }} style={({ pressed }) => [styles.shelfCheckBtn, pressed && styles.btnPressed]}
+              accessibilityRole="button" accessibilityLabel="Scan the shelf to compare">
+              <ScanLine size={14} color={colors.primaryText} />
+              <Text style={styles.shelfCheckText}>{t('Check shelf')}</Text>
+            </Pressable>
+            {shelfCheck ? <Text style={[styles.shelfCheckResult, { color: shelfCheck.ok ? '#059669' : colors.danger }]} numberOfLines={2}>
+              {shelfCheck.ok ? t('Matches {shelf}', { shelf: shelfName(shelfCheck.scanned) })
+                : t('Scanned {scanned}, recorded {recorded}', { scanned: shelfName(shelfCheck.scanned), recorded: verifiedContainer.currentStorageLocationCode ? shelfName(verifiedContainer.currentStorageLocationCode) : t('Not on a shelf') })}
+            </Text> : null}
+          </View>
           <View style={styles.verifiedCardHeader}>
             <View style={styles.verifiedBadgeRow}>
               <CheckCircle2 size={18} color="#059669" />
@@ -555,6 +570,16 @@ export function InventoryLookupScreen() {
           </ScrollView>
         </>
       )}
+      <Scanner visible={shelfScan} expect={['LOCATION']} title="Scan the shelf label" manualLabel="Shelf code" placeholder="Scan or type the shelf code"
+        onClose={() => setShelfScan(false)}
+        onScanResult={(_raw, scanned) => {
+          setShelfScan(false);
+          const recorded = verifiedContainer?.currentStorageLocationCode?.toUpperCase() ?? '';
+          const location = places.locations.find(item => item.code.toUpperCase() === scanned.code.toUpperCase() || item.endpointCode.toUpperCase() === scanned.code.toUpperCase());
+          const ok = !!recorded && (scanned.code.toUpperCase() === recorded || location?.code.toUpperCase() === recorded);
+          triggerHaptic(ok ? 'success' : 'error');
+          setShelfCheck({ scanned: location?.code ?? scanned.code, ok });
+        }} />
       <BarcodeScannerHUD visible={scannerOpen} onClose={() => setScannerOpen(false)}
         onScanResult={(barcode) => { setScannerOpen(false); setSearchTerm(barcode); void handleVerifyBarcode(barcode); }} />
     </View>
@@ -614,6 +639,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
   levelFilterRow: {
     marginTop: 2,
   },
+  shelfCheckRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  shelfCheckBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.primaryBorder },
+  shelfCheckText: { fontSize: 13, fontWeight: '700', color: colors.primaryText },
+  shelfCheckResult: { flex: 1, fontSize: 13, fontWeight: '700' },
   filterBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
   filterPill: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingHorizontal: 12, borderRadius: 17, maxWidth: 200,
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },

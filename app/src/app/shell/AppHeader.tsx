@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Bell } from 'lucide-react-native';
+import { Bell, ScanLine } from 'lucide-react-native';
 import { colors, ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
@@ -13,6 +13,7 @@ import { AccountSheet } from './AccountSheet';
 import { NotificationSheet } from './NotificationSheet';
 import { useRealtime } from '../../shared/realtime';
 import { useAuth } from '../../features/auth/authContext';
+import { useNavigation } from '../navigation/NavigationContext';
 
 interface AppHeaderProps {
   operatorName?: string;
@@ -52,6 +53,7 @@ export function AppHeader({
   const styles = useThemedStyles(createStyles);
   const { unreadCount } = useRealtime();
   const { session } = useAuth();
+  const { navigate } = useNavigation();
   const [isAccountOpen, setIsAccountOpen] = useState(initialOpen === 'account');
   const [isNotificationOpen, setIsNotificationOpen] = useState(initialOpen === 'notifications');
 
@@ -67,6 +69,18 @@ export function AppHeader({
 
         {/* Right: Notification Bell + Operator Avatar */}
         <View style={styles.rightGroup}>
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              navigate('scanner');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Scan a code"
+            style={({ pressed }) => [styles.iconBtn, styles.scanBtn, pressed && styles.iconBtnPressed]}
+          >
+            <ScanLine size={18} color="#ffffff" strokeWidth={2.4} />
+          </Pressable>
+
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
@@ -120,6 +134,7 @@ export function AppHeader({
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
+    scanBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
     header: {
       backgroundColor: colors.surface,
       borderBottomWidth: 1,

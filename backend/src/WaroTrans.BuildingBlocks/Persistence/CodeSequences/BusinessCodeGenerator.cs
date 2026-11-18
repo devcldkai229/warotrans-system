@@ -111,6 +111,25 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
         return ShortDailyCode(letter, bucket, value);
     }
 
+    public async Task<bool> IsIssuedContainerCodeAsync(string code, CancellationToken cancellationToken = default)
+    {
+        if (TryParseShortDailyCode(code, "C") is not { } parsed) return false;
+        var key = $"container:{parsed.Day:yyyyMMdd}";
+        var next = await db.CodeSequences.AsNoTracking().Where(s => s.Key == key).Select(s => (long?)s.NextValue).FirstOrDefaultAsync(cancellationToken);
+        return next is { } value && parsed.Number >= 1 && parsed.Number < value;
+    }
+
+    /// <summary>Day and number of a short daily code (C181126001 = 18/11/2026, 1), or null when it is not one.</summary>
+    public static (DateOnly Day, long Number)? TryParseShortDailyCode(string? code, string letter)
+    {
+        var value = code?.Trim() ?? string.Empty;
+        if (value.Length < letter.Length + 9 || !value.StartsWith(letter, StringComparison.Ordinal)) return null;
+        var digits = value[letter.Length..];
+        if (!digits.All(char.IsAsciiDigit)) return null;
+        if (!DateOnly.TryParseExact(digits[..6], "ddMMyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var day)) return null;
+        return long.TryParse(digits[6..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) ? (day, number) : null;
+    }
+
     public static string ShortDailyCode(string letter, DateOnly day, long value) =>
         $"{letter}{day:ddMMyy}{value.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(3, '0')}";
 

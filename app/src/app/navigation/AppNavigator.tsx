@@ -22,6 +22,7 @@ import { TransportHistoryScreen } from '../../features/transport/TransportHistor
 import { TransportRequestDetailScreen } from '../../features/transport/TransportRequestDetailScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
 import { AppHeader } from '../shell/AppHeader';
+import { ScanScreen } from '../../features/scan/ScanScreen';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { BottomTabBar } from './BottomTabBar';
@@ -89,13 +90,7 @@ export function AppNavigator() {
         return <OfflineBannerHUD />;
       case 'scanner':
       case 'scanner_hud':
-        return (
-          <BarcodeScannerHUD
-            visible={true}
-            onClose={goBack}
-            onScanResult={() => goBack()}
-          />
-        );
+        return <ScanScreen />;
       default:
         return <HomeScreen />;
     }
