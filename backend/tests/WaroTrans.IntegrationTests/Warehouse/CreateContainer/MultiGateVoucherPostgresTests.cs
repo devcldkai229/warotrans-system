@@ -182,6 +182,9 @@ public sealed partial class ContainerBatchPostgresTests
         services.AddScoped<INavigationModule, NavigationModuleApi>();
         services.AddScoped<IWorkflowRequestValidator>(_ => new GateWorkflowValidator(_inboundWorkflowId));
         services.AddScoped<CreateTransportRequestHandler>();
+        services.AddScoped<WaroTrans.Transportation.Features.PreviewOutboundPick.OutboundPickHandler>();
+        services.AddScoped<IValidator<WaroTrans.Transportation.Features.PreviewOutboundPick.OutboundPickRequest>,
+            WaroTrans.Transportation.Features.PreviewOutboundPick.OutboundPickValidator>();
         services.AddScoped<IValidator<CreateTransportRequestRequest>, CreateTransportRequestValidator>();
     }
 

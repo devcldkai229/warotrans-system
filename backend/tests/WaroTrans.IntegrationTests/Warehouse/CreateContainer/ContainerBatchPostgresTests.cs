@@ -308,7 +308,9 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         WaroTrans.Warehouse.Features.AddStockVoucherLines.AddStockVoucherLinesEndpoint.MapAddStockVoucherLines(warehouse);
         WaroTrans.Warehouse.Features.ListContainers.ListContainersEndpoint.MapListContainers(warehouse);
         WaroTrans.Warehouse.Features.ListInventory.ListInventoryEndpoint.MapListInventory(warehouse);
-        WaroTrans.Transportation.Features.CreateTransportRequest.CreateTransportRequestEndpoint.Map(app.MapGroup("/api/transportation"));
+        var transport = app.MapGroup("/api/transportation");
+        WaroTrans.Transportation.Features.CreateTransportRequest.CreateTransportRequestEndpoint.Map(transport);
+        WaroTrans.Transportation.Features.PreviewOutboundPick.PreviewOutboundPickEndpoint.Map(transport);
         await app.StartAsync();
         return app;
     }

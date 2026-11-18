@@ -10,7 +10,9 @@ using WaroTrans.Navigation.Enums;
 using WaroTrans.Transportation.Entities;
 using WaroTrans.Transportation.Enums;
 using WaroTrans.Transportation.Features.Shared;
+using WaroTrans.Transportation.Features.PreviewOutboundPick;
 using WaroTrans.Transportation.Persistence;
+using WaroTrans.Transportation.Services;
 using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.WorkflowExecution.Contracts;
@@ -32,14 +34,6 @@ public sealed class CreateTransportRequestHandler(
         ContainerStatus.CREATED,
         ContainerStatus.PACKED,
         ContainerStatus.STORED
-    ];
-
-    private static readonly TransportRequestDetailStatus[] ActiveDetailStatuses =
-    [
-        TransportRequestDetailStatus.PENDING,
-        TransportRequestDetailStatus.QUEUED,
-        TransportRequestDetailStatus.IN_PROGRESS,
-        TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY
     ];
 
     public Task<CreateTransportRequestResponse> HandleAsync(
@@ -70,6 +64,21 @@ public sealed class CreateTransportRequestHandler(
         var endpoints = await EnsureEndpointsAsync(request.MapVersionId, details, cancellationToken);
         details = await AttachShelvesAsync(request.WarehouseId, details, endpoints, cancellationToken);
         await EnsureStorageLocationsAsync(request.WarehouseId, details, cancellationToken);
+        await using var transaction = dbContext.Database.IsNpgsql()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await TransportReservations.LockAsync(dbContext, details.Select(d => d.ContainerId).ToArray(), cancellationToken);
+
+        if (request.OutboundFifo is { } selection)
+        {
+            var pick = new OutboundPickRequest(request.WarehouseId, request.MapVersionId, selection.ProductId,
+                selection.ContainerCount, details[0].DestinationEndpointId);
+            var current = await new OutboundPickHandler(dbContext, warehouseModule, navigationModule).HandleAsync(pick, cancellationToken);
+            if (!current.IsComplete || !current.Items.Select(item => item.Detail).SequenceEqual(details.OrderBy(d => d.SequenceNo)))
+                throw new ConflictException("The FIFO selection has changed. Preview the available Containers again before submitting.",
+                    "outbound_fifo_selection_changed");
+        }
+
         var containers = await EnsureContainersAsync(details, cancellationToken);
         EnsureContainersAtSource(details, containers);
         await EnsureStockVouchersAsync(request.WarehouseId, details, containers, endpoints, cancellationToken);
@@ -102,11 +111,12 @@ public sealed class CreateTransportRequestHandler(
             TransportRequestSnapshotMapper.ToExecutionSnapshot(transportRequest),
             cancellationToken);
 
-        // Request + all Details are written by one SaveChanges, i.e. one transaction.
+        // Hold the reservation locks through the atomic write of Request and Details.
         dbContext.TransportRequests.Add(transportRequest);
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
@@ -316,16 +326,14 @@ public sealed class CreateTransportRequestHandler(
             }
         }
 
-        var alreadyRequested = await dbContext.TransportRequestDetails
-            .AsNoTracking()
-            .Where(d => containerIds.Contains(d.ContainerId) && ActiveDetailStatuses.Contains(d.Status))
-            .Select(d => d.ContainerId)
+        var alreadyRequested = await TransportReservations.UnavailableContainers(dbContext)
+            .Where(id => containerIds.Contains(id))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (alreadyRequested != Guid.Empty)
         {
             throw new ConflictException(
-                $"Container '{containers[alreadyRequested].Barcode}' is already part of an active TransportRequest.",
+                $"Container '{containers[alreadyRequested].Barcode}' has an active TransportRequest or an unsettled handover.",
                 "container_already_requested");
         }
 
