@@ -13,6 +13,7 @@ import { t } from '../../shared/i18n';
 import type { AppJobItem, AppJobTaskItem, JobContainerItem } from './jobData';
 import { JOB_STATUS_PRESENTATION, jobStepTitle } from './jobData';
 import type { JobStepResponse } from '../../shared/types/contracts';
+import { containerRoutes, groupStops, stopStatus } from './jobStops';
 
 type Tone = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
 
@@ -40,12 +41,12 @@ const STEP_STATUS: Record<string, string> = {
 };
 
 /** What a step does, in words a staff member uses, with the place by name. */
-export function stepSentence(step: JobStepResponse, place: string): string {
+export function stepSentence(step: JobStepResponse, place: string, container?: string): string {
   const code = `${step.operationCode} ${step.workflowStepKey}`.toUpperCase();
   if (step.stepType === 'MOVE') return t('Robot drives to {place}', { place });
   if (step.stepType === 'HUMAN_INTERACTION') {
-    if (code.includes('PICKUP')) return t('Staff loads the container at {place}', { place });
-    if (code.includes('DROPOFF') || code.includes('DELIVER')) return t('Staff unloads the container at {place}', { place });
+    if (code.includes('PICKUP')) return container ? t('Staff loads {container} onto the robot', { container }) : t('Staff loads the container at {place}', { place });
+    if (code.includes('DROPOFF') || code.includes('DELIVER')) return container ? t('Staff unloads {container} at {place}', { container, place }) : t('Staff unloads the container at {place}', { place });
     return t('Staff confirms at {place}', { place });
   }
   if (step.stepType === 'WAIT') return t('Wait at {place}', { place });
@@ -78,7 +79,8 @@ export function JobOverviewCard({ job, places, robotName, online, speed, battery
   const presentation = JOB_STATUS_PRESENTATION[job.status];
   const tone = toneColors(colors, presentation.tone as Tone);
   const from = places.name(job.sourceEndpointCode, t('Pick-up'));
-  const to = places.name(job.destinationEndpointCode, t('Drop-off'));
+  const drops = [...new Set(job.tasks.filter(task => task.contextValues?.stopAction === 'DROPOFF' && task.endpointCode).map(task => task.endpointCode as string))];
+  const to = drops.length > 1 ? drops.map(code => places.name(code)).join(', ') : places.name(drops[0] ?? job.destinationEndpointCode, t('Drop-off'));
   const assigned = !!job.assignedRobotId || (!!job.robot && job.robot !== 'Unassigned');
   const progress = job.progressPercent ?? 0;
   return <View style={[styles.card, { borderColor: tone.border }]}>
@@ -147,9 +149,10 @@ const CONTAINER_STATE: Record<string, { label: string; tone: Tone }> = {
 };
 
 /** Every container of the job, its state, and where it goes. */
-export function JobContainersCard({ containers, places, from, to }: { containers: JobContainerItem[]; places: PlaceDirectory; from: string; to: string }) {
+export function JobContainersCard({ containers, places, from, to, tasks }: { containers: JobContainerItem[]; places: PlaceDirectory; from: string; to: string; tasks: AppJobTaskItem[] }) {
   const { styles, colors } = useThemedStyles(createStyles);
   if (!containers.length) return null;
+  const routes = containerRoutes(tasks);
   return <View style={styles.card}>
     <View style={styles.sectionHeader}>
       <View style={styles.sectionIcon}><Package size={18} color={colors.primaryText} /></View>
@@ -167,9 +170,9 @@ export function JobContainersCard({ containers, places, from, to }: { containers
           {container.product && container.product !== 'Unknown Product' ? <Text variant="caption" color="textSecondary" numberOfLines={1}>{container.product}</Text> : null}
           <View style={styles.inlineRoute}>
             <MapPin size={12} color={colors.textMuted} />
-            <Text variant="caption" color="textSecondary" numberOfLines={1}>{from}</Text>
+            <Text variant="caption" color="textSecondary" numberOfLines={1}>{routes[container.code]?.from ? places.name(routes[container.code].from) : from}</Text>
             <ArrowRight size={12} color={colors.textMuted} />
-            <Text variant="caption" color="textPrimary" fontWeight="600" numberOfLines={1}>{to}</Text>
+            <Text variant="caption" color="textPrimary" fontWeight="600" numberOfLines={1}>{routes[container.code]?.to ? places.name(routes[container.code].to) : to}</Text>
           </View>
         </View>
         <View style={[styles.smallPill, { backgroundColor: tone.bg }]}><Text variant="caption" fontWeight="700" color={tone.fg}>{t(state.label)}</Text></View>
@@ -191,39 +194,42 @@ function StepIcon({ status, type, color }: { status: string; type: string; color
 /** The workflow as coloured stops; each opens to its steps. The current stop is open by default. */
 export function JobStepsAccordion({ tasks, places, activeStepId }: { tasks: AppJobTaskItem[]; places: PlaceDirectory; activeStepId?: string }) {
   const { styles, colors } = useThemedStyles(createStyles);
-  const current = tasks.find(task => task.steps.some(step => step.id === activeStepId))
-    ?? tasks.find(task => !['COMPLETED', 'SKIPPED'].includes(task.status));
-  const [open, setOpen] = useState<Record<string, boolean>>(() => (current ? { [current.id]: true } : {}));
-  const done = tasks.filter(task => task.status === 'COMPLETED').length;
+  const stops = groupStops(tasks);
+  const current = stops.find(stop => stop.steps.some(item => item.step.id === activeStepId))
+    ?? stops.find(stop => stopStatus(stop) !== 'COMPLETED');
+  const [open, setOpen] = useState<Record<string, boolean>>(() => (current ? { [current.key]: true } : {}));
+  const done = stops.filter(stop => stopStatus(stop) === 'COMPLETED').length;
   return <View style={styles.card}>
     <View style={styles.sectionHeader}>
       <View style={styles.sectionIcon}><Truck size={18} color={colors.primaryText} /></View>
       <View style={{ flex: 1 }}>
         <Text variant="headline">Workflow Steps</Text>
-        <Text variant="caption" color="textSecondary">{t('{done} of {total} stops done', { done, total: tasks.length })}</Text>
+        <Text variant="caption" color="textSecondary">{t('{done} of {total} stops done', { done, total: stops.length })}</Text>
       </View>
     </View>
-    {tasks.map((task, index) => {
-      const tone = toneColors(colors, stepTone(task.status === 'RUNNING' && task.steps.some(step => step.status === 'WAITING') ? 'WAITING' : task.status));
-      const expanded = open[task.id] ?? false;
-      const place = places.name(task.endpointCode, t('the stop'));
-      const stepsDone = task.steps.filter(step => step.status === 'COMPLETED').length;
-      return <View key={task.id} style={[styles.taskBlock, { borderColor: tone.border, backgroundColor: expanded ? tone.bg : colors.surface }]}>
-        <Pressable onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setOpen(previous => ({ ...previous, [task.id]: !expanded })); }}
+    {stops.map((stop, index) => {
+      const status = stopStatus(stop);
+      const tone = toneColors(colors, stepTone(status));
+      const expanded = open[stop.key] ?? false;
+      const place = places.name(stop.endpointCode, t('the stop'));
+      const title = stop.action === 'PICKUP' ? t('Pick up at {place}', { place }) : stop.action === 'DROPOFF' ? t('Deliver to {place}', { place }) : stop.tasks[0].title;
+      const stepsDone = stop.steps.filter(item => item.step.status === 'COMPLETED').length;
+      return <View key={stop.key} style={[styles.taskBlock, { borderColor: tone.border, backgroundColor: expanded ? tone.bg : colors.surface }]}>
+        <Pressable onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setOpen(previous => ({ ...previous, [stop.key]: !expanded })); }}
           style={styles.taskHeader} accessibilityRole="button" accessibilityState={{ expanded }}>
           <View style={[styles.taskNumber, { backgroundColor: tone.solid }]}>
-            {task.status === 'COMPLETED' ? <Check size={14} color="#fff" strokeWidth={3} /> : <Text variant="caption" fontWeight="800" color="#fff">{index + 1}</Text>}
+            {status === 'COMPLETED' ? <Check size={14} color="#fff" strokeWidth={3} /> : <Text variant="caption" fontWeight="800" color="#fff">{index + 1}</Text>}
           </View>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text variant="bodyMedium" fontWeight="700">{taskSentence(task, places)}</Text>
-            <Text variant="caption" color={tone.fg} fontWeight="600">{t(STEP_STATUS[task.status] ?? task.status)} · {t('{done}/{total} steps', { done: stepsDone, total: task.steps.length })}</Text>
+            <Text variant="bodyMedium" fontWeight="700">{title}</Text>
+            <Text variant="caption" color={tone.fg} fontWeight="600">{t(STEP_STATUS[status] ?? status)} · {t('{done}/{total} steps', { done: stepsDone, total: stop.steps.length })}</Text>
           </View>
           {expanded ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
         </Pressable>
         {expanded ? <View style={styles.stepList}>
-          {task.steps.map((step, stepIndex) => {
+          {stop.steps.map(({ step, containerCode }, stepIndex) => {
             const stepColors = toneColors(colors, stepTone(step.status));
-            const last = stepIndex === task.steps.length - 1;
+            const last = stepIndex === stop.steps.length - 1;
             return <View key={step.id} style={styles.stepRow}>
               <View style={styles.stepRail}>
                 <View style={[styles.stepDot, { backgroundColor: step.status === 'PENDING' || step.status === 'READY' ? colors.surface : stepColors.solid, borderColor: stepColors.solid }]}>
@@ -232,7 +238,7 @@ export function JobStepsAccordion({ tasks, places, activeStepId }: { tasks: AppJ
                 {!last ? <View style={[styles.stepLine, { backgroundColor: step.status === 'COMPLETED' ? colors.success : colors.border }]} /> : null}
               </View>
               <View style={{ flex: 1, paddingBottom: last ? 0 : 12, gap: 2 }}>
-                <Text variant="bodyMedium" fontWeight={step.id === activeStepId ? '700' : '500'}>{stepSentence(step, place)}</Text>
+                <Text variant="bodyMedium" fontWeight={step.id === activeStepId ? '700' : '500'}>{stepSentence(step, place, containerCode)}</Text>
                 <Text variant="caption" color={stepColors.fg}>{t(STEP_STATUS[step.status] ?? step.status)}</Text>
                 {step.errorMessage ? <View style={styles.stepError}><AlertTriangle size={12} color={colors.dangerText} /><Text variant="caption" color="dangerText" style={{ flex: 1 }}>{step.errorMessage}</Text></View> : null}
               </View>

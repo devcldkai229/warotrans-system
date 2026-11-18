@@ -474,6 +474,7 @@ export function JobDetailScreen() {
           places={places}
           from={places.name(job.sourceEndpointCode, 'Pick-up')}
           to={places.name(job.destinationEndpointCode, 'Drop-off')}
+          tasks={job.tasks}
         />
 
         <JobStepsAccordion key={job.id} tasks={job.tasks} places={places} activeStepId={job.activeStepId} />

@@ -1735,4 +1735,6 @@ export const vi: Record<string, string> = {
   "Wrong container, blocked path, damaged goods… The supervisor is told right away.": "Sai container, đường bị chặn, hàng hư hỏng… Giám sát viên được báo ngay.",
   "View on map": "Xem trên bản đồ",
   "At:": "Tại:",
+  "Staff loads {container} onto the robot": "Nhân viên xếp {container} lên robot",
+  "Staff unloads {container} at {place}": "Nhân viên dỡ {container} tại {place}",
 };
