@@ -38,6 +38,7 @@ import { BaseMapLayer } from './layers/BaseMapLayer';
 import { InfrastructureLayer } from './layers/InfrastructureLayer';
 import { EndpointIcon, EndpointTile } from './EndpointGlyph';
 import { ROBOT_COLOR } from './mapStyle';
+import { t } from '../i18n';
 import { BatteryIndicator, OnlineBadge } from '../ui/RobotBadges';
 import { navigationLabel, robotStatusLabel } from './robotLabels';
 import { RobotLayer } from './layers/RobotLayer';
@@ -353,7 +354,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                 ? `${map.code} · V${map.versionNo} · ${map.resolution} m/px`
                 : sheet === 'endpoint'
                 ? `${endpoint?.code} · ${endpoint?.endpointType}`
-                : robot?.isOnline ? `${robotStatusLabel(robot.status)} · Online` : 'Offline'}
+                : robot?.isOnline ? `${t(robotStatusLabel(robot.status))} · ${t('Online')}` : 'Offline'}
             </Text>
           </View>
           <Pressable

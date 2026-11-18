@@ -40,14 +40,16 @@ import { useSafetyHold } from '../../shared/context/SafetyHoldContext';
 import { triggerHaptic } from '../../shared/utils/haptics';
 import { Button, Card, ProgressMeter, StatusPill, Text } from '../../shared/ui';
 import { AmrCargoBayVisualizer } from './AmrCargoBayVisualizer';
-import { JobTaskPlan } from './JobTaskPlan';
+import { JobContainersCard, JobOverviewCard, JobStepsAccordion, ReportProblemCard } from './JobDetailParts';
+import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
+import { useQuery } from '@tanstack/react-query';
 import { JobTaskDetailSheet } from './JobTaskDetailSheet';
-import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB } from './jobData';
+import { AppJobItem, JOB_STATUS_PRESENTATION, mapJobDetailToAppJobItem, EMPTY_JOB, isTerminalJobStatus } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { HandoverActionsCard } from './HandoverActionsCard';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { IncidentCategory, IssueReportingModal } from '../monitoring/IssueReportingModal';
-import { cancelRobotCommand, getJobDetail, reportTaskProblem, resumeJob, startJob } from '../../shared/api';
+import { cancelRobotCommand, getJobDetail, getRobot, reportTaskProblem, resumeJob, startJob } from '../../shared/api';
 import type { JobDetailResponse } from '../../shared/types/contracts';
 import { useRealtime } from '../../shared/realtime/RealtimeContext';
 import { createJobRefresh } from './jobRefresh';
@@ -60,7 +62,8 @@ export function JobDetailScreen() {
   const [isLoadingJob, setIsLoadingJob] = useState(true);
   const [jobError, setJobError] = useState<string | null>(null);
   const [jobRefreshError, setJobRefreshError] = useState<string | null>(null);
-  const { lastJobUpdate, lastTrafficUpdate } = useRealtime();
+  const { lastJobUpdate, lastTrafficUpdate, robotTelemetry, robotConnectivity } = useRealtime();
+  const places = usePlaceDirectory();
 
   const initialModal = params?.modal;
   const isInitialVerify =
@@ -191,7 +194,20 @@ export function JobDetailScreen() {
     }
   };
 
-  const statusPresentation = JOB_STATUS_PRESENTATION[job.status];
+  // The robot: name and last known state from the API, speed / battery / online from the live hub when it reports.
+  const robotQuery = useQuery({
+    queryKey: ['job-robot', job.assignedRobotId],
+    queryFn: () => getRobot(job.assignedRobotId!),
+    enabled: !!job.assignedRobotId,
+    refetchInterval: 15_000,
+  });
+  const robotCode = robotQuery.data?.code ?? (job.robot !== 'Unassigned' ? job.robot : undefined);
+  const live = robotCode ? robotTelemetry[robotCode] : undefined;
+  const connectivity = robotCode ? robotConnectivity[robotCode] : undefined;
+  const liveOnline = connectivity ? connectivity.isOnline : robotQuery.data ? robotQuery.data.isOnline : null;
+  const liveSpeed = typeof live?.linearVelocity === 'number' ? live.linearVelocity
+    : typeof robotQuery.data?.linearVelocity === 'number' ? robotQuery.data.linearVelocity : null;
+  const liveBattery = typeof live?.batteryPercent === 'number' ? live.batteryPercent : robotQuery.data?.batteryPercent ?? null;
 
   const handleNudge = (_delta: string) => {
     toast.warning('Dock nudging is unavailable during job execution. Use the supervised robot controls.');
@@ -298,40 +314,27 @@ export function JobDetailScreen() {
               style={styles.menuItem}
               onPress={() => {
                 setShowMenu(false);
-                handleToggleSoftHold();
+                navigate('live_map', { jobId: job.id, robotId: job.robot });
               }}
             >
-              <PauseCircle size={16} color={isHolding ? colors.primary : colors.warning} />
+              <Maximize2 size={16} color={colors.primary} />
               <Text variant="body" style={styles.menuItemText}>
-                {isHolding ? 'Release Soft Hold · Sim Aid' : 'Soft Hold (3m) · Sim Aid'}
+                View on map
               </Text>
             </Pressable>
 
-            <Pressable
+            {!isTerminalJobStatus(job.status) ? <Pressable
               style={styles.menuItem}
               onPress={() => {
                 setShowMenu(false);
-                setShowNudgeControls((prev) => !prev);
+                setIsIssueOpen(true);
               }}
             >
-              <SlidersHorizontal size={16} color={colors.primary} />
-              <Text variant="body" style={styles.menuItemText}>
-                Dock Alignment Nudge · Sim Aid
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                toast.warning('Task release is not available on this server.');
-              }}
-            >
-              <UserMinus size={16} color={colors.danger} />
+              <AlertTriangle size={16} color={colors.danger} />
               <Text variant="body" color={colors.danger} style={styles.menuItemText}>
-                Release Task to Pool
+                Report a problem
               </Text>
-            </Pressable>
+            </Pressable> : null}
           </View>
         </>
       )}
@@ -348,144 +351,16 @@ export function JobDetailScreen() {
           <Text variant="caption" color={colors.warningText}>{jobRefreshError}</Text>
           <Button title="Retry Refresh" variant="outline" size="sm" onPress={() => { void refreshJob().catch(() => {}); }} />
         </View> : null}
-        {/* Mission Status Hero Card */}
-        <Card padding="md" gap={12}>
-          <View style={styles.cardHeaderRow}>
-            <StatusPill
-              status={job.status}
-              label={statusPresentation.label}
-              tone={statusPresentation.tone}
-              size="md"
-              dot
-            />
-            {isHolding && (
-              <View style={styles.holdBannerBadge}>
-                <PauseCircle size={13} color="#ffffff" style={{ marginRight: 4 }} />
-                <Text variant="caption" style={styles.holdBannerText}>
-                  3m Soft Hold Active
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Current Stop & Location */}
-          <View style={styles.locationBlock}>
-            <View style={styles.locationRow}>
-              <MapPin size={16} color={colors.primary} style={{ marginTop: 2 }} />
-              <View style={{ flex: 1 }}>
-                <Text variant="headline" style={styles.currentStopText}>
-                  {job.currentStop || 'Current Location Unavailable'}
-                </Text>
-                <Text variant="caption" color={colors.textSecondary} style={{ marginTop: 2 }}>
-                  Route: {job.route}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.robotContextRow}>
-            <View style={styles.robotPill}>
-              <Truck size={14} color={colors.primaryText} />
-              <Text variant="caption" color={colors.primaryText} style={styles.robotPillText} numberOfLines={1}>{assignedRobotLabel}</Text>
-            </View>
-            <Button title="View Map" variant="ghost" size="sm" icon={Maximize2} onPress={() => navigate('live_map', { jobId: job.id, robotId: job.robot })} />
-          </View>
-
-          {/* Telemetry Strip */}
-          <View style={styles.telemetryStrip}>
-            <View style={styles.telemetryItem}>
-              <Text variant="caption" color={colors.textSecondary} style={styles.telemetryLabel}>
-                Speed
-              </Text>
-              <Text variant="caption" color={colors.textPrimary} style={styles.telemetryValueMono}>
-                {job.speed}
-              </Text>
-            </View>
-
-            <View style={styles.telemetryDivider} />
-
-            <View style={styles.telemetryItem}>
-              <Text variant="caption" color={colors.textSecondary} style={styles.telemetryLabel}>
-                Battery
-              </Text>
-              <Text variant="caption" color={colors.textPrimary} style={styles.telemetryValueBold}>
-                {job.battery}
-              </Text>
-            </View>
-
-            <View style={styles.telemetryDivider} />
-
-            <View style={styles.telemetryItem}>
-              <Text variant="caption" color={colors.textSecondary} style={styles.telemetryLabel}>
-                {job.status === 'RECOVERY_REQUIRED' ? 'Status' : isWaiting ? 'Timing' : 'ETA'}
-              </Text>
-              <Text
-                variant="caption"
-                color={
-                  job.status === 'RECOVERY_REQUIRED'
-                    ? colors.danger
-                    : isWaiting
-                    ? colors.warning
-                    : colors.primary
-                }
-                style={styles.telemetryValueBold}
-              >
-                {job.status === 'RECOVERY_REQUIRED'
-                  ? 'Stalled'
-                  : isWaiting
-                  ? 'At Station'
-                  : job.etaSeconds
-                  ? `${Math.floor(job.etaSeconds / 60)}m`
-                  : '—'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Progress Bar (En Route) */}
-          {isEnRoute && (
-            <View style={styles.enRouteProgressBlock}>
-              <View style={styles.progressHeader}>
-                <Text variant="caption" color={colors.textSecondary}>
-                  Job Step Progress
-                </Text>
-                <Text variant="caption" color={colors.primary} style={{ fontWeight: '700' }}>
-                  {job.progressPercent ?? 0}%
-                </Text>
-              </View>
-              <ProgressMeter value={job.progressPercent ?? 0} tone="primary" />
-            </View>
-          )}
-
-          {/* Dock Nudge Quick Controls (When expanded) */}
-          {showNudgeControls && (
-            <View style={styles.nudgeBox}>
-              <View style={styles.nudgeBoxHeader}>
-                <Text variant="caption" color={colors.textSecondary} style={{ fontWeight: '600' }}>
-                  Dock Alignment Micro-Nudge
-                </Text>
-                <Pressable onPress={() => setShowNudgeControls(false)}>
-                  <X size={14} color={colors.textMuted} />
-                </Pressable>
-              </View>
-              <View style={styles.nudgeButtonsRow}>
-                <Button
-                  title="◀ -10cm"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => handleNudge('-10cm')}
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  title="+10cm ▶"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => handleNudge('+10cm')}
-                  style={{ flex: 1 }}
-                />
-              </View>
-            </View>
-          )}
-        </Card>
+        <JobOverviewCard
+          job={job}
+          places={places}
+          robotName={robotQuery.data?.name ?? null}
+          online={liveOnline}
+          speed={liveSpeed}
+          battery={liveBattery}
+          charging={robotQuery.data?.status === 'CHARGING'}
+          onOpenMap={() => navigate('live_map', { jobId: job.id, robotId: job.robot })}
+        />
 
         {/* Primary Handover Focus Card (When waiting at station) */}
         {isWaiting && primaryTarget && (
@@ -514,10 +389,10 @@ export function JobDetailScreen() {
               </Text>
               <View style={styles.focusDestinationRow}>
                 <Text variant="caption" color={colors.textSecondary}>
-                  Destination Shelf:
+                  At:
                 </Text>
                 <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '700' }}>
-                  {primaryTarget.location || job.target}
+                  {places.name(activeTask?.endpointCode, places.name(job.destinationEndpointCode))}
                 </Text>
               </View>
             </View>
@@ -594,87 +469,20 @@ export function JobDetailScreen() {
           />
         ) : null}
 
-        {/* Dynamic AMR Cargo Bay Visualizer */}
-        <AmrCargoBayVisualizer
-          containers={job.containers?.map((c, idx) => ({
-            code: c.code,
-            sequenceNo: idx + 1,
-            status: c.status,
-            action: c.action,
-            location: c.location,
-            isTarget: c.code === primaryTarget?.code,
-          }))}
-          targetCode={primaryTarget?.code}
-          isWaiting={isWaiting}
-          robotCode={job.assignedRobotCode || job.robot}
-          onSelectContainer={(code) => { if (isWaiting && code === primaryTarget?.code) handleOpenVerify(code); }}
+        <JobContainersCard
+          containers={job.containers}
+          places={places}
+          from={places.name(job.sourceEndpointCode, 'Pick-up')}
+          to={places.name(job.destinationEndpointCode, 'Drop-off')}
         />
 
-        <JobTaskPlan tasks={job.tasks} jobStatus={job.status} onSelectTask={setSelectedTaskId} />
+        <JobStepsAccordion key={job.id} tasks={job.tasks} places={places} activeStepId={job.activeStepId} />
+
+        {!isTerminalJobStatus(job.status) ? <ReportProblemCard onPress={() => setIsIssueOpen(true)} /> : null}
       </ScrollView>
 
       {/* Sticky Bottom Action Console */}
       <View style={styles.bottomConsole} onLayout={(event) => setBottomConsoleHeight(event.nativeEvent.layout.height)}>
-        {/* Tier 1 Safety & Utilities Strip (Hidden once mission is completed) */}
-        {!isCompleted && (
-          <View style={styles.consoleUtilityRow}>
-            <Pressable
-              onPress={handleToggleSoftHold}
-              style={({ pressed }) => [
-                styles.utilityBtn,
-                isHolding && styles.utilityBtnActive,
-                pressed && styles.btnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Soft hold"
-            >
-              <PauseCircle
-                size={15}
-                color={isHolding ? '#ffffff' : colors.warning}
-                style={{ marginRight: 6 }}
-              />
-              <Text
-                variant="caption"
-                color={isHolding ? '#ffffff' : colors.textPrimary}
-                style={{ fontWeight: '600' }}
-              >
-                {isHolding ? 'Hold Active (3m)' : 'Soft Hold (3m)'}
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setShowNudgeControls((prev) => !prev)}
-              style={({ pressed }) => [
-                styles.utilityBtn,
-                showNudgeControls && styles.utilityBtnSelected,
-                pressed && styles.btnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Nudge dock alignment"
-            >
-              <SlidersHorizontal size={14} color={colors.primary} style={{ marginRight: 6 }} />
-              <Text variant="caption" color={colors.textPrimary} style={{ fontWeight: '600' }}>
-                Dock Nudge · Sim Aid
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setIsIssueOpen(true)}
-              style={({ pressed }) => [
-                styles.utilityBtnDanger,
-                pressed && styles.btnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Report issue"
-            >
-              <AlertTriangle size={14} color={colors.danger} style={{ marginRight: 6 }} />
-              <Text variant="caption" color={colors.danger} style={{ fontWeight: '600' }}>
-                Report Issue
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
         {/* Tier 2 Commanding Action Button (Machined Obsidian #121317) */}
         {isQueuedOrCreated && <Text variant="caption" color={colors.textSecondary}>
           The system assigns an available robot when you start this Job.
