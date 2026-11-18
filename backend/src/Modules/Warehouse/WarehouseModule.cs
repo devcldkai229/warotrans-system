@@ -48,8 +48,6 @@ public static class WarehouseModule
         services.AddScoped<ResolveProductHandler>();
         services.AddScoped<CreateContainerHandler>();
         services.AddScoped<CreateContainerBatchHandler>();
-        services.AddScoped<WaroTrans.Warehouse.Features.Shared.ReceivingLocationResolver>();
-        services.Configure<ReceivingOptions>(configuration.GetSection(ReceivingOptions.SectionName));
         services.AddScoped<CreateWarehouseHandler>();
         services.AddScoped<GetContainerHandler>();
         services.AddScoped<GetProductInventoryContextHandler>();

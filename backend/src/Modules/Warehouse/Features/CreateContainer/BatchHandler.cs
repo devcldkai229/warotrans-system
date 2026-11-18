@@ -5,12 +5,10 @@ using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.BuildingBlocks.Persistence.CodeSequences;
-using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Features.Shared;
@@ -18,14 +16,12 @@ using WaroTrans.Warehouse.Persistence;
 
 namespace WaroTrans.Warehouse.Features.CreateContainer;
 
-/// <summary>Creates a complete batch at configured Inbound, atomically, optionally attaching every new box to one DRAFT inbound voucher. No stock posting.</summary>
+/// <summary>Creates a complete batch without assigning a physical location, atomically, optionally attaching every new box to one DRAFT inbound voucher. No stock posting.</summary>
 public sealed class CreateContainerBatchHandler(
     WarehouseDbContext db,
     IBusinessCodeGenerator codes,
     ICurrentUser user,
     IValidator<CreateContainerRequest> validator,
-    IMapEndpointCatalog navigation,
-    IOptions<ReceivingOptions> options,
     ILogger<CreateContainerBatchHandler> logger)
 {
     public async Task<CreateContainerBatchResponse> HandleAsync(CreateContainerRequest request, CancellationToken cancellationToken = default)
@@ -66,7 +62,8 @@ public sealed class CreateContainerBatchHandler(
             var warehouseId = request.WarehouseId!.Value;
             if (!await db.Warehouses.AsNoTracking().AnyAsync(w => w.Id == warehouseId && w.IsActive, cancellationToken))
                 throw new NotFoundException("The warehouse was not found or is inactive.", "warehouse_not_found");
-            var location = await ReceivingLocationAsync(request, cancellationToken);
+            if (request.InitialStorageLocationId.HasValue)
+                throw new DomainValidationException("Select an Inbound gate during putaway. Batch registration has no initial location.", "batch_initial_location_not_supported");
             var productIds = rows.Select(row => row.ProductId).Distinct().Order().ToArray();
             // Hold existing Product rows against concurrent deactivation through the one batch commit.
             var products = db.Database.IsNpgsql()
@@ -86,7 +83,7 @@ public sealed class CreateContainerBatchHandler(
                 Id = Guid.NewGuid(), ProductId = row.ProductId, Barcode = barcodes[index],
                 SupplierPackageBarcode = row.SupplierBarcode ?? byId[row.ProductId].SupplierBarcode,
                 ContentsQuantity = row.Quantity, ContentsUnit = row.Unit,
-                CurrentStorageLocationId = location.Id, CurrentLevelNo = null,
+                WarehouseId = warehouseId,
                 Status = ContainerStatus.CREATED, CreatedBy = actor, CreatedAt = now, UpdatedAt = now,
                 CreationRequestId = request.RequestId, CreationRequestHash = fingerprint, CreationOrdinal = index + 1,
                 CreationGroupKey = row.GroupKey, CreationGroupOrdinal = row.ContainerNo, CreationStockVoucherId = request.StockVoucherId
@@ -99,7 +96,7 @@ public sealed class CreateContainerBatchHandler(
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             logger.LogInformation("Created receiving request {RequestId}, {Count} containers in warehouse {WarehouseId} by {AccountId}", request.RequestId, rows.Count, warehouseId, actor);
             var detail = voucher is null ? null : await StockVoucherQueries.LoadDetailAsync(db, voucher.Id, cancellationToken);
-            return Response(request, containers, new Dictionary<Guid, Guid> { [location.Id] = location.EndpointId }, false, detail);
+            return Response(request, containers, new Dictionary<Guid, Guid>(), false, detail);
         }
         catch (DbUpdateException exception) when (UniqueViolation.ConstraintOf(exception) == "ux_containers_creation_request")
         {
@@ -109,14 +106,6 @@ public sealed class CreateContainerBatchHandler(
             return await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken)
                 ?? throw new ConflictException("The receiving request changed. Retry using the same RequestId.", "container_creation_request_conflict");
         }
-    }
-
-    private async Task<StorageLocation> ReceivingLocationAsync(CreateContainerRequest request, CancellationToken cancellationToken)
-    {
-        var location = await new ReceivingLocationResolver(db, navigation, options).ResolveAsync(request.WarehouseId!.Value, cancellationToken);
-        if (request.InitialStorageLocationId.HasValue && request.InitialStorageLocationId != location.Id)
-            throw new DomainValidationException("Use the warehouse's configured inbound location.", "container_receiving_location_mismatch");
-        return location;
     }
 
     private async Task<CreateContainerBatchResponse?> FindReceiptAsync(CreateContainerRequest request, Guid actor, string hash, int count, CancellationToken cancellationToken)
@@ -138,7 +127,7 @@ public sealed class CreateContainerBatchHandler(
         new(request.RequestId!.Value, request.WarehouseId!.Value, containers.Count, replayed,
             containers.Select(c => new CreatedContainerBatchItem(c.Id, c.Barcode, c.ProductId, c.CreationGroupKey!, c.CreationGroupOrdinal!.Value,
                 c.ContentsQuantity!.Value, c.ContentsUnit!, c.SupplierPackageBarcode, c.Status.ToString(), c.CurrentStorageLocationId,
-                c.CurrentStorageLocationId is { } id && endpoints.TryGetValue(id, out var endpoint) ? endpoint : null, c.CreatedAt)).ToList(), voucher);
+                c.CurrentStorageLocationId is { } id && endpoints.TryGetValue(id, out var endpoint) ? endpoint : c.CurrentEndpointId, c.CreatedAt)).ToList(), voucher);
 
     private static List<PlannedContainer> Expand(CreateContainerRequest request)
     {

@@ -56,7 +56,7 @@ public sealed class ContainerMovementRecorder(
 
         var now = DateTimeOffset.UtcNow;
         var fromStatus = container.Status;
-        if (container.InboundStockVoucherId is not null)
+        if (HasAdmissionOrBalance(container))
             await InventoryAccounting.TransferAsync(dbContext, container, storageLocationId, levelNo, now, cancellationToken);
         else
             await AdjustStockAsync(container, storageLocationId, levelNo, +1, now, cancellationToken);
@@ -101,11 +101,13 @@ public sealed class ContainerMovementRecorder(
                 if (transaction is not null) await transaction.CommitAsync(cancellationToken);
                 return;
             }
-            catch (DbUpdateException exception) when (attempt < MaxAttempts && IsRetryable(exception))
+            catch (Exception exception)
             {
                 // Another move changed the same Container or stock row first, or this very key was written by a
                 // concurrent retry: reload and apply again.
                 dbContext.ChangeTracker.Clear();
+                if (attempt >= MaxAttempts || exception is not DbUpdateException dbError || !IsRetryable(dbError))
+                    throw;
             }
         }
     }
@@ -129,7 +131,7 @@ public sealed class ContainerMovementRecorder(
             return;
         }
 
-        if (container.Status is ContainerStatus.IN_TRANSIT or ContainerStatus.ISSUED)
+        if (container.Status is ContainerStatus.IN_TRANSIT or ContainerStatus.ISSUED or ContainerStatus.STAGED_OUTBOUND)
         {
             logger.LogWarning(
                 "Container {Barcode} picked up while {Status}; stock unchanged",
@@ -140,7 +142,9 @@ public sealed class ContainerMovementRecorder(
 
         var now = DateTimeOffset.UtcNow;
         var movement = NewMovement(ContainerMovementType.PICKED_UP, container, key, pickup.JobId, pickup.TransportRequestId, now);
-        if (container is { InboundStockVoucherId: null, Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
+        if (pickup.OutboundEndpointId.HasValue)
+            await HoldStagingBalanceAsync(container, pickup.WarehouseId, cancellationToken);
+        if (!HasAdmissionOrBalance(container) && container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
         {
             await AdjustStockAsync(container, source, container.CurrentLevelNo ?? 1, -1, now, cancellationToken);
         }
@@ -148,6 +152,7 @@ public sealed class ContainerMovementRecorder(
         container.Status = ContainerStatus.IN_TRANSIT;
         container.CurrentStorageLocationId = null;
         container.CurrentLevelNo = null;
+        container.CurrentEndpointId = null;
         container.UpdatedAt = now;
         movement.ToStatus = container.Status;
         dbContext.ContainerMovements.Add(movement);
@@ -177,19 +182,53 @@ public sealed class ContainerMovementRecorder(
         var now = DateTimeOffset.UtcNow;
         var movement = NewMovement(ContainerMovementType.DELIVERED, container, key, delivery.JobId, delivery.TransportRequestId, now);
 
+        if (container.Status is ContainerStatus.ISSUED or ContainerStatus.STAGED_OUTBOUND)
+            return;
+
+        if (delivery.OutboundEndpointId is { } outboundGate && destination is null)
+        {
+            await HoldStagingBalanceAsync(container, delivery.WarehouseId, cancellationToken);
+            container.Status = ContainerStatus.STAGED_OUTBOUND;
+            container.CurrentStorageLocationId = null;
+            container.CurrentLevelNo = null;
+            container.CurrentEndpointId = outboundGate;
+        }
+        else
+        {
+            await DeliverToStorageOrOffShelfAsync(delivery, container, movement, level, now, cancellationToken);
+        }
+
+        container.UpdatedAt = now;
+        movement.ToStatus = container.Status;
+        movement.ToStorageLocationId = container.CurrentStorageLocationId;
+        movement.ToLevelNo = container.CurrentLevelNo;
+        movement.ToEndpointId = container.CurrentEndpointId;
+        dbContext.ContainerMovements.Add(movement);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation("Container {Barcode} delivered: {Status} at {StorageLocationId} or gate {EndpointId}",
+            container.Barcode, container.Status, container.CurrentStorageLocationId, container.CurrentEndpointId);
+    }
+
+    private async Task DeliverToStorageOrOffShelfAsync(
+        ContainerDelivery delivery, Container container, ContainerMovement movement, short level, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var destination = delivery.DestinationStorageLocationId;
+        container.CurrentEndpointId = null;
         var alreadyThere = container.Status == ContainerStatus.STORED
             && container.CurrentStorageLocationId == destination
             && container.CurrentLevelNo == level;
 
         // Picked up before this ledger existed, or the pickup post was lost: the Container still counts on its shelf.
-        if (!alreadyThere && container is { InboundStockVoucherId: null, Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
+        if (!alreadyThere && !HasAdmissionOrBalance(container) && container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: { } source })
         {
             await AdjustStockAsync(container, source, container.CurrentLevelNo ?? 1, -1, now, cancellationToken);
         }
 
         if (destination is { } target)
         {
-            if (container.InboundStockVoucherId is not null)
+            if (HasAdmissionOrBalance(container))
                 await InventoryAccounting.TransferAsync(dbContext, container, target, level, now, cancellationToken);
             else if (!alreadyThere)
                 await AdjustStockAsync(container, target, level, +1, now, cancellationToken);
@@ -198,7 +237,7 @@ public sealed class ContainerMovementRecorder(
             container.CurrentStorageLocationId = target;
             container.CurrentLevelNo = level;
         }
-        else if (container.InboundStockVoucherId is not null)
+        else if (HasAdmissionOrBalance(container))
         {
             // No accounting location at an endpoint-only drop. Retain ownership and its last accounting slot.
             // Outbound stock posting is deliberately not performed by robot delivery.
@@ -228,21 +267,28 @@ public sealed class ContainerMovementRecorder(
                 container.Barcode,
                 container.Status);
         }
-
-        container.UpdatedAt = now;
-        movement.ToStatus = container.Status;
-        movement.ToStorageLocationId = container.CurrentStorageLocationId;
-        movement.ToLevelNo = container.CurrentLevelNo;
-        dbContext.ContainerMovements.Add(movement);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        logger.LogInformation(
-            "Container {Barcode} delivered: {Status} at {StorageLocationId} level {LevelNo}",
-            container.Barcode,
-            container.Status,
-            container.CurrentStorageLocationId,
-            container.CurrentLevelNo);
     }
+
+    private async Task HoldStagingBalanceAsync(Container container, Guid? warehouseId, CancellationToken ct)
+    {
+        var locationId = container.InventoryStorageLocationId ?? container.CurrentStorageLocationId;
+        var level = container.InventoryLevelNo ?? container.CurrentLevelNo ?? 1;
+        var location = locationId.HasValue
+            ? await dbContext.StorageLocations.AsNoTracking().SingleOrDefaultAsync(l => l.Id == locationId, ct)
+            : null;
+        if (!warehouseId.HasValue || location is null || location.WarehouseId != warehouseId
+            || (container.WarehouseId.HasValue && container.WarehouseId != warehouseId)
+            || !await dbContext.InventoryStocks.AnyAsync(s => s.ProductId == container.ProductId
+                && s.StorageLocationId == location.Id && s.LevelNo == level && s.ContainerCount > 0, ct))
+            throw new ConflictException("A Container must have booked warehouse stock before staging for outbound.", "inventory_balance_missing");
+
+        container.WarehouseId = warehouseId;
+        container.InventoryStorageLocationId = location.Id;
+        container.InventoryLevelNo = level;
+    }
+
+    private static bool HasAdmissionOrBalance(Container container) =>
+        container.InboundStockVoucherId.HasValue || container.InventoryStorageLocationId.HasValue;
 
     private async Task<Container?> LoadForMovementAsync(Guid containerId, CancellationToken ct)
     {
@@ -277,6 +323,7 @@ public sealed class ContainerMovementRecorder(
             ToStatus = container.Status,
             FromStorageLocationId = container.CurrentStorageLocationId,
             FromLevelNo = container.CurrentLevelNo,
+            FromEndpointId = container.CurrentEndpointId,
             JobId = jobId,
             TransportRequestId = transportRequestId,
             IdempotencyKey = key,

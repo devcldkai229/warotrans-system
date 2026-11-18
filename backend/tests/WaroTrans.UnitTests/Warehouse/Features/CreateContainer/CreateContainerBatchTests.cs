@@ -1,12 +1,8 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Exceptions;
-using WaroTrans.Navigation.Contracts;
-using WaroTrans.Warehouse.Contracts;
-using WaroTrans.Navigation.Enums;
 using WaroTrans.UnitTests.Warehouse.Infrastructure;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
@@ -28,7 +24,7 @@ public class CreateContainerBatchTests
         Assert.Equal(6, response.Items.Count(item => item.GroupKey == "group-1" && item.ProductId == fixture.A.Id));
         Assert.Equal(4, response.Items.Count(item => item.GroupKey == "group-2" && item.ProductId == fixture.B.Id));
         Assert.Equal(18m, response.Items.Single(item => item.GroupKey == "group-1" && item.ContainerNo == 2).ContentsQuantity);
-        Assert.All(response.Items, item => { Assert.Equal("CREATED", item.Status); Assert.Equal("pcs", item.ContentsUnit); Assert.Equal(fixture.Location.Id, item.CurrentStorageLocationId); Assert.Equal(fixture.Location.EndpointId, item.CurrentEndpointId); });
+        Assert.All(response.Items, item => { Assert.Equal("CREATED", item.Status); Assert.Equal("pcs", item.ContentsUnit); Assert.Null(item.CurrentStorageLocationId); Assert.Null(item.CurrentEndpointId); });
         Assert.Empty(await fixture.Db.InventoryStocks.ToListAsync());
         Assert.Empty(await fixture.Db.StockVouchers.ToListAsync());
         Assert.Equal(1, fixture.Codes.ContainerBatchCalls);
@@ -60,7 +56,6 @@ public class CreateContainerBatchTests
         var row = await f.Db.Containers.FindAsync(first.Items[0].Id);
         row!.Status = ContainerStatus.IN_TRANSIT; row.CurrentStorageLocationId = null;
         await f.Db.SaveChangesAsync();
-        f.Options.InboundStorageLocations.Clear();
         var replay = await f.Handler.HandleAsync(f.Request);
         Assert.True(replay.Replayed);
         Assert.Equal(first.Items.Select(i => (i.Id, i.Barcode)), replay.Items.Select(i => (i.Id, i.Barcode)));
@@ -118,32 +113,13 @@ public class CreateContainerBatchTests
         Assert.Empty(await f.Db.Containers.ToListAsync());
     }
 
-    [Theory]
-    [InlineData("missing-config")]
-    [InlineData("inactive-location")]
-    [InlineData("wrong-warehouse")]
-    [InlineData("disabled-endpoint")]
-    [InlineData("wrong-map")]
-    [InlineData("draft-map")]
-    [InlineData("parking-point")]
-    [InlineData("requested-shelf")]
-    public async Task Receiving_location_must_be_server_configured_active_and_on_the_active_published_map(string scenario)
+    [Fact]
+    public async Task Batch_rejects_a_preassigned_physical_location_without_creating_boxes()
     {
         using var f = await Fixture.CreateAsync();
-        var request = f.Request;
-        switch (scenario)
-        {
-            case "missing-config": f.Options.InboundStorageLocations.Clear(); break;
-            case "inactive-location": f.Location.IsActive = false; break;
-            case "wrong-warehouse": f.Location.WarehouseId = Guid.NewGuid(); break;
-            case "disabled-endpoint": f.Navigation.Endpoint = f.Navigation.Endpoint with { IsEnabled = false }; break;
-            case "wrong-map": f.Navigation.Endpoint = f.Navigation.Endpoint with { MapVersionId = Guid.NewGuid() }; break;
-            case "draft-map": f.Navigation.Map = f.Navigation.Map with { Status = MapStatus.DRAFT }; break;
-            case "parking-point": f.Navigation.Endpoint = f.Navigation.Endpoint with { EndpointType = "PARK" }; break;
-            case "requested-shelf": request = request with { InitialStorageLocationId = Guid.NewGuid() }; break;
-        }
-        await f.Db.SaveChangesAsync();
-        await Assert.ThrowsAnyAsync<AppException>(() => f.Handler.HandleAsync(request));
+        var request = f.Request with { InitialStorageLocationId = Guid.NewGuid() };
+        var failure = await Assert.ThrowsAsync<DomainValidationException>(() => f.Handler.HandleAsync(request));
+        Assert.Equal("batch_initial_location_not_supported", failure.Code);
         Assert.Empty(await f.Db.Containers.ToListAsync());
         Assert.Equal(0, f.Codes.ContainerBatchCalls);
     }
@@ -155,16 +131,6 @@ public class CreateContainerBatchTests
         var error = await Assert.ThrowsAsync<AppException>(() => f.Handler.HandleAsync(f.Request));
         Assert.Equal(403, error.StatusCode);
         Assert.Empty(await f.Db.Containers.ToListAsync());
-    }
-
-    [Fact]
-    public void Server_receiving_dictionary_binds_warehouse_and_location_guids()
-    {
-        var warehouse = Guid.NewGuid(); var location = Guid.NewGuid();
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        { [$"WarehouseReceiving:InboundStorageLocations:{warehouse}"] = location.ToString() }).Build();
-        var options = config.GetSection(ReceivingOptions.SectionName).Get<ReceivingOptions>()!;
-        Assert.Equal(location, options.InboundStorageLocations[warehouse.ToString()]);
     }
 
     [Fact]
@@ -192,21 +158,15 @@ public class CreateContainerBatchTests
         public WarehouseDbContext Db { get; } = WarehouseTestDbContextFactory.Create(Guid.NewGuid().ToString());
         public Product A { get; } = new() { Id = Guid.NewGuid(), Name = "A", Sku = "A", IsActive = true, SupplierBarcode = "supplier-a" };
         public Product B { get; } = new() { Id = Guid.NewGuid(), Name = "B", Sku = "B", IsActive = true };
-        public StorageLocation Location { get; } = new() { Id = Guid.NewGuid(), EndpointId = Guid.NewGuid(), IsActive = true, Code = "Receiving" };
         public FakeCurrentUser User { get; } = new(role: "STAFF");
         public FakeBusinessCodeGenerator Codes { get; } = new();
-        public ReceivingOptions Options { get; } = new();
-        public ReceivingNavigation Navigation { get; private set; } = null!;
         public CreateContainerBatchHandler Handler { get; private set; } = null!;
         public CreateContainerRequest Request { get; private set; } = null!;
         public static async Task<Fixture> CreateAsync()
         {
             var f = new Fixture(); var warehouse = new WaroTrans.Warehouse.Entities.Warehouse { Id = Guid.NewGuid(), IsActive = true, Name = "Warehouse", Code = "WH" };
-            f.Location.WarehouseId = warehouse.Id;
-            f.Db.Warehouses.Add(warehouse); f.Db.StorageLocations.Add(f.Location); f.Db.Products.AddRange(f.A, f.B); await f.Db.SaveChangesAsync();
-            f.Options.InboundStorageLocations[warehouse.Id.ToString()] = f.Location.Id;
-            f.Navigation = new(warehouse.Id, f.Location.EndpointId);
-            f.Handler = new(f.Db, f.Codes, f.User, new CreateContainerValidator(), f.Navigation, Microsoft.Extensions.Options.Options.Create(f.Options), NullLogger<CreateContainerBatchHandler>.Instance);
+            f.Db.Warehouses.Add(warehouse); f.Db.Products.AddRange(f.A, f.B); await f.Db.SaveChangesAsync();
+            f.Handler = new(f.Db, f.Codes, f.User, new CreateContainerValidator(), NullLogger<CreateContainerBatchHandler>.Instance);
             f.Request = new(WarehouseId: warehouse.Id, RequestId: Guid.NewGuid(), ContainerCount: 10, Groups:
                 [new("group-1", f.A.Id, 6, 24, " pcs ", [new(2, 18)]), new("group-2", f.B.Id, 4, 12, "pcs")]);
             return f;
@@ -214,19 +174,4 @@ public class CreateContainerBatchTests
         public void Dispose() => Db.Dispose();
     }
 
-    private sealed class ReceivingNavigation : IMapEndpointCatalog
-    {
-        public MapVersionSnapshot Map { get; set; }
-        public MapEndpointSnapshot Endpoint { get; set; }
-        public ReceivingNavigation(Guid warehouseId, Guid endpointId)
-        {
-            Map = new(Guid.NewGuid(), warehouseId, 1, MapStatus.PUBLISHED);
-            // The code intentionally has no INBOUND substring: configuration, not a naming heuristic, owns its role.
-            Endpoint = new(endpointId, Map.Id, "EP-DOCK", "Receiving", "WAYPOINT", true);
-        }
-        public Task<IReadOnlyList<MapEndpointSnapshot>> GetPublishedEndpointsAsync(Guid warehouseId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MapEndpointSnapshot>>(Map.WarehouseId == warehouseId && Map.Status == MapStatus.PUBLISHED && Endpoint.MapVersionId == Map.Id ? [Endpoint] : []);
-        public Task<IReadOnlyList<MapEndpointSnapshot>> GetEndpointsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MapEndpointSnapshot>>(ids.Contains(Endpoint.Id) ? [Endpoint] : []);
-    }
 }

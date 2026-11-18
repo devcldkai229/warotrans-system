@@ -31,7 +31,7 @@ public sealed class StockVoucher
     public static ContainerStatus[] EligibleContainerStatuses(StockVoucherType type) =>
         type == StockVoucherType.INBOUND
             ? [ContainerStatus.CREATED, ContainerStatus.PACKED]
-            : [ContainerStatus.STORED];
+            : [ContainerStatus.STAGED_OUTBOUND];
 
     public static StockVoucher Create(
         string code,

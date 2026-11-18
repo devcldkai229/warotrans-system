@@ -12,7 +12,8 @@ public sealed class ContainerTransportLookup(TransportationDbContext db) : ICont
     [
         TransportRequestDetailStatus.PENDING,
         TransportRequestDetailStatus.QUEUED,
-        TransportRequestDetailStatus.IN_PROGRESS
+        TransportRequestDetailStatus.IN_PROGRESS,
+        TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY
     ];
 
     public async Task<IReadOnlySet<Guid>> GetContainersInActiveTransportAsync(

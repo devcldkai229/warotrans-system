@@ -38,7 +38,8 @@ public sealed class CreateTransportRequestHandler(
     [
         TransportRequestDetailStatus.PENDING,
         TransportRequestDetailStatus.QUEUED,
-        TransportRequestDetailStatus.IN_PROGRESS
+        TransportRequestDetailStatus.IN_PROGRESS,
+        TransportRequestDetailStatus.CANCEL_PENDING_RECOVERY
     ];
 
     public Task<CreateTransportRequestResponse> HandleAsync(
@@ -66,12 +67,12 @@ public sealed class CreateTransportRequestHandler(
 
         await EnsureWarehouseAsync(request.WarehouseId, cancellationToken);
         await EnsureMapVersionAsync(request.WarehouseId, request.MapVersionId, cancellationToken);
-        await EnsureEndpointsAsync(request.MapVersionId, details, cancellationToken);
-        details = await AttachShelvesAsync(request.WarehouseId, details, cancellationToken);
+        var endpoints = await EnsureEndpointsAsync(request.MapVersionId, details, cancellationToken);
+        details = await AttachShelvesAsync(request.WarehouseId, details, endpoints, cancellationToken);
         await EnsureStorageLocationsAsync(request.WarehouseId, details, cancellationToken);
         var containers = await EnsureContainersAsync(details, cancellationToken);
         EnsureContainersAtSource(details, containers);
-        await EnsureStockVouchersAsync(request.WarehouseId, details, containers, cancellationToken);
+        await EnsureStockVouchersAsync(request.WarehouseId, details, containers, endpoints, cancellationToken);
 
         var requestCode = await businessCodeGenerator.NextRequestCodeAsync(cancellationToken: cancellationToken);
 
@@ -155,7 +156,7 @@ public sealed class CreateTransportRequestHandler(
         }
     }
 
-    private async Task EnsureEndpointsAsync(
+    private async Task<IReadOnlyDictionary<Guid, EndpointSnapshot>> EnsureEndpointsAsync(
         Guid mapVersionId,
         IReadOnlyList<CreateTransportRequestDetailRequest> details,
         CancellationToken cancellationToken)
@@ -189,6 +190,7 @@ public sealed class CreateTransportRequestHandler(
                     "endpoint_disabled");
             }
         }
+        return endpoints;
     }
 
     /// <summary>
@@ -199,6 +201,7 @@ public sealed class CreateTransportRequestHandler(
     private async Task<IReadOnlyList<CreateTransportRequestDetailRequest>> AttachShelvesAsync(
         Guid warehouseId,
         IReadOnlyList<CreateTransportRequestDetailRequest> details,
+        IReadOnlyDictionary<Guid, EndpointSnapshot> endpoints,
         CancellationToken cancellationToken)
     {
         var bareEndpoints = details
@@ -227,8 +230,8 @@ public sealed class CreateTransportRequestHandler(
         return details
             .Select(d => d with
             {
-                SourceStorageLocationId = d.SourceStorageLocationId ?? ShelfAt(d.SourceEndpointId),
-                DestinationStorageLocationId = d.DestinationStorageLocationId ?? ShelfAt(d.DestinationEndpointId)
+                SourceStorageLocationId = d.SourceStorageLocationId ?? (IsInbound(endpoints[d.SourceEndpointId]) ? null : ShelfAt(d.SourceEndpointId)),
+                DestinationStorageLocationId = d.DestinationStorageLocationId ?? (IsOutbound(endpoints[d.DestinationEndpointId]) ? null : ShelfAt(d.DestinationEndpointId))
             })
             .ToList();
     }
@@ -376,56 +379,50 @@ public sealed class CreateTransportRequestHandler(
         }
     }
 
-    /// <summary>
-    /// Stock only enters or leaves the warehouse on a CONFIRMED StockVoucher of the same warehouse: an unshelved
-    /// Container going onto a shelf needs a phiếu nhập, a shelved one going off-shelf needs a phiếu xuất.
-    /// Shelf-to-shelf relocation and off-shelf moves of unshelved Containers need no voucher.
-    /// </summary>
     private async Task EnsureStockVouchersAsync(
         Guid warehouseId,
         IReadOnlyList<CreateTransportRequestDetailRequest> details,
         IReadOnlyDictionary<Guid, ContainerSnapshot> containers,
+        IReadOnlyDictionary<Guid, EndpointSnapshot> endpoints,
         CancellationToken cancellationToken)
     {
-        var required = details
-            .Select(d => (Container: containers[d.ContainerId], Type: RequiredVoucherType(containers[d.ContainerId], d)))
-            .Where(x => x.Type.HasValue)
-            .ToList();
-        if (required.Count == 0)
+        var required = new List<(ContainerSnapshot Container, StockVoucherType Type)>();
+        foreach (var detail in details)
         {
-            return;
-        }
+            var box = containers[detail.ContainerId];
+            if (box.WarehouseId is { } owner && owner != warehouseId)
+                throw new DomainValidationException($"Container '{box.Barcode}' belongs to another warehouse.", "container_wrong_warehouse");
 
-        var lines = await warehouseModule.GetConfirmedVoucherLinesAsync(
-            required.Select(x => x.Container.Id).ToList(),
-            cancellationToken);
+            if (box.RequiresInboundAdmission && box.InboundStockVoucherId is null)
+                throw new DomainValidationException($"Container '{box.Barcode}' requires a posted inbound voucher.", "inbound_voucher_required");
 
-        foreach (var (container, type) in required)
-        {
-            if (!lines.Any(l => l.ContainerId == container.Id && l.Type == type && l.WarehouseId == warehouseId))
+            if (box.Status is ContainerStatus.CREATED or ContainerStatus.PACKED && detail.DestinationStorageLocationId.HasValue)
             {
-                var (kind, code) = type == StockVoucherType.INBOUND
-                    ? ("inbound", "inbound_voucher_required")
-                    : ("outbound", "outbound_voucher_required");
-                throw new DomainValidationException(
-                    $"Container '{container.Barcode}' must be on a CONFIRMED {kind} voucher of this warehouse.",
-                    code);
+                if (box.InboundStockVoucherId.HasValue && !IsInbound(endpoints[detail.SourceEndpointId]))
+                    throw new DomainValidationException("Select an enabled Inbound gate on the published map.", "inbound_source_not_gate");
+                required.Add((box, StockVoucherType.INBOUND));
+            }
+            else if (box is { Status: ContainerStatus.STORED, CurrentStorageLocationId: not null } && !detail.DestinationStorageLocationId.HasValue
+                && !IsOutbound(endpoints[detail.DestinationEndpointId]))
+            {
+                // Keep the old voucher guard for custom workflows to non-shipping points.
+                required.Add((box, StockVoucherType.OUTBOUND));
             }
         }
-    }
 
-    private static StockVoucherType? RequiredVoucherType(ContainerSnapshot container, CreateTransportRequestDetailRequest detail)
-    {
-        var shelved = container is { Status: ContainerStatus.STORED, CurrentStorageLocationId: not null };
-        var toShelf = detail.DestinationStorageLocationId.HasValue;
-
-        if (!shelved && toShelf && container.Status is ContainerStatus.CREATED or ContainerStatus.PACKED)
+        if (required.Count == 0) return;
+        var lines = await warehouseModule.GetConfirmedVoucherLinesAsync(required.Select(r => r.Container.Id).ToArray(), cancellationToken);
+        foreach (var (container, type) in required)
         {
-            return StockVoucherType.INBOUND;
+            if (lines.Any(l => l.ContainerId == container.Id && l.Type == type && l.WarehouseId == warehouseId))
+                continue;
+            var kind = type == StockVoucherType.INBOUND ? "inbound" : "outbound";
+            throw new DomainValidationException($"Container '{container.Barcode}' must be on a CONFIRMED {kind} voucher of this warehouse.", $"{kind}_voucher_required");
         }
-
-        return shelved && !toShelf ? StockVoucherType.OUTBOUND : null;
     }
+
+    private static bool IsInbound(EndpointSnapshot endpoint) => WarehouseGate.IsInbound(endpoint.Code, endpoint.EndpointType.ToString());
+    private static bool IsOutbound(EndpointSnapshot endpoint) => WarehouseGate.IsOutbound(endpoint.Code, endpoint.EndpointType.ToString());
 
     private static CreateTransportRequestResponse ToResponse(TransportRequest request) =>
         new(

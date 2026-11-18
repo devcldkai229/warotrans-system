@@ -80,6 +80,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("creation_stock_voucher_id");
 
+                    b.Property<Guid?>("CurrentEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_endpoint_id");
+
                     b.Property<short?>("CurrentLevelNo")
                         .HasColumnType("smallint")
                         .HasColumnName("current_level_no");
@@ -124,6 +128,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
                     b.Property<decimal?>("WeightKg")
                         .HasColumnType("numeric")
                         .HasColumnName("weight_kg");
@@ -154,6 +162,9 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.HasIndex("ProductId")
                         .HasDatabaseName("i_x_containers_product_id");
 
+                    b.HasIndex("WarehouseId")
+                        .HasDatabaseName("i_x_containers_warehouse_id");
+
                     b.HasIndex("CreationRequestId", "CreationOrdinal")
                         .IsUnique()
                         .HasDatabaseName("ux_containers_creation_request")
@@ -165,7 +176,9 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_containers_creation_receipt", "(creation_request_id IS NULL AND creation_request_hash IS NULL AND creation_ordinal IS NULL AND creation_group_key IS NULL AND creation_group_ordinal IS NULL) OR (creation_request_id IS NOT NULL AND creation_request_hash IS NOT NULL AND length(creation_request_hash) = 64 AND creation_ordinal IS NOT NULL AND creation_ordinal > 0 AND creation_group_key IS NOT NULL AND length(btrim(creation_group_key)) > 0 AND creation_group_ordinal IS NOT NULL AND creation_group_ordinal > 0 AND contents_quantity IS NOT NULL AND contents_unit IS NOT NULL)");
 
-                            t.HasCheckConstraint("ck_containers_stock_receipt", "(inbound_stock_voucher_id IS NULL AND inventory_storage_location_id IS NULL AND inventory_level_no IS NULL) OR (inbound_stock_voucher_id IS NOT NULL AND inventory_storage_location_id IS NOT NULL AND inventory_level_no IS NOT NULL AND inventory_level_no > 0)");
+                            t.HasCheckConstraint("ck_containers_endpoint_custody", "(current_endpoint_id IS NULL AND status <> 'STAGED_OUTBOUND') OR (current_endpoint_id IS NOT NULL AND status = 'STAGED_OUTBOUND' AND warehouse_id IS NOT NULL AND current_storage_location_id IS NULL AND current_level_no IS NULL AND inventory_storage_location_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_containers_stock_receipt", "(inventory_storage_location_id IS NULL AND inventory_level_no IS NULL) OR (inventory_storage_location_id IS NOT NULL AND inventory_level_no IS NOT NULL AND inventory_level_no > 0 AND warehouse_id IS NOT NULL)");
                         });
                 });
 
@@ -183,6 +196,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.Property<Guid>("ContainerId")
                         .HasColumnType("uuid")
                         .HasColumnName("container_id");
+
+                    b.Property<Guid?>("FromEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_endpoint_id");
 
                     b.Property<short?>("FromLevelNo")
                         .HasColumnType("smallint")
@@ -216,6 +233,10 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("occurred_at");
+
+                    b.Property<Guid?>("ToEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_endpoint_id");
 
                     b.Property<short?>("ToLevelNo")
                         .HasColumnType("smallint")
@@ -473,7 +494,7 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
 
                     b.ToTable("stock_vouchers", "warehouse", t =>
                         {
-                            t.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR (type = 'INBOUND' AND status = 'CONFIRMED')");
+                            t.HasCheckConstraint("ck_stock_vouchers_posted", "stock_posted_at IS NULL OR status = 'CONFIRMED'");
                         });
                 });
 
@@ -648,6 +669,12 @@ namespace WaroTrans.Warehouse.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("f_k_containers_products_product_id");
+
+                    b.HasOne("WaroTrans.Warehouse.Entities.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("f_k_containers_warehouses_warehouse_id");
 
                     b.Navigation("CurrentStorageLocation");
 

@@ -37,7 +37,10 @@ public sealed record ContainerSnapshot(
     ContainerStatus Status,
     Guid? CurrentStorageLocationId,
     short? CurrentLevelNo,
-    decimal? WeightKg = null);
+    decimal? WeightKg = null,
+    Guid? WarehouseId = null,
+    bool RequiresInboundAdmission = false,
+    Guid? InboundStockVoucherId = null);
 
 public sealed record StorageLocationSnapshot(
     Guid Id,

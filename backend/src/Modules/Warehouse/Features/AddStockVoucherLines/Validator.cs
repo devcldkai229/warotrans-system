@@ -7,9 +7,9 @@ public sealed class AddStockVoucherLinesValidator : AbstractValidator<AddStockVo
     public AddStockVoucherLinesValidator()
     {
         RuleFor(x => x)
-            .Must(x => (x.ContainerIds is { Count: > 0 }) ^ x.ProductId.HasValue)
-            .WithName("Request")
-            .WithMessage("Send either ContainerIds or ProductId with Count, not both.");
+            .Must(x => x.ContainerIds is { Count: > 0 } && x.ProductId is null && x.Count is null)
+            .WithName("ContainerIds")
+            .WithMessage("Select ContainerIds explicitly. ProductId/Count picking is not supported on stock vouchers.");
 
         RuleFor(x => x.ContainerIds!)
             .Must(ids => ids.Count <= 200)
@@ -20,16 +20,5 @@ public sealed class AddStockVoucherLinesValidator : AbstractValidator<AddStockVo
             .WithMessage("ContainerIds must be unique.")
             .When(x => x.ContainerIds is { Count: > 0 });
 
-        RuleFor(x => x.ProductId!.Value)
-            .NotEmpty()
-            .WithMessage("ProductId must not be empty.")
-            .When(x => x.ProductId.HasValue);
-
-        RuleFor(x => x.Count)
-            .NotNull()
-            .WithMessage("Count is required with ProductId.")
-            .InclusiveBetween(1, 200)
-            .WithMessage("Count must be between 1 and 200.")
-            .When(x => x.ProductId.HasValue);
     }
 }

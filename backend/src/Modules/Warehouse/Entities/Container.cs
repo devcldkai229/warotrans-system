@@ -25,6 +25,8 @@ public sealed class Container
     public Guid? InboundStockVoucherId { get; set; }
     public Guid? InventoryStorageLocationId { get; set; }
     public short? InventoryLevelNo { get; set; }
+    public Guid? WarehouseId { get; set; }
+    public Guid? CurrentEndpointId { get; set; }
     public ContainerStatus Status { get; set; }
     public Guid? CurrentStorageLocationId { get; set; }
     public short? CurrentLevelNo { get; set; }

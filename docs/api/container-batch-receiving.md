@@ -1,8 +1,8 @@
-# Container receiving API — Product and quantity before barcode
+# Container batches and stock vouchers
 
-Updated: 2026-11-17. Owner: BE. FE integration: Antigravity.
+Updated 2026-11-18.
 
-User decision: Staff enters the full batch (Products, number of boxes, contents of each box), then creates the Containers and their barcodes. This supersedes the earlier barcode-first/allocation proposal in the mobile handoff. There is no Product-less Container or separate barcode reservation API/table.
+Staff enters the Products, box counts and contents before creating Containers and barcodes.
 
 ## Route and compatibility
 
@@ -68,7 +68,7 @@ Rules:
 - Optional `supplierPackageBarcode` belongs on each group, at most 128 characters; missing/blank falls back to the Product supplier barcode. This is separate from the unique WaroTrans barcode.
 - Do not mix `groups` with root `productId`, root supplier barcode or `initialLevelNo`.
 - `stockVoucherId` is optional for backward compatibility with unlinked batches. **Mobile inbound should supply it.** The voucher must be INBOUND, DRAFT, and belong to `warehouseId`; the actor also needs `VoucherWrite`. Containers and all their StockVoucherLines are created in one transaction, including batches over 200. Do not call the legacy add-lines API after a successful linked batch. Its old per-call limit remains separate.
-- Omit `initialStorageLocationId`; the server uses its configured Inbound. If supplied, it must match that configuration.
+- Omit `initialStorageLocationId` for new batches. A supplied location returns 400 `batch_initial_location_not_supported`. A replay of an old request still resolves its existing receipt.
 
 ## Receipt and idempotency
 
@@ -82,7 +82,7 @@ The response contains `requestId`, `warehouseId`, `containerCount`, `replayed`, 
 | `contentsQuantity`, `contentsUnit` | Effective quantity/unit after overrides |
 | `supplierPackageBarcode` | Supplier barcode, if any |
 | `status` | `CREATED` on first success |
-| `currentStorageLocationId`, `currentEndpointId` | Configured Inbound on first success |
+| `currentStorageLocationId`, `currentEndpointId` | Both null on first success |
 | `createdAt` | Persisted UTC timestamp |
 
 Order is request-group order, then increasing `containerNo`. Render/print only the **successfully returned** persisted IDs/barcodes. Client previews must not invent them.
@@ -91,99 +91,31 @@ Retry the same payload with the same `requestId` and same account, including aft
 
 Reusing a `requestId` for a different payload/account returns 409 `container_creation_request_conflict`. When a user deliberately changes an already submitted batch, first resolve the prior outcome, then start a genuinely new operation with a new ID. Do not auto-generate a new ID on network failure or conflict.
 
-A replay of a linked batch also reads the **current** voucher detail, even after confirmation or cancellation. It does not recreate intentionally removed lines or change the voucher. A replay reads **current** Container status/location; it does not move existing goods back to Inbound or reset them to CREATED. Replay succeeds even if the Product or receiving configuration has since become unavailable. Partial receipt data returns 409 `container_creation_receipt_incomplete`; it is not silently replenished. This receipt is retained on Container rows; they must not be hard-deleted to recycle a request ID.
+A replay of a linked batch also reads the **current** voucher detail, even after confirmation or cancellation. It does not recreate intentionally removed lines or change the voucher. A replay reads **current** Container status/location; it does not move existing goods back to Inbound or reset them to CREATED. Replay succeeds even if the Product has since become unavailable. Partial receipt data returns 409 `container_creation_receipt_incomplete`; it is not silently replenished. This receipt is retained on Container rows; they must not be hard-deleted to recycle a request ID.
 
-## Server Inbound configuration and deployment
+## Inbound
 
-There is currently no canonical Inbound endpoint type in the Navigation schema. The server therefore requires an explicit warehouse-to-StorageLocation mapping instead of guessing by code/name or accepting an arbitrary client location.
+1. Create an INBOUND draft with `POST /api/warehouse/stock-vouchers`. The metadata-only create has no idempotency key. Persist the returned voucher ID before creating the batch.
+2. Create the batch with `groups`, `stockVoucherId` and a stable `requestId`. Every Container starts `CREATED` with null location and endpoint. The response includes the linked draft and its lines.
+3. Call `POST /api/warehouse/stock-vouchers/{id}/confirm` with no body. A successful confirmation sets `stockPostedAt`, marks each Container admitted to this warehouse and leaves it `CREATED` with null location and endpoint. Every line needs complete contents and an active Product. Active transport, a conflicting voucher or incompatible custody blocks the entire confirmation.
+4. Use `INBOUND_PUTAWAY` with any enabled Inbound gate on the current published map as `sourceEndpointId`, and a shelf as `destinationStorageLocationId` with its matching `destinationEndpointId`. The shelf balance and Container status/location update when robot delivery posts. Retried handovers preserve a single stock allocation per Container.
 
-```json
-{
-  "WarehouseReceiving": {
-    "InboundStorageLocations": {
-      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa": "cccccccc-cccc-cccc-cccc-cccccccccccc"
-    }
-  }
-}
-```
+A gate is an enabled Navigation `WAYPOINT` with an `INBOUND` or `OUTBOUND` token in its endpoint code, separated by a hyphen, underscore or space. Codes such as `EP-INBOUND-A` and `EP-OUTBOUND-02` allow multiple gates per published map. The old `WarehouseReceiving:InboundStorageLocations` setting and dedicated setup script were retired.
 
-An environment configuration key has the form `WarehouseReceiving__InboundStorageLocations__<warehouse-uuid>` and the value is the real StorageLocation UUID. Use canonical dashed warehouse UUID keys. Empty defaults are intentional: no demo/production IDs are hardcoded.
+`GET /api/warehouse/inventory?warehouseId=...` returns `warehouseContainerCount` and `unallocatedContainerCount` for the whole warehouse, independent of pagination and search. New admitted Containers count immediately as unallocated. Putaway turns that admission into an `InventoryStock` balance at the destination without increasing the warehouse total. While booked stock is in transit or staged, the balance stays at its last accounting location. Read Container status, location and endpoint for physical custody.
 
-The configured StorageLocation must be active, belong to that warehouse, and point to an enabled WAYPOINT on its PUBLISHED map. Warehouse reads this through the existing `IMapEndpointCatalog` boundary. After publishing/rebinding maps, verify this configuration still identifies the intended receiving dock.
+## Outbound
 
-| Condition | HTTP / code |
-| --- | --- |
-| Invalid request/count/quantity | 400 `validation_failed` (unknown/malformed JSON: 400) |
-| Explicit location differs from configured Inbound | 400 `container_receiving_location_mismatch` |
-| Missing/inactive warehouse or Product | 404 `warehouse_not_found` / `product_not_found` |
-| No configured Inbound | 409 `inbound_location_not_configured` |
-| Wrong/inactive receiving StorageLocation | 409 `inbound_location_invalid` |
-| Endpoint unavailable/disabled/not on published map | 409 `inbound_endpoint_unavailable` |
-| Missing authentication / permission | 401 / 403 |
+1. Create a TR to collect a `STORED` Container from its shelf and deliver it to an enabled Outbound gate on the published map. Use `destinationEndpointId` with a null `destinationStorageLocationId`. This route is allowed before any OUTBOUND voucher exists.
+2. After delivery posts, `GET /api/warehouse/containers?warehouseId=...&eligibleOnly=false&status=STAGED_OUTBOUND` returns candidates. Their `currentEndpointId` is the gate where they were delivered and their `currentStorageLocationId` is null. Filter out `inActiveTransport` in the UI. The warehouse total remains unchanged.
+3. Create an OUTBOUND draft. Send `{ "containerIds": [...] }` to `POST /api/warehouse/stock-vouchers/{id}/lines`, up to 200 IDs per call. The endpoint adds only IDs absent from this draft, so repeating the same selection returns the same lines. Only explicit Container IDs are accepted. Product/count picking for forming TRs remains separate.
+4. Confirm the draft after reviewing all selected lines. The server checks that each box is staged at an enabled Outbound gate of this warehouse, is free of active transport and belongs to no other live OUTBOUND voucher. A voucher can include boxes from several TRs or gates. A failing line rejects the entire confirmation.
+5. Success deducts every selected box from its accounting slot, records an `ISSUED` movement with its previous gate, clears physical location and endpoint and sets `stockPostedAt` with `CONFIRMED`. Repeating confirmation returns the same posting timestamp and current detail. The transaction commits all deductions, movements and status changes together.
 
-Apply both Warehouse migrations before running the changed API:
+Common 400 errors include `voucher_container_not_at_outbound`, `container_contents_incomplete` and `inbound_source_not_gate`. Common 409 errors include `voucher_container_in_transport`, `voucher_container_on_other_voucher`, `inventory_balance_missing`, `inbound_stock_not_posted` and `outbound_stock_not_posted`. The last two errors identify an older CONFIRMED voucher with no posting receipt. Older OUTBOUND drafts require their selected rows to be staged before confirmation. Goods already on a robot when upgrading from the old stock-debit workflow may require reconciliation if their accounting slot was removed before the new flow.
 
-1. `20261113083127_AddContainerBatchContents`: nullable contents/creation-receipt columns on Container.
-2. `20261114101712_AddAtomicInboundVoucherPosting`: creation-voucher link, inbound stock-admission link, accounting location/level and `StockVoucher.stockPostedAt`, with integrity checks/FKs. No new domain tables.
+## Deployment
 
-Neither migration invents quantities or admissions for legacy Containers or backfills document-only confirmations as posted stock.
+Apply Warehouse migrations through `20261118054034_AddGateStagingAndUnlocatedReceiving` before running the updated BE. The migration adds Container warehouse ownership and endpoint custody, records endpoint IDs for movements and preserves existing booked balances. Coordinate the upgrade with completion of in-flight TRs, especially pickups made under the old accounting rules.
 
-For local Development, `appsettings.Development.json` explicitly maps Kho ONE (`55c88958-d994-48d3-ae5d-11991476673f`) to receiving StorageLocation `473896d8-f634-4807-9c89-e2c264a30eae`. Run `backend/scripts/configure-kho-one-inbound.sql` on the intended dev database after migration. It creates only that location on the existing enabled `EP-INBOUND` of Kho ONE's published map (stable warehouse ID; accepted dev codes WH-ONE/ONE). It refuses absent/ambiguous endpoints or a conflicting existing location; it never creates/publishes a map or guesses another warehouse. Production defaults remain empty.
-
-Start the BE from **feature/stock-voucher-backend** (or a branch containing it), with `ASPNETCORE_ENVIRONMENT=Development` to load this dev mapping. Starting an older checkout or another environment will not use these changes/configuration.
-
-## Mobile inbound workflow and capability gates
-
-1. `POST /api/warehouse/stock-vouchers` with warehouse/type metadata to obtain a real INBOUND DRAFT. Persist its returned ID before allocation. This existing metadata-only create is not an idempotent operation: do not blindly auto-retry it after an unknown network result.
-2. `POST /api/warehouse/containers` with `stockVoucherId`, full `groups`, total count, warehouse and stable `requestId`. Receive every new Container **and** the voucher's complete lines in the same committed result. Stock is still unchanged. Print/reprint only persisted returned barcodes.
-3. `POST /api/warehouse/stock-vouchers/{id}/confirm` with no body. INBOUND confirmation validates the complete line set and writes stock/document/admission markers in one transaction.
-4. Retry the same batch request after an unknown batch result, or the same confirm endpoint after an unknown confirm result. Both are idempotent, including concurrent calls. Reopen server voucher detail to reconcile; never create a fresh batch to recover an already committed one.
-5. Only after posting, create the inbound TR/putaway. Admission keeps Container lifecycle status CREATED/PACKED until movement; the existing TR voucher check and a receiving-batch movement guard prevent putaway before admission.
-
-FE can enable `mobileCapabilities.createContainer = true` for this integrated receiving flow and `mobileCapabilities.confirmStockVoucher = true` **with an INBOUND-only action guard**, once running against this BE/migrated/configured environment. This change is BE-owned; Antigravity owns the FE switch/integration and iPhone acceptance. It does not assert the FE flags have already been edited or that the iPhone test has run.
-
-**OUTBOUND confirmation remains unavailable** and returns 501 `outbound_stock_posting_not_supported`. Do not expose its Confirm action through a global flag. Staged eligibility and outbound/TR posting remain the next work item.
-
-## Inbound confirmation and putaway accounting
-
-Confirm requires a nonempty INBOUND DRAFT, active warehouse and Products, complete positive contents/unit, every Container physically at its configured Inbound (level null/1), matching line Products, no active transport and no conflicting live inbound voucher/admission. It fails the entire operation if any line is ineligible. No FIFO substitution or partial success.
-
-On first success: `status = CONFIRMED`, immutable `confirmedBy`/`confirmedAt`, and nonnull **`stockPostedAt`**. InventoryStock increases by the number of boxes per Product at Inbound, level 1. Quantities inside boxes remain descriptive, not InventoryStock counts. Detail GET and batch receipt include `stockPostedAt`; `doneCount` continues to mean robot progress, not stock admission.
-
-A retry of a posted confirmation returns the same posting timestamp and current detail before mutable Product/location eligibility checks. A legacy CONFIRMED voucher with null `stockPostedAt` returns 409 `inbound_stock_not_posted` and requires reconciliation; the server does not pretend that its old document-only confirmation posted stock. Cancelled vouchers cannot be confirmed, and confirmed vouchers cannot be edited/cancelled through draft actions.
-
-New Containers retain `InboundStockVoucherId` and an accounting location/level. At pickup physical `CurrentStorageLocationId` becomes null/IN_TRANSIT, but the counted balance stays at the last accounting location while the robot carries it. At shelf delivery/recovery, the same transaction subtracts the old accounting slot and adds the destination slot, then updates physical location and status. Total warehouse stock stays constant during pickup, transport, putaway, recovery and relocation; duplicate delivery events do not add stock again. Per-location InventoryStock is this accounting allocation, **not an assertion that every counted box is physically on that shelf during transport**. Use Container custody/status for physical tracking.
-
-Endpoint-only drops of admitted goods retain stock and enter HOLD; they do not issue goods. Missing/inconsistent balances or invalid cross-warehouse transfer destinations fail for reconciliation rather than silently adding a second copy. Old unposted legacy boxes retain their earlier movement behavior; they are not silently migrated into the new admission model.
-
-Additional confirm errors include 400 `container_contents_incomplete` / `voucher_product_inactive` / `voucher_container_not_eligible`, and 409 `voucher_container_not_at_inbound`, `voucher_container_in_transport`, `container_stock_already_admitted`, `voucher_container_on_other_voucher`, `inbound_stock_not_posted`. Existing authentication/permission checks still apply. Confirm and competing voucher mutations are serialized; product accounting locks also protect initially absent stock rows against lost increments from different vouchers.
-
-`GET /api/warehouse/containers/{id}`, barcode lookup, Container lists and stock voucher detail lines expose nullable `contentsQuantity` / `contentsUnit`. Container detail also exposes creation request/group mapping. Null on legacy data means unknown, not zero.
-
-## Local deployment verification
-
-Verified on local PostgreSQL `warotrans` at port 5433 on 2026-11-17:
-
-- Both Warehouse migrations above are applied, confirmed from EF migration history.
-- Current receiving location exists and is active on enabled `EP-INBOUND` of published **`MAP-ONE-V013`**, warehouse ID unchanged, current code/name **ONE / ONE LOGISTICS**.
-- The initial migration check showed **22 Containers / 3 vouchers / 0 stock rows**, unchanged before/after the two Warehouse migrations. A later check found the dev DB replaced/changed independently to **8 Containers / 4 vouchers / 0 stock rows**, ONE / ONE LOGISTICS and MAP-ONE-V013. This task did not restore older data; runtime logs contain no Container insert/delete. Receiving setup was reconciled against that current published endpoint, preserving those current counts.
-- Full pre-migration backup: `/tmp/warotrans-before-inbound-20261117.dump` (local-only, permissions 0600).
-- Migration/setup wrote only the two Warehouse migrations and the configured Inbound location to the shared dev DB. Mutation/end-to-end tests used isolated databases and sent no robot commands.
-- API port **5090** was restarted using the built BE artifact after synchronization with running base `ff57bba`; the existing content root, asset paths and environment were preserved, with the receiving mapping supplied explicitly. Runtime OpenAPI now exposes batch receipt/`stockPostedAt`. FE source/flags were not edited by this task.
-
-This BE branch has been synchronized with the exact running base `ff57bba` to preserve its Fleet/Workflow updates and existing Container voucher metadata. The Development configuration is in this BE worktree. The mobile checkout remains separate; run/restart the BE from this worktree or deploy this branch before opening FE gates. Database migration alone does not replace an already-running older BE process.
-
-## Verification
-
-- Unit suite after synchronization with running base `ff57bba`: **897 passed**, 3 existing skips, 0 failed.
-- Architecture suite: 11 passed, 0 failed.
-- Isolated PostgreSQL suite: **19 passed, 0 failed**, including actual linked creation and posting of 9,999 boxes. `ContainerBatchPostgresTests` covers migration/legacy compatibility, real endpoint/auth/validation, atomic voucher-linked batches, concurrent creation and confirmation, posting rollback, maximum-batch boundary, putaway/recovery preserving total stock, code-sequence concurrency and published-map checks.
-
-For integration verification, point `WAROTRANS_CONTAINER_TEST_POSTGRES` at a **disposable** PostgreSQL server whose user can create databases, then run only:
-
-```sh
-dotnet test backend/tests/WaroTrans.IntegrationTests/WaroTrans.IntegrationTests.csproj \
-  --filter 'FullyQualifiedName~ContainerBatchPostgresTests'
-```
-
-Each test creates/drops only a randomly named database it owns. It does not use the application's integration fixture/reset/seed or start robot, MQTT or notification services. Without that explicit variable these tests are skipped.
+Mobile FE can use both directions on the updated BE. For outbound, replace the shelf/`STORED` preview predicate with `STAGED_OUTBOUND` and display the returned endpoint. For inbound, render null location as None and select a gate only when composing putaway.

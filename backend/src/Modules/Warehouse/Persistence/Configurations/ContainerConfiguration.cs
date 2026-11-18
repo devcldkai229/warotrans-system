@@ -10,7 +10,8 @@ public sealed class ContainerConfiguration : IEntityTypeConfiguration<Container>
     {
         builder.ToTable("containers", table =>
         {
-            table.HasCheckConstraint("ck_containers_stock_receipt", "(inbound_stock_voucher_id IS NULL AND inventory_storage_location_id IS NULL AND inventory_level_no IS NULL) OR (inbound_stock_voucher_id IS NOT NULL AND inventory_storage_location_id IS NOT NULL AND inventory_level_no IS NOT NULL AND inventory_level_no > 0)");
+            table.HasCheckConstraint("ck_containers_stock_receipt", "(inventory_storage_location_id IS NULL AND inventory_level_no IS NULL) OR (inventory_storage_location_id IS NOT NULL AND inventory_level_no IS NOT NULL AND inventory_level_no > 0 AND warehouse_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_containers_endpoint_custody", "(current_endpoint_id IS NULL AND status <> 'STAGED_OUTBOUND') OR (current_endpoint_id IS NOT NULL AND status = 'STAGED_OUTBOUND' AND warehouse_id IS NOT NULL AND current_storage_location_id IS NULL AND current_level_no IS NULL AND inventory_storage_location_id IS NOT NULL)");
             table.HasCheckConstraint("ck_containers_contents", "(contents_quantity IS NULL AND contents_unit IS NULL) OR (contents_quantity IS NOT NULL AND contents_quantity > 0 AND contents_unit IS NOT NULL AND length(btrim(contents_unit)) > 0)");
             table.HasCheckConstraint("ck_containers_creation_receipt", "(creation_request_id IS NULL AND creation_request_hash IS NULL AND creation_ordinal IS NULL AND creation_group_key IS NULL AND creation_group_ordinal IS NULL) OR (creation_request_id IS NOT NULL AND creation_request_hash IS NOT NULL AND length(creation_request_hash) = 64 AND creation_ordinal IS NOT NULL AND creation_ordinal > 0 AND creation_group_key IS NOT NULL AND length(btrim(creation_group_key)) > 0 AND creation_group_ordinal IS NOT NULL AND creation_group_ordinal > 0 AND contents_quantity IS NOT NULL AND contents_unit IS NOT NULL)");
         });
@@ -29,6 +30,8 @@ public sealed class ContainerConfiguration : IEntityTypeConfiguration<Container>
         builder.HasIndex(x => new { x.CreationRequestId, x.CreationOrdinal })
             .HasDatabaseName("ux_containers_creation_request").IsUnique()
             .HasFilter("creation_request_id IS NOT NULL");
+
+        builder.HasOne<WaroTrans.Warehouse.Entities.Warehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<StockVoucher>().WithMany().HasForeignKey(x => x.CreationStockVoucherId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<StockVoucher>().WithMany().HasForeignKey(x => x.InboundStockVoucherId).OnDelete(DeleteBehavior.Restrict);

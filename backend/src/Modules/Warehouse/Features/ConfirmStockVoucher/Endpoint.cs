@@ -17,7 +17,7 @@ public static class ConfirmStockVoucherEndpoint
         .RequirePermission(Permissions.VoucherWrite)
         .WithName("ConfirmStockVoucher")
         .WithSummary("Confirm a DRAFT stock voucher")
-        .WithDescription("Atomically confirms and posts INBOUND stock once at configured Inbound. A retry returns the existing posting receipt. OUTBOUND confirmation is unavailable until staged eligibility and outbound posting are implemented.");
+        .WithDescription("Posts warehouse admission for INBOUND or issues the selected Containers staged at Outbound. Retrying a posted confirmation returns the existing receipt.");
 
         return group;
     }

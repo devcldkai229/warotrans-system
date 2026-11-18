@@ -1,11 +1,10 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using WaroTrans.Warehouse.Features.Shared;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.UnitTests.Warehouse.Infrastructure;
 using WaroTrans.Warehouse.Entities;
+using WaroTrans.Warehouse.Contracts;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Features.AddStockVoucherLines;
 using WaroTrans.Warehouse.Features.ConfirmStockVoucher;
@@ -21,14 +20,18 @@ public sealed class StockVoucherHandlerTests
     private static readonly Guid OtherWarehouseId = Guid.NewGuid();
     private static readonly Guid Shelf = Guid.NewGuid();
     private static readonly Guid OtherShelf = Guid.NewGuid();
+    private static readonly Guid Gate = Guid.NewGuid();
     private static readonly Guid ProductId = Guid.NewGuid();
 
     private readonly string _dbName = $"vouchers-{Guid.NewGuid()}";
     private readonly FakeCurrentUser _user = new(Guid.NewGuid());
     private readonly FakeContainerTransportLookup _transports = new();
 
+    private readonly FakeReceivingEndpointCatalog _map = new();
+
     public StockVoucherHandlerTests()
     {
+        _map.Published.Add(new MapEndpointSnapshot(Gate, Guid.NewGuid(), "EP-OUTBOUND-1", "Outbound 1", "WAYPOINT", true));
         using var db = Db();
         db.Warehouses.AddRange(
             new WaroTrans.Warehouse.Entities.Warehouse { Id = WarehouseId, Code = "WH-001", Name = "Main", IsActive = true },
@@ -50,10 +53,10 @@ public sealed class StockVoucherHandlerTests
     }
 
     private AddStockVoucherLinesHandler AddLines() =>
-        new(Db(), _transports, _user, new AddStockVoucherLinesValidator(), NullLogger<AddStockVoucherLinesHandler>.Instance);
+        new(Db(), _transports, _user, new AddStockVoucherLinesValidator(), NullLogger<AddStockVoucherLinesHandler>.Instance, _map);
 
     private ConfirmStockVoucherHandler Confirm() =>
-        new(Db(), _transports, _user, NullLogger<ConfirmStockVoucherHandler>.Instance, new ReceivingLocationResolver(Db(), new FakeReceivingEndpointCatalog(), Options.Create(new ReceivingOptions())));
+        new(Db(), _transports, _user, NullLogger<ConfirmStockVoucherHandler>.Instance, _map);
 
     private async Task<Guid> SeedContainerAsync(ContainerStatus status, Guid? shelf, DateTimeOffset createdAt)
     {
@@ -64,8 +67,12 @@ public sealed class StockVoucherHandlerTests
             ProductId = ProductId,
             Barcode = $"CTN-{createdAt:HHmmssfff}-{Guid.NewGuid():N}",
             Status = status,
-            CurrentStorageLocationId = shelf,
-            CurrentLevelNo = shelf.HasValue ? (short)1 : null,
+            CurrentStorageLocationId = status == ContainerStatus.STAGED_OUTBOUND ? null : shelf,
+            CurrentLevelNo = status == ContainerStatus.STAGED_OUTBOUND ? null : shelf.HasValue ? (short)1 : null,
+            CurrentEndpointId = status == ContainerStatus.STAGED_OUTBOUND ? Gate : null,
+            WarehouseId = status == ContainerStatus.STAGED_OUTBOUND ? (shelf == OtherShelf ? OtherWarehouseId : WarehouseId) : null,
+            InventoryStorageLocationId = status == ContainerStatus.STAGED_OUTBOUND ? shelf : null,
+            InventoryLevelNo = status == ContainerStatus.STAGED_OUTBOUND ? (short)1 : null,
             CreatedAt = createdAt,
             UpdatedAt = createdAt
         };
@@ -89,41 +96,9 @@ public sealed class StockVoucherHandlerTests
     }
 
     [Fact]
-    public async Task Outbound_pick_by_product_takes_the_oldest_stored_containers_of_the_warehouse()
-    {
-        var t0 = DateTimeOffset.UtcNow.AddDays(-3);
-        var oldest = await SeedContainerAsync(ContainerStatus.STORED, Shelf, t0);
-        var second = await SeedContainerAsync(ContainerStatus.STORED, Shelf, t0.AddHours(1));
-        await SeedContainerAsync(ContainerStatus.STORED, Shelf, t0.AddHours(2));
-        await SeedContainerAsync(ContainerStatus.STORED, OtherShelf, t0.AddMinutes(-5));
-        await SeedContainerAsync(ContainerStatus.CREATED, null, t0.AddMinutes(-10));
-        var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
-
-        var response = await AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest(ProductId: ProductId, Count: 2));
-
-        Assert.Equal([oldest, second], response.Lines.Select(l => l.ContainerId));
-        Assert.Equal(2, response.ContainerCount);
-        Assert.Equal(0, response.DoneCount);
-        var product = Assert.Single(response.Products);
-        Assert.Equal(2, product.ContainerCount);
-    }
-
-    [Fact]
-    public async Task Outbound_pick_fails_when_not_enough_containers_are_free()
-    {
-        await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow);
-        var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
-
-        var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
-            AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest(ProductId: ProductId, Count: 2)));
-
-        Assert.Equal("not_enough_stored_containers", ex.Code);
-    }
-
-    [Fact]
     public async Task A_container_on_one_live_outbound_voucher_cannot_go_on_another()
     {
-        var container = await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow);
+        var container = await SeedContainerAsync(ContainerStatus.STAGED_OUTBOUND, Shelf, DateTimeOffset.UtcNow);
         var first = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
         var second = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
         await AddLines().HandleAsync(first, new AddStockVoucherLinesRequest([container]));
@@ -132,33 +107,31 @@ public sealed class StockVoucherHandlerTests
             AddLines().HandleAsync(second, new AddStockVoucherLinesRequest([container])));
         Assert.Equal("voucher_container_on_other_voucher", ex.Code);
 
-        // The FIFO pick skips it as well.
-        var pick = await Assert.ThrowsAsync<DomainValidationException>(() =>
-            AddLines().HandleAsync(second, new AddStockVoucherLinesRequest(ProductId: ProductId, Count: 1)));
-        Assert.Equal("not_enough_stored_containers", pick.Code);
+
     }
 
     [Fact]
     public async Task Outbound_rejects_a_container_of_another_warehouse()
     {
-        var container = await SeedContainerAsync(ContainerStatus.STORED, OtherShelf, DateTimeOffset.UtcNow);
+        var container = await SeedContainerAsync(ContainerStatus.STAGED_OUTBOUND, OtherShelf, DateTimeOffset.UtcNow);
         var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
 
         var ex = await Assert.ThrowsAsync<DomainValidationException>(() =>
             AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest([container])));
 
-        Assert.Equal("voucher_container_wrong_warehouse", ex.Code);
+        Assert.Equal("voucher_container_not_at_outbound", ex.Code);
     }
 
     [Fact]
-    public async Task Validator_wants_either_container_ids_or_a_product_pick()
+    public async Task Validator_requires_explicit_container_ids()
     {
         var validator = new AddStockVoucherLinesValidator();
 
         Assert.False((await validator.ValidateAsync(new AddStockVoucherLinesRequest())).IsValid);
         Assert.False((await validator.ValidateAsync(new AddStockVoucherLinesRequest([Guid.NewGuid()], ProductId, 1))).IsValid);
         Assert.False((await validator.ValidateAsync(new AddStockVoucherLinesRequest(ProductId: ProductId))).IsValid);
-        Assert.True((await validator.ValidateAsync(new AddStockVoucherLinesRequest(ProductId: ProductId, Count: 3))).IsValid);
+        Assert.False((await validator.ValidateAsync(new AddStockVoucherLinesRequest(ProductId: ProductId, Count: 3))).IsValid);
+        Assert.True((await validator.ValidateAsync(new AddStockVoucherLinesRequest([Guid.NewGuid()]))).IsValid);
     }
 
     [Fact]
@@ -190,9 +163,9 @@ public sealed class StockVoucherHandlerTests
     }
 
     [Fact]
-    public async Task Outbound_confirm_remains_unavailable_even_for_a_stale_draft()
+    public async Task Outbound_confirm_revalidates_the_staging_state()
     {
-        var container = await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow);
+        var container = await SeedContainerAsync(ContainerStatus.STAGED_OUTBOUND, Shelf, DateTimeOffset.UtcNow);
         var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
         await AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest([container]));
         await using (var db = Db())
@@ -203,41 +176,15 @@ public sealed class StockVoucherHandlerTests
             await db.SaveChangesAsync();
         }
 
-        var ex = await Assert.ThrowsAsync<AppException>(() => Confirm().HandleAsync(voucherId));
+        var ex = await Assert.ThrowsAsync<DomainValidationException>(() => Confirm().HandleAsync(voucherId));
 
-        Assert.Equal("outbound_stock_posting_not_supported", ex.Code);
-    }
-
-    [Fact]
-    public async Task Outbound_confirm_does_not_claim_document_only_confirmation_as_stock_posting()
-    {
-        var container = await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow);
-        var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
-        await AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest([container]));
-
-        var error = await Assert.ThrowsAsync<AppException>(() => Confirm().HandleAsync(voucherId));
-        Assert.Equal(501, error.StatusCode);
-        Assert.Equal(StockVoucherStatus.DRAFT, (await Db().StockVouchers.FindAsync(voucherId))!.Status);
-    }
-
-    [Fact]
-    public async Task Fifo_pick_skips_a_container_a_robot_is_already_moving()
-    {
-        var t0 = DateTimeOffset.UtcNow.AddDays(-1);
-        var moving = await SeedContainerAsync(ContainerStatus.STORED, Shelf, t0);
-        var next = await SeedContainerAsync(ContainerStatus.STORED, Shelf, t0.AddHours(1));
-        _transports.Moving.Add(moving);
-        var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
-
-        var response = await AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest(ProductId: ProductId, Count: 1));
-
-        Assert.Equal(next, Assert.Single(response.Lines).ContainerId);
+        Assert.Equal("voucher_container_not_at_outbound", ex.Code);
     }
 
     [Fact]
     public async Task A_container_in_transport_cannot_be_added_or_confirmed()
     {
-        var container = await SeedContainerAsync(ContainerStatus.STORED, Shelf, DateTimeOffset.UtcNow);
+        var container = await SeedContainerAsync(ContainerStatus.STAGED_OUTBOUND, Shelf, DateTimeOffset.UtcNow);
         var voucherId = await CreateVoucherAsync(StockVoucherType.OUTBOUND);
         _transports.Moving.Add(container);
 
@@ -249,7 +196,7 @@ public sealed class StockVoucherHandlerTests
         _transports.Moving.Clear();
         await AddLines().HandleAsync(voucherId, new AddStockVoucherLinesRequest([container]));
         _transports.Moving.Add(container);
-        var confirm = await Assert.ThrowsAsync<AppException>(() => Confirm().HandleAsync(voucherId));
-        Assert.Equal("outbound_stock_posting_not_supported", confirm.Code);
+        var confirm = await Assert.ThrowsAsync<ConflictException>(() => Confirm().HandleAsync(voucherId));
+        Assert.Equal("voucher_container_in_transport", confirm.Code);
     }
 }

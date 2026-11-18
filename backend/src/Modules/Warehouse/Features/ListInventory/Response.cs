@@ -13,4 +13,5 @@ public sealed record InventoryStockItemResponse(
     int ContainerCount,
     DateTimeOffset UpdatedAt);
 
-public sealed record ListInventoryResponse(IReadOnlyList<InventoryStockItemResponse> Items, int Total);
+public sealed record ListInventoryResponse(IReadOnlyList<InventoryStockItemResponse> Items, int Total,
+    int WarehouseContainerCount = 0, int UnallocatedContainerCount = 0);

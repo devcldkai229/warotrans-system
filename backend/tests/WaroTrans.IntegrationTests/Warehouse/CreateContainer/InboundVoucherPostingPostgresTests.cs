@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Services;
 using WaroTrans.Warehouse.Contracts;
@@ -88,8 +87,7 @@ public sealed partial class ContainerBatchPostgresTests
         var request = Request() with { StockVoucherId = voucher.Id };
         await using (var db = Warehouse(new InvalidLastContainer()))
         await using (var codes = Codes())
-        await using (var navigation = Navigation())
-            await Assert.ThrowsAsync<DbUpdateException>(() => Handler(db, new WaroTrans.BuildingBlocks.Persistence.CodeSequences.BusinessCodeGenerator(codes), navigation).HandleAsync(request));
+            await Assert.ThrowsAsync<DbUpdateException>(() => Handler(db, new WaroTrans.BuildingBlocks.Persistence.CodeSequences.BusinessCodeGenerator(codes)).HandleAsync(request));
         await using var check = Warehouse();
         Assert.Empty(await check.Containers.ToListAsync());
         Assert.Empty(await check.StockVoucherLines.ToListAsync());
@@ -150,7 +148,6 @@ public sealed partial class ContainerBatchPostgresTests
         Assert.Equal(20, await check.ContainerMovements.CountAsync());
         // A retry after physical putaway/config or Product changes reads the posting receipt, without re-admission.
         await using (var changed = Warehouse()) { (await changed.Products.FindAsync(_productA))!.IsActive = false; await changed.SaveChangesAsync(); }
-        _receiving.InboundStorageLocations.Clear();
         var retry = await client.PostAsync($"{Vouchers}/{request.StockVoucherId}/confirm", null);
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         Assert.Equal(receipt.StockPostedAt, (await retry.Content.ReadFromJsonAsync<StockVoucherDetailResponse>())!.StockPostedAt);
@@ -184,7 +181,7 @@ public sealed partial class ContainerBatchPostgresTests
             var (request, batch) = await LinkedAsync(client);
             await using (var db = Warehouse())
             {
-                if (scenario == "wrong-location") (await db.Containers.FindAsync(batch.Items[0].Id))!.CurrentStorageLocationId = null;
+                if (scenario == "wrong-location") (await db.Containers.FindAsync(batch.Items[0].Id))!.CurrentStorageLocationId = _location;
                 if (scenario == "contents")
                 {
                     // Contents and receipt must remain structurally valid: use a legacy row attached to this draft.
@@ -219,7 +216,7 @@ public sealed partial class ContainerBatchPostgresTests
         await using (var navigation = Navigation())
         {
             var handler = new ConfirmStockVoucherHandler(db, _transportLookup, new TestActor(), NullLogger<ConfirmStockVoucherHandler>.Instance,
-                new ReceivingLocationResolver(db, new MapEndpointCatalog(navigation), Options.Create(_receiving)));
+                new MapEndpointCatalog(navigation));
             await Assert.ThrowsAsync<DbUpdateException>(() => handler.HandleAsync(request.StockVoucherId!.Value));
         }
         await using var check = Warehouse();
@@ -286,7 +283,7 @@ public sealed partial class ContainerBatchPostgresTests
         Assert.Equal(0, await TotalAsync());
         var outbound = await client.PostAsJsonAsync(Vouchers, new { warehouseId = _warehouse, type = "OUTBOUND" });
         var other = (await outbound.Content.ReadFromJsonAsync<StockVoucherDetailResponse>())!;
-        Assert.Equal(HttpStatusCode.NotImplemented, (await client.PostAsync($"{Vouchers}/{other.Id}/confirm", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync($"{Vouchers}/{other.Id}/confirm", null)).StatusCode);
     }
 
     private async Task<StockVoucherDetailResponse> DraftAsync(HttpClient client)
@@ -308,7 +305,9 @@ public sealed partial class ContainerBatchPostgresTests
     private async Task<int> TotalAsync()
     {
         await using var db = Warehouse();
-        return await db.InventoryStocks.SumAsync(s => s.ContainerCount);
+        var inventory = await new WaroTrans.Warehouse.Features.ListInventory.ListInventoryHandler(db)
+            .HandleAsync(new WaroTrans.Warehouse.Features.ListInventory.ListInventoryRequest(_warehouse, null, 0, 100), default);
+        return inventory.WarehouseContainerCount;
     }
     private async Task<Guid> RackAsync()
     {

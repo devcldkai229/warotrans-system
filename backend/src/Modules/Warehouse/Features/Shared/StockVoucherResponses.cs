@@ -59,7 +59,7 @@ internal static class StockVoucherProgress
 {
     public static bool IsDone(StockVoucherType type, ContainerStatus status) =>
         type == StockVoucherType.INBOUND
-            ? status is ContainerStatus.STORED or ContainerStatus.ISSUED
+            ? status is ContainerStatus.STORED or ContainerStatus.STAGED_OUTBOUND or ContainerStatus.ISSUED
             : status == ContainerStatus.ISSUED;
 }
 
@@ -116,7 +116,7 @@ internal static class StockVoucherQueries
                 ProductName = l.Product.Name,
                 l.Container.CurrentStorageLocationId,
                 LocationCode = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.Code : null,
-                EndpointId = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.EndpointId : (Guid?)null,
+                EndpointId = l.Container.CurrentStorageLocation != null ? l.Container.CurrentStorageLocation.EndpointId : l.Container.CurrentEndpointId,
                 l.Container.CurrentLevelNo,
                 l.Container.ContentsQuantity,
                 l.Container.ContentsUnit

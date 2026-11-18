@@ -46,7 +46,6 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
     private readonly Guid _location = Guid.NewGuid();
     private readonly Guid _endpoint = Guid.NewGuid();
     private readonly Guid _map = Guid.NewGuid();
-    private readonly ReceivingOptions _receiving = new();
 
     public async Task InitializeAsync()
     {
@@ -66,6 +65,7 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         await db.Database.MigrateAsync();
         await using var navigation = Navigation();
         await navigation.Database.MigrateAsync();
+        await using (var transportation = Transportation()) await transportation.Database.MigrateAsync();
         var category = new ProductCategory { Id = Guid.NewGuid(), Code = "CAT", Name = "Category" };
         db.ProductCategories.Add(category);
         db.Warehouses.Add(new WaroTrans.Warehouse.Entities.Warehouse { Id = _warehouse, Code = "WH-TEST", Name = "Receiving", IsActive = true });
@@ -77,7 +77,6 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         navigation.MapVersions.Add(new MapVersion { Id = _map, WarehouseId = _warehouse, Code = "MAP-TEST", Name = "Map", VersionNo = 1, Status = MapStatus.PUBLISHED });
         navigation.Endpoints.Add(new Endpoint { Id = _endpoint, MapVersionId = _map, Code = "EP-DOCK", Name = "Dock", EndpointType = EndpointType.WAYPOINT, IsEnabled = true });
         await navigation.SaveChangesAsync();
-        _receiving.InboundStorageLocations[_warehouse.ToString()] = _location;
     }
 
     public async Task DisposeAsync()
@@ -107,7 +106,7 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         Assert.Equal(10, batch.Items.Count);
         Assert.False(batch.Replayed);
         Assert.Equal(18, batch.Items.Single(i => i.GroupKey == "a" && i.ContainerNo == 2).ContentsQuantity);
-        Assert.All(batch.Items, i => { Assert.Equal(_location, i.CurrentStorageLocationId); Assert.Equal(_endpoint, i.CurrentEndpointId); });
+        Assert.All(batch.Items, i => { Assert.Null(i.CurrentStorageLocationId); Assert.Null(i.CurrentEndpointId); });
         await using var db = Warehouse();
         Assert.Equal(11, await db.Containers.CountAsync());
         Assert.Null((await db.Containers.SingleAsync(c => c.Id == old.Id)).ContentsQuantity);
@@ -164,16 +163,14 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         var request = Request();
         await using (var db = Warehouse(new InvalidLastContainer()))
         await using (var codes = Codes())
-        await using (var navigation = Navigation())
         {
-            var handler = Handler(db, new BusinessCodeGenerator(codes), navigation);
+            var handler = Handler(db, new BusinessCodeGenerator(codes));
             await Assert.ThrowsAsync<DbUpdateException>(() => handler.HandleAsync(request));
         }
         await using (var check = Warehouse()) Assert.Empty(await check.Containers.ToListAsync());
         await using var retryDb = Warehouse();
         await using var retryCodes = Codes();
-        await using var retryNavigation = Navigation();
-        var result = await Handler(retryDb, new BusinessCodeGenerator(retryCodes), retryNavigation).HandleAsync(request);
+        var result = await Handler(retryDb, new BusinessCodeGenerator(retryCodes)).HandleAsync(request);
         Assert.False(result.Replayed);
         Assert.Equal(10, await retryDb.Containers.CountAsync());
         Assert.Empty(await retryDb.InventoryStocks.ToListAsync());
@@ -203,17 +200,25 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
     }
 
     [IsolatedPostgresFact]
-    public async Task Migration_round_trip_preserves_a_legacy_container_without_inventing_contents()
+    public async Task Migration_preserves_legacy_rows_and_backfills_the_owner_from_a_posted_receipt()
     {
         await using var db = Warehouse();
         var migrations = db.Database.GetMigrations().ToArray();
-        Assert.EndsWith("AddAtomicInboundVoucherPosting", migrations[^1]);
+        Assert.EndsWith("AddGateStagingAndUnlocatedReceiving", migrations[^1]);
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(migrations[^2]);
         var id = Guid.NewGuid();
         var actor = new TestActor().AccountId!.Value;
         var now = DateTimeOffset.UtcNow;
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO warehouse.containers (id, product_id, barcode, status, created_by, created_at, updated_at) VALUES ({id}, {_productA}, {"CTN-LEGACY"}, {"CREATED"}, {actor}, {now}, {now})");
+        var admittedId = Guid.NewGuid();
+        var voucherId = Guid.NewGuid();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO warehouse.stock_vouchers (id, code, type, status, warehouse_id, created_by, created_at, confirmed_at, updated_at, stock_posted_at)
+            VALUES ({voucherId}, {"PN-LEGACY"}, {"INBOUND"}, {"CONFIRMED"}, {_warehouse}, {actor}, {now}, {now}, {now}, {now});
+            INSERT INTO warehouse.containers (id, product_id, barcode, status, created_by, created_at, updated_at, inbound_stock_voucher_id, inventory_storage_location_id, inventory_level_no)
+            VALUES ({admittedId}, {_productA}, {"CTN-LEGACY-POSTED"}, {"IN_TRANSIT"}, {actor}, {now}, {now}, {voucherId}, {_location}, {1});
+            """);
         await migrator.MigrateAsync();
         var old = await db.Containers.SingleAsync(c => c.Id == id);
         Assert.Equal("CTN-LEGACY", old.Barcode);
@@ -222,10 +227,16 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         Assert.Null(old.ContentsUnit);
         Assert.Null(old.CreationRequestId);
         Assert.Null(old.InboundStockVoucherId);
+        Assert.Null(old.WarehouseId);
+        var admitted = await db.Containers.SingleAsync(c => c.Id == admittedId);
+        Assert.Equal(_warehouse, admitted.WarehouseId);
+        Assert.Equal(voucherId, admitted.InboundStockVoucherId);
+        Assert.Equal(_location, admitted.InventoryStorageLocationId);
+        Assert.Null(admitted.CurrentStorageLocationId);
     }
 
     [IsolatedPostgresFact]
-    public async Task Real_navigation_catalog_requires_an_enabled_endpoint_on_a_published_map()
+    public async Task Batch_registration_does_not_require_a_published_gate()
     {
         await using var app = await ServerAsync();
         using var client = app.GetTestClient();
@@ -233,14 +244,14 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         var map = await navigation.MapVersions.SingleAsync();
         map.Status = MapStatus.DRAFT;
         await navigation.SaveChangesAsync();
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(Route, Request())).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(Route, Request())).StatusCode);
         map.Status = MapStatus.PUBLISHED;
         var endpoint = await navigation.Endpoints.SingleAsync();
         endpoint.IsEnabled = false;
         await navigation.SaveChangesAsync();
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(Route, Request())).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(Route, Request())).StatusCode);
         await using var db = Warehouse();
-        Assert.Empty(await db.Containers.ToListAsync());
+        Assert.Equal(20, await db.Containers.CountAsync());
     }
 
     private CreateContainerRequest Request() => new(WarehouseId: _warehouse, RequestId: Guid.NewGuid(), ContainerCount: 10,
@@ -250,8 +261,8 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         .UseNpgsql(_connection).AddInterceptors(interceptors).Options);
     private NavigationDbContext Navigation() => new(new DbContextOptionsBuilder<NavigationDbContext>().UseNpgsql(_connection).Options);
     private CodeSequenceDbContext Codes() => new(new DbContextOptionsBuilder<CodeSequenceDbContext>().UseNpgsql(_connection).Options);
-    private CreateContainerBatchHandler Handler(WarehouseDbContext db, IBusinessCodeGenerator codes, NavigationDbContext navigation) =>
-        new(db, codes, new TestActor(), new CreateContainerValidator(), new MapEndpointCatalog(navigation), Options.Create(_receiving), NullLogger<CreateContainerBatchHandler>.Instance);
+    private CreateContainerBatchHandler Handler(WarehouseDbContext db, IBusinessCodeGenerator codes) =>
+        new(db, codes, new TestActor(), new CreateContainerValidator(), NullLogger<CreateContainerBatchHandler>.Instance);
 
     private async Task<WebApplication> ServerAsync()
     {
@@ -263,11 +274,14 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         builder.Services.AddDbContext<CodeSequenceDbContext>(o => o.UseNpgsql(_connection));
         builder.Services.AddScoped<IBusinessCodeGenerator, BusinessCodeGenerator>();
         builder.Services.AddScoped<IMapEndpointCatalog, MapEndpointCatalog>();
-        builder.Services.AddSingleton(Options.Create(_receiving));
         builder.Services.AddScoped<IValidator<CreateContainerRequest>, CreateContainerValidator>();
         builder.Services.AddScoped<CreateContainerHandler>();
         builder.Services.AddScoped<CreateContainerBatchHandler>();
-        builder.Services.AddScoped<WaroTrans.Warehouse.Features.Shared.ReceivingLocationResolver>();
+        builder.Services.AddValidatorsFromAssembly(typeof(WaroTrans.Warehouse.WarehouseModule).Assembly);
+        builder.Services.AddScoped<WaroTrans.Warehouse.Features.ListContainers.ListContainersHandler>();
+        builder.Services.AddScoped<WaroTrans.Warehouse.Features.ListInventory.ListInventoryHandler>();
+        builder.Services.AddScoped<WaroTrans.Warehouse.Features.AddStockVoucherLines.AddStockVoucherLinesHandler>();
+        builder.Services.AddScoped<IValidator<WaroTrans.Warehouse.Features.AddStockVoucherLines.AddStockVoucherLinesRequest>, WaroTrans.Warehouse.Features.AddStockVoucherLines.AddStockVoucherLinesValidator>();
         builder.Services.AddScoped<WaroTrans.Warehouse.Features.ConfirmStockVoucher.ConfirmStockVoucherHandler>();
         builder.Services.AddScoped<WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherHandler>();
         builder.Services.AddScoped<IValidator<WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherRequest>, WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherValidator>();
@@ -279,6 +293,7 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         builder.Services.AddAuthorization(options => options.AddPolicy(AuthorizationPolicies.StaffOrAdmin, policy => policy.RequireAuthenticatedUser().RequireRole("STAFF", "ADMIN")));
         builder.Services.AddPermissionAuthorization();
         builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
+        RegisterTransport(builder.Services);
         builder.Services.AddProblemDetails();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         var app = builder.Build();
@@ -290,6 +305,10 @@ public sealed partial class ContainerBatchPostgresTests : IAsyncLifetime
         WaroTrans.Warehouse.Features.CreateStockVoucher.CreateStockVoucherEndpoint.MapCreateStockVoucher(warehouse);
         WaroTrans.Warehouse.Features.ConfirmStockVoucher.ConfirmStockVoucherEndpoint.MapConfirmStockVoucher(warehouse);
         WaroTrans.Warehouse.Features.GetStockVoucher.GetStockVoucherEndpoint.MapGetStockVoucher(warehouse);
+        WaroTrans.Warehouse.Features.AddStockVoucherLines.AddStockVoucherLinesEndpoint.MapAddStockVoucherLines(warehouse);
+        WaroTrans.Warehouse.Features.ListContainers.ListContainersEndpoint.MapListContainers(warehouse);
+        WaroTrans.Warehouse.Features.ListInventory.ListInventoryEndpoint.MapListInventory(warehouse);
+        WaroTrans.Transportation.Features.CreateTransportRequest.CreateTransportRequestEndpoint.Map(app.MapGroup("/api/transportation"));
         await app.StartAsync();
         return app;
     }

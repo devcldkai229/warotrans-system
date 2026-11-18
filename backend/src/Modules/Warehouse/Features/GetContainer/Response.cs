@@ -19,5 +19,6 @@ public sealed record ContainerDetailsResponse(
     string? ContentsUnit = null,
     Guid? CreationRequestId = null,
     string? CreationGroupKey = null,
-    int? CreationGroupOrdinal = null
+    int? CreationGroupOrdinal = null,
+    Guid? CurrentEndpointId = null
 );
