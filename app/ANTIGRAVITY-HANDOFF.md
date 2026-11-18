@@ -7,9 +7,9 @@ Cập nhật ngày 13/11/2026 theo quyết định mới của chủ dự án. B
 - Antigravity phụ trách FE mobile trong `app/`: UI/UX, navigation, state, typed API client, contract mapping, realtime, native lifecycle, FE tests và tài liệu tích hợp.
 - Codex phụ trách BE và trả lời/chốt nghiệp vụ với chủ dự án. Khi thiếu BE contract, ghi yêu cầu cụ thể cho Codex; không tự sửa backend/DB/robot để làm UI đi qua.
 - Phân vai AI không tự thay ownership của thành viên trong checklist, DoD hoặc % Complete của MasterPlan. Các module Fleet/Robot/Identity/Operations vẫn cần phối hợp đúng owner thực tế.
-- Workspace FE: `/mnt/Data/Capstone Project - WaroTrans/warotrans-system`.
-- Nhánh FE: `feature/mobile-stock-voucher-batches`, tách từ mốc app `1ed36b7`. Đọc `git log` để lấy commit bàn giao mới nhất; không hardcode HEAD phải bằng mốc cũ.
-- Workspace BE riêng: `/mnt/Data/Capstone Project - WaroTrans/warotrans-system/.worktrees/stock-voucher-backend`, nhánh `feature/stock-voucher-backend`. Antigravity không sửa workspace BE. Codex dùng worktree này khi làm BE để không checkout/đổi nhánh trong workspace FE đang mở.
+- Workspace chung FE/BE là repo chính tại `/mnt/Data/Capstone Project - WaroTrans/warotrans-system`.
+- Nhánh chung là `feature/mobile-stock-voucher-batches`. Cả Antigravity và Codex tích hợp thay đổi vào nhánh này. Người dùng chạy backend từ thư mục gốc bằng `dotnet run --project backend/src/WaroTrans.Host --launch-profile http`.
+- Worktree `.worktrees/stock-voucher-backend` giữ nhánh BE cũ làm mốc lịch sử. BE FIFO `cae03e0` đã nằm trên nhánh chung qua merge `96674e1`, cùng FE tích hợp `339d377`.
 - Mốc `1ed36b7` trước đó bị commit/push vào `feature/mobile-vietnamese-mode`. Nhánh FE mới chứa mốc đó; commit vẫn tồn tại trên nhánh cũ. Không tự force-push, reset, revert hoặc xóa nhánh tiếng Việt để “dọn lịch sử”.
 
 ## 2. Đọc trước khi sửa
@@ -118,7 +118,7 @@ Contract do Codex/owner BE xác nhận trước khi nối. Không tự bịa URL
 - Plan gốc có baseline SDK 57/no-upgrade-in-slice; đó là thông tin thời điểm lập plan. Không coi 3 file dirty là lý do tự nâng tiếp hoặc tự rollback SDK. Antigravity phụ trách FE có thể rà soát upgrade như một nhóm riêng, giữ đúng ý định của chủ dự án.
 - Từ quyết định 13/11: **sau mỗi nhóm chỉnh sửa, kiểm tra rồi tự commit**, không hỏi lại để chờ duyệt. Push feature branch theo quy trình hiện có. Người dùng có thể tiếp tục yêu cầu sửa bằng commit sau; vẫn đưa bước nghiệm thu rõ ràng.
 - Trước Git mutation: `git status`, branch và staged diff; chỉ stage file/hunk của task. Không `git add .`, không gộp thay đổi của người khác, không force-push hoặc push thẳng main/develop. Giữ công việc đang có.
-- Chỉ một agent chịu trách nhiệm Git trong mỗi worktree. Không checkout BE branch trong workspace FE hoặc ngược lại. Giao tiếp bằng commit hash, contract/audit và yêu cầu người dùng chuyển giữa hai công cụ; không cùng sửa một file.
+- Hai agent có thể sửa song song ở các file khác nhau trong repo chính. Thực hiện thao tác Git lần lượt. Kiểm tra nhánh và diff trước khi stage, chỉ stage file hoặc hunk thuộc phần mình phụ trách. Dùng commit hash và contract để bàn giao trên cùng nhánh.
 - Sau code: `npm run typecheck`, `npm test` trong `app/`; export web khi ảnh hưởng bundle, iOS khi cần. Dùng tests có giá trị cho validation/contract/race/persistence, không viết tests chỉ mirror giao diện.
 - Không chạy seed/reset hoặc BE integration tests vào DB dùng chung. Không fake ACK, stock, claim, allocation, offline sync, fixtures hoặc robot state trong production path.
 - Giữ ThemeTokens/shared UI, font sàn 12pt, touch 44pt, useTopInset/safe area/dock, loading/empty/error/stale đúng; lỗi trong modal phải thấy được trong modal. Ngôn ngữ UI ngắn gọn, tránh banner nội bộ thừa.

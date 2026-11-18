@@ -2,7 +2,7 @@
 
 ## Phạm vi và cách bắt đầu
 
-- Phân vai AI ngày 13/11/2026: Antigravity phụ trách FE app; Codex phụ trách BE và tư vấn/chốt nghiệp vụ với chủ dự án. Prompt tiếp nhận và trạng thái bàn giao ở [ANTIGRAVITY-HANDOFF.md](ANTIGRAVITY-HANDOFF.md). Dùng workspace/nhánh riêng, không checkout nhánh của agent kia trong cùng working tree.
+- Phân vai AI ngày 13/11/2026: Antigravity phụ trách FE app; Codex phụ trách BE và tư vấn/chốt nghiệp vụ với chủ dự án. Prompt tiếp nhận và trạng thái bàn giao ở [ANTIGRAVITY-HANDOFF.md](ANTIGRAVITY-HANDOFF.md). Dùng chung nhánh `feature/mobile-stock-voucher-batches` trong repo chính để tích hợp và chạy cả FE lẫn BE. Trước khi sửa hoặc commit, kiểm tra trạng thái Git và phối hợp nếu có thay đổi đồng thời. Mỗi bên chỉ stage phần mình phụ trách.
 - Chỉ sửa `app/`. Đọc BE/Web/rules để đối chiếu; không sửa endpoint, DTO BE, quyền, migration, DB, robot, infrastructure hoặc source của role khác.
 - Đọc [README](README.md), [rules/README](../rules/README.md), rồi rules 00–06, 09, 99 và rule liên quan trước khi code. Đọc source feature/API đang dùng, không quét mọi tài liệu cho mỗi task.
 - Quyết định mới của người dùng ưu tiên theo rules/README. README ghi nghiệp vụ đích; route/DTO/handler đang chạy là bằng chứng triển khai. Nếu khác nhau, nêu gap và phối hợp BE, không tự đổi nghiệp vụ.
