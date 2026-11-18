@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const load = require('./load-module.cjs')();
-const { mappedLocations, stationPoints, containerOrigin, transportDestinations, containerReadiness,
+const { transportFlow, mappedLocations, stationPoints, containerOrigin, transportDestinations, containerReadiness,
   activeContainerIds, movementDetail, validateMovementFields, parseOutboundFifoCount, outboundFifoScopeKey } = load('src/features/transport/transportDraft.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const ep = (id, code, type = 'WAYPOINT', map = 'map') => ({ id, code, name: code, endpointType: type, mapVersionId: map, isEnabled: true });
@@ -66,4 +66,14 @@ test('outbound FIFO count validation enforces 1..200 and scope key tracks every 
   assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, destinationEndpointId: 'gate-2' }));
   assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, mapId: 'map-2' }));
   assert.notEqual(outboundFifoScopeKey(base), outboundFifoScopeKey({ ...base, warehouseId: 'wh-2' }));
+});
+
+test('transportFlow maps both seeded and verbose workflow codes to their supported flow', () => {
+  assert.equal(transportFlow('INBOUND'), 'inbound');
+  assert.equal(transportFlow('INBOUND_PUTAWAY'), 'inbound');
+  assert.equal(transportFlow('OUTBOUND'), 'outbound');
+  assert.equal(transportFlow('OUTBOUND_RETRIEVAL'), 'outbound');
+  assert.equal(transportFlow('INTERNAL_RELOCATION'), 'storage');
+  assert.equal(transportFlow('POINT_TO_POINT_TRANSPORT'), 'direct');
+  assert.equal(transportFlow('CUSTOM_UNKNOWN'), 'unsupported');
 });

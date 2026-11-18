@@ -30,8 +30,9 @@ import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { t } from '../../shared/i18n';
 
 const workflowNames: Record<string, string> = {
-  INBOUND_PUTAWAY: 'Inbound Putaway', OUTBOUND_RETRIEVAL: 'Outbound Retrieval', INTERNAL_RELOCATION: 'Internal Relocation',
-  POINT_TO_POINT_TRANSPORT: 'Point To Point', REPLENISHMENT: 'Replenishment',
+  INBOUND: 'Inbound Putaway', INBOUND_PUTAWAY: 'Inbound Putaway',
+  OUTBOUND: 'Outbound Retrieval', OUTBOUND_RETRIEVAL: 'Outbound Retrieval',
+  INTERNAL_RELOCATION: 'Internal Relocation', POINT_TO_POINT_TRANSPORT: 'Point To Point', REPLENISHMENT: 'Replenishment',
 };
 type ViewFilter = 'ready' | 'all' | 'location';
 type Picker = { kind: 'receiving' | 'origin' | 'destination' | 'bulk' | 'fifo-gate'; containerId?: string } | null;
@@ -183,7 +184,7 @@ export function TransportCreationScreen() {
     const initial = data.previous ? data.previous.details.filter(line => data.containers.some(item => item.id === line.containerId)).map(line => line.containerId)
       : data.containers.filter(item => (JSON.parse(barcodesKey) as string[]).includes(item.barcode)).map(item => item.id);
     setSelected(initial);
-    if (matched?.code === 'INBOUND_PUTAWAY' && data.previous) {
+    if (transportFlow(matched?.code || '') === 'inbound' && data.previous) {
       const sources = [...new Set(data.previous.details.map(line => line.sourceEndpointId))];
       if (sources.length === 1 && stationPoints(data.map.endpoints, data.map.id, 'INBOUND').some(point => point.endpointId === sources[0])) setReceivingId(sources[0]);
     }
@@ -432,7 +433,10 @@ export function TransportCreationScreen() {
         onPress={() => chooseWorkflow(item.id)} style={({ pressed }) => [styles.workflowRow, pressed && styles.pressed]}>
         <View style={styles.workflowIcon}><Package size={20} color={colors.primaryText} /></View>
         <View style={styles.flex}><Text variant="headline">{workflowNames[item.code] || item.name}</Text>
-          <Text variant="caption">{item.code === 'INBOUND_PUTAWAY' ? 'Receiving → Storage' : item.code === 'OUTBOUND_RETRIEVAL' ? 'Storage → Shipping' : item.code === 'INTERNAL_RELOCATION' ? 'Move Between Storage Locations' : 'Use Published Workflow'}</Text></View>
+          <Text variant="caption">{(() => {
+            const itemFlow = transportFlow(item.code);
+            return itemFlow === 'inbound' ? 'Receiving → Storage' : itemFlow === 'outbound' ? 'Storage → Shipping' : itemFlow === 'storage' ? 'Move Between Storage Locations' : 'Use Published Workflow';
+          })()}</Text></View>
         <ChevronRight size={18} color={colors.textMuted} />
       </Pressable>)}
     </ScrollView> : <>

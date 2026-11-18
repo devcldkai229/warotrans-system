@@ -9,8 +9,8 @@ export type TransportFlow = 'inbound' | 'outbound' | 'storage' | 'direct' | 'uns
 export interface TransportPlace { id: string; endpointId: string; label: string; code: string; locationId: string | null }
 
 export function transportFlow(code: string): TransportFlow {
-  if (code === 'INBOUND_PUTAWAY') return 'inbound';
-  if (code === 'OUTBOUND_RETRIEVAL') return 'outbound';
+  if (code === 'INBOUND' || code === 'INBOUND_PUTAWAY') return 'inbound';
+  if (code === 'OUTBOUND' || code === 'OUTBOUND_RETRIEVAL') return 'outbound';
   if (code === 'INTERNAL_RELOCATION') return 'storage';
   if (code === 'POINT_TO_POINT_TRANSPORT') return 'direct';
   return 'unsupported';
