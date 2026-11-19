@@ -1,6 +1,8 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, scanFromURLAsync, useCameraPermissions, type BarcodeType } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -8,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { ArrowRight, Zap, X } from 'lucide-react-native';
+import { ArrowRight, ImageIcon, Zap, X } from 'lucide-react-native';
 import { t, translateText } from '../../shared/i18n';
 import { classifyCode, createScanGuard, SCAN_KIND_LABEL, type ScanKind, type ScannedCode } from '../../shared/scan/scanCodes';
 import { RawText as Text } from '../../shared/ui/Text';
@@ -37,6 +39,8 @@ interface BarcodeScannerHUDProps {
   placeholder?: string;
 }
 
+const BARCODE_TYPES: BarcodeType[] = ['qr', 'code128', 'ean13', 'ean8', 'code39', 'upc_a', 'upc_e'];
+
 export function BarcodeScannerHUD({
   visible,
   onClose,
@@ -59,6 +63,7 @@ export function BarcodeScannerHUD({
   const guard = useRef(createScanGuard());
   const [notice, setNotice] = useState<ScanFeedback | null>(null);
   const [history, setHistory] = useState<{ code: string; ok: boolean; message: string }[]>([]);
+  const [readingImage, setReadingImage] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -135,6 +140,32 @@ export function BarcodeScannerHUD({
     }
   };
 
+  // Backup for a camera that cannot focus or is denied: read the code from a photo or screenshot.
+  const scanFromImage = async () => {
+    if (readingImage) return;
+    triggerHaptic('tap');
+    setReadingImage(true);
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      const uri = picked.canceled ? null : picked.assets?.[0]?.uri;
+      if (!uri) return;
+      const found = await scanFromURLAsync(uri, BARCODE_TYPES);
+      const data = found.find((item) => item.data?.trim())?.data;
+      if (!data) {
+        triggerHaptic('error');
+        setNotice({ ok: false, message: translateText('No code found in this image. Try a sharper photo or type the code.') });
+        return;
+      }
+      guard.current = createScanGuard();
+      await submitBarcode(data);
+    } catch {
+      triggerHaptic('error');
+      setNotice({ ok: false, message: translateText('Could not read this image. Type the code instead.') });
+    } finally {
+      setReadingImage(false);
+    }
+  };
+
   if (!visible) return null;
 
   return (
@@ -177,9 +208,7 @@ export function BarcodeScannerHUD({
                   style={StyleSheet.absoluteFill}
                   facing="back"
                   enableTorch={torchOn}
-                  barcodeScannerSettings={{
-                    barcodeTypes: ['qr', 'code128', 'ean13', 'ean8', 'code39', 'upc_a', 'upc_e'],
-                  }}
+                  barcodeScannerSettings={{ barcodeTypes: BARCODE_TYPES }}
                   onMountError={(error) => {
                     setCameraError(error.message);
                     setCameraActive(false);
@@ -227,6 +256,19 @@ export function BarcodeScannerHUD({
                 ))}
               </View>
             ) : null}
+
+            <Pressable
+              onPress={() => {
+                void scanFromImage();
+              }}
+              disabled={readingImage}
+              style={({ pressed }) => [styles.imageBtn, pressed && styles.submitBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={translateText('Scan from an image')}
+            >
+              {readingImage ? <ActivityIndicator size="small" color="#ffffff" /> : <ImageIcon size={18} color="#ffffff" />}
+              <Text style={styles.imageBtnText}>{translateText(readingImage ? 'Reading image…' : 'Scan from an image')}</Text>
+            </Pressable>
 
             <View style={styles.manualRow}>
               <TextInput
@@ -450,6 +492,23 @@ const createStyles = (_colors: ThemeColors) =>
       flex: 1,
       color: '#cbd5e1',
       fontSize: 12,
+    },
+    imageBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      minHeight: 46,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.14)',
+    },
+    imageBtnText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '700',
+      fontFamily: typography.fontSans,
     },
     manualRow: {
       flexDirection: 'row',
