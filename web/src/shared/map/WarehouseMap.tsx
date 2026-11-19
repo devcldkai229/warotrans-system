@@ -30,7 +30,7 @@ import {
   zoneSwatchStyle,
 } from './mapStyle'
 import { lineStringToPoints, polygonToPoints } from './geoJson'
-import { CHEVRON_PATH, laneGlyphs } from './laneGlyphs'
+import { LANE_ARROW_PATH, laneGlyphs } from './laneGlyphs'
 import { pointInPolygon } from './scene'
 import { t } from '@/shared/i18n'
 /** A Robot as the map draws it: pose from fleet.robots, status for the colour. */
@@ -479,13 +479,10 @@ export function WarehouseMap({
                     {glyphs.chevrons.map((c, index) => (
                       <path
                         key={index}
-                        d={CHEVRON_PATH}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeOpacity={LANE_CHEVRON_OPACITY}
-                        strokeWidth={0.16}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                        d={LANE_ARROW_PATH}
+                        fill="currentColor"
+                        fillOpacity={LANE_CHEVRON_OPACITY}
+                        stroke="none"
                         transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`}
                       />
                     ))}

@@ -1,12 +1,15 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
-import { LogBox, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, LogBox, Platform, StyleSheet, Text, View } from 'react-native';
+import { t } from './src/shared/i18n';
 
 if (__DEV__) {
   LogBox.ignoreLogs([
     'props.pointerEvents is deprecated',
     'Animated: `useNativeDriver`',
     'componentWillReceiveProps has been renamed',
+    // New Architecture: LayoutAnimation no longer needs the Android experimental flag.
+    'setLayoutAnimationEnabledExperimental',
   ]);
 }
 import { Wifi } from 'lucide-react-native';
@@ -29,7 +32,11 @@ import { typography } from './src/shared/theme/typography';
 function AuthenticatedShell() {
   const { session, isLoading, connectionError, retrySession, logout } = useAuth();
   if (connectionError) return <AuthConnectionScreen message={connectionError} loading={isLoading} onRetry={retrySession} onSignOut={logout} />;
-  if (isLoading) return <View style={{ flex: 1 }} />;
+  // Checking the saved session: say so instead of a blank screen (a slow or unreachable server is visible).
+  if (isLoading) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+    <ActivityIndicator size="large" />
+    <Text style={{ fontSize: 15, opacity: 0.7 }}>{t('Connecting to the server…')}</Text>
+  </View>;
   return (
     <NavigationProvider key={session?.id || 'signed-out'}>
       <ToastProvider><SafetyHoldProvider><RealtimeProvider><AppNavigator /></RealtimeProvider></SafetyHoldProvider></ToastProvider>

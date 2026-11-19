@@ -1,3 +1,5 @@
+import { containerLabels, printLabelSheet, qrPayload } from '@/features/labels/printLabels'
+import { issueContainerLabels } from '@/shared/api/warehouses'
 import { useRef, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/authContext'
@@ -42,6 +44,15 @@ const PAGE_SIZE = 50
 export function ContainersSection({ locations, onChanged }: { locations: StorageLocationView[]; onChanged: () => void }) {
   const { capabilities } = useAuth()
   const mayRecover = hasPermission(capabilities, PERMISSIONS.containerRecover)
+  const mayCreate = hasPermission(capabilities, PERMISSIONS.containerCreate)
+  // Pre-printed labels: codes are reserved now; each becomes a container when the phone scans it with a product.
+  const printBlankLabels = async () => {
+    const answer = window.prompt(t('How many blank labels? (1-200)'), '24')
+    const count = Number.parseInt(answer ?? '', 10)
+    if (!Number.isInteger(count) || count < 1 || count > 200) return
+    const { codes } = await issueContainerLabels(count)
+    printLabelSheet(containerLabels(codes, 'WaroTrans', new Date().toLocaleDateString('vi-VN')), t('Blank container labels'))
+  }
   const [recovering, setRecovering] = useState<ManagedContainer | null>(null)
   const [measuring, setMeasuring] = useState<ManagedContainer | null>(null)
   const queryClient = useQueryClient()
@@ -92,6 +103,14 @@ export function ContainersSection({ locations, onChanged }: { locations: Storage
             </option>
           ))}
         </select>
+        {containers.length > 0 ? (
+          <Button variant="ghost" onClick={() => printLabelSheet(containers.map((item) => ({ code: item.barcode, qr: qrPayload('CONTAINER', item.barcode), title: item.productName, subtitle: item.sku })), t('Container labels'))}>
+            {t('Print labels')}
+          </Button>
+        ) : null}
+        {mayCreate ? (
+          <Button variant="tonal" onClick={() => void printBlankLabels()}>{t('Print blank labels')}</Button>
+        ) : null}
       </SectionHead>
 
       <div className={cx('transition-opacity duration-200', listing.isPlaceholderData && 'opacity-60')}>

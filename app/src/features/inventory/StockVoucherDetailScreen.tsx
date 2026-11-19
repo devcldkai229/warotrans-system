@@ -2,7 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Box, FileText, MapPin } from 'lucide-react-native';
+import { Box, CheckCircle2, FileText, MapPin, Printer, QrCode, ScanLine, Truck } from 'lucide-react-native';
+import { Scanner } from '../../shared/scan/Scanner';
+import { Code128View, QrCodeView } from '../../shared/scan/CodeViews';
+import { qrPayload } from '../../shared/scan/scanCodes';
+import { printLabels } from '../../shared/scan/printLabels';
 import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
@@ -22,7 +26,7 @@ import { VoucherDraftWorkspace } from './VoucherDraftWorkspace';
 export function StockVoucherDetailScreen() {
   const { styles, colors } = useThemedStyles(createVoucherStyles);
   const { session } = useAuth();
-  const { params, goBack } = useNavigation();
+  const { params, goBack, navigate } = useNavigation();
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
   const voucherId = typeof params?.voucherId === 'string' ? params.voucherId : '';
@@ -36,6 +40,9 @@ export function StockVoucherDetailScreen() {
   const inbound = data?.type === 'INBOUND';
   const prep = useVoucherPreparation(session?.id || '', data?.warehouseId || '', voucherId, data?.type || 'INBOUND');
   const [acting, setActing] = useState(false);
+  const [checked, setChecked] = useState<string[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [actionError, setActionError] = useState<string | null>(() => typeof params?.batchError === 'string' ? params.batchError : null);
   const alive = useRef(true);
@@ -188,6 +195,20 @@ export function StockVoucherDetailScreen() {
               {!!data.confirmedAt && <Text variant="caption" color="textSecondary">{t('Confirmed {date}', { date: voucherDate(data.confirmedAt) })}</Text>}
               {data.status === 'CONFIRMED' && <Text variant="caption" color="textSecondary">{data.stockPostedAt ? t('Stock posted {date}', { date: voucherDate(data.stockPostedAt) }) : 'Stock posting status is unavailable.'}</Text>}
               {!!data.cancelledAt && <Text variant="caption" color="textSecondary">{t('Cancelled {date}', { date: voucherDate(data.cancelledAt) })}</Text>}
+              {/* A confirmed voucher with containers still to move: dispatch robots with every open container filled in
+                  (inbound picks up at the receiving point, outbound delivers to the shipping point). */}
+              {data.status === 'CONFIRMED' && data.lines.some(line => !line.done) ? <Button
+                title={inbound ? 'Dispatch Robots To Put Away' : 'Dispatch Robots To Ship'} icon={Truck} fullWidth
+                onPress={() => navigate('transport_create', { workflow: inbound ? 'inbound' : 'outbound', containers: data.lines.filter(line => !line.done && (!checked.length || checked.includes(line.containerBarcode))).map(line => line.containerBarcode) })} /> : null}
+              {data.status !== 'CANCELLED' && data.lines.length ? <Button title={checked.length ? t('Scan Containers ({done}/{total} checked)', { done: checked.length, total: data.lines.length }) : 'Scan Containers To Check'}
+                icon={ScanLine} variant="outline" fullWidth onPress={() => setScanning(true)} /> : null}
+              <Button title={showCode ? 'Hide Voucher Code' : 'Show Voucher Code'} icon={QrCode} variant="ghost" size="sm" onPress={() => setShowCode(value => !value)} />
+              {showCode ? <View style={{ alignItems: 'center', gap: 10, paddingVertical: 8 }}>
+                <QrCodeView value={qrPayload('VOUCHER', data.code)} size={170} />
+                <Code128View value={data.code} width={260} height={52} />
+                <Text variant="code" selectable>{data.code}</Text>
+                <Button title="Print Voucher Code" icon={Printer} variant="outline" size="sm" onPress={() => { void printLabels([{ code: data.code, qr: qrPayload('VOUCHER', data.code), title: inbound ? t('Inbound voucher') : t('Outbound voucher'), subtitle: voucherDate(data.createdAt) }], data.code).catch(() => {}); }} />
+              </View> : null}
               {data.status === 'DRAFT' && canCreateVoucher(session) && (confirmingCancel ? (
                 <View style={styles.error}>
                   <Text variant="caption" color="dangerText">Cancel this draft voucher? Attached containers will be released.</Text>
@@ -209,7 +230,7 @@ export function StockVoucherDetailScreen() {
               {data.lines.map((line, index) => <View key={line.id} style={[styles.summaryRow, index === 0 && { paddingTop: 4 }, index === data.lines.length - 1 && { borderBottomWidth: 0, paddingBottom: 2 }]}>
                 <View style={styles.summaryIcon}><Box size={18} strokeWidth={1.8} color={colors.primaryText} /></View>
                 <View style={styles.summaryInfo}>
-                  <View style={styles.between}><Text variant="code" selectable style={{ flex: 1 }}>{line.containerBarcode}</Text><StatusPill status={line.containerStatus} /></View>
+                  <View style={styles.between}>{checked.includes(line.containerBarcode) ? <CheckCircle2 size={16} color={colors.success} /> : null}<Text variant="code" selectable style={{ flex: 1 }}>{line.containerBarcode}</Text><StatusPill status={line.containerStatus} /></View>
                   <Text variant="bodyMedium" numberOfLines={1}>{line.productName}</Text>
                   <Text variant="caption" color="textSecondary" numberOfLines={1}>
                     {line.productSku}
@@ -221,6 +242,15 @@ export function StockVoucherDetailScreen() {
               </View>)}
             </Card>}
           </ScrollView>
+          <Scanner visible={scanning} continuous expect={['CONTAINER']} title="Check containers of this voucher" manualLabel="Container code"
+            placeholder="Scan or type a container code" onClose={() => setScanning(false)}
+            onScanResult={(_raw, scanned) => {
+              const line = data.lines.find(item => item.containerBarcode.toUpperCase() === scanned.code.toUpperCase());
+              if (!line) return { ok: false, message: t('Not on this voucher') };
+              if (checked.includes(line.containerBarcode)) return { ok: false, message: t('Already checked') };
+              setChecked(previous => [...previous, line.containerBarcode]);
+              return { ok: true, message: t('On this voucher · {product}', { product: line.productName }) };
+            }} />
           {data.status === 'DRAFT' && (() => {
             const canAllocateFromPlan = inbound && !data.lines.length && prep.ready && !!prep.value.groups?.length;
             const canAttachOutbound = !inbound && !data.lines.length && prep.ready && selectedIds.length > 0;

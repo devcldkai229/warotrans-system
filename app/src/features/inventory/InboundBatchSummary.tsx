@@ -20,8 +20,7 @@ export function InboundBatchSummary({ groups }: { groups: InboundBatchGroup[] })
         {!!group.product && <Text variant="code" color="textSecondary" numberOfLines={1}>{group.product.sku}</Text>}
       </View>
       <View style={styles.summaryMetrics}>
-        <Text variant="bodyMedium" style={styles.tabular}>{t('{count} boxes', { count: group.containerCount || '—' })}</Text>
-        <Text variant="caption" color="textSecondary" style={styles.tabular}>{t('{quantity} {unit} per box', { quantity: group.quantity || '—', unit: group.unit })}</Text>
+        <Text variant="bodyMedium" style={styles.tabular}>{t('{count} containers', { count: group.containerCount || '—' })}</Text>
       </View>
     </View>
   ))}</View>;

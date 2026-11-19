@@ -49,22 +49,24 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
     public Task<string> NextRobotCodeAsync(CancellationToken cancellationToken = default) =>
         NextFixedAsync("robot", "RBT-", 3, cancellationToken);
 
+    // Container, request and job codes are short enough to read out and type: a letter, the day as ddMMyy and a
+    // three-digit daily number (C181126001, R181126001, J181126001; a 1000th one simply gets a fourth digit).
     public Task<string> NextContainerCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
-        NextDailyAsync("container", "CTN-", day, cancellationToken);
+        NextShortDailyAsync("container", "C", day, cancellationToken);
 
     public async Task<IReadOnlyList<string>> NextContainerCodesAsync(int count, DateOnly? day = null, CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
         var bucket = day ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var first = await NextValuesAsync($"container:{bucket:yyyyMMdd}", bucket, count, cancellationToken);
-        return Enumerable.Range(0, count).Select(i => $"CTN-{bucket:yyyyMMdd}-{(first + i).ToString().PadLeft(6, '0')}").ToArray();
+        return Enumerable.Range(0, count).Select(i => ShortDailyCode("C", bucket, first + i)).ToArray();
     }
 
     public Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
-        NextDailyAsync("request", "REQ-", day, cancellationToken);
+        NextShortDailyAsync("request", "R", day, cancellationToken);
 
     public Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
-        NextDailyAsync("job", "JOB-", day, cancellationToken);
+        NextShortDailyAsync("job", "J", day, cancellationToken);
 
     public Task<string> NextInboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default) =>
         NextDailyAsync("voucher-in", "PN-", day, cancellationToken);
@@ -100,6 +102,36 @@ public sealed class BusinessCodeGenerator(CodeSequenceDbContext db) : IBusinessC
         var value = await NextValueAsync(key, bucket, cancellationToken);
         return $"{codePrefix}{bucket:yyyyMMdd}-{value.ToString().PadLeft(6, '0')}";
     }
+
+    private async Task<string> NextShortDailyAsync(string keyPrefix, string letter, DateOnly? day, CancellationToken cancellationToken)
+    {
+        var bucket = day ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        // Same sequence key as before, so a day that already issued codes keeps counting instead of repeating numbers.
+        var value = await NextValueAsync($"{keyPrefix}:{bucket:yyyyMMdd}", bucket, cancellationToken);
+        return ShortDailyCode(letter, bucket, value);
+    }
+
+    public async Task<bool> IsIssuedContainerCodeAsync(string code, CancellationToken cancellationToken = default)
+    {
+        if (TryParseShortDailyCode(code, "C") is not { } parsed) return false;
+        var key = $"container:{parsed.Day:yyyyMMdd}";
+        var next = await db.CodeSequences.AsNoTracking().Where(s => s.Key == key).Select(s => (long?)s.NextValue).FirstOrDefaultAsync(cancellationToken);
+        return next is { } value && parsed.Number >= 1 && parsed.Number < value;
+    }
+
+    /// <summary>Day and number of a short daily code (C181126001 = 18/11/2026, 1), or null when it is not one.</summary>
+    public static (DateOnly Day, long Number)? TryParseShortDailyCode(string? code, string letter)
+    {
+        var value = code?.Trim() ?? string.Empty;
+        if (value.Length < letter.Length + 9 || !value.StartsWith(letter, StringComparison.Ordinal)) return null;
+        var digits = value[letter.Length..];
+        if (!digits.All(char.IsAsciiDigit)) return null;
+        if (!DateOnly.TryParseExact(digits[..6], "ddMMyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var day)) return null;
+        return long.TryParse(digits[6..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) ? (day, number) : null;
+    }
+
+    public static string ShortDailyCode(string letter, DateOnly day, long value) =>
+        $"{letter}{day:ddMMyy}{value.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(3, '0')}";
 
     private Task<long> NextValueAsync(string key, DateOnly? day, CancellationToken cancellationToken) =>
         NextValuesAsync(key, day, 1, cancellationToken);

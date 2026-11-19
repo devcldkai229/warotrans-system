@@ -73,7 +73,9 @@ public sealed class CreateContainerBatchHandler(
                 throw new NotFoundException("A batch product was not found or is inactive.", "product_not_found");
             var byId = products.ToDictionary(p => p.Id);
             var now = DateTimeOffset.UtcNow;
-            var barcodes = await codes.NextContainerCodesAsync(rows.Count, DateOnly.FromDateTime(now.UtcDateTime), cancellationToken);
+            var barcodes = request.LabelBarcode is { } label
+                ? await ClaimLabelAsync(label.Trim(), cancellationToken)
+                : await codes.NextContainerCodesAsync(rows.Count, DateOnly.FromDateTime(now.UtcDateTime), cancellationToken);
             if (barcodes.Count != rows.Count || barcodes.Any(code => string.IsNullOrWhiteSpace(code) || code.Length > 100)
                 || barcodes.Distinct(StringComparer.Ordinal).Count() != rows.Count)
                 throw new InvalidOperationException("The code generator did not provide a distinct code for every container.");
@@ -98,6 +100,14 @@ public sealed class CreateContainerBatchHandler(
             var detail = voucher is null ? null : await StockVoucherQueries.LoadDetailAsync(db, voucher.Id, cancellationToken);
             return Response(request, containers, new Dictionary<Guid, Guid>(), false, detail);
         }
+        catch (DbUpdateException exception) when (request.LabelBarcode is not null
+            && UniqueViolation.ConstraintOf(exception) is { } constraint && constraint.Contains("barcode", StringComparison.OrdinalIgnoreCase))
+        {
+            // Two phones scanning the same label: the unique barcode decides, the second is told it is taken.
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+            db.ChangeTracker.Clear();
+            throw new ConflictException($"Label {request.LabelBarcode.Trim()} is already on a container.", "label_already_used");
+        }
         catch (DbUpdateException exception) when (UniqueViolation.ConstraintOf(exception) == "ux_containers_creation_request")
         {
             // The unique receipt ordinal arbitrates simultaneous requests, including a first request for the key.
@@ -106,6 +116,16 @@ public sealed class CreateContainerBatchHandler(
             return await FindReceiptAsync(request, actor, fingerprint, rows.Count, cancellationToken)
                 ?? throw new ConflictException("The receiving request changed. Retry using the same RequestId.", "container_creation_request_conflict");
         }
+    }
+
+    /// <summary>A scanned pre-printed label: issued by the daily sequence and not on any container yet.</summary>
+    private async Task<IReadOnlyList<string>> ClaimLabelAsync(string label, CancellationToken cancellationToken)
+    {
+        if (!await codes.IsIssuedContainerCodeAsync(label, cancellationToken))
+            throw new DomainValidationException($"{label} is not a container label issued by WaroTrans.", "label_not_issued");
+        if (await db.Containers.AsNoTracking().AnyAsync(c => c.Barcode == label, cancellationToken))
+            throw new ConflictException($"Label {label} is already on a container.", "label_already_used");
+        return [label];
     }
 
     private async Task<CreateContainerBatchResponse?> FindReceiptAsync(CreateContainerRequest request, Guid actor, string hash, int count, CancellationToken cancellationToken)

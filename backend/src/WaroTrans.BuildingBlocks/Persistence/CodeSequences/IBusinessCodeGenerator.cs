@@ -19,6 +19,12 @@ public interface IBusinessCodeGenerator
         return codes;
     }
 
+    /// <summary>
+    /// Whether a container code (C + ddMMyy + number) was issued by the daily sequence, for a pre-printed label that
+    /// no container uses yet. Reads the sequence without moving it.
+    /// </summary>
+    Task<bool> IsIssuedContainerCodeAsync(string code, CancellationToken cancellationToken = default) => Task.FromResult(false);
+
     Task<string> NextRequestCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);
     Task<string> NextJobCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);
     Task<string> NextInboundVoucherCodeAsync(DateOnly? day = null, CancellationToken cancellationToken = default);

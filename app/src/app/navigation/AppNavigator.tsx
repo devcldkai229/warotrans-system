@@ -17,18 +17,19 @@ import { OfflineBannerHUD } from '../../features/monitoring/OfflineBannerHUD';
 import { BlockPathHazardScreen } from '../../features/safety/BlockPathHazardScreen';
 import { FleetRecallScreen } from '../../features/safety/FleetRecallScreen';
 import { PayloadRecoveryScreen } from '../../features/safety/PayloadRecoveryScreen';
-import { TransportCreationScreen } from '../../features/transport/TransportCreationScreen';
+import { TransportComposerScreen } from '../../features/transport/TransportComposerScreen';
 import { TransportHistoryScreen } from '../../features/transport/TransportHistoryScreen';
 import { TransportRequestDetailScreen } from '../../features/transport/TransportRequestDetailScreen';
 import { TransportScreen } from '../../features/transport/TransportScreen';
 import { AppHeader } from '../shell/AppHeader';
+import { ScanScreen } from '../../features/scan/ScanScreen';
 import { ThemeColors } from '../../shared/theme/colors';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { BottomTabBar } from './BottomTabBar';
 import { isMainTabScreen, useNavigation } from './NavigationContext';
 
 export function AppNavigator() {
-  const { session, isAuthenticated, logout, updateZone } = useAuth();
+  const { session, isAuthenticated, logout } = useAuth();
   const { currentScreen, goBack, params, navigate } = useNavigation();
   const styles = useThemedStyles(createStyles);
 
@@ -68,7 +69,7 @@ export function AppNavigator() {
       case 'transport_create':
       case 'replenishment':
       case 'point_to_point':
-        return <TransportCreationScreen />;
+        return <TransportComposerScreen />;
       case 'create_container':
         return <CreateContainerScreen />;
       case 'inventory_lookup':
@@ -89,13 +90,7 @@ export function AppNavigator() {
         return <OfflineBannerHUD />;
       case 'scanner':
       case 'scanner_hud':
-        return (
-          <BarcodeScannerHUD
-            visible={true}
-            onClose={goBack}
-            onScanResult={() => goBack()}
-          />
-        );
+        return <ScanScreen />;
       default:
         return <HomeScreen />;
     }
@@ -108,13 +103,9 @@ export function AppNavigator() {
           operatorName={session.fullName}
           operatorRole={session.role === 'ADMIN' ? 'Admin' : session.role === 'TECHNICIAN' ? 'Technician' : 'Staff'}
           initials={session.avatarInitials}
-          zone={session.zone}
           onLogout={logout}
-          onZoneChange={updateZone}
           initialOpen={
-            params?.modal === 'zone'
-              ? 'zone'
-              : params?.modal === 'account'
+            params?.modal === 'account'
                 ? 'account'
                 : params?.modal === 'notifications'
                   ? 'notifications'

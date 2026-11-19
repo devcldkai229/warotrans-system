@@ -12,7 +12,7 @@ namespace WaroTrans.Evidence.Worker.Services;
 /// mapping relies on it). The client request token only dedupes about a minute at AWS: the processing job row is the
 /// real guard, and <see cref="FindAsync"/> adopts a job submitted before a crash instead of submitting it twice.
 /// </summary>
-public sealed class MediaConvertTranscoder(IOptions<EvidenceMediaOptions> options) : IMediaTranscoder
+public sealed class MediaConvertTranscoder(IOptions<EvidenceMediaOptions> options, IOptions<EvidenceAwsOptions> aws) : IMediaTranscoder
 {
     private AmazonMediaConvertClient? _client;
 
@@ -31,7 +31,8 @@ public sealed class MediaConvertTranscoder(IOptions<EvidenceMediaOptions> option
                 config.AuthenticationRegion = o.Region;
             }
 
-            _client = new AmazonMediaConvertClient(config);
+            var credentials = aws.Value.Credentials();
+            _client = credentials is null ? new AmazonMediaConvertClient(config) : new AmazonMediaConvertClient(credentials, config);
         }
 
         _ = cancellationToken;

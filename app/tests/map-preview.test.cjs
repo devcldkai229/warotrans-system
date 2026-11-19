@@ -42,7 +42,7 @@ test('the shared V018 snapshot matches the scan identity and the five source-map
 
 test('junctions have a distinct label and map color from lanes and restricted areas', () => {
   assert.equal(zoneLabel('JUNCTION'), 'Junction');
-  assert.equal(zoneLabel('SINGLE_OCCUPANCY'), 'Single Occupancy');
+  assert.equal(zoneLabel('SINGLE_OCCUPANCY'), 'Single-occupancy');
   for (const type of ['KEEP_OUT','NO_STOP','SPEED','SINGLE_OCCUPANCY']) assert.notEqual(zoneColor('JUNCTION'), zoneColor(type));
 });
 

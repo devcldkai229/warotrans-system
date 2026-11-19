@@ -1,15 +1,10 @@
-import { colors } from '../theme/colors';
+import { ZONE_LABEL, zoneColorOf } from './mapStyle';
 
+/** Zone colour as on the web map (mapStyle.ts). */
 export function zoneColor(type: string): string {
-  switch (type) {
-    case 'KEEP_OUT': return colors.danger;
-    case 'SPEED': return colors.warning;
-    case 'JUNCTION': return colors.success;
-    case 'NO_STOP': return colors.textSecondary;
-    default: return colors.primary;
-  }
+  return zoneColorOf(type);
 }
 
 export function zoneLabel(type: string): string {
-  return type.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+  return ZONE_LABEL[type] ?? type.toLowerCase().replaceAll('_', ' ').replace(/\w/g, letter => letter.toUpperCase());
 }

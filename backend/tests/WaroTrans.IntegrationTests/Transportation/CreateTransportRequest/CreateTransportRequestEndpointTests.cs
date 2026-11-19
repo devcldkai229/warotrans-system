@@ -85,7 +85,7 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var created = (await response.Content.ReadFromJsonAsync<RequestDto>(JsonOptions))!;
         Assert.Equal($"{Route}/{created.Id}", response.Headers.Location?.ToString());
-        Assert.StartsWith("REQ-", created.RequestCode);
+        Assert.Matches(@"^R\d{9}$", created.RequestCode);
         Assert.Equal("SUBMITTED", created.Status);
         Assert.Equal(1, created.PlanSchemaVersion);
         Assert.Equal(TestAccountId, created.RequestedBy);
@@ -394,7 +394,7 @@ public sealed class CreateTransportRequestEndpointTests(WaroTransWebApplicationF
         Assert.Equal("RBT-NAMED", one.GetProperty("robotCode").GetString());
         Assert.Equal(robot, one.GetProperty("assignedRobotId").GetGuid());
         Assert.False(string.IsNullOrWhiteSpace(one.GetProperty("workflowName").GetString()));
-        Assert.StartsWith("REQ-", one.GetProperty("requestCodes")[0].GetString());
+        Assert.Matches(@"^R\d{9}$", one.GetProperty("requestCodes")[0].GetString());
         Assert.NotEmpty(one.GetProperty("containerBarcodes").EnumerateArray());
 
         var foreign = (await (await client.GetWithTokenAsync(jobsUrl, tech)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items")[0];

@@ -19,11 +19,9 @@ import {
   Layers,
   MapPin,
   Navigation,
-  ParkingSquare,
   Scan,
   Tag,
   X,
-  Zap,
 } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto } from '../api/navigationApi';
 import { getAccessToken, getApiBaseUrl } from '../api/client';
@@ -38,11 +36,16 @@ import { triggerHaptic } from '../utils/haptics';
 import { resolveMapPreviewUri, worldToMapPercent } from '../utils/mapCoordinates';
 import { BaseMapLayer } from './layers/BaseMapLayer';
 import { InfrastructureLayer } from './layers/InfrastructureLayer';
+import { EndpointIcon, EndpointTile } from './EndpointGlyph';
+import { ROBOT_COLOR } from './mapStyle';
+import { t } from '../i18n';
+import { BatteryIndicator, OnlineBadge } from '../ui/RobotBadges';
+import { robotStatusLabel } from './robotLabels';
 import { RobotLayer } from './layers/RobotLayer';
 import { GridLabels } from './layers/GridLabels';
 import { MapAnchor } from './MapAnchor';
 import { MapControl, MapHud } from './MapHud';
-import { findMapModel, spacedLocations } from './mapModel';
+import { findMapModel, mapHeading, spacedLocations } from './mapModel';
 import { mapRobotState, mapUpdateLabel, sampleAgeLabel, type MapUpdateMode } from './mapTelemetry';
 import { createMapFrame, metricScale, worldToBase, type MapFrame } from './mapTransform';
 import { zoneColor, zoneLabel } from './mapPresentation';
@@ -59,6 +62,8 @@ interface Props {
   fullBleed?:boolean;
   /** Given when the user may localize robots (robot.localize): adds "Localize Robot Here" to the robot panel. */
   onLocalizeRobot?:(robotId:string,endpointId:string)=>Promise<void>;
+  /** Pick mode: tapping a station hands it to the caller instead of opening its detail panel. */
+  onPickEndpoint?:(endpoint:EndpointDto)=>void;
 }
 type LayerKey='stations'|'labels'|'zones'|'lanes'|'grid'|'scan';
 
@@ -192,7 +197,7 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
   </View>;
 }
 
-function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
+function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot,onPickEndpoint}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
   const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const layerItems = useMemo(() => getLayerItems(colors, isDark), [colors, isDark]);
@@ -242,6 +247,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
   const selectEndpoint = (item: EndpointDto) => {
     if (Date.now() - camera.lastGestureAt > 200) {
       triggerHaptic('tap');
+      if (onPickEndpoint) { onPickEndpoint(item); return; }
       setEndpointId(item.id);
       setSheet('endpoint');
     }
@@ -295,15 +301,14 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
           </Animated.View>
           {layers.grid ? <GridLabels map={map} frame={frame} camera={camera} /> : null}
           {layers.stations ? visibleEndpoints.map(({ x, y, endpoint: item }) => {
-            const Icon = item.endpointType === 'CHARGER' ? Zap : ['PARK', 'PARKING'].includes(item.endpointType) ? ParkingSquare : MapPin;
             return <MapAnchor key={item.id} point={{ x, y }} camera={camera}>
               <MapControl label={`${item.name}, ${item.code}, ${item.endpointType}`} onPress={() => selectEndpoint(item)} selected={endpointId === item.id} style={styles.station}>
-                <View style={styles.stationGlyph}><Icon size={16} color={colors.primaryText} /></View>
+                <EndpointTile type={item.endpointType} headingDeg={mapHeading(item.yaw, map.originYaw, frame.rotated) - 90} selected={endpointId === item.id} isDark={isDark} surface={colors.surface} />
               </MapControl>
             </MapAnchor>;
           }) : null}
           {layers.labels ? visibleEndpoints.filter(p => labelsDetailed || p.endpoint.id === endpointId).map(({ x, y, endpoint: item }) => <MapAnchor key={`label-${item.id}`} point={{ x, y }} camera={camera} width={110} height={24} passThrough>
-            <Text variant="caption" fontWeight="600" numberOfLines={1} style={[styles.label, { marginTop: 36 }]}>{item.code}</Text>
+            <Text variant="caption" fontWeight="600" numberOfLines={1} style={[styles.label, { marginTop: 36 }]}>{item.name || item.code}</Text>
           </MapAnchor>) : null}
           <RobotLayer map={map} frame={frame} robots={robots} camera={camera} selected={selectedRobot} now={now} updateMode={updateMode} onSelect={selectRobot} />
         </View>
@@ -349,7 +354,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                 ? `${map.code} · V${map.versionNo} · ${map.resolution} m/px`
                 : sheet === 'endpoint'
                 ? `${endpoint?.code} · ${endpoint?.endpointType}`
-                : `${robot?.status ?? 'Offline'} · ${state?.label ?? 'Idle'}`}
+                : robot?.isOnline ? `${t(robotStatusLabel(robot.status))} · ${t('Online')}` : 'Offline'}
             </Text>
           </View>
           <Pressable
@@ -559,12 +564,11 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                       {enabledEndpoints.map((e, idx) => {
                         const isLast = idx === enabledEndpoints.length - 1;
                         const isSelected = endpointId === e.id;
-                        const Icon = e.endpointType === 'CHARGER' ? Zap : ['PARK', 'PARKING'].includes(e.endpointType) ? ParkingSquare : MapPin;
                         return (
                           <View key={e.id}>
                             <View style={[styles.stationItem, isSelected && styles.stationItemSelected]}>
                               <View style={styles.stationIconBox}>
-                                <Icon size={16} color={colors.textPrimary} />
+                                <EndpointIcon type={e.endpointType} size={16} isDark={isDark} />
                               </View>
                               <Pressable
                                 style={styles.stationInfo}
@@ -625,13 +629,7 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
             <View style={styles.detailContainer}>
               <View style={styles.detailHeroCard}>
                 <View style={styles.detailHeroIconBox}>
-                  {endpoint.endpointType === 'CHARGER' ? (
-                    <Zap size={22} color={colors.primary} />
-                  ) : ['PARK', 'PARKING'].includes(endpoint.endpointType) ? (
-                    <ParkingSquare size={22} color={colors.primary} />
-                  ) : (
-                    <MapPin size={22} color={colors.primary} />
-                  )}
+                  <EndpointIcon type={endpoint.endpointType} size={22} isDark={isDark} />
                 </View>
                 <View style={styles.detailHeroText}>
                   <Text variant="title">{endpoint.name}</Text>
@@ -693,37 +691,29 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
           ) : sheet === 'robot' && robot && state ? (
             /* Robot Detail View */
             <View style={styles.detailContainer}>
-              <View style={styles.detailHeroCard}>
-                <View style={styles.detailHeroIconBox}>
-                  <Bot size={22} color={robot.isOnline ? colors.primaryText : colors.textMuted} />
+              <View style={[styles.robotHero, { borderColor: robot.isOnline ? colors.successBorder : colors.borderStrong }]}>
+                <View style={styles.robotHeroTop}>
+                  <View style={[styles.robotAvatar, { backgroundColor: (ROBOT_COLOR[robot.status] ?? colors.textMuted) + '22' }]}>
+                    <Bot size={24} color={robot.isOnline ? ROBOT_COLOR[robot.status] ?? colors.primaryText : colors.textMuted} />
+                  </View>
+                  <View style={styles.detailHeroText}>
+                    <Text variant="title" numberOfLines={1} style={{ fontFamily: typography.fontMono }}>{robot.code}</Text>
+                    <Text variant="caption" color="textSecondary" numberOfLines={1}>{robot.name || robot.code}</Text>
+                  </View>
+                  <OnlineBadge online={robot.isOnline} />
                 </View>
-                <View style={styles.detailHeroText}>
-                  <Text variant="title" style={{ fontFamily: typography.fontMono }}>{robot.code}</Text>
-                  <Text variant="caption" color="textSecondary">{state.label}</Text>
-                </View>
-                <StatusPill status={robot.isOnline ? 'ONLINE' : 'OFFLINE'} label={robot.isOnline ? 'Online' : 'Offline'} dot />
-              </View>
-
-              <View style={styles.specBox}>
-                <View style={styles.specRow}>
-                  <Text variant="caption" color="textSecondary">Battery Level</Text>
-                  <Text variant="bodyMedium" fontWeight="700">
-                    {formatBattery(robot.batteryPercent)}
-                  </Text>
-                </View>
-                <View style={styles.specRow}>
-                  <Text variant="caption" color="textSecondary">Navigation Status</Text>
-                  <Text variant="bodyMedium" fontWeight="600">{robot.navigationStatus || 'IDLE'}</Text>
-                </View>
-                <View style={styles.specRow}>
-                  <Text variant="caption" color="textSecondary">Localization</Text>
-                  <Text variant="bodyMedium" fontWeight="600">{robot.localizationStatus || 'UNKNOWN'}</Text>
-                </View>
-                <View style={styles.specRow}>
-                  <Text variant="caption" color="textSecondary">Coordinates</Text>
-                  <Text variant="bodyMedium" fontWeight="700" style={{ fontFamily: typography.fontMono }}>
-                    X {robot.poseX.toFixed(2)}m · Y {robot.poseY.toFixed(2)}m
-                  </Text>
+                <View style={styles.robotStats}>
+                  <View style={styles.robotStat}>
+                    <Text variant="caption" color="textSecondary">Battery</Text>
+                    <BatteryIndicator percent={robot.batteryPercent} charging={robot.status === 'CHARGING'} size="lg" bar />
+                  </View>
+                  <View style={styles.robotStat}>
+                    <Text variant="caption" color="textSecondary">Status</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ROBOT_COLOR[robot.status] ?? colors.textMuted }} />
+                      <Text variant="bodyMedium" fontWeight="700" numberOfLines={1}>{robotStatusLabel(robot.status)}</Text>
+                    </View>
+                  </View>
                 </View>
               </View>
 
@@ -776,7 +766,12 @@ const createStyles = (colors: ThemeColors, _shadows: unknown, isDark: boolean) =
   root: { ...StyleSheet.absoluteFill, backgroundColor: colors.background, overflow: 'hidden' },
   heading: { position: 'absolute', left: 16, right: 16, gap: 3, paddingTop: 8, paddingBottom: 6 },
   smallState: { position: 'absolute', left: 24, right: 24, justifyContent: 'center' },
-  station: { backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: 24 },
+  station: { backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: 20 },
+  robotHero: { borderWidth: 1.5, borderRadius: 18, padding: 14, gap: 14, backgroundColor: colors.surface },
+  robotHeroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  robotAvatar: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  robotStats: { flexDirection: 'row', gap: 8 },
+  robotStat: { flex: 1, gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surfaceSubtle },
   stationGlyph: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.borderStrong },
   label: { backgroundColor: colors.surface, paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, textAlign: 'center' },
   footer: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },

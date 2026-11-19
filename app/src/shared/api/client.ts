@@ -107,6 +107,31 @@ function isAbortError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
 }
 
+/** A request that gets no answer fails instead of hanging (an unreachable Host must not leave a blank screen). */
+export const REQUEST_TIMEOUT_MS = 15_000;
+
+/** fetch with the caller's signal and a timeout; a timeout throws a network error, a caller's abort stays an abort. */
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS);
+  const caller = init.signal;
+  const forward = () => timeout.abort();
+  if (caller) {
+    if (caller.aborted) timeout.abort();
+    else caller.addEventListener('abort', forward, { once: true });
+  }
+  try {
+    return await fetch(url, { ...init, signal: timeout.signal });
+  } catch (error) {
+    if (caller?.aborted) throw error;
+    if (timeout.signal.aborted) throw new TypeError('Request timed out');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    caller?.removeEventListener('abort', forward);
+  }
+}
+
 function networkError(init: RequestInit = {}, path = ''): ApiError {
   const isWrite = !path.startsWith('/api/identity/') && init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase());
   return new ApiError(0, 'NETWORK_ERROR', isWrite
@@ -269,7 +294,7 @@ async function performTokenRefresh(): Promise<string | null> {
     const baseUrl = getApiBaseUrl();
     const refreshUrl = `${baseUrl}/api/identity/refresh`;
 
-    const res = await fetch(refreshUrl, {
+    const res = await fetchWithTimeout(refreshUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -334,7 +359,7 @@ export async function apiFetch<T>(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       ...init,
       headers,
     });
@@ -370,7 +395,7 @@ export async function apiFetch<T>(
 
         let retryResponse: Response;
         try {
-          retryResponse = await fetch(url, {
+          retryResponse = await fetchWithTimeout(url, {
             ...init,
             headers: retryHeaders,
           });

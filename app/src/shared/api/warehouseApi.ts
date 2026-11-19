@@ -121,6 +121,12 @@ export interface CreateContainerBatchGroupInput {
 }
 export interface CreateContainerBatchBody {
   warehouseId: string; requestId: string; stockVoucherId?: string | null; containerCount: number; groups: CreateContainerBatchGroupInput[];
+  /** A pre-printed label scanned for this one container (containerCount 1): the server checks it was issued and is unused. */
+  labelBarcode?: string;
+}
+/** Codes for pre-printed container labels. Nothing is created until a label is scanned with a product. */
+export function issueContainerLabels(count: number) {
+  return apiFetch<{ codes: string[]; issuedAt: string }>('/api/warehouse/container-labels', { method: 'POST', body: JSON.stringify({ count }) });
 }
 export interface CreatedBatchContainerItem {
   id: string; barcode: string; productId: string; groupKey: string; containerNo: number;

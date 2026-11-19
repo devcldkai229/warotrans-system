@@ -71,3 +71,7 @@ samples/**/*.token
 /infrastructure/terraform/**
 
 
+
+# tools/run-backend.ps1 output
+.logs/
+

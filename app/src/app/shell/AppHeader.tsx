@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Bell, ChevronDown, MapPin } from 'lucide-react-native';
+import { Bell, ScanLine } from 'lucide-react-native';
 import { colors, ThemeColors } from '../../shared/theme/colors';
 import { useTopInset } from '../../shared/theme/layout';
 import { radii } from '../../shared/theme/radii';
@@ -9,21 +9,18 @@ import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Text } from '../../shared/ui';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { triggerHaptic } from '../../shared/utils/haptics';
-import { toast } from '../../shared/context/ToastContext';
 import { AccountSheet } from './AccountSheet';
 import { NotificationSheet } from './NotificationSheet';
-import { ZonePickerModal } from './ZonePickerModal';
 import { useRealtime } from '../../shared/realtime';
 import { useAuth } from '../../features/auth/authContext';
+import { useNavigation } from '../navigation/NavigationContext';
 
 interface AppHeaderProps {
   operatorName?: string;
   operatorRole?: string;
   initials?: string;
-  zone?: string;
   onLogout?: () => void;
-  onZoneChange?: (zone: string) => void;
-  initialOpen?: 'zone' | 'account' | 'notifications';
+  initialOpen?: 'account' | 'notifications';
 }
 
 function initialsOf(name: string): string {
@@ -38,73 +35,52 @@ function initialsOf(name: string): string {
   );
 }
 
-function formatZonePillLabel(z: string): string {
-  if (z.includes('Storage Zone A')) return 'Zone A · A01-A12';
-  if (z.includes('Storage Zone B')) return 'Zone B · B01-B08';
-  if (z.includes('Inbound Dock')) return 'Inbound Dock 01';
-  if (z.includes('Outbound Shipping')) return 'Shipping Bay 01';
-  return z;
-}
-
 /**
  * Enterprise Calm Operations Home Header.
  *
  * Structure:
- *   - Left: BrandMark (40px) + Work Zone Selector Pill (40px height).
+ *   - Left: BrandMark (40px).
  *   - Right: Quick Search (40px) + Notification Bell with Badge (40px) + Operator Avatar (40px).
  */
 export function AppHeader({
   operatorName = 'Alex Tran',
   operatorRole = 'Staff',
   initials,
-  zone = 'Inbound Dock 01',
   onLogout,
-  onZoneChange,
   initialOpen,
 }: AppHeaderProps) {
   const topInset = useTopInset();
   const styles = useThemedStyles(createStyles);
   const { unreadCount } = useRealtime();
   const { session } = useAuth();
-  const [isZoneModalOpen, setIsZoneModalOpen] = useState(initialOpen === 'zone');
+  const { navigate } = useNavigation();
   const [isAccountOpen, setIsAccountOpen] = useState(initialOpen === 'account');
   const [isNotificationOpen, setIsNotificationOpen] = useState(initialOpen === 'notifications');
 
   const avatarInitials = initials ?? initialsOf(operatorName);
 
-  const handleZoneChange = (nextZone: string) => {
-    triggerHaptic('tap');
-    onZoneChange?.(nextZone);
-    setIsZoneModalOpen(false);
-    toast.info(`Switched zone to ${nextZone}`);
-  };
-
   return (
     <View style={[styles.header, { paddingTop: topInset + 4 }]}>
       <View style={styles.row}>
-        {/* Left: Brand Mark (40px) + Work Zone Selector Pill */}
+        {/* Left: Brand Mark (40px) */}
         <View style={styles.leftGroup}>
           <BrandMark size={40} />
-
-          <Pressable
-            onPress={() => {
-              triggerHaptic('tap');
-              setIsZoneModalOpen(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={`Work zone: ${zone}. Tap to change.`}
-            style={({ pressed }) => [styles.zonePill, pressed && styles.zonePillPressed]}
-          >
-            <MapPin size={13} color={colors.primaryText} strokeWidth={2.4} />
-            <Text variant="label" color={colors.textPrimary} numberOfLines={1} style={styles.zoneName}>
-              {formatZonePillLabel(zone)}
-            </Text>
-            <ChevronDown size={13} color={colors.textMuted} strokeWidth={2.2} />
-          </Pressable>
         </View>
 
         {/* Right: Notification Bell + Operator Avatar */}
         <View style={styles.rightGroup}>
+          <Pressable
+            onPress={() => {
+              triggerHaptic('tap');
+              navigate('scanner');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Scan a code"
+            style={({ pressed }) => [styles.iconBtn, styles.scanBtn, pressed && styles.iconBtnPressed]}
+          >
+            <ScanLine size={18} color="#ffffff" strokeWidth={2.4} />
+          </Pressable>
+
           <Pressable
             onPress={() => {
               triggerHaptic('tap');
@@ -138,20 +114,12 @@ export function AppHeader({
         </View>
       </View>
 
-      <ZonePickerModal
-        visible={isZoneModalOpen}
-        zone={zone}
-        onClose={() => setIsZoneModalOpen(false)}
-        onSelect={handleZoneChange}
-      />
-
       <AccountSheet
         visible={isAccountOpen}
         operatorName={operatorName}
         operatorUsername={session?.username}
         operatorRole={operatorRole}
         initials={avatarInitials}
-        zone={zone}
         onClose={() => setIsAccountOpen(false)}
         onLogout={onLogout}
       />
@@ -166,6 +134,7 @@ export function AppHeader({
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolean) =>
   StyleSheet.create({
+    scanBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
     header: {
       backgroundColor: colors.surface,
       borderBottomWidth: 1,
@@ -187,26 +156,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows, isDark: boolea
       gap: 10,
       flex: 1,
       minWidth: 0,
-    },
-    zonePill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      height: 40,
-      paddingHorizontal: 12,
-      borderRadius: radii.full,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: colors.border,
-      maxWidth: 180,
-    },
-    zonePillPressed: {
-      backgroundColor: colors.surfaceMuted,
-    },
-    zoneName: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.textPrimary,
     },
     rightGroup: {
       flexDirection: 'row',

@@ -115,9 +115,10 @@ export interface JobListItem {
   failureCode: string | null;
 }
 export interface JobListResponse { items: JobListItem[]; total: number }
-export async function listJobSummaries(filter: { status?: JobStatus; transportRequestId?: string; take?: number } = {}): Promise<JobListResponse> {
+export async function listJobSummaries(filter: { status?: JobStatus; transportRequestId?: string; search?: string; take?: number } = {}): Promise<JobListResponse> {
   const query = new URLSearchParams();
   if (filter.status) query.set('status', filter.status);
+  if (filter.search) query.set('search', filter.search);
   if (filter.transportRequestId) query.set('transportRequestId', filter.transportRequestId);
   query.set('take', String(Math.min(200, Math.max(1, filter.take ?? 50))));
   return apiFetch<JobListResponse>(`/api/workflow-execution/jobs?${query}`);
@@ -202,6 +203,16 @@ export async function failJobContainer(stepId: string, containerId: string, reas
 }
 export function confirmJobStep(stepId: string, containerId: string | null, note?: string | null) {
   return confirmHandover({ jobStepId: stepId, containerId, note });
+}
+/**
+ * Confirm an INSPECTION_CONFIRM step with its result (the step's declared output inspectionResult). A FAILED result
+ * needs a note; the scanned container is compared by the server like a handover scan.
+ */
+export async function confirmInspection(stepId: string, result: 'PASSED' | 'FAILED', note: string | null, scannedBarcode: string | null, containerId: string | null) {
+  const response = await apiFetch<RuntimeJob>(`/api/workflow-execution/job-steps/${stepId}/confirm`, {
+    method: 'POST', body: JSON.stringify({ containerId: containerId && UUID.test(containerId) ? containerId : null, note: note?.trim() || null, scannedBarcode, inspectionResult: result }),
+  });
+  return (await hydrateJobs([response]))[0];
 }
 /** Staff incident categories → backend IssueReport type and severity (OPS-01). */
 const ISSUE_MAPPING: Record<string, { issueType: string; severity: string }> = {

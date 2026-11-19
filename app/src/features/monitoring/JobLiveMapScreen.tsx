@@ -13,6 +13,11 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { useNavigation } from '../../app/navigation/NavigationContext';
+import { t } from '../../shared/i18n';
+import { usePlaceDirectory } from '../../shared/places/usePlaceDirectory';
+import { BatteryIndicator, OnlineBadge } from '../../shared/ui/RobotBadges';
+import { robotStatusLabel } from '../../shared/maps/robotLabels';
+import { ROBOT_COLOR } from '../../shared/maps/mapStyle';
 import { SubScreenHeader } from '../../shared/components/SubScreenHeader';
 import { ThemeColors } from '../../shared/theme/colors';
 import { dockReservedSpace } from '../../shared/theme/layout';
@@ -53,6 +58,7 @@ export function JobLiveMapScreen() {
   const activeMap = mapQuery.data && mapQuery.data.id === mapId ? mapQuery.data : null;
   const fleetRobots = fleet.robots;
   const liveJob = job.data ? mapJobDetailToAppJobItem(job.data) : null;
+  const places = usePlaceDirectory();
   const mapError = job.error?.message || mapQuery.error?.message || fleet.error?.message || (!jobId ? 'Open a job to view its map.' : null);
   const target = params?.target || 'Unknown Destination';
   const route = params?.route || 'No Job Selected';
@@ -133,33 +139,29 @@ export function JobLiveMapScreen() {
             <View>
               <Text style={styles.sheetRobotId}>{selectedRobot}</Text>
               <Text style={styles.sheetRoute} numberOfLines={1}>
-                {liveJob?.route || route}
+                {liveJob ? `${places.name(liveJob.sourceEndpointCode)} ➔ ${places.name(liveJob.destinationEndpointCode)}` : route}
               </Text>
             </View>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>{telemetryState?.label || 'Telemetry Unavailable'}</Text>
-            </View>
+            {telemetry ? <OnlineBadge online={!!telemetry.isOnline} /> : <OnlineBadge online={false} label="No robot" />}
           </View>
 
           {/* Metric Columns */}
           <View style={styles.metricRow}>
-            <View style={styles.metricCol}>
-              <Text style={styles.metricVal}>
-                {telemetry && Number.isFinite(Number(telemetry.batteryPercent)) ? `${Math.round(Number(telemetry.batteryPercent))}%` : '—'}
-              </Text>
+            <View style={[styles.metricCol, { alignItems: 'center' }]}>
+              <BatteryIndicator percent={telemetry && Number.isFinite(Number(telemetry.batteryPercent)) ? Number(telemetry.batteryPercent) : null} charging={telemetry?.status === 'CHARGING'} />
               <Text style={styles.metricLabel}>Battery</Text>
             </View>
             <View style={styles.metricCol}>
               <Text style={styles.metricVal}>
-                {telemetry && [telemetry.poseX,telemetry.poseY].every(Number.isFinite) ? `${telemetry.poseX.toFixed(1)}m, ${telemetry.poseY.toFixed(1)}m` : '—'}
+                {telemetry && Number.isFinite(Number(telemetry.linearVelocity)) ? `${Math.abs(Number(telemetry.linearVelocity)).toFixed(2)} m/s` : '—'}
               </Text>
-              <Text style={styles.metricLabel}>{lastReported ? 'Last Pose' : 'Pose Snapshot'}</Text>
+              <Text style={styles.metricLabel}>Speed</Text>
             </View>
             <View style={[styles.metricCol, { borderRightWidth: 0 }]}>
-              <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
-                {telemetry?.navigationStatus || 'Unknown'}
+              <Text style={[styles.metricVal, { color: ROBOT_COLOR[telemetry?.status ?? ''] ?? colors.textPrimary }]} numberOfLines={1}>
+                {t(robotStatusLabel(telemetry?.status))}
               </Text>
-              <Text style={styles.metricLabel}>Nav State</Text>
+              <Text style={styles.metricLabel}>Status</Text>
             </View>
           </View>
 
@@ -167,7 +169,7 @@ export function JobLiveMapScreen() {
           <View style={styles.targetBanner}>
             <Clock3 size={15} color={colors.textSecondary} />
             <Text style={styles.targetBannerText} numberOfLines={1}>
-              Target: {liveJob?.target || target}
+              {t('Destination: {place}', { place: liveJob ? places.name(liveJob.destinationEndpointCode) : target })}
             </Text>
           </View>
         </View>

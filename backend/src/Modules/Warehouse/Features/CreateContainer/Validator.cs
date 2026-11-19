@@ -21,6 +21,8 @@ public sealed class CreateContainerValidator : AbstractValidator<CreateContainer
                     context.AddFailure(nameof(request.InitialLevelNo), "InitialLevelNo must be greater than 0.");
                 if (request.WarehouseId.HasValue || request.RequestId.HasValue || request.ContainerCount.HasValue)
                     context.AddFailure(nameof(request.Groups), "Groups is required for batch receiving.");
+                if (request.LabelBarcode is not null)
+                    context.AddFailure(nameof(request.LabelBarcode), "A pre-printed label is claimed with the batch shape.");
                 return;
             }
 
@@ -32,6 +34,8 @@ public sealed class CreateContainerValidator : AbstractValidator<CreateContainer
                 context.AddFailure(nameof(request.RequestId), "RequestId is required and must be reused when retrying this batch.");
             if (request.ContainerCount is null or < 1 or > MaxContainers)
                 context.AddFailure(nameof(request.ContainerCount), $"ContainerCount must be between 1 and {MaxContainers}.");
+            if (request.LabelBarcode is not null && (request.ContainerCount != 1 || string.IsNullOrWhiteSpace(request.LabelBarcode) || request.LabelBarcode.Trim().Length > 32))
+                context.AddFailure(nameof(request.LabelBarcode), "A pre-printed label names exactly one container (ContainerCount 1).");
             if (request.StockVoucherId == Guid.Empty)
                 context.AddFailure(nameof(request.StockVoucherId), "StockVoucherId must be a non-empty UUID.");
             if (request.InitialStorageLocationId == Guid.Empty)

@@ -37,8 +37,8 @@ test('batch review accepts a fully assigned mixed-product lot and never changes 
   assert.equal(inboundBatchProblem('9', groups).message, 'Product group counts must equal the batch container count.');
 });
 
-test('review identifies the group with invalid Product, group count, common quantity or unit', () => {
-  for (const patch of [{ product: null }, { product: { ...product, isActive: false } }, { containerCount: '0' }, { containerCount: '1.5' }, { quantity: '0' }, { quantity: '-1' }, { unit: ' ' }]) {
+test('review identifies the group with invalid Product or group count; contents are not asked for', () => {
+  for (const patch of [{ product: null }, { product: { ...product, isActive: false } }, { containerCount: '0' }, { containerCount: '1.5' }]) {
     const problem = inboundBatchProblem('6', [group('group-1', patch)]);
     assert.equal(problem.groupKey, 'group-1');
   }
@@ -46,6 +46,8 @@ test('review identifies the group with invalid Product, group count, common quan
   assert.match(inboundBatchProblem('10000', [group()]).message, /1 and 9,999/);
   assert.ok(inboundBatchProblem('6', []));
   assert.ok(inboundBatchProblem('12', [group(), group()]));
+  // staff do not manage pieces per container: an empty quantity or unit is not a problem
+  assert.equal(inboundBatchProblem('6', [group('group-1', { quantity: '', unit: '' })]), null);
 });
 
 test('old preparations and legacy cached quantities remain readable while malformed batch caches are rejected', () => {
@@ -103,8 +105,10 @@ test('batch request builder maps groups, decimal precision, unit limits and supp
   });
   assert.throws(() => buildContainerBatchBody('', reqId, '10', groups), /WarehouseId/);
   assert.throws(() => buildContainerBatchBody('wh-1', ' ', '10', groups), /RequestId/);
-  assert.throws(() => buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: '1.2345' })]), /greater than zero/);
-  assert.throws(() => buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { unit: 'u'.repeat(33) })]), /32 characters/);
+  // no contents entered: each container is recorded as one container
+  const plainBody = plain(buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: '', unit: '' })]));
+  assert.equal(plainBody.groups[0].quantityPerContainer, 1);
+  assert.equal(plainBody.groups[0].unit, 'container');
 });
 
 test('preparation requestId validation and batch allocation permission gate work as expected', () => {

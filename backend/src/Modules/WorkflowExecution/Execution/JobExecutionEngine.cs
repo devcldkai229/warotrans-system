@@ -553,6 +553,7 @@ public sealed class JobExecutionEngine(
         }
 
         var note = source.Note;
+        var inspectionResult = InspectionResultFor(operation, source.InspectionResult, note);
         var handoverType = operation switch
         {
             nameof(HumanActionCode.PICKUP_CONFIRM) => HandoverType.PICKUP,
@@ -642,6 +643,9 @@ public sealed class JobExecutionEngine(
             ["confirmedAt"] = JsonSerializer.SerializeToElement(now),
             ["note"] = JsonSerializer.SerializeToElement(note ?? string.Empty)
         };
+        // INSPECTION_CONFIRM declares the output inspectionResult (PASSED / FAILED) in the step registry.
+        if (inspectionResult is not null)
+            step.OutputValues["inspectionResult"] = JsonSerializer.SerializeToElement(inspectionResult);
         SetStepStatus(job, task, step, workflowStep.StepKey, JobStepStatus.COMPLETED, now);
         CompleteTaskIfDone(task);
         await SaveAndPublishAsync(cancellationToken);
@@ -1107,6 +1111,25 @@ public sealed class JobExecutionEngine(
         {
             throw new ConflictException("Someone else is handling this step.", HumanTaskClaimedCode);
         }
+    }
+
+    /// <summary>
+    /// The inspection result belongs to INSPECTION_CONFIRM only: required there (PASSED or FAILED, a failure with a
+    /// reason), refused on every other step so a result is never recorded where nothing reads it.
+    /// </summary>
+    public static string? InspectionResultFor(string operation, string? result, string? note)
+    {
+        var value = string.IsNullOrWhiteSpace(result) ? null : result.Trim().ToUpperInvariant();
+        if (operation != nameof(HumanActionCode.INSPECTION_CONFIRM))
+        {
+            return value is null ? null : throw new DomainValidationException(
+                "An inspection result can only be given on an inspection step.", "inspection_result_not_allowed");
+        }
+        if (value is not ("PASSED" or "FAILED"))
+            throw new DomainValidationException("Choose PASSED or FAILED for the inspection.", "inspection_result_required");
+        if (value == "FAILED" && string.IsNullOrWhiteSpace(note))
+            throw new DomainValidationException("Say why the inspection failed.", "inspection_failure_reason_required");
+        return value;
     }
 
     private async Task EnsureScannedBarcodeMatchesAsync(string? scanned, Guid expected, CancellationToken cancellationToken)

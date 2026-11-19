@@ -421,6 +421,7 @@ export function VerifyModal({
         <BarcodeScannerHUD
           visible={isScannerOpen}
           targetBarcode={targetContainer}
+          expect={['CONTAINER']}
           onClose={() => setIsScannerOpen(false)}
           onScanResult={handleScannerResult}
         />

@@ -166,7 +166,7 @@ public sealed class MultiRobotTripsTests(WaroTransWebApplicationFactory factory)
             Assert.All(opened, e =>
             {
                 Assert.Equal("OPENED", e.GetProperty("sourceStatusCode").GetString());
-                Assert.StartsWith("REQ-", e.GetProperty("requestCode").GetString());
+                Assert.Matches(@"^R\d{9}$", e.GetProperty("requestCode").GetString());
                 Assert.StartsWith("RBT-MR-", e.GetProperty("robotCode").GetString());
                 Assert.Equal(5, e.GetProperty("payload").GetProperty("requestContainerCount").GetInt32());
             });

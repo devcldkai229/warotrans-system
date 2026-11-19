@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, G, Path, Pattern, Rect } from 'react-native-svg';
-import { BatteryMedium, Bot, Layers, MapPin, ParkingSquare, X, Zap } from 'lucide-react-native';
+import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect } from 'react-native-svg';
+import { BatteryMedium, Bot, Layers, X } from 'lucide-react-native';
 import type { EndpointDto, MapVersionDetailDto, ZoneDto } from '../../shared/api/navigationApi';
 import type { RobotDto } from '../../shared/api';
 import { getAccessToken, getApiBaseUrl } from '../../shared/api/client';
@@ -13,7 +13,10 @@ import { BottomSheet } from '../../shared/ui/BottomSheet';
 import { colors, ThemeColors } from '../../shared/theme/colors';
 import { radii } from '../../shared/theme/radii';
 import { ThemeShadows } from '../../shared/theme/shadows';
-import { useThemedStyles } from '../../shared/theme/ThemeContext';
+import { useTheme, useThemedStyles } from '../../shared/theme/ThemeContext';
+import { LANE_ARROW_PATH, laneGlyphs } from '../../shared/maps/laneGlyphs';
+import { LANE_BAND_OPACITY, LANE_BLUE, LANE_CHEVRON_OPACITY, ZONE_FILL_OPACITY } from '../../shared/maps/mapStyle';
+import { EndpointIcon, EndpointTile } from '../../shared/maps/EndpointGlyph';
 import { MapViewport } from '../../shared/maps/MapViewport';
 import { interactiveMapEnabled } from '../../shared/maps/mapFeatures';
 import { mapRobotState, mapUpdateLabel, type MapUpdateMode } from '../../shared/maps/mapTelemetry';
@@ -37,6 +40,7 @@ export function OperationalMap(props: Props) {
 
 function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bottomInset, updateMode = 'polling' }: Props) {
   const styles = useThemedStyles(createStyles);
+  const { isDark } = useTheme();
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [layersOpen, setLayersOpen] = useState(false);
   const [endpointId, setEndpointId] = useState<string | null>(null);
@@ -108,12 +112,22 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
               {Array.from({length: rack.levels}, (_,i) => <Rect key={i} x={a.x+1.5} y={a.y+1.5+i*(b.y-a.y)/rack.levels} width={b.x-a.x-3} height={(b.y-a.y)/rack.levels-3} rx={0.7} fill={colors.mapRack} />)}</G>;
           })}
         </G> : null}
-        {zones.map(zone => <Path key={zone.id} d={zonePath(zone)} fill={zoneColor(zone.zoneType)} fillOpacity={0.07} stroke={zoneColor(zone.zoneType)} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="4 4" fillRule="evenodd" />)}
+        {zones.map(zone => <Path key={zone.id} d={zonePath(zone)} fill={zoneColor(zone.zoneType)} fillOpacity={ZONE_FILL_OPACITY[zone.zoneType] ?? 0.2} stroke={zoneColor(zone.zoneType)} strokeOpacity={0.7} strokeWidth={1.2} fillRule="evenodd" />)}
         {(map.edges || []).filter(e => e.mapVersionId === map.id && e.isActive && e.geometry?.type === 'LineString').map(edge => {
           const points = edge.geometry.coordinates.map(p => point(p[0],p[1]));
-          return points.length >= 2 && points.every(Boolean) ? <Path key={edge.id} d={points.map((p,i) => `${i ? 'L':'M'}${p!.x},${p!.y}`).join(' ')} fill="none" stroke={colors.mapLine} strokeWidth={2} strokeDasharray="3 5" /> : null;
+          if (points.length < 2 || !points.every(Boolean)) return null;
+          const stage = points as {x:number;y:number}[];
+          const width = Math.max((edge.widthMeters || 1) * s / (map.resolution || 0.05), 6);
+          const glyphs = laneGlyphs(stage, width, edge.direction === 'ONE_WAY' ? 'ONE_WAY' : 'BIDIRECTIONAL');
+          const line = (l: {x:number;y:number}[]) => l.map(p => `${p.x},${p.y}`).join(' ');
+          return <G key={edge.id}>
+            <Polyline points={line(stage)} fill="none" stroke={LANE_BLUE} strokeOpacity={LANE_BAND_OPACITY} strokeWidth={width} strokeLinejoin="miter" />
+            {glyphs.sides.map((side, i) => <Polyline key={i} points={line(side)} fill="none" stroke={LANE_BLUE} strokeOpacity={0.45} strokeWidth={0.8} />)}
+            {glyphs.divider ? <Polyline points={line(glyphs.divider)} fill="none" stroke={LANE_BLUE} strokeOpacity={0.6} strokeWidth={0.8} strokeDasharray="5 4" /> : null}
+            {glyphs.chevrons.map((c, i) => <Path key={i} d={LANE_ARROW_PATH} fill={LANE_BLUE} fillOpacity={LANE_CHEVRON_OPACITY}
+              transform={`translate(${c.x} ${c.y}) rotate(${c.angle}) scale(${glyphs.chevronSize})`} />)}
+          </G>;
         })}
-        {endpoints.map(e => {const p = point(e.x,e.y); return p ? <Circle key={e.id} cx={p.x} cy={p.y} r={3} fill={colors.primaryText} /> : null;})}
       </Svg>
       {detailsVisible && !showScan && model?.floorPaint?.filter(z => ['inbound','outbound'].includes(z.name)).map(z => {
         const p = point((z.x0+z.x1)/2,(z.y0+z.y1)/2);
@@ -125,9 +139,8 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
       })}
       {detailsVisible && visibleLocations.map(({endpoint:e,...p}) => {
         if (!p) return null;
-        const Icon = e.endpointType === 'CHARGER' ? Zap : e.endpointType === 'PARK' ? ParkingSquare : MapPin;
         return <Pressable key={e.id} style={[styles.endpoint,{left:p.x-22,top:p.y-22}]} accessibilityRole="button" accessibilityLabel={`Location ${e.name}`} onPress={() => setEndpointId(e.id)}>
-          <View style={[styles.pin, e.endpointType === 'CHARGER' && styles.charger]}><Icon size={14} color={e.endpointType === 'CHARGER' ? colors.successText : colors.textSecondary} /></View>
+          <EndpointTile type={e.endpointType} headingDeg={mapHeading(e.yaw, map.originYaw, viewport.rotated) - 90} selected={endpointId === e.id} isDark={isDark} surface={colors.surface} />
         </Pressable>;
       })}
       {detailsVisible && poseRobots.map(robot => {
@@ -157,7 +170,7 @@ function LegacyOperationalMap({ map, fleet, selectedRobotId, onSelectRobot, bott
         <Text variant="headline">{map.name}</Text><Text variant="body">Published · Version {map.versionNo}</Text>
         {model ? <View style={styles.segment}><Button title="Operational" variant={!showScan ? 'primary':'ghost'} onPress={() => setShowScan(false)} /><Button title="Scan" variant={showScan ? 'primary':'ghost'} onPress={() => setShowScan(true)} /></View> : <Text variant="body">The published scan is shown. An operational model has not been linked to this map yet.</Text>}
         <Text variant="headline">Locations · {endpoints.length}</Text>
-        {!endpoints.length ? <Text variant="body">No locations have been configured on this map.</Text> : endpoints.map(e => <Pressable key={e.id} accessibilityRole="button" accessibilityLabel={`Details for ${e.name}`} style={styles.locationRow} onPress={() => {setLayersOpen(false);setEndpointId(e.id);}}><MapPin size={18} color={colors.primaryText} /><View style={styles.flex}><Text variant="bodyMedium">{e.name}</Text><Text variant="caption">{e.code}</Text></View></Pressable>)}
+        {!endpoints.length ? <Text variant="body">No locations have been configured on this map.</Text> : endpoints.map(e => <Pressable key={e.id} accessibilityRole="button" accessibilityLabel={`Details for ${e.name}`} style={styles.locationRow} onPress={() => {setLayersOpen(false);setEndpointId(e.id);}}><EndpointIcon type={e.endpointType} size={18} isDark={isDark} /><View style={styles.flex}><Text variant="bodyMedium">{e.name}</Text><Text variant="caption">{e.code}</Text></View></Pressable>)}
         <Text variant="headline">Zones · {zones.length}</Text>
         {!zones.length ? <Text variant="body">No zones have been configured on this map.</Text> : zones.map(z => <View key={z.id} style={styles.locationRow}><View style={[styles.dot,{backgroundColor:zoneColor(z.zoneType)}]} /><View style={styles.flex}><Text variant="bodyMedium">{z.name}</Text><Text variant="caption">{zoneLabel(z.zoneType)} · Capacity {z.capacity}{z.maxSpeed != null ? ` · ${z.maxSpeed} m/s` : ''}</Text></View></View>)}
       </ScrollView>

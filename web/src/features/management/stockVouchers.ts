@@ -1,3 +1,5 @@
+import { code128Path, qrMatrix, qrPath } from '@/features/labels/labels'
+import { qrPayload } from '@/features/labels/printLabels'
 import { useQuery } from '@tanstack/react-query'
 import {
   listStockVouchers,
@@ -46,6 +48,14 @@ function escapeHtml(value: string): string {
 }
 
 /** Opens a plain printable copy of the voucher in a new window and starts the browser's print dialog. */
+/** The voucher code as QR (WT:V:<code>) and Code 128, scannable by the mobile app. */
+function voucherCodeSvg(code: string): string {
+  const qr = qrMatrix(qrPayload('VOUCHER', code))
+  const bars = code128Path(code, 40)
+  return `<svg class="qr" viewBox="-2 -2 ${qr.size + 4} ${qr.size + 4}"><rect x="-2" y="-2" width="${qr.size + 4}" height="${qr.size + 4}" fill="#fff"/><path d="${qrPath(qr)}"/></svg>` +
+    `<svg class="bars" viewBox="0 0 ${bars.width} 40" preserveAspectRatio="none"><path d="${bars.d}"/></svg>`
+}
+
 export function printVoucher(voucher: StockVoucherDetail) {
   const title = voucher.type === 'INBOUND' ? 'PHIẾU NHẬP KHO' : 'PHIẾU XUẤT KHO'
   const rows = voucher.lines
@@ -83,7 +93,10 @@ export function printVoucher(voucher: StockVoucherDetail) {
   th { background: #eee; }
   .signs { display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; margin-top: 40px; }
   .signs div { min-height: 90px; }
+  .codes { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: -40px; }
+  .codes .qr { width: 80px; height: 80px; } .codes .bars { width: 180px; height: 40px; }
 </style></head><body>
+<div class="codes">${voucherCodeSvg(voucher.code)}</div>
 <h1>${title}</h1><div class="code">${escapeHtml(voucher.code)}</div>
 <div class="meta">${meta}</div>
 <h3>Tổng hợp theo sản phẩm (đơn vị: Container)</h3>
