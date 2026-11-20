@@ -54,6 +54,8 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         storedMove.AcceptedMoveCommandId = moveId;
         storedMove.MoveAcceptedAt = DateTimeOffset.UtcNow.AddSeconds(5);
         await db.SaveChangesAsync();
+        using var beforeOffer = await client.GetWithTokenAsync($"/api/workflow-execution/jobs/{job.Id}", firstToken);
+        Assert.Equal(stop.Id, (await ReadAsync(beforeOffer)).GetProperty("activeHandoverStopId").GetGuid());
         using var early = await client.SendWithTokenAsync(HttpMethod.Post, $"{change}/claim", firstToken, new { moveId, version = 0 });
         Assert.Equal(HttpStatusCode.Conflict, early.StatusCode);
         Assert.Equal("handover_stop_not_open", await early.ReadErrorCodeAsync());
@@ -199,6 +201,9 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
         await warehouse.SaveChangesAsync();
 
         var path = $"/api/workflow-execution/jobs/{job.Id}/handover-stops/{stop.Id}";
+        using var legacyBeforeClaim = await client.SendWithTokenAsync(HttpMethod.Post,
+            $"/api/workflow-execution/job-steps/{firstStep.Id}/confirm", peerToken, new { containerId = firstId });
+        Assert.Equal("handover_stop_confirmation_required", await legacyBeforeClaim.ReadErrorCodeAsync());
         using var claim = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/claim", ownerToken, new { moveId, version = 0 });
         var claimed = await ReadAsync(claim);
         using var legacy = await client.SendWithTokenAsync(HttpMethod.Post,

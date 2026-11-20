@@ -128,8 +128,7 @@ public sealed partial class JobExecutionEngine
     {
         if (!StopSettings.EnableHandoverStopButton) return false;
         var job = await LoadJobAsync(jobId, cancellationToken);
-        var operations = await StopHandover.LoadOperationsAsync(db, [job.WorkflowId], cancellationToken);
-        var stop = StopHandover.Read(job, operations);
+        var stop = await ReadActiveHandoverStopAsync(job, cancellationToken);
         var now = (clock ?? TimeProvider.System).GetUtcNow();
         if (stop is not { ReadyAt: { } ready } || ready > now || stop.StopTask.HandoverBeganAt is null
             || stop.OwnerAt(now, StopSettings) is null || AssignedRobot(job) is not { } robotId)
@@ -176,19 +175,20 @@ public sealed partial class JobExecutionEngine
         return barcodes;
     }
 
-    private async Task EnsureStepIsNotHeldByStopAsync(Job job, JobStep step, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task EnsureLegacyHandoverAllowedAsync(
+        Job job, JobStep step, DateTimeOffset now, bool requireStop, CancellationToken cancellationToken)
     {
-        if (!job.JobTasks.Any(task => task.HandoverClaimedBy is not null && task.HandoverConfirmedAt is null))
+        if (!requireStop && !job.JobTasks.Any(task => task.HandoverClaimedBy is not null && task.HandoverConfirmedAt is null))
             return;
 
-        var definitions = await db.WorkflowSteps.AsNoTracking()
-            .Where(definition => definition.WorkflowTask.WorkflowId == job.WorkflowId && definition.StepType == StepType.HUMAN_INTERACTION)
-            .Select(definition => new { definition.Id, definition.Config })
-            .ToListAsync(cancellationToken);
-        var stop = StopHandover.Read(job, definitions.ToDictionary(row => row.Id, row => row.Config.OperationCode));
-        if (stop is not null && stop.OwnerAt(now, StopSettings) is not null && stop.Containers.Any(item => item.Step.Id == step.Id))
+        var stop = await ReadActiveHandoverStopAsync(job, cancellationToken);
+        if (stop is not null && (requireStop || stop.OwnerAt(now, StopSettings) is not null)
+            && stop.Containers.Any(item => item.Step.Id == step.Id))
             throw new ConflictException("Use the handover stop to confirm all containers together.", "handover_stop_confirmation_required");
     }
+
+    private async Task<StopHandover?> ReadActiveHandoverStopAsync(Job job, CancellationToken cancellationToken) =>
+        StopHandover.Read(job, await StopHandover.LoadOperationsAsync(db, [job.WorkflowId], cancellationToken));
 
     private static Guid? GuidInput(JobStep step, string key) =>
         step.ResolvedInputs.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.String && value.TryGetGuid(out var id)

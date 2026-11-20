@@ -259,10 +259,8 @@ public sealed partial class JobExecutionEngine(
             throw new AppException("Only the operator who paused this Job or an Administrator can resume it.", 403, ownershipDenial);
         }
 
-        if (job.FailureCode is PayloadTransferredCode or CargoOnboardCancelCode
-            && await db.JobRecoveryCases.AnyAsync(item => item.JobId == jobId && item.Status == JobRecoveryStatuses.Transferred
-                && item.ClaimedBy != null, cancellationToken))
-            await EnsureRecoveryRequestsActiveAsync(job, cancellationToken);
+        if (await TransferredRecoveryResumeDenialAsync(job, cancellationToken) is { } recoveryDenial)
+            throw new ConflictException("The transport request has stopped. Review the cargo before resuming.", recoveryDenial);
 
         var previousRobot = AssignedRobot(job);
         var targetRobotId = robotId ?? previousRobot
@@ -525,7 +523,8 @@ public sealed partial class JobExecutionEngine(
         Guid jobStepId,
         Guid? containerId,
         HumanConfirmationSource source,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireStop = false)
     {
         var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
@@ -559,7 +558,7 @@ public sealed partial class JobExecutionEngine(
         }
 
         var now = DateTimeOffset.UtcNow;
-        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
+        await EnsureLegacyHandoverAllowedAsync(job, step, now, requireStop || source.Channel == ConfirmationSource.ROBOT_BUTTON, cancellationToken);
         EnsureNotClaimedByAnother(step, source.UserId, now);
         if (source.UserId is { } confirmer && step.ClaimedBy != confirmer)
         {
@@ -1286,13 +1285,14 @@ public sealed partial class JobExecutionEngine(
     private TimeSpan ClaimLease => TimeSpan.FromSeconds(Math.Max(1, humanTasks?.Value.ClaimLeaseSeconds ?? 300));
 
     /// <summary>Takes a free or expired step, or extends one's own claim. Two people at once: one wins, the other gets 409.</summary>
-    public async Task<JobStep> ClaimHumanStepAsync(Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default)
+    public async Task<JobStep> ClaimHumanStepAsync(
+        Guid jobStepId, Guid accountId, CancellationToken cancellationToken = default, bool requireStop = false)
     {
         var jobId = await FindStepJobIdAsync(jobStepId, cancellationToken);
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var (job, step) = await LoadWaitingHumanStepAsync(jobId, jobStepId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
+        await EnsureLegacyHandoverAllowedAsync(job, step, now, requireStop, cancellationToken);
         EnsureNotClaimedByAnother(step, accountId, now);
         SetClaim(step, accountId, now);
         await SaveAndPublishAsync(cancellationToken, transaction);
@@ -1322,7 +1322,7 @@ public sealed partial class JobExecutionEngine(
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var (job, step) = await LoadWaitingHumanStepAsync(jobId, jobStepId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        await EnsureStepIsNotHeldByStopAsync(job, step, now, cancellationToken);
+        await EnsureLegacyHandoverAllowedAsync(job, step, now, requireStop: false, cancellationToken);
         SetClaim(step, accountId, now);
         await SaveAndPublishAsync(cancellationToken, transaction);
         return step;
@@ -1366,7 +1366,8 @@ public sealed partial class JobExecutionEngine(
         IReadOnlyList<Guid> containerIds,
         Guid accountId,
         string? note,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireStop = false)
     {
         var job = await LoadJobAsync(jobId, cancellationToken);
         if (job.Status != JobStatus.RUNNING)
@@ -1415,7 +1416,7 @@ public sealed partial class JobExecutionEngine(
                 pending.Remove(containerId);
                 try
                 {
-                    await ConfirmHumanStepAsync(match.Step.Id, containerId, HumanConfirmationSource.StaffApp(accountId, note), cancellationToken);
+                    await ConfirmHumanStepAsync(match.Step.Id, containerId, HumanConfirmationSource.StaffApp(accountId, note), cancellationToken, requireStop);
                     results[containerId] = new(containerId, match.Step.Id, HandoverBatchOutcomes.Confirmed, null);
                     progressed = true;
                 }
@@ -1594,8 +1595,12 @@ public sealed partial class JobExecutionEngine(
             return;
         }
 
-        if (await TryArmBegunHandoverStopAsync(job.Id, cancellationToken))
+        var groupedStop = await ReadActiveHandoverStopAsync(job, cancellationToken);
+        if (groupedStop?.Containers.Any(item => item.Step.Id == step.Id) == true)
+        {
+            await TryArmBegunHandoverStopAsync(job.Id, cancellationToken);
             return;
+        }
 
         var robotId = AssignedRobot(job);
         if (robotId is null)

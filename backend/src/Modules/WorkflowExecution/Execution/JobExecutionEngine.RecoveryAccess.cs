@@ -172,6 +172,15 @@ public sealed partial class JobExecutionEngine
         return await RecoveryRequestDenialAsync(job, cancellationToken);
     }
 
+    internal async Task<string?> TransferredRecoveryResumeDenialAsync(Job job, CancellationToken cancellationToken)
+    {
+        if (job.FailureCode is not (PayloadTransferredCode or CargoOnboardCancelCode)
+            || !await db.JobRecoveryCases.AsNoTracking().AnyAsync(item => item.JobId == job.Id
+                && item.Status == JobRecoveryStatuses.Transferred && item.ClaimedBy != null, cancellationToken))
+            return null;
+        return await RecoveryRequestDenialAsync(job, cancellationToken);
+    }
+
     private async Task EnsureRecoveryRequestsActiveAsync(Job job, CancellationToken cancellationToken)
     {
         if (await RecoveryRequestDenialAsync(job, cancellationToken) is { } reason)
