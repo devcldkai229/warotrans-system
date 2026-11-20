@@ -2062,6 +2062,70 @@ public sealed class JobExecutionEngineTests
     }
 
     [Fact]
+    public async Task A_busy_robot_makes_the_move_retry_and_it_goes_out_once_the_robot_is_free()
+    {
+        var job = await ProvisionAsync();
+        PlaceRobot(_fleet.RobotId, 0, 0);
+        _fleet.NavigateFailures.Enqueue(new ConflictException("Robot already has an in-flight command.", "robot_busy"));
+
+        await SemanticEngine().StartAsync(job, _fleet.RobotId);
+
+        var step = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.WAITING);
+        Assert.True(step.OutputValues.ContainsKey(JobExecutionEngine.RetryWaitSinceKey));
+        Assert.Empty(_fleet.Commands);
+
+        await WakeAreaWaitsAsync(SemanticEngine());
+
+        Assert.Single(_fleet.Commands);
+        var issued = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == step.Id);
+        Assert.Equal(JobStepStatus.EXECUTING, issued.Status);
+        Assert.False(issued.OutputValues.ContainsKey(JobExecutionEngine.RetryWaitSinceKey));
+    }
+
+    [Fact]
+    public async Task A_robot_that_stays_busy_fails_the_move_instead_of_retrying_forever()
+    {
+        var job = await ProvisionAsync();
+        PlaceRobot(_fleet.RobotId, 0, 0);
+        _fleet.NavigateFailures.Enqueue(new ConflictException("Robot already has an in-flight command.", "robot_busy"));
+        await SemanticEngine().StartAsync(job, _fleet.RobotId);
+
+        // Still busy, and it has been for longer than the bound.
+        var step = await _db.JobSteps.SingleAsync(s => s.StepType == StepType.MOVE && s.Status == JobStepStatus.WAITING);
+        step.OutputValues = new Dictionary<string, JsonElement>(step.OutputValues)
+        {
+            [JobExecutionEngine.RetryWaitSinceKey] = JsonSerializer.SerializeToElement(
+                DateTimeOffset.UtcNow.AddSeconds(-JobExecutionEngine.TransientRetryLimitSeconds - 1))
+        };
+        await _db.SaveChangesAsync();
+        _fleet.NavigateFailures.Enqueue(new ConflictException("Robot already has an in-flight command.", "robot_busy"));
+
+        await WakeAreaWaitsAsync(SemanticEngine());
+
+        var failed = await _db.JobSteps.AsNoTracking().SingleAsync(s => s.Id == step.Id);
+        Assert.Equal(JobStepStatus.FAILED, failed.Status);
+        Assert.Equal("transient_retry_timeout", failed.ErrorCode);
+        Assert.Empty(_fleet.Commands);
+    }
+
+    [Theory]
+    [InlineData("AUTHORITY_ALREADY_HELD", true)]
+    [InlineData("QUARANTINED:NAVIGATE:NAVIGATION_CANCELED", true)]
+    [InlineData("QUARANTINED:NAVIGATE:NAV_FAILED", false)]
+    [InlineData("ROBOT_OFFLINE", false)]
+    [InlineData(null, false)]
+    public void Only_a_retreat_handover_refusal_is_retried(string? reason, bool retried) =>
+        Assert.Equal(retried, JobExecutionEngine.IsRetreatHandoverReason(reason));
+
+    [Fact]
+    public void Extra_deadlock_retreat_endpoints_come_from_configuration()
+    {
+        var options = new WaroTrans.Fleet.Traffic.TrafficOptions { DeadlockRetreatEndpointCodes = " EP-WAIT, EP-SIDING ,," };
+        Assert.Equal(["EP-SIDING", "EP-WAIT"], options.DeadlockRetreatCodes().Order(StringComparer.Ordinal));
+        Assert.Empty(new WaroTrans.Fleet.Traffic.TrafficOptions().DeadlockRetreatCodes());
+    }
+
+    [Fact]
     public async Task A_robot_standing_in_the_area_keeps_others_out_even_without_a_job()
     {
         var job = await ProvisionAsync();
@@ -2461,6 +2525,11 @@ public sealed class JobExecutionEngineTests
             double? timeoutSeconds = null,
             double? positionTolerance = null)
         {
+            if (NavigateFailures.TryDequeue(out var failure))
+            {
+                throw failure;
+            }
+
             var commandId = Guid.NewGuid();
             Commands.Add((robotId, x, y, jobStepId, commandId));
             PositionTolerances.Add(positionTolerance);
@@ -2469,6 +2538,9 @@ public sealed class JobExecutionEngineTests
         }
 
         public List<double?> Timeouts { get; } = [];
+
+        /// <summary>Thrown by the next NavigateAsync calls, one per call (e.g. robot_busy while a command closes).</summary>
+        public Queue<Exception> NavigateFailures { get; } = new();
         public List<(Guid RobotId, Guid CommandId)> Cancels { get; } = [];
 
         public Task<bool> CancelNavigationAsync(Guid robotId, Guid navigateCommandId, CancellationToken cancellationToken = default)

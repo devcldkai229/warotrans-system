@@ -214,20 +214,6 @@ public sealed class TrafficState
             return AcquireResult.Grant(robot.Authority);
         }
 
-        robot.JobStepId = request.JobStepId;
-        robot.ActiveCommandId = request.CommandId;
-        robot.ProposedPath = request.Poses;
-        robot.PlanRevision = request.PlanRevision;
-        robot.PlanHash = request.PlanHash;
-        // Nav2 plans from the robot's localized pose: the first pose is the freshest position evidence there is.
-        robot.X = request.Poses[0].X;
-        robot.Y = request.Poses[0].Y;
-        if (request.Goal is { } g)
-        {
-            robot.RouteGoal = new TrafficRouteGoal(g.X, g.Y, g.Yaw);
-            robot.PendingSegments = [];
-        }
-
         // Replan: the old grant reserved another path. It is withdrawn here; if the new path is granted the robot
         // gets the new EXTEND, otherwise an explicit revoke (below) so it never keeps driving on the old one.
         var previous = robot.Authority;
@@ -236,8 +222,13 @@ public sealed class TrafficState
             RevokeAuthorityKeepOccupancy(robot, "REPLAN");
         }
 
+        // Nav2 plans from the robot's localized pose: the first pose is the freshest position evidence there is.
+        robot.X = request.Poses[0].X;
+        robot.Y = request.Poses[0].Y;
+
         if (SemanticReservation.PlanHitsKeepout(_semantic, request.Poses))
         {
+            robot.ProposedPath = [];
             Log($"semantic-reject-keepout:{robot.RobotId}:rev={request.PlanRevision}");
             if (previous is not null)
             {
@@ -249,10 +240,26 @@ public sealed class TrafficState
             return AcquireResult.Reject("KEEPOUT_VIOLATION");
         }
 
+        robot.JobStepId = request.JobStepId;
+        robot.ActiveCommandId = request.CommandId;
+        robot.ProposedPath = request.Poses;
+        robot.PlanRevision = request.PlanRevision;
+        robot.PlanHash = request.PlanHash;
+        if (request.Goal is { } g)
+        {
+            robot.RouteGoal = new TrafficRouteGoal(g.X, g.Y, g.Yaw);
+            robot.PendingSegments = [];
+        }
+
         var resources = SemanticReservation.CollectResources(_semantic, request.Poses);
 
-        // Diff-release occupancy left behind by prior horizons (prevents corridor-wide lock).
-        ReleaseSemanticOccupancyOutside(robot, resources);
+        // Diff-release occupancy left behind by prior horizons (prevents corridor-wide lock). A robot that held no
+        // grant before this plan is standing still behind a closed gate: it keeps only what its body covers, not the
+        // part of its new plan it has never entered. Holding that part let a waiting robot (docking into a bay next
+        // to a corridor) and a robot in the corridor each hold a strip the other needs — a wait-for cycle no one
+        // could break, though the two were 0.9 m apart with a wall between them.
+        var standingStill = previous is null && robot.Phase is TrafficRobotPhase.Waiting or TrafficRobotPhase.Idle;
+        ReleaseSemanticOccupancyOutside(robot, standingStill ? ResourcesUnder(request.Poses[0].X, request.Poses[0].Y) : resources);
 
         EnsureSemanticCapacities(resources);
 
@@ -1957,23 +1964,28 @@ public sealed class TrafficState
     {
         var robots = _robots.Values
             .OrderBy(r => r.RobotId)
-            .Select(r => new RobotTrafficView(
-                r.RobotId,
-                r.Phase,
-                r.NodeId,
-                r.X,
-                r.Y,
-                r.LocalizationOk,
-                r.OccupiedResourceIds.Order(StringComparer.Ordinal).ToImmutableArray(),
-                // A default ImmutableArray cannot be serialized (the snapshot API answered 500 under a grant).
-                r.Authority is { Maneuvers.IsDefault: true } a ? a with { Maneuvers = [] } : r.Authority,
-                r.LastSeq,
-                r.WaitingReason,
-                r.BlockingOwner,
-                r.QuarantineReason,
-                r.JobStepId,
-                r.PlanRevision,
-                r.ProposedPath.IsDefault ? [] : r.ProposedPath))
+            .Select(r =>
+            {
+                var plan = PlanView(r);
+                return new RobotTrafficView(
+                    r.RobotId,
+                    r.Phase,
+                    r.NodeId,
+                    r.X,
+                    r.Y,
+                    r.LocalizationOk,
+                    r.OccupiedResourceIds.Order(StringComparer.Ordinal).ToImmutableArray(),
+                    // A default ImmutableArray cannot be serialized (the snapshot API answered 500 under a grant).
+                    r.Authority is { Maneuvers.IsDefault: true } a ? a with { Maneuvers = [] } : r.Authority,
+                    r.LastSeq,
+                    r.WaitingReason,
+                    r.BlockingOwner,
+                    r.QuarantineReason,
+                    r.JobStepId,
+                    r.PlanRevision,
+                    plan.Path,
+                    plan.GrantedPoints);
+            })
             .ToImmutableArray();
 
         var resources = (_graph?.Resources ?? [])
@@ -2040,6 +2052,83 @@ public sealed class TrafficState
             waits,
             cycles,
             _events.ToImmutableArray());
+    }
+
+    /// <summary>
+    /// What the map draws of a robot's Nav2 plan: the part still ahead of its pose (thinned to ~5 cm steps) while it
+    /// has a route open, and how many of those points lie inside what traffic has granted. A waiting robot shows its
+    /// whole plan with nothing granted; a robot on a full grant shows it all granted.
+    /// </summary>
+    private (ImmutableArray<SemanticPlanPose> Path, int GrantedPoints) PlanView(RobotRuntime r)
+    {
+        if (r.ProposedPath.IsDefaultOrEmpty
+            || r.ActiveCommandId is null
+            || r.Phase is not (TrafficRobotPhase.Waiting or TrafficRobotPhase.Authorized
+                or TrafficRobotPhase.Moving or TrafficRobotPhase.Reconciling))
+        {
+            return ([], 0);
+        }
+
+        var path = r.X is double rx && r.Y is double ry
+            ? TrimProposedPathFromPose(r.ProposedPath, rx, ry).Path
+            : r.ProposedPath;
+        path = ThinPath(path, 0.05);
+        if (path.IsDefaultOrEmpty)
+        {
+            return ([], 0);
+        }
+
+        if (r.Authority is not { } auth || r.Phase is TrafficRobotPhase.Waiting)
+        {
+            return (path, 0);
+        }
+
+        if (_semantic is null || r.PartialAuthorityId != auth.AuthorityId || auth.ResourceIds.IsDefaultOrEmpty)
+        {
+            return (path, path.Length);
+        }
+
+        var granted = auth.ResourceIds.ToHashSet(StringComparer.Ordinal);
+        var cellSize = _semantic.EffectiveCellSize;
+        var count = 0;
+        foreach (var p in path)
+        {
+            var cx = (int)Math.Floor(p.X / cellSize);
+            var cy = (int)Math.Floor(p.Y / cellSize);
+            if (!granted.Contains(SemanticReservation.CellId(cx, cy)))
+            {
+                break;
+            }
+
+            count++;
+        }
+
+        return (path, count);
+    }
+
+    /// <summary>Keeps the first, the last and every pose at least <paramref name="step"/> metres from the last kept one.</summary>
+    private static ImmutableArray<SemanticPlanPose> ThinPath(ImmutableArray<SemanticPlanPose> path, double step)
+    {
+        if (path.IsDefaultOrEmpty || path.Length <= 2)
+        {
+            return path.IsDefault ? [] : path;
+        }
+
+        var kept = ImmutableArray.CreateBuilder<SemanticPlanPose>(path.Length);
+        kept.Add(path[0]);
+        var last = path[0];
+        for (var i = 1; i < path.Length - 1; i++)
+        {
+            var p = path[i];
+            if ((p.X - last.X) * (p.X - last.X) + (p.Y - last.Y) * (p.Y - last.Y) >= step * step)
+            {
+                kept.Add(p);
+                last = p;
+            }
+        }
+
+        kept.Add(path[^1]);
+        return kept.ToImmutable();
     }
 
     private void PromoteWaiters(IEnumerable<string> freedResources)

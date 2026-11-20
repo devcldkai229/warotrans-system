@@ -29,6 +29,7 @@ export const vi_operations_robots: Record<string, string> = {
   '{code} waiting at {zone}': '{code} đang chờ tại {zone}',
   'held by {heldByRobotCode}, queue +{value}': 'đang bị {heldByRobotCode} giữ, hàng chờ +{value}',
   '{code} traffic wait': '{code} chờ giao thông',
+  '{code} waiting for {blocker}': '{code} đang chờ {blocker}',
   '{code} quarantined': '{code} bị cách ly',
   '{mapLabel} · traffic e{epoch}': '{mapLabel} · giao thông e{epoch}',
   'robots': 'robot',

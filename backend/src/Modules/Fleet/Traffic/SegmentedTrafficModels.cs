@@ -62,7 +62,9 @@ public sealed record RobotTrafficView(
     string? QuarantineReason,
     Guid? JobStepId,
     long PlanRevision = 0,
-    ImmutableArray<SemanticPlanPose> ProposedPath = default);
+    ImmutableArray<SemanticPlanPose> ProposedPath = default,
+    /// <summary>How many leading points of <see cref="ProposedPath"/> lie inside the traffic grant (0 = still waiting).</summary>
+    int GrantedPathPoints = 0);
 
 public sealed record ResourceTrafficView(
     string ResourceId,

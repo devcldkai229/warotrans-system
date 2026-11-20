@@ -125,12 +125,17 @@ public sealed class ProcessRobotCommandResultHandler(
             {
                 // Route finished: clear authority (stops RENEW) or quarantine on failure (fail-closed). Semantic grants
                 // are tied to this NAVIGATE; the pose is passed only when fresh and localized (else nothing is released).
+                // A NAVIGATE that ends CANCELED with a fresh localized pose is a clean stop, not a fault: the robot stood
+                // still where its pose says, so traffic keeps what its body covers instead of quarantining it. This holds
+                // whoever cancelled (the backend, an operator, Nav2 preempting the goal): only the pose evidence counts.
                 var maxAge = TimeSpan.FromSeconds(Math.Max(0.5, trafficOptions.Value.PoseMaxAgeSec));
                 var poseFresh = robot is { LocalizationStatus: LocalizationStatus.LOCALIZED, LastTelemetryAt: { } at }
                                 && utcNow - at <= maxAge;
+                var cleanStop = message.Outcome == RobotCommandOutcomes.Succeeded
+                                || (message.Outcome == RobotCommandOutcomes.Canceled && poseFresh);
                 await segmentedTraffic.CompleteRouteAsync(
                     command.RobotId,
-                    message.Outcome == RobotCommandOutcomes.Succeeded,
+                    cleanStop,
                     message.ErrorCode ?? message.Outcome,
                     NavigateAuthorityId(command.PayloadJson),
                     cancellationToken,
