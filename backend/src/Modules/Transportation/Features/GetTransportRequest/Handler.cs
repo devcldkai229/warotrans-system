@@ -3,6 +3,7 @@ using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.BuildingBlocks.Exceptions;
 using WaroTrans.Navigation.Contracts;
+using WaroTrans.Transportation.Entities;
 using WaroTrans.Transportation.Features.Shared;
 using WaroTrans.Transportation.Persistence;
 using WaroTrans.Warehouse.Contracts;
@@ -37,6 +38,25 @@ public sealed class GetTransportRequestHandler(
             cancellationToken);
 
         var jobs = (await jobControl.GetJobsAsync([request.Id], cancellationToken)).GetValueOrDefault(request.Id) ?? [];
+
+        var postings = (await dbContext.StockPostings
+                .AsNoTracking()
+                .Where(p => p.TransportRequestId == request.Id)
+                .OrderByDescending(p => p.CreatedAt)
+                .ThenByDescending(p => p.Id)
+                .Select(p => new
+                {
+                    p.ContainerId,
+                    p.Type,
+                    Sync = new WarehouseStockPostingResponse(
+                        p.JobId,
+                        p.PostedAt != null ? "POSTED" : p.Attempts > 0 ? "RETRYING" : "PENDING",
+                        p.CreatedAt,
+                        p.PostedAt,
+                        p.NextAttemptAt)
+                })
+                .ToListAsync(cancellationToken))
+            .ToLookup(p => p.ContainerId);
 
         var names = await accounts.GetNamesAsync([request.RequestedBy], cancellationToken);
 
@@ -76,6 +96,10 @@ public sealed class GetTransportRequestHandler(
                     lookups.Endpoints.TryGetValue(d.SourceEndpointId, out var sourceEndpoint);
                     lookups.Endpoints.TryGetValue(d.DestinationEndpointId, out var destinationEndpoint);
 
+                    var containerPostings = postings[d.ContainerId];
+                    var pickup = containerPostings.FirstOrDefault(p => p.Type == StockPostingType.PICKUP)?.Sync;
+                    var delivery = containerPostings.FirstOrDefault(p => p.Type == StockPostingType.DELIVERY)?.Sync;
+
                     return new TransportRequestDetailItemResponse(
                         d.Id,
                         d.SequenceNo,
@@ -93,7 +117,8 @@ public sealed class GetTransportRequestHandler(
                         destinationEndpoint?.Code,
                         destinationEndpoint?.Name,
                         d.DestinationLevelNo,
-                        d.Status.ToString());
+                        d.Status.ToString(),
+                        pickup is null && delivery is null ? null : new WarehouseHandoverSyncResponse(pickup, delivery));
                 })
                 .ToList(),
             request.CancelledBy,

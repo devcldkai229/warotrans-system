@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WaroTrans.BuildingBlocks.Enums;
 using WaroTrans.IntegrationTests.Infrastructure;
+using WaroTrans.Transportation.Entities;
+using WaroTrans.Transportation.Persistence;
 using WaroTrans.Warehouse.Entities;
 using WaroTrans.Warehouse.Enums;
 using WaroTrans.Warehouse.Persistence;
@@ -67,7 +69,12 @@ public sealed class ListGetTransportRequestEndpointTests(WaroTransWebApplication
         string? SourceEndpointName,
         Guid DestinationEndpointId,
         string? DestinationEndpointCode,
-        string Status);
+        string Status,
+        WarehouseSyncDto? WarehouseSync);
+
+    private sealed record WarehouseSyncDto(PostingDto? Pickup, PostingDto? Delivery);
+
+    private sealed record PostingDto(Guid JobId, string Status, DateTimeOffset RecordedAt, DateTimeOffset? PostedAt, DateTimeOffset? NextAttemptAt);
 
     private sealed record GetDto(
         Guid Id,
@@ -133,6 +140,58 @@ public sealed class ListGetTransportRequestEndpointTests(WaroTransWebApplication
         Assert.Equal(seed.SourceLocationId, detail.SourceStorageLocationId);
         Assert.Equal("LOC-SRC", detail.SourceStorageLocationCode);
         Assert.False(string.IsNullOrWhiteSpace(detail.SourceEndpointName));
+        Assert.Null(detail.WarehouseSync);
+    }
+
+    [Fact]
+    public async Task Get_distinguishes_pending_retrying_and_posted_warehouse_updates_for_a_detail()
+    {
+        var seed = await SeedAsync();
+        var workflowId = await CreatePublishedWorkflowAsync();
+        var requestId = await TransportRequestScenario.SubmitAsync(Client, seed, workflowId);
+        var jobId = Guid.NewGuid();
+        var recordedAt = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var retryAt = recordedAt.AddHours(1);
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TransportationDbContext>();
+        var pickup = new StockPosting
+        {
+            Id = Guid.NewGuid(), Key = $"{jobId:N}:{seed.ContainerId:N}:PICKUP", Type = StockPostingType.PICKUP,
+            JobId = jobId, TransportRequestId = requestId, ContainerId = seed.ContainerId,
+            CreatedAt = recordedAt.AddSeconds(-1), PostedAt = recordedAt
+        };
+        var delivery = new StockPosting
+        {
+            Id = Guid.NewGuid(), Key = $"{jobId:N}:{seed.ContainerId:N}:DELIVERY", Type = StockPostingType.DELIVERY,
+            JobId = jobId, TransportRequestId = requestId, ContainerId = seed.ContainerId,
+            CreatedAt = recordedAt, NextAttemptAt = retryAt
+        };
+        db.StockPostings.AddRange(pickup, delivery);
+        await db.SaveChangesAsync();
+
+        var path = $"{Route}/{requestId}";
+        var pending = Assert.Single((await Client.GetFromJsonAsync<GetDto>(path, JsonOptions))!.Details).WarehouseSync;
+        Assert.NotNull(pending);
+        Assert.Equal(new PostingDto(jobId, "POSTED", pickup.CreatedAt, pickup.PostedAt, null), pending.Pickup);
+        Assert.Equal(new PostingDto(jobId, "PENDING", recordedAt, null, retryAt), pending.Delivery);
+
+        delivery.Attempts = 1;
+        delivery.LastError = "Internal Warehouse error for test";
+        await db.SaveChangesAsync();
+        using var response = await Client.GetAsync(path);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(delivery.LastError, json);
+        var retrying = Assert.Single(JsonSerializer.Deserialize<GetDto>(json, JsonOptions)!.Details).WarehouseSync;
+        Assert.Equal(new PostingDto(jobId, "RETRYING", recordedAt, null, retryAt), retrying!.Delivery);
+
+        delivery.PostedAt = recordedAt.AddSeconds(1);
+        delivery.NextAttemptAt = null;
+        delivery.LastError = null;
+        await db.SaveChangesAsync();
+        var posted = Assert.Single((await Client.GetFromJsonAsync<GetDto>(path, JsonOptions))!.Details).WarehouseSync;
+        Assert.Equal(new PostingDto(jobId, "POSTED", recordedAt, delivery.PostedAt, null), posted!.Delivery);
     }
 
     [Fact]

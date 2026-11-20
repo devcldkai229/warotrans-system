@@ -50,6 +50,7 @@ public class RolePermissionMatrixTests
     [InlineData(Permissions.TransportCreate)]
     [InlineData(Permissions.TransportCancel)]
     [InlineData(Permissions.JobOperate)]
+    [InlineData(Permissions.ProductCreate)]
     [InlineData(Permissions.ContainerCreate)]
     [InlineData(Permissions.MapRead)]
     public void Staff_keeps_the_floor_rights_the_mobile_app_uses(string permission)
@@ -60,6 +61,7 @@ public class RolePermissionMatrixTests
     [Theory]
     [InlineData(Permissions.UserManage)]
     [InlineData(Permissions.WarehouseWrite)]
+    [InlineData(Permissions.ProductCreate)]
     [InlineData(Permissions.ContainerCreate)]
     [InlineData(Permissions.TransportCreate)]
     [InlineData(Permissions.TransportCancel)]

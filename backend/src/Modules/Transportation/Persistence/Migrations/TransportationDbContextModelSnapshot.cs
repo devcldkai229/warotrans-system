@@ -94,6 +94,9 @@ namespace WaroTrans.Transportation.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("i_x_stock_postings_key");
 
+                    b.HasIndex("TransportRequestId")
+                        .HasDatabaseName("i_x_stock_postings_transport_request_id");
+
                     b.ToTable("stock_postings", "transportation");
                 });
 

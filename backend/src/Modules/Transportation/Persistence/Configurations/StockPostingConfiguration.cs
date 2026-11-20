@@ -17,5 +17,6 @@ public sealed class StockPostingConfiguration : IEntityTypeConfiguration<StockPo
 
         builder.HasIndex(x => x.Key).IsUnique();
         builder.HasIndex(x => x.CreatedAt).HasFilter("posted_at IS NULL");
+        builder.HasIndex(x => x.TransportRequestId);
     }
 }

@@ -21,6 +21,6 @@ public static class GetTransportRequestEndpoint
         .WithName("GetTransportRequest")
         .WithSummary("Get TransportRequest by id")
         .WithDescription(
-            "Returns a TransportRequest with enriched container, storage location and endpoint labels.");
+            "Returns a TransportRequest with location labels and Warehouse synchronization for each recorded handover.");
     }
 }

@@ -114,8 +114,22 @@ A gate is an enabled Navigation `WAYPOINT` with an `INBOUND` or `OUTBOUND` token
 
 Common 400 errors include `voucher_container_not_at_outbound`, `container_contents_incomplete` and `inbound_source_not_gate`. Common 409 errors include `voucher_container_in_transport`, `voucher_container_on_other_voucher`, `inventory_balance_missing`, `inbound_stock_not_posted` and `outbound_stock_not_posted`. The last two errors identify an older CONFIRMED voucher with no posting receipt. Older OUTBOUND drafts require their selected rows to be staged before confirmation. Goods already on a robot when upgrading from the old stock-debit workflow may require reconciliation if their accounting slot was removed before the new flow.
 
+## Warehouse synchronization after a handover
+
+`GET /api/transportation/transport-requests/{id}` includes `details[].warehouseSync` when the request has a recorded Warehouse posting for that Container. `pickup` and `delivery` are each nullable. A posting contains `jobId`, `status`, `recordedAt`, `postedAt` and `nextAttemptAt`.
+
+- `PENDING` means the handover was recorded and Warehouse still has to apply it.
+- `RETRYING` means a posting attempt failed and the server will try again. The server reports a separate issue after repeated failures.
+- `POSTED` means the Warehouse posting completed. `postedAt` is present even when an earlier attempt failed.
+
+A missing posting means this endpoint has no receipt for the handover. A completed Job or transport detail can coexist with a pending Warehouse posting. Refresh the transport request to read the new posting status while the server retries.
+
+## Product creation during receiving
+
+`POST /api/warehouse/products` requires `product.create`, granted to Admin and Staff. The request takes `categoryId` for an existing category, `sku`, `name`, and optional `supplierBarcode` and `description`. The API returns the active Product on `201`. A duplicate returns `409 product_sku_taken` or `409 product_supplier_barcode_taken`. The app can select the returned Product for the batch immediately after the operator submits the Product form.
+
 ## Deployment
 
-Apply Warehouse migrations through `20261118054034_AddGateStagingAndUnlocatedReceiving` before running the updated BE. The migration adds Container warehouse ownership and endpoint custody, records endpoint IDs for movements and preserves existing booked balances. Coordinate the upgrade with completion of in-flight TRs, especially pickups made under the old accounting rules.
+Apply Warehouse migrations through `20261118054034_AddGateStagingAndUnlocatedReceiving` before running the updated BE. The migration adds Container warehouse ownership and endpoint custody, records endpoint IDs for movements and preserves existing booked balances. Apply Transportation migrations through `20261120075239_IndexStockPostingsByRequest` to index the handover status lookup. Coordinate the upgrade with completion of in-flight TRs, especially pickups made under the old accounting rules.
 
 Mobile FE can use both directions on the updated BE. For outbound, replace the shelf/`STORED` preview predicate with `STAGED_OUTBOUND` and display the returned endpoint. For inbound, render null location as None and select a gate only when composing putaway.
