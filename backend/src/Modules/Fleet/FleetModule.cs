@@ -72,6 +72,7 @@ public static class FleetModule
         services.AddScoped<IFleetModule, WaroTrans.Fleet.Services.FleetModuleApi>();
         services.AddScoped<IssueCancelCommandHandler>();
         services.AddScoped<TeleopRobotHandler>();
+        services.Configure<ManualDriveOptions>(configuration.GetSection(ManualDriveOptions.SectionName));
         services.AddScoped<WaroTrans.Fleet.Features.RobotControl.RobotControlService>();
         services.AddSingleton<WaroTrans.Fleet.Features.RobotHealth.RobotHealthStore>();
         services.AddScoped<WaroTrans.Fleet.Features.RobotHealth.ProcessRobotHealthHandler>();

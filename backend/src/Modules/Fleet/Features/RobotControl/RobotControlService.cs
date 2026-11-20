@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Exceptions;
@@ -10,6 +11,7 @@ using WaroTrans.BuildingBlocks.Mqtt;
 using WaroTrans.BuildingBlocks.Mqtt.Messages;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Enums;
+using WaroTrans.Fleet.Features.TeleopRobot;
 using WaroTrans.Fleet.IntegrationEvents;
 using WaroTrans.Fleet.Persistence;
 using WaroTrans.Fleet.Services;
@@ -45,7 +47,10 @@ public sealed record ManualLeaseResponse(
     Guid? HolderId,
     string? HolderName,
     DateTimeOffset? Until,
-    bool HeldByMe);
+    bool HeldByMe,
+    Guid? LeaseId = null,
+    bool Sequenced = false,
+    DateTimeOffset? ServerTime = null);
 
 public sealed record MaintenanceChecklist(
     bool SensorsOk,
@@ -77,7 +82,8 @@ public sealed class RobotControlService(
     IAuditTrail audit,
     TimeProvider clock,
     WaroTrans.Navigation.Contracts.INavigationModule? navigation = null,
-    WaroTrans.Fleet.Contracts.IRobotWorkQuery? work = null)
+    WaroTrans.Fleet.Contracts.IRobotWorkQuery? work = null,
+    IOptions<ManualDriveOptions>? manualDrive = null)
 {
     /// <summary>A lease is renewed by the client while the operator keeps driving; it lapses on its own otherwise.</summary>
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
@@ -170,28 +176,27 @@ public sealed class RobotControlService(
     // ------------------------------------------------------------------ manual-drive lease (RB-04)
 
     public async Task<ManualLeaseResponse> AcquireLeaseAsync(
-        Guid robotId,
-        bool takeover,
-        string? reason,
-        CancellationToken cancellationToken)
+        Guid robotId, AcquireLeaseRequest request, CancellationToken cancellationToken)
     {
         var me = currentUser.AccountId ?? throw new AppException("Sign in first.", 401, "unauthenticated");
         var now = clock.GetUtcNow();
         var robot = await LoadAsync(robotId, cancellationToken);
+        if (request.Sequenced && manualDrive?.Value.EnableSequencedLease != true)
+            throw new ConflictException("Sequenced manual drive is unavailable on this deployment.", "manual_sequence_unavailable");
 
         await EnsureNoOperatorPausedJobAsync(robot.Id, cancellationToken);
         if (!robot.IsEnabled) throw new ConflictException($"Robot {robot.Code} is disabled.", "robot_disabled");
         if (!robot.IsOnline) throw new ConflictException($"Robot {robot.Code} is offline.", "robot_offline");
 
         var heldByOther = robot.HasActiveManualLease(now) && robot.ManualLeaseHolderId != me;
-        if (heldByOther && !takeover)
+        if (heldByOther && !request.Takeover)
         {
             throw new ConflictException(
                 $"{robot.ManualLeaseHolderName} is driving {robot.Code} until {robot.ManualLeaseUntil:HH:mm:ss}.",
                 "manual_lease_held");
         }
 
-        if (heldByOther && (!UserHas(Permissions.RobotManage) || string.IsNullOrWhiteSpace(reason)))
+        if (heldByOther && (!UserHas(Permissions.RobotManage) || string.IsNullOrWhiteSpace(request.Reason)))
         {
             throw new AppException("Only an administrator may take over a lease, and must give a reason.", 403, "manual_takeover_forbidden");
         }
@@ -205,6 +210,13 @@ public sealed class RobotControlService(
         }
 
         var first = !robot.HasActiveManualLease(now) || robot.ManualLeaseHolderId != me;
+        var previousLeaseId = robot.ManualLeaseId;
+        if (request.LeaseId is not null && (first || request.LeaseId != previousLeaseId || !request.Sequenced))
+            throw new ConflictException("This manual-drive lease has changed or expired.", "manual_lease_changed");
+        if (!first && (request.Sequenced != (previousLeaseId is not null) || request.LeaseId != previousLeaseId))
+            throw new ConflictException("A manual-drive controller is already using this lease.", "manual_lease_held");
+
+        var leaseId = request.Sequenced ? first ? Guid.NewGuid() : previousLeaseId : null;
         var until = now + LeaseDuration;
         var previousHolder = robot.ManualLeaseHolderId;
         var name = currentUser.Username;
@@ -213,11 +225,14 @@ public sealed class RobotControlService(
         var updated = await db.Robots
             .Where(r => r.Id == robotId
                         && (r.ManualLeaseHolderId == null || r.ManualLeaseUntil <= now || r.ManualLeaseHolderId == me
-                            || (takeover && r.ManualLeaseHolderId == previousHolder)))
+                            || (request.Takeover && r.ManualLeaseHolderId == previousHolder))
+                        && r.ManualLeaseId == previousLeaseId && r.ManualLeaseUntil == robot.ManualLeaseUntil)
             .ExecuteUpdateAsync(
                 s => s.SetProperty(r => r.ManualLeaseHolderId, me)
                     .SetProperty(r => r.ManualLeaseHolderName, name)
-                    .SetProperty(r => r.ManualLeaseUntil, until),
+                    .SetProperty(r => r.ManualLeaseUntil, until)
+                    .SetProperty(r => r.ManualLeaseId, leaseId)
+                    .SetProperty(r => r.ManualLeaseLastSequence, r => first ? null : r.ManualLeaseLastSequence),
                 cancellationToken);
         if (updated == 0)
         {
@@ -233,11 +248,11 @@ public sealed class RobotControlService(
                     robotId,
                     Before: new Dictionary<string, object?> { ["holderId"] = previousHolder },
                     After: new Dictionary<string, object?> { ["holderId"] = me, ["until"] = until },
-                    Reason: reason),
+                    Reason: request.Reason),
                 cancellationToken);
         }
 
-        return new ManualLeaseResponse(robotId, true, me, name, until, true);
+        return new ManualLeaseResponse(robotId, true, me, name, until, true, leaseId, request.Sequenced, now);
     }
 
     private async Task EnsureNoOperatorPausedJobAsync(Guid robotId, CancellationToken cancellationToken)
@@ -246,7 +261,7 @@ public sealed class RobotControlService(
             throw new ConflictException("This robot has an operator-paused Job. Resume the Job to release the hold.", "job_paused_robot_held");
     }
 
-    public async Task ReleaseLeaseAsync(Guid robotId, CancellationToken cancellationToken)
+    public async Task ReleaseLeaseAsync(Guid robotId, CancellationToken cancellationToken, Guid? leaseId = null)
     {
         var me = currentUser.AccountId;
         var robot = await LoadAsync(robotId, cancellationToken);
@@ -260,11 +275,20 @@ public sealed class RobotControlService(
             throw new AppException("Only the lease holder or an administrator can release it.", 403, "manual_lease_not_yours");
         }
 
-        await db.Robots.Where(r => r.Id == robotId).ExecuteUpdateAsync(
+        if ((leaseId is not null && leaseId != robot.ManualLeaseId)
+            || (robot.ManualLeaseId is not null && leaseId is null && !UserHas(Permissions.RobotManage)))
+            throw new ConflictException("This manual-drive lease has changed or expired.", "manual_lease_changed");
+
+        var released = await db.Robots.Where(r => r.Id == robotId && r.ManualLeaseId == robot.ManualLeaseId
+            && r.ManualLeaseHolderId == robot.ManualLeaseHolderId && r.ManualLeaseUntil == robot.ManualLeaseUntil).ExecuteUpdateAsync(
             s => s.SetProperty(r => r.ManualLeaseHolderId, (Guid?)null)
                 .SetProperty(r => r.ManualLeaseHolderName, (string?)null)
-                .SetProperty(r => r.ManualLeaseUntil, (DateTimeOffset?)null),
+                .SetProperty(r => r.ManualLeaseUntil, (DateTimeOffset?)null)
+                .SetProperty(r => r.ManualLeaseId, (Guid?)null)
+                .SetProperty(r => r.ManualLeaseLastSequence, (long?)null),
             cancellationToken);
+        if (released == 0)
+            throw new ConflictException("This manual-drive lease has changed or expired.", "manual_lease_changed");
         await audit.RecordAsync(
             new AuditEntry("robot.manual_lease_released", "ROBOT", robotId,
                 Before: new Dictionary<string, object?> { ["holderId"] = robot.ManualLeaseHolderId }),
@@ -282,7 +306,8 @@ public sealed class RobotControlService(
             active ? robot.ManualLeaseHolderId : null,
             active ? robot.ManualLeaseHolderName : null,
             active ? robot.ManualLeaseUntil : null,
-            active && robot.ManualLeaseHolderId == currentUser.AccountId);
+            active && robot.ManualLeaseHolderId == currentUser.AccountId,
+            Sequenced: active && robot.ManualLeaseId is not null, ServerTime: clock.GetUtcNow());
     }
 
     // ------------------------------------------------------------------ maintenance (RB-08)

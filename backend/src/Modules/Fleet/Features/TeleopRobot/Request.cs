@@ -5,4 +5,6 @@ namespace WaroTrans.Fleet.Features.TeleopRobot;
 /// The console repeats it every ~200 ms while a direction is held.
 /// <c>Assist</c> (default true): the robot slows down and stops before an obstacle in the direction of travel.
 /// </summary>
-public sealed record TeleopRobotRequest(double Linear, double Angular, bool? Assist = null);
+public sealed record TeleopRobotRequest(
+    double Linear, double Angular, bool? Assist = null, Guid? LeaseId = null, long? Seq = null,
+    DateTimeOffset? ClientSentAt = null);

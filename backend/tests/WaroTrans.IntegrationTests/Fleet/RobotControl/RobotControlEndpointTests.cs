@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using WaroTrans.Fleet.Entities;
 using WaroTrans.Fleet.Enums;
 using WaroTrans.Fleet.Persistence;
+using WaroTrans.Fleet.Features.TeleopRobot;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
 using WaroTrans.IntegrationTests.Infrastructure;
@@ -149,6 +151,57 @@ public sealed class RobotControlEndpointTests(WaroTransWebApplicationFactory fac
         // A stop always goes through, lease or not.
         var tinaStops = await client.SendWithTokenAsync(HttpMethod.Post, $"/api/fleet/robots/{robotId}/teleop", tina.AccessToken, new { linear = 0.0, angular = 0.0 });
         Assert.Equal(HttpStatusCode.Accepted, tinaStops.StatusCode);
+    }
+
+    [Fact]
+    public async Task Sequenced_lease_rejects_unknown_controllers_stale_motion_and_old_epochs()
+    {
+        var robotId = await SeedRobotAsync();
+        var (client, admin) = await SignInAsync("sequence-admin", AccountRole.ADMIN);
+        var path = $"/api/fleet/robots/{robotId}";
+        var options = Factory.Services.GetRequiredService<IOptions<ManualDriveOptions>>().Value;
+        var original = options.EnableSequencedLease;
+        options.EnableSequencedLease = false;
+        try
+        {
+            using var disabled = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/manual/lease", admin.AccessToken, new { sequenced = true });
+            Assert.Equal("manual_sequence_unavailable", await disabled.ReadErrorCodeAsync());
+            options.EnableSequencedLease = true;
+            using var acquire = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/manual/lease", admin.AccessToken, new { sequenced = true });
+            acquire.EnsureSuccessStatusCode();
+            var leaseId = (await BodyAsync(acquire)).GetProperty("leaseId").GetGuid();
+            using var secondController = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/manual/lease", admin.AccessToken, new { sequenced = true });
+            Assert.Equal("manual_lease_held", await secondController.ReadErrorCodeAsync());
+            using var legacy = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/teleop", admin.AccessToken, new { linear = 0.1, angular = 0 });
+            Assert.Equal("manual_sequence_required", await legacy.ReadErrorCodeAsync());
+
+            Task<HttpResponseMessage> Send(Guid epoch, int seq, DateTimeOffset time) =>
+                client.SendWithTokenAsync(HttpMethod.Post, $"{path}/teleop", admin.AccessToken,
+                    new { linear = 0.1, angular = 0, leaseId = epoch, seq, clientSentAt = time });
+
+            using var stale = await Send(leaseId, 3, DateTimeOffset.UtcNow.AddSeconds(-2));
+            Assert.Equal("manual_setpoint_stale", await stale.ReadErrorCodeAsync());
+            using var first = await Send(leaseId, 3, DateTimeOffset.UtcNow);
+            Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+            using var older = await Send(leaseId, 2, DateTimeOffset.UtcNow);
+            Assert.Equal("manual_sequence_out_of_order", await older.ReadErrorCodeAsync());
+            using var renew = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/manual/lease", admin.AccessToken, new { sequenced = true, leaseId });
+            Assert.Equal(leaseId, (await BodyAsync(renew)).GetProperty("leaseId").GetGuid());
+            using var replay = await Send(leaseId, 3, DateTimeOffset.UtcNow);
+            Assert.Equal("manual_sequence_out_of_order", await replay.ReadErrorCodeAsync());
+            using var release = await client.SendWithTokenAsync(HttpMethod.Delete, $"{path}/manual/lease?leaseId={leaseId}", admin.AccessToken);
+            Assert.Equal(HttpStatusCode.NoContent, release.StatusCode);
+            using var reacquire = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/manual/lease", admin.AccessToken, new { sequenced = true });
+            var nextLeaseId = (await BodyAsync(reacquire)).GetProperty("leaseId").GetGuid();
+            Assert.NotEqual(leaseId, nextLeaseId);
+            using var old = await Send(leaseId, 4, DateTimeOffset.UtcNow);
+            Assert.Equal("manual_lease_changed", await old.ReadErrorCodeAsync());
+            Assert.Single(Mqtt.PublishedTeleop, item => item.LeaseId == leaseId && item.Seq == 3);
+        }
+        finally
+        {
+            options.EnableSequencedLease = original;
+        }
     }
 
     [Fact]

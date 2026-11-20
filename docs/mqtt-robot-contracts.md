@@ -345,6 +345,12 @@ bridge drives only from `/cmd_vel_motor` and only while the gate is its sole pub
 Not a command: no `commandId`, no ACK / RESULT, nothing persisted. The web console sends a setpoint every
 ~200 ms while a direction is held and `{0, 0}` on release (`POST /api/fleet/robots/{id}/teleop`).
 
+The sequenced controller requests `{ sequenced: true }` at `POST /api/fleet/robots/{id}/manual/lease` and retains the returned `leaseId` locally. Renew with `{ sequenced: true, leaseId }` and release with `DELETE /api/fleet/robots/{id}/manual/lease?leaseId=…`. An active sequenced lease cannot be renewed by a second controller using the same account without that lease ID. `serverTime` is available to align the controller's request timestamp. The release or a new lease ends the previous sequence.
+
+Each sequenced setpoint carries `leaseId`, a strictly increasing positive integer `seq`, and UTC `clientSentAt`. The server rejects setpoints over 500 ms old or more than 250 ms ahead, duplicate or out-of-order sequences, and commands for a superseded lease. The MQTT message carries these three fields along with `sentAt`. Reconnecting clients must acquire a fresh lease and wait for a new joystick gesture. A QoS 0 publish does not establish that the robot moved or stopped.
+
+`ManualDrive:EnableSequencedLease` defaults to false. Deploy the gateway with sequence and expiry validation through its collision monitor, motion authority and deadman before enabling it. Fleet migration `20261120090749_SequenceManualDriveLease` stores the current lease ID and sequence.
+
 ```json
 {
   "schemaVersion": 1,

@@ -326,6 +326,14 @@ namespace WaroTrans.Fleet.Persistence.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("manual_lease_holder_name");
 
+                    b.Property<Guid?>("ManualLeaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("manual_lease_id");
+
+                    b.Property<long?>("ManualLeaseLastSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("manual_lease_last_sequence");
+
                     b.Property<DateTimeOffset?>("ManualLeaseUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("manual_lease_until");

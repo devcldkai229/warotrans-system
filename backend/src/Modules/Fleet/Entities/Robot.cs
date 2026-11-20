@@ -61,6 +61,8 @@ public sealed class Robot
     public Guid? ManualLeaseHolderId { get; set; }
     public string? ManualLeaseHolderName { get; set; }
     public DateTimeOffset? ManualLeaseUntil { get; set; }
+    public Guid? ManualLeaseId { get; set; }
+    public long? ManualLeaseLastSequence { get; set; }
 
     /// <summary>Why the robot is in MAINTENANCE, and since when (RB-08).</summary>
     public string? MaintenanceReason { get; set; }
