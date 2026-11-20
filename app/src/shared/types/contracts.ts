@@ -667,6 +667,25 @@ export type HandoverProblemCode =
   | 'CONTAINER_DAMAGED'
   | 'QUANTITY_MISMATCH';
 
+export type HazardType =
+  | 'LIQUID_SPILL'
+  | 'FALLEN_CARGO'
+  | 'FACILITY_WORK'
+  | 'FORKLIFT_TRAFFIC'
+  | 'OTHER';
+
+export type IssueSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface HazardLocationResponse {
+  warehouseId: string;
+  mapVersionId: string;
+  edgeId: string | null;
+  zoneId: string | null;
+  endpointId: string | null;
+  locationCode: string;
+  hazardType: HazardType | string;
+}
+
 export type IssueStatus = 'OPEN' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
 
 export interface IssueEvidenceDto {
@@ -702,6 +721,7 @@ export interface IssueReportResponse {
   resolution: string | null;
   allowedTransitions: string[];
   problemCode: HandoverProblemCode | string | null;
+  hazard?: HazardLocationResponse | null;
 }
 
 export interface ListIssuesResponse {

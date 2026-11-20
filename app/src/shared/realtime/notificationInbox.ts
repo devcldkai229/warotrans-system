@@ -64,5 +64,8 @@ export function notificationDestination(item: LiveNotificationEvent, session: Us
   if (item.entityType === 'REQUEST' && sessionCan(session, PERMISSIONS.transportRead)) {
     return { screen: 'transport_detail' as const, params: { requestId: item.entityId } };
   }
+  if (item.entityType === 'ISSUE' && sessionCan(session, PERMISSIONS.issueRead)) {
+    return { screen: 'block_path' as const, params: { issueId: item.entityId } };
+  }
   return null;
 }

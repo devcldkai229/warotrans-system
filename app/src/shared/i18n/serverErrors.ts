@@ -241,4 +241,9 @@ export const viServerErrors: Record<string, string> = {
   manual_setpoint_stale: 'Lệnh vận tốc đã quá hạn thời gian cho phép. Hãy thao tác lại.',
   handover_work_zone_priority: 'Lượt bàn giao này đang ưu tiên tạm thời cho nhân viên trong khu vực làm việc.',
   handover_work_zone_invalid: 'Hãy chọn khu vực làm việc (ZONE-AREA) thuộc bản đồ đang xuất bản của kho hiện tại.',
+  hazard_location_invalid: 'Hãy chọn đúng một hành lang, vùng hoặc điểm dừng đang hoạt động trên bản đồ đã xuất bản.',
+  hazard_request_conflict: 'Mã gửi cảnh báo này đã được dùng cho một nội dung khác.',
+  hazard_warehouse_out_of_scope: 'Hãy chọn vị trí thuộc phạm vi kho bạn đang vận hành.',
+  hazard_request_invalid: 'Hãy chọn loại sự cố, mức độ và bản đồ kho đã xuất bản.',
+  hazard_description_invalid: 'Hãy mô tả mối nguy hiểm từ 1 đến 2000 ký tự.',
 };

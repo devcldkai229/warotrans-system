@@ -121,3 +121,149 @@ test('resolveOwnHandoverIssue and transitionIssue validate inputs, bind caller t
     error => error.code === 'issue_resolve_invalid',
   );
 });
+
+test('reportWarehouseHazard validates exactly one map location and forwards idempotent requestId', async () => {
+  const requests = [];
+  const ops = loadOps(async (path, init = {}, token) => {
+    requests.push({ path, method: init.method || 'GET', body: JSON.parse(init.body), token });
+    return sampleIssue({
+      id: 'haz-1',
+      code: 'ISS-099',
+      issueType: 'OTHER',
+      severity: 'CRITICAL',
+      problemCode: null,
+      hazard: {
+        warehouseId: 'wh-1',
+        mapVersionId: 'map-1',
+        edgeId: 'edge-1',
+        zoneId: null,
+        endpointId: null,
+        locationCode: 'AISLE-01',
+        hazardType: 'LIQUID_SPILL',
+      },
+    });
+  }, 'staff-token');
+
+  const created = await ops.reportWarehouseHazard({
+    requestId: 'req-uuid-1',
+    mapVersionId: 'map-1',
+    hazardType: 'LIQUID_SPILL',
+    severity: 'CRITICAL',
+    description: '  Oil spill near bay 2  ',
+    edgeId: 'edge-1',
+  });
+  assert.equal(created.hazard.locationCode, 'AISLE-01');
+  assert.deepEqual(plain(requests[0]), {
+    path: '/api/operations/hazards',
+    method: 'POST',
+    body: {
+      requestId: 'req-uuid-1',
+      mapVersionId: 'map-1',
+      hazardType: 'LIQUID_SPILL',
+      severity: 'CRITICAL',
+      description: 'Oil spill near bay 2',
+      edgeId: 'edge-1',
+      zoneId: null,
+      endpointId: null,
+    },
+    token: 'staff-token',
+  });
+
+  await assert.rejects(
+    () =>
+      ops.reportWarehouseHazard({
+        requestId: 'req-2',
+        mapVersionId: 'map-1',
+        hazardType: 'LIQUID_SPILL',
+        severity: 'HIGH',
+        description: 'Spill',
+        edgeId: 'edge-1',
+        zoneId: 'zone-1',
+      }),
+    error => error.code === 'hazard_location_invalid',
+  );
+
+  await assert.rejects(
+    () =>
+      ops.reportWarehouseHazard({
+        requestId: 'req-3',
+        mapVersionId: 'map-1',
+        hazardType: 'LIQUID_SPILL',
+        severity: 'HIGH',
+        description: '   ',
+        endpointId: 'ep-1',
+      }),
+    error => error.code === 'hazard_description_invalid',
+  );
+});
+
+test('hazardReportData filters active map locations, builds payloads and keeps stable fingerprints', () => {
+  const {
+    buildHazardRequestBody,
+    collectMapHazardLocations,
+    createHazardRequestId,
+    hazardPayloadFingerprint,
+  } = createLoader()('src/features/safety/hazardReportData.ts');
+
+  const id = createHazardRequestId();
+  assert.match(id, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i);
+
+  const locs = collectMapHazardLocations({
+    id: 'map-1',
+    edges: [
+      { id: 'e2', mapVersionId: 'map-1', code: 'E-02', direction: 'ONE_WAY', isActive: true },
+      { id: 'e1', mapVersionId: 'map-1', code: 'E-01', direction: 'BIDIRECTIONAL', isActive: false },
+    ],
+    zones: [
+      { id: 'z1', mapVersionId: 'map-1', code: 'ZONE-AREA-A', name: 'Inbound Staging', zoneType: 'JUNCTION', isActive: true },
+      { id: 'z2', mapVersionId: 'map-other', code: 'ZONE-OTHER', name: 'Other', isActive: true },
+    ],
+    endpoints: [
+      { id: 'ep1', mapVersionId: 'map-1', code: 'IN-01', name: 'Inbound Dock', endpointType: 'WAYPOINT', isEnabled: true },
+    ],
+  });
+  assert.deepEqual(plain(locs.edges.map(x => x.code)), ['E-02']);
+  assert.deepEqual(plain(locs.zones.map(x => x.code)), ['ZONE-AREA-A']);
+  assert.deepEqual(plain(locs.endpoints.map(x => x.code)), ['IN-01']);
+
+  const fp1 = hazardPayloadFingerprint({
+    mapVersionId: 'map-1',
+    locationKind: 'zone',
+    locationId: 'z1',
+    hazardType: 'FALLEN_CARGO',
+    severity: 'HIGH',
+    description: ' Pallet fallen ',
+  });
+  const fp2 = hazardPayloadFingerprint({
+    mapVersionId: 'map-1',
+    locationKind: 'zone',
+    locationId: 'z1',
+    hazardType: 'FALLEN_CARGO',
+    severity: 'HIGH',
+    description: 'Pallet fallen',
+  });
+  assert.equal(fp1, fp2);
+
+  assert.deepEqual(
+    plain(
+      buildHazardRequestBody('req-1', {
+        mapVersionId: 'map-1',
+        locationKind: 'zone',
+        locationId: 'z1',
+        hazardType: 'FALLEN_CARGO',
+        severity: 'HIGH',
+        description: '  Pallet fallen ',
+      }),
+    ),
+    {
+      requestId: 'req-1',
+      mapVersionId: 'map-1',
+      hazardType: 'FALLEN_CARGO',
+      severity: 'HIGH',
+      description: 'Pallet fallen',
+      edgeId: null,
+      zoneId: 'z1',
+      endpointId: null,
+    },
+  );
+});

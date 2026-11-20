@@ -1,7 +1,33 @@
 import { apiFetch, ApiError, getAccessToken } from './client';
-import type { IssueReportResponse, IssueStatus, ListIssuesResponse } from '../types/contracts';
+import type {
+  HazardType,
+  IssueReportResponse,
+  IssueSeverity,
+  IssueStatus,
+  ListIssuesResponse,
+} from '../types/contracts';
 
 const callerToken = () => (typeof getAccessToken === 'function' ? getAccessToken() : undefined);
+
+const VALID_HAZARD_TYPES = new Set<HazardType>([
+  'LIQUID_SPILL',
+  'FALLEN_CARGO',
+  'FACILITY_WORK',
+  'FORKLIFT_TRAFFIC',
+  'OTHER',
+]);
+const VALID_HAZARD_SEVERITIES = new Set<IssueSeverity>(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
+
+export interface ReportWarehouseHazardBody {
+  requestId: string;
+  mapVersionId: string;
+  hazardType: HazardType;
+  severity: IssueSeverity;
+  description: string;
+  edgeId?: string | null;
+  zoneId?: string | null;
+  endpointId?: string | null;
+}
 
 export async function listIssues(
   filter: { jobId?: string; status?: string; mine?: boolean; take?: number } = {},
@@ -87,4 +113,46 @@ export async function transitionIssue(
     throw new ApiError(502, 'issue_invalid', 'Could not read issue details from the server.');
   }
   return issue;
+}
+
+export async function reportWarehouseHazard(
+  body: ReportWarehouseHazardBody,
+): Promise<IssueReportResponse> {
+  const requestId = typeof body.requestId === 'string' ? body.requestId.trim() : '';
+  const mapVersionId = typeof body.mapVersionId === 'string' ? body.mapVersionId.trim() : '';
+  if (!requestId || !mapVersionId || !VALID_HAZARD_TYPES.has(body.hazardType) || !VALID_HAZARD_SEVERITIES.has(body.severity)) {
+    throw new ApiError(400, 'hazard_request_invalid', 'Select hazard type, severity, and a published warehouse map.');
+  }
+  const description = typeof body.description === 'string' ? body.description.trim() : '';
+  if (!description || description.length > 2000) {
+    throw new ApiError(400, 'hazard_description_invalid', 'Describe the hazard in 1 to 2000 characters.');
+  }
+  const edgeId = typeof body.edgeId === 'string' && body.edgeId.trim() ? body.edgeId.trim() : null;
+  const zoneId = typeof body.zoneId === 'string' && body.zoneId.trim() ? body.zoneId.trim() : null;
+  const endpointId = typeof body.endpointId === 'string' && body.endpointId.trim() ? body.endpointId.trim() : null;
+  const locationCount = [edgeId, zoneId, endpointId].filter(Boolean).length;
+  if (locationCount !== 1) {
+    throw new ApiError(400, 'hazard_location_invalid', 'Select one active corridor, zone, or station on the published map.');
+  }
+  const created = await apiFetch<IssueReportResponse>(
+    '/api/operations/hazards',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        requestId,
+        mapVersionId,
+        hazardType: body.hazardType,
+        severity: body.severity,
+        description,
+        edgeId,
+        zoneId,
+        endpointId,
+      }),
+    },
+    callerToken(),
+  );
+  if (!created || typeof created.id !== 'string' || typeof created.code !== 'string' || !created.hazard?.locationCode) {
+    throw new ApiError(502, 'issue_invalid', 'Could not read hazard ticket details from the server.');
+  }
+  return created;
 }

@@ -62,10 +62,15 @@ test('REST presentation preserves real read state/time/entity instead of resetti
 test('notification links use verified entity IDs and current permissions; unknown/web-only routes are not guessed', () => {
   const { notificationDestination } = modules(async () => {})('src/shared/realtime/notificationInbox.ts');
   const session = { permissions: ['job.read', 'tr.read'] };
+  const issueSession = { permissions: ['job.read', 'tr.read', 'issue.read'] };
   const item = { entityType: 'JOB', entityId: 'job-1', route: 'https://unexpected.example/' };
   assert.deepEqual(plain(notificationDestination(item, session)), { screen: 'job_detail', params: { jobId: 'job-1' } });
   assert.deepEqual(plain(notificationDestination({ ...item, entityType: 'REQUEST', entityId: 'request-1' }, session)),
     { screen: 'transport_detail', params: { requestId: 'request-1' } });
+  assert.deepEqual(
+    plain(notificationDestination({ ...item, kind: 'WAREHOUSE_HAZARD', entityType: 'ISSUE', entityId: 'iss-1' }, issueSession)),
+    { screen: 'block_path', params: { issueId: 'iss-1' } },
+  );
   for (const entityType of ['ROBOT', 'ISSUE', 'CONTAINER', 'RECOVERY', 'NEW_KIND']) {
     assert.equal(notificationDestination({ ...item, entityType }, session), null);
   }
