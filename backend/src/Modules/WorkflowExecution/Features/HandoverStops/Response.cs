@@ -5,6 +5,8 @@ namespace WaroTrans.WorkflowExecution.Features.HandoverStops;
 
 public sealed record HandoverStopVersionRequest(Guid MoveId, int Version);
 
+public sealed record SelectWorkZoneRequest(Guid? ZoneId);
+
 public sealed record ConfirmHandoverStopRequest(Guid MoveId, int Version, IReadOnlyList<HandoverStopScan> Scans);
 
 public sealed record HandoverStopContainerResponse(Guid ContainerId, string? Barcode);
@@ -25,4 +27,7 @@ public sealed record HandoverStopResponse(
     DateTimeOffset? BeginDeadline,
     DateTimeOffset? BeganAt,
     int Version,
-    IReadOnlyList<ActionAvailability> AvailableActions);
+    IReadOnlyList<ActionAvailability> AvailableActions,
+    DateTimeOffset WarehouseOpensAt,
+    DateTimeOffset? WorkDeadline,
+    int HeartbeatIntervalSeconds);

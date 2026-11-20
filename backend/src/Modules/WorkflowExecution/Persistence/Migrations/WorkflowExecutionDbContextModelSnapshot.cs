@@ -575,10 +575,18 @@ namespace WaroTrans.WorkflowExecution.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("handover_confirmed_at");
 
+                    b.Property<DateTimeOffset?>("HandoverHeartbeatAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_heartbeat_at");
+
                     b.Property<int>("HandoverVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("integer")
                         .HasColumnName("handover_version");
+
+                    b.Property<DateTimeOffset?>("HandoverWorkDeadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handover_work_deadline");
 
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")

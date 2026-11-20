@@ -12,7 +12,7 @@ namespace WaroTrans.WorkflowExecution.Services;
 public sealed class StaffWarehouseScope(
     WorkflowExecutionDbContext db,
     INavigationModule navigation,
-    IWarehouseModule warehouse)
+    IWarehouseModule warehouse) : IStaffOperatingWarehouse
 {
     public async Task<Guid?> GetOperatingWarehouseIdAsync(CancellationToken cancellationToken)
     {

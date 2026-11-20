@@ -171,6 +171,12 @@ Only the operator recorded on the pause or an Admin may resume an operator-pause
 
 Staff who reported a classified handover issue can call `POST /api/operations/issues/{id}/resolve-handover` with `{ expectedVersion, scannedBarcode, resolution }`. The server verifies the expected container's barcode and records the actor and scan. The Issue response includes `problemCode` and actor-specific `allowedTransitions`. Admin and Technician use their scoped transition route and supply `scannedBarcode` when resolving a wrong or missing container issue. Resolution does not advance the Job.
 
+Staff select their work zone with PUT `/api/workflow-execution/handover-stops/work-zone` and `{ zoneId }`, or clear it with `{ zoneId: null }`. GET returns `{ workZone: { warehouseId, code } | null }`. The active `ZONE-AREA-*` polygons on the published map decide work-zone priority. At `offerOpensAt` the offer is available to Staff in that work zone. At `warehouseOpensAt` every Staff member in the operating warehouse can claim. Stops outside work zones open to the warehouse immediately.
+
+Before Begin, send POST `/heartbeat` with the same `{ moveId, version }` at the returned `heartbeatIntervalSeconds`. A heartbeat keeps the connection lease alive and leaves the deadline for Begin unchanged. After Begin, the owner remains assigned even if offline or overdue. POST `/extend` with the latest version adds time to `workDeadline`. The server sends offer, reminder and overdue notifications, and emits `handoverStopsChanged` on `/hubs/notifications`; clients reload the queue and keep REST polling for catch-up. The development profile uses +10 seconds to offer, 5 seconds of priority, 30 seconds to Begin and 15 seconds of grace without a heartbeat before Begin.
+
+Apply Identity migration `20261120104707_StoreStaffWorkZone` and WorkflowExecution migration `20261120104725_TrackHandoverStopDeadlines`.
+
 ## Payload recovery
 
 Under `/api/workflow-execution/jobs/{jobId}/recovery`, GET returns `{ recovery }` with the case ID, version, `claimedBy`, manifest barcodes, robot IDs, `robotArrived` and `availableActions`. GET `/candidates` returns `{ items }` with each robot's effective `maxContainers`, eligibility and reasons for the full cargo currently on board.

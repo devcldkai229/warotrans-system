@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Enums;
 using WaroTrans.Identity.Enums;
 using WaroTrans.IntegrationTests.Identity;
@@ -14,6 +15,7 @@ using WaroTrans.Warehouse.Persistence;
 using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
+using WaroTrans.WorkflowExecution.Execution;
 using WaroTrans.WorkflowExecution.Persistence;
 using WaroTrans.WorkflowExecution.Services;
 using Product = WaroTrans.Warehouse.Entities.Product;
@@ -239,6 +241,76 @@ public sealed class HandoverStopEndpointTests(WaroTransWebApplicationFactory fac
             Assert.NotNull(record.Evidence);
         });
         Assert.All(await db.JobContainers.AsNoTracking().ToListAsync(), container => Assert.Equal(JobContainerStatus.ONBOARD, container.Status));
+    }
+
+    [Fact]
+    public async Task A_work_zone_gets_first_claim_and_the_offer_then_opens_to_the_warehouse()
+    {
+        var nearby = await Factory.CreateAccountAsync("nearby", AccountRole.STAFF);
+        var elsewhere = await Factory.CreateAccountAsync("elsewhere", AccountRole.STAFF);
+        var client = CreateAnonymousClient();
+        var nearbyToken = (await client.LoginAsync(nearby.Username)).AccessToken;
+        var elsewhereToken = (await client.LoginAsync(elsewhere.Username)).AccessToken;
+        var (job, stop, move, _, moveId) = await SeedAsync(nearby.Id);
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WorkflowExecutionDbContext>();
+        var navigation = scope.ServiceProvider.GetRequiredService<NavigationDbContext>();
+        var settings = scope.ServiceProvider.GetRequiredService<IOptions<HumanTaskOptions>>().Value;
+        var oldPriority = settings.StopWorkZonePrioritySeconds;
+        settings.StopWorkZonePrioritySeconds = 120;
+        try
+        {
+            var zone = new Zone
+            {
+                Id = Guid.NewGuid(), MapVersionId = job.MapVersionId, Name = "Picking", Code = "ZONE-AREA-PICKING",
+                ZoneType = ZoneType.SPEED, IsActive = true,
+                Geometry = JsonDocument.Parse("""{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}""")
+            };
+            navigation.AddRange(zone, new Endpoint
+            {
+                Id = move.TargetEndpointId!.Value, MapVersionId = job.MapVersionId, Name = "Pick", Code = "WAYPOINT-PICK",
+                IsEnabled = true, X = 1, Y = 1
+            });
+            await navigation.SaveChangesAsync();
+            using var selected = await client.SendWithTokenAsync(HttpMethod.Put,
+                "/api/workflow-execution/handover-stops/work-zone", nearbyToken, new { zoneId = zone.Id });
+            Assert.Equal(zone.Code, (await ReadAsync(selected)).GetProperty("workZone").GetProperty("code").GetString());
+
+            var storedMove = (await db.JobSteps.FindAsync(move.Id))!;
+            storedMove.AcceptedMoveCommandId = moveId;
+            storedMove.MoveAcceptedAt = DateTimeOffset.UtcNow.AddSeconds(-11);
+            await db.SaveChangesAsync();
+            var path = $"/api/workflow-execution/jobs/{job.Id}/handover-stops/{stop.Id}";
+            using var tooEarly = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/claim", elsewhereToken, new { moveId, version = 0 });
+            Assert.Equal("handover_work_zone_priority", await tooEarly.ReadErrorCodeAsync());
+            const string offers = "/api/operations/notifications?kind=HANDOVER_STOP_OFFERED&take=100";
+            using var untilNotice = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            while (true)
+            {
+                using var response = await client.GetWithTokenAsync(offers, nearbyToken);
+                if ((await ReadAsync(response)).GetProperty("items").GetArrayLength() > 0) break;
+                await Task.Delay(100, untilNotice.Token);
+            }
+            using var foreignNotice = await client.GetWithTokenAsync(offers, elsewhereToken);
+            Assert.Empty((await ReadAsync(foreignNotice)).GetProperty("items").EnumerateArray());
+
+            storedMove.MoveAcceptedAt = DateTimeOffset.UtcNow.AddSeconds(-131);
+            await db.SaveChangesAsync();
+            using var claim = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/claim", elsewhereToken, new { moveId, version = 0 });
+            var version = (await ReadAsync(claim)).GetProperty("version").GetInt32();
+            using var heartbeat = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/heartbeat", elsewhereToken, new { moveId, version });
+            Assert.Equal(version, (await ReadAsync(heartbeat)).GetProperty("version").GetInt32());
+
+            var savedStop = (await db.JobTasks.FindAsync(stop.Id))!;
+            savedStop.HandoverHeartbeatAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+            await db.SaveChangesAsync();
+            using var reclaimed = await client.SendWithTokenAsync(HttpMethod.Post, $"{path}/claim", nearbyToken, new { moveId, version });
+            Assert.Equal(nearby.Id, (await ReadAsync(reclaimed)).GetProperty("claimedBy").GetGuid());
+        }
+        finally
+        {
+            settings.StopWorkZonePrioritySeconds = oldPriority;
+        }
     }
 
     private static async Task<JsonElement> ReadAsync(HttpResponseMessage response)

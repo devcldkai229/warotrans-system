@@ -1,12 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using WaroTrans.Navigation.Contracts;
 using WaroTrans.Navigation.Enums;
+using WaroTrans.Navigation.Geometry;
 using WaroTrans.Navigation.Persistence;
 
 namespace WaroTrans.Navigation.Services;
 
 public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INavigationModule
 {
+    // Same convention as the operational area filter in the mobile and web map.
+    private const string WorkZonePrefix = "ZONE-AREA-%";
     public Task<MapVersionSnapshot?> GetMapVersionAsync(Guid mapVersionId, CancellationToken cancellationToken = default) =>
         dbContext.MapVersions
             .AsNoTracking()
@@ -62,4 +65,22 @@ public sealed class NavigationModuleApi(NavigationDbContext dbContext) : INaviga
             .Where(e => e.Id == endpointId)
             .Select(e => new EndpointPoseSnapshot(e.Id, e.MapVersionId, e.Code, e.X, e.Y, e.Yaw, e.IsEnabled, e.PositionTolerance))
             .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<WorkZoneSnapshot?> GetWorkZoneAsync(Guid zoneId, CancellationToken cancellationToken = default) =>
+        dbContext.Zones.AsNoTracking()
+            .Where(zone => zone.Id == zoneId && zone.IsActive && EF.Functions.ILike(zone.Code, WorkZonePrefix))
+            .Select(zone => new WorkZoneSnapshot(zone.Id, zone.MapVersionId, zone.Code))
+            .SingleOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<string>> GetWorkZoneCodesAtEndpointAsync(Guid endpointId, CancellationToken cancellationToken = default)
+    {
+        var endpoint = await GetEndpointPoseAsync(endpointId, cancellationToken);
+        if (endpoint is not { IsEnabled: true }) return [];
+        var zones = await dbContext.Zones.AsNoTracking()
+            .Where(zone => zone.MapVersionId == endpoint.MapVersionId && zone.IsActive && EF.Functions.ILike(zone.Code, WorkZonePrefix))
+            .Select(zone => new { zone.Code, zone.Geometry })
+            .ToListAsync(cancellationToken);
+        return zones.Where(zone => GeoJsonGeometry.ContainsPoint(zone.Geometry.RootElement, endpoint.X, endpoint.Y))
+            .Select(zone => zone.Code.ToUpperInvariant()).ToList();
+    }
 }

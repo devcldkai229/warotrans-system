@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
+using WaroTrans.BuildingBlocks.Abstractions;
 using WaroTrans.BuildingBlocks.Authorization;
 
 namespace WaroTrans.Host.Hubs;
@@ -17,7 +18,7 @@ namespace WaroTrans.Host.Hubs;
 /// scope at least once per token lifetime.
 /// </summary>
 [Authorize]
-public sealed class NotificationsHub(IRobotAccessScope robotAccessScope) : Hub
+public sealed class NotificationsHub(IRobotAccessScope robotAccessScope, IStaffOperatingWarehouse staffWarehouse) : Hub
 {
     public override async Task OnConnectedAsync()
     {
@@ -39,6 +40,9 @@ public sealed class NotificationsHub(IRobotAccessScope robotAccessScope) : Hub
         if (RolePermissionMatrix.UserHas(user, Permissions.NotificationRead))
         {
             groups.AddRange(AppRoles.All.Where(user.IsInRole).Select(RealtimeGroups.Role));
+            if (user.IsInRole(AppRoles.Staff)
+                && await staffWarehouse.GetOperatingWarehouseIdAsync(Context.ConnectionAborted) is { } warehouse)
+                groups.Add(RealtimeGroups.StaffWarehouse(warehouse));
         }
 
         if (RolePermissionMatrix.UserHas(user, Permissions.RobotRead))
@@ -74,6 +78,8 @@ public static class RealtimeGroups
     public static string Robot(Guid robotId) => $"robot:{robotId:D}";
 
     public static string User(Guid accountId) => $"user:{accountId:D}";
+
+    public static string StaffWarehouse(Guid warehouseId) => $"staff:warehouse:{warehouseId:D}";
 
     /// <summary>Everyone signed in with this role who may read notifications.</summary>
     public static string Role(string role) => $"role:{role}";

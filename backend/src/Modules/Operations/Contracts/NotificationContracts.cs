@@ -8,7 +8,8 @@ namespace WaroTrans.Operations.Contracts;
 /// <param name="Roles">Everyone with one of these roles, when there is no single <paramref name="AccountId"/>.</param>
 /// <param name="AccountId">One person: an assignee, the reporter of an issue.</param>
 /// <param name="RobotId">The robot it is about: Technicians only receive it for robots in their scope.</param>
-public sealed record NotificationAudience(IReadOnlyList<string> Roles, Guid? AccountId = null, Guid? RobotId = null)
+public sealed record NotificationAudience(
+    IReadOnlyList<string> Roles, Guid? AccountId = null, Guid? RobotId = null, Guid? WarehouseId = null)
 {
     public static readonly NotificationAudience Admins = new([AppRoles.Admin]);
 
@@ -85,7 +86,8 @@ public sealed record NotificationCreated(
     Guid? ReceiverAccountId = null,
     IReadOnlyList<string>? RecipientRoles = null,
     Guid? RobotId = null,
-    string? Route = null) : IIntegrationEvent
+    string? Route = null,
+    Guid? WarehouseId = null) : IIntegrationEvent
 {
     public Guid EventId { get; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;

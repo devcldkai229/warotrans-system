@@ -58,6 +58,7 @@ public static class IdentityModule
         services.AddScoped<AccountRobotScopeHandler>();
         services.AddScoped<IRobotAccessScope, RobotAccessScope>();
         services.AddScoped<WaroTrans.BuildingBlocks.Abstractions.IAccountNameLookup, AccountNameLookup>();
+        services.AddScoped<WaroTrans.BuildingBlocks.Abstractions.IStaffWorkZones, StaffWorkZones>();
 
         return services;
     }

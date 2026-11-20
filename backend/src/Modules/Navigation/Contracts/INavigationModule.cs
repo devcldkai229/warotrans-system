@@ -29,7 +29,15 @@ public interface INavigationModule
 
     /// <summary>Map-frame pose of an endpoint (where a robot must stop), or null when unknown.</summary>
     Task<EndpointPoseSnapshot?> GetEndpointPoseAsync(Guid endpointId, CancellationToken cancellationToken = default);
+
+    Task<WorkZoneSnapshot?> GetWorkZoneAsync(Guid zoneId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<WorkZoneSnapshot?>(null);
+
+    Task<IReadOnlyList<string>> GetWorkZoneCodesAtEndpointAsync(Guid endpointId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>([]);
 }
+
+public sealed record WorkZoneSnapshot(Guid Id, Guid MapVersionId, string Code);
 
 public sealed record EndpointPoseSnapshot(
     Guid Id,

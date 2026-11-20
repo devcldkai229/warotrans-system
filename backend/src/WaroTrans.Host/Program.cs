@@ -101,6 +101,8 @@ builder.Services.AddScoped<IIntegrationEventHandler<JobWaitingToStart>, AdminNot
 builder.Services.AddScoped<IIntegrationEventHandler<JobStepWaitingForPerson>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<HumanTaskOffered>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<HumanStepOverdue>, AdminNotificationProducer>();
+builder.Services.AddScoped<IIntegrationEventHandler<HandoverStopNotice>, HandoverStopRealtime>();
+builder.Services.AddScoped<IIntegrationEventHandler<HandoverStopQueueChanged>, HandoverStopRealtime>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestClosedByOperator>, AdminNotificationProducer>();
 builder.Services.AddScoped<IIntegrationEventHandler<TransportRequestProgressed>, SignalRJobRealtimeForwarder>();

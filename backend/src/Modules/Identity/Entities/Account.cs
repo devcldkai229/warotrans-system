@@ -11,6 +11,8 @@ public sealed class Account
     public string FullName { get; set; } = string.Empty;
     public AccountRole Role { get; set; }
     public AccountStatus Status { get; set; }
+    public Guid? WorkZoneWarehouseId { get; set; }
+    public string? WorkZoneCode { get; set; }
 
     /// <summary>
     /// True while the account holds a temporary password handed out by an Admin (new account or reset).

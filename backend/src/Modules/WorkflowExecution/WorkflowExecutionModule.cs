@@ -71,6 +71,7 @@ public static class WorkflowExecutionModule
         services.Configure<Execution.HumanTaskOptions>(configuration.GetSection(Execution.HumanTaskOptions.SectionName));
         services.AddScoped<Features.HumanTasks.HumanTaskQueries>();
         services.AddScoped<Features.HandoverStops.HandoverStopsHandler>();
+        services.AddHostedService<HandoverStopNoticeHostedService>();
         services.AddScoped<IHandoverIssueVerifier, HandoverIssueVerifier>();
         services.Configure<Execution.RecoveryOptions>(configuration.GetSection(Execution.RecoveryOptions.SectionName));
         services.AddHostedService<Services.RobotOfflineJobHostedService>();
@@ -87,6 +88,7 @@ public static class WorkflowExecutionModule
         services.AddScoped<JobExecutionEngine>();
         services.AddScoped<JobQueries>();
         services.AddScoped<StaffWarehouseScope>();
+        services.AddScoped<IStaffOperatingWarehouse>(sp => sp.GetRequiredService<StaffWarehouseScope>());
         services.AddScoped<ITransportRequestJobControl, Services.TransportRequestJobControl>();
         services.AddScoped<IJobEvidenceQuery, Services.JobEvidenceQuery>();
         services.AddScoped<StartJobHandler>();

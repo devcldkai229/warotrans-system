@@ -1,8 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using WaroTrans.BuildingBlocks.Abstractions;
+using WaroTrans.BuildingBlocks.Authorization;
 using WaroTrans.BuildingBlocks.Exceptions;
+using WaroTrans.Navigation.Contracts;
+using WaroTrans.Navigation.Enums;
 using WaroTrans.Warehouse.Contracts;
+using WaroTrans.WorkflowExecution.Contracts;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
 using WaroTrans.WorkflowExecution.Execution;
@@ -12,7 +16,7 @@ using WaroTrans.WorkflowExecution.Services;
 
 namespace WaroTrans.WorkflowExecution.Features.HandoverStops;
 
-public enum HandoverStopAction { Claim, Begin, Release }
+public enum HandoverStopAction { Claim, Begin, Release, Heartbeat, Extend }
 
 public sealed class HandoverStopsHandler(
     WorkflowExecutionDbContext db,
@@ -24,7 +28,10 @@ public sealed class HandoverStopsHandler(
     IOptions<HumanTaskOptions> options,
     JobExecutionEngine engine,
     JobQueries queries,
-    IIssueReporter issues)
+    IIssueReporter issues,
+    IStaffWorkZones workZones,
+    INavigationModule navigation,
+    IIntegrationEventPublisher events)
 {
     private HumanTaskOptions Settings => options.Value;
 
@@ -34,7 +41,7 @@ public sealed class HandoverStopsHandler(
         var jobs = await JobsWithSteps().AsNoTracking().Where(job => job.Status == JobStatus.RUNNING).ToListAsync(cancellationToken);
         var visibleMaps = await staffWarehouse.VisibleMapIdsAsync(jobs.Select(job => job.MapVersionId), user, cancellationToken);
         jobs.RemoveAll(job => !visibleMaps.Contains(job.MapVersionId));
-        var operations = await LoadHumanOperationsAsync(jobs.Select(job => job.WorkflowId).Distinct().ToArray(), cancellationToken);
+        var operations = await StopHandover.LoadOperationsAsync(db, jobs.Select(job => job.WorkflowId).Distinct().ToArray(), cancellationToken);
         var now = clock.GetUtcNow();
         var stops = jobs.Select(job => StopHandover.Read(job, operations)).OfType<StopHandover>()
             .Where(stop => stop.OfferOpensAt(Settings) <= now && (!mine || stop.OwnerAt(now, Settings) == actor))
@@ -51,7 +58,7 @@ public sealed class HandoverStopsHandler(
         await using var transaction = await JobWriteLock.AcquireAsync(db, jobId, cancellationToken);
         var job = await JobsWithSteps().FirstOrDefaultAsync(job => job.Id == jobId, cancellationToken)
             ?? throw new NotFoundException($"Job '{jobId}' was not found.", "job_not_found");
-        var operations = await LoadHumanOperationsAsync([job.WorkflowId], cancellationToken);
+        var operations = await StopHandover.LoadOperationsAsync(db, [job.WorkflowId], cancellationToken);
         var now = clock.GetUtcNow();
         var stop = StopHandover.Read(job, operations);
         if (stop is null || stop.StopTask.Id != stopId || stop.MoveId != request.MoveId
@@ -65,6 +72,8 @@ public sealed class HandoverStopsHandler(
         switch (action)
         {
             case HandoverStopAction.Claim:
+                if (owner is null && await WorkZonePriorityAsync(stop, await GetWorkZoneAsync(cancellationToken), now, cancellationToken) is { Denied: true })
+                    throw new ConflictException("This handover is temporarily reserved for Staff in its work zone.", "handover_work_zone_priority");
                 if (owner is not null && owner != actor)
                     throw new ConflictException("Another operator holds this handover.", "handover_stop_claimed");
                 if (stop.Containers.Any(item => item.Step.ClaimedBy is { } holder && holder != actor && item.Step.ClaimExpiresAt > now))
@@ -73,7 +82,9 @@ public sealed class HandoverStopsHandler(
                 task.HandoverClaimedBy = actor;
                 task.HandoverClaimMoveId = stop.MoveId;
                 task.HandoverClaimedAt = now;
+                task.HandoverHeartbeatAt = now;
                 task.HandoverBeganAt = null;
+                task.HandoverWorkDeadline = null;
                 task.HandoverVersion++;
                 break;
             case HandoverStopAction.Begin:
@@ -82,6 +93,7 @@ public sealed class HandoverStopsHandler(
                     throw new ConflictException("Wait until the robot reaches the handover stop.", "handover_robot_not_ready");
                 if (task.HandoverBeganAt is not null) break;
                 task.HandoverBeganAt = now;
+                task.HandoverWorkDeadline = now.AddSeconds(Math.Max(Settings.StopWorkWindowSeconds, 1));
                 task.HandoverVersion++;
                 break;
             case HandoverStopAction.Release:
@@ -91,6 +103,19 @@ public sealed class HandoverStopsHandler(
                 task.HandoverClaimedBy = null;
                 task.HandoverClaimMoveId = null;
                 task.HandoverClaimedAt = null;
+                task.HandoverHeartbeatAt = null;
+                task.HandoverVersion++;
+                break;
+            case HandoverStopAction.Heartbeat:
+                EnsureOwner(owner, actor);
+                if (task.HandoverBeganAt is null) task.HandoverHeartbeatAt = now;
+                break;
+            case HandoverStopAction.Extend:
+                EnsureOwner(owner, actor);
+                if (task.HandoverBeganAt is null)
+                    throw new ConflictException("Begin the handover before extending it.", "handover_stop_begin_required");
+                var deadline = task.HandoverWorkDeadline > now ? task.HandoverWorkDeadline.Value : now;
+                task.HandoverWorkDeadline = deadline.AddSeconds(Math.Max(Settings.StopWorkExtensionSeconds, 1));
                 task.HandoverVersion++;
                 break;
         }
@@ -104,6 +129,9 @@ public sealed class HandoverStopsHandler(
             throw new ConflictException("The handover stop changed. Refresh the queue.", "handover_stop_changed");
         }
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        if (task.HandoverVersion != request.Version
+            && await navigation.GetMapVersionAsync(job.MapVersionId, CancellationToken.None) is { } map)
+            await events.PublishAsync(new HandoverStopQueueChanged(job.Id, task.Id, map.WarehouseId), CancellationToken.None);
 
         return (await ProjectAsync([stop], actor, now, cancellationToken))[0];
     }
@@ -117,6 +145,37 @@ public sealed class HandoverStopsHandler(
         return await queries.GetDetailAsync(jobId, cancellationToken);
     }
 
+    public Task<StaffWorkZone?> GetWorkZoneAsync(CancellationToken cancellationToken) =>
+        user.Role == AppRoles.Staff ? workZones.GetAsync(Actor(), cancellationToken) : Task.FromResult<StaffWorkZone?>(null);
+
+    public async Task<StaffWorkZone?> SetWorkZoneAsync(Guid? zoneId, CancellationToken cancellationToken)
+    {
+        StaffWorkZone? selection = null;
+        if (zoneId is { } id)
+        {
+            var zone = await navigation.GetWorkZoneAsync(id, cancellationToken);
+            var map = zone is null ? null : await navigation.GetMapVersionAsync(zone.MapVersionId, cancellationToken);
+            if (map is not { Status: MapStatus.PUBLISHED } || map.WarehouseId != await staffWarehouse.GetOperatingWarehouseIdAsync(cancellationToken))
+                throw new DomainValidationException("Choose a work zone from the current warehouse map.", "handover_work_zone_invalid");
+            selection = new StaffWorkZone(map.WarehouseId, zone!.Code.ToUpperInvariant());
+        }
+
+        await workZones.SetAsync(Actor(), selection, cancellationToken);
+        return selection;
+    }
+
+    private async Task<(DateTimeOffset OpensAt, bool Denied)> WorkZonePriorityAsync(
+        StopHandover stop, StaffWorkZone? selected, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var codes = await navigation.GetWorkZoneCodesAtEndpointAsync(stop.EndpointId, cancellationToken);
+        var opens = stop.WarehouseOpensAt(Settings, codes.Count != 0);
+        if (user.Role != AppRoles.Staff || now >= opens)
+            return (opens, false);
+
+        var map = await navigation.GetMapVersionAsync(stop.Job.MapVersionId, cancellationToken);
+        return (opens, selected is null || selected.WarehouseId != map?.WarehouseId || !codes.Contains(selected.Code));
+    }
+
     private Guid Actor() => user.AccountId
         ?? throw new AppException("Sign in to operate a handover.", 401, "unauthenticated");
 
@@ -128,15 +187,6 @@ public sealed class HandoverStopsHandler(
 
     private IQueryable<Job> JobsWithSteps() => db.Jobs.Include(job => job.JobTasks).ThenInclude(task => task.JobSteps).AsSplitQuery();
 
-    private async Task<Dictionary<Guid, string>> LoadHumanOperationsAsync(Guid[] workflowIds, CancellationToken cancellationToken)
-    {
-        if (workflowIds.Length == 0) return [];
-        var steps = await db.WorkflowSteps.AsNoTracking()
-            .Where(step => workflowIds.Contains(step.WorkflowTask.WorkflowId) && step.StepType == StepType.HUMAN_INTERACTION)
-            .Select(step => new { step.Id, step.Config }).ToListAsync(cancellationToken);
-        return steps.ToDictionary(step => step.Id, step => step.Config.OperationCode);
-    }
-
     private async Task<IReadOnlyList<HandoverStopResponse>> ProjectAsync(
         IReadOnlyList<StopHandover> stops, Guid actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -145,10 +195,12 @@ public sealed class HandoverStopsHandler(
         var barcodes = (await warehouse.GetContainersAsync(ids, cancellationToken)).ToDictionary(item => item.Id, item => item.Barcode);
         var owners = stops.Select(stop => stop.OwnerAt(now, Settings)).OfType<Guid>().Distinct().ToArray();
         var names = await accountNames.GetNamesAsync(owners, cancellationToken);
+        var workZone = await GetWorkZoneAsync(cancellationToken);
         var result = new List<HandoverStopResponse>(stops.Count);
         foreach (var stop in stops)
         {
             var owner = stop.OwnerAt(now, Settings);
+            var (warehouseOpens, priorityDenial) = await WorkZonePriorityAsync(stop, workZone, now, cancellationToken);
             var confirmDenial = owner != actor ? "handover_stop_claim_required"
                 : stop.ReadyAt is not { } arrived || arrived > now ? "handover_robot_not_ready"
                 : stop.StopTask.HandoverBeganAt is null ? "handover_stop_begin_required" : null;
@@ -162,14 +214,17 @@ public sealed class HandoverStopsHandler(
                 stop.OfferOpensAt(Settings), stop.ReadyAt, owner, owner is { } holder ? names.GetValueOrDefault(holder) : null,
                 owner is null ? null : stop.BeginDeadline(Settings), stop.StopTask.HandoverBeganAt, stop.StopTask.HandoverVersion,
                 [
-                    ActionAvailability.Of("CLAIM", owner is null ? null : "handover_stop_claimed", permitted: true),
+                    ActionAvailability.Of("CLAIM", owner is not null ? "handover_stop_claimed"
+                        : priorityDenial ? "handover_work_zone_priority" : null, permitted: true),
                     ActionAvailability.Of("BEGIN", owner != actor ? "handover_stop_claim_required"
                         : stop.ReadyAt is not { } readyAt || readyAt > now ? "handover_robot_not_ready"
                         : stop.StopTask.HandoverBeganAt is null ? null : "handover_already_began", permitted: true),
                     ActionAvailability.Of("RELEASE", owner != actor ? "handover_stop_claim_required"
                         : stop.StopTask.HandoverBeganAt is null ? null : "handover_already_began", permitted: true),
+                    ActionAvailability.Of("EXTEND", owner != actor ? "handover_stop_claim_required"
+                        : stop.StopTask.HandoverBeganAt is null ? "handover_stop_begin_required" : null, permitted: true),
                     ActionAvailability.Of("CONFIRM", confirmDenial, permitted: true)
-                ]));
+                ], warehouseOpens, stop.StopTask.HandoverWorkDeadline, Math.Max(Settings.StopDisconnectSeconds / 3, 1)));
         }
         return result;
     }

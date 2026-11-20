@@ -86,6 +86,15 @@ namespace WaroTrans.Identity.Persistence.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("username");
 
+                    b.Property<string>("WorkZoneCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("work_zone_code");
+
+                    b.Property<Guid?>("WorkZoneWarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_zone_warehouse_id");
+
                     b.HasKey("Id")
                         .HasName("p_k_accounts");
 

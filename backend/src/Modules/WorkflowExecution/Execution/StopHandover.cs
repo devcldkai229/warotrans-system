@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using WaroTrans.WorkflowExecution.Entities;
 using WaroTrans.WorkflowExecution.Enums;
+using WaroTrans.WorkflowExecution.Persistence;
 
 namespace WaroTrans.WorkflowExecution.Execution;
 
@@ -17,6 +19,9 @@ internal sealed record StopHandover(
     public DateTimeOffset OfferOpensAt(HumanTaskOptions options) =>
         MoveStartedAt.AddSeconds(Math.Max(options.StopOfferDelaySeconds, 0));
 
+    public DateTimeOffset WarehouseOpensAt(HumanTaskOptions options, bool hasWorkZone) =>
+        OfferOpensAt(options).AddSeconds(hasWorkZone ? Math.Max(options.StopWorkZonePrioritySeconds, 0) : 0);
+
     public DateTimeOffset? BeginDeadline(HumanTaskOptions options) =>
         ReadyAt is { } ready && StopTask.HandoverClaimedAt is { } claimed && StopTask.HandoverBeganAt is null
             ? (ready > claimed ? ready : claimed).AddSeconds(Math.Max(options.StopBeginWindowSeconds, 1))
@@ -26,6 +31,8 @@ internal sealed record StopHandover(
     {
         if (StopTask.HandoverBeganAt is not null) return StopTask.HandoverClaimedBy;
         if (StopTask.HandoverClaimMoveId != MoveId) return null;
+        if (StopTask.HandoverHeartbeatAt is { } heartbeat && heartbeat.AddSeconds(Math.Max(options.StopDisconnectSeconds, 1)) <= now)
+            return null;
         return BeginDeadline(options) is { } deadline && deadline <= now ? null : StopTask.HandoverClaimedBy;
     }
 
@@ -83,6 +90,16 @@ internal sealed record StopHandover(
         if (ready is null && current.Step.Id != move.Id) return null;
 
         return new StopHandover(job, stop, moveId, endpointId, action, moveStartedAt, ready, containers);
+    }
+
+    internal static async Task<Dictionary<Guid, string>> LoadOperationsAsync(
+        WorkflowExecutionDbContext db, Guid[] workflowIds, CancellationToken cancellationToken)
+    {
+        if (workflowIds.Length == 0) return [];
+        var definitions = await db.WorkflowSteps.AsNoTracking()
+            .Where(step => workflowIds.Contains(step.WorkflowTask.WorkflowId) && step.StepType == StepType.HUMAN_INTERACTION)
+            .Select(step => new { step.Id, step.Config }).ToListAsync(cancellationToken);
+        return definitions.ToDictionary(step => step.Id, step => step.Config.OperationCode);
     }
 
     private static int? Sequence(JobTask task) => task.ContextValues.TryGetValue("stopSequenceNo", out var value)

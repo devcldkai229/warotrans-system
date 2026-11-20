@@ -46,6 +46,7 @@ public sealed class NotificationService(
             ReceiverAccountId = audience.AccountId ?? Notification.EveryAdmin,
             RecipientRoles = audience.AccountId is null ? audience.Roles.Distinct().ToList() : [],
             RobotId = audience.RobotId ?? (draft.EntityType == "ROBOT" ? draft.EntityId : null),
+            WarehouseId = audience.WarehouseId,
             Type = draft.Type,
             Kind = draft.Kind,
             Title = draft.Title,
@@ -72,7 +73,8 @@ public sealed class NotificationService(
                 audience.AccountId,
                 notification.RecipientRoles,
                 notification.RobotId,
-                notification.Route),
+                notification.Route,
+                notification.WarehouseId),
             cancellationToken);
 
         return notification.Id;
@@ -92,7 +94,7 @@ public sealed class NotificationService(
 /// <summary>Which notifications one signed-in person may see, and which of those they have not read yet.</summary>
 public static class NotificationVisibility
 {
-    public static FilterDefinition<Notification> VisibleTo(Guid accountId, string? role, RobotScope scope)
+    public static FilterDefinition<Notification> VisibleTo(Guid accountId, string? role, RobotScope scope, Guid? warehouseId = null)
     {
         var f = Builders<Notification>.Filter;
         var roleMatches = role == AppRoles.Admin
@@ -107,7 +109,10 @@ public static class NotificationVisibility
             forMyRole = f.And(forMyRole, f.Or(f.Eq(n => n.RobotId, null), f.In(n => n.RobotId, robots)));
         }
 
-        return f.Or(f.Eq(n => n.ReceiverAccountId, accountId), forMyRole);
+        var visible = f.Or(f.Eq(n => n.ReceiverAccountId, accountId), forMyRole);
+        if (role == AppRoles.Staff)
+            visible &= f.Or(f.Eq(n => n.WarehouseId, null), f.Eq(n => n.WarehouseId, warehouseId));
+        return visible;
     }
 
     public static FilterDefinition<Notification> UnreadBy(Guid accountId)
