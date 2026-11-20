@@ -552,6 +552,32 @@ export interface JobDetailResponse {
   operatorPause?: JobOperatorPause | null;
 }
 
+export type HandoverStopAction = 'CLAIM' | 'BEGIN' | 'RELEASE';
+
+export interface HandoverStopContainerResponse {
+  containerId: string;
+  barcode: string | null;
+}
+
+export interface HandoverStopResponse {
+  id: string;
+  jobId: string;
+  jobNo: string;
+  mapVersionId: string;
+  endpointId: string;
+  moveId: string;
+  action: string;
+  containers: HandoverStopContainerResponse[];
+  offerOpensAt: UtcDateTime;
+  robotReadyAt: UtcDateTime | null;
+  claimedBy: string | null;
+  claimedByName: string | null;
+  beginDeadline: UtcDateTime | null;
+  beganAt: UtcDateTime | null;
+  version: number;
+  availableActions: ActionAvailability[];
+}
+
 export interface ReportTaskProblemBody {
   reason: string;
   note?: string;

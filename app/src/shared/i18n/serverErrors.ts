@@ -191,4 +191,13 @@ export const viServerErrors: Record<string, string> = {
   outbound_pick_invalid_map: 'Hãy chọn bản đồ đã xuất bản của kho.',
   outbound_pick_invalid_destination: 'Hãy chọn một cổng Xuất kho (Outbound) đang bật trên bản đồ đã xuất bản.',
   outbound_pick_preview_invalid: 'Không xác minh được danh sách xem trước FIFO. Hãy thử lại.',
+  handover_stop_changed: 'Lượt bàn giao đã thay đổi. Hãy tải lại hàng đợi trước khi thao tác.',
+  handover_stop_not_open: 'Lượt bàn giao này chưa mở để nhận (cần sau 10 giây kể từ lúc robot xác nhận di chuyển).',
+  handover_stop_claimed: 'Nhân viên khác đã nhận lượt bàn giao này.',
+  handover_robot_not_ready: 'Hãy chờ robot tới điểm dừng trước khi bắt đầu bàn giao.',
+  handover_already_began: 'Lượt bàn giao đã bắt đầu nên không thể nhả lại.',
+  handover_stop_claim_required: 'Hãy nhận lượt bàn giao này trước khi thao tác.',
+  human_task_claimed: 'Một bước tại điểm dừng này đã có nhân viên khác giữ.',
+  handover_stops_invalid: 'Không đọc được phản hồi hàng đợi bàn giao từ máy chủ.',
+  handover_stop_invalid: 'Dữ liệu lượt bàn giao không hợp lệ. Hãy tải lại hàng đợi.',
 };

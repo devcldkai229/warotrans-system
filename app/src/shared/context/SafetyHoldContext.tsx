@@ -27,7 +27,7 @@ const SafetyHoldContext = createContext<SafetyHoldContextType | undefined>(undef
 export function SafetyHoldProvider({ children }: { children: ReactNode }) {
   const [isHolding, setIsHolding] = useState(false);
 
-  const toggleHold = useCallback(() => toast.warning('Pause and resume are unavailable on this backend. No robot command was sent.'), []);
+  const toggleHold = useCallback(() => toast.warning('Nearby-robot soft hold is unavailable on this backend. Pause an active job from Job Detail instead.'), []);
   const releaseHold = useCallback(() => setIsHolding(false), []);
 
   const value = useMemo(

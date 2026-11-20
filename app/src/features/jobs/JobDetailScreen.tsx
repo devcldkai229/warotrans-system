@@ -57,6 +57,7 @@ import {
 } from './jobData';
 import { VerifyModal } from './VerifyModal';
 import { HandoverActionsCard } from './HandoverActionsCard';
+import { HandoverStopCard } from './HandoverStopCard';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import { IncidentCategory, IssueReportingModal, type IssueSubmitInput } from '../monitoring/IssueReportingModal';
 import {
@@ -67,6 +68,7 @@ import {
   getRobotStopState,
   getUserErrorMessage,
   isJobActionAllowed,
+  listHandoverStops,
   mobileCapabilities,
   pauseJob,
   reportTaskProblem,
@@ -146,6 +148,16 @@ export function JobDetailScreen() {
     return () => { isMounted = false; clearInterval(poll); jobReader.invalidate(); };
   }, [jobId, refreshJob]);
 
+  const canOperate = sessionCan(session, PERMISSIONS.jobOperate);
+  const stopsQuery = useQuery({
+    queryKey: ['handover-stops', session?.id],
+    queryFn: ({ signal }) => listHandoverStops({ signal }),
+    enabled: Boolean(session?.id && canOperate && job.id && job.status === 'RUNNING'),
+    refetchInterval: 5_000,
+  });
+  const { refetch: refetchStops } = stopsQuery;
+  const activeStop = stopsQuery.data?.find(item => item.jobId === job.id);
+
   useEffect(() => {
     if (
       lastJobUpdate &&
@@ -158,8 +170,9 @@ export function JobDetailScreen() {
         .catch((err) => {
           console.warn('Failed to refetch job detail on realtime jobUpdated:', err);
         });
+      if (canOperate) void refetchStops();
     }
-  }, [lastJobUpdate, jobId, job.id, job.jobNo, refreshJob]);
+  }, [lastJobUpdate, jobId, job.id, job.jobNo, canOperate, refreshJob, refetchStops]);
 
   // A traffic grant / wait / release for this job (trafficUpdated): its waiting reason and progress changed.
   useEffect(() => {
@@ -237,9 +250,9 @@ export function JobDetailScreen() {
   });
   const startAction = getJobAction(job, 'START');
   const resumeAction = getJobAction(job, 'RESUME');
-  const canStart = sessionCan(session, PERMISSIONS.jobOperate) && isJobActionAllowed(job, 'START', true);
+  const canStart = canOperate && isJobActionAllowed(job, 'START', true);
   const canPause = mobileCapabilities.pauseJob && sessionCan(session, PERMISSIONS.jobPause) && isJobActionAllowed(job, 'PAUSE', job.status === 'RUNNING');
-  const canResume = sessionCan(session, PERMISSIONS.jobOperate) && isJobActionAllowed(job, 'RESUME', true);
+  const canResume = canOperate && isJobActionAllowed(job, 'RESUME', true);
   const actionReasonText = (code?: string | null) => code ? localizeServerMessage(code, code.replace(/_/g, ' ')) : null;
   const robotCode = robotQuery.data?.code ?? (job.robot !== 'Unassigned' ? job.robot : undefined);
   const live = robotCode ? robotTelemetry[robotCode] : undefined;
@@ -630,6 +643,20 @@ export function JobDetailScreen() {
           </Card>
         )}
 
+        {job.status === 'RUNNING' && activeStop ? (
+          <HandoverStopCard
+            stop={activeStop}
+            placeName={places.name(activeStop.endpointId, activeStop.endpointId)}
+            accountId={session?.id}
+            canOperate={canOperate}
+            onUpdated={() => {
+              void refetchStops();
+              void refreshJob().catch(() => {});
+            }}
+            onRefresh={refetchStops}
+          />
+        ) : null}
+
         {/* Web parity: claim / give back / take over, confirm without scanning, confirm the whole stop at once. */}
         {isWaiting && activeStep ? (
           <HandoverActionsCard
@@ -641,12 +668,13 @@ export function JobDetailScreen() {
             containerCode={activeContainer?.code || primaryTarget?.code || activeContainerId || 'Container'}
             containerLabel={id => job.containers.find(container => container.containerId === id)?.code || id}
             accountId={session?.id}
-            canOperate={sessionCan(session, PERMISSIONS.jobOperate)}
+            canOperate={canOperate}
             canTakeOver={sessionCan(session, PERMISSIONS.jobTakeover)}
             onUpdated={detail => {
               if (activeJobId.current !== job.id) return;
               jobReader.invalidate();
               setJob(mapJobDetailToAppJobItem(detail, session?.id));
+              void refetchStops();
               void refreshJob().catch(() => {});
             }}
           />

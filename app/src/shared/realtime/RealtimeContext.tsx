@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import {
   realtimeClient,
   RobotConnectivityEvent,
@@ -39,10 +40,16 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const [lastTransportStatus, setLastTransportStatus] = useState<TransportStatusEvent | null>(null);
   const [lastJobUpdate, setLastJobUpdate] = useState<JobUpdatedRealtimeEvent | null>(null);
   const [accessToken, setAuthToken] = useState(getAccessToken);
+  const [appActive, setAppActive] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const telemetryVersions = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    if (!accessToken || !getAccessToken()) {
+    const lifecycle = AppState.addEventListener('change', state => setAppActive(state === 'active'));
+    return () => { lifecycle.remove(); };
+  }, []);
+
+  useEffect(() => {
+    if (!accessToken || !getAccessToken() || !appActive) {
       return;
     }
     let cancelled = false;
@@ -72,7 +79,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     hydrateLiveState().catch(() => {});
     const poll = setInterval(() => { void hydrateLiveState().catch(() => {}); }, 15000);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [accessToken, lastJobUpdate, isConnected]);
+  }, [accessToken, appActive, lastJobUpdate, isConnected]);
 
   useEffect(() => {
     realtimeClient.start().catch(() => {});
@@ -118,6 +125,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
     const unsubToken = onAccessTokenChange((token) => {
       setAuthToken(token);
+      telemetryVersions.current = {};
+      setRobotTelemetry({});
+      setRobotConnectivity({});
+      setRobotHealth({});
+      setLastTransportStatus(null);
+      setLastJobUpdate(null);
+      setLastTrafficUpdate(null);
       // When token becomes available or changes on login/logout, reconnect with Bearer token
       realtimeClient.restart().catch(() => {});
     });
@@ -137,10 +151,11 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!accessToken || !appActive) return;
+    if (!realtimeClient.isConnected) void realtimeClient.start();
     const retry = setInterval(() => { if (!realtimeClient.isConnected) void realtimeClient.start(); }, 10000);
     return () => clearInterval(retry);
-  }, [accessToken]);
+  }, [accessToken, appActive]);
 
   return (
     <RealtimeContext.Provider

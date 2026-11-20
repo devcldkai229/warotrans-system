@@ -539,15 +539,17 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                                 </View>
                               </View>
                               <Button
-                                title={following && isSelected ? 'Following' : 'Track'}
+                                title={following && isSelected ? 'Following' : rState.canFollow ? 'Track' : 'Inspect'}
                                 variant={isSelected ? 'primary' : 'outline'}
                                 size="sm"
                                 icon={Navigation}
                                 onPress={() => {
                                   triggerHaptic('tap');
                                   selectRobot(r.code);
-                                  setFollowing(true);
-                                  close();
+                                  if (rState.canFollow && active) {
+                                    setFollowing(true);
+                                    close();
+                                  }
                                 }}
                               />
                             </View>

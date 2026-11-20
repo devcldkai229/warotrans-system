@@ -3,7 +3,7 @@ import { AccessibilityInfo, AppState } from 'react-native';
 
 export function useMapEnvironment() {
   const [now,setNow] = useState(Date.now);
-  const [active,setActive] = useState(AppState.currentState !== 'background');
+  const [active,setActive] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const [reducedMotion,setReducedMotion] = useState(false);
   useEffect(() => {
     let mounted = true;

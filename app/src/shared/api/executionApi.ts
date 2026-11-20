@@ -5,8 +5,9 @@ import { getWorkflow } from './workflowApi';
 import { listRobots } from './fleetApi';
 import { requireMobileCapability } from './capabilities';
 import type {
-  ActionAvailability, JobContainerResponse, JobDetailResponse, JobStatus, JobStepResponse, JobTaskResponse,
-  HandoverConfirmationBody, HandoverConfirmationResponse, ReportTaskProblemBody,
+  ActionAvailability, HandoverStopAction, HandoverStopResponse, JobContainerResponse, JobDetailResponse,
+  JobStatus, JobStepResponse, JobTaskResponse, HandoverConfirmationBody, HandoverConfirmationResponse,
+  ReportTaskProblemBody,
 } from '../types/contracts';
 
 export type JobAction = 'START' | 'PAUSE' | 'RESUME' | 'CANCEL';
@@ -27,6 +28,20 @@ export function isJobActionAllowed(
 ): boolean {
   if (!job?.availableActions) return fallbackAllowed;
   return Boolean(getJobAction(job, action)?.allowed);
+}
+
+export function getHandoverStopAction(
+  stop: Pick<HandoverStopResponse, 'availableActions'> | null | undefined,
+  action: HandoverStopAction,
+): ActionAvailability | undefined {
+  return stop?.availableActions?.find(item => item.action === action);
+}
+
+export function isHandoverStopActionAllowed(
+  stop: Pick<HandoverStopResponse, 'availableActions'> | null | undefined,
+  action: HandoverStopAction,
+): boolean {
+  return Boolean(getHandoverStopAction(stop, action)?.allowed);
 }
 
 interface RuntimeStep extends JobStepResponse { stepKey?: string; name?: string }
@@ -228,6 +243,51 @@ export async function confirmHandoverBatch(jobId: string, type: 'PICKUP' | 'DROP
     method: 'POST', body: JSON.stringify({ type, containerIds, note: note ?? null }),
   });
   return { results: response.results, job: (await hydrateJobs([response.job]))[0] };
+}
+
+export async function listHandoverStops(
+  options: { mine?: boolean; signal?: AbortSignal } = {},
+): Promise<HandoverStopResponse[]> {
+  const path = `/api/workflow-execution/handover-stops${options.mine ? '?mine=true' : ''}`;
+  const data = await apiFetch<{ items?: unknown }>(path, { signal: options.signal });
+  if (!data || !Array.isArray(data.items)) {
+    throw new ApiError(502, 'handover_stops_invalid', 'The handover queue response could not be read.');
+  }
+  return data.items as HandoverStopResponse[];
+}
+
+async function changeHandoverStop(
+  jobId: string,
+  stopId: string,
+  path: 'claim' | 'begin' | 'release',
+  moveId: string,
+  version: number,
+): Promise<HandoverStopResponse> {
+  requireMobileCapability('claimHumanTask');
+  if (typeof moveId !== 'string' || !moveId.trim() || !Number.isInteger(version) || version < 0) {
+    throw new ApiError(400, 'handover_stop_invalid', 'Invalid handover turn reference. Refresh the queue.');
+  }
+  const response = await apiFetch<HandoverStopResponse>(
+    `/api/workflow-execution/jobs/${encodeURIComponent(jobId)}/handover-stops/${encodeURIComponent(stopId)}/${path}`,
+    { method: 'POST', body: JSON.stringify({ moveId: moveId.trim(), version }) },
+    callerToken(),
+  );
+  if (!response || response.id !== stopId || response.jobId !== jobId) {
+    throw new ApiError(502, 'handover_stop_invalid', 'The handover queue response could not be read.');
+  }
+  return response;
+}
+
+export function claimHandoverStop(jobId: string, stopId: string, moveId: string, version: number) {
+  return changeHandoverStop(jobId, stopId, 'claim', moveId, version);
+}
+
+export function beginHandoverStop(jobId: string, stopId: string, moveId: string, version: number) {
+  return changeHandoverStop(jobId, stopId, 'begin', moveId, version);
+}
+
+export function releaseHandoverStop(jobId: string, stopId: string, moveId: string, version: number) {
+  return changeHandoverStop(jobId, stopId, 'release', moveId, version);
 }
 /** WH-10: the container of this waiting handover cannot go on; the Job continues with the others. */
 export async function failJobContainer(stepId: string, containerId: string, reason: string) {

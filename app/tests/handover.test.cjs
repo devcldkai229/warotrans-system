@@ -1,7 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
-const { humanConfirmation, handoverStatus } = createLoader()('src/features/jobs/handoverData.ts');
+const {
+  humanConfirmation, handoverStatus, handoverStopOwnerState, handoverStopPhase, mergeMyJobIdsWithStops,
+} = createLoader()('src/features/jobs/handoverData.ts');
 const confirmedStep = (source, actor = {}) => ({
   id: 'handover-1', stepType: 'HUMAN_INTERACTION', operationCode: 'PICKUP_CONFIRM', status: 'COMPLETED',
   outputValues: { confirmed: true, confirmationSource: source, confirmedAt: '2026-10-27T05:00:00Z', ...actor },
@@ -102,4 +104,113 @@ test('pauseJob requires a trimmed reason up to 500 chars, binds caller token and
   assert.equal(api.isJobActionAllowed(result, 'PAUSE', true), false);
   assert.equal(api.isJobActionAllowed({ id: 'legacy' }, 'START', true), true);
   assert.equal(api.isJobActionAllowed({ id: 'legacy' }, 'START', false), false);
+});
+
+const stopOffer = (overrides = {}) => ({
+  id: 'stop-1',
+  jobId: 'job-1',
+  jobNo: 'JOB-100',
+  mapVersionId: 'map-1',
+  endpointId: 'ep-1',
+  moveId: 'move-1',
+  action: 'PICKUP',
+  containers: [{ containerId: 'ctn-1', barcode: 'CTN-0001' }],
+  offerOpensAt: '2026-11-20T08:00:10Z',
+  robotReadyAt: null,
+  claimedBy: null,
+  claimedByName: null,
+  beginDeadline: null,
+  beganAt: null,
+  version: 2,
+  availableActions: [
+    { action: 'CLAIM', allowed: true, reason: null },
+    { action: 'BEGIN', allowed: false, reason: 'handover_stop_claim_required' },
+    { action: 'RELEASE', allowed: false, reason: 'handover_stop_claim_required' },
+  ],
+  ...overrides,
+});
+
+test('listHandoverStops calls GET queue and rejects malformed payloads', async () => {
+  const calls = [];
+  const api = loadApi(async (url) => {
+    calls.push(url);
+    if (url.includes('mine=true')) return { items: [stopOffer({ claimedBy: 'staff-a' })] };
+    return { items: [stopOffer()] };
+  });
+
+  const all = await api.listHandoverStops();
+  assert.equal(calls[0], '/api/workflow-execution/handover-stops');
+  assert.equal(all.length, 1);
+  assert.equal(all[0].moveId, 'move-1');
+
+  const mine = await api.listHandoverStops({ mine: true });
+  assert.equal(calls[1], '/api/workflow-execution/handover-stops?mine=true');
+  assert.equal(mine[0].claimedBy, 'staff-a');
+
+  const badApi = loadApi(async () => ({ items: 'not-an-array' }));
+  await assert.rejects(() => badApi.listHandoverStops(), error => error.status === 502 && error.code === 'handover_stops_invalid');
+});
+
+test('claimHandoverStop, beginHandoverStop and releaseHandoverStop send moveId+version, bind caller token, and validate responses', async () => {
+  const requests = [];
+  const api = loadApi(async (url, init, token) => {
+    requests.push({ url, method: init.method, body: JSON.parse(init.body), token });
+    return stopOffer({ version: JSON.parse(init.body).version + 1 });
+  });
+
+  const claimed = await api.claimHandoverStop('job-1', 'stop-1', 'move-1', 2);
+  const begun = await api.beginHandoverStop('job-1', 'stop-1', 'move-1', 3);
+  const released = await api.releaseHandoverStop('job-1', 'stop-1', 'move-1', 4);
+
+  assert.deepEqual(requests, [
+    { url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/claim', method: 'POST', body: { moveId: 'move-1', version: 2 }, token: 'staff-token' },
+    { url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/begin', method: 'POST', body: { moveId: 'move-1', version: 3 }, token: 'staff-token' },
+    { url: '/api/workflow-execution/jobs/job-1/handover-stops/stop-1/release', method: 'POST', body: { moveId: 'move-1', version: 4 }, token: 'staff-token' },
+  ]);
+  assert.equal(claimed.version, 3);
+  assert.equal(begun.version, 4);
+  assert.equal(released.version, 5);
+
+  await assert.rejects(() => api.claimHandoverStop('job-1', 'stop-1', ' ', 1), error => error.code === 'handover_stop_invalid');
+  await assert.rejects(() => api.beginHandoverStop('job-1', 'stop-1', 'move-1', -1), error => error.code === 'handover_stop_invalid');
+
+  const mismatchedApi = loadApi(async () => stopOffer({ jobId: 'other-job' }));
+  await assert.rejects(() => mismatchedApi.claimHandoverStop('job-1', 'stop-1', 'move-1', 2), error => error.status === 502 && error.code === 'handover_stop_invalid');
+
+  const conflictApi = loadApi(async () => {
+    const err = new Error('The handover stop changed.');
+    err.status = 409;
+    err.code = 'handover_stop_changed';
+    throw err;
+  });
+  await assert.rejects(() => conflictApi.claimHandoverStop('job-1', 'stop-1', 'move-1', 2), error => error.code === 'handover_stop_changed');
+
+  assert.equal(api.isHandoverStopActionAllowed(stopOffer(), 'CLAIM'), true);
+  assert.equal(api.isHandoverStopActionAllowed(stopOffer(), 'BEGIN'), false);
+  assert.equal(api.getHandoverStopAction(stopOffer(), 'BEGIN').reason, 'handover_stop_claim_required');
+});
+
+test('handover stop helpers classify pre-arrival/ready/in-progress/other and merge My Tasks job IDs', () => {
+  assert.equal(handoverStopOwnerState(stopOffer(), 'staff-a'), 'free');
+  assert.equal(handoverStopPhase(stopOffer(), 'staff-a'), 'unclaimed_approaching');
+  assert.equal(handoverStopPhase(stopOffer({ robotReadyAt: '2026-11-20T08:00:25Z' }), 'staff-a'), 'unclaimed_ready');
+  assert.equal(handoverStopPhase(stopOffer({ claimedBy: 'staff-a' }), 'staff-a'), 'claimed_approaching');
+  assert.equal(handoverStopPhase(stopOffer({ claimedBy: 'staff-a', robotReadyAt: '2026-11-20T08:00:25Z' }), 'staff-a'), 'claimed_ready');
+  assert.equal(handoverStopPhase(stopOffer({ claimedBy: 'staff-a', robotReadyAt: '2026-11-20T08:00:25Z', beganAt: '2026-11-20T08:00:30Z' }), 'staff-a'), 'in_progress');
+  assert.equal(handoverStopPhase(stopOffer({ claimedBy: 'staff-b' }), 'staff-a'), 'claimed_by_other');
+
+  const merged = mergeMyJobIdsWithStops(
+    [
+      { id: 'job-1', isMine: false, status: 'RUNNING' },
+      { id: 'job-2', isMine: true, status: 'RUNNING' },
+      { id: 'job-3', isMine: true, status: 'COMPLETED' },
+      { id: 'job-4', isMine: false, status: 'RUNNING' },
+    ],
+    [
+      stopOffer({ jobId: 'job-1', claimedBy: 'staff-a' }),
+      stopOffer({ jobId: 'job-4', claimedBy: 'staff-b' }),
+    ],
+    'staff-a',
+  );
+  assert.deepEqual([...merged].sort(), ['job-1', 'job-2']);
 });
