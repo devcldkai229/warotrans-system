@@ -25,7 +25,7 @@ Unknown JSON members are rejected with 400, including misspelled count fields, s
 
 ## Receiving request
 
-The UUIDs below are illustrative; use real warehouse/Product IDs and the ID of the server-created DRAFT inbound voucher. `requestId` must be generated once and retained for this submission and any retry.
+Use real warehouse and Product IDs and the server-created DRAFT inbound voucher ID in this example. Generate `requestId` once and retain it for the submission and every retry. Concurrent requests with the same ID wait for one write and then replay the stored receipt.
 
 ```json
 {

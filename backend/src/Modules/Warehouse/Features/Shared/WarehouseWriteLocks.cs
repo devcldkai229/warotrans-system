@@ -7,6 +7,12 @@ namespace WaroTrans.Warehouse.Features.Shared;
 /// <summary>All locks live inside the caller's transaction; sorted product locks also cover initially absent stock rows.</summary>
 internal static class WarehouseWriteLocks
 {
+    public static async Task ReceivingRequestAsync(WarehouseDbContext db, Guid requestId, CancellationToken ct)
+    {
+        if (db.Database.IsNpgsql())
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({requestId.ToString()}, 64217))", ct);
+    }
+
     public static async Task<StockVoucher> VoucherAsync(WarehouseDbContext db, Guid id, CancellationToken ct)
     {
         if (db.Database.IsNpgsql())
