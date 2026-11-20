@@ -170,3 +170,20 @@ test('legacy StorageLocations bound to Inbound or Outbound gate endpoints stay g
   assert.equal(data.defaultSource(container('multi-in'), 'INBOUND', legacyMultiPlaces), null);
   assert.equal(data.defaultDestination('OUTBOUND', legacyMultiPlaces), null);
 });
+
+test('allowedPlaces restricts Putaway source to Inbound gates and destination to shelves across search and map pick', () => {
+  const inboundSources = data.allowedPlaces('INBOUND', 'source', places);
+  assert.deepEqual(plain(inboundSources.map(place => place.code)), ['EP-INBOUND']);
+  assert.deepEqual(plain(data.searchPlaces(inboundSources, 'out')), []);
+  assert.equal(data.placeForEndpoint(inboundSources, 'e-EP-OUTBOUND'), null);
+  assert.equal(data.placeForEndpoint(inboundSources, 'e-EP-SHELF-A-1'), null);
+
+  const inboundDests = data.allowedPlaces('INBOUND', 'destination', places);
+  assert.deepEqual(plain(inboundDests.map(place => place.code)), ['SHELF-A-1', 'SHELF-C-1']);
+  assert.deepEqual(plain(data.searchPlaces(inboundDests, 'out')), []);
+  assert.equal(data.placeForEndpoint(inboundDests, 'e-EP-INBOUND'), null);
+  assert.equal(data.placeForEndpoint(inboundDests, 'e-EP-OUTBOUND'), null);
+
+  assert.deepEqual(plain(data.allowedPlaces('INTERNAL', 'source', places).map(place => place.code)), ['SHELF-A-1', 'SHELF-C-1']);
+  assert.deepEqual(plain(data.allowedPlaces('OTHER', 'source', places).map(place => place.code)), ['SHELF-A-1', 'SHELF-C-1', 'EP-INBOUND', 'EP-OUTBOUND']);
+});

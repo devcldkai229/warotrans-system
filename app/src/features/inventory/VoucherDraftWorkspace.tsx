@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { Barcode, Check, ChevronRight, ScanLine } from 'lucide-react-native';
+import { Check, ChevronRight, ScanLine } from 'lucide-react-native';
 import type { StockVoucherDetail } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, Text, TextField } from '../../shared/ui';
 import { BarcodeScannerHUD } from '../monitoring/BarcodeScannerHUD';
+import { InboundBatchEditor } from './InboundBatchEditor';
 import { InboundBatchSummary } from './InboundBatchSummary';
-import { ContainerCountField } from './ContainerCountField';
+import { batchTotal, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
 import { OutboundVoucherSelection } from './OutboundVoucherSelection';
 import { useVoucherPreparation } from './useVoucherPreparation';
@@ -34,6 +35,20 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
   useEffect(() => {
     if (prep.ready && !prep.value.requestedCount && data.lines.length && inbound) prep.update(previous => ({ ...previous, requestedCount: String(data.lines.length) }));
   }, [prep.ready, data.lines.length, inbound]);
+  useEffect(() => {
+    if (prep.ready && writable && inbound && !data.lines.length && !prep.value.groups?.length) {
+      const initialCount = prep.value.requestedCount || '1';
+      prep.update(previous => ({
+        ...previous,
+        requestedCount: previous.requestedCount || initialCount,
+        groups: [newBatchGroup([], initialCount)],
+      }));
+    }
+  }, [prep.ready, writable, inbound, data.lines.length, prep.value.groups?.length]);
+  const editGroups = (next: InboundBatchGroup[]) => {
+    if (!writable) return;
+    prep.update(previous => ({ ...previous, requestId: undefined, groups: next, requestedCount: batchTotal(next) }));
+  };
   const editContent = (id: string, fields: Partial<PreparedContent>) => {
     if (!writable || !data.lines.some(line => line.containerId === id)) return;
     setReview(false); setReviewError(null);
@@ -48,7 +63,7 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
   };
   if (!prep.ready) return <Card gap={12}><Text variant="body">{prep.error || 'Loading Preparation…'}</Text>{prep.error && <Button title="Retry" variant="outline" onPress={prep.retry} />}</Card>;
   return <>
-    {!hasServerBatchLines && (inbound ? (!prep.value.groups?.length || !!data.lines.length) : !data.lines.length) && <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
+    {!hasServerBatchLines && (inbound ? !!data.lines.length : !data.lines.length) && <View style={styles.stepTrack}>{steps.map((label, index) => <React.Fragment key={label}>
       {!!index && <View style={styles.stepLine} />}
       <View style={styles.step}><View style={[styles.stepNumber, index <= currentStep && styles.stepCurrent]}>
         {index < currentStep ? <Check size={15} color={colors.primaryText} /> : <Text variant="caption" color={index === currentStep ? 'primaryText' : 'textMuted'}>{index + 1}</Text>}
@@ -57,21 +72,14 @@ export function VoucherDraftWorkspace({ data, accountId, writable, preparation }
     {prep.error && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{prep.error}</Text><Button title="Retry Save" variant="outline" onPress={() => { void prep.persist().catch(() => {}); }} /></View>}
     {!writable && <Text variant="body" color="textSecondary">Preparation is read-only. Check access or refresh this voucher.</Text>}
     {inbound && !review && <>
-      {!data.lines.length && !prep.value.groups?.length && <Card gap={14} style={styles.reviewCard}>
-        <View style={styles.row}><Barcode size={22} color={colors.primaryText} /><Text variant="headline">Container Barcodes</Text></View>
-        <ContainerCountField value={prep.value.requestedCount} onChange={requestedCount => prep.update(previous => ({ ...previous, requestedCount }))} editable={writable} />
-        <Text variant="bodyMedium">{data.lines.length} codes allocated{prep.value.requestedCount ? ` · ${prep.value.requestedCount} requested` : ''}</Text>
-        <Button title="Generate Barcodes" disabled onPress={() => {}} />
-        <Text variant="caption" color="textSecondary">Barcode allocation is awaiting server support. No codes are generated on this device.</Text>
-      </Card>}
-      {!data.lines.length && !!prep.value.groups?.length && <Card gap={12} style={styles.reviewCard}>
-        <View style={styles.between}><Text variant="headline">Batch Plan</Text><View style={styles.statusPill}><Text variant="caption" color="textSecondary" style={{ fontWeight: '600' }}>On This Device</Text></View></View>
-        <View style={styles.batchStatBar}>
-          <View style={styles.stat}><Text variant="title" style={styles.tabular}>{prep.value.requestedCount || '—'}</Text><Text variant="bodyMedium" color="textSecondary">Containers</Text></View>
-          <Text variant="caption" color="textSecondary" style={[styles.tabular, { fontWeight: '600' }]}>{t('{count} product groups', { count: prep.value.groups.length })}</Text>
-        </View>
-        <InboundBatchSummary groups={prep.value.groups} />
-      </Card>}
+      {!data.lines.length && (
+        <InboundBatchEditor
+          requestedCount={prep.value.requestedCount}
+          groups={prep.value.groups?.length ? prep.value.groups : [newBatchGroup([], prep.value.requestedCount || '1')]}
+          editable={writable}
+          onChange={editGroups}
+        />
+      )}
       {hasServerBatchLines && !!prep.value.groups?.length && <Card gap={12} style={styles.reviewCard}>
         <View style={styles.between}><Text variant="headline">Inbound Batch</Text></View>
         <View style={styles.batchStatBar}>

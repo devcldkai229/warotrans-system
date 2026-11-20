@@ -1835,4 +1835,7 @@ export const vi: Record<string, string> = {
   "{count} containers are in warehouse stock and waiting to be put away onto shelves.": "{count} container đã vào tồn kho và đang chờ đưa lên kệ.",
   "Shelved / Staged": "Trên kệ / Chờ xuất",
   "{count} staged at Outbound gate": "{count} container đang tập kết tại cổng xuất",
+  "Allocated": "Đã phân bổ vị trí",
+  "Unallocated": "Chưa phân bổ vị trí",
+  "The server draft was created, but preparation could not be copied. Re-enter the products, quantities and units below; do not create another draft.": "Phiếu nháp trên máy chủ đã được tạo nhưng không sao chép được dữ liệu chuẩn bị. Hãy nhập lại sản phẩm, số lượng và đơn vị bên dưới; đừng tạo thêm phiếu nháp khác.",
 };

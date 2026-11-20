@@ -29,7 +29,7 @@ import { submitDispatch } from './dispatchSubmission';
 import { startQueuedJobs, type JobStartResult } from './startQueuedJobs';
 import { activeContainerIds, outboundFifoScopeKey, parseOutboundFifoCount } from './transportDraft';
 import {
-  buildDetails, composerPlaces, defaultDestination, defaultSource, groupContainers, ineligibleReason, movementProblem,
+  allowedPlaces, buildDetails, composerPlaces, defaultDestination, defaultSource, groupContainers, ineligibleReason, movementProblem,
   outboundGates, outboundMovementProblem, placeForEndpoint, searchPlaces, suggestedPlaces, workflowKindOf,
   type ComposerPlace, type Movement, type WorkflowKind,
 } from './composerData';
@@ -745,7 +745,7 @@ export function TransportComposerScreen() {
       </View>
     </BottomSheet> : null}
 
-    {pick ? <PlacePickerSheet places={places} suggested={suggestedPlaces(kind, pick.end, places)} end={pick.end} bulk={!pick.containerId}
+    {pick ? <PlacePickerSheet places={allowedPlaces(kind, pick.end, places)} suggested={suggestedPlaces(kind, pick.end, places)} end={pick.end} bulk={!pick.containerId}
       map={data.map} onPick={applyPlace} onClose={() => setPick(null)} /> : null}
 
     {gatePickerOpen ? <PlacePickerSheet places={gates} suggested={gates} end="destination" bulk={true}

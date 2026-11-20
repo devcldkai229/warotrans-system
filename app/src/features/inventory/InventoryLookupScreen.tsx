@@ -371,14 +371,14 @@ export function InventoryLookupScreen() {
             <View style={styles.stockMetricDivider} />
             <View style={styles.stockMetric}>
               <StatusText variant="headline" fontWeight="700" style={styles.tabularValue}>{stockSummary.allocatedContainers}</StatusText>
-              <StatusText variant="caption" color="textSecondary">Shelved / Staged</StatusText>
+              <StatusText variant="caption" color="textSecondary">Allocated</StatusText>
             </View>
             <View style={styles.stockMetricDivider} />
             <View style={styles.stockMetric}>
               <StatusText variant="headline" fontWeight="700" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textPrimary'} style={styles.tabularValue}>
                 {stockSummary.unallocatedContainers}
               </StatusText>
-              <StatusText variant="caption" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textSecondary'}>Awaiting Putaway</StatusText>
+              <StatusText variant="caption" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textSecondary'}>Unallocated</StatusText>
             </View>
           </View>
           {stagedOutboundCount > 0 && (

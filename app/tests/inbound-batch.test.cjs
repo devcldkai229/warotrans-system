@@ -135,3 +135,19 @@ test('preparation requestId validation and batch allocation permission gate work
   assert.equal(canAllocateInboundBatch(staff), false);
   assert.equal(canAllocateInboundBatch({ ...staff, permissions: [...staff.permissions, 'container.create'] }), true);
 });
+
+test('missing local preparation on an existing draft inbound voucher can be re-entered with product, quantity and unit', () => {
+  const { batchTotal } = load('src/features/inventory/inboundBatch.ts');
+  const lost = emptyPreparation('INBOUND');
+  assert.equal(lost.groups, undefined);
+  const recovered = [{ ...newBatchGroup([], '2'), product, quantity: '24', unit: 'chai' }];
+  const total = batchTotal(recovered);
+  assert.equal(total, '2');
+  assert.equal(inboundBatchProblem(total, recovered), null);
+  const body = plain(buildContainerBatchBody('wh-1', createBatchRequestId(), total, recovered, 'draft-voucher-1'));
+  assert.equal(body.stockVoucherId, 'draft-voucher-1');
+  assert.equal(body.containerCount, 2);
+  assert.deepEqual(body.groups, [
+    { groupKey: 'group-1', productId: 'p-1', containerCount: 2, quantityPerContainer: 24, unit: 'chai' },
+  ]);
+});

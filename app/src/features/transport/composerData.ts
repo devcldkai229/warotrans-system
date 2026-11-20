@@ -185,6 +185,14 @@ export function suggestedPlaces(kind: WorkflowKind, end: 'source' | 'destination
   return places;
 }
 
+/** Places allowed by the backend for this workflow end (Putaway: Inbound gates -> shelves; Outbound: shelves -> Outbound gates; Internal: shelves -> shelves). */
+export function allowedPlaces(kind: WorkflowKind, end: 'source' | 'destination', places: ComposerPlace[]): ComposerPlace[] {
+  if (kind === 'INBOUND') return end === 'source' ? stationNamed(places, 'INBOUND') : places.filter(place => place.kind === 'location');
+  if (kind === 'OUTBOUND') return end === 'source' ? places.filter(place => place.kind === 'location') : stationNamed(places, 'OUTBOUND');
+  if (kind === 'INTERNAL') return places.filter(place => place.kind === 'location');
+  return places;
+}
+
 export function searchPlaces(places: ComposerPlace[], query: string): ComposerPlace[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return places;

@@ -238,7 +238,7 @@ export function StockVoucherDetailScreen() {
               ))}
             </Card>
 
-            {params?.preparationCopyFailed && <View style={styles.error}><Text variant="body" color="dangerText">The server draft was created, but preparation could not be copied. Enter the container count again; do not create another draft.</Text></View>}
+            {params?.preparationCopyFailed && <View style={styles.error}><Text variant="body" color="dangerText">The server draft was created, but preparation could not be copied. Re-enter the products, quantities and units below; do not create another draft.</Text></View>}
             {data.status === 'DRAFT' && <VoucherDraftWorkspace key={`${session?.id}:${data.id}:${data.type}`} data={data} accountId={session?.id || ''} writable={canCreateVoucher(session) && !query.isError && !acting} preparation={prep} />}
 
             {(data.status !== 'DRAFT' || hasServerBatchLines || !inbound) && !!data.lines.length && <Card gap={8} style={styles.reviewCard}>
@@ -277,12 +277,24 @@ export function StockVoucherDetailScreen() {
             const allocateProblem = canAllocateFromPlan ? inboundBatchProblem(prep.value.requestedCount, prep.value.groups!) : null;
             return <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
               {actionError && <View style={styles.error}><Text variant="body" color="dangerText" accessibilityRole="alert">{actionError}</Text></View>}
-              {canAllocateFromPlan ? <>
-                <Text variant="caption" color="textSecondary">Allocate server container barcodes for this batch before confirming inbound stock.</Text>
-                <Button title="Allocate Container Barcodes" fullWidth loading={acting}
-                  disabled={!canAllocateInboundBatch(session) || !mobileCapabilities.createContainer || acting || query.isError || !!allocateProblem}
-                  onPress={() => { void allocateBatch(); }} />
-              </> : canAttachOutbound ? <>
+              {canAllocateFromPlan ? (() => {
+                const problemIndex = allocateProblem?.groupKey
+                  ? (prep.value.groups ?? []).findIndex(group => group.key === allocateProblem.groupKey)
+                  : -1;
+                const problemText = allocateProblem
+                  ? (problemIndex < 0
+                    ? t(allocateProblem.message)
+                    : t('Group {group}: {message}', { group: problemIndex + 1, message: t(allocateProblem.message) }))
+                  : null;
+                return <>
+                  <Text variant="caption" color={problemText ? 'warningText' : 'textSecondary'}>
+                    {problemText ?? 'Allocate server container barcodes for this batch before confirming inbound stock.'}
+                  </Text>
+                  <Button title="Allocate Container Barcodes" fullWidth loading={acting}
+                    disabled={!canAllocateInboundBatch(session) || !mobileCapabilities.createContainer || acting || query.isError || !!allocateProblem}
+                    onPress={() => { void allocateBatch(); }} />
+                </>;
+              })() : canAttachOutbound ? <>
                 <Text variant="caption" color="textSecondary">Save the selected outbound containers to the server before confirming.</Text>
                 <Button title="Save Selected Containers" fullWidth loading={acting}
                   disabled={!canCreateVoucher(session) || acting || query.isError}
