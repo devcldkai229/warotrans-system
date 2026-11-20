@@ -135,3 +135,38 @@ test('outbound auto-fills single gate, requires one TR gate choice when multiple
   assert.equal(data.outboundMovementProblem({ source: src, destination: null }, false), 'No outbound point is configured on this map.');
   assert.equal(data.outboundMovementProblem({ source: src, destination: src }, true), 'Pick-up and delivery must differ');
 });
+
+test('legacy StorageLocations bound to Inbound or Outbound gate endpoints stay gates on both single-gate and multi-gate maps', () => {
+  const legacySinglePlaces = data.composerPlaces({
+    endpoints,
+    locations: [
+      ...locations,
+      { id: 'L-LEGACY-IN', warehouseId: 'w', endpointId: 'e-EP-INBOUND', endpointCode: 'EP-INBOUND', code: 'LOC-IN', name: 'Inbound Stage', isActive: true },
+      { id: 'L-LEGACY-OUT', warehouseId: 'w', endpointId: 'e-EP-OUTBOUND', endpointCode: 'EP-OUTBOUND', code: 'LOC-OUT', name: 'Outbound Stage', isActive: true },
+    ],
+    mapId: MAP,
+  });
+  assert.deepEqual(plain(data.inboundGates(legacySinglePlaces).map(gate => [gate.code, gate.kind, gate.storageLocationId])), [['EP-INBOUND', 'endpoint', null]]);
+  assert.deepEqual(plain(data.outboundGates(legacySinglePlaces).map(gate => [gate.code, gate.kind, gate.storageLocationId])), [['EP-OUTBOUND', 'endpoint', null]]);
+  assert.deepEqual(plain(data.suggestedPlaces('INBOUND', 'destination', legacySinglePlaces).map(place => place.code)), ['SHELF-A-1', 'SHELF-C-1']);
+  assert.equal(data.defaultSource(container('legacy-in', { status: 'CREATED', currentStorageLocationId: 'L-LEGACY-IN', currentEndpointId: 'e-EP-INBOUND' }), 'INBOUND', legacySinglePlaces).code, 'EP-INBOUND');
+  assert.equal(data.defaultDestination('OUTBOUND', legacySinglePlaces).code, 'EP-OUTBOUND');
+  assert.equal(data.placeForEndpoint(legacySinglePlaces, 'e-EP-OUTBOUND').kind, 'endpoint');
+
+  const multiEndpoints = [...endpoints, ep('EP-INBOUND-2', 'Inbound 2'), ep('EP-OUTBOUND-2', 'Outbound 2')];
+  const legacyMultiPlaces = data.composerPlaces({
+    endpoints: multiEndpoints,
+    locations: [
+      ...locations,
+      { id: 'L-IN-1', warehouseId: 'w', endpointId: 'e-EP-INBOUND', endpointCode: 'EP-INBOUND', code: 'IN-1', name: 'Inbound 1', isActive: true },
+      { id: 'L-IN-2', warehouseId: 'w', endpointId: 'e-EP-INBOUND-2', endpointCode: 'EP-INBOUND-2', code: 'IN-2', name: 'Inbound 2', isActive: true },
+      { id: 'L-OUT-1', warehouseId: 'w', endpointId: 'e-EP-OUTBOUND', endpointCode: 'EP-OUTBOUND', code: 'OUT-1', name: 'Outbound 1', isActive: true },
+      { id: 'L-OUT-2', warehouseId: 'w', endpointId: 'e-EP-OUTBOUND-2', endpointCode: 'EP-OUTBOUND-2', code: 'OUT-2', name: 'Outbound 2', isActive: true },
+    ],
+    mapId: MAP,
+  });
+  assert.deepEqual(plain(data.inboundGates(legacyMultiPlaces).map(gate => gate.code)), ['EP-INBOUND', 'EP-INBOUND-2']);
+  assert.deepEqual(plain(data.outboundGates(legacyMultiPlaces).map(gate => gate.code)), ['EP-OUTBOUND', 'EP-OUTBOUND-2']);
+  assert.equal(data.defaultSource(container('multi-in'), 'INBOUND', legacyMultiPlaces), null);
+  assert.equal(data.defaultDestination('OUTBOUND', legacyMultiPlaces), null);
+});

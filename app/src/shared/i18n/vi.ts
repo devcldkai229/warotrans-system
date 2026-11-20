@@ -1833,4 +1833,6 @@ export const vi: Record<string, string> = {
   "{count} confirmed containers awaiting putaway (not on shelves yet).": "{count} container đã xác nhận nhập đang chờ đưa lên kệ (chưa lên kệ).",
   "All Confirmed Stock Awaits Putaway": "Toàn bộ tồn đã xác nhận đang chờ đưa lên kệ",
   "{count} containers are in warehouse stock and waiting to be put away onto shelves.": "{count} container đã vào tồn kho và đang chờ đưa lên kệ.",
+  "Shelved / Staged": "Trên kệ / Chờ xuất",
+  "{count} staged at Outbound gate": "{count} container đang tập kết tại cổng xuất",
 };

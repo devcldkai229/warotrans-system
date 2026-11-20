@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const createLoader = require('./load-module.cjs');
 class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
 const load = createLoader({ 'src/shared/api/client.ts': { ApiError } });
-const { applyBatchGroupProduct, batchCounts, buildContainerBatchBody, createBatchRequestId, inboundBatchProblem, newBatchGroup } = load('src/features/inventory/inboundBatch.ts');
+const { applyBatchGroupProduct, batchCounts, buildContainerBatchBody, createBatchRequestId, DEFAULT_QUANTITY, DEFAULT_UNIT, inboundBatchProblem, newBatchGroup } = load('src/features/inventory/inboundBatch.ts');
 const { emptyPreparation, validPreparation } = load('src/features/inventory/voucherPreparation.ts');
 const { createPreparationStorage } = load('src/features/inventory/preparationStorage.ts');
 const { canAllocateInboundBatch } = load('src/features/inventory/stockVoucherData.ts');
@@ -17,15 +17,20 @@ test('batch counts separate requested, grouped and active Product-assigned conta
   assert.deepEqual(plain(batchCounts('', [])), { total: null, grouped: 0, assigned: 0, remaining: null });
 });
 
-test('new planning groups have unique local keys without constructing barcodes, Container IDs or per-box overrides', () => {
+test('new planning groups start with empty box contents unless defaults are passed explicitly', () => {
   const first = newBatchGroup([], '5');
   const next = newBatchGroup([first], '2');
   assert.notEqual(first.key, next.key);
   assert.equal(next.containerCount, '2');
+  assert.equal(next.quantity, '');
+  assert.equal(next.unit, '');
   assert.equal(next.product, null);
   assert.equal('barcode' in next, false);
   assert.equal('containerId' in next, false);
   assert.equal('quantities' in next, false);
+  const quick = newBatchGroup([], '3', DEFAULT_QUANTITY, DEFAULT_UNIT);
+  assert.equal(quick.quantity, '1');
+  assert.equal(quick.unit, 'container');
 });
 
 test('batch review accepts a fully assigned mixed-product lot and never changes stock or actual contents', () => {
@@ -37,8 +42,19 @@ test('batch review accepts a fully assigned mixed-product lot and never changes 
   assert.equal(inboundBatchProblem('9', groups).message, 'Product group counts must equal the batch container count.');
 });
 
-test('review identifies the group with invalid Product or group count; contents are not asked for', () => {
-  for (const patch of [{ product: null }, { product: { ...product, isActive: false } }, { containerCount: '0' }, { containerCount: '1.5' }]) {
+test('review identifies the group with invalid Product, box count, quantity per box or unit', () => {
+  for (const patch of [
+    { product: null },
+    { product: { ...product, isActive: false } },
+    { containerCount: '0' },
+    { containerCount: '1.5' },
+    { quantity: '' },
+    { quantity: '0' },
+    { quantity: '1.2345' },
+    { unit: '' },
+    { unit: '   ' },
+    { unit: 'u'.repeat(33) },
+  ]) {
     const problem = inboundBatchProblem('6', [group('group-1', patch)]);
     assert.equal(problem.groupKey, 'group-1');
   }
@@ -46,8 +62,7 @@ test('review identifies the group with invalid Product or group count; contents 
   assert.match(inboundBatchProblem('10000', [group()]).message, /1 and 9,999/);
   assert.ok(inboundBatchProblem('6', []));
   assert.ok(inboundBatchProblem('12', [group(), group()]));
-  // staff do not manage pieces per container: an empty quantity or unit is not a problem
-  assert.equal(inboundBatchProblem('6', [group('group-1', { quantity: '', unit: '' })]), null);
+  assert.equal(inboundBatchProblem('6', [group('group-1', { containerCount: '6', quantity: '24', unit: 'chai' })]), null);
 });
 
 test('old preparations and legacy cached quantities remain readable while malformed batch caches are rejected', () => {
@@ -105,10 +120,10 @@ test('batch request builder maps groups, decimal precision, unit limits and supp
   });
   assert.throws(() => buildContainerBatchBody('', reqId, '10', groups), /WarehouseId/);
   assert.throws(() => buildContainerBatchBody('wh-1', ' ', '10', groups), /RequestId/);
-  // no contents entered: each container is recorded as one container
-  const plainBody = plain(buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: '', unit: '' })]));
-  assert.equal(plainBody.groups[0].quantityPerContainer, 1);
-  assert.equal(plainBody.groups[0].unit, 'container');
+  assert.throws(() => buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: '', unit: '' })]), /quantity/i);
+  const quickBody = plain(buildContainerBatchBody('wh-1', reqId, '6', [group('g-1', { quantity: DEFAULT_QUANTITY, unit: DEFAULT_UNIT })]));
+  assert.equal(quickBody.groups[0].quantityPerContainer, 1);
+  assert.equal(quickBody.groups[0].unit, 'container');
 });
 
 test('preparation requestId validation and batch allocation permission gate work as expected', () => {

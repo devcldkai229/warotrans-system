@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,13 +11,14 @@ import { useNavigation } from '../../app/navigation/NavigationContext';
 import { useAuth } from '../auth/authContext';
 import { ApiError, getUserErrorMessage } from '../../shared/api/client';
 import { mobileCapabilities } from '../../shared/api/capabilities';
+import { getActiveMapVersion, getMapVersionDetail } from '../../shared/api/navigationApi';
 import { addStockVoucherLines, cancelStockVoucher, confirmStockVoucher, createContainerBatch, getStockVoucher } from '../../shared/api/warehouseApi';
 import { t } from '../../shared/i18n';
 import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import { Button, Card, EmptyState, ScreenHeader, StatusPill, Text } from '../../shared/ui';
 import { buildContainerBatchBody, createBatchRequestId, inboundBatchProblem } from './inboundBatch';
 import { preparationDeviceStore } from './preparationDeviceStore';
-import { canAllocateInboundBatch, canCreateVoucher, canReadVouchers, uncertainDraftWrite, voucherDate } from './stockVoucherData';
+import { canAllocateInboundBatch, canCreateVoucher, canReadVouchers, uncertainDraftWrite, voucherDate, voucherLineLocation } from './stockVoucherData';
 import { useVoucherPreparation } from './useVoucherPreparation';
 import { emptyPreparation } from './voucherPreparation';
 import { createVoucherStyles } from './voucherStyles';
@@ -54,6 +55,22 @@ export function StockVoucherDetailScreen() {
 
   const hasServerBatchLines = !!data && inbound && data.lines.length > 0 && data.lines.every(line => line.contentsQuantity != null && !!line.contentsUnit);
   const selectedIds = Object.keys(prep.value.selected);
+  const needsEndpointLabels = Boolean(data?.warehouseId) && data!.lines.some(line => !line.currentStorageLocationCode && !!line.currentEndpointId);
+  const mapEndpointsQuery = useQuery({
+    queryKey: ['warehouse-map-endpoints', session?.id, data?.warehouseId],
+    queryFn: async ({ signal }) => {
+      const active = await getActiveMapVersion(data!.warehouseId, signal);
+      if (!active) return [];
+      return (await getMapVersionDetail(active.id, signal)).endpoints;
+    },
+    enabled: needsEndpointLabels,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const endpointLabelById = useMemo(
+    () => new Map((mapEndpointsQuery.data ?? []).map(ep => [ep.id, ep.name || ep.code])),
+    [mapEndpointsQuery.data],
+  );
 
   const allocateBatch = async () => {
     if (pending.current || acting || !data || !inbound || data.status !== 'DRAFT' || data.lines.length > 0
@@ -234,7 +251,10 @@ export function StockVoucherDetailScreen() {
                   <Text variant="caption" color="textSecondary" numberOfLines={1}>
                     {line.productSku}
                     {line.contentsQuantity != null && line.contentsUnit ? ` · ${line.contentsQuantity} ${line.contentsUnit}` : ''}
-                    {` · ${line.currentStorageLocationCode || t('None')}`}
+                    {(() => {
+                      const locationText = voucherLineLocation(line, endpointLabelById);
+                      return locationText ? ` · ${t(locationText)}` : '';
+                    })()}
                     {line.currentLevelNo != null ? ` ${t('· Level {level}', { level: line.currentLevelNo })}` : ''}
                   </Text>
                 </View>

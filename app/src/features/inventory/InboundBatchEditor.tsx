@@ -6,7 +6,7 @@ import { useThemedStyles } from '../../shared/theme/ThemeContext';
 import type { ThemeColors } from '../../shared/theme/colors';
 import type { ThemeShadows } from '../../shared/theme/shadows';
 import { radii } from '../../shared/theme/radii';
-import { Button, Text } from '../../shared/ui';
+import { Button, Text, TextField } from '../../shared/ui';
 import { ReceivingProductPicker } from './ReceivingProductPicker';
 import { applyBatchGroupProduct, batchCounts, newBatchGroup, type InboundBatchGroup } from './inboundBatch';
 
@@ -49,6 +49,30 @@ export function InboundBatchEditor({ requestedCount, groups, editable, onChange 
           <Text variant="bodyMedium" color="textSecondary" numberOfLines={1} style={styles.countLabel}>Containers</Text>
           <Stepper value={group.containerCount} editable={editable} label={t('Containers In Group {group}', { group: index + 1 })}
             onChange={containerCount => edit(group.key, previous => ({ ...previous, containerCount }))} />
+        </View>
+        <View style={styles.fields}>
+          <TextField
+            containerStyle={styles.fieldWide}
+            label="Qty / Box"
+            accessibilityLabel={t('Quantity Per Container In Group {group}', { group: index + 1 })}
+            value={group.quantity}
+            onChangeText={quantity => edit(group.key, previous => ({ ...previous, quantity }))}
+            keyboardType="decimal-pad"
+            maxLength={16}
+            editable={editable}
+            placeholder="24"
+          />
+          <TextField
+            containerStyle={styles.fieldNarrow}
+            label="Unit"
+            accessibilityLabel={t('Unit In Group {group}', { group: index + 1 })}
+            value={group.unit}
+            onChangeText={unit => edit(group.key, previous => ({ ...previous, unit }))}
+            maxLength={32}
+            editable={editable}
+            placeholder="pcs"
+            autoCapitalize="none"
+          />
         </View>
       </View>
     ))}

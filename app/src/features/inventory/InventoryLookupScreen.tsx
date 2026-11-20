@@ -163,9 +163,21 @@ export function InventoryLookupScreen() {
     }
   };
 
+  const stagedOutboundCount = !serverSearch && containersQuery.isSuccess && containers.length === containerTotal
+    ? containers.filter(item => item.status === 'STAGED_OUTBOUND').length
+    : 0;
+  const endpointLabel = (endpointId: string, fallbackCode?: string | null, status?: string) =>
+    places.endpoints.find(ep => ep.id === endpointId)?.name ?? fallbackCode ?? (status === 'STAGED_OUTBOUND' ? t('Outbound Gate') : t('At Station'));
   const locationOptions = useMemo(() => containerLocationFilters(containers), [containers]);
-  const locationLabel = (key: string) => key === 'ALL' ? t('All locations') : key === 'UNLOCATED' ? t('Not on a shelf')
-    : shelfName(locationOptions.find(option => option.key === key)?.label ?? key);
+  const locationLabel = (key: string) => {
+    if (key === 'ALL') return t('All locations');
+    if (key === 'UNLOCATED') return t('Not on a shelf');
+    if (key.startsWith('endpoint:')) {
+      const endpointId = key.slice('endpoint:'.length);
+      return endpointLabel(endpointId, locationOptions.find(option => option.key === key)?.label);
+    }
+    return shelfName(locationOptions.find(option => option.key === key)?.label ?? key);
+  };
   const uniqueLocationsCount = locationOptions.filter(location => location.key !== 'ALL' && location.key !== 'UNLOCATED').length;
   const activeLocationFilter = locationOptions.some(location => location.key === selectedLocation) ? selectedLocation : 'ALL';
 
@@ -350,23 +362,30 @@ export function InventoryLookupScreen() {
       )}
 
       {Boolean(activeWarehouseId) && stockSummary && (
-        <View style={styles.stockSummaryBar}>
-          <View style={styles.stockMetric}>
-            <StatusText variant="headline" fontWeight="700" style={styles.tabularValue}>{stockSummary.totalContainers}</StatusText>
-            <StatusText variant="caption" color="textSecondary">Total Stock</StatusText>
+        <View style={styles.stockSummaryCard}>
+          <View style={styles.stockSummaryBar}>
+            <View style={styles.stockMetric}>
+              <StatusText variant="headline" fontWeight="700" style={styles.tabularValue}>{stockSummary.totalContainers}</StatusText>
+              <StatusText variant="caption" color="textSecondary">Total Stock</StatusText>
+            </View>
+            <View style={styles.stockMetricDivider} />
+            <View style={styles.stockMetric}>
+              <StatusText variant="headline" fontWeight="700" style={styles.tabularValue}>{stockSummary.allocatedContainers}</StatusText>
+              <StatusText variant="caption" color="textSecondary">Shelved / Staged</StatusText>
+            </View>
+            <View style={styles.stockMetricDivider} />
+            <View style={styles.stockMetric}>
+              <StatusText variant="headline" fontWeight="700" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textPrimary'} style={styles.tabularValue}>
+                {stockSummary.unallocatedContainers}
+              </StatusText>
+              <StatusText variant="caption" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textSecondary'}>Awaiting Putaway</StatusText>
+            </View>
           </View>
-          <View style={styles.stockMetricDivider} />
-          <View style={styles.stockMetric}>
-            <StatusText variant="headline" fontWeight="700" style={styles.tabularValue}>{stockSummary.allocatedContainers}</StatusText>
-            <StatusText variant="caption" color="textSecondary">On Shelves</StatusText>
-          </View>
-          <View style={styles.stockMetricDivider} />
-          <View style={styles.stockMetric}>
-            <StatusText variant="headline" fontWeight="700" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textPrimary'} style={styles.tabularValue}>
-              {stockSummary.unallocatedContainers}
+          {stagedOutboundCount > 0 && (
+            <StatusText variant="caption" color="primaryText" style={styles.stockSubNote}>
+              {t('{count} staged at Outbound gate', { count: stagedOutboundCount })}
             </StatusText>
-            <StatusText variant="caption" color={stockSummary.unallocatedContainers > 0 ? 'primaryText' : 'textSecondary'}>Awaiting Putaway</StatusText>
-          </View>
+          )}
         </View>
       )}
 
@@ -494,7 +513,13 @@ export function InventoryLookupScreen() {
                 <View style={styles.locationRow}>
                   <MapPin size={13} color={colors.primaryText} style={{ marginRight: 6 }} />
                   <Text style={styles.locationText} numberOfLines={1}>
-                    {c.currentStorageLocationCode ? shelfName(c.currentStorageLocationCode) : c.currentEndpointId ? places.name(c.currentEndpointId) : t('Not on a shelf')}
+                    {c.currentStorageLocationCode
+                      ? shelfName(c.currentStorageLocationCode)
+                      : c.currentEndpointId
+                        ? endpointLabel(c.currentEndpointId, c.currentEndpointCode, c.status)
+                        : c.status === 'ISSUED'
+                          ? t('Issued')
+                          : t('Not on a shelf')}
                     {c.currentStorageLocationCode && c.currentLevelNo ? ` · ${t('Level {level}', { level: c.currentLevelNo })}` : ''}
                   </Text>
                 </View>
@@ -661,9 +686,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     marginTop: 10,
     marginBottom: 4,
   },
-  stockSummaryBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  stockSummaryCard: {
     marginHorizontal: 16,
     marginTop: 10,
     paddingVertical: 10,
@@ -672,6 +695,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => StyleSheet.
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: 6,
+  },
+  stockSummaryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stockSubNote: {
+    textAlign: 'center',
   },
   stockMetric: {
     flex: 1,

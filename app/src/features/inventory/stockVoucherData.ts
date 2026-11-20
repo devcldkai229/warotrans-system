@@ -1,8 +1,23 @@
 import { ApiError } from '../../shared/api/client';
-import { type StockVoucherPage } from '../../shared/api/warehouseApi';
+import { type StockVoucherLine, type StockVoucherPage } from '../../shared/api/warehouseApi';
 import type { OperatingContext } from '../../shared/api/operatingContextApi';
 import { PERMISSIONS, sessionCan } from '../../shared/auth/permissions';
 import type { StockVoucherType, UserSession } from '../../shared/types/contracts';
+
+export function voucherLineLocation(
+  line: Pick<StockVoucherLine, 'currentStorageLocationCode' | 'currentEndpointId' | 'containerStatus'>,
+  endpointLabelById?: ReadonlyMap<string, string>,
+): string | null {
+  if (line.currentStorageLocationCode) return line.currentStorageLocationCode;
+  if (line.currentEndpointId) {
+    const resolved = endpointLabelById?.get(line.currentEndpointId);
+    if (resolved) return resolved;
+    return line.containerStatus === 'STAGED_OUTBOUND' ? 'Outbound Gate' : 'At Station';
+  }
+  if (line.containerStatus === 'STAGED_OUTBOUND') return 'Outbound Gate';
+  if (line.containerStatus === 'ISSUED') return null;
+  return 'None';
+}
 
 export function canReadVouchers(session: UserSession | null) {
   return !!session && ['STAFF', 'ADMIN'].includes(session.role) && sessionCan(session, PERMISSIONS.warehouseRead);

@@ -101,14 +101,24 @@ export function groupContainers(containers: ContainerListItem[], kind: WorkflowK
 }
 
 const SERVICE_POINT = /(^|[-_ ])(CHARGE|CHARGER|PARK|PARKING|QUEUE|WAIT)($|[-_ ])/i;
+const INBOUND_GATE = /(^|[-_ ])INBOUND($|[-_ ])/i;
+const OUTBOUND_GATE = /(^|[-_ ])OUTBOUND($|[-_ ])/i;
 
-/** Every place a movement may use: the shelves (by their name) first, then the other enabled stations of the map. */
+function isGateEndpoint(endpoint: Pick<EndpointDto, 'code' | 'endpointType'>): boolean {
+  return endpoint.endpointType === 'WAYPOINT'
+    && (INBOUND_GATE.test(endpoint.code) || OUTBOUND_GATE.test(endpoint.code));
+}
+
+/** Every place a movement may use: shelves (excluding gates with legacy StorageLocations) first, then enabled stations. */
 export function composerPlaces(ctx: ComposerContext): ComposerPlace[] {
   const enabled = ctx.endpoints.filter(endpoint => endpoint.mapVersionId === ctx.mapId && endpoint.isEnabled);
+  const enabledById = new Map(enabled.map(endpoint => [endpoint.id, endpoint]));
   const shelfEndpoints = new Set<string>();
   const locations: ComposerPlace[] = [];
   for (const location of ctx.locations) {
-    if (!location.isActive || !enabled.some(endpoint => endpoint.id === location.endpointId)) continue;
+    if (!location.isActive) continue;
+    const endpoint = enabledById.get(location.endpointId);
+    if (!endpoint || isGateEndpoint(endpoint)) continue;
     shelfEndpoints.add(location.endpointId);
     locations.push({ key: `L:${location.id}`, endpointId: location.endpointId, storageLocationId: location.id,
       name: location.name || location.code, code: location.code, kind: 'location' });
@@ -132,14 +142,22 @@ const stationNamed = (places: ComposerPlace[], word: 'INBOUND' | 'OUTBOUND') => 
   return places.filter(place => place.kind === 'endpoint' && pattern.test(place.code));
 };
 
+export function inboundGates(places: ComposerPlace[]): ComposerPlace[] {
+  return stationNamed(places, 'INBOUND');
+}
+
 export function outboundGates(places: ComposerPlace[]): ComposerPlace[] {
   return stationNamed(places, 'OUTBOUND');
 }
 
 /** Where the container is now; an inbound container not placed yet starts at the receiving point when there is one. */
 export function defaultSource(container: ContainerListItem, kind: WorkflowKind, places: ComposerPlace[]): ComposerPlace | null {
-  if (container.currentStorageLocationId) {
+  if (container.status === 'STORED' && container.currentStorageLocationId) {
     return places.find(place => place.storageLocationId === container.currentStorageLocationId) ?? null;
+  }
+  if (container.currentStorageLocationId) {
+    const shelf = places.find(place => place.storageLocationId === container.currentStorageLocationId);
+    if (shelf) return shelf;
   }
   if (container.currentEndpointId) {
     const at = placeForEndpoint(places, container.currentEndpointId);

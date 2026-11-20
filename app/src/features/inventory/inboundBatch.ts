@@ -1,5 +1,5 @@
 import type { CreateContainerBatchBody, CreateContainerBatchGroupInput, ProductItem } from '../../shared/api/warehouseApi';
-import { contentsQuantity, preparationCount } from './voucherPreparation';
+import { contentProblem, contentsQuantity, preparationCount } from './voucherPreparation';
 
 /** Local planning groups; keys are never Container IDs or barcodes. */
 export interface InboundBatchGroup {
@@ -9,10 +9,7 @@ export interface InboundBatchGroup {
   quantity: string;
   unit: string;
 }
-/**
- * Staff do not manage the contents of a container (how many pieces, in what unit): a container is the unit they move.
- * The API still stores contents, so every container is recorded as holding one container's worth.
- */
+/** Explicit box contents defaults used by quick container creation without a contents form. */
 export const DEFAULT_QUANTITY = '1';
 export const DEFAULT_UNIT = 'container';
 
@@ -22,10 +19,10 @@ export function batchTotal(groups: InboundBatchGroup[]): string {
   return sum > 0 ? String(sum) : '';
 }
 export interface BatchProblem { message: string; groupKey?: string }
-export function newBatchGroup(groups: InboundBatchGroup[], count = ''): InboundBatchGroup {
+export function newBatchGroup(groups: InboundBatchGroup[], count = '', quantity = '', unit = ''): InboundBatchGroup {
   let index = 1;
   while (groups.some(group => group.key === `group-${index}`)) index++;
-  return { key: `group-${index}`, product: null, containerCount: count, quantity: DEFAULT_QUANTITY, unit: DEFAULT_UNIT };
+  return { key: `group-${index}`, product: null, containerCount: count, quantity, unit };
 }
 export function batchCounts(requested: string, groups: InboundBatchGroup[]) {
   const total = preparationCount(requested);
@@ -46,7 +43,9 @@ export function inboundBatchProblem(requested: string, groups: InboundBatchGroup
     keys.add(group.key);
     const count = preparationCount(group.containerCount);
     if (count === null || count > 9999) return { groupKey: group.key, message: 'Enter a positive whole number of containers for this product.' };
-    if (!group.product?.isActive) return { groupKey: group.key, message: 'Choose an active product.' };
+    const problem = contentProblem(group);
+    if (problem) return { groupKey: group.key, message: problem };
+    if (group.unit.trim().length > 32) return { groupKey: group.key, message: 'Unit must be 32 characters or fewer.' };
   }
   if (grouped !== total) return { message: 'Product group counts must equal the batch container count.' };
   return null;
@@ -91,8 +90,8 @@ export function buildContainerBatchBody(
       groupKey: group.key.trim(),
       productId: group.product!.id,
       containerCount: preparationCount(group.containerCount)!,
-      quantityPerContainer: contentsQuantity(group.quantity) ?? Number(DEFAULT_QUANTITY),
-      unit: group.unit?.trim() || DEFAULT_UNIT,
+      quantityPerContainer: contentsQuantity(group.quantity)!,
+      unit: group.unit.trim(),
       ...(supplierBarcode ? { supplierPackageBarcode: supplierBarcode } : {}),
     };
   });
