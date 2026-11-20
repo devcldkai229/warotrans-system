@@ -118,21 +118,32 @@ public sealed partial class JobExecutionEngine
         }
 
         var now = DateTimeOffset.UtcNow;
-        db.HandoverConfirmations.Add(new HandoverConfirmation
+        var stepIds = OrderedSteps(job).Select(x => x.Step.Id).ToList();
+        var confirmed = (await db.HandoverConfirmations.AsNoTracking()
+                .Where(h => stepIds.Contains(h.JobStepId))
+                .Select(h => h.JobStepId)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        // A step holds one confirmation; the container's own drop-off never ran, so it is normally the one used.
+        if (HandoverStepFor(job, containerId, confirmed) is { } recordOn)
         {
-            Id = Guid.NewGuid(),
-            JobStepId = HandoverStepFor(job, containerId).Id,
-            ContainerId = containerId,
-            ConfirmedBy = actor,
-            ConfirmationSource = ConfirmationSource.STAFF_APP,
-            HandoverType = HandoverType.CANCEL_UNLOAD,
-            ConfirmedAt = now,
-            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
-            Evidence = new Dictionary<string, JsonElement>
+            db.HandoverConfirmations.Add(new HandoverConfirmation
             {
-                ["scannedBarcode"] = JsonSerializer.SerializeToElement(scannedBarcode.Trim())
-            }
-        });
+                Id = Guid.NewGuid(),
+                JobStepId = recordOn.Id,
+                ContainerId = containerId,
+                ConfirmedBy = actor,
+                ConfirmationSource = ConfirmationSource.STAFF_APP,
+                HandoverType = HandoverType.CANCEL_UNLOAD,
+                ConfirmedAt = now,
+                Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                Evidence = new Dictionary<string, JsonElement>
+                {
+                    ["scannedBarcode"] = JsonSerializer.SerializeToElement(scannedBarcode.Trim()),
+                    ["jobId"] = JsonSerializer.SerializeToElement(job.Id)
+                }
+            });
+        }
         jobContainer.FailureCode = CancelHandedOverCode;
         jobContainer.FailureMessage = string.IsNullOrWhiteSpace(note) ? "Unloaded by hand after the request was cancelled." : Trim500(note);
         SetContainerStatus(job, jobContainer, JobContainerStatus.CANCELLED, now);
@@ -310,17 +321,22 @@ public sealed partial class JobExecutionEngine
             && task.JobSteps.All(s => s.Status is JobStepStatus.PENDING or JobStepStatus.READY or JobStepStatus.SKIPPED);
     }
 
-    /// <summary>The step the unload is recorded against: the container's drop-off, else any step of its own task.</summary>
-    private static JobStep HandoverStepFor(Job job, Guid containerId)
+    /// <summary>
+    /// The step the unload is recorded against: the container's own drop-off (never confirmed, it is still on board),
+    /// else any step of the Job without a confirmation yet; null when every step already holds one.
+    /// </summary>
+    private static JobStep? HandoverStepFor(Job job, Guid containerId, IReadOnlySet<Guid> taken)
     {
-        var own = OrderedSteps(job)
+        var free = OrderedSteps(job).Where(x => !taken.Contains(x.Step.Id)).ToList();
+        var own = free
             .Where(x => x.Task.ContextValues.TryGetValue("containerId", out var id)
                         && id.ValueKind == JsonValueKind.String && id.GetGuid() == containerId)
             .Select(x => x.Step)
             .ToList();
         return own.LastOrDefault(s => s.StepType == StepType.HUMAN_INTERACTION)
             ?? own.LastOrDefault()
-            ?? OrderedSteps(job).Select(x => x.Step).Last();
+            ?? free.Select(x => x.Step).LastOrDefault(s => s.StepType == StepType.HUMAN_INTERACTION)
+            ?? free.Select(x => x.Step).LastOrDefault();
     }
 
     private static string Trim500(string text)

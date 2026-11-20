@@ -86,6 +86,7 @@ public sealed class IssueCancelCommandHandler(
                 RobotCode = robot.Code,
                 Type = RobotCommandTypes.Cancel,
                 IssuedAt = utcNow,
+                ExpiresAt = utcNow + RobotCommandMessage.CancelLifetime,
                 JobAssignmentId = target.JobAssignmentId,
                 JobStepId = target.JobStepId,
                 Payload = JsonSerializer.SerializeToElement(payload, JsonOptions)
@@ -151,6 +152,7 @@ public sealed class IssueCancelCommandHandler(
             RobotCode = robot.Code,
             Type = RobotCommandTypes.Cancel,
             IssuedAt = utcNow,
+            ExpiresAt = utcNow + RobotCommandMessage.CancelLifetime,
             JobAssignmentId = target.JobAssignmentId,
             JobStepId = target.JobStepId,
             Payload = JsonSerializer.SerializeToElement(cancelPayload, JsonOptions)

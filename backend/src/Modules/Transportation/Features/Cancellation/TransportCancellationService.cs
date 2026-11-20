@@ -439,6 +439,16 @@ public sealed class TransportCancellationService(
     {
         var actor = currentUser.AccountId
             ?? throw new AppException("Unloading cargo needs a signed-in account.", 401, "unauthenticated");
+
+        // A repeated scan after the cancellation finished answers with it, like any repeat.
+        var latest = await LatestAsync(transportRequestId, cancellationToken);
+        if (latest is { IsActive: false }
+            && latest.Items.Any(i => i.JobId == jobId
+                && i.Containers.Any(c => c.ContainerId == body.ContainerId && c.Resolution == ContainerResolutions.HandedOver)))
+        {
+            return await RefreshAsync(latest, cancellationToken);
+        }
+
         var operation = await ActiveAsync(transportRequestId, cancellationToken);
         var item = operation.Items.FirstOrDefault(i => i.JobId == jobId)
             ?? throw new NotFoundException("This Job is not part of the cancellation.", "cancellation_job_not_found");

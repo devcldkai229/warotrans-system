@@ -161,6 +161,7 @@ public sealed class IssueNavigateCommandHandler(
             RobotCode = robot.Code,
             Type = RobotCommandTypes.NavigateToPose,
             IssuedAt = utcNow,
+            ExpiresAt = utcNow + RobotCommandMessage.NavigateLifetime,
             JobAssignmentId = assignment?.Id,
             JobStepId = request.JobStepId,
             Payload = JsonSerializer.SerializeToElement(posePayload, JsonOptions)
