@@ -61,6 +61,9 @@ export function HomeScreen() {
   const onLocalizeRobot = sessionCan(session, PERMISSIONS.robotLocalize)
     ? async (robotId: string, endpointId: string) => { await localizeRobot(robotId, endpointId); toast.success('Localize command accepted.'); void fleetQuery.refetch(); }
     : undefined;
+  const onManualDrive = sessionCan(session, PERMISSIONS.robotManualDrive)
+    ? (robotId: string) => navigate('manual_drive', { robotId })
+    : undefined;
   const rawFleet = fleetQuery.robots;
   const onlineFleet = useMemo(() => rawFleet.filter(robot => robot.isOnline), [rawFleet]);
   const [selectedRobotId, setSelectedRobotId] = useState<string>('');
@@ -134,6 +137,7 @@ export function HomeScreen() {
         fleet={onlineFleet}
         updateMode={fleetQuery.updateMode}
         onLocalizeRobot={onLocalizeRobot}
+        onManualDrive={onManualDrive}
         selectedRobotId={selectedRobotId}
         onSelectRobot={(id) => {
           setSelectedRobotId(id);

@@ -225,8 +225,30 @@ export interface RobotResponse {
   mapVersionCode: string | null;
   currentCommandId: string | null;
   isEnabled: boolean;
+  motionHeld?: boolean;
+  manualLeaseHolderName?: string | null;
+  manualLeaseHolderId?: string | null;
+  manualLeaseUntil?: UtcDateTime | null;
+  maintenanceReason?: string | null;
+  maintenanceSince?: UtcDateTime | null;
   createdAt: UtcDateTime;
   updatedAt: UtcDateTime;
+}
+
+export interface ManualLeaseResponse {
+  robotId: string;
+  active: boolean;
+  holderId: string | null;
+  holderName: string | null;
+  until: UtcDateTime | null;
+  heldByMe: boolean;
+}
+
+export interface TeleopRobotResponse {
+  robotId: string;
+  robotCode: string;
+  linear: number;
+  angular: number;
 }
 
 /** `Fleet/Features/ListRobots/Response.cs` (paged envelope). */

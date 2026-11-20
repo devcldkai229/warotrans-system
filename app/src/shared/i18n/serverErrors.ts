@@ -200,4 +200,9 @@ export const viServerErrors: Record<string, string> = {
   human_task_claimed: 'Một bước tại điểm dừng này đã có nhân viên khác giữ.',
   handover_stops_invalid: 'Không đọc được phản hồi hàng đợi bàn giao từ máy chủ.',
   handover_stop_invalid: 'Dữ liệu lượt bàn giao không hợp lệ. Hãy tải lại hàng đợi.',
+  manual_lease_required: 'Hãy nhận quyền giữ lái thủ công của robot trước khi di chuyển.',
+  manual_takeover_forbidden: 'Chỉ Quản trị viên mới được chiếm quyền giữ lái và phải nêu rõ lý do.',
+  manual_lease_not_yours: 'Chỉ người đang giữ quyền lái hoặc Quản trị viên mới được trả quyền.',
+  manual_lease_invalid: 'Không xác minh được trạng thái quyền giữ lái thủ công. Hãy tải lại.',
+  teleop_invalid_velocity: 'Vận tốc điều khiển phải là số hợp lệ.',
 };

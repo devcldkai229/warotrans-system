@@ -15,6 +15,8 @@ export const mobileCapabilities = {
   pauseJob: true,
   resumeJob: true,
   payloadRecovery: false,
+  // M5 teleop & lease acquisition stay gated until BE lease-epoch/freshness and robot Semantic Mode authority/mux pass.
+  manualDriveTeleop: false,
 } as const;
 
 export function requireMobileCapability(feature: keyof typeof mobileCapabilities): void {

@@ -21,6 +21,8 @@ export const PERMISSIONS = {
   jobTakeover: 'job.takeover',
   jobPause: 'job.pause',
   robotRead: 'robot.read',
+  robotManage: 'robot.manage',
+  robotConfigure: 'robot.configure',
   robotStop: 'robot.stop',
   /** LOCALIZE at a known endpoint; never makes the robot move. */
   robotLocalize: 'robot.localize',

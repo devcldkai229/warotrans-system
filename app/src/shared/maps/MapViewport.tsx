@@ -20,6 +20,7 @@ import {
   MapPin,
   Navigation,
   Scan,
+  SlidersHorizontal,
   Tag,
   X,
 } from 'lucide-react-native';
@@ -64,6 +65,8 @@ interface Props {
   onLocalizeRobot?:(robotId:string,endpointId:string)=>Promise<void>;
   /** Pick mode: tapping a station hands it to the caller instead of opening its detail panel. */
   onPickEndpoint?:(endpoint:EndpointDto)=>void;
+  /** Given when the user may manually drive robots (robot.manual.drive). */
+  onManualDrive?:(robotId:string)=>void;
 }
 type LayerKey='stations'|'labels'|'zones'|'lanes'|'grid'|'scan';
 
@@ -197,7 +200,7 @@ export function MapViewport({contentInsets={top:0,bottom:0},title='Warehouse Ove
   </View>;
 }
 
-function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot,onPickEndpoint}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
+function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,updateMode='polling',fullBleed=false,bottomInset=0,onLocalizeRobot,onPickEndpoint,onManualDrive}:Omit<Props,'contentInsets'|'title'>&{frame:MapFrame;horizontal:boolean;top:number;bottomInset?:number}) {
   const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const layerItems = useMemo(() => getLayerItems(colors, isDark), [colors, isDark]);
@@ -737,6 +740,20 @@ function MapCanvas({map,robots,selectedRobot,onSelectRobot,frame,horizontal,top,
                     close();
                   }}
                 />
+                {onManualDrive ? (
+                  <Button
+                    title="Manual Drive"
+                    variant="outline"
+                    size="md"
+                    icon={SlidersHorizontal}
+                    fullWidth
+                    onPress={() => {
+                      triggerHaptic('tap');
+                      close();
+                      onManualDrive(robot.id);
+                    }}
+                  />
+                ) : null}
                 <Button
                   title="Back to Layers"
                   variant="ghost"
